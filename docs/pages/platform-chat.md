@@ -40,7 +40,7 @@ Press Enter while a response is streaming to queue your message. Queued messages
 
 Queueing works during [context compaction](#context-compaction) too. A message you send while the conversation is being compacted waits in the queue, then sends once compaction finishes — so a long chat never drops what you typed.
 
-While a response streams, the send button becomes Stop. Clicking it or pressing Esc stops the response. The next queued message sends when the stream settles.
+While a response streams, the send button becomes Stop. Clicking it or pressing Esc stops the response and discards any queued messages for that conversation. Nothing else is sent until you submit a new message.
 
 ### MCP Elicitation
 

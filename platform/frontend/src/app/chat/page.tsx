@@ -2155,13 +2155,15 @@ export function ChatPageContent({
     });
   }, []);
 
-  // Stop the in-flight response. Wired to the submit button's Stop face in
-  // the prompt input; any queued follow-up starts once the stream settles.
+  // Stop the in-flight response and discard its pending follow-ups. Wired to
+  // the submit button's Stop face in the prompt input.
   const handleStopStreaming = () => {
     if (conversationId) {
-      // Set the cache flag first, THEN close the connection so the
-      // connection-close handler on the backend finds the flag.
-      stopChatStreamMutation.mutateAsync(conversationId).finally(() => {
+      // Clear synchronously so no status transition can drain a queued turn
+      // while the separate Stop request is in flight. onFinish repeats this
+      // idempotently for any abort path that did not originate on this page.
+      chatMessageQueue.clear(conversationId);
+      void stopChatStreamMutation.mutateAsync(conversationId).finally(() => {
         stop?.();
       });
     } else {

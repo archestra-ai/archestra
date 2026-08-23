@@ -86,7 +86,15 @@ import type { VectorSearchResult } from "@/models/kb-chunk";
 import { describe, expect, test } from "@/test";
 
 import { KnowledgeBaseSearchTimeoutError } from "./errors";
-import { findEmbeddingDimensionMismatch, queryService } from "./query";
+import {
+  findEmbeddingDimensionMismatch,
+  QueryService,
+  queryService,
+} from "./query";
+import {
+  type KnowledgeRetrievalBackend,
+  knowledgeRetrievalBackend,
+} from "./retrieval-backend";
 
 function makeFakeEmbedding(seed: number): number[] {
   return Array.from({ length: 1536 }, (_, i) => Math.cos(seed + i * 0.01));
@@ -210,6 +218,138 @@ describe("QueryService", () => {
       input: ["TypeScript"],
       dimensions: 1536,
     });
+  });
+
+  test("an alternate backend preserves ACL scope, citations, and context expansion", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    setupEmbeddingConfig();
+    setupSingleQueryExpansion();
+
+    const visibleDocument = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      sourceId: "runbook-42",
+      title: "Certificate rotation runbook",
+      content: "Certificate inventory and rotation steps",
+      contentHash: "alternate-backend-visible",
+      sourceUrl: "https://docs.example.test/runbook-42",
+      metadata: { section: "rotation" },
+      embeddingStatus: "completed",
+    });
+    const restrictedDocument = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      sourceId: "restricted-42",
+      title: "Restricted runbook",
+      content: "Restricted result",
+      contentHash: "alternate-backend-restricted",
+      embeddingStatus: "completed",
+    });
+    const [visibleNeighbor, visibleChunk, restrictedChunk] =
+      await KbChunkModel.insertMany([
+        {
+          documentId: visibleDocument.id,
+          content: "Use the current certificate inventory.",
+          chunkIndex: 0,
+          acl: ["org:*"],
+        },
+        {
+          documentId: visibleDocument.id,
+          content: "The rotation starts after approval.",
+          chunkIndex: 1,
+          acl: ["org:*"],
+        },
+        {
+          documentId: restrictedDocument.id,
+          content: "Restricted result",
+          chunkIndex: 0,
+          acl: ["team:restricted"],
+        },
+      ]);
+
+    const visibleHit: VectorSearchResult = {
+      id: visibleChunk.id,
+      content: "Forged external content",
+      chunkIndex: 1,
+      documentId: visibleDocument.id,
+      sourceId: "forged-source",
+      title: "Forged external title",
+      sourceUrl: null,
+      metadata: null,
+      connectorType: null,
+      score: 0.95,
+    };
+    const indexedRows: VectorSearchResult[] = [
+      visibleHit,
+      {
+        ...visibleHit,
+        id: restrictedChunk.id,
+        documentId: restrictedDocument.id,
+        content: "Restricted result",
+        score: 0.9,
+      },
+    ];
+
+    const alternateBackend: KnowledgeRetrievalBackend = {
+      ...knowledgeRetrievalBackend,
+      requiresResultVerification: true,
+      // Deliberately return restricted and forged data. Archestra must treat
+      // these as ranked ids only, then apply its own canonical access state.
+      vectorSearch: async () => indexedRows,
+      keywordSearch: async () => indexedRows,
+      getTextSearchLanguages: async () => [],
+      hasKeywordStatistics: async () => false,
+      getPopulatedEmbeddingDimensions: async () => new Set([1536]),
+      findNeighbors: async () => [
+        {
+          id: visibleNeighbor.id,
+          documentId: visibleDocument.id,
+          chunkIndex: 0,
+          content: "Forged external neighbour content",
+        },
+        {
+          id: restrictedChunk.id,
+          documentId: restrictedDocument.id,
+          chunkIndex: 0,
+          content: "Restricted result",
+        },
+      ],
+      isSearchTimeout: () => false,
+    };
+    const alternateQueryService = new QueryService(alternateBackend);
+
+    embeddingQueue.push(makeFakeEmbedding(1));
+    const results = await alternateQueryService.query({
+      connectorIds: [connector.id],
+      organizationId: org.id,
+      queryText: "How do certificates rotate?",
+      userAcl: ["org:*"],
+      environmentId: null,
+    });
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({
+      content:
+        "Use the current certificate inventory.\n\nThe rotation starts after approval.",
+      chunkIndex: 1,
+      metadata: { section: "rotation" },
+      ref: `${visibleDocument.id}#1`,
+      citation: {
+        title: "Certificate rotation runbook",
+        sourceUrl: "https://docs.example.test/runbook-42",
+        documentId: visibleDocument.id,
+        sourceId: "runbook-42",
+        connectorType: "jira",
+      },
+    });
+    expect(results[0].content).not.toContain("Forged external");
+    expect(results[0].content).not.toContain("Restricted result");
   });
 
   test("returns a media chunk as a descriptor plus an out-of-band payload", async ({

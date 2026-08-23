@@ -175,6 +175,79 @@ class KbChunkModel {
   }
 
   /**
+   * Re-hydrate candidates from an external retrieval backend and apply every
+   * security predicate in PostgreSQL. Candidate content and citation fields
+   * are deliberately ignored: only the backend's rank and stable chunk id are
+   * trusted. This keeps ACL, environment isolation, and soft-delete filtering
+   * under Archestra's control even when ranking runs outside PostgreSQL.
+   */
+  static async verifyExternalSearchResults(params: {
+    candidates: VectorSearchResult[];
+    connectorIds: string[];
+    userAcl: AclEntry[];
+    bypassAcl?: boolean;
+    environmentId?: string | null;
+  }): Promise<VectorSearchResult[]> {
+    const {
+      candidates,
+      connectorIds,
+      userAcl,
+      bypassAcl = false,
+      environmentId,
+    } = params;
+    if (candidates.length === 0 || connectorIds.length === 0) return [];
+    if (!bypassAcl && userAcl.length === 0) return [];
+
+    const candidateIds = sql.join(
+      [...new Set(candidates.map((candidate) => candidate.id))].map(
+        (id) => sql`${id}::uuid`,
+      ),
+      sql`, `,
+    );
+    const scopedConnectorIds = sql.join(
+      connectorIds.map((id) => sql`${id}`),
+      sql`, `,
+    );
+    const aclEntries = bypassAcl
+      ? null
+      : sql.join(
+          userAcl.map((entry) => sql`${entry}`),
+          sql`, `,
+        );
+    const environmentFilter =
+      environmentId !== undefined
+        ? sql`AND kbc.environment_id IS NOT DISTINCT FROM ${environmentId}`
+        : sql``;
+
+    const rows = await db.execute(sql`
+      SELECT
+        c.id, c.content, c.chunk_index AS "chunkIndex",
+        c.document_id AS "documentId", d.source_id AS "sourceId", d.title,
+        d.source_url AS "sourceUrl", d.metadata,
+        kbc.connector_type AS "connectorType"
+      FROM kb_chunks c
+      JOIN kb_documents d ON d.id = c.document_id
+      LEFT JOIN knowledge_base_connectors kbc ON kbc.id = d.connector_id
+      WHERE c.id IN (${candidateIds})
+        AND d.connector_id IN (${scopedConnectorIds})
+        AND kbc.deleted_at IS NULL
+        ${environmentFilter}
+        ${bypassAcl ? sql`` : sql`AND c.acl ?| ARRAY[${aclEntries}]`}
+    `);
+
+    const verifiedById = new Map(
+      (rows.rows as Array<Omit<VectorSearchResult, "score">>).map((row) => [
+        row.id,
+        row,
+      ]),
+    );
+    return candidates.flatMap((candidate) => {
+      const verified = verifiedById.get(candidate.id);
+      return verified ? [{ ...verified, score: candidate.score }] : [];
+    });
+  }
+
+  /**
    * Return the set of embedding dimensions that actually have stored vectors for
    * the given connectors (one entry per non-empty per-dimension column). Used to
    * diagnose a dimension mismatch when a search returns nothing: if documents

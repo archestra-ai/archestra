@@ -8,8 +8,9 @@ import {
   OCR_RUN_PAGE_BUDGET,
   type OcrRunContext,
 } from "@/knowledge-base/pdf-ocr";
+import { knowledgeRetrievalBackend } from "@/knowledge-base/retrieval-backend";
 import logger from "@/logging";
-import { KbChunkModel, KbDocumentModel, KbFileModel } from "@/models";
+import { KbDocumentModel, KbFileModel } from "@/models";
 import { readRowBytes } from "@/skills-sandbox/file-storage";
 import { taskQueueService } from "@/task-queue";
 import { type AclEntry, ApiError } from "@/types";
@@ -256,7 +257,7 @@ export async function indexFilesIntoKnowledgeBase(params: {
       // by nothing. Re-indexing replaces the previous chunks rather than
       // appending to them.
       if (existing) {
-        await KbChunkModel.deleteByDocument(document.id);
+        await knowledgeRetrievalBackend.deleteDocumentChunks(document.id);
       }
       await chunkAndStoreDocument({
         documentId: document.id,

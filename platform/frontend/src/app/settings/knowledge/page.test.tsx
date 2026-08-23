@@ -1040,12 +1040,12 @@ describe("KnowledgeSettingsPage", () => {
       ];
       renderPage();
 
-      const rerankingCard = screen
+      const rerankingSection = screen
         .getByText("Search Ranking Configuration")
-        .closest('[data-slot="card"]');
-      expect(rerankingCard).not.toBeNull();
+        .closest("section");
+      expect(rerankingSection).not.toBeNull();
       await user.click(
-        within(rerankingCard as HTMLElement).getByRole("button", {
+        within(rerankingSection as HTMLElement).getByRole("button", {
           name: /OpenAI Key/i,
         }),
       );
@@ -1080,12 +1080,12 @@ describe("KnowledgeSettingsPage", () => {
       ];
       renderPage();
 
-      const rerankingCard = screen
+      const rerankingSection = screen
         .getByText("Search Ranking Configuration")
-        .closest('[data-slot="card"]');
-      expect(rerankingCard).not.toBeNull();
+        .closest("section");
+      expect(rerankingSection).not.toBeNull();
       await user.click(
-        within(rerankingCard as HTMLElement).getByRole("button", {
+        within(rerankingSection as HTMLElement).getByRole("button", {
           name: /xAI Console Key/i,
         }),
       );

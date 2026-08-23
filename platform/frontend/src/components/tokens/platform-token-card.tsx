@@ -2,9 +2,8 @@
 
 import { Key } from "lucide-react";
 import type { ReactNode } from "react";
-import { SettingsCardHeader } from "@/components/settings/settings-block";
+import { SettingsBlock } from "@/components/settings/settings-block";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface PlatformTokenCardProps {
@@ -29,14 +28,13 @@ export function PlatformTokenCard({
   const showAction = !isLoading && !error && tokenExists;
 
   return (
-    <Card>
-      <SettingsCardHeader
-        title={title}
-        description={description}
-        action={showAction ? action : undefined}
-      />
+    <SettingsBlock
+      title={title}
+      description={description}
+      control={showAction ? action : undefined}
+    >
       {!showAction && (
-        <CardContent>
+        <div>
           {isLoading ? (
             <Skeleton className="h-10 w-full max-w-sm" />
           ) : error ? (
@@ -53,8 +51,8 @@ export function PlatformTokenCard({
               </p>
             </div>
           )}
-        </CardContent>
+        </div>
       )}
-    </Card>
+    </SettingsBlock>
   );
 }

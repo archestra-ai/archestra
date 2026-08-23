@@ -68,12 +68,26 @@ export function ChatLinksEditor({
 
   return (
     <div className="space-y-3">
-      <div className="space-y-1">
-        <Label>Chat Links</Label>
-        <p className="text-xs text-muted-foreground">
-          Add up to 3 optional buttons shown on the new chat page. Labels are
-          required and limited to 25 characters.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div className="space-y-1">
+          <Label>Chat Links</Label>
+          <p className="text-xs text-muted-foreground">
+            Add up to 3 optional buttons shown on the new chat page. Labels are
+            required and limited to 25 characters.
+          </p>
+        </div>
+        {links.length < 3 && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+            onClick={handleAdd}
+          >
+            <Plus className="h-4 w-4" />
+            Add Link
+          </Button>
+        )}
       </div>
       <div className="space-y-3">
         {links.map((link, index) => {
@@ -156,12 +170,6 @@ export function ChatLinksEditor({
           );
         })}
       </div>
-      {links.length < 3 && (
-        <Button type="button" variant="outline" size="sm" onClick={handleAdd}>
-          <Plus className="h-4 w-4" />
-          Add Link
-        </Button>
-      )}
     </div>
   );
 }

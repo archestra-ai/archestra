@@ -6,6 +6,7 @@ import { KeyRound, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
+import { AccountPageAction } from "@/app/account/_components/account-page-action";
 import { CopyButton } from "@/components/copy-button";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
@@ -16,13 +17,11 @@ import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { QueryLoadError } from "@/components/query-load-error";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { SearchInput } from "@/components/search-input";
-import { SettingsCardHeader } from "@/components/settings/settings-block";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
 import { DialogForm, DialogStickyFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -253,129 +252,126 @@ function ApiKeysCardContent() {
 
   return (
     <>
-      <Card>
-        <SettingsCardHeader
-          title="API Keys"
-          description={
-            <>
-              Keys that let scripts and integrations call the{" "}
-              {apiDocsUrl ? (
-                <ExternalDocsLink
-                  href={apiDocsUrl}
-                  className="text-inherit underline underline-offset-4"
-                  showIcon={false}
-                >
-                  platform API
-                </ExternalDocsLink>
-              ) : (
-                "platform API"
-              )}{" "}
-              as you.
-              <WithPermissions
-                permissions={{ serviceAccount: ["read"] }}
-                noPermissionHandle="hide"
-              >
-                {" "}
-                For automation not tied to your user, use{" "}
-                <Link
-                  href="/settings/service-accounts"
-                  className="underline underline-offset-4"
-                >
-                  Service Accounts
-                </Link>
-                .
-              </WithPermissions>
-            </>
-          }
-          action={
-            <PermissionButton
-              permissions={{ apiKey: ["create"] }}
-              onClick={() => setIsCreateDialogOpen(true)}
-            >
-              <Plus className="h-4 w-4" />
-              Create API Key
-            </PermissionButton>
-          }
-        />
-        <CardContent>
-          <LoadingWrapper
-            isPending={isPending}
-            loadingFallback={<LoadingSpinner />}
-          >
-            <div className="space-y-4">
-              <FilterBar
-                className="mb-0"
-                onClearFilters={
-                  search
-                    ? () => updateQueryParams({ search: null, page: "1" })
-                    : undefined
-                }
-              >
-                <SearchInput
-                  objectNamePlural="API keys"
-                  searchFields={["key name"]}
-                  className={filterSearchClass}
-                />
-              </FilterBar>
-              {isApiKeysLoadError ? (
-                <QueryLoadError
-                  title="Couldn't load your API keys"
-                  onRetry={() => refetchApiKeys()}
-                />
-              ) : (
-                <>
-                  <BulkActionsBar
-                    count={selectedApiKeys.length}
-                    noun="API key"
-                    onClear={clearSelection}
-                    busy={bulkDelete.isPending}
-                    selectAllMatching={selectAllMatching}
-                    className="mb-3"
-                  >
-                    <PermissionButton
-                      permissions={{ apiKey: ["delete"] }}
-                      variant="destructive"
-                      size="sm"
-                      onClick={() =>
-                        bulkDelete.mutate(selectedApiKeys, {
-                          onSuccess: (outcome) => {
-                            reportBulkOutcome({
-                              outcome,
-                              verb: "Deleted",
-                              failureVerb: "delete",
-                              noun: "API key",
-                            });
-                            if (outcome.failed.length === 0) clearSelection();
-                          },
-                        })
-                      }
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      <span>Delete</span>
-                    </PermissionButton>
-                  </BulkActionsBar>
+      <AccountPageAction>
+        <PermissionButton
+          permissions={{ apiKey: ["create"] }}
+          onClick={() => setIsCreateDialogOpen(true)}
+        >
+          <Plus className="h-4 w-4" />
+          Create API Key
+        </PermissionButton>
+      </AccountPageAction>
 
-                  <DataTable
-                    columns={columns}
-                    data={filteredApiKeys}
-                    getRowId={(row) => row.id}
-                    rowSelection={rowSelection}
-                    onRowSelectionChange={setRowSelection}
-                    onPageRowIdsChange={onPageRowIdsChange}
-                    hideSelectedCount
-                    emptyMessage="No API keys yet"
-                    hasActiveFilters={search.trim().length > 0}
-                    filteredEmptyMessage="No API keys match your search. Try adjusting your search."
-                    onClearFilters={() =>
-                      updateQueryParams({ search: null, page: "1" })
+      <section className="space-y-5">
+        <div className="space-y-1">
+          <h2 className="text-sm font-medium leading-5">API Keys</h2>
+          <p className="text-sm leading-5 text-muted-foreground">
+            Keys that let scripts and integrations call the{" "}
+            {apiDocsUrl ? (
+              <ExternalDocsLink
+                href={apiDocsUrl}
+                className="text-inherit underline underline-offset-4"
+                showIcon={false}
+              >
+                platform API
+              </ExternalDocsLink>
+            ) : (
+              <span>platform API</span>
+            )}{" "}
+            as you.
+            <WithPermissions
+              permissions={{ serviceAccount: ["read"] }}
+              noPermissionHandle="hide"
+            >
+              {" "}
+              For automation not tied to your user, use{" "}
+              <Link
+                href="/settings/service-accounts"
+                className="underline underline-offset-4"
+              >
+                Service Accounts
+              </Link>
+              .
+            </WithPermissions>
+          </p>
+        </div>
+        <LoadingWrapper
+          isPending={isPending}
+          loadingFallback={<LoadingSpinner />}
+        >
+          <div className="space-y-4">
+            <FilterBar
+              className="mb-0"
+              onClearFilters={
+                search
+                  ? () => updateQueryParams({ search: null, page: "1" })
+                  : undefined
+              }
+            >
+              <SearchInput
+                objectNamePlural="API keys"
+                searchFields={["key name"]}
+                className={filterSearchClass}
+              />
+            </FilterBar>
+            {isApiKeysLoadError ? (
+              <QueryLoadError
+                title="Couldn't load your API keys"
+                onRetry={() => refetchApiKeys()}
+              />
+            ) : (
+              <>
+                <BulkActionsBar
+                  count={selectedApiKeys.length}
+                  noun="API key"
+                  onClear={clearSelection}
+                  busy={bulkDelete.isPending}
+                  selectAllMatching={selectAllMatching}
+                  className="mb-3"
+                >
+                  <PermissionButton
+                    permissions={{ apiKey: ["delete"] }}
+                    variant="destructive"
+                    size="sm"
+                    onClick={() =>
+                      bulkDelete.mutate(selectedApiKeys, {
+                        onSuccess: (outcome) => {
+                          reportBulkOutcome({
+                            outcome,
+                            verb: "Deleted",
+                            failureVerb: "delete",
+                            noun: "API key",
+                          });
+                          if (outcome.failed.length === 0) clearSelection();
+                        },
+                      })
                     }
-                  />
-                </>
-              )}
-            </div>
-          </LoadingWrapper>
-        </CardContent>
-      </Card>
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span>Delete</span>
+                  </PermissionButton>
+                </BulkActionsBar>
+
+                <DataTable
+                  columns={columns}
+                  data={filteredApiKeys}
+                  getRowId={(row) => row.id}
+                  rowSelection={rowSelection}
+                  onRowSelectionChange={setRowSelection}
+                  onPageRowIdsChange={onPageRowIdsChange}
+                  hideSelectedCount
+                  emptyMessage="No API keys yet"
+                  hasActiveFilters={search.trim().length > 0}
+                  filteredEmptyMessage="No API keys match your search. Try adjusting your search."
+                  onClearFilters={() =>
+                    updateQueryParams({ search: null, page: "1" })
+                  }
+                />
+              </>
+            )}
+          </div>
+        </LoadingWrapper>
+      </section>
 
       <FormDialog
         open={isCreateDialogOpen}

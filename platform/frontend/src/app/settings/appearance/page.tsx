@@ -2,14 +2,14 @@
 
 import { DEFAULT_APP_DESCRIPTION, DEFAULT_APP_NAME } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
+import type { ReactNode } from "react";
 import { useCallback, useState } from "react";
 import {
-  SettingsCardHeader,
+  SettingsBlock,
   SettingsSaveBar,
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
 import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -316,14 +316,16 @@ export default function AppearanceSettingsPage() {
         }}
       />
 
-      <Card>
-        <SettingsCardHeader
-          title="Branding"
-          description="Customize your organization's browser tab title, OpenGraph description, footer text, chat links, and chat placeholders."
-        />
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="appName">App Name</Label>
+      <SettingsBlock
+        title="Branding"
+        description="Customize your organization's browser tab title, OpenGraph description, footer text, chat links, and chat placeholders."
+      >
+        <div className="space-y-5">
+          <AppearanceControlRow
+            id="appName"
+            label="App Name"
+            description="Shown in the browser tab title. This also brands the built-in MCP server name and built-in MCP tool names and prefix."
+          >
             <Input
               id="appName"
               placeholder={DEFAULT_APP_NAME}
@@ -331,13 +333,12 @@ export default function AppearanceSettingsPage() {
               onChange={(e) => setAppName(e.target.value)}
               maxLength={100}
             />
-            <p className="text-xs text-muted-foreground">
-              Shown in the browser tab title. This also brands the built-in MCP
-              server name and built-in MCP tool names and prefix.
-            </p>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="ogDescription">OpenGraph Description</Label>
+          </AppearanceControlRow>
+          <AppearanceControlRow
+            id="ogDescription"
+            label="OpenGraph Description"
+            description="Used when sharing links to your platform."
+          >
             <Textarea
               id="ogDescription"
               placeholder={DEFAULT_APP_DESCRIPTION}
@@ -346,12 +347,12 @@ export default function AppearanceSettingsPage() {
               maxLength={500}
               rows={2}
             />
-            <p className="text-xs text-muted-foreground">
-              Used when sharing links to your platform.
-            </p>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="footerText">Footer Text</Label>
+          </AppearanceControlRow>
+          <AppearanceControlRow
+            id="footerText"
+            label="Footer Text"
+            description="Custom text shown in the footer alongside the version number."
+          >
             <Textarea
               id="footerText"
               placeholder="Leave empty to show version number"
@@ -360,10 +361,7 @@ export default function AppearanceSettingsPage() {
               maxLength={500}
               rows={2}
             />
-            <p className="text-xs text-muted-foreground">
-              Custom text shown in the footer alongside the version number.
-            </p>
-          </div>
+          </AppearanceControlRow>
           <ChatLinksEditor
             links={effectiveChatLinks}
             validationErrors={displayedChatLinkValidationErrors}
@@ -385,10 +383,11 @@ export default function AppearanceSettingsPage() {
               return true;
             }}
           />
-          <div className="space-y-2">
-            <Label htmlFor="chatErrorSupportMessage">
-              Support Contact Message
-            </Label>
+          <AppearanceControlRow
+            id="chatErrorSupportMessage"
+            label="Support Contact Message"
+            description="Shown alongside errors in chat. Use this to direct users to your support team."
+          >
             <Input
               id="chatErrorSupportMessage"
               placeholder="e.g. Contact support@company.com for assistance and send us the information below"
@@ -396,52 +395,37 @@ export default function AppearanceSettingsPage() {
               onChange={(e) => setChatErrorSupportMessage(e.target.value)}
               maxLength={500}
             />
-            <p className="text-xs text-muted-foreground">
-              Shown alongside errors in chat. Use this to direct users to your
-              support team.
-            </p>
-          </div>
-          <div className="flex items-start justify-between gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="slimChatErrorUi">
-                Simplified Chat Error Cards
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                Hide provider, model, stack trace, and raw error details in
-                chat. Users will only see the support message or default error
-                text plus correlation IDs.
-              </p>
-            </div>
+          </AppearanceControlRow>
+          <AppearanceControlRow
+            id="slimChatErrorUi"
+            label="Simplified Chat Error Cards"
+            description="Hide provider, model, stack trace, and raw error details in chat. Users will only see the support message or default error text plus correlation IDs."
+          >
             <Switch
               id="slimChatErrorUi"
-              className="mt-0.5"
+              className="ml-auto"
               checked={effectiveSlimChatErrorUi}
               onCheckedChange={(checked) => setSlimChatErrorUi(checked)}
             />
-          </div>
-          <div className="flex items-start justify-between gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="animateChatPlaceholders">
-                Animate Chat Placeholders
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                Show the chat placeholder text with a typing animation. Single
-                placeholder entries always stay static.
-              </p>
-            </div>
+          </AppearanceControlRow>
+          <AppearanceControlRow
+            id="animateChatPlaceholders"
+            label="Animate Chat Placeholders"
+            description="Show the chat placeholder text with a typing animation. Single placeholder entries always stay static."
+          >
             <Switch
               id="animateChatPlaceholders"
-              className="mt-0.5"
+              className="ml-auto"
               checked={effectiveAnimateChatPlaceholders}
               onCheckedChange={(checked) => setAnimateChatPlaceholders(checked)}
             />
-          </div>
+          </AppearanceControlRow>
           <ChatPlaceholdersEditor
             placeholders={effectiveChatPlaceholders}
             onChange={setChatPlaceholders}
           />
-        </CardContent>
-      </Card>
+        </div>
+      </SettingsBlock>
 
       <SiteNotificationsSection
         content={effectiveNotificationContent}
@@ -508,5 +492,27 @@ export default function AppearanceSettingsPage() {
         }
       />
     </SettingsSectionStack>
+  );
+}
+
+function AppearanceControlRow({
+  id,
+  label,
+  description,
+  children,
+}: {
+  id: string;
+  label: string;
+  description: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_20rem] sm:items-start sm:gap-8">
+      <div className="space-y-1">
+        <Label htmlFor={id}>{label}</Label>
+        <p className="text-xs leading-5 text-muted-foreground">{description}</p>
+      </div>
+      <div className="flex min-w-0 items-start">{children}</div>
+    </div>
   );
 }

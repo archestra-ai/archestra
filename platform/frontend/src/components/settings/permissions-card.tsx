@@ -10,10 +10,9 @@ import {
 } from "@archestra/shared";
 import { ChevronDown, ChevronRight, Search } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
-import { SettingsCardHeader } from "@/components/settings/settings-block";
+import { SettingsBlock } from "@/components/settings/settings-block";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   Collapsible,
   CollapsibleContent,
@@ -55,12 +54,10 @@ export function PermissionsCard() {
 
   if (isLoading) {
     return (
-      <Card>
-        <CardContent className="space-y-4">
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-40 w-full" />
-        </CardContent>
-      </Card>
+      <div className="space-y-4">
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-40 w-full" />
+      </div>
     );
   }
 
@@ -73,55 +70,54 @@ export function PermissionsCard() {
     granted.length > 0 && expandedCategories.size === granted.length;
 
   return (
-    <Card>
-      <SettingsCardHeader
-        title="Your Permissions"
-        description={
-          totalResources > 0 ? (
-            <>
-              What your{" "}
-              {role ? (
-                <span className="font-medium capitalize text-foreground">
-                  {role}
-                </span>
-              ) : (
-                "current"
-              )}{" "}
-              role grants you — {totalResources} resource
-              {totalResources === 1 ? "" : "s"} across {granted.length} categor
-              {granted.length === 1 ? "y" : "ies"}.
-            </>
-          ) : (
-            "What your role grants you across the platform."
-          )
-        }
-        action={
-          granted.length > 0 ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                setExpandedCategories(
-                  allExpanded
-                    ? new Set()
-                    : new Set(granted.map((group) => group.category)),
-                )
-              }
-            >
-              <span>{allExpanded ? "Collapse all" : "Expand all"}</span>
-            </Button>
-          ) : null
-        }
-      />
-      <CardContent className="space-y-4 border-t pt-6">
+    <SettingsBlock
+      title="Your Permissions"
+      description={
+        totalResources > 0 ? (
+          <>
+            What your{" "}
+            {role ? (
+              <span className="font-medium capitalize text-foreground">
+                {role}
+              </span>
+            ) : (
+              "current"
+            )}{" "}
+            role grants you — {totalResources} resource
+            {totalResources === 1 ? "" : "s"} across {granted.length} categor
+            {granted.length === 1 ? "y" : "ies"}.
+          </>
+        ) : (
+          "What your role grants you across the platform."
+        )
+      }
+      control={
+        granted.length > 0 ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              setExpandedCategories(
+                allExpanded
+                  ? new Set()
+                  : new Set(granted.map((group) => group.category)),
+              )
+            }
+          >
+            <span>{allExpanded ? "Collapse all" : "Expand all"}</span>
+          </Button>
+        ) : null
+      }
+    >
+      <div className="space-y-4">
         {totalResources === 0 ? (
           <p className="text-sm text-muted-foreground">
             Your role grants no resource permissions.
           </p>
         ) : (
           <>
-            <div className="relative">
+            <div className="relative sm:max-w-md">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={filter}
@@ -136,7 +132,7 @@ export function PermissionsCard() {
                 No permissions match that filter.
               </p>
             ) : (
-              <div className="space-y-2">
+              <div className="divide-y border-y">
                 {matches.map(({ category, resources }) => (
                   <CategorySection
                     key={category}
@@ -154,8 +150,8 @@ export function PermissionsCard() {
             )}
           </>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </SettingsBlock>
   );
 }
 
@@ -174,26 +170,26 @@ function CategorySection({
 }) {
   return (
     <Collapsible open={isExpanded} onOpenChange={() => onToggle(category)}>
-      <CollapsibleTrigger className="flex w-full items-center gap-2 rounded-md border bg-card p-3 hover:bg-accent/50 transition-colors">
+      <CollapsibleTrigger className="flex w-full items-center gap-2 py-3 text-left text-muted-foreground transition-colors hover:text-foreground">
         {isExpanded ? (
           <ChevronDown className="h-4 w-4 shrink-0" />
         ) : (
           <ChevronRight className="h-4 w-4 shrink-0" />
         )}
-        <span className="font-semibold text-sm">{category}</span>
+        <span className="text-sm font-medium text-foreground">{category}</span>
         <span className="ml-auto text-xs text-muted-foreground">
           {resources.length} resource
           {resources.length !== 1 ? <span>s</span> : null}
         </span>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="mt-1 space-y-1 pl-6">
+        <div className="divide-y pb-2 pl-6">
           {resources.map((resource) => {
             const actions = permissions[resource] || [];
             return (
               <div
                 key={resource}
-                className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-md border bg-card px-3 py-2.5"
+                className="grid gap-2 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-4"
               >
                 <div className="min-w-0">
                   <p className="text-sm font-medium leading-tight">
@@ -205,7 +201,7 @@ function CategorySection({
                     </p>
                   )}
                 </div>
-                <div className="flex flex-wrap gap-1 shrink-0">
+                <div className="flex shrink-0 flex-wrap gap-1 sm:justify-end">
                   {actions.map((action) => (
                     <Badge key={action} variant="outline" className="text-xs">
                       {actionLabels[action] || action}

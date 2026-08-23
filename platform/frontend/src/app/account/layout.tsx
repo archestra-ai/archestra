@@ -1,8 +1,9 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { AccountPageActionSlotContext } from "@/app/account/_components/account-page-action";
 import { AccountSectionNav } from "@/app/account/_components/account-section-nav";
 import { ChangePasswordDialog } from "@/app/account/_components/change-password-dialog";
 import { LoadingSpinner } from "@/components/loading";
@@ -12,8 +13,12 @@ import { usePublicConfig } from "@/lib/config/config.query";
 
 function AccountShell({ children }: { children: React.ReactNode }) {
   const searchParams = useSearchParams();
+  const pathname = usePathname();
   const highlight = searchParams.get("highlight");
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [pageActionSlot, setPageActionSlot] = useState<HTMLDivElement | null>(
+    null,
+  );
   const { data: publicConfig, isLoading: isLoadingPublicConfig } =
     usePublicConfig();
   const isBasicAuthDisabled = publicConfig?.disableBasicAuth ?? false;
@@ -29,22 +34,26 @@ function AccountShell({ children }: { children: React.ReactNode }) {
   return (
     <PageLayout
       title="Personal Settings"
-      // Page-level, not tucked inside a section: changing a password is the
-      // thing people arrive here to do, and it should stay one click away
-      // from whichever section they happen to be on. It lives in the layout so
-      // the `?highlight=change-password` deep link works on every one of them.
+      // Most account sections keep password management one click away. A page
+      // with a primary action of its own can replace it in the same header
+      // slot; API Keys uses that for Create API Key. The dialog stays mounted
+      // here so the `?highlight=change-password` deep link still works.
       actionButton={
-        showChangePasswordButton ? (
+        pathname === "/account/api-keys" ? (
+          <div ref={setPageActionSlot} />
+        ) : showChangePasswordButton ? (
           <Button type="button" onClick={() => setIsChangePasswordOpen(true)}>
             Change Password
           </Button>
         ) : null
       }
     >
-      <div className="grid items-start gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
-        <AccountSectionNav />
-        <div className="min-w-0">{children}</div>
-      </div>
+      <AccountPageActionSlotContext.Provider value={pageActionSlot}>
+        <div className="grid items-start gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
+          <AccountSectionNav />
+          <div className="min-w-0">{children}</div>
+        </div>
+      </AccountPageActionSlotContext.Provider>
       {showChangePasswordButton && (
         <ChangePasswordDialog
           open={isChangePasswordOpen}

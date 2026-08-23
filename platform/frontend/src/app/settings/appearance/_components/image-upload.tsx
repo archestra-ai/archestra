@@ -4,8 +4,7 @@ import { Upload, X } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
-import { SettingsCardHeader } from "@/components/settings/settings-block";
-import { Card, CardContent } from "@/components/ui/card";
+import { SettingsBlock } from "@/components/settings/settings-block";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useUpdateAppearanceSettings } from "@/lib/organization.query";
 
@@ -86,9 +85,10 @@ export function ImageUpload({
   const hasPreview = preview || currentImage;
 
   return (
-    <Card>
-      <SettingsCardHeader title={title} description={description} />
-      <CardContent className="space-y-4">
+    <SettingsBlock
+      title={title}
+      description={description}
+      control={
         <div className="flex items-center gap-4">
           <div className="relative h-10 w-10 rounded-md border border-border bg-muted flex items-center justify-center overflow-hidden shrink-0">
             {hasPreview ? (
@@ -127,15 +127,16 @@ export function ImageUpload({
             )}
           </div>
         </div>
-        <input
-          ref={fileInputRef}
-          type="file"
-          aria-label="Upload image"
-          accept="image/png"
-          className="hidden"
-          onChange={handleFileSelect}
-        />
-      </CardContent>
-    </Card>
+      }
+    >
+      <input
+        ref={fileInputRef}
+        type="file"
+        aria-label="Upload image"
+        accept="image/png"
+        className="hidden"
+        onChange={handleFileSelect}
+      />
+    </SettingsBlock>
   );
 }

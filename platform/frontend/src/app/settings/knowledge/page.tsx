@@ -54,19 +54,12 @@ import { QueryLoadError } from "@/components/query-load-error";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { IntegrationAvailabilitySection } from "@/components/settings/integration-availability-section";
 import {
+  SettingsBlock,
   SettingsSaveBar,
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
 import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import {
   DialogBody,
   DialogForm,
@@ -1166,132 +1159,132 @@ function KnowledgeSettingsContent() {
       loadingFallback={<LoadingSpinner />}
     >
       <SettingsSectionStack>
-        <Card id="embedding-configuration">
-          <CardHeader>
-            <CardTitle>Embedding Configuration</CardTitle>
-            <CardDescription className="leading-relaxed">
+        <SettingsBlock
+          id="embedding-configuration"
+          title="Embedding Configuration"
+          description={
+            <>
               The model that turns your documents into searchable meaning. It
               decides how well a search finds passages that say what was asked
               in different words. Pick it once — changing it later means
               re-indexing everything. A key appears here once its embedding
               models are synced with dimensions set (384, 768, 1024, 1536 or
               3072).
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <WithPermissions
-              permissions={{ knowledgeSettings: ["update"] }}
-              noPermissionHandle="tooltip"
-            >
-              {({ hasPermission }) => (
-                <div className="flex flex-col gap-4">
-                  <CardRow label="Key">
-                    <ApiKeySelector
-                      value={embeddingChatApiKeyId}
-                      onChange={setEmbeddingChatApiKeyId}
-                      disabled={!hasPermission || isEmbeddingModelLocked}
-                      forEmbedding
-                      label="embedding API key"
-                      allowedKeyIds={embeddingCapableKeyIds}
-                      pulse={
-                        embeddingSetupStep === "add-key" ||
-                        embeddingSetupStep === "select-key"
-                      }
-                    />
-                  </CardRow>
-                  <CardRow label="Model">
-                    <LlmModelSearchableSelect
-                      value={embeddingModel ?? ""}
-                      onValueChange={(v) => setEmbeddingModel(v || null)}
-                      options={(embeddingModels ?? []).map((model) => ({
-                        value: model.id,
-                        model: model.displayName ?? model.id,
-                        modelId: model.id,
-                        provider: model.provider,
-                        description:
-                          model.displayName === model.id ? undefined : model.id,
-                        capabilities: model.capabilities,
-                        isFree: model.isFree,
-                        isBest: model.isBest,
-                        badge: model.embeddingDimensions
-                          ? `${model.embeddingDimensions} dims`
-                          : undefined,
-                      }))}
-                      placeholder="Select embedding model..."
-                      searchPlaceholder="Search embedding models..."
-                      emptyMessage={embeddingEmptyMessage}
-                      className={cn(
-                        "w-full",
-                        embeddingSetupStep === "select-model" &&
-                          SETUP_HIGHLIGHT_CLASS,
-                      )}
-                      popoverContentClassName={KNOWLEDGE_MODEL_POPOVER_CLASS}
-                      popoverListClassName={KNOWLEDGE_MODEL_POPOVER_LIST_CLASS}
-                      popoverSide="bottom"
-                      popoverAlign="end"
-                      truncateOptionLabels={false}
-                      disabled={
-                        !hasPermission ||
-                        isEmbeddingModelLocked ||
-                        !embeddingChatApiKeyId
-                      }
-                    />
-                  </CardRow>
-                  <p className="text-sm text-muted-foreground sm:ml-auto sm:w-80">
-                    Don't see your model?{" "}
-                    <Link
-                      href="/llm/models"
-                      className="inline-flex items-center gap-0.5 text-primary underline-offset-2 hover:underline"
-                    >
-                      Sync models and configure embedding dimensions
-                      <ArrowUpRight className="h-3.5 w-3.5" />
-                    </Link>
-                  </p>
-                  {embeddingModel &&
-                    selectedEmbeddingProvider &&
-                    noticeDismissalScope && (
-                      <EmbeddingModelImageSupportNotice
-                        modelId={embeddingModel}
-                        provider={selectedEmbeddingProvider}
-                        dismissalScope={noticeDismissalScope}
-                        supportsImages={
-                          selectedEmbeddingCatalogModel
-                            ? embeddingModelSupportsImages(
-                                selectedEmbeddingCatalogModel,
-                              )
-                            : null
-                        }
-                        showSettingsLink={false}
-                        className="sm:ml-auto sm:w-80"
-                      />
-                    )}
-                  {selectedEmbeddingProvider === "gemini" &&
-                    selectedEmbeddingModel?.embeddingDimensions === 1536 && (
-                      <p className="flex items-start gap-2 text-xs text-muted-foreground sm:ml-auto sm:w-80">
-                        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                        <span>
-                          Gemini will truncate from its native 3072 dimensions
-                          via outputDimensionality.
-                        </span>
-                      </p>
-                    )}
-                  {embeddingStatus.status === "failed" &&
-                    embeddingStatus.error && (
-                      <p className="flex items-start gap-2 text-sm text-destructive sm:ml-auto sm:w-80">
-                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                        <span>{embeddingStatus.error}</span>
-                      </p>
-                    )}
-                  <DropEmbeddingConfigDialog
-                    open={showDropDialog}
-                    onOpenChange={setShowDropDialog}
+            </>
+          }
+        >
+          <WithPermissions
+            permissions={{ knowledgeSettings: ["update"] }}
+            noPermissionHandle="tooltip"
+          >
+            {({ hasPermission }) => (
+              <div className="flex flex-col gap-4">
+                <CardRow label="Key">
+                  <ApiKeySelector
+                    value={embeddingChatApiKeyId}
+                    onChange={setEmbeddingChatApiKeyId}
+                    disabled={!hasPermission || isEmbeddingModelLocked}
+                    forEmbedding
+                    label="embedding API key"
+                    allowedKeyIds={embeddingCapableKeyIds}
+                    pulse={
+                      embeddingSetupStep === "add-key" ||
+                      embeddingSetupStep === "select-key"
+                    }
                   />
-                </div>
-              )}
-            </WithPermissions>
-          </CardContent>
+                </CardRow>
+                <CardRow label="Model">
+                  <LlmModelSearchableSelect
+                    value={embeddingModel ?? ""}
+                    onValueChange={(v) => setEmbeddingModel(v || null)}
+                    options={(embeddingModels ?? []).map((model) => ({
+                      value: model.id,
+                      model: model.displayName ?? model.id,
+                      modelId: model.id,
+                      provider: model.provider,
+                      description:
+                        model.displayName === model.id ? undefined : model.id,
+                      capabilities: model.capabilities,
+                      isFree: model.isFree,
+                      isBest: model.isBest,
+                      badge: model.embeddingDimensions
+                        ? `${model.embeddingDimensions} dims`
+                        : undefined,
+                    }))}
+                    placeholder="Select embedding model..."
+                    searchPlaceholder="Search embedding models..."
+                    emptyMessage={embeddingEmptyMessage}
+                    className={cn(
+                      "w-full",
+                      embeddingSetupStep === "select-model" &&
+                        SETUP_HIGHLIGHT_CLASS,
+                    )}
+                    popoverContentClassName={KNOWLEDGE_MODEL_POPOVER_CLASS}
+                    popoverListClassName={KNOWLEDGE_MODEL_POPOVER_LIST_CLASS}
+                    popoverSide="bottom"
+                    popoverAlign="end"
+                    truncateOptionLabels={false}
+                    disabled={
+                      !hasPermission ||
+                      isEmbeddingModelLocked ||
+                      !embeddingChatApiKeyId
+                    }
+                  />
+                </CardRow>
+                <p className="text-sm text-muted-foreground sm:ml-auto sm:w-80">
+                  Don't see your model?{" "}
+                  <Link
+                    href="/llm/models"
+                    className="inline-flex items-center gap-0.5 text-primary underline-offset-2 hover:underline"
+                  >
+                    Sync models and configure embedding dimensions
+                    <ArrowUpRight className="h-3.5 w-3.5" />
+                  </Link>
+                </p>
+                {embeddingModel &&
+                  selectedEmbeddingProvider &&
+                  noticeDismissalScope && (
+                    <EmbeddingModelImageSupportNotice
+                      modelId={embeddingModel}
+                      provider={selectedEmbeddingProvider}
+                      dismissalScope={noticeDismissalScope}
+                      supportsImages={
+                        selectedEmbeddingCatalogModel
+                          ? embeddingModelSupportsImages(
+                              selectedEmbeddingCatalogModel,
+                            )
+                          : null
+                      }
+                      showSettingsLink={false}
+                      className="sm:ml-auto sm:w-80"
+                    />
+                  )}
+                {selectedEmbeddingProvider === "gemini" &&
+                  selectedEmbeddingModel?.embeddingDimensions === 1536 && (
+                    <p className="flex items-start gap-2 text-xs text-muted-foreground sm:ml-auto sm:w-80">
+                      <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                      <span>
+                        Gemini will truncate from its native 3072 dimensions via
+                        outputDimensionality.
+                      </span>
+                    </p>
+                  )}
+                {embeddingStatus.status === "failed" &&
+                  embeddingStatus.error && (
+                    <p className="flex items-start gap-2 text-sm text-destructive sm:ml-auto sm:w-80">
+                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                      <span>{embeddingStatus.error}</span>
+                    </p>
+                  )}
+                <DropEmbeddingConfigDialog
+                  open={showDropDialog}
+                  onOpenChange={setShowDropDialog}
+                />
+              </div>
+            )}
+          </WithPermissions>
           {showEmbeddingFooter && (
-            <CardFooter className="-mb-6 mt-2 flex flex-col gap-3 rounded-b-xl border-t bg-muted/30 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="mt-5 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
               {isEmbeddingModelLocked ? (
                 <p className="flex items-start gap-2 text-sm text-muted-foreground">
                   <Lock className="mt-0.5 h-4 w-4 shrink-0" />
@@ -1338,22 +1331,24 @@ function KnowledgeSettingsContent() {
                   </div>
                 )}
               </WithPermissions>
-            </CardFooter>
+            </div>
           )}
-        </Card>
+        </SettingsBlock>
 
-        <Card id="search-ranking-configuration">
-          <CardHeader>
-            <CardTitle>Search Ranking Configuration</CardTitle>
-            <CardDescription>
+        <SettingsBlock
+          id="search-ranking-configuration"
+          title="Search Ranking Configuration"
+          description={
+            <>
               Orders the passages a search has found. Keyword ranking scores
               them by the words they share with the question and builds the
               shortlist; reranking reads that shortlist and puts the passages
               that answer the question first. Changes apply to the next search —
               nothing is re-indexed.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-6">
+            </>
+          }
+        >
+          <div className="flex flex-col gap-6">
             <section id="keyword-ranking" className="flex flex-col gap-3">
               <div className="space-y-1">
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
@@ -1579,9 +1574,9 @@ function KnowledgeSettingsContent() {
                   </p>
                 )}
             </section>
-          </CardContent>
+          </div>
           {(rerankerChatApiKeyId || rerankerModel) && (
-            <CardFooter className="-mb-6 mt-2 flex flex-col gap-3 rounded-b-xl border-t bg-muted/30 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="mt-5 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
               <span />
               <WithPermissions
                 permissions={{ knowledgeSettings: ["update"] }}
@@ -1619,78 +1614,77 @@ function KnowledgeSettingsContent() {
                   </div>
                 )}
               </WithPermissions>
-            </CardFooter>
+            </div>
           )}
-        </Card>
+        </SettingsBlock>
 
-        <Card id="document-ocr">
-          <CardHeader>
-            <CardTitle>Document OCR</CardTitle>
-            <CardDescription>
+        <SettingsBlock
+          id="document-ocr"
+          title="Document OCR"
+          description={
+            <>
               Reads the text in scanned or image-only PDF pages — a signed
               contract that was scanned, for example — so those documents show
               up in search like any other. Without it, such pages are skipped.
               Each transcribed page is one metered model call, visible in LLM
               cost statistics. Optional.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <WithPermissions
-              permissions={{ knowledgeSettings: ["update"] }}
-              noPermissionHandle="tooltip"
-            >
-              {({ hasPermission }) => (
-                <div className="flex flex-col gap-4">
-                  <CardRow label="Key">
-                    <ApiKeySelector
-                      value={ocrChatApiKeyId}
-                      onChange={handleOcrKeyChange}
-                      disabled={!hasPermission}
-                      label="OCR API key"
-                      allowedKeyIds={ocrCapableKeyIds}
-                      autoSelectFirstKey={false}
-                    />
-                  </CardRow>
-                  <CardRow label="Model">
-                    <OcrModelSelector
-                      value={ocrModel}
-                      onChange={setOcrModel}
-                      disabled={!hasPermission}
-                      selectedKeyId={ocrChatApiKeyId}
-                    />
-                  </CardRow>
-                  <p className="text-sm text-muted-foreground sm:ml-auto sm:w-80">
-                    Don't see your model?{" "}
-                    <Link
-                      href="/llm/models"
-                      className="inline-flex items-center gap-0.5 text-primary underline-offset-2 hover:underline"
-                    >
-                      Mark its image or PDF input modality
-                      <ArrowUpRight className="h-3.5 w-3.5" />
-                    </Link>
+            </>
+          }
+        >
+          <WithPermissions
+            permissions={{ knowledgeSettings: ["update"] }}
+            noPermissionHandle="tooltip"
+          >
+            {({ hasPermission }) => (
+              <div className="flex flex-col gap-4">
+                <CardRow label="Key">
+                  <ApiKeySelector
+                    value={ocrChatApiKeyId}
+                    onChange={handleOcrKeyChange}
+                    disabled={!hasPermission}
+                    label="OCR API key"
+                    allowedKeyIds={ocrCapableKeyIds}
+                    autoSelectFirstKey={false}
+                  />
+                </CardRow>
+                <CardRow label="Model">
+                  <OcrModelSelector
+                    value={ocrModel}
+                    onChange={setOcrModel}
+                    disabled={!hasPermission}
+                    selectedKeyId={ocrChatApiKeyId}
+                  />
+                </CardRow>
+                <p className="text-sm text-muted-foreground sm:ml-auto sm:w-80">
+                  Don't see your model?{" "}
+                  <Link
+                    href="/llm/models"
+                    className="inline-flex items-center gap-0.5 text-primary underline-offset-2 hover:underline"
+                  >
+                    Mark its image or PDF input modality
+                    <ArrowUpRight className="h-3.5 w-3.5" />
+                  </Link>
+                </p>
+                {ocrConfigured && !ocrWasEnabled && (
+                  <p className="flex items-start gap-2 text-xs text-muted-foreground sm:ml-auto sm:w-80">
+                    <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    <span>
+                      Saving triggers a full re-sync of every connector so
+                      documents previously skipped as unreadable are picked up.
+                    </span>
                   </p>
-                  {ocrConfigured && !ocrWasEnabled && (
-                    <p className="flex items-start gap-2 text-xs text-muted-foreground sm:ml-auto sm:w-80">
-                      <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                      <span>
-                        Saving triggers a full re-sync of every connector so
-                        documents previously skipped as unreadable are picked
-                        up.
-                      </span>
-                    </p>
-                  )}
-                  {ocrStatus.status === "failed" && ocrStatus.error && (
-                    <p className="flex items-start gap-2 text-sm text-destructive sm:ml-auto sm:w-80">
-                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                      <span>{ocrStatus.error}</span>
-                    </p>
-                  )}
-                </div>
-              )}
-            </WithPermissions>
-          </CardContent>
+                )}
+                {ocrStatus.status === "failed" && ocrStatus.error && (
+                  <p className="flex items-start gap-2 text-sm text-destructive sm:ml-auto sm:w-80">
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>{ocrStatus.error}</span>
+                  </p>
+                )}
+              </div>
+            )}
+          </WithPermissions>
           {(ocrChatApiKeyId || ocrModel) && (
-            <CardFooter className="-mb-6 mt-2 flex flex-col gap-3 rounded-b-xl border-t bg-muted/30 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="mt-5 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
               <span />
               <WithPermissions
                 permissions={{ knowledgeSettings: ["update"] }}
@@ -1728,9 +1722,9 @@ function KnowledgeSettingsContent() {
                   </div>
                 )}
               </WithPermissions>
-            </CardFooter>
+            </div>
           )}
-        </Card>
+        </SettingsBlock>
 
         <SettingsSaveBar
           hasChanges={hasChanges}

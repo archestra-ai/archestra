@@ -5,45 +5,17 @@ import type { ReactNode } from "react";
 import { createContext, useContext, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
-import { CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { cn } from "@/lib/utils";
 
 interface SettingsBlockProps {
   title: ReactNode;
   description?: ReactNode;
-  control: ReactNode;
+  control?: ReactNode;
   notice?: ReactNode;
   children?: ReactNode;
   /** Anchor for a link that points at this specific setting. */
   id?: string;
-}
-
-interface SettingsCardHeaderProps {
-  title: ReactNode;
-  description?: ReactNode;
-  action?: ReactNode;
-  notice?: ReactNode;
-}
-
-export function SettingsCardHeader({
-  title,
-  description,
-  action,
-  notice,
-}: SettingsCardHeaderProps) {
-  return (
-    <CardHeader>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0 flex-1 space-y-1.5">
-          <CardTitle>{title}</CardTitle>
-          {description && <CardDescription>{description}</CardDescription>}
-        </div>
-        {action && <div className="flex shrink-0 items-center">{action}</div>}
-      </div>
-      {notice && <div className="text-sm mt-2">{notice}</div>}
-    </CardHeader>
-  );
 }
 
 export function SettingsBlock({

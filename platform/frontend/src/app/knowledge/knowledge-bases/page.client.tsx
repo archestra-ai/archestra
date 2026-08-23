@@ -20,7 +20,7 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FilterBar, filterSearchClass } from "@/components/filter-bar";
-import { LoadingSpinner } from "@/components/loading";
+import { LoadingState } from "@/components/loading";
 import {
   PERMANENT_DELETE_LABEL,
   permanentDeleteRowAction,
@@ -677,11 +677,7 @@ function KnowledgeBaseCardGrid({
   onPaginationChange: (next: { pageIndex: number; pageSize: number }) => void;
 }) {
   if (isLoading) {
-    return (
-      <div className="flex justify-center py-16">
-        <LoadingSpinner />
-      </div>
-    );
+    return <LoadingState label="Loading knowledge bases…" />;
   }
 
   if (knowledgeBases.length === 0) {

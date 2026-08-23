@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
-import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
+import { LoadingState, LoadingWrapper } from "@/components/loading";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -271,7 +271,7 @@ export default function GithubSettingsPage() {
       ) : (
         <LoadingWrapper
           isPending={isLoadingApps || isLoadingPats}
-          loadingFallback={<LoadingSpinner />}
+          loadingFallback={<LoadingState />}
         >
           <DataTable
             columns={columns}

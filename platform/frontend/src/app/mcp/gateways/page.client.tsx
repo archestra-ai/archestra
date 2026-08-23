@@ -32,7 +32,7 @@ import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { FilterBar, filterSearchClass } from "@/components/filter-bar";
-import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
+import { LoadingState, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
@@ -626,7 +626,9 @@ function McpGateways({
   return (
     <LoadingWrapper
       isPending={showLoading}
-      loadingFallback={<LoadingSpinner />}
+      loadingFallback={
+        <LoadingState label="Loading MCP gateways…" variant="page" />
+      }
     >
       <PageLayout
         title="MCP Gateways"

@@ -11,7 +11,7 @@ import Link from "next/link";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { ExecutedAsBadge } from "@/components/executed-as-badge";
 import { JsonCodeBlock } from "@/components/json-code-block";
-import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
+import { LoadingState, LoadingWrapper } from "@/components/loading";
 import {
   LockedChatContentUnavailable,
   LockedChatContentUnavailableLabel,
@@ -75,7 +75,7 @@ function McpToolCallDetail({
   const { data: agents } = useProfiles();
 
   if (isPending) {
-    return <LoadingSpinner />;
+    return <LoadingState label="Loading tool call…" variant="page" />;
   }
 
   if (isLoadingError) {

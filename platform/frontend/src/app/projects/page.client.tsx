@@ -17,6 +17,7 @@ import { AgentSelector } from "@/components/agent-selector";
 import { ApiKeyLoadError } from "@/components/api-key-load-error";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FilterBar, filterSearchClass } from "@/components/filter-bar";
+import { LoadingState } from "@/components/loading";
 import { NoApiKeySetup } from "@/components/no-api-key-setup";
 import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
@@ -261,11 +262,13 @@ function ProjectsList() {
               deletePermission={{ project: ["admin"] }}
             />
           </FilterBar>
-          {isDeletedView ? (
+          {isPending ? (
+            <LoadingState label="Loading projects…" />
+          ) : isDeletedView ? (
             projects.length === 0 ? (
               <div className="flex flex-col items-center gap-2 py-16 text-center text-sm text-muted-foreground">
                 <FolderKanban className="h-8 w-8 opacity-50" />
-                <p>{isPending ? "Loading…" : "No deleted projects"}</p>
+                <p>No deleted projects</p>
               </div>
             ) : (
               <DeletedProjectsTable
@@ -280,11 +283,9 @@ function ProjectsList() {
             <div className="flex flex-col items-center gap-2 py-16 text-center text-sm text-muted-foreground">
               <FolderKanban className="h-8 w-8 opacity-50" />
               <p>
-                {isPending
-                  ? "Loading…"
-                  : hasActiveFilter
-                    ? "No projects match your filters"
-                    : "No projects yet"}
+                {hasActiveFilter
+                  ? "No projects match your filters"
+                  : "No projects yet"}
               </p>
             </div>
           ) : (

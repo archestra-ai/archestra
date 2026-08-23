@@ -44,7 +44,7 @@ import {
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FilterBar, filterSearchClass } from "@/components/filter-bar";
 import { ImportAgentDialog } from "@/components/import-agent-dialog";
-import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
+import { LoadingState, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
@@ -565,7 +565,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   return (
     <LoadingWrapper
       isPending={showLoading}
-      loadingFallback={<LoadingSpinner />}
+      loadingFallback={<LoadingState label="Loading agents…" variant="page" />}
     >
       <PageLayout
         title="Agents"

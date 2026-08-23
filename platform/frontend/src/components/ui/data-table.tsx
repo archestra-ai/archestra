@@ -15,9 +15,10 @@ import {
   useReactTable,
   type VisibilityState,
 } from "@tanstack/react-table";
-import { Inbox, Loader2, Search } from "lucide-react";
+import { Inbox, Search } from "lucide-react";
 import React, { useState } from "react";
 
+import { LoadingState } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -269,6 +270,10 @@ export function DataTable<TData, TValue>({
     1,
   );
 
+  if (isLoading && data.length === 0) {
+    return <LoadingState label="Loading results…" />;
+  }
+
   return (
     <div className="w-full space-y-4">
       <div className="overflow-x-auto rounded-md border">
@@ -388,25 +393,17 @@ export function DataTable<TData, TValue>({
               <TableRow>
                 <TableCell colSpan={columns.length} className="py-0">
                   <div className="flex flex-col items-center justify-center py-12 text-center">
-                    {isLoading ? (
-                      <Loader2 className="mb-3 h-10 w-10 animate-spin text-muted-foreground" />
-                    ) : (
-                      <div className="mb-3 text-muted-foreground">
-                        {hasActiveFilters ? (
-                          <Search className="h-10 w-10" />
-                        ) : (
-                          (emptyIcon ?? <Inbox className="h-10 w-10" />)
-                        )}
-                      </div>
-                    )}
+                    <div className="mb-3 text-muted-foreground">
+                      {hasActiveFilters ? (
+                        <Search className="h-10 w-10" />
+                      ) : (
+                        (emptyIcon ?? <Inbox className="h-10 w-10" />)
+                      )}
+                    </div>
                     <p className="text-sm text-muted-foreground">
-                      {isLoading
-                        ? "Loading..."
-                        : hasActiveFilters
-                          ? filteredEmptyMessage
-                          : emptyMessage}
+                      {hasActiveFilters ? filteredEmptyMessage : emptyMessage}
                     </p>
-                    {!isLoading && hasActiveFilters && onClearFilters && (
+                    {hasActiveFilters && onClearFilters && (
                       <Button
                         variant="outline"
                         size="sm"

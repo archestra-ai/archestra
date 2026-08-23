@@ -112,7 +112,7 @@ import {
 import { useTeams } from "@/lib/teams/team.query";
 
 vi.mock("@/components/loading", () => ({
-  LoadingSpinner: () => <div>Loading</div>,
+  LoadingState: () => <div>Loading</div>,
   LoadingWrapper: ({ children }: { children: React.ReactNode }) => children,
 }));
 

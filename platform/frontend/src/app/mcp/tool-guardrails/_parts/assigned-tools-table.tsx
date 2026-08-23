@@ -26,7 +26,7 @@ import {
   FilterSelect,
   filterSearchClass,
 } from "@/components/filter-bar";
-import { LoadingSpinner } from "@/components/loading";
+import { LoadingState } from "@/components/loading";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { ResultPolicyToggle } from "@/components/result-policy-toggle";
 import { WithPermissions } from "@/components/roles/with-permissions";
@@ -542,7 +542,7 @@ export function AssignedToolsTable({
                     size="table"
                   />
                   {isUpdating && (
-                    <LoadingSpinner className="ml-1 h-3 w-3 text-muted-foreground" />
+                    <LoadingState className="ml-1" variant="inline" />
                   )}
                 </RowClickShield>
               )}
@@ -608,9 +608,7 @@ export function AssignedToolsTable({
                     }}
                     disabled={isUpdating || !hasPermission}
                   />
-                  {isUpdating && (
-                    <LoadingSpinner className="h-3 w-3 text-muted-foreground" />
-                  )}
+                  {isUpdating && <LoadingState variant="inline" />}
                 </RowClickShield>
               )}
             </WithPermissions>

@@ -188,10 +188,10 @@ describe("KnowledgePageLayout", () => {
   });
 
   describe("loading state", () => {
-    it("shows loading spinner when isPending is true", () => {
+    it("shows the shared loading state when isPending is true", () => {
       renderLayout(true);
 
-      // Content and placeholder should not be visible
+      expect(screen.getByRole("status", { name: "Loading…" })).toBeVisible();
       expect(screen.queryByTestId("content")).not.toBeInTheDocument();
       expect(
         screen.queryByText("Embedding configuration required"),

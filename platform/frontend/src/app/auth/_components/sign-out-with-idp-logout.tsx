@@ -1,8 +1,8 @@
 "use client";
 
 import { archestraApiSdk } from "@archestra/shared";
-import { Loader2 } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { LoadingState } from "@/components/loading";
 import { clearSsoSignInAttempt } from "@/lib/auth/sso-sign-in-attempt";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed; reset is a no-op when RUM never started
 import { rumClient } from "@/lib/rum.ee";
@@ -17,12 +17,7 @@ export function SignOutWithIdpLogout() {
     performSignOut();
   }, []);
 
-  return (
-    <div className="flex flex-col items-center justify-center gap-4 p-8">
-      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      <p className="text-sm text-muted-foreground">Signing out...</p>
-    </div>
-  );
+  return <LoadingState label="Signing out…" variant="page" />;
 }
 
 async function performSignOut() {

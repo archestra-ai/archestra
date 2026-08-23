@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AppLogo } from "@/components/app-logo";
 import { CommunityLinks } from "@/components/community-links";
-import { LoadingSpinner } from "@/components/loading";
+import { LoadingState } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -110,14 +110,14 @@ function SignUpWithInvitationContent() {
   if (isCheckingInvitation && invitationId) {
     return (
       <main className="h-full flex items-center justify-center">
-        <LoadingSpinner />
+        <LoadingState variant="page" />
       </main>
     );
   }
 
   return (
     <ErrorBoundary>
-      <Suspense fallback={<LoadingSpinner />}>
+      <Suspense fallback={<LoadingState variant="page" />}>
         <main className="h-full flex items-center justify-center p-4">
           <div className="w-full max-w-sm space-y-4">
             <AppLogo />
@@ -220,7 +220,7 @@ function SignUpWithInvitationContent() {
 export default function SignUpWithInvitationPage() {
   return (
     <ErrorBoundary>
-      <Suspense fallback={<LoadingSpinner />}>
+      <Suspense fallback={<LoadingState />}>
         <SignUpWithInvitationContent />
       </Suspense>
     </ErrorBoundary>

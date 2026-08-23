@@ -57,7 +57,9 @@ describe("SessionDetailPage", () => {
 
     renderSessionDetailPage();
 
-    expect(await screen.findByText("Loading session logs...")).toBeVisible();
+    expect(
+      await screen.findByRole("status", { name: "Loading session logs…" }),
+    ).toBeVisible();
     expect(
       screen.queryByText("No interactions found for this session"),
     ).not.toBeInTheDocument();
@@ -85,7 +87,7 @@ describe("SessionDetailPage", () => {
       await screen.findByText("No interactions found for this session"),
     ).toBeVisible();
     expect(
-      screen.queryByText("Loading session logs..."),
+      screen.queryByRole("status", { name: "Loading session logs…" }),
     ).not.toBeInTheDocument();
   });
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { LoadingSpinner } from "@/components/loading";
+import { LoadingState } from "@/components/loading";
 import { AppSettingsForm } from "@/components/mcp-app/app-settings-form";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Button } from "@/components/ui/button";
@@ -50,12 +50,11 @@ export function AppSettingsDialog({
           <DialogTitle>App settings</DialogTitle>
         </DialogHeader>
         {isPending ? (
-          <output
-            aria-label="Loading app settings"
-            className="flex min-h-40 flex-1 items-center justify-center"
-          >
-            <LoadingSpinner />
-          </output>
+          <LoadingState
+            className="min-h-40 flex-1"
+            label="Loading app settings…"
+            variant="compact"
+          />
         ) : isLoadingError ? (
           <QueryLoadError
             title="Couldn't load app settings"

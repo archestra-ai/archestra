@@ -9,7 +9,7 @@ import { ConnectivityStatusBar } from "@/components/connectivity-status-bar";
 import { ConversationSearchProvider } from "@/components/conversation-search-provider";
 import { FeedbackPopupDialog } from "@/components/feedback-popup-dialog";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
-import { LoadingSpinner } from "@/components/loading";
+import { LoadingState } from "@/components/loading";
 import {
   NavigationStatusProvider,
   useNavigationStatus,
@@ -127,7 +127,7 @@ export function AppShell({ children }: AppShellProps) {
   if (redirectingToTwoFactorSetup) {
     return (
       <main className="h-app-viewport w-full flex items-center justify-center bg-background">
-        <LoadingSpinner />
+        <LoadingState variant="page" />
       </main>
     );
   }

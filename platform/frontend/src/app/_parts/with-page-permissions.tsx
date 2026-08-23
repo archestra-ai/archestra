@@ -4,6 +4,7 @@ import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import { usePathname } from "next/navigation";
 import type React from "react";
 import { ForbiddenPage } from "@/app/_parts/forbidden-page";
+import { LoadingState } from "@/components/loading";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 
 export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
@@ -19,7 +20,7 @@ export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
 
   // Show loading while checking permissions
   if (isPending && requiredPermissions) {
-    return null;
+    return <LoadingState label="Checking access…" variant="page" />;
   }
 
   // Show forbidden page if user doesn't have required permissions

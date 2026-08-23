@@ -16,7 +16,7 @@ import {
   parseLabelsParam,
   serializeLabels,
 } from "@/components/label-select";
-import { LoadingWrapper } from "@/components/loading";
+import { LoadingState, LoadingWrapper } from "@/components/loading";
 import { AppSettingsDialog } from "@/components/mcp-app/app-settings-dialog";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -197,7 +197,10 @@ export default function AppsPage() {
           </div>
         )}
 
-        <LoadingWrapper isPending={isPending && !data}>
+        <LoadingWrapper
+          isPending={isPending && !data}
+          loadingFallback={<LoadingState variant="page" />}
+        >
           {isLoadingError ? (
             <QueryLoadError
               title="Couldn't load your apps"

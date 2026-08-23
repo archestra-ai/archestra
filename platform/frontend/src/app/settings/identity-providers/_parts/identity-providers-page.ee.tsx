@@ -9,7 +9,7 @@ import {
 import { useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
 import { IdentityProviderIcon } from "@/components/identity-provider-icons.ee";
-import { LoadingSpinner } from "@/components/loading";
+import { LoadingState } from "@/components/loading";
 import { TableCardGrid } from "@/components/table-card-view";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -334,7 +334,7 @@ export function IdentityProvidersSettingsContent() {
   // Gating is handled by the parent (DisabledEnterpriseSection in
   // identity-providers/page.tsx). When disabled the wrapper renders this UI
   // dimmed and non-interactive, so we no longer short-circuit here.
-  if (isLoading) return <LoadingSpinner />;
+  if (isLoading) return <LoadingState />;
 
   return (
     <div>

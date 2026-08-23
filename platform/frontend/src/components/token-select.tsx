@@ -13,7 +13,7 @@ import {
 import { useMcpServersGroupedByCatalog } from "@/lib/mcp/mcp-server.query";
 import { cn } from "@/lib/utils";
 import Divider from "./divider";
-import { LoadingSpinner } from "./loading";
+import { LoadingState } from "./loading";
 
 // Special value for dynamic team credential option
 export const DYNAMIC_CREDENTIAL_VALUE = "__dynamic__";
@@ -82,7 +82,7 @@ export function TokenSelect({
   }, []);
 
   if (isLoading) {
-    return <LoadingSpinner className="w-3 h-3 inline-block ml-2" />;
+    return <LoadingState className="ml-2" variant="inline" />;
   }
 
   if (staticCredentialOutsideOfGroupedCredentials) {

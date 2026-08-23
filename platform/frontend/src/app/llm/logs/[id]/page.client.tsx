@@ -10,7 +10,7 @@ import Link from "next/link";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { BilledCost } from "@/components/billed-cost";
 import { JsonCodeBlock } from "@/components/json-code-block";
-import { LoadingSpinner } from "@/components/loading";
+import { LoadingState } from "@/components/loading";
 import { LockedChatContentUnavailable } from "@/components/locked-chat-content-unavailable";
 import MessageThread from "@/components/message-thread";
 import { MetadataCard, MetadataItem } from "@/components/metadata-card";
@@ -69,7 +69,7 @@ function LogDetail({
   const { data: agents } = useProfiles();
 
   if (isPending) {
-    return <LoadingSpinner />;
+    return <LoadingState label="Loading interaction…" variant="page" />;
   }
 
   if (isLoadingError) {

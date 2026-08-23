@@ -3,6 +3,7 @@
 import { ArrowLeft, FileX } from "lucide-react";
 import Link from "next/link";
 import type { MouseEvent } from "react";
+import { LoadingState } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,7 +13,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { Skeleton } from "@/components/ui/skeleton";
 
 /** The page header's way back: to the list, or from the wizard to the skill. */
 export function SkillBackLink({
@@ -49,10 +49,7 @@ export function SkillPageLoading() {
       backLink={<SkillBackLink href="/skills" label="Skills" />}
       maxWidth="wizard"
     >
-      <div className="space-y-4">
-        <Skeleton className="h-8 w-64" />
-        <Skeleton className="h-96 w-full rounded-xl" />
-      </div>
+      <LoadingState label="Loading skill…" variant="page" />
     </PageLayout>
   );
 }

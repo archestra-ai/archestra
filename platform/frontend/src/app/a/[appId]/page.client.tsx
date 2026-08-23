@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { LoadingState } from "@/components/loading";
 import { AppFrame } from "@/components/mcp-app/app-frame";
 import { QueryLoadError } from "@/components/query-load-error";
 import { useApp } from "@/lib/app.query";
@@ -22,6 +23,16 @@ export default function AppRunPage({ idOrSlug }: { idOrSlug: string }) {
     if (app?.name) document.title = app.name;
   }, [app?.name]);
 
+  if (isPending) {
+    return (
+      <LoadingState
+        className="h-app-viewport"
+        label="Loading app…"
+        variant="page"
+      />
+    );
+  }
+
   if (isLoadingError) {
     return (
       <QueryLoadError
@@ -35,7 +46,7 @@ export default function AppRunPage({ idOrSlug }: { idOrSlug: string }) {
   // Mount only once resolved so the runtime keys diagnostics to a concrete
   // version — AppFrame renders the bare runtime and doesn't gate on it.
   if (!app) {
-    return isPending ? null : (
+    return (
       <output className="flex h-app-viewport items-center justify-center p-8 text-center text-sm text-muted-foreground">
         This app does not exist, or it is not shared with you. If you expected
         to see it, ask its owner to share it with your team or organization.

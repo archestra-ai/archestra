@@ -30,7 +30,7 @@ import {
 } from "@/components/limit-cleanup-interval-select";
 import { LlmModelPicker } from "@/components/llm-model-picker";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
-import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
+import { LoadingState, LoadingWrapper } from "@/components/loading";
 import { QueryLoadError } from "@/components/query-load-error";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { TableRowActions } from "@/components/table-row-actions";
@@ -785,10 +785,7 @@ export default function LimitsPage() {
         />
       </div>
 
-      <LoadingWrapper
-        isPending={isPending}
-        loadingFallback={<LoadingSpinner />}
-      >
+      <LoadingWrapper isPending={isPending} loadingFallback={<LoadingState />}>
         <DataTable
           columns={columns}
           data={filteredLimits}

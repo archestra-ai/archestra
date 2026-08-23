@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AppLogo } from "@/components/app-logo";
-import { LoadingSpinner } from "@/components/loading";
+import { LoadingState } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -75,7 +75,7 @@ export default function LinkedIdentityProviderCallbackPage() {
                 Try Again
               </Button>
             ) : (
-              <LoadingSpinner />
+              <LoadingState />
             )}
           </CardContent>
         </Card>

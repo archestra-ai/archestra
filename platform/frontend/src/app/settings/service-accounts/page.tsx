@@ -9,7 +9,7 @@ import { useForm } from "react-hook-form";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FilterBar, filterSearchClass } from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
-import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
+import { LoadingState, LoadingWrapper } from "@/components/loading";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
@@ -255,7 +255,7 @@ export default function ServiceAccountsSettingsPage() {
       ) : (
         <LoadingWrapper
           isPending={isPending}
-          loadingFallback={<LoadingSpinner />}
+          loadingFallback={<LoadingState />}
         >
           <div>
             <FilterBar

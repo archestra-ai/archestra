@@ -3,6 +3,7 @@
 import { ArrowLeft, Loader2, Play } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { LoadingState } from "@/components/loading";
 import { ScheduleRunsList } from "@/components/scheduled-tasks/schedule-runs-list";
 import { Button } from "@/components/ui/button";
 import { useProject } from "@/lib/projects/projects.query";
@@ -31,11 +32,7 @@ export function ProjectScheduleRunsClient() {
   };
 
   if (triggerLoading) {
-    return (
-      <div className="flex items-center justify-center py-16">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <LoadingState label="Loading schedule runs…" variant="page" />;
   }
 
   return (

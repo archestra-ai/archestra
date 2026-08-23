@@ -6,7 +6,7 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AccountPageActionSlotContext } from "@/app/account/_components/account-page-action";
 import { AccountSectionNav } from "@/app/account/_components/account-section-nav";
 import { ChangePasswordDialog } from "@/app/account/_components/change-password-dialog";
-import { LoadingSpinner } from "@/components/loading";
+import { LoadingState } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { Button } from "@/components/ui/button";
 import { usePublicConfig } from "@/lib/config/config.query";
@@ -71,7 +71,7 @@ export default function AccountLayout({
 }) {
   return (
     <ErrorBoundary>
-      <Suspense fallback={<LoadingSpinner />}>
+      <Suspense fallback={<LoadingState variant="page" />}>
         <AccountShell>{children}</AccountShell>
       </Suspense>
     </ErrorBoundary>

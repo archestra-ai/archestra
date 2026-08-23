@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { usePathname, useRouter } from "next/navigation";
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
+import { LoadingState } from "@/components/loading";
 import { authQueryKeys, useSession } from "@/lib/auth/auth.query";
 import { usePublicConfig } from "@/lib/config/config.query";
 import { getValidatedRedirectPath } from "@/lib/utils/redirect-validation";
@@ -175,13 +176,12 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
 
   // Show loading while checking auth/permissions
   if (inProgress) {
-    return null;
+    return <LoadingState label="Loading your workspace…" variant="page" />;
   } else if (isSpecialAuth) {
     // Special auth pages are always rendered (handles both 2FA verification and setup)
     return <>{children}</>;
   } else if (isAuthPage && isLoggedIn) {
-    // During redirects, show nothing to avoid flash
-    return null;
+    return <LoadingState label="Redirecting…" variant="page" />;
   } else if (isRecordingRender) {
     // The offline video renderer drives a browser that holds no session, so
     // this page cannot sit behind the gate. It is safe outside it because it
@@ -190,7 +190,7 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
     // visitor gets an empty page rather than anyone's recording.
     return <>{children}</>;
   } else if (!isAuthPage && !isLoggedIn) {
-    return null;
+    return <LoadingState label="Redirecting to sign-in…" variant="page" />;
   }
 
   return <>{children}</>;

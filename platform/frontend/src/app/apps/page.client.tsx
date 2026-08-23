@@ -11,11 +11,6 @@ import {
   parseLabelsParam,
   serializeLabels,
 } from "@/components/label-select";
-import {
-  type ListViewMode,
-  ListViewToggle,
-  useListViewMode,
-} from "@/components/list-view-toggle";
 import { LoadingWrapper } from "@/components/loading";
 import { AppSettingsDialog } from "@/components/mcp-app/app-settings-dialog";
 import { PageLayout } from "@/components/page-layout";
@@ -25,6 +20,12 @@ import {
   useScopeFilterParams,
 } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
+import {
+  TableCardGrid,
+  TableCardView,
+  TableCardViewContent,
+  TableCardViewToggle,
+} from "@/components/table-card-view";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Select,
@@ -74,8 +75,6 @@ export default function AppsPage() {
     { toastOnError: false },
   );
   const [createOpen, setCreateOpen] = useState(false);
-  const [viewMode, setViewMode] = useListViewMode("archestra-apps-view");
-
   // The settings dialog is owned here (one hook instance for the page-level
   // "settings" param); cards only report which app to open it for, and the
   // dialog fetches the full app by id itself. So synthesize the entity from the
@@ -148,101 +147,100 @@ export default function AppsPage() {
         </PermissionButton>
       }
     >
-      <div className="mb-6 flex flex-wrap items-center gap-2">
-        <SearchInput
-          paramName="search"
-          placeholder="Search apps"
-          className="relative mr-1 w-[280px]"
-        />
-        <Select
-          value={kind}
-          onValueChange={(value) =>
-            setParam("kind", value === "all" ? null : value)
-          }
-        >
-          <SelectTrigger className="w-[160px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent position="popper" side="bottom" align="start">
-            <SelectItem value="all">All kinds</SelectItem>
-            <SelectItem value="owned">Apps</SelectItem>
-            <SelectItem value="external">MCP Server Apps</SelectItem>
-          </SelectContent>
-        </Select>
-        <ResourceScopeFilter
-          ownerLabelPlural="apps"
-          allLabel="All apps"
-          adminPermission={{ app: ["admin"] }}
-          showTeamSelect={false}
-        />
-        <LabelSelect
-          labelKeys={labelKeys}
-          LabelKeyRowComponent={AppLabelKeyRow}
-        />
-        <span className="ml-auto">
-          <ListViewToggle value={viewMode} onChange={setViewMode} />
-        </span>
-      </div>
-
-      {parsedLabels && (
-        <div className="mb-6">
-          <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />
-        </div>
-      )}
-
-      <LoadingWrapper isPending={isPending && !data}>
-        {isLoadingError ? (
-          <QueryLoadError
-            title="Couldn't load your apps"
-            onRetry={() => refetch()}
+      <TableCardView storageKey="archestra-apps-view">
+        <div className="mb-6 flex flex-wrap items-center gap-2">
+          <SearchInput
+            paramName="search"
+            placeholder="Search apps"
+            className="relative mr-1 w-[280px]"
           />
-        ) : filtered.length === 0 ? (
-          <div className="flex min-h-[40vh] flex-col items-center justify-center text-center">
-            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border bg-background shadow-sm">
-              <AppWindow className="h-6 w-6 text-primary" />
-            </div>
-            <h2 className="mb-1 text-lg font-semibold">
-              {search ? "No apps match your search" : "No apps here yet"}
-            </h2>
-            <p className="max-w-sm text-sm text-muted-foreground">
-              Create an app to get started.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            <AppSection
-              title="Pinned"
-              apps={pinnedApps}
-              viewMode={viewMode}
-              onOpenSettings={openSettings}
-            />
-            <AppSection
-              title="Apps"
-              apps={ownedApps}
-              viewMode={viewMode}
-              onOpenSettings={openSettings}
-            />
-            <AppSection
-              title="Apps from installed MCP servers"
-              apps={externalApps}
-              viewMode={viewMode}
-              onOpenSettings={openSettings}
-            />
+          <Select
+            value={kind}
+            onValueChange={(value) =>
+              setParam("kind", value === "all" ? null : value)
+            }
+          >
+            <SelectTrigger className="w-[160px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent position="popper" side="bottom" align="start">
+              <SelectItem value="all">All kinds</SelectItem>
+              <SelectItem value="owned">Apps</SelectItem>
+              <SelectItem value="external">MCP Server Apps</SelectItem>
+            </SelectContent>
+          </Select>
+          <ResourceScopeFilter
+            ownerLabelPlural="apps"
+            allLabel="All apps"
+            adminPermission={{ app: ["admin"] }}
+            showTeamSelect={false}
+          />
+          <LabelSelect
+            labelKeys={labelKeys}
+            LabelKeyRowComponent={AppLabelKeyRow}
+          />
+          <span className="ml-auto">
+            <TableCardViewToggle />
+          </span>
+        </div>
+
+        {parsedLabels && (
+          <div className="mb-6">
+            <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />
           </div>
         )}
-      </LoadingWrapper>
 
-      <AppCreateDialog open={createOpen} onOpenChange={setCreateOpen} />
+        <LoadingWrapper isPending={isPending && !data}>
+          {isLoadingError ? (
+            <QueryLoadError
+              title="Couldn't load your apps"
+              onRetry={() => refetch()}
+            />
+          ) : filtered.length === 0 ? (
+            <div className="flex min-h-[40vh] flex-col items-center justify-center text-center">
+              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border bg-background shadow-sm">
+                <AppWindow className="h-6 w-6 text-primary" />
+              </div>
+              <h2 className="mb-1 text-lg font-semibold">
+                {search ? "No apps match your search" : "No apps here yet"}
+              </h2>
+              <p className="max-w-sm text-sm text-muted-foreground">
+                Create an app to get started.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              <AppSection
+                title="Pinned"
+                apps={pinnedApps}
+                onOpenSettings={openSettings}
+              />
+              <AppSection
+                title="Apps"
+                apps={ownedApps}
+                onOpenSettings={openSettings}
+              />
+              <AppSection
+                title="Apps from installed MCP servers"
+                apps={externalApps}
+                onOpenSettings={openSettings}
+              />
+            </div>
+          )}
+        </LoadingWrapper>
 
-      {settingsApp ? (
-        <AppSettingsDialog
-          appId={settingsApp.id}
-          open={!!settingsApp}
-          onOpenChange={(open) => {
-            if (!open) closeSettings();
-          }}
-        />
-      ) : null}
+        <AppCreateDialog open={createOpen} onOpenChange={setCreateOpen} />
+
+        {settingsApp ? (
+          <AppSettingsDialog
+            appId={settingsApp.id}
+            open={!!settingsApp}
+            onOpenChange={(open) => {
+              if (!open) closeSettings();
+            }}
+          />
+        ) : null}
+      </TableCardView>
     </PageLayout>
   );
 }
@@ -281,12 +279,10 @@ function AppLabelKeyRow({
 function AppSection({
   title,
   apps,
-  viewMode,
   onOpenSettings,
 }: {
   title: string;
   apps: AppListItem[];
-  viewMode: ListViewMode;
   onOpenSettings: (app: { id: string }) => void;
 }) {
   if (apps.length === 0) return null;
@@ -296,27 +292,28 @@ function AppSection({
       <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
         {title}
       </h2>
-      {viewMode === "table" ? (
-        <AppsTable apps={apps} onOpenSettings={onOpenSettings} />
-      ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {apps.map((app) => (
-            <AppCard
-              // Several tools of one server can share a widget resource, so
-              // (mcpServerId, resourceUri) alone collides; duplicate keys make
-              // React duplicate/omit cards on search re-renders, breaking the
-              // grid. The tool-scoped name disambiguates.
-              key={
-                app.source === "owned"
-                  ? app.id
-                  : `${app.mcpServerId}:${app.resourceUri}:${app.name}`
-              }
-              app={app}
-              onOpenSettings={onOpenSettings}
-            />
-          ))}
-        </div>
-      )}
+      <TableCardViewContent
+        table={<AppsTable apps={apps} onOpenSettings={onOpenSettings} />}
+        cards={
+          <TableCardGrid>
+            {apps.map((app) => (
+              <AppCard
+                // Several tools of one server can share a widget resource, so
+                // (mcpServerId, resourceUri) alone collides; duplicate keys make
+                // React duplicate/omit cards on search re-renders, breaking the
+                // grid. The tool-scoped name disambiguates.
+                key={
+                  app.source === "owned"
+                    ? app.id
+                    : `${app.mcpServerId}:${app.resourceUri}:${app.name}`
+                }
+                app={app}
+                onOpenSettings={onOpenSettings}
+              />
+            ))}
+          </TableCardGrid>
+        }
+      />
     </section>
   );
 }

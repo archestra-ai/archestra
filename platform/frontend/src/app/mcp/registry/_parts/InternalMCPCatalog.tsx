@@ -17,12 +17,17 @@ import {
   parseLabelsParam,
   serializeLabels,
 } from "@/components/label-select";
-import { ListViewToggle, useListViewMode } from "@/components/list-view-toggle";
 import {
   OAuthConfirmationDialog,
   type OAuthInstallResult,
 } from "@/components/oauth-confirmation-dialog";
 import { SearchInput } from "@/components/search-input";
+import {
+  TableCardGrid,
+  TableCardView,
+  TableCardViewContent,
+  TableCardViewToggle,
+} from "@/components/table-card-view";
 import { Button } from "@/components/ui/button";
 import {
   Empty,
@@ -164,12 +169,6 @@ export function InternalMCPCatalog({
   const alertingEnabled = alertingFeature === true;
 
   const [sort, setSort] = useState<SortKey>("name-asc");
-  // The table is the registry's default view: it is the one that reads a
-  // long server list fastest and opens each server's page on its row.
-  const [viewMode, setViewMode] = useListViewMode(
-    "archestra-mcp-registry-view",
-    "table",
-  );
   // The filters live in the URL, not in component state: the sidebar badge
   // and the retired `?tab=attention` links both have to be able to point at a
   // filtered list, and Back has to undo a filter change rather than leave the
@@ -1100,401 +1099,413 @@ export function InternalMCPCatalog({
   ).size;
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-3">
-        {alertingEnabled && (
-          <div className="min-w-0 overflow-x-auto">
-            <RegistryAttentionFacets
-              counts={facetCounts}
-              totalCount={registryItems.length}
-              othersLabel={othersFacetLabel}
-              showOthers={!userIsMcpServerAdmin}
-              selected={selectedFacet}
-              onSelect={selectFacet}
+    <TableCardView storageKey="archestra-mcp-registry-view" defaultMode="table">
+      <div className="space-y-4">
+        <div className="space-y-3">
+          {alertingEnabled && (
+            <div className="min-w-0 overflow-x-auto">
+              <RegistryAttentionFacets
+                counts={facetCounts}
+                totalCount={registryItems.length}
+                othersLabel={othersFacetLabel}
+                showOthers={!userIsMcpServerAdmin}
+                selected={selectedFacet}
+                onSelect={selectFacet}
+              />
+            </div>
+          )}
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <SearchInput
+              objectNamePlural="MCP servers"
+              searchFields={["name"]}
+              value={searchQueryFromUrl}
+              onSearchChange={handleSearchChange}
+              syncQueryParams={false}
+              debounceMs={300}
+              inputClassName="w-full bg-background/50 backdrop-blur-sm border-border/50 focus:border-primary/50 transition-colors pl-9"
             />
+            <McpCatalogLabelFilter />
+            {selectedFacet ? (
+              <RegistryFilterDropdown
+                label="Issue"
+                options={ISSUE_OPTIONS}
+                selected={filters.issue}
+                onToggle={(value) => toggleFilter("issue", value)}
+              />
+            ) : (
+              <RegistryFilterDropdown
+                label="Status"
+                options={STATUS_OPTIONS}
+                selected={filters.status}
+                onToggle={(value) => toggleFilter("status", value)}
+              />
+            )}
+            {environmentOptions.length > 0 && (
+              <RegistryFilterDropdown
+                label="Environment"
+                options={environmentOptions}
+                selected={filters.environment}
+                onToggle={(value) => toggleFilter("environment", value)}
+              />
+            )}
+            {authorOptions.length > 0 && (
+              <RegistryFilterDropdown
+                label="Author"
+                options={authorOptions}
+                selected={filters.author}
+                onToggle={(value) => toggleFilter("author", value)}
+              />
+            )}
+            <RegistrySortMenu value={sort} onChange={setSort} />
+            {!selectedFacet && (
+              <TableCardViewToggle order={["table", "cards"]} />
+            )}
           </div>
-        )}
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <SearchInput
-            objectNamePlural="MCP servers"
-            searchFields={["name"]}
-            value={searchQueryFromUrl}
-            onSearchChange={handleSearchChange}
-            syncQueryParams={false}
-            debounceMs={300}
-            inputClassName="w-full bg-background/50 backdrop-blur-sm border-border/50 focus:border-primary/50 transition-colors pl-9"
-          />
-          <McpCatalogLabelFilter />
-          {selectedFacet ? (
-            <RegistryFilterDropdown
-              label="Issue"
-              options={ISSUE_OPTIONS}
-              selected={filters.issue}
-              onToggle={(value) => toggleFilter("issue", value)}
-            />
-          ) : (
-            <RegistryFilterDropdown
-              label="Status"
-              options={STATUS_OPTIONS}
-              selected={filters.status}
-              onToggle={(value) => toggleFilter("status", value)}
-            />
-          )}
-          {environmentOptions.length > 0 && (
-            <RegistryFilterDropdown
-              label="Environment"
-              options={environmentOptions}
-              selected={filters.environment}
-              onToggle={(value) => toggleFilter("environment", value)}
-            />
-          )}
-          {authorOptions.length > 0 && (
-            <RegistryFilterDropdown
-              label="Author"
-              options={authorOptions}
-              selected={filters.author}
-              onToggle={(value) => toggleFilter("author", value)}
-            />
-          )}
-          <RegistrySortMenu value={sort} onChange={setSort} />
-          {!selectedFacet && (
-            <ListViewToggle
-              value={viewMode}
-              onChange={setViewMode}
-              order={["table", "cards"]}
-            />
-          )}
         </div>
-      </div>
-      {hasLabelFilters && (
-        <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />
-      )}
-      <RegistryFilterChips
-        selected={filters}
-        onRemove={removeFilter}
-        onClearAll={clearAdvancedFilters}
-      />
-      {selectedFacet ? (
-        allFilteredItems.length === 0 ? (
-          // A clean fleet is only claimable when the facet itself is empty.
-          // With rows in the facet and a search or a chip that matched none of
-          // them, the count on the button above is right and the list is
-          // right; what is missing is the reason they disagree.
-          facetCatalogIds?.size === 0 ? (
-            <div className="py-8" data-testid="mcp-registry-attention-list">
-              <Empty>
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <CheckCircle2 className="text-muted-foreground" />
-                  </EmptyMedia>
-                  <EmptyTitle>
-                    {selectedFacet === "muted"
-                      ? "You have not dismissed any alerts"
-                      : selectedFacet === "others"
-                        ? "No alerts need action by another user"
-                        : installedCatalogCount === 1
-                          ? "Your installed MCP server is healthy"
-                          : `All ${installedCatalogCount} installed MCP servers are healthy`}
-                  </EmptyTitle>
-                  <EmptyDescription>
-                    {selectedFacet === "muted"
-                      ? "Alerts you dismiss stay listed here, so a dismissed problem is never invisible."
-                      : selectedFacet === "others"
-                        ? "This view contains unresolved issues owned by someone you can identify only when your role permits it."
-                        : "Servers that fail to start, stop running, or need re-authentication show up here."}
-                  </EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            </div>
-          ) : (
-            <div
-              className="flex flex-col items-center justify-center py-12 text-center"
-              data-testid="mcp-registry-attention-list"
-            >
-              <Search className="mb-4 h-10 w-10 text-muted-foreground" />
-              <p className="text-muted-foreground">
-                No MCP servers match your filters. Try adjusting your search.
-              </p>
-              <Button
-                variant="outline"
-                className="mt-4"
-                onClick={clearFiltersKeepingFacet}
+        {hasLabelFilters && (
+          <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />
+        )}
+        <RegistryFilterChips
+          selected={filters}
+          onRemove={removeFilter}
+          onClearAll={clearAdvancedFilters}
+        />
+        {selectedFacet ? (
+          allFilteredItems.length === 0 ? (
+            // A clean fleet is only claimable when the facet itself is empty.
+            // With rows in the facet and a search or a chip that matched none of
+            // them, the count on the button above is right and the list is
+            // right; what is missing is the reason they disagree.
+            facetCatalogIds?.size === 0 ? (
+              <div className="py-8" data-testid="mcp-registry-attention-list">
+                <Empty>
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                      <CheckCircle2 className="text-muted-foreground" />
+                    </EmptyMedia>
+                    <EmptyTitle>
+                      {selectedFacet === "muted"
+                        ? "You have not dismissed any alerts"
+                        : selectedFacet === "others"
+                          ? "No alerts need action by another user"
+                          : installedCatalogCount === 1
+                            ? "Your installed MCP server is healthy"
+                            : `All ${installedCatalogCount} installed MCP servers are healthy`}
+                    </EmptyTitle>
+                    <EmptyDescription>
+                      {selectedFacet === "muted"
+                        ? "Alerts you dismiss stay listed here, so a dismissed problem is never invisible."
+                        : selectedFacet === "others"
+                          ? "This view contains unresolved issues owned by someone you can identify only when your role permits it."
+                          : "Servers that fail to start, stop running, or need re-authentication show up here."}
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              </div>
+            ) : (
+              <div
+                className="flex flex-col items-center justify-center py-12 text-center"
+                data-testid="mcp-registry-attention-list"
               >
-                Clear filters
-              </Button>
-            </div>
-          )
-        ) : (
-          <McpServerAttentionList
-            // Match Guardrails: changing URL-owned filters clears selection.
-            // Live issue refetches keep the component mounted so failed
-            // targets survive a partial bulk action.
-            key={searchParams.toString()}
-            items={allFilteredItems}
-            issuesByCatalog={issuesByCatalog}
-            servers={installedServers ?? []}
-            facet={selectedFacet}
-            tableContext={{
-              getServerInfo: getInstalledServerInfo,
-              envLabelByCatalog,
-              deploymentFeedState,
-              deploymentStatuses,
-              installingItemId,
-              onInstall: handleTableInstall,
-              onCancelInstallation: install.cancelInstallation,
-            }}
-            onReinstall={handleReinstall}
-          />
-        )
-      ) : (
-        <div className="space-y-6">
-          {personalItems.length > 0 && (
-            <div className="space-y-3">
-              <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-                Personal
-              </h3>
-              {viewMode === "table" ? (
-                <McpServerTable
-                  items={personalItems}
-                  getServerInfo={getInstalledServerInfo}
-                  envLabelByCatalog={envLabelByCatalog}
-                  issuesByCatalog={issuesByCatalog}
-                  deploymentFeedState={deploymentFeedState}
-                  deploymentStatuses={deploymentStatuses}
-                  installingItemId={installingItemId}
-                  onInstall={handleTableInstall}
-                  onReinstall={handleReinstall}
-                  onCancelInstallation={install.cancelInstallation}
-                />
-              ) : (
-                <div className={CARD_GRID_CLASS}>
-                  {personalItems.map((item) => {
-                    const serverInfo = getInstalledServerInfo(item);
-                    return (
-                      <McpServerCard
-                        variant={
-                          item.serverType === "builtin"
-                            ? "builtin"
-                            : item.serverType === "remote"
-                              ? "remote"
-                              : "local"
-                        }
-                        key={item.id}
-                        item={item}
-                        installedServer={serverInfo.installedServer}
-                        installingItemId={installingItemId}
-                        installationStatus={
-                          serverInfo.installedServer?.localInstallationStatus ||
-                          undefined
-                        }
-                        deploymentStatuses={deploymentStatuses}
-                        deploymentFeedState={deploymentFeedState}
-                        issues={issuesByCatalog.get(item.id)}
-                        onInstallRemoteServer={() =>
-                          install.installRemote(item)
-                        }
-                        onInstallLocalServer={() =>
-                          isPlaywrightCatalogItem(item.id)
-                            ? install.installPlaywright(item)
-                            : install.installLocal(item)
-                        }
-                        onReinstall={(flagged, options) =>
-                          handleReinstall(item, flagged, options)
-                        }
-                        onCancelInstallation={install.cancelInstallation}
-                        isBuiltInPlaywright={isPlaywrightCatalogItem(item.id)}
-                      />
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-
-          {sharedItems.length > 0 ? (
-            <div className="space-y-3">
-              {personalItems.length > 0 && (
-                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-                  Shared
-                </h3>
-              )}
-              {viewMode === "table" ? (
-                <McpServerTable
-                  items={sharedItems}
-                  getServerInfo={getInstalledServerInfo}
-                  envLabelByCatalog={envLabelByCatalog}
-                  issuesByCatalog={issuesByCatalog}
-                  deploymentFeedState={deploymentFeedState}
-                  deploymentStatuses={deploymentStatuses}
-                  installingItemId={installingItemId}
-                  onInstall={handleTableInstall}
-                  onReinstall={handleReinstall}
-                  onCancelInstallation={install.cancelInstallation}
-                />
-              ) : (
-                <div className={CARD_GRID_CLASS}>
-                  {sharedItems.map((item) => {
-                    const serverInfo = getInstalledServerInfo(item);
-                    return (
-                      <McpServerCard
-                        variant={
-                          item.serverType === "builtin"
-                            ? "builtin"
-                            : item.serverType === "remote"
-                              ? "remote"
-                              : "local"
-                        }
-                        key={item.id}
-                        item={item}
-                        installedServer={serverInfo.installedServer}
-                        installingItemId={installingItemId}
-                        installationStatus={
-                          serverInfo.installedServer?.localInstallationStatus ||
-                          undefined
-                        }
-                        deploymentStatuses={deploymentStatuses}
-                        deploymentFeedState={deploymentFeedState}
-                        issues={issuesByCatalog.get(item.id)}
-                        onInstallRemoteServer={() =>
-                          install.installRemote(item)
-                        }
-                        onInstallLocalServer={() =>
-                          isPlaywrightCatalogItem(item.id)
-                            ? install.installPlaywright(item)
-                            : install.installLocal(item)
-                        }
-                        onReinstall={(flagged, options) =>
-                          handleReinstall(item, flagged, options)
-                        }
-                        onCancelInstallation={install.cancelInstallation}
-                        isBuiltInPlaywright={isPlaywrightCatalogItem(item.id)}
-                      />
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          ) : (
-            personalItems.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                {hasActiveFilters ? (
-                  <>
-                    <Search className="mb-4 h-10 w-10 text-muted-foreground" />
-                    <p className="text-muted-foreground">
-                      No MCP servers match your filters. Try adjusting your
-                      search.
-                    </p>
-                    <Button
-                      variant="outline"
-                      className="mt-4"
-                      onClick={handleClearFilters}
-                    >
-                      Clear filters
-                    </Button>
-                  </>
-                ) : (
-                  <p className="text-muted-foreground">No MCP servers found.</p>
-                )}
+                <Search className="mb-4 h-10 w-10 text-muted-foreground" />
+                <p className="text-muted-foreground">
+                  No MCP servers match your filters. Try adjusting your search.
+                </p>
+                <Button
+                  variant="outline"
+                  className="mt-4"
+                  onClick={clearFiltersKeepingFacet}
+                >
+                  Clear filters
+                </Button>
               </div>
             )
-          )}
-        </div>
-      )}
+          ) : (
+            <McpServerAttentionList
+              // Match Guardrails: changing URL-owned filters clears selection.
+              // Live issue refetches keep the component mounted so failed
+              // targets survive a partial bulk action.
+              key={searchParams.toString()}
+              items={allFilteredItems}
+              issuesByCatalog={issuesByCatalog}
+              servers={installedServers ?? []}
+              facet={selectedFacet}
+              tableContext={{
+                getServerInfo: getInstalledServerInfo,
+                envLabelByCatalog,
+                deploymentFeedState,
+                deploymentStatuses,
+                installingItemId,
+                onInstall: handleTableInstall,
+                onCancelInstallation: install.cancelInstallation,
+              }}
+              onReinstall={handleReinstall}
+            />
+          )
+        ) : (
+          <div className="space-y-6">
+            {personalItems.length > 0 && (
+              <div className="space-y-3">
+                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+                  Personal
+                </h3>
+                <TableCardViewContent
+                  table={
+                    <McpServerTable
+                      items={personalItems}
+                      getServerInfo={getInstalledServerInfo}
+                      envLabelByCatalog={envLabelByCatalog}
+                      issuesByCatalog={issuesByCatalog}
+                      deploymentFeedState={deploymentFeedState}
+                      deploymentStatuses={deploymentStatuses}
+                      installingItemId={installingItemId}
+                      onInstall={handleTableInstall}
+                      onReinstall={handleReinstall}
+                      onCancelInstallation={install.cancelInstallation}
+                    />
+                  }
+                  cards={
+                    <TableCardGrid className={CARD_GRID_CLASS}>
+                      {personalItems.map((item) => {
+                        const serverInfo = getInstalledServerInfo(item);
+                        return (
+                          <McpServerCard
+                            variant={
+                              item.serverType === "builtin"
+                                ? "builtin"
+                                : item.serverType === "remote"
+                                  ? "remote"
+                                  : "local"
+                            }
+                            key={item.id}
+                            item={item}
+                            installedServer={serverInfo.installedServer}
+                            installingItemId={installingItemId}
+                            installationStatus={
+                              serverInfo.installedServer
+                                ?.localInstallationStatus || undefined
+                            }
+                            deploymentStatuses={deploymentStatuses}
+                            deploymentFeedState={deploymentFeedState}
+                            issues={issuesByCatalog.get(item.id)}
+                            onInstallRemoteServer={() =>
+                              install.installRemote(item)
+                            }
+                            onInstallLocalServer={() =>
+                              isPlaywrightCatalogItem(item.id)
+                                ? install.installPlaywright(item)
+                                : install.installLocal(item)
+                            }
+                            onReinstall={(flagged, options) =>
+                              handleReinstall(item, flagged, options)
+                            }
+                            onCancelInstallation={install.cancelInstallation}
+                            isBuiltInPlaywright={isPlaywrightCatalogItem(
+                              item.id,
+                            )}
+                          />
+                        );
+                      })}
+                    </TableCardGrid>
+                  }
+                />
+              </div>
+            )}
 
-      {/* Shared install-mode dialogs (remote, OAuth, no-auth, local). */}
-      {install.dialogs}
+            {sharedItems.length > 0 ? (
+              <div className="space-y-3">
+                {personalItems.length > 0 && (
+                  <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+                    Shared
+                  </h3>
+                )}
+                <TableCardViewContent
+                  table={
+                    <McpServerTable
+                      items={sharedItems}
+                      getServerInfo={getInstalledServerInfo}
+                      envLabelByCatalog={envLabelByCatalog}
+                      issuesByCatalog={issuesByCatalog}
+                      deploymentFeedState={deploymentFeedState}
+                      deploymentStatuses={deploymentStatuses}
+                      installingItemId={installingItemId}
+                      onInstall={handleTableInstall}
+                      onReinstall={handleReinstall}
+                      onCancelInstallation={install.cancelInstallation}
+                    />
+                  }
+                  cards={
+                    <TableCardGrid className={CARD_GRID_CLASS}>
+                      {sharedItems.map((item) => {
+                        const serverInfo = getInstalledServerInfo(item);
+                        return (
+                          <McpServerCard
+                            variant={
+                              item.serverType === "builtin"
+                                ? "builtin"
+                                : item.serverType === "remote"
+                                  ? "remote"
+                                  : "local"
+                            }
+                            key={item.id}
+                            item={item}
+                            installedServer={serverInfo.installedServer}
+                            installingItemId={installingItemId}
+                            installationStatus={
+                              serverInfo.installedServer
+                                ?.localInstallationStatus || undefined
+                            }
+                            deploymentStatuses={deploymentStatuses}
+                            deploymentFeedState={deploymentFeedState}
+                            issues={issuesByCatalog.get(item.id)}
+                            onInstallRemoteServer={() =>
+                              install.installRemote(item)
+                            }
+                            onInstallLocalServer={() =>
+                              isPlaywrightCatalogItem(item.id)
+                                ? install.installPlaywright(item)
+                                : install.installLocal(item)
+                            }
+                            onReinstall={(flagged, options) =>
+                              handleReinstall(item, flagged, options)
+                            }
+                            onCancelInstallation={install.cancelInstallation}
+                            isBuiltInPlaywright={isPlaywrightCatalogItem(
+                              item.id,
+                            )}
+                          />
+                        );
+                      })}
+                    </TableCardGrid>
+                  }
+                />
+              </div>
+            ) : (
+              personalItems.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  {hasActiveFilters ? (
+                    <>
+                      <Search className="mb-4 h-10 w-10 text-muted-foreground" />
+                      <p className="text-muted-foreground">
+                        No MCP servers match your filters. Try adjusting your
+                        search.
+                      </p>
+                      <Button
+                        variant="outline"
+                        className="mt-4"
+                        onClick={handleClearFilters}
+                      >
+                        Clear filters
+                      </Button>
+                    </>
+                  ) : (
+                    <p className="text-muted-foreground">
+                      No MCP servers found.
+                    </p>
+                  )}
+                </div>
+              )
+            )}
+          </div>
+        )}
 
-      {/* Reinstall + reauth reuse the install dialog components but keep their
+        {/* Shared install-mode dialogs (remote, OAuth, no-auth, local). */}
+        {install.dialogs}
+
+        {/* Reinstall + reauth reuse the install dialog components but keep their
           own instances/state so they stay independent of the install flow. */}
-      <RemoteServerInstallDialog
-        isOpen={isDialogOpened("remote-install")}
-        onClose={() => {
-          closeDialog("remote-install");
-          setSelectedCatalogItem(null);
-          setReauthServerId(null);
-          setReinstallServerId(null);
-          setTargetServerTeamId(null);
-          setTargetServerScope(undefined);
-        }}
-        onConfirm={handleRemoteServerReauthOrReinstallConfirm}
-        catalogItem={selectedCatalogItem}
-        isInstalling={reauthMutation.isPending || reinstallMutation.isPending}
-        isReauth={!!reauthServerId}
-        isReinstall={!!reinstallServerId && !reauthServerId}
-        existingTeamId={targetServerTeamId}
-        existingScope={targetServerScope}
-      />
-
-      <OAuthConfirmationDialog
-        open={isDialogOpened("oauth")}
-        onOpenChange={(open) => {
-          if (!open) {
-            closeDialog("oauth");
-          }
-        }}
-        serverName={selectedCatalogItem?.name || ""}
-        onConfirm={handleReauthOAuthConfirm}
-        onCancel={() => {
-          closeDialog("oauth");
-          setSelectedCatalogItem(null);
-          setReauthServerId(null);
-        }}
-        catalogId={selectedCatalogItem?.id}
-      />
-
-      <ReinstallConfirmationDialog
-        isOpen={isDialogOpened("reinstall")}
-        onClose={() => {
-          closeDialog("reinstall");
-          setCatalogItemForReinstall(null);
-          setReinstallFlaggedTargets([]);
-        }}
-        onConfirm={handleReinstallConfirm}
-        serverName={catalogItemForReinstall?.name || ""}
-        isReinstalling={
-          reinstallMutation.isPending || reinstallCatalogMutation.isPending
-        }
-        targets={reinstallFlaggedTargets}
-      />
-
-      {localServerCatalogItem && (
-        <LocalServerInstallDialog
-          isOpen={isDialogOpened("local-install")}
+        <RemoteServerInstallDialog
+          isOpen={isDialogOpened("remote-install")}
           onClose={() => {
-            closeDialog("local-install");
-            setLocalServerCatalogItem(null);
+            closeDialog("remote-install");
+            setSelectedCatalogItem(null);
+            setReauthServerId(null);
             setReinstallServerId(null);
             setTargetServerTeamId(null);
             setTargetServerScope(undefined);
-            setReauthServerId(null);
           }}
-          onConfirm={handleLocalServerReauthOrReinstallConfirm}
-          catalogItem={localServerCatalogItem}
-          isInstalling={reinstallMutation.isPending || reauthMutation.isPending}
-          isReinstall={!!reinstallServerId}
+          onConfirm={handleRemoteServerReauthOrReinstallConfirm}
+          catalogItem={selectedCatalogItem}
+          isInstalling={reauthMutation.isPending || reinstallMutation.isPending}
+          isReauth={!!reauthServerId}
+          isReinstall={!!reinstallServerId && !reauthServerId}
           existingTeamId={targetServerTeamId}
           existingScope={targetServerScope}
-          isReauth={!!reauthServerId}
         />
-      )}
 
-      {manageCatalogItem && (
-        <ManageUsersDialog
-          isOpen={!!manageCatalogItem}
-          onClose={closeManageDialog}
-          catalogId={manageCatalogItem.id}
-          onAddPersonalConnection={() => {
-            install.addPersonalConnection(manageCatalogItem);
+        <OAuthConfirmationDialog
+          open={isDialogOpened("oauth")}
+          onOpenChange={(open) => {
+            if (!open) {
+              closeDialog("oauth");
+            }
           }}
-          onAddSharedConnection={(teamId) => {
-            install.addSharedConnection(manageCatalogItem, teamId);
+          serverName={selectedCatalogItem?.name || ""}
+          onConfirm={handleReauthOAuthConfirm}
+          onCancel={() => {
+            closeDialog("oauth");
+            setSelectedCatalogItem(null);
+            setReauthServerId(null);
           }}
-          onAddOrgConnection={() => {
-            install.addOrgConnection(manageCatalogItem);
-          }}
+          catalogId={selectedCatalogItem?.id}
         />
-      )}
-    </div>
+
+        <ReinstallConfirmationDialog
+          isOpen={isDialogOpened("reinstall")}
+          onClose={() => {
+            closeDialog("reinstall");
+            setCatalogItemForReinstall(null);
+            setReinstallFlaggedTargets([]);
+          }}
+          onConfirm={handleReinstallConfirm}
+          serverName={catalogItemForReinstall?.name || ""}
+          isReinstalling={
+            reinstallMutation.isPending || reinstallCatalogMutation.isPending
+          }
+          targets={reinstallFlaggedTargets}
+        />
+
+        {localServerCatalogItem && (
+          <LocalServerInstallDialog
+            isOpen={isDialogOpened("local-install")}
+            onClose={() => {
+              closeDialog("local-install");
+              setLocalServerCatalogItem(null);
+              setReinstallServerId(null);
+              setTargetServerTeamId(null);
+              setTargetServerScope(undefined);
+              setReauthServerId(null);
+            }}
+            onConfirm={handleLocalServerReauthOrReinstallConfirm}
+            catalogItem={localServerCatalogItem}
+            isInstalling={
+              reinstallMutation.isPending || reauthMutation.isPending
+            }
+            isReinstall={!!reinstallServerId}
+            existingTeamId={targetServerTeamId}
+            existingScope={targetServerScope}
+            isReauth={!!reauthServerId}
+          />
+        )}
+
+        {manageCatalogItem && (
+          <ManageUsersDialog
+            isOpen={!!manageCatalogItem}
+            onClose={closeManageDialog}
+            catalogId={manageCatalogItem.id}
+            onAddPersonalConnection={() => {
+              install.addPersonalConnection(manageCatalogItem);
+            }}
+            onAddSharedConnection={(teamId) => {
+              install.addSharedConnection(manageCatalogItem, teamId);
+            }}
+            onAddOrgConnection={() => {
+              install.addOrgConnection(manageCatalogItem);
+            }}
+          />
+        )}
+      </div>
+    </TableCardView>
   );
 }
 
@@ -1560,4 +1571,4 @@ function McpCatalogLabelKeyRow({
  * a little room for the author name to occupy rather than truncate.
  */
 const CARD_GRID_CLASS =
-  "grid gap-4 grid-cols-[repeat(auto-fill,minmax(19rem,1fr))]";
+  "grid-cols-[repeat(auto-fill,minmax(19rem,1fr))] lg:grid-cols-[repeat(auto-fill,minmax(19rem,1fr))] 2xl:grid-cols-[repeat(auto-fill,minmax(19rem,1fr))]";

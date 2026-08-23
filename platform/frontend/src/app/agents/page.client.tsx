@@ -14,6 +14,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -55,6 +56,13 @@ import {
 } from "@/components/resource-scope-filter";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
+import {
+  TableCard,
+  TableCardList,
+  TableCardView,
+  TableCardViewContent,
+  TableCardViewToggle,
+} from "@/components/table-card-view";
 import { Badge } from "@/components/ui/badge";
 import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
@@ -350,6 +358,76 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     });
   }, [updateQueryParams]);
 
+  const renderAgentActions = (agent: AgentData) => {
+    const canModify = computeCanModifyAgent({
+      agent,
+      isAdmin: !!isAgentAdmin,
+      isTeamAdmin: !!isAgentTeamAdmin,
+      currentUserId,
+      userTeamIds: userTeamIdSet,
+    });
+    return (
+      <AgentActions
+        agent={agent}
+        canModify={canModify}
+        onEdit={(target) => router.push(agentEditHref("agent", target.id))}
+        onView={(target) => router.push(agentDetailHref("agent", target.id))}
+        onDelete={setDeletingAgentId}
+        onRestore={(agentId) => {
+          restoreAgent.mutate(agentId, {
+            onSuccess: (data) => {
+              if (!data) return;
+              toast.success("Agent restored successfully");
+            },
+          });
+        }}
+        onPermanentlyDelete={setPermanentlyDeletingAgent}
+        onClone={setCloningAgent}
+        onConvertToSkill={setConvertingAgent}
+        personalDefault={
+          agent.agentType === "agent" &&
+          !agent.builtIn &&
+          offersDefaultPin({ agentId: agent.id, badge: effectiveDefault })
+            ? {
+                isDefault: agent.id === personalDefaultAgentId,
+                onToggle: (target, makeDefault) => {
+                  updateDefaultAgentId.mutate(makeDefault ? target.id : null, {
+                    onSuccess: (data) => {
+                      if (!data) return;
+                      toast.success(
+                        makeDefault
+                          ? `${target.name} is now your default agent`
+                          : `${target.name} is no longer your default agent`,
+                      );
+                    },
+                  });
+                },
+              }
+            : undefined
+        }
+        onHistory={(id, historyCanModify) =>
+          setHistory({ id, canModify: historyCanModify })
+        }
+        onExport={(agentData) => {
+          exportAgent.mutate(agentData.id, {
+            onSuccess: (data) => {
+              if (!data) return;
+              const blob = new Blob([JSON.stringify(data, null, 2)], {
+                type: "application/json",
+              });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `${agentData.name.replace(/\s+/g, "-").toLowerCase()}-agent.json`;
+              a.click();
+              URL.revokeObjectURL(url);
+            },
+          });
+        }}
+      />
+    );
+  };
+
   const columns: ColumnDef<AgentData>[] = [
     // A deleted row can only be restored or purged, neither of which this
     // selection drives, so the trash view keeps its rows unselectable.
@@ -456,95 +534,11 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       header: "Actions",
       enableHiding: false,
       size: 220,
-      cell: ({ row }) => {
-        const agent = row.original;
-        const canModify = computeCanModifyAgent({
-          agent,
-          isAdmin: !!isAgentAdmin,
-          isTeamAdmin: !!isAgentTeamAdmin,
-          currentUserId,
-          userTeamIds: userTeamIdSet,
-        });
-        return (
-          // The whole cell, so a disabled action's tooltip wrapper cannot let
-          // the click through to the row either.
-          <RowClickShield>
-            <AgentActions
-              agent={agent}
-              canModify={canModify}
-              onEdit={(target) =>
-                router.push(agentEditHref("agent", target.id))
-              }
-              onView={(target) =>
-                router.push(agentDetailHref("agent", target.id))
-              }
-              onDelete={setDeletingAgentId}
-              onRestore={(agentId) => {
-                restoreAgent.mutate(agentId, {
-                  onSuccess: (data) => {
-                    if (!data) return;
-                    toast.success("Agent restored successfully");
-                  },
-                });
-              }}
-              onPermanentlyDelete={setPermanentlyDeletingAgent}
-              onClone={setCloningAgent}
-              onConvertToSkill={setConvertingAgent}
-              // Pinning a default is about this viewer's own chats, not about
-              // owning the agent: every chat agent on this page is one they
-              // can start a chat with, so every one of them can be pinned.
-              // Except the one already badged `default (org)` — see
-              // offersDefaultPin.
-              personalDefault={
-                agent.agentType === "agent" &&
-                !agent.builtIn &&
-                offersDefaultPin({
-                  agentId: agent.id,
-                  badge: effectiveDefault,
-                })
-                  ? {
-                      isDefault: agent.id === personalDefaultAgentId,
-                      onToggle: (target, makeDefault) => {
-                        updateDefaultAgentId.mutate(
-                          makeDefault ? target.id : null,
-                          {
-                            onSuccess: (data) => {
-                              if (!data) return;
-                              toast.success(
-                                makeDefault
-                                  ? `${target.name} is now your default agent`
-                                  : `${target.name} is no longer your default agent`,
-                              );
-                            },
-                          },
-                        );
-                      },
-                    }
-                  : undefined
-              }
-              onHistory={(id, historyCanModify) =>
-                setHistory({ id, canModify: historyCanModify })
-              }
-              onExport={(agentData) => {
-                exportAgent.mutate(agentData.id, {
-                  onSuccess: (data) => {
-                    if (!data) return;
-                    const blob = new Blob([JSON.stringify(data, null, 2)], {
-                      type: "application/json",
-                    });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = `${agentData.name.replace(/\s+/g, "-").toLowerCase()}-agent.json`;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                  },
-                });
-              }}
-            />
-          </RowClickShield>
-        );
-      },
+      cell: ({ row }) => (
+        // The whole cell, so a disabled action's tooltip wrapper cannot let
+        // the click through to the row either.
+        <RowClickShield>{renderAgentActions(row.original)}</RowClickShield>
+      ),
     },
   ];
 
@@ -601,237 +595,305 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
           </div>
         }
       >
-        <div>
+        <TableCardView storageKey="archestra-agents-view">
           <div>
-            <div className="mb-6 flex flex-col gap-2">
-              <div className="flex flex-wrap items-center gap-4">
-                <SearchInput
-                  objectNamePlural="agents"
-                  searchFields={["name"]}
-                  paramName="name"
-                />
-                <ResourceScopeFilter
-                  showBuiltIn
-                  showLabels
-                  ownerLabelPlural="agents"
-                  adminPermission={{ agent: ["admin"] }}
-                />
-                <ResourceDeletedStatusFilter
-                  deletePermission={{ agent: ["delete"] }}
+            <div>
+              <div className="mb-6 flex flex-col gap-2">
+                <div className="flex flex-wrap items-center gap-4">
+                  <SearchInput
+                    objectNamePlural="agents"
+                    searchFields={["name"]}
+                    paramName="name"
+                  />
+                  <ResourceScopeFilter
+                    showBuiltIn
+                    showLabels
+                    ownerLabelPlural="agents"
+                    adminPermission={{ agent: ["admin"] }}
+                  />
+                  <ResourceDeletedStatusFilter
+                    deletePermission={{ agent: ["delete"] }}
+                  />
+                  {!isDeletedView ? (
+                    <span className="ml-auto">
+                      <TableCardViewToggle />
+                    </span>
+                  ) : null}
+                </div>
+                {!canReadTeams && (
+                  <PermissionRequirementHint
+                    message="Team-based filters and sharing details are unavailable without"
+                    permissions={[{ resource: "team", action: "read" }]}
+                  />
+                )}
+                <ActiveFilterBadges adminPermission={{ agent: ["admin"] }} />
+              </div>
+
+              <BulkActionsBar
+                count={selectedAgents.length}
+                noun="agent"
+                onClear={clearSelection}
+                busy={bulkDelete.isPending || isFetchingAllMatching}
+                selectAllMatching={{
+                  total: pagination?.total ?? 0,
+                  pageFullySelected:
+                    agents.length > 0 && pageSelection.length === agents.length,
+                  active: allMatchingSelected,
+                  onSelectAll: () => setEscalatedFor(filterSignature),
+                  matchDescription: nameFilter
+                    ? "match this search query"
+                    : "match the current filters",
+                }}
+                className="mb-3"
+              >
+                <PermissionButton
+                  permissions={{ agent: ["update"] }}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setBulkVisibilityOpen(true)}
+                >
+                  <Pencil className="h-4 w-4" />
+                  <span>Edit visibility</span>
+                </PermissionButton>
+                <PermissionButton
+                  permissions={{ agent: ["delete"] }}
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setBulkDeleteOpen(true)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span>Delete</span>
+                </PermissionButton>
+              </BulkActionsBar>
+
+              <div data-testid={E2eTestId.AgentsTable}>
+                <TableCardViewContent
+                  forceTable={isDeletedView}
+                  cards={
+                    <TableCardList
+                      itemCount={agents.length}
+                      emptyMessage="No agents found"
+                      hasActiveFilters={hasActiveFilters}
+                      filteredEmptyMessage="No agents match your filters. Try adjusting your search."
+                      onClearFilters={clearFilters}
+                      pagination={{
+                        pageIndex,
+                        pageSize,
+                        total: pagination?.total ?? 0,
+                      }}
+                      onPaginationChange={handlePaginationChange}
+                    >
+                      {agents.map((agent) => (
+                        <TableCard
+                          key={agent.id}
+                          icon={<AgentIcon icon={agent.icon} size={20} />}
+                          title={
+                            <Link href={agentDetailHref("agent", agent.id)}>
+                              {agent.name}
+                            </Link>
+                          }
+                          description={agent.description}
+                          actions={renderAgentActions(agent)}
+                          selected={!!rowSelection[agent.id]}
+                          onSelectedChange={(selected) => {
+                            const next = { ...rowSelection };
+                            if (selected) next[agent.id] = true;
+                            else delete next[agent.id];
+                            setRowSelection(next);
+                          }}
+                          selectionLabel={`Select ${agent.name}`}
+                        >
+                          <div className="flex flex-wrap items-center gap-2">
+                            <ResourceVisibilityBadge
+                              scope={agent.scope}
+                              teams={agent.teams}
+                              users={agent.users}
+                              authorId={agent.authorId}
+                              authorName={agent.authorName}
+                              currentUserId={currentUserId}
+                              showSelfAsMe
+                            />
+                            {effectiveDefault?.agentId === agent.id ? (
+                              <DefaultAgentTag
+                                source={effectiveDefault.source}
+                              />
+                            ) : null}
+                          </div>
+                        </TableCard>
+                      ))}
+                    </TableCardList>
+                  }
+                  table={
+                    <DataTable
+                      columns={columns}
+                      data={agents}
+                      getRowId={(row) => row.id}
+                      rowSelection={rowSelection}
+                      onRowSelectionChange={setRowSelection}
+                      hideSelectedCount
+                      sorting={sorting}
+                      onSortingChange={handleSortingChange}
+                      manualSorting={true}
+                      manualPagination={true}
+                      pagination={{
+                        pageIndex,
+                        pageSize,
+                        total: pagination?.total ?? 0,
+                      }}
+                      onPaginationChange={handlePaginationChange}
+                      // Trashed rows have no page to open — Restore and permanent
+                      // delete stay row actions.
+                      onRowClick={
+                        isDeletedView
+                          ? undefined
+                          : (row, event) =>
+                              openRowOnPlainClick(event, () =>
+                                router.push(agentDetailHref("agent", row.id)),
+                              )
+                      }
+                      emptyMessage="No agents found"
+                      hasActiveFilters={hasActiveFilters}
+                      filteredEmptyMessage={
+                        isDeletedView
+                          ? "No deleted agents found."
+                          : "No agents match your filters. Try adjusting your search."
+                      }
+                      onClearFilters={clearFilters}
+                    />
+                  }
                 />
               </div>
-              {!canReadTeams && (
-                <PermissionRequirementHint
-                  message="Team-based filters and sharing details are unavailable without"
-                  permissions={[{ resource: "team", action: "read" }]}
+
+              {bulkVisibilityOpen && (
+                <BulkVisibilityDialog
+                  items={selectedAgents.map((profile) => ({
+                    ...profile,
+                    teams: profile.teams ?? [],
+                    users: profile.users ?? [],
+                  }))}
+                  noun="agent"
+                  plural="agents"
+                  open={bulkVisibilityOpen}
+                  onOpenChange={setBulkVisibilityOpen}
+                  isPending={bulkVisibility.isPending}
+                  onApply={async (change) => {
+                    const outcome = await bulkVisibility.mutateAsync({
+                      profiles: selectedAgents,
+                      scope: change.scope,
+                      teamIds: change.teamIds,
+                      userIds: change.userIds,
+                    });
+                    reportBulkOutcome({
+                      outcome,
+                      verb: "Updated",
+                      failureVerb: "update",
+                      noun: "agent",
+                      plural: "agents",
+                    });
+                    if (outcome.succeeded.length === 0) return false;
+                    if (outcome.failed.length === 0) clearSelection();
+                    return true;
+                  }}
                 />
               )}
-              <ActiveFilterBadges adminPermission={{ agent: ["admin"] }} />
+
+              {bulkDeleteOpen && (
+                <DeleteConfirmDialog
+                  open={bulkDeleteOpen}
+                  onOpenChange={setBulkDeleteOpen}
+                  title="Delete agents"
+                  description={`Delete ${selectedAgents.length} ${
+                    selectedAgents.length === 1 ? "agent" : "agents"
+                  }? This cannot be undone.`}
+                  isPending={bulkDelete.isPending}
+                  onConfirm={() => {
+                    bulkDelete.mutate(selectedAgents, {
+                      onSuccess: (outcome) => {
+                        reportBulkOutcome({
+                          outcome,
+                          verb: "Deleted",
+                          failureVerb: "delete",
+                          noun: "agent",
+                        });
+                        setBulkDeleteOpen(false);
+                        // Rows that failed stay ticked so the selection can be
+                        // retried rather than rebuilt.
+                        if (outcome.failed.length === 0) clearSelection();
+                      },
+                    });
+                  }}
+                  confirmLabel="Delete agents"
+                  pendingLabel="Deleting..."
+                />
+              )}
+
+              {deletingAgentId && (
+                <DeleteAgentDialog
+                  agentId={deletingAgentId}
+                  open={!!deletingAgentId}
+                  onOpenChange={(open) => !open && setDeletingAgentId(null)}
+                />
+              )}
+
+              {permanentlyDeletingAgent && (
+                <DeleteConfirmDialog
+                  open={!!permanentlyDeletingAgent}
+                  onOpenChange={(open) =>
+                    !open && setPermanentlyDeletingAgent(null)
+                  }
+                  title="Delete agent permanently"
+                  description={AGENT_PAGE_CONFIGS.agent.permanentDeleteDescription(
+                    permanentlyDeletingAgent.name,
+                  )}
+                  isPending={permanentlyDeleteAgent.isPending}
+                  onConfirm={() => {
+                    permanentlyDeleteAgent.mutate(permanentlyDeletingAgent.id, {
+                      onSuccess: (ok) => {
+                        if (ok) setPermanentlyDeletingAgent(null);
+                      },
+                    });
+                  }}
+                  confirmLabel={PERMANENT_DELETE_LABEL}
+                />
+              )}
+
+              <ImportAgentDialog
+                open={isImportDialogOpen}
+                onOpenChange={setIsImportDialogOpen}
+                onSuccess={() => {}}
+              />
+
+              <ConvertToSkillDialog
+                agent={convertingAgent}
+                onOpenChange={(open) => {
+                  if (!open) setConvertingAgent(null);
+                }}
+              />
+
+              <CloneAgentDialog
+                agent={cloningAgent}
+                onOpenChange={(open) => {
+                  if (!open) setCloningAgent(null);
+                }}
+                onCloned={(cloned) => {
+                  // Land on the clone's Configuration step so it can be renamed
+                  // straight away.
+                  router.push(
+                    agentEditHref("agent", cloned.id, "configuration"),
+                  );
+                }}
+              />
+
+              <AgentVersionHistoryDialog
+                agentId={history?.id ?? null}
+                canModify={!!history?.canModify}
+                onOpenChange={(open) => {
+                  if (!open) setHistory(null);
+                }}
+              />
             </div>
-
-            <BulkActionsBar
-              count={selectedAgents.length}
-              noun="agent"
-              onClear={clearSelection}
-              busy={bulkDelete.isPending || isFetchingAllMatching}
-              selectAllMatching={{
-                total: pagination?.total ?? 0,
-                pageFullySelected:
-                  agents.length > 0 && pageSelection.length === agents.length,
-                active: allMatchingSelected,
-                onSelectAll: () => setEscalatedFor(filterSignature),
-                matchDescription: nameFilter
-                  ? "match this search query"
-                  : "match the current filters",
-              }}
-              className="mb-3"
-            >
-              <PermissionButton
-                permissions={{ agent: ["update"] }}
-                variant="outline"
-                size="sm"
-                onClick={() => setBulkVisibilityOpen(true)}
-              >
-                <Pencil className="h-4 w-4" />
-                <span>Edit visibility</span>
-              </PermissionButton>
-              <PermissionButton
-                permissions={{ agent: ["delete"] }}
-                variant="destructive"
-                size="sm"
-                onClick={() => setBulkDeleteOpen(true)}
-              >
-                <Trash2 className="h-4 w-4" />
-                <span>Delete</span>
-              </PermissionButton>
-            </BulkActionsBar>
-
-            <div data-testid={E2eTestId.AgentsTable}>
-              <DataTable
-                columns={columns}
-                data={agents}
-                getRowId={(row) => row.id}
-                rowSelection={rowSelection}
-                onRowSelectionChange={setRowSelection}
-                hideSelectedCount
-                sorting={sorting}
-                onSortingChange={handleSortingChange}
-                manualSorting={true}
-                manualPagination={true}
-                pagination={{
-                  pageIndex,
-                  pageSize,
-                  total: pagination?.total ?? 0,
-                }}
-                onPaginationChange={handlePaginationChange}
-                // Trashed rows have no page to open — Restore and permanent
-                // delete stay row actions.
-                onRowClick={
-                  isDeletedView
-                    ? undefined
-                    : (row, event) =>
-                        openRowOnPlainClick(event, () =>
-                          router.push(agentDetailHref("agent", row.id)),
-                        )
-                }
-                emptyMessage="No agents found"
-                hasActiveFilters={hasActiveFilters}
-                filteredEmptyMessage={
-                  isDeletedView
-                    ? "No deleted agents found."
-                    : "No agents match your filters. Try adjusting your search."
-                }
-                onClearFilters={clearFilters}
-              />
-            </div>
-
-            {bulkVisibilityOpen && (
-              <BulkVisibilityDialog
-                items={selectedAgents.map((profile) => ({
-                  ...profile,
-                  teams: profile.teams ?? [],
-                  users: profile.users ?? [],
-                }))}
-                noun="agent"
-                plural="agents"
-                open={bulkVisibilityOpen}
-                onOpenChange={setBulkVisibilityOpen}
-                isPending={bulkVisibility.isPending}
-                onApply={async (change) => {
-                  const outcome = await bulkVisibility.mutateAsync({
-                    profiles: selectedAgents,
-                    scope: change.scope,
-                    teamIds: change.teamIds,
-                    userIds: change.userIds,
-                  });
-                  reportBulkOutcome({
-                    outcome,
-                    verb: "Updated",
-                    failureVerb: "update",
-                    noun: "agent",
-                    plural: "agents",
-                  });
-                  if (outcome.succeeded.length === 0) return false;
-                  if (outcome.failed.length === 0) clearSelection();
-                  return true;
-                }}
-              />
-            )}
-
-            {bulkDeleteOpen && (
-              <DeleteConfirmDialog
-                open={bulkDeleteOpen}
-                onOpenChange={setBulkDeleteOpen}
-                title="Delete agents"
-                description={`Delete ${selectedAgents.length} ${
-                  selectedAgents.length === 1 ? "agent" : "agents"
-                }? This cannot be undone.`}
-                isPending={bulkDelete.isPending}
-                onConfirm={() => {
-                  bulkDelete.mutate(selectedAgents, {
-                    onSuccess: (outcome) => {
-                      reportBulkOutcome({
-                        outcome,
-                        verb: "Deleted",
-                        failureVerb: "delete",
-                        noun: "agent",
-                      });
-                      setBulkDeleteOpen(false);
-                      // Rows that failed stay ticked so the selection can be
-                      // retried rather than rebuilt.
-                      if (outcome.failed.length === 0) clearSelection();
-                    },
-                  });
-                }}
-                confirmLabel="Delete agents"
-                pendingLabel="Deleting..."
-              />
-            )}
-
-            {deletingAgentId && (
-              <DeleteAgentDialog
-                agentId={deletingAgentId}
-                open={!!deletingAgentId}
-                onOpenChange={(open) => !open && setDeletingAgentId(null)}
-              />
-            )}
-
-            {permanentlyDeletingAgent && (
-              <DeleteConfirmDialog
-                open={!!permanentlyDeletingAgent}
-                onOpenChange={(open) =>
-                  !open && setPermanentlyDeletingAgent(null)
-                }
-                title="Delete agent permanently"
-                description={AGENT_PAGE_CONFIGS.agent.permanentDeleteDescription(
-                  permanentlyDeletingAgent.name,
-                )}
-                isPending={permanentlyDeleteAgent.isPending}
-                onConfirm={() => {
-                  permanentlyDeleteAgent.mutate(permanentlyDeletingAgent.id, {
-                    onSuccess: (ok) => {
-                      if (ok) setPermanentlyDeletingAgent(null);
-                    },
-                  });
-                }}
-                confirmLabel={PERMANENT_DELETE_LABEL}
-              />
-            )}
-
-            <ImportAgentDialog
-              open={isImportDialogOpen}
-              onOpenChange={setIsImportDialogOpen}
-              onSuccess={() => {}}
-            />
-
-            <ConvertToSkillDialog
-              agent={convertingAgent}
-              onOpenChange={(open) => {
-                if (!open) setConvertingAgent(null);
-              }}
-            />
-
-            <CloneAgentDialog
-              agent={cloningAgent}
-              onOpenChange={(open) => {
-                if (!open) setCloningAgent(null);
-              }}
-              onCloned={(cloned) => {
-                // Land on the clone's Configuration step so it can be renamed
-                // straight away.
-                router.push(agentEditHref("agent", cloned.id, "configuration"));
-              }}
-            />
-
-            <AgentVersionHistoryDialog
-              agentId={history?.id ?? null}
-              canModify={!!history?.canModify}
-              onOpenChange={(open) => {
-                if (!open) setHistory(null);
-              }}
-            />
           </div>
-        </div>
+        </TableCardView>
       </PageLayout>
     </LoadingWrapper>
   );

@@ -7,6 +7,7 @@ import type {
   SortingState,
 } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp, Pencil, Plus, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -42,6 +43,13 @@ import {
 } from "@/components/resource-scope-filter";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
+import {
+  TableCard,
+  TableCardList,
+  TableCardView,
+  TableCardViewContent,
+  TableCardViewToggle,
+} from "@/components/table-card-view";
 import { Badge } from "@/components/ui/badge";
 import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
@@ -286,6 +294,38 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
   const selectedProxies =
     allMatchingSelected && allMatching ? allMatching : pageSelection;
 
+  const renderProxyActions = (agent: ProxyData) => {
+    const isLegacy = agent.agentType === "profile";
+    const canModify = computeCanModifyAgent({
+      agent,
+      isAdmin: isLegacy ? !!isLegacyAdmin : !!isAdmin,
+      isTeamAdmin: isLegacy ? !!isLegacyTeamAdmin : !!isTeamAdmin,
+      currentUserId,
+      userTeamIds: userTeamIdSet,
+    });
+    return (
+      <LlmProxyActions
+        agent={agent}
+        canModify={canModify}
+        onEdit={(target) => router.push(agentEditHref("llm_proxy", target.id))}
+        onDelete={setDeletingProxyId}
+        onRestore={(agentId) => {
+          restoreProxy.mutate(agentId, {
+            onSuccess: (data) => {
+              if (!data) return;
+              toast.success("LLM Proxy restored successfully");
+            },
+          });
+        }}
+        onPermanentlyDelete={setPermanentlyDeletingProxy}
+        onClone={setCloningProxy}
+        onHistory={(id, historyCanModify) =>
+          setHistory({ id, canModify: historyCanModify })
+        }
+      />
+    );
+  };
+
   const columns: ColumnDef<ProxyData>[] = [
     // A deleted row can only be restored or purged, neither of which this
     // selection drives, so the trash view keeps its rows unselectable.
@@ -390,44 +430,11 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
       // keeps its px width while the sized columns scale down to fit.
       size: 200,
       enableHiding: false,
-      cell: ({ row }) => {
-        const agent = row.original;
-        const isLegacy = agent.agentType === "profile";
-        const canModify = computeCanModifyAgent({
-          agent,
-          isAdmin: isLegacy ? !!isLegacyAdmin : !!isAdmin,
-          isTeamAdmin: isLegacy ? !!isLegacyTeamAdmin : !!isTeamAdmin,
-          currentUserId,
-          userTeamIds: userTeamIdSet,
-        });
-        return (
-          // The whole cell, so a disabled action's tooltip wrapper cannot let
-          // the click through to the row either.
-          <RowClickShield>
-            <LlmProxyActions
-              agent={agent}
-              canModify={canModify}
-              onEdit={(target) =>
-                router.push(agentEditHref("llm_proxy", target.id))
-              }
-              onDelete={setDeletingProxyId}
-              onRestore={(agentId) => {
-                restoreProxy.mutate(agentId, {
-                  onSuccess: (data) => {
-                    if (!data) return;
-                    toast.success("LLM Proxy restored successfully");
-                  },
-                });
-              }}
-              onPermanentlyDelete={setPermanentlyDeletingProxy}
-              onClone={setCloningProxy}
-              onHistory={(id, historyCanModify) =>
-                setHistory({ id, canModify: historyCanModify })
-              }
-            />
-          </RowClickShield>
-        );
-      },
+      cell: ({ row }) => (
+        // The whole cell, so a disabled action's tooltip wrapper cannot let
+        // the click through to the row either.
+        <RowClickShield>{renderProxyActions(row.original)}</RowClickShield>
+      ),
     },
   ];
 
@@ -467,247 +474,334 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
           </PermissionButton>
         }
       >
-        <div>
+        <TableCardView storageKey="archestra-llm-proxies-view">
           <div>
-            <div className="mb-6 flex flex-col gap-2">
-              <div className="flex flex-wrap items-center gap-4">
-                <SearchInput
-                  objectNamePlural="proxies"
-                  searchFields={["name"]}
-                  paramName="name"
-                />
-                <ResourceScopeFilter
-                  showLabels
-                  ownerLabelPlural="LLM proxies"
-                  adminPermission={{ llmProxy: ["admin"] }}
-                />
-                <ResourceDeletedStatusFilter
-                  deletePermission={{ llmProxy: ["delete"] }}
+            <div>
+              <div className="mb-6 flex flex-col gap-2">
+                <div className="flex flex-wrap items-center gap-4">
+                  <SearchInput
+                    objectNamePlural="proxies"
+                    searchFields={["name"]}
+                    paramName="name"
+                  />
+                  <ResourceScopeFilter
+                    showLabels
+                    ownerLabelPlural="LLM proxies"
+                    adminPermission={{ llmProxy: ["admin"] }}
+                  />
+                  <ResourceDeletedStatusFilter
+                    deletePermission={{ llmProxy: ["delete"] }}
+                  />
+                  {!isDeletedView ? (
+                    <span className="ml-auto">
+                      <TableCardViewToggle />
+                    </span>
+                  ) : null}
+                </div>
+                {!canReadTeams && (
+                  <PermissionRequirementHint
+                    message="Team-based filters and sharing details are unavailable without"
+                    permissions={[{ resource: "team", action: "read" }]}
+                  />
+                )}
+                <ActiveFilterBadges adminPermission={{ llmProxy: ["admin"] }} />
+              </div>
+
+              <div data-testid={E2eTestId.AgentsTable}>
+                <BulkActionsBar
+                  count={selectedProxies.length}
+                  noun="proxy"
+                  plural="proxies"
+                  onClear={clearSelection}
+                  busy={bulkDelete.isPending || isFetchingAllMatching}
+                  selectAllMatching={{
+                    total: pagination?.total ?? 0,
+                    pageFullySelected:
+                      agents.length > 0 &&
+                      pageSelection.length === agents.length,
+                    active: allMatchingSelected,
+                    onSelectAll: () => setEscalatedFor(filterSignature),
+                    matchDescription: nameFilter
+                      ? "match this search query"
+                      : "match the current filters",
+                  }}
+                  className="mb-3"
+                >
+                  <PermissionButton
+                    permissions={{ agent: ["update"] }}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setBulkVisibilityOpen(true)}
+                  >
+                    <Pencil className="h-4 w-4" />
+                    <span>Edit visibility</span>
+                  </PermissionButton>
+                  <PermissionButton
+                    permissions={{ agent: ["delete"] }}
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setBulkDeleteOpen(true)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span>Delete</span>
+                  </PermissionButton>
+                </BulkActionsBar>
+
+                <TableCardViewContent
+                  forceTable={isDeletedView}
+                  cards={
+                    <TableCardList
+                      itemCount={agents.length}
+                      hasActiveFilters={Boolean(
+                        nameFilter ||
+                          scopeFilter.hasActiveScopeFilters ||
+                          labelsFromUrl,
+                      )}
+                      filteredEmptyMessage="No LLM proxies match your filters. Try adjusting your search."
+                      onClearFilters={() =>
+                        updateQueryParams({
+                          name: null,
+                          scope: null,
+                          teamIds: null,
+                          authorIds: null,
+                          excludeAuthorIds: null,
+                          labels: null,
+                          status: null,
+                          page: "1",
+                        })
+                      }
+                      pagination={{
+                        pageIndex,
+                        pageSize,
+                        total: pagination?.total ?? 0,
+                      }}
+                      onPaginationChange={handlePaginationChange}
+                    >
+                      {agents.map((agent) => (
+                        <TableCard
+                          key={agent.id}
+                          icon={
+                            <AgentIcon
+                              icon={agent.icon}
+                              size={20}
+                              fallbackType="llm_proxy"
+                            />
+                          }
+                          title={
+                            <Link href={agentDetailHref("llm_proxy", agent.id)}>
+                              {agent.name}
+                            </Link>
+                          }
+                          description={agent.description}
+                          actions={renderProxyActions(agent)}
+                          selected={!!rowSelection[agent.id]}
+                          onSelectedChange={(selected) => {
+                            const next = { ...rowSelection };
+                            if (selected) next[agent.id] = true;
+                            else delete next[agent.id];
+                            setRowSelection(next);
+                          }}
+                          selectionLabel={`Select ${agent.name}`}
+                        >
+                          <div className="flex flex-wrap items-center gap-2">
+                            <ResourceVisibilityBadge
+                              scope={agent.scope}
+                              teams={agent.teams}
+                              users={agent.users}
+                              authorId={agent.authorId}
+                              authorName={agent.authorName}
+                              currentUserId={currentUserId}
+                              showSelfAsMe
+                            />
+                            {agent.agentType === "profile" ? (
+                              <Badge variant="outline">Profile</Badge>
+                            ) : null}
+                          </div>
+                        </TableCard>
+                      ))}
+                    </TableCardList>
+                  }
+                  table={
+                    <DataTable
+                      columns={columns}
+                      data={agents}
+                      getRowId={(row) => row.id}
+                      rowSelection={rowSelection}
+                      onRowSelectionChange={setRowSelection}
+                      hideSelectedCount
+                      sorting={sorting}
+                      onSortingChange={handleSortingChange}
+                      manualSorting={true}
+                      manualPagination={true}
+                      pagination={{
+                        pageIndex,
+                        pageSize,
+                        total: pagination?.total ?? 0,
+                      }}
+                      onPaginationChange={handlePaginationChange}
+                      // Trashed rows have no page to open — Restore and permanent
+                      // delete stay row actions.
+                      onRowClick={
+                        isDeletedView
+                          ? undefined
+                          : (row, event) =>
+                              openRowOnPlainClick(event, () =>
+                                router.push(
+                                  agentDetailHref("llm_proxy", row.id),
+                                ),
+                              )
+                      }
+                      hasActiveFilters={Boolean(
+                        nameFilter ||
+                          scopeFilter.hasActiveScopeFilters ||
+                          labelsFromUrl ||
+                          isDeletedView,
+                      )}
+                      onClearFilters={() =>
+                        updateQueryParams({
+                          name: null,
+                          scope: null,
+                          teamIds: null,
+                          authorIds: null,
+                          excludeAuthorIds: null,
+                          labels: null,
+                          status: null,
+                          page: "1",
+                        })
+                      }
+                      emptyMessage={
+                        isDeletedView
+                          ? "No deleted LLM proxies found"
+                          : "No LLM proxies found"
+                      }
+                      filteredEmptyMessage={
+                        isDeletedView
+                          ? "No deleted LLM proxies found."
+                          : "No LLM proxies match your filters. Try adjusting your search."
+                      }
+                    />
+                  }
                 />
               </div>
-              {!canReadTeams && (
-                <PermissionRequirementHint
-                  message="Team-based filters and sharing details are unavailable without"
-                  permissions={[{ resource: "team", action: "read" }]}
+
+              {bulkVisibilityOpen && (
+                <BulkVisibilityDialog
+                  items={selectedProxies.map((profile) => ({
+                    ...profile,
+                    teams: profile.teams ?? [],
+                    users: profile.users ?? [],
+                  }))}
+                  noun="proxy"
+                  plural="proxies"
+                  open={bulkVisibilityOpen}
+                  onOpenChange={setBulkVisibilityOpen}
+                  isPending={bulkVisibility.isPending}
+                  onApply={async (change) => {
+                    const outcome = await bulkVisibility.mutateAsync({
+                      profiles: selectedProxies,
+                      scope: change.scope,
+                      teamIds: change.teamIds,
+                      userIds: change.userIds,
+                    });
+                    reportBulkOutcome({
+                      outcome,
+                      verb: "Updated",
+                      failureVerb: "update",
+                      noun: "proxy",
+                      plural: "proxies",
+                    });
+                    if (outcome.succeeded.length === 0) return false;
+                    if (outcome.failed.length === 0) clearSelection();
+                    return true;
+                  }}
                 />
               )}
-              <ActiveFilterBadges adminPermission={{ llmProxy: ["admin"] }} />
-            </div>
 
-            <div data-testid={E2eTestId.AgentsTable}>
-              <BulkActionsBar
-                count={selectedProxies.length}
-                noun="proxy"
-                plural="proxies"
-                onClear={clearSelection}
-                busy={bulkDelete.isPending || isFetchingAllMatching}
-                selectAllMatching={{
-                  total: pagination?.total ?? 0,
-                  pageFullySelected:
-                    agents.length > 0 && pageSelection.length === agents.length,
-                  active: allMatchingSelected,
-                  onSelectAll: () => setEscalatedFor(filterSignature),
-                  matchDescription: nameFilter
-                    ? "match this search query"
-                    : "match the current filters",
-                }}
-                className="mb-3"
-              >
-                <PermissionButton
-                  permissions={{ agent: ["update"] }}
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setBulkVisibilityOpen(true)}
-                >
-                  <Pencil className="h-4 w-4" />
-                  <span>Edit visibility</span>
-                </PermissionButton>
-                <PermissionButton
-                  permissions={{ agent: ["delete"] }}
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => setBulkDeleteOpen(true)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                  <span>Delete</span>
-                </PermissionButton>
-              </BulkActionsBar>
+              {bulkDeleteOpen && (
+                <DeleteConfirmDialog
+                  open={bulkDeleteOpen}
+                  onOpenChange={setBulkDeleteOpen}
+                  title="Delete proxies"
+                  description={`Delete ${selectedProxies.length} ${
+                    selectedProxies.length === 1 ? "proxy" : "proxies"
+                  }? This cannot be undone.`}
+                  isPending={bulkDelete.isPending}
+                  onConfirm={() => {
+                    bulkDelete.mutate(selectedProxies, {
+                      onSuccess: (outcome) => {
+                        reportBulkOutcome({
+                          outcome,
+                          verb: "Deleted",
+                          failureVerb: "delete",
+                          noun: "proxy",
+                          plural: "proxies",
+                        });
+                        setBulkDeleteOpen(false);
+                        // Rows that failed stay ticked so the selection can be
+                        // retried rather than rebuilt.
+                        if (outcome.failed.length === 0) clearSelection();
+                      },
+                    });
+                  }}
+                  confirmLabel="Delete proxies"
+                  pendingLabel="Deleting..."
+                />
+              )}
 
-              <DataTable
-                columns={columns}
-                data={agents}
-                getRowId={(row) => row.id}
-                rowSelection={rowSelection}
-                onRowSelectionChange={setRowSelection}
-                hideSelectedCount
-                sorting={sorting}
-                onSortingChange={handleSortingChange}
-                manualSorting={true}
-                manualPagination={true}
-                pagination={{
-                  pageIndex,
-                  pageSize,
-                  total: pagination?.total ?? 0,
+              {deletingProxyId && (
+                <DeleteProxyDialog
+                  agentId={deletingProxyId}
+                  open={!!deletingProxyId}
+                  onOpenChange={(open) => !open && setDeletingProxyId(null)}
+                />
+              )}
+
+              {permanentlyDeletingProxy && (
+                <DeleteConfirmDialog
+                  open={!!permanentlyDeletingProxy}
+                  onOpenChange={(open) =>
+                    !open && setPermanentlyDeletingProxy(null)
+                  }
+                  title="Delete LLM Proxy permanently"
+                  description={AGENT_PAGE_CONFIGS.llm_proxy.permanentDeleteDescription(
+                    permanentlyDeletingProxy.name,
+                  )}
+                  isPending={permanentlyDeleteProxy.isPending}
+                  onConfirm={() => {
+                    permanentlyDeleteProxy.mutate(permanentlyDeletingProxy.id, {
+                      onSuccess: (ok) => {
+                        if (ok) setPermanentlyDeletingProxy(null);
+                      },
+                    });
+                  }}
+                  confirmLabel={PERMANENT_DELETE_LABEL}
+                />
+              )}
+
+              <CloneAgentDialog
+                agent={cloningProxy}
+                onOpenChange={(open) => {
+                  if (!open) setCloningProxy(null);
                 }}
-                onPaginationChange={handlePaginationChange}
-                // Trashed rows have no page to open — Restore and permanent
-                // delete stay row actions.
-                onRowClick={
-                  isDeletedView
-                    ? undefined
-                    : (row, event) =>
-                        openRowOnPlainClick(event, () =>
-                          router.push(agentDetailHref("llm_proxy", row.id)),
-                        )
-                }
-                hasActiveFilters={Boolean(
-                  nameFilter ||
-                    scopeFilter.hasActiveScopeFilters ||
-                    labelsFromUrl ||
-                    isDeletedView,
-                )}
-                onClearFilters={() =>
-                  updateQueryParams({
-                    name: null,
-                    scope: null,
-                    teamIds: null,
-                    authorIds: null,
-                    excludeAuthorIds: null,
-                    labels: null,
-                    status: null,
-                    page: "1",
-                  })
-                }
-                emptyMessage={
-                  isDeletedView
-                    ? "No deleted LLM proxies found"
-                    : "No LLM proxies found"
-                }
-                filteredEmptyMessage={
-                  isDeletedView
-                    ? "No deleted LLM proxies found."
-                    : "No LLM proxies match your filters. Try adjusting your search."
-                }
+                onCloned={(cloned) => {
+                  // Land on the clone's Configuration step so it can be renamed
+                  // straight away.
+                  router.push(
+                    agentEditHref("llm_proxy", cloned.id, "configuration"),
+                  );
+                }}
+              />
+
+              <AgentVersionHistoryDialog
+                agentId={history?.id ?? null}
+                canModify={!!history?.canModify}
+                onOpenChange={(open) => {
+                  if (!open) setHistory(null);
+                }}
               />
             </div>
-
-            {bulkVisibilityOpen && (
-              <BulkVisibilityDialog
-                items={selectedProxies.map((profile) => ({
-                  ...profile,
-                  teams: profile.teams ?? [],
-                  users: profile.users ?? [],
-                }))}
-                noun="proxy"
-                plural="proxies"
-                open={bulkVisibilityOpen}
-                onOpenChange={setBulkVisibilityOpen}
-                isPending={bulkVisibility.isPending}
-                onApply={async (change) => {
-                  const outcome = await bulkVisibility.mutateAsync({
-                    profiles: selectedProxies,
-                    scope: change.scope,
-                    teamIds: change.teamIds,
-                    userIds: change.userIds,
-                  });
-                  reportBulkOutcome({
-                    outcome,
-                    verb: "Updated",
-                    failureVerb: "update",
-                    noun: "proxy",
-                    plural: "proxies",
-                  });
-                  if (outcome.succeeded.length === 0) return false;
-                  if (outcome.failed.length === 0) clearSelection();
-                  return true;
-                }}
-              />
-            )}
-
-            {bulkDeleteOpen && (
-              <DeleteConfirmDialog
-                open={bulkDeleteOpen}
-                onOpenChange={setBulkDeleteOpen}
-                title="Delete proxies"
-                description={`Delete ${selectedProxies.length} ${
-                  selectedProxies.length === 1 ? "proxy" : "proxies"
-                }? This cannot be undone.`}
-                isPending={bulkDelete.isPending}
-                onConfirm={() => {
-                  bulkDelete.mutate(selectedProxies, {
-                    onSuccess: (outcome) => {
-                      reportBulkOutcome({
-                        outcome,
-                        verb: "Deleted",
-                        failureVerb: "delete",
-                        noun: "proxy",
-                        plural: "proxies",
-                      });
-                      setBulkDeleteOpen(false);
-                      // Rows that failed stay ticked so the selection can be
-                      // retried rather than rebuilt.
-                      if (outcome.failed.length === 0) clearSelection();
-                    },
-                  });
-                }}
-                confirmLabel="Delete proxies"
-                pendingLabel="Deleting..."
-              />
-            )}
-
-            {deletingProxyId && (
-              <DeleteProxyDialog
-                agentId={deletingProxyId}
-                open={!!deletingProxyId}
-                onOpenChange={(open) => !open && setDeletingProxyId(null)}
-              />
-            )}
-
-            {permanentlyDeletingProxy && (
-              <DeleteConfirmDialog
-                open={!!permanentlyDeletingProxy}
-                onOpenChange={(open) =>
-                  !open && setPermanentlyDeletingProxy(null)
-                }
-                title="Delete LLM Proxy permanently"
-                description={AGENT_PAGE_CONFIGS.llm_proxy.permanentDeleteDescription(
-                  permanentlyDeletingProxy.name,
-                )}
-                isPending={permanentlyDeleteProxy.isPending}
-                onConfirm={() => {
-                  permanentlyDeleteProxy.mutate(permanentlyDeletingProxy.id, {
-                    onSuccess: (ok) => {
-                      if (ok) setPermanentlyDeletingProxy(null);
-                    },
-                  });
-                }}
-                confirmLabel={PERMANENT_DELETE_LABEL}
-              />
-            )}
-
-            <CloneAgentDialog
-              agent={cloningProxy}
-              onOpenChange={(open) => {
-                if (!open) setCloningProxy(null);
-              }}
-              onCloned={(cloned) => {
-                // Land on the clone's Configuration step so it can be renamed
-                // straight away.
-                router.push(
-                  agentEditHref("llm_proxy", cloned.id, "configuration"),
-                );
-              }}
-            />
-
-            <AgentVersionHistoryDialog
-              agentId={history?.id ?? null}
-              canModify={!!history?.canModify}
-              onOpenChange={(open) => {
-                if (!open) setHistory(null);
-              }}
-            />
           </div>
-        </div>
+        </TableCardView>
       </PageLayout>
     </LoadingWrapper>
   );

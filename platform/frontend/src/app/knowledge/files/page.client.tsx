@@ -25,6 +25,13 @@ import {
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
+import {
+  TableCard,
+  TableCardList,
+  TableCardView,
+  TableCardViewContent,
+  TableCardViewToggle,
+} from "@/components/table-card-view";
 import { TableRowActions } from "@/components/table-row-actions";
 import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
 import { Button } from "@/components/ui/button";
@@ -498,229 +505,406 @@ export default function KnowledgeFilesPage() {
       }
       isPending={isLoading && files.length === 0}
     >
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center gap-2">
-          {openDirectory ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="-ml-2"
-              onClick={() => {
-                setOpenDirectoryId(null);
-                clearSelection();
+      <TableCardView storageKey="archestra-knowledge-files-view">
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {openDirectory ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="-ml-2"
+                onClick={() => {
+                  setOpenDirectoryId(null);
+                  clearSelection();
+                  updateQueryParams({ page: "1" });
+                }}
+              >
+                <ChevronLeft className="mr-1 h-4 w-4" />
+                <span>All files</span>
+              </Button>
+            ) : null}
+            {openDirectory && (
+              <span className="font-medium text-sm">{openDirectory.name}</span>
+            )}
+
+            <SearchInput
+              value={search}
+              onSearchChange={(value) => {
+                setSearch(value);
                 updateQueryParams({ page: "1" });
               }}
-            >
-              <ChevronLeft className="mr-1 h-4 w-4" />
-              <span>All files</span>
-            </Button>
-          ) : null}
-          {openDirectory && (
-            <span className="font-medium text-sm">{openDirectory.name}</span>
-          )}
+              // The term lives in local state and the page reset is handled just
+              // above, so the component's own query-param sync would only add a
+              // second router push per keystroke.
+              syncQueryParams={false}
+              placeholder="Search documents…"
+              className="w-full max-w-sm flex-1"
+            />
+            <span className="ml-auto">
+              <TableCardViewToggle />
+            </span>
+          </div>
 
-          <SearchInput
-            value={search}
-            onSearchChange={(value) => {
-              setSearch(value);
-              updateQueryParams({ page: "1" });
-            }}
-            // The term lives in local state and the page reset is handled just
-            // above, so the component's own query-param sync would only add a
-            // second router push per keystroke.
-            syncQueryParams={false}
-            placeholder="Search documents…"
-            className="w-full max-w-sm flex-1"
-          />
-        </div>
-
-        {/* Visibility follows the ticked rows, not the document count: picking
+          {/* Visibility follows the ticked rows, not the document count: picking
             an empty directory selects something the bar has to be able to
             report on and clear, even though it resolves to no documents. */}
-        <BulkActionsBar
-          count={allMatchingSelected ? actionDocumentCount : selectedIds.length}
-          noun="document"
-          label={`${actionDocumentCount} ${
-            actionDocumentCount === 1 ? "document" : "documents"
-          } selected`}
-          onClear={clearSelection}
-          busy={isFetchingAllMatching}
-          selectAllMatching={{
-            // Documents only. Directories arrive whole rather than a page at a
-            // time, so none of them are hidden behind this offer.
-            total: data?.pagination?.total ?? 0,
-            pageFullySelected:
-              rows.length > 0 && selectedIds.length === rows.length,
-            active: allMatchingSelected,
-            onSelectAll: () => setEscalatedFor(viewSignature),
-            matchDescription: search
-              ? "match this search query"
-              : "are in this view",
-          }}
-        >
-          <PermissionButton
-            permissions={{ knowledgeSource: ["update"] }}
-            variant="outline"
-            size="sm"
-            onClick={() => setBulkVisibilityOpen(true)}
-          >
-            <Pencil className="h-4 w-4" />
-            <span>Edit visibility</span>
-          </PermissionButton>
-          <PermissionButton
-            permissions={{ knowledgeSource: ["delete"] }}
-            variant="destructive"
-            size="sm"
-            onClick={() => setBulkDeleteOpen(true)}
-          >
-            <Trash2 className="h-4 w-4" />
-            <span>Delete</span>
-          </PermissionButton>
-          <PermissionButton
-            permissions={{ knowledgeSource: ["update"] }}
-            size="sm"
-            // An empty directory resolves to nothing, so the action is
-            // refused here rather than by an error that contradicts the
-            // "selected" count next to it.
-            disabled={actionDocumentCount === 0}
-            tooltip={
-              actionDocumentCount === 0
-                ? "The selected directories have no documents in them yet."
-                : undefined
+          <BulkActionsBar
+            count={
+              allMatchingSelected ? actionDocumentCount : selectedIds.length
             }
-            onClick={() => setAddToKbOpen(true)}
-          >
-            <span>Add to knowledge base</span>
-          </PermissionButton>
-        </BulkActionsBar>
-
-        {isLoadingError ? (
-          <QueryLoadError
-            title="Could not load documents"
-            onRetry={() => refetch()}
-          />
-        ) : (
-          <DataTable
-            columns={columns}
-            data={rows}
-            isLoading={isLoading}
-            emptyIcon={<Files className="h-10 w-10" />}
-            emptyMessage={
-              openDirectory
-                ? "This directory is empty. Upload a document into it to get started."
-                : "No documents yet. Upload one to make it available to your agents."
-            }
-            getRowId={(row) => row.id}
-            // The bulk bar above already names the count.
-            hideSelectedCount
-            rowSelection={rowSelection}
-            onRowSelectionChange={setRowSelection}
-            // Cell contents (badges, knowledge-base names) cannot shrink, so a
-            // narrow viewport scrolls the table instead of wrapping headers one
-            // letter per line.
-            tableClassName="min-w-[900px]"
-            manualPagination
-            pagination={{
-              pageIndex,
-              pageSize,
+            noun="document"
+            label={`${actionDocumentCount} ${
+              actionDocumentCount === 1 ? "document" : "documents"
+            } selected`}
+            onClear={clearSelection}
+            busy={isFetchingAllMatching}
+            selectAllMatching={{
+              // Documents only. Directories arrive whole rather than a page at a
+              // time, so none of them are hidden behind this offer.
               total: data?.pagination?.total ?? 0,
+              pageFullySelected:
+                rows.length > 0 && selectedIds.length === rows.length,
+              active: allMatchingSelected,
+              onSelectAll: () => setEscalatedFor(viewSignature),
+              matchDescription: search
+                ? "match this search query"
+                : "are in this view",
             }}
-            onPaginationChange={setPagination}
+          >
+            <PermissionButton
+              permissions={{ knowledgeSource: ["update"] }}
+              variant="outline"
+              size="sm"
+              onClick={() => setBulkVisibilityOpen(true)}
+            >
+              <Pencil className="h-4 w-4" />
+              <span>Edit visibility</span>
+            </PermissionButton>
+            <PermissionButton
+              permissions={{ knowledgeSource: ["delete"] }}
+              variant="destructive"
+              size="sm"
+              onClick={() => setBulkDeleteOpen(true)}
+            >
+              <Trash2 className="h-4 w-4" />
+              <span>Delete</span>
+            </PermissionButton>
+            <PermissionButton
+              permissions={{ knowledgeSource: ["update"] }}
+              size="sm"
+              // An empty directory resolves to nothing, so the action is
+              // refused here rather than by an error that contradicts the
+              // "selected" count next to it.
+              disabled={actionDocumentCount === 0}
+              tooltip={
+                actionDocumentCount === 0
+                  ? "The selected directories have no documents in them yet."
+                  : undefined
+              }
+              onClick={() => setAddToKbOpen(true)}
+            >
+              <span>Add to knowledge base</span>
+            </PermissionButton>
+          </BulkActionsBar>
+
+          {isLoadingError ? (
+            <QueryLoadError
+              title="Could not load documents"
+              onRetry={() => refetch()}
+            />
+          ) : (
+            <TableCardViewContent
+              cards={
+                <TableCardList
+                  itemCount={rows.length}
+                  isLoading={isLoading}
+                  emptyIcon={<Files className="h-10 w-10" />}
+                  emptyMessage={
+                    openDirectory
+                      ? "This directory is empty. Upload a document into it to get started."
+                      : "No documents yet. Upload one to make it available to your agents."
+                  }
+                  hasActiveFilters={!!search}
+                  filteredEmptyMessage="No documents match your search."
+                  onClearFilters={() => {
+                    setSearch("");
+                    updateQueryParams({ page: "1" });
+                  }}
+                  pagination={{
+                    pageIndex,
+                    pageSize,
+                    total: data?.pagination?.total ?? 0,
+                  }}
+                  onPaginationChange={setPagination}
+                >
+                  {rows.map((item) => {
+                    const name =
+                      item.kind === "directory"
+                        ? item.directory.name
+                        : item.file.filename;
+                    const visibility =
+                      item.kind === "directory"
+                        ? item.directory.visibility
+                        : item.file.visibility;
+                    const teamIds =
+                      item.kind === "directory"
+                        ? item.directory.teamIds
+                        : item.file.teamIds;
+                    const authorId =
+                      item.kind === "directory"
+                        ? item.directory.createdBy
+                        : item.file.uploadedBy;
+                    const createdAt =
+                      item.kind === "directory"
+                        ? item.directory.createdAt
+                        : item.file.createdAt;
+                    const actions =
+                      item.kind === "directory"
+                        ? [
+                            {
+                              icon: <Pencil className="h-4 w-4" />,
+                              label: "Edit",
+                              permissions: {
+                                knowledgeSource: ["update"] as const,
+                              },
+                              onClick: () =>
+                                setDirectoryDialog({
+                                  open: true,
+                                  directory: item.directory,
+                                }),
+                            },
+                            {
+                              icon: <Trash2 className="h-4 w-4" />,
+                              label: "Delete",
+                              variant: "destructive" as const,
+                              permissions: {
+                                knowledgeSource: ["delete"] as const,
+                              },
+                              onClick: () =>
+                                deleteDirectory.mutate(item.directory.id),
+                            },
+                          ]
+                        : [
+                            {
+                              icon: <Pencil className="h-4 w-4" />,
+                              label: "Edit",
+                              permissions: {
+                                knowledgeSource: ["update"] as const,
+                              },
+                              onClick: () => setEditFile(item.file),
+                            },
+                            {
+                              icon: <Trash2 className="h-4 w-4" />,
+                              label: "Delete",
+                              variant: "destructive" as const,
+                              permissions: {
+                                knowledgeSource: ["delete"] as const,
+                              },
+                              onClick: () => deleteFile.mutate(item.file.id),
+                            },
+                          ];
+
+                    return (
+                      <TableCard
+                        key={item.id}
+                        icon={
+                          item.kind === "directory" ? (
+                            <Folder className="h-4 w-4" />
+                          ) : (
+                            <FileText className="h-4 w-4" />
+                          )
+                        }
+                        title={
+                          <Button
+                            variant="link"
+                            className="h-auto max-w-full justify-start truncate p-0 font-medium"
+                            onClick={() => {
+                              if (item.kind === "directory") {
+                                setOpenDirectoryId(item.directory.id);
+                                clearSelection();
+                                updateQueryParams({ page: "1" });
+                              } else {
+                                setPreviewFile({
+                                  name: item.file.filename,
+                                  mimeType: item.file.mimeType,
+                                  contentUrl: `/api/knowledge-files/${item.file.id}/content`,
+                                });
+                              }
+                            }}
+                          >
+                            <span className="truncate">{name}</span>
+                          </Button>
+                        }
+                        actions={
+                          <TableRowActions itemName={name} actions={actions} />
+                        }
+                        selected={!!rowSelection[item.id]}
+                        onSelectedChange={(selected) => {
+                          const next = { ...rowSelection };
+                          if (selected) next[item.id] = true;
+                          else delete next[item.id];
+                          setRowSelection(next);
+                        }}
+                        selectionLabel={`Select ${name}`}
+                        footer={
+                          <span>
+                            Added {formatRelativeTimeFromNow(createdAt)}
+                          </span>
+                        }
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <VisibilityBadge
+                            visibility={visibility}
+                            teamIds={teamIds}
+                            authorId={authorId}
+                          />
+                          {item.kind === "directory" ? (
+                            <span className="text-xs text-muted-foreground">
+                              {item.directory.fileCount}{" "}
+                              {item.directory.fileCount === 1
+                                ? "file"
+                                : "files"}
+                            </span>
+                          ) : (
+                            <span className="truncate text-xs text-muted-foreground">
+                              {(item.file.knowledgeBases ?? []).length === 0
+                                ? "Not indexed"
+                                : (item.file.knowledgeBases ?? [])
+                                    .map((base) => base.name)
+                                    .join(", ")}
+                            </span>
+                          )}
+                        </div>
+                      </TableCard>
+                    );
+                  })}
+                </TableCardList>
+              }
+              table={
+                <DataTable
+                  columns={columns}
+                  data={rows}
+                  isLoading={isLoading}
+                  emptyIcon={<Files className="h-10 w-10" />}
+                  emptyMessage={
+                    openDirectory
+                      ? "This directory is empty. Upload a document into it to get started."
+                      : "No documents yet. Upload one to make it available to your agents."
+                  }
+                  getRowId={(row) => row.id}
+                  // The bulk bar above already names the count.
+                  hideSelectedCount
+                  rowSelection={rowSelection}
+                  onRowSelectionChange={setRowSelection}
+                  // Cell contents (badges, knowledge-base names) cannot shrink, so a
+                  // narrow viewport scrolls the table instead of wrapping headers one
+                  // letter per line.
+                  tableClassName="min-w-[900px]"
+                  manualPagination
+                  pagination={{
+                    pageIndex,
+                    pageSize,
+                    total: data?.pagination?.total ?? 0,
+                  }}
+                  onPaginationChange={setPagination}
+                />
+              }
+            />
+          )}
+        </div>
+
+        <UploadFileDialog
+          open={uploadOpen}
+          onOpenChange={setUploadOpen}
+          directories={directories}
+          defaultDirectoryId={openDirectoryId}
+        />
+        <DirectoryDialog
+          open={directoryDialog.open}
+          onOpenChange={(open) => setDirectoryDialog({ open })}
+          directory={directoryDialog.directory}
+        />
+        <EditFileDialog
+          open={!!editFile}
+          onOpenChange={(open) => !open && setEditFile(undefined)}
+          file={editFile}
+          directories={directories}
+        />
+        <FilePreviewDialog
+          open={!!previewFile}
+          onOpenChange={(open) => !open && setPreviewFile(undefined)}
+          file={previewFile}
+        />
+        {bulkDeleteOpen && (
+          <DeleteConfirmDialog
+            open={bulkDeleteOpen}
+            onOpenChange={setBulkDeleteOpen}
+            title="Delete selection"
+            description={`Delete ${selectionItems.length} ${
+              selectionItems.length === 1 ? "item" : "items"
+            }? Deleting a directory takes the documents inside it too.`}
+            isPending={bulkDelete.isPending}
+            onConfirm={() => {
+              bulkDelete.mutate(selectionItems, {
+                onSuccess: (outcome) => {
+                  reportBulkOutcome({
+                    outcome,
+                    verb: "Deleted",
+                    failureVerb: "delete",
+                    noun: "item",
+                  });
+                  setBulkDeleteOpen(false);
+                  if (outcome.failed.length === 0) clearSelection();
+                },
+              });
+            }}
+            confirmLabel="Delete"
+            pendingLabel="Deleting..."
           />
         )}
-      </div>
 
-      <UploadFileDialog
-        open={uploadOpen}
-        onOpenChange={setUploadOpen}
-        directories={directories}
-        defaultDirectoryId={openDirectoryId}
-      />
-      <DirectoryDialog
-        open={directoryDialog.open}
-        onOpenChange={(open) => setDirectoryDialog({ open })}
-        directory={directoryDialog.directory}
-      />
-      <EditFileDialog
-        open={!!editFile}
-        onOpenChange={(open) => !open && setEditFile(undefined)}
-        file={editFile}
-        directories={directories}
-      />
-      <FilePreviewDialog
-        open={!!previewFile}
-        onOpenChange={(open) => !open && setPreviewFile(undefined)}
-        file={previewFile}
-      />
-      {bulkDeleteOpen && (
-        <DeleteConfirmDialog
-          open={bulkDeleteOpen}
-          onOpenChange={setBulkDeleteOpen}
-          title="Delete selection"
-          description={`Delete ${selectionItems.length} ${
-            selectionItems.length === 1 ? "item" : "items"
-          }? Deleting a directory takes the documents inside it too.`}
-          isPending={bulkDelete.isPending}
-          onConfirm={() => {
-            bulkDelete.mutate(selectionItems, {
-              onSuccess: (outcome) => {
-                reportBulkOutcome({
-                  outcome,
-                  verb: "Deleted",
-                  failureVerb: "delete",
-                  noun: "item",
-                });
-                setBulkDeleteOpen(false);
-                if (outcome.failed.length === 0) clearSelection();
-              },
-            });
-          }}
-          confirmLabel="Delete"
-          pendingLabel="Deleting..."
+        {bulkVisibilityOpen && (
+          <BulkVisibilityDialog
+            // Documents carry team scoping but no per-person grants, so the
+            // dialog's Users choice resolves to "private" — visible to you alone.
+            items={selectionItems.map((item) => ({
+              id: item.id,
+              scope: "org" as const,
+              teams: [],
+              users: [],
+            }))}
+            noun="item"
+            open={bulkVisibilityOpen}
+            onOpenChange={setBulkVisibilityOpen}
+            isPending={bulkVisibility.isPending}
+            onApply={async (change) => {
+              const outcome = await bulkVisibility.mutateAsync({
+                items: selectionItems,
+                visibility: VISIBILITY_BY_SCOPE[change.scope],
+                teamIds: change.teamIds,
+              });
+              reportBulkOutcome({
+                outcome,
+                verb: "Updated",
+                failureVerb: "update",
+                noun: "item",
+              });
+              if (outcome.succeeded.length === 0) return false;
+              if (outcome.failed.length === 0) clearSelection();
+              return true;
+            }}
+          />
+        )}
+
+        <AddToKnowledgeBaseDialog
+          open={addToKbOpen}
+          onOpenChange={setAddToKbOpen}
+          fileIds={actionFileIds}
+          directoryIds={actionDirectoryIds}
+          documentCount={actionDocumentCount}
+          onIndexed={clearSelection}
         />
-      )}
-
-      {bulkVisibilityOpen && (
-        <BulkVisibilityDialog
-          // Documents carry team scoping but no per-person grants, so the
-          // dialog's Users choice resolves to "private" — visible to you alone.
-          items={selectionItems.map((item) => ({
-            id: item.id,
-            scope: "org" as const,
-            teams: [],
-            users: [],
-          }))}
-          noun="item"
-          open={bulkVisibilityOpen}
-          onOpenChange={setBulkVisibilityOpen}
-          isPending={bulkVisibility.isPending}
-          onApply={async (change) => {
-            const outcome = await bulkVisibility.mutateAsync({
-              items: selectionItems,
-              visibility: VISIBILITY_BY_SCOPE[change.scope],
-              teamIds: change.teamIds,
-            });
-            reportBulkOutcome({
-              outcome,
-              verb: "Updated",
-              failureVerb: "update",
-              noun: "item",
-            });
-            if (outcome.succeeded.length === 0) return false;
-            if (outcome.failed.length === 0) clearSelection();
-            return true;
-          }}
-        />
-      )}
-
-      <AddToKnowledgeBaseDialog
-        open={addToKbOpen}
-        onOpenChange={setAddToKbOpen}
-        fileIds={actionFileIds}
-        directoryIds={actionDirectoryIds}
-        documentCount={actionDocumentCount}
-        onIndexed={clearSelection}
-      />
+      </TableCardView>
     </KnowledgePageLayout>
   );
 }

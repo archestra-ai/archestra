@@ -23,7 +23,7 @@ interface CallPolicyToggleProps {
   value: CallPolicyAction;
   onChange: (action: CallPolicyAction) => void;
   disabled?: boolean;
-  size?: "sm" | "lg";
+  size?: "sm" | "table" | "lg";
 }
 
 export function CallPolicyToggle({
@@ -32,14 +32,19 @@ export function CallPolicyToggle({
   disabled,
   size = "sm",
 }: CallPolicyToggleProps) {
-  if (size === "lg") {
+  if (size === "lg" || size === "table") {
+    const isTable = size === "table";
     return (
       <Select
         value={value}
         onValueChange={(val: CallPolicyAction) => onChange(val)}
         disabled={disabled}
       >
-        <SelectTrigger className="w-[220px]">
+        <SelectTrigger
+          className={isTable ? "h-8 w-[200px] text-xs" : "w-[220px]"}
+          size={isTable ? "sm" : "default"}
+          onClick={isTable ? (event) => event.stopPropagation() : undefined}
+        >
           <SelectValue placeholder="Select policy" />
         </SelectTrigger>
         <SelectContent>

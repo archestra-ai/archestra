@@ -3,37 +3,41 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
-  SettingsCardHeader,
+  SettingsBlock,
   SettingsSaveBar,
   SettingsSectionStack,
 } from "./settings-block";
 
 vi.mock("@/lib/auth/auth.query");
 
-describe("SettingsCardHeader", () => {
-  it("adds spacing between the title and description", () => {
-    const { container } = render(
-      <SettingsCardHeader
+describe("SettingsBlock", () => {
+  it("renders a semantic section with an accessible heading", () => {
+    render(
+      <SettingsBlock
         title="Default model"
         description="Pick the model used by default."
       />,
     );
 
-    expect(container.querySelector(".space-y-1\\.5")).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Default model" }),
+    ).toBeVisible();
     expect(screen.getByText("Pick the model used by default.")).toBeVisible();
   });
 
-  it("vertically centers the action area", () => {
-    const { container } = render(
-      <SettingsCardHeader
+  it("supports an aligned control and full-width content", () => {
+    render(
+      <SettingsBlock
         title="Default model"
         description="Pick the model used by default."
-        action={<button type="button">Reset</button>}
-      />,
+        control={<button type="button">Reset</button>}
+      >
+        <div>Advanced controls</div>
+      </SettingsBlock>,
     );
 
-    expect(container.querySelector(".items-center")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Reset" })).toBeVisible();
+    expect(screen.getByText("Advanced controls")).toBeVisible();
   });
 });
 

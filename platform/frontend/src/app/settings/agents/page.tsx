@@ -252,14 +252,14 @@ export default function AgentSettingsPage() {
               isLoadError ? (
                 <QueryLoadError
                   title="Couldn't load your LLM providers"
-                  className="w-80"
+                  className="w-full sm:w-80"
                   onRetry={() => {
                     refetchApiKeys();
                     refetchModels();
                   }}
                 />
               ) : (
-                <div className="flex flex-col gap-2 w-80">
+                <div className="flex w-full flex-col gap-2 sm:w-80">
                   <LlmProviderApiKeyDropdown
                     availableKeys={availableKeys}
                     selectedApiKeyId={selectedApiKeyId || null}
@@ -272,7 +272,7 @@ export default function AgentSettingsPage() {
                       setApiKeySelectorOpen(false);
                     }}
                     triggerVariant="select"
-                    triggerClassName="w-80"
+                    triggerClassName="w-full"
                     popoverClassName="w-80"
                     emptyTriggerLabel="Select provider key..."
                   />
@@ -288,7 +288,7 @@ export default function AgentSettingsPage() {
                           ? "Loading models..."
                           : "Select model..."
                     }
-                    className="w-80"
+                    className="w-full"
                     disabled={
                       isSaving ||
                       !hasPermission ||
@@ -340,7 +340,7 @@ export default function AgentSettingsPage() {
                 agents={orgAgents ?? []}
                 placeholder="Select agent..."
                 searchPlaceholder="Search agents..."
-                className="w-80"
+                className="w-full sm:w-80"
                 disabled={isSaving || !hasPermission}
                 hint="Only org-wide agents are shown"
                 sentinelOption={{

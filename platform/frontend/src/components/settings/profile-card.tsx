@@ -4,9 +4,9 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { SettingsBlock } from "@/components/settings/settings-block";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   Form,
   FormControl,
@@ -46,21 +46,19 @@ export function ProfileCard() {
   const image = session?.user?.image ?? null;
 
   return (
-    <Card>
-      <CardContent>
-        {/* A settings form is read at a fixed measure: fields stretched to a
-            1400px card are hard to scan and imply far more input than a
-            name. */}
-        <div className="max-w-xl">
-          <ProfileForm
-            name={name}
-            email={email}
-            image={image}
-            role={role ?? ""}
-          />
-        </div>
-      </CardContent>
-    </Card>
+    <SettingsBlock
+      title="Profile"
+      description="Your personal details and organization role."
+    >
+      <div className="max-w-xl">
+        <ProfileForm
+          name={name}
+          email={email}
+          image={image}
+          role={role ?? ""}
+        />
+      </div>
+    </SettingsBlock>
   );
 }
 
@@ -191,29 +189,28 @@ function ReadOnlyField({
 
 function ProfileSkeleton() {
   return (
-    <Card>
-      <CardContent>
-        {/* Shaped like the form it replaces, so the section does not jump
-            when the session lands. */}
-        <div className="max-w-xl space-y-6">
-          <div className="flex items-start gap-4">
-            <Skeleton className="size-16 shrink-0 rounded-full" />
-            <div className="grid min-w-0 flex-1 gap-2">
-              <Skeleton className="h-4 w-16" />
-              <Skeleton className="h-9 w-full" />
-              <Skeleton className="h-4 w-2/3" />
-            </div>
+    <SettingsBlock
+      title="Profile"
+      description="Your personal details and organization role."
+    >
+      <div className="max-w-xl space-y-6">
+        <div className="flex items-start gap-4">
+          <Skeleton className="size-16 shrink-0 rounded-full" />
+          <div className="grid min-w-0 flex-1 gap-2">
+            <Skeleton className="h-4 w-16" />
+            <Skeleton className="h-9 w-full" />
+            <Skeleton className="h-4 w-2/3" />
           </div>
-          {["email", "role"].map((field) => (
-            <div key={field} className="grid gap-2">
-              <Skeleton className="h-4 w-16" />
-              <Skeleton className="h-9 w-full" />
-              <Skeleton className="h-4 w-2/3" />
-            </div>
-          ))}
-          <Skeleton className="h-9 w-32" />
         </div>
-      </CardContent>
-    </Card>
+        {["email", "role"].map((field) => (
+          <div key={field} className="grid gap-2">
+            <Skeleton className="h-4 w-16" />
+            <Skeleton className="h-9 w-full" />
+            <Skeleton className="h-4 w-2/3" />
+          </div>
+        ))}
+        <Skeleton className="h-9 w-32" />
+      </div>
+    </SettingsBlock>
   );
 }

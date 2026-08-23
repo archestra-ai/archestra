@@ -134,10 +134,12 @@ export default function ServiceAccountsSettingsPage() {
       {
         accessorKey: "name",
         header: "Account",
+        size: 240,
         cell: ({ row }) => (
           <Link
-            className="font-medium hover:underline"
+            className="block truncate font-medium hover:underline"
             href={`/settings/service-accounts/${row.original.id}`}
+            title={row.original.name}
           >
             {row.original.name}
           </Link>
@@ -146,6 +148,7 @@ export default function ServiceAccountsSettingsPage() {
       {
         accessorKey: "role",
         header: "Role",
+        size: 120,
         cell: ({ row }) => (
           <Badge variant="secondary">{formatRoleName(row.original.role)}</Badge>
         ),
@@ -153,11 +156,13 @@ export default function ServiceAccountsSettingsPage() {
       {
         accessorKey: "tokenCount",
         header: "API keys",
+        size: 90,
         cell: ({ row }) => row.original.tokenCount,
       },
       {
         accessorKey: "disabled",
         header: "Status",
+        size: 100,
         cell: ({ row }) =>
           row.original.disabled ? (
             <Badge variant="outline">Disabled</Badge>
@@ -168,6 +173,7 @@ export default function ServiceAccountsSettingsPage() {
       {
         accessorKey: "createdAt",
         header: "Created",
+        size: 130,
         cell: ({ row }) => formatRelativeTimeFromNow(row.original.createdAt),
       },
     ];
@@ -181,6 +187,7 @@ export default function ServiceAccountsSettingsPage() {
       {
         id: "actions",
         header: "Actions",
+        size: 130,
         cell: ({ row }) => (
           <TableRowActions
             itemName={row.original.name}
@@ -250,9 +257,8 @@ export default function ServiceAccountsSettingsPage() {
           isPending={isPending}
           loadingFallback={<LoadingSpinner />}
         >
-          <div className="space-y-4">
+          <div>
             <FilterBar
-              className="mb-0"
               onClearFilters={
                 search
                   ? () => updateQueryParams({ search: null, page: "1" })
@@ -309,6 +315,15 @@ export default function ServiceAccountsSettingsPage() {
                   onClearFilters={() =>
                     updateQueryParams({ search: null, page: "1" })
                   }
+                  hidePaginationWhenSinglePage
+                  fixedWidthColumnIds={[
+                    "role",
+                    "tokenCount",
+                    "disabled",
+                    "createdAt",
+                    "actions",
+                  ]}
+                  flexibleColumnIds={["name"]}
                 />
               </>
             )}

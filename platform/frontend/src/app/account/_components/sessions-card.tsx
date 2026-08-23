@@ -1,17 +1,14 @@
 "use client";
 
-import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
+import type { ColumnDef } from "@tanstack/react-table";
 import { KeyRound, Laptop, LogOut, Smartphone, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useState } from "react";
 import { UAParser } from "ua-parser-js";
 import { QueryLoadError } from "@/components/query-load-error";
-import { SettingsCardHeader } from "@/components/settings/settings-block";
 import { TableRowActions } from "@/components/table-row-actions";
 import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
 import {
   Empty,
@@ -88,10 +85,12 @@ export function SessionsCard() {
       // Signing yourself out is the row's own action; doing it inside a batch
       // would kill the request revoking the rest.
       canSelect: (row) => !isCurrent(row),
+      disabledReason: () => "Use Sign out for your current session",
     }),
     {
       id: "device",
       header: "Device",
+      size: 320,
       cell: ({ row }) => {
         const { deviceType, label } = describeUserAgent(row.original.userAgent);
         return (
@@ -118,6 +117,7 @@ export function SessionsCard() {
     {
       id: "signed-in",
       header: "Signed in",
+      size: 130,
       cell: ({ row }) => (
         <span className="text-sm text-muted-foreground">
           {formatRelativeTimeFromNow(row.original.createdAt)}
@@ -127,6 +127,7 @@ export function SessionsCard() {
     {
       id: "expires",
       header: "Expires",
+      size: 130,
       cell: ({ row }) => (
         <span className="text-sm text-muted-foreground">
           {formatRelativeTimeFromNow(row.original.expiresAt)}
@@ -135,7 +136,8 @@ export function SessionsCard() {
     },
     {
       id: "actions",
-      header: () => <div className="text-right">Actions</div>,
+      header: "Actions",
+      size: 90,
       cell: ({ row }) => (
         <TableRowActions
           itemName={row.original.ipAddress ?? "this session"}
@@ -164,88 +166,91 @@ export function SessionsCard() {
   ];
 
   return (
-    <Card className="w-full">
-      <SettingsCardHeader
-        title="Sessions"
-        description="Manage where your account is signed in."
-      />
-      <CardContent>
-        {isLoadingError && error instanceof StaleSessionError ? (
-          <Empty className="py-6">
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <KeyRound />
-              </EmptyMedia>
-              <EmptyTitle>Sign in again to manage your sessions</EmptyTitle>
-              <EmptyDescription>
-                {/* 24 hours mirrors Better Auth's session.freshAge default,
+    <section className="w-full space-y-5">
+      <div className="space-y-1">
+        <h2 className="text-sm font-medium leading-5">Sessions</h2>
+        <p className="text-sm leading-5 text-muted-foreground">
+          Manage where your account is signed in.
+        </p>
+      </div>
+      {isLoadingError && error instanceof StaleSessionError ? (
+        <Empty className="py-6">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <KeyRound />
+            </EmptyMedia>
+            <EmptyTitle>Sign in again to manage your sessions</EmptyTitle>
+            <EmptyDescription>
+              {/* 24 hours mirrors Better Auth's session.freshAge default,
                     pinned by backend/src/auth/list-sessions-freshness.test.ts */}
-                For your security, this list is only available for the first 24
-                hours after you sign in. Sign out and back in to see where your
-                account is signed in.
-              </EmptyDescription>
-            </EmptyHeader>
-            <EmptyContent>
-              <Button
-                variant="outline"
-                onClick={() => router.push("/auth/sign-out")}
-              >
-                Sign Out
-              </Button>
-            </EmptyContent>
-          </Empty>
-        ) : isLoadingError ? (
-          <QueryLoadError
-            className="py-6"
-            title="Couldn't load your sessions"
-            onRetry={() => refetch()}
-          />
-        ) : (
-          <>
-            <BulkActionsBar
-              count={selectedSessions.length}
-              noun="session"
-              onClear={clearSelection}
-              selectAllMatching={selectAllMatching}
-              busy={bulkRevoke.isPending}
-              className="mb-3"
+              For your security, this list is only available for the first 24
+              hours after you sign in. Sign out and back in to see where your
+              account is signed in.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button
+              variant="outline"
+              onClick={() => router.push("/auth/sign-out")}
             >
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() =>
-                  bulkRevoke.mutate(selectedSessions, {
-                    onSuccess: (outcome) => {
-                      reportBulkOutcome({
-                        outcome,
-                        verb: "Revoked",
-                        failureVerb: "revoke",
-                        noun: "session",
-                      });
-                      if (outcome.failed.length === 0) clearSelection();
-                    },
-                  })
-                }
-              >
-                <span>Revoke</span>
-              </Button>
-            </BulkActionsBar>
+              Sign Out
+            </Button>
+          </EmptyContent>
+        </Empty>
+      ) : isLoadingError ? (
+        <QueryLoadError
+          className="py-6"
+          title="Couldn't load your sessions"
+          onRetry={() => refetch()}
+        />
+      ) : (
+        <>
+          <BulkActionsBar
+            count={selectedSessions.length}
+            noun="session"
+            onClear={clearSelection}
+            selectAllMatching={selectAllMatching}
+            busy={bulkRevoke.isPending}
+            className="mb-3"
+          >
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() =>
+                bulkRevoke.mutate(selectedSessions, {
+                  onSuccess: (outcome) => {
+                    reportBulkOutcome({
+                      outcome,
+                      verb: "Revoked",
+                      failureVerb: "revoke",
+                      noun: "session",
+                    });
+                    if (outcome.failed.length === 0) clearSelection();
+                  },
+                })
+              }
+            >
+              <span>Revoke</span>
+            </Button>
+          </BulkActionsBar>
 
-            <DataTable
-              columns={columns}
-              data={rows}
-              getRowId={(row) => row.id}
-              rowSelection={rowSelection}
-              onRowSelectionChange={setRowSelection}
-              onPageRowIdsChange={onPageRowIdsChange}
-              hideSelectedCount
-              isLoading={isPending}
-              emptyMessage="No active sessions."
-            />
-          </>
-        )}
-      </CardContent>
-    </Card>
+          <DataTable
+            columns={columns}
+            data={rows}
+            getRowId={(row) => row.id}
+            rowSelection={rowSelection}
+            onRowSelectionChange={setRowSelection}
+            onPageRowIdsChange={onPageRowIdsChange}
+            hideSelectedCount
+            isLoading={isPending}
+            emptyMessage="No active sessions."
+            hidePaginationWhenSinglePage
+            fixedWidthColumnIds={["signed-in", "expires", "actions"]}
+            flexibleColumnIds={["device"]}
+          />
+        </>
+      )}
+    </section>
   );
 }
 

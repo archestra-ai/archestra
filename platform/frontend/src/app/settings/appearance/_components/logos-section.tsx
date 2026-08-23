@@ -3,8 +3,7 @@
 import { Upload, X } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
-import { SettingsCardHeader } from "@/components/settings/settings-block";
-import { Card, CardContent } from "@/components/ui/card";
+import { SettingsBlock } from "@/components/settings/settings-block";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useUpdateAppearanceSettings } from "@/lib/organization.query";
 
@@ -62,23 +61,20 @@ export function LogosSection({
   };
 
   return (
-    <Card>
-      <SettingsCardHeader title="Logos" description="PNG or SVG, max 2 MB." />
-      <CardContent>
-        <div className="divide-y divide-border border-t border-border">
-          {ROWS.map(({ label, description, field }) => (
-            <LogoRow
-              key={field}
-              label={label}
-              description={description}
-              field={field}
-              current={values[field]}
-              onChange={onChange}
-            />
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+    <SettingsBlock title="Logos" description="PNG or SVG, max 2 MB.">
+      <div className="divide-y divide-border border-y border-border">
+        {ROWS.map(({ label, description, field }) => (
+          <LogoRow
+            key={field}
+            label={label}
+            description={description}
+            field={field}
+            current={values[field]}
+            onChange={onChange}
+          />
+        ))}
+      </div>
+    </SettingsBlock>
   );
 }
 

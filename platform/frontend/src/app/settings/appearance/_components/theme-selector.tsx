@@ -2,9 +2,8 @@
 
 import type { OrganizationTheme } from "@archestra/shared";
 import { WithPermissions } from "@/components/roles/with-permissions";
-import { SettingsCardHeader } from "@/components/settings/settings-block";
+import { SettingsBlock } from "@/components/settings/settings-block";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { type ThemeMetadata, themes } from "@/themes";
 
 interface ThemeSelectorProps {
@@ -17,34 +16,31 @@ export function ThemeSelector({
   onThemeSelect,
 }: ThemeSelectorProps) {
   return (
-    <Card>
-      <SettingsCardHeader
-        title="Color Theme"
-        description="Choose a color theme for your organization. Changes are previewed in real-time."
-      />
-      <CardContent>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-          {themes.map((theme) => (
-            <div key={theme.id} className="flex-1">
-              <WithPermissions
-                permissions={{ organizationSettings: ["update"] }}
-                noPermissionHandle="tooltip"
-                key={theme.id}
-              >
-                {({ hasPermission }) => (
-                  <ThemeOption
-                    theme={theme}
-                    isSelected={selectedTheme === theme.id}
-                    onClick={() => onThemeSelect(theme.id)}
-                    disabled={!hasPermission}
-                  />
-                )}
-              </WithPermissions>
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+    <SettingsBlock
+      title="Color Theme"
+      description="Choose a color theme for your organization. Changes are previewed in real-time."
+    >
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+        {themes.map((theme) => (
+          <div key={theme.id} className="flex-1">
+            <WithPermissions
+              permissions={{ organizationSettings: ["update"] }}
+              noPermissionHandle="tooltip"
+              key={theme.id}
+            >
+              {({ hasPermission }) => (
+                <ThemeOption
+                  theme={theme}
+                  isSelected={selectedTheme === theme.id}
+                  onClick={() => onThemeSelect(theme.id)}
+                  disabled={!hasPermission}
+                />
+              )}
+            </WithPermissions>
+          </div>
+        ))}
+      </div>
+    </SettingsBlock>
   );
 }
 

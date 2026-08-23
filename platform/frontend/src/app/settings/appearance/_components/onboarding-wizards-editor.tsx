@@ -107,7 +107,7 @@ export function OnboardingWizardEditor({
 
   if (!wizard) {
     return (
-      <div className="space-y-3">
+      <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
           <Label>Onboarding</Label>
           <p className="text-xs text-muted-foreground">
@@ -120,6 +120,7 @@ export function OnboardingWizardEditor({
           type="button"
           variant="outline"
           size="sm"
+          className="shrink-0"
           onClick={handleAddWizard}
         >
           <Plus className="h-4 w-4" />

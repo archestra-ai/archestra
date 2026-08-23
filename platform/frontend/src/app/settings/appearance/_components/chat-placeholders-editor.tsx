@@ -53,12 +53,28 @@ export function ChatPlaceholdersEditor({
   );
 
   return (
-    <div className="space-y-2">
-      <Label>Chat Placeholders</Label>
-      <p className="text-xs text-muted-foreground">
-        Custom placeholder texts for the chat input. Max 20 entries, 80 chars
-        each.
-      </p>
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-4">
+        <div className="space-y-1">
+          <Label>Chat Placeholders</Label>
+          <p className="text-xs text-muted-foreground">
+            Custom placeholder texts for the chat input. Max 20 entries, 80
+            chars each.
+          </p>
+        </div>
+        {placeholders.length < 20 && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+            onClick={handleAdd}
+          >
+            <Plus className="h-4 w-4" />
+            Add Placeholder
+          </Button>
+        )}
+      </div>
       <div className="space-y-2">
         {placeholders.map((placeholder, index) => (
           <div key={keysRef.current[index]} className="flex items-center gap-2">
@@ -82,12 +98,6 @@ export function ChatPlaceholdersEditor({
           </div>
         ))}
       </div>
-      {placeholders.length < 20 && (
-        <Button type="button" variant="outline" size="sm" onClick={handleAdd}>
-          <Plus className="h-4 w-4" />
-          Add Placeholder
-        </Button>
-      )}
     </div>
   );
 }

@@ -1,16 +1,14 @@
 "use client";
 
 import { Trash2 } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { Editor } from "@/components/editor";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
-import { SettingsCardHeader } from "@/components/settings/settings-block";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { SettingsBlock } from "@/components/settings/settings-block";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { Textarea } from "@/components/ui/textarea";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   useDeleteSiteNotification,
@@ -73,7 +71,6 @@ export function SiteNotificationsSection({
   });
   const deleteMutation = useDeleteSiteNotification();
 
-  const [tab, setTab] = useState<"markdown" | "preview">("markdown");
   const trimmedContent = content.trim();
 
   const handleDelete = useCallback(async () => {
@@ -87,12 +84,11 @@ export function SiteNotificationsSection({
   }
 
   return (
-    <Card>
-      <SettingsCardHeader
-        title="Site Notifications"
-        description="Manage a site-wide announcement banner displayed across the app."
-      />
-      <CardContent className="space-y-4">
+    <SettingsBlock
+      title="Site Notifications"
+      description="Manage a site-wide announcement banner displayed across the app."
+    >
+      <div className="space-y-4">
         {isLoading ? (
           <p className="text-sm text-muted-foreground">
             Loading notification settings...
@@ -110,35 +106,38 @@ export function SiteNotificationsSection({
               }
             />
 
-            <div className="rounded-lg border">
-              <div className="flex items-center gap-1 border-b p-1">
-                <Button
-                  type="button"
-                  variant={tab === "markdown" ? "secondary" : "ghost"}
-                  size="sm"
-                  onClick={() => setTab("markdown")}
-                >
+            <div className="grid overflow-hidden rounded-lg border lg:grid-cols-2">
+              <div className="min-w-0 border-b lg:border-b-0 lg:border-r">
+                <div className="border-b bg-muted/30 px-3 py-2 text-xs font-medium text-muted-foreground">
                   Markdown
-                </Button>
-                <Button
-                  type="button"
-                  variant={tab === "preview" ? "secondary" : "ghost"}
-                  size="sm"
-                  onClick={() => setTab("preview")}
-                >
-                  Preview
-                </Button>
-              </div>
-              {tab === "markdown" ? (
-                <Textarea
-                  aria-label="Notification content"
+                </div>
+                <Editor
+                  height="240px"
+                  defaultLanguage="markdown"
                   value={content}
-                  onChange={(event) => onContentChange(event.target.value)}
-                  placeholder="Write your notification content using markdown."
-                  className="border-0 rounded-none font-mono text-sm min-h-[160px] resize-none focus-visible:ring-0"
+                  onChange={(value) => onContentChange(value ?? "")}
+                  options={{
+                    ariaLabel: "Notification content",
+                    minimap: { enabled: false },
+                    lineNumbers: "off",
+                    folding: false,
+                    glyphMargin: false,
+                    lineDecorationsWidth: 8,
+                    lineNumbersMinChars: 0,
+                    scrollBeyondLastLine: false,
+                    wordWrap: "on",
+                    fontSize: 13,
+                    padding: { top: 10, bottom: 10 },
+                    placeholder:
+                      "Write your notification content using markdown.",
+                  }}
                 />
-              ) : (
-                <div className="p-4 min-h-[160px] [&_p]:my-1 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:text-sm [&_h2]:font-semibold [&_a]:text-primary [&_a]:underline [&_strong]:font-semibold [&_em]:italic">
+              </div>
+              <div className="min-w-0">
+                <div className="border-b bg-muted/30 px-3 py-2 text-xs font-medium text-muted-foreground">
+                  Preview
+                </div>
+                <div className="h-[240px] overflow-y-auto p-4 [&_p]:my-1 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:text-sm [&_h2]:font-semibold [&_a]:text-primary [&_a]:underline [&_strong]:font-semibold [&_em]:italic">
                   {trimmedContent.length > 0 ? (
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
@@ -152,7 +151,7 @@ export function SiteNotificationsSection({
                     </p>
                   )}
                 </div>
-              )}
+              </div>
             </div>
 
             {notification && (
@@ -172,7 +171,7 @@ export function SiteNotificationsSection({
             )}
           </>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </SettingsBlock>
   );
 }

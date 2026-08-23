@@ -20,7 +20,6 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FilterBar, filterSearchClass } from "@/components/filter-bar";
-import { ListViewToggle, useListViewMode } from "@/components/list-view-toggle";
 import { LoadingSpinner } from "@/components/loading";
 import {
   PERMANENT_DELETE_LABEL,
@@ -30,6 +29,12 @@ import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceDeletedStatusFilter } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
 import { StandardDialog } from "@/components/standard-dialog";
+import {
+  TableCardGrid,
+  TableCardView,
+  TableCardViewContent,
+  TableCardViewToggle,
+} from "@/components/table-card-view";
 import {
   type TableRowAction,
   TableRowActions,
@@ -164,13 +169,8 @@ function KnowledgeBasesList() {
     knowledgeBaseId: string;
   } | null>(null);
   const { startChat, isCreating: isChatCreating } = useChatWithKnowledgeBase();
-  const [viewMode, setViewMode] = useListViewMode("knowledge-bases-view");
-
   const items = knowledgeBases?.data ?? [];
   const pagination = knowledgeBases?.pagination;
-  // Cards are the browse view; the trash is a lifecycle queue and stays a
-  // table (its rows have no connectors left to show).
-  const showCards = viewMode === "cards" && !isDeletedView;
   // One query for every connector on the page, rather than one per knowledge
   // base as the expandable sub-table did. It also polls while any connector is
   // syncing, so the status dots stay live.
@@ -425,209 +425,209 @@ function KnowledgeBasesList() {
       onCreateClick={() => setIsCreateDialogOpen(true)}
       isPending={isPending && !knowledgeBases}
     >
-      <div>
-        <div className="mb-6 flex flex-col gap-2">
-          <FilterBar
-            className="mb-0"
-            actions={
-              !isDeletedView && (
-                <ListViewToggle
-                  value={viewMode}
-                  onChange={setViewMode}
-                  size="sm"
-                />
-              )
-            }
-          >
-            <SearchInput paramName="search" className={filterSearchClass} />
-            <ResourceDeletedStatusFilter
-              deletePermission={{ knowledgeSource: ["delete"] }}
-            />
-          </FilterBar>
-        </div>
-
-        {!isDeletedView && (
-          <BulkActionsBar
-            count={selectedKnowledgeBases.length}
-            noun="knowledge base"
-            plural="knowledge bases"
-            onClear={clearSelection}
-            busy={bulkDelete.isPending}
-            selectAllMatching={{
-              total: pagination?.total ?? items.length,
-              pageFullySelected:
-                items.length > 0 && items.every((kb) => rowSelection[kb.id]),
-              active: allMatchingActive,
-              onSelectAll: () => setSelectAllMatchingFor(filterSignature),
-              matchDescription: "match this search",
-              max: MAX_BULK_IDS,
-            }}
-            className="mb-3"
-          >
-            <PermissionButton
-              permissions={{ knowledgeSource: ["delete"] }}
-              variant="destructive"
-              size="sm"
-              onClick={() => setBulkDeleteOpen(true)}
+      <TableCardView storageKey="knowledge-bases-view">
+        <div>
+          <div className="mb-6 flex flex-col gap-2">
+            <FilterBar
+              className="mb-0"
+              actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
             >
-              <Trash2 className="h-4 w-4" />
-              <span>Delete</span>
-            </PermissionButton>
-          </BulkActionsBar>
-        )}
+              <SearchInput paramName="search" className={filterSearchClass} />
+              <ResourceDeletedStatusFilter
+                deletePermission={{ knowledgeSource: ["delete"] }}
+              />
+            </FilterBar>
+          </div>
 
-        {showCards ? (
-          <KnowledgeBaseCardGrid
-            knowledgeBases={items}
-            connectorsById={connectorsById}
-            rowSelection={rowSelection}
-            onRowSelectionChange={setRowSelection}
-            rowActions={rowActions}
-            onAddConnector={setAddConnectorKbId}
-            onEditConnector={openEditConnector}
-            onRemoveConnector={setRemovingConnector}
-            isLoading={isFetching && items.length === 0}
-            hasActiveFilters={hasActiveFilters}
-            onClearFilters={clearFilters}
-            pagination={{
-              pageIndex,
-              pageSize,
-              total: pagination?.total ?? 0,
-            }}
-            onPaginationChange={goToPage}
-          />
-        ) : (
-          <DataTable
-            columns={isDeletedView ? deletedColumns : columns}
-            data={items}
-            getRowId={(row) => row.id}
-            rowSelection={isDeletedView ? undefined : rowSelection}
-            onRowSelectionChange={isDeletedView ? undefined : setRowSelection}
-            hideSelectedCount
-            // The deleted view always counts as filtered (see hasActiveFilters),
-            // so its empty state is the filtered one below.
-            emptyMessage="No knowledge bases found"
-            hasActiveFilters={hasActiveFilters}
-            filteredEmptyMessage={
-              isDeletedView
-                ? "No deleted knowledge bases found."
-                : "No knowledge bases match your filters. Try adjusting your search."
+          {!isDeletedView && (
+            <BulkActionsBar
+              count={selectedKnowledgeBases.length}
+              noun="knowledge base"
+              plural="knowledge bases"
+              onClear={clearSelection}
+              busy={bulkDelete.isPending}
+              selectAllMatching={{
+                total: pagination?.total ?? items.length,
+                pageFullySelected:
+                  items.length > 0 && items.every((kb) => rowSelection[kb.id]),
+                active: allMatchingActive,
+                onSelectAll: () => setSelectAllMatchingFor(filterSignature),
+                matchDescription: "match this search",
+                max: MAX_BULK_IDS,
+              }}
+              className="mb-3"
+            >
+              <PermissionButton
+                permissions={{ knowledgeSource: ["delete"] }}
+                variant="destructive"
+                size="sm"
+                onClick={() => setBulkDeleteOpen(true)}
+              >
+                <Trash2 className="h-4 w-4" />
+                <span>Delete</span>
+              </PermissionButton>
+            </BulkActionsBar>
+          )}
+
+          <TableCardViewContent
+            forceTable={isDeletedView}
+            cards={
+              <KnowledgeBaseCardGrid
+                knowledgeBases={items}
+                connectorsById={connectorsById}
+                rowSelection={rowSelection}
+                onRowSelectionChange={setRowSelection}
+                rowActions={rowActions}
+                onAddConnector={setAddConnectorKbId}
+                onEditConnector={openEditConnector}
+                onRemoveConnector={setRemovingConnector}
+                isLoading={isFetching && items.length === 0}
+                hasActiveFilters={hasActiveFilters}
+                onClearFilters={clearFilters}
+                pagination={{
+                  pageIndex,
+                  pageSize,
+                  total: pagination?.total ?? 0,
+                }}
+                onPaginationChange={goToPage}
+              />
             }
-            onClearFilters={clearFilters}
-            manualPagination
-            pagination={{
-              pageIndex,
-              pageSize,
-              total: pagination?.total ?? 0,
-            }}
-            onPaginationChange={goToPage}
-            isLoading={isFetching}
-          />
-        )}
-
-        {bulkDeleteOpen && (
-          <DeleteConfirmDialog
-            open={bulkDeleteOpen}
-            onOpenChange={setBulkDeleteOpen}
-            title="Delete knowledge bases"
-            description={`Delete ${selectedKnowledgeBases.length} ${
-              selectedKnowledgeBases.length === 1
-                ? "knowledge base"
-                : "knowledge bases"
-            }? Their connectors survive and keep working; the agents using them lose that knowledge until it is reassigned.`}
-            isPending={bulkDelete.isPending}
-            onConfirm={() => {
-              bulkDelete.mutate(selectedKnowledgeBases, {
-                onSuccess: (outcome) => {
-                  reportBulkOutcome({
-                    outcome,
-                    verb: "Deleted",
-                    failureVerb: "delete",
-                    noun: "knowledge base",
-                    plural: "knowledge bases",
-                  });
-                  setBulkDeleteOpen(false);
-                  if (outcome.failed.length === 0) clearSelection();
-                },
-              });
-            }}
-            confirmLabel="Delete knowledge bases"
-            pendingLabel="Deleting..."
-          />
-        )}
-
-        {permanentlyDeletingKb && (
-          <DeleteConfirmDialog
-            open={!!permanentlyDeletingKb}
-            onOpenChange={(open) => {
-              if (!open) setPermanentlyDeletingKb(null);
-            }}
-            title="Delete knowledge base permanently"
-            description={`This destroys "${permanentlyDeletingKb.name}" along with its agent and connector assignments. Its connectors survive and keep working. Nothing recovers the knowledge base.`}
-            isPending={permanentlyDeleteKnowledgeBase.isPending}
-            onConfirm={async () => {
-              const ok = await permanentlyDeleteKnowledgeBase.mutateAsync(
-                permanentlyDeletingKb.id,
-              );
-              if (ok) setPermanentlyDeletingKb(null);
-            }}
-            confirmLabel={PERMANENT_DELETE_LABEL}
-          />
-        )}
-
-        <CreateKnowledgeBaseDialog
-          open={isCreateDialogOpen}
-          onOpenChange={setIsCreateDialogOpen}
-        />
-
-        {editingItem && (
-          <EditKnowledgeBaseDialog
-            knowledgeBase={editingItem}
-            open={!!editingItem}
-            onOpenChange={(open) => !open && closeEditDialog()}
-          />
-        )}
-
-        {editingConnector && (
-          <EditConnectorDialog
-            connector={editingConnector}
-            open={!!editingConnector}
-            onOpenChange={(open) => !open && closeEditConnector()}
-          />
-        )}
-
-        {deletingId && (
-          <DeleteKnowledgeBaseDialog
-            knowledgeBaseId={deletingId}
-            open={!!deletingId}
-            onOpenChange={(open) => !open && setDeletingId(null)}
-          />
-        )}
-
-        {removingConnector && (
-          <RemoveConnectorDialog
-            connectorId={removingConnector.connectorId}
-            knowledgeBaseId={removingConnector.knowledgeBaseId}
-            open
-            onOpenChange={(open) => !open && setRemovingConnector(null)}
-          />
-        )}
-
-        {addConnectorKbId && (
-          <AddConnectorDialog
-            knowledgeBaseId={addConnectorKbId}
-            assignedConnectorIds={
-              new Set(
-                items
-                  .find((kb) => kb.id === addConnectorKbId)
-                  ?.connectors.map((c) => c.id) ?? [],
-              )
+            table={
+              <DataTable
+                columns={isDeletedView ? deletedColumns : columns}
+                data={items}
+                getRowId={(row) => row.id}
+                rowSelection={isDeletedView ? undefined : rowSelection}
+                onRowSelectionChange={
+                  isDeletedView ? undefined : setRowSelection
+                }
+                hideSelectedCount
+                // The deleted view always counts as filtered (see hasActiveFilters),
+                // so its empty state is the filtered one below.
+                emptyMessage="No knowledge bases found"
+                hasActiveFilters={hasActiveFilters}
+                filteredEmptyMessage={
+                  isDeletedView
+                    ? "No deleted knowledge bases found."
+                    : "No knowledge bases match your filters. Try adjusting your search."
+                }
+                onClearFilters={clearFilters}
+                manualPagination
+                pagination={{
+                  pageIndex,
+                  pageSize,
+                  total: pagination?.total ?? 0,
+                }}
+                onPaginationChange={goToPage}
+                isLoading={isFetching}
+              />
             }
-            open={!!addConnectorKbId}
-            onOpenChange={(open) => !open && setAddConnectorKbId(null)}
           />
-        )}
-      </div>
+
+          {bulkDeleteOpen && (
+            <DeleteConfirmDialog
+              open={bulkDeleteOpen}
+              onOpenChange={setBulkDeleteOpen}
+              title="Delete knowledge bases"
+              description={`Delete ${selectedKnowledgeBases.length} ${
+                selectedKnowledgeBases.length === 1
+                  ? "knowledge base"
+                  : "knowledge bases"
+              }? Their connectors survive and keep working; the agents using them lose that knowledge until it is reassigned.`}
+              isPending={bulkDelete.isPending}
+              onConfirm={() => {
+                bulkDelete.mutate(selectedKnowledgeBases, {
+                  onSuccess: (outcome) => {
+                    reportBulkOutcome({
+                      outcome,
+                      verb: "Deleted",
+                      failureVerb: "delete",
+                      noun: "knowledge base",
+                      plural: "knowledge bases",
+                    });
+                    setBulkDeleteOpen(false);
+                    if (outcome.failed.length === 0) clearSelection();
+                  },
+                });
+              }}
+              confirmLabel="Delete knowledge bases"
+              pendingLabel="Deleting..."
+            />
+          )}
+
+          {permanentlyDeletingKb && (
+            <DeleteConfirmDialog
+              open={!!permanentlyDeletingKb}
+              onOpenChange={(open) => {
+                if (!open) setPermanentlyDeletingKb(null);
+              }}
+              title="Delete knowledge base permanently"
+              description={`This destroys "${permanentlyDeletingKb.name}" along with its agent and connector assignments. Its connectors survive and keep working. Nothing recovers the knowledge base.`}
+              isPending={permanentlyDeleteKnowledgeBase.isPending}
+              onConfirm={async () => {
+                const ok = await permanentlyDeleteKnowledgeBase.mutateAsync(
+                  permanentlyDeletingKb.id,
+                );
+                if (ok) setPermanentlyDeletingKb(null);
+              }}
+              confirmLabel={PERMANENT_DELETE_LABEL}
+            />
+          )}
+
+          <CreateKnowledgeBaseDialog
+            open={isCreateDialogOpen}
+            onOpenChange={setIsCreateDialogOpen}
+          />
+
+          {editingItem && (
+            <EditKnowledgeBaseDialog
+              knowledgeBase={editingItem}
+              open={!!editingItem}
+              onOpenChange={(open) => !open && closeEditDialog()}
+            />
+          )}
+
+          {editingConnector && (
+            <EditConnectorDialog
+              connector={editingConnector}
+              open={!!editingConnector}
+              onOpenChange={(open) => !open && closeEditConnector()}
+            />
+          )}
+
+          {deletingId && (
+            <DeleteKnowledgeBaseDialog
+              knowledgeBaseId={deletingId}
+              open={!!deletingId}
+              onOpenChange={(open) => !open && setDeletingId(null)}
+            />
+          )}
+
+          {removingConnector && (
+            <RemoveConnectorDialog
+              connectorId={removingConnector.connectorId}
+              knowledgeBaseId={removingConnector.knowledgeBaseId}
+              open
+              onOpenChange={(open) => !open && setRemovingConnector(null)}
+            />
+          )}
+
+          {addConnectorKbId && (
+            <AddConnectorDialog
+              knowledgeBaseId={addConnectorKbId}
+              assignedConnectorIds={
+                new Set(
+                  items
+                    .find((kb) => kb.id === addConnectorKbId)
+                    ?.connectors.map((c) => c.id) ?? [],
+                )
+              }
+              open={!!addConnectorKbId}
+              onOpenChange={(open) => !open && setAddConnectorKbId(null)}
+            />
+          )}
+        </div>
+      </TableCardView>
     </KnowledgePageLayout>
   );
 }
@@ -704,7 +704,7 @@ function KnowledgeBaseCardGrid({
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+      <TableCardGrid>
         {knowledgeBases.map((kb) => (
           <KnowledgeBaseCard
             key={kb.id}
@@ -728,7 +728,7 @@ function KnowledgeBaseCardGrid({
             }
           />
         ))}
-      </div>
+      </TableCardGrid>
       <TablePagination
         pageIndex={pagination.pageIndex}
         pageSize={pagination.pageSize}

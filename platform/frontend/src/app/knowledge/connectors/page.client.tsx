@@ -8,8 +8,9 @@ import {
 } from "@archestra/shared";
 import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import { ArchiveRestore, Database, Pencil, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
 import { BulkConnectorVisibilityDialog } from "@/app/knowledge/connectors/_parts/bulk-connector-visibility-dialog";
@@ -32,6 +33,13 @@ import {
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceDeletedStatusFilter } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
+import {
+  TableCard,
+  TableCardList,
+  TableCardView,
+  TableCardViewContent,
+  TableCardViewToggle,
+} from "@/components/table-card-view";
 import { TableRowActions } from "@/components/table-row-actions";
 import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
@@ -103,15 +111,6 @@ function ConnectorsList() {
   const connectorTypeOptions = CONNECTOR_TYPE_OPTIONS.filter(
     (type) =>
       (type !== "mfiles" || mfilesEnabled) && !connectorCatalog.isHidden(type),
-  );
-  const connectorSettingsItems = useMemo(
-    () =>
-      (Object.keys(CONNECTOR_TYPE_LABELS) as ConnectorType[]).map((type) => ({
-        id: type,
-        label: CONNECTOR_TYPE_LABELS[type],
-        icon: <ConnectorTypeIcon type={type} className="h-[18px] w-[18px]" />,
-      })),
-    [],
   );
   // The trash view; the backend serves deleted connectors to manage-deleted
   // holders only, and the status filter itself is gated the same way.
@@ -241,6 +240,25 @@ function ConnectorsList() {
     router.push(`${pathname}?${params.toString()}`, { scroll: false });
   }, [searchParams, router, pathname]);
 
+  const connectorActions = (connector: ConnectorItem) => (
+    <TableRowActions
+      itemName={connector.name}
+      actions={[
+        {
+          icon: <Pencil className="h-4 w-4" />,
+          label: "Edit connector",
+          onClick: () => openEditDialog(connector),
+        },
+        {
+          icon: <Trash2 className="h-4 w-4" />,
+          label: "Delete connector",
+          variant: "destructive",
+          onClick: () => setDeletingConnectorId(connector.id),
+        },
+      ]}
+    />
+  );
+
   const columns: ColumnDef<ConnectorItem>[] = [
     createSelectColumn<ConnectorItem>({
       rowLabel: (connector) => `Select ${connector.name}`,
@@ -309,24 +327,7 @@ function ConnectorsList() {
     {
       id: "actions",
       header: "Actions",
-      cell: ({ row }) => (
-        <TableRowActions
-          itemName={row.original.name}
-          actions={[
-            {
-              icon: <Pencil className="h-4 w-4" />,
-              label: "Edit connector",
-              onClick: () => openEditDialog(row.original),
-            },
-            {
-              icon: <Trash2 className="h-4 w-4" />,
-              label: "Delete connector",
-              variant: "destructive",
-              onClick: () => setDeletingConnectorId(row.original.id),
-            },
-          ]}
-        />
-      ),
+      cell: ({ row }) => connectorActions(row.original),
     },
   ];
 
@@ -406,213 +407,285 @@ function ConnectorsList() {
       onCreateClick={() => setIsCreateDialogOpen(true)}
       isPending={isPending && !connectors}
     >
-      <div>
-        <div className="mb-6 flex flex-col gap-2">
-          <FilterBar className="mb-0">
-            <SearchInput paramName="search" className={filterSearchClass} />
-            <Select
-              value={connectorTypeFilter}
-              onValueChange={handleConnectorTypeChange}
+      <TableCardView storageKey="archestra-connectors-view">
+        <div>
+          <div className="mb-6 flex flex-col gap-2">
+            <FilterBar
+              className="mb-0"
+              actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
             >
-              <SelectTrigger
-                size="sm"
-                aria-label="Filter by connector type"
-                className={filterControlClass({
-                  active: connectorTypeFilter !== "all",
-                })}
+              <SearchInput paramName="search" className={filterSearchClass} />
+              <Select
+                value={connectorTypeFilter}
+                onValueChange={handleConnectorTypeChange}
               >
-                <SelectValue placeholder="Filter by connector type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All connector types</SelectItem>
-                {connectorTypeOptions.map((type) => (
-                  <SelectItem key={type} value={type}>
-                    <div className="flex items-center gap-2">
-                      <ConnectorTypeIcon type={type} className="h-4 w-4" />
-                      <span>{CONNECTOR_TYPE_LABELS[type]}</span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <ResourceDeletedStatusFilter
-              deletePermission={{ knowledgeSource: ["delete"] }}
+                <SelectTrigger
+                  size="sm"
+                  aria-label="Filter by connector type"
+                  className={filterControlClass({
+                    active: connectorTypeFilter !== "all",
+                  })}
+                >
+                  <SelectValue placeholder="Filter by connector type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All connector types</SelectItem>
+                  {connectorTypeOptions.map((type) => (
+                    <SelectItem key={type} value={type}>
+                      <div className="flex items-center gap-2">
+                        <ConnectorTypeIcon type={type} className="h-4 w-4" />
+                        <span>{CONNECTOR_TYPE_LABELS[type]}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <ResourceDeletedStatusFilter
+                deletePermission={{ knowledgeSource: ["delete"] }}
+              />
+            </FilterBar>
+          </div>
+
+          {isConnectorsLoadError ? (
+            <QueryLoadError
+              title="Couldn't load your connectors"
+              onRetry={() => refetchConnectors()}
             />
-          </FilterBar>
-        </div>
-
-        {isConnectorsLoadError ? (
-          <QueryLoadError
-            title="Couldn't load your connectors"
-            onRetry={() => refetchConnectors()}
-          />
-        ) : (
-          <>
-            {!isDeletedView && (
-              <BulkActionsBar
-                count={selectedConnectors.length}
-                noun="connector"
-                onClear={clearSelection}
-                busy={bulkDelete.isPending || bulkVisibility.isPending}
-                selectAllMatching={{
-                  total: pagination?.total ?? items.length,
-                  pageFullySelected:
-                    items.length > 0 &&
-                    items.every((connector) => rowSelection[connector.id]),
-                  active: allMatchingActive,
-                  onSelectAll: () => setSelectAllMatchingFor(filterSignature),
-                  matchDescription: "match this search",
-                  max: MAX_BULK_IDS,
-                }}
-                className="mb-3"
-              >
-                <PermissionButton
-                  permissions={{ knowledgeSource: ["update"] }}
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setBulkVisibilityOpen(true)}
+          ) : (
+            <>
+              {!isDeletedView && (
+                <BulkActionsBar
+                  count={selectedConnectors.length}
+                  noun="connector"
+                  onClear={clearSelection}
+                  busy={bulkDelete.isPending || bulkVisibility.isPending}
+                  selectAllMatching={{
+                    total: pagination?.total ?? items.length,
+                    pageFullySelected:
+                      items.length > 0 &&
+                      items.every((connector) => rowSelection[connector.id]),
+                    active: allMatchingActive,
+                    onSelectAll: () => setSelectAllMatchingFor(filterSignature),
+                    matchDescription: "match this search",
+                    max: MAX_BULK_IDS,
+                  }}
+                  className="mb-3"
                 >
-                  <span>Edit visibility</span>
-                </PermissionButton>
-                <PermissionButton
-                  permissions={{ knowledgeSource: ["delete"] }}
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => setBulkDeleteOpen(true)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                  <span>Delete</span>
-                </PermissionButton>
-              </BulkActionsBar>
-            )}
+                  <PermissionButton
+                    permissions={{ knowledgeSource: ["update"] }}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setBulkVisibilityOpen(true)}
+                  >
+                    <span>Edit visibility</span>
+                  </PermissionButton>
+                  <PermissionButton
+                    permissions={{ knowledgeSource: ["delete"] }}
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setBulkDeleteOpen(true)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span>Delete</span>
+                  </PermissionButton>
+                </BulkActionsBar>
+              )}
 
-            <DataTable
-              columns={isDeletedView ? deletedColumns : columns}
-              data={items}
-              getRowId={(row) => row.id}
-              rowSelection={isDeletedView ? undefined : rowSelection}
-              onRowSelectionChange={isDeletedView ? undefined : setRowSelection}
-              // The deleted view always counts as filtered (see
-              // hasActiveFilters), so its empty state is the filtered one below.
-              emptyMessage="No connectors found"
-              hasActiveFilters={hasActiveFilters}
-              onClearFilters={clearFilters}
-              filteredEmptyMessage={
-                isDeletedView
-                  ? "No deleted connectors found."
-                  : "No connectors match your filters. Try adjusting your search."
-              }
-              hideSelectedCount
-              manualPagination
-              pagination={{
-                pageIndex,
-                pageSize,
-                total: pagination?.total ?? 0,
+              <TableCardViewContent
+                forceTable={isDeletedView}
+                cards={
+                  <TableCardList
+                    itemCount={items.length}
+                    isLoading={isFetching || isPending}
+                    emptyMessage="No connectors found"
+                    hasActiveFilters={hasActiveFilters}
+                    filteredEmptyMessage="No connectors match your filters. Try adjusting your search."
+                    onClearFilters={clearFilters}
+                    pagination={{
+                      pageIndex,
+                      pageSize,
+                      total: pagination?.total ?? 0,
+                    }}
+                    onPaginationChange={handlePaginationChange}
+                  >
+                    {items.map((connector) => (
+                      <TableCard
+                        key={connector.id}
+                        icon={
+                          <ConnectorTypeIcon
+                            type={connector.connectorType}
+                            className="h-5 w-5"
+                          />
+                        }
+                        title={
+                          <Link href={`/knowledge/connectors/${connector.id}`}>
+                            {connector.name}
+                          </Link>
+                        }
+                        description={connector.description}
+                        actions={connectorActions(connector)}
+                        selected={!!rowSelection[connector.id]}
+                        onSelectedChange={(selected) => {
+                          const next = { ...rowSelection };
+                          if (selected) next[connector.id] = true;
+                          else delete next[connector.id];
+                          setRowSelection(next);
+                        }}
+                        selectionLabel={`Select ${connector.name}`}
+                        footer={
+                          <div className="flex items-center justify-between gap-3">
+                            <span>
+                              {formatCronSchedule(connector.schedule)}
+                            </span>
+                            <ConnectorStatusCell
+                              lastSyncAt={connector.lastSyncAt}
+                              lastSyncStatus={connector.lastSyncStatus}
+                            />
+                          </div>
+                        }
+                      >
+                        <ConnectorAccessBadge
+                          visibility={connector.visibility}
+                          teamIds={connector.teamIds}
+                        />
+                      </TableCard>
+                    ))}
+                  </TableCardList>
+                }
+                table={
+                  <DataTable
+                    columns={isDeletedView ? deletedColumns : columns}
+                    data={items}
+                    getRowId={(row) => row.id}
+                    rowSelection={isDeletedView ? undefined : rowSelection}
+                    onRowSelectionChange={
+                      isDeletedView ? undefined : setRowSelection
+                    }
+                    // The deleted view always counts as filtered (see
+                    // hasActiveFilters), so its empty state is the filtered one below.
+                    emptyMessage="No connectors found"
+                    hasActiveFilters={hasActiveFilters}
+                    onClearFilters={clearFilters}
+                    filteredEmptyMessage={
+                      isDeletedView
+                        ? "No deleted connectors found."
+                        : "No connectors match your filters. Try adjusting your search."
+                    }
+                    hideSelectedCount
+                    manualPagination
+                    pagination={{
+                      pageIndex,
+                      pageSize,
+                      total: pagination?.total ?? 0,
+                    }}
+                    onPaginationChange={handlePaginationChange}
+                    isLoading={isFetching || isPending}
+                    onRowClick={
+                      isDeletedView
+                        ? undefined
+                        : (row) =>
+                            router.push(`/knowledge/connectors/${row.id}`)
+                    }
+                  />
+                }
+              />
+            </>
+          )}
+
+          {bulkDeleteOpen && (
+            <DeleteConfirmDialog
+              open={bulkDeleteOpen}
+              onOpenChange={setBulkDeleteOpen}
+              title="Delete connectors"
+              description={`Delete ${selectedConnectors.length} ${
+                selectedConnectors.length === 1 ? "connector" : "connectors"
+              }? Their synced documents stop being searchable, and each one's stored credential is destroyed — a restored connector comes back disabled and re-authenticates.`}
+              isPending={bulkDelete.isPending}
+              onConfirm={() => {
+                bulkDelete.mutate(selectedConnectors, {
+                  onSuccess: (outcome) => {
+                    reportBulkOutcome({
+                      outcome,
+                      verb: "Deleted",
+                      failureVerb: "delete",
+                      noun: "connector",
+                    });
+                    setBulkDeleteOpen(false);
+                    if (outcome.failed.length === 0) clearSelection();
+                  },
+                });
               }}
-              onPaginationChange={handlePaginationChange}
-              isLoading={isFetching || isPending}
-              onRowClick={
-                isDeletedView
-                  ? undefined
-                  : (row) => router.push(`/knowledge/connectors/${row.id}`)
-              }
+              confirmLabel="Delete connectors"
+              pendingLabel="Deleting..."
             />
-          </>
-        )}
+          )}
 
-        {bulkDeleteOpen && (
-          <DeleteConfirmDialog
-            open={bulkDeleteOpen}
-            onOpenChange={setBulkDeleteOpen}
-            title="Delete connectors"
-            description={`Delete ${selectedConnectors.length} ${
-              selectedConnectors.length === 1 ? "connector" : "connectors"
-            }? Their synced documents stop being searchable, and each one's stored credential is destroyed — a restored connector comes back disabled and re-authenticates.`}
-            isPending={bulkDelete.isPending}
-            onConfirm={() => {
-              bulkDelete.mutate(selectedConnectors, {
-                onSuccess: (outcome) => {
-                  reportBulkOutcome({
-                    outcome,
-                    verb: "Deleted",
-                    failureVerb: "delete",
-                    noun: "connector",
-                  });
-                  setBulkDeleteOpen(false);
-                  if (outcome.failed.length === 0) clearSelection();
-                },
-              });
-            }}
-            confirmLabel="Delete connectors"
-            pendingLabel="Deleting..."
+          {bulkVisibilityOpen && (
+            <BulkConnectorVisibilityDialog
+              open={bulkVisibilityOpen}
+              onOpenChange={setBulkVisibilityOpen}
+              count={selectedConnectors.length}
+              isPending={bulkVisibility.isPending}
+              onApply={async (change) => {
+                const outcome = await bulkVisibility.mutateAsync({
+                  connectors: selectedConnectors,
+                  visibility: change.visibility,
+                  teamIds: change.teamIds,
+                });
+                reportBulkOutcome({
+                  outcome,
+                  verb: "Updated",
+                  failureVerb: "update",
+                  noun: "connector",
+                });
+                if (outcome.succeeded.length === 0) return false;
+                if (outcome.failed.length === 0) clearSelection();
+                return true;
+              }}
+            />
+          )}
+
+          {permanentlyDeletingConnector && (
+            <DeleteConfirmDialog
+              open={!!permanentlyDeletingConnector}
+              onOpenChange={(open) => {
+                if (!open) setPermanentlyDeletingConnector(null);
+              }}
+              title="Delete connector permanently"
+              description={`This destroys "${permanentlyDeletingConnector.name}" along with its synced documents, run history, and access mappings. Nothing recovers them.`}
+              isPending={permanentlyDeleteConnector.isPending}
+              onConfirm={async () => {
+                const ok = await permanentlyDeleteConnector.mutateAsync(
+                  permanentlyDeletingConnector.id,
+                );
+                if (ok) setPermanentlyDeletingConnector(null);
+              }}
+              confirmLabel={PERMANENT_DELETE_LABEL}
+            />
+          )}
+
+          <CreateConnectorDialog
+            open={isCreateDialogOpen}
+            onOpenChange={setIsCreateDialogOpen}
           />
-        )}
 
-        {bulkVisibilityOpen && (
-          <BulkConnectorVisibilityDialog
-            open={bulkVisibilityOpen}
-            onOpenChange={setBulkVisibilityOpen}
-            count={selectedConnectors.length}
-            isPending={bulkVisibility.isPending}
-            onApply={async (change) => {
-              const outcome = await bulkVisibility.mutateAsync({
-                connectors: selectedConnectors,
-                visibility: change.visibility,
-                teamIds: change.teamIds,
-              });
-              reportBulkOutcome({
-                outcome,
-                verb: "Updated",
-                failureVerb: "update",
-                noun: "connector",
-              });
-              if (outcome.succeeded.length === 0) return false;
-              if (outcome.failed.length === 0) clearSelection();
-              return true;
-            }}
-          />
-        )}
+          {editingConnector && (
+            <EditConnectorDialog
+              connector={editingConnector}
+              open={!!editingConnector}
+              onOpenChange={(open) => !open && closeEditDialog()}
+            />
+          )}
 
-        {permanentlyDeletingConnector && (
-          <DeleteConfirmDialog
-            open={!!permanentlyDeletingConnector}
-            onOpenChange={(open) => {
-              if (!open) setPermanentlyDeletingConnector(null);
-            }}
-            title="Delete connector permanently"
-            description={`This destroys "${permanentlyDeletingConnector.name}" along with its synced documents, run history, and access mappings. Nothing recovers them.`}
-            isPending={permanentlyDeleteConnector.isPending}
-            onConfirm={async () => {
-              const ok = await permanentlyDeleteConnector.mutateAsync(
-                permanentlyDeletingConnector.id,
-              );
-              if (ok) setPermanentlyDeletingConnector(null);
-            }}
-            confirmLabel={PERMANENT_DELETE_LABEL}
-          />
-        )}
-
-        <CreateConnectorDialog
-          open={isCreateDialogOpen}
-          onOpenChange={setIsCreateDialogOpen}
-        />
-
-        {editingConnector && (
-          <EditConnectorDialog
-            connector={editingConnector}
-            open={!!editingConnector}
-            onOpenChange={(open) => !open && closeEditDialog()}
-          />
-        )}
-
-        {deletingConnectorId && (
-          <DeleteConnectorDialog
-            connectorId={deletingConnectorId}
-            open={!!deletingConnectorId}
-            onOpenChange={(open) => !open && setDeletingConnectorId(null)}
-          />
-        )}
-      </div>
+          {deletingConnectorId && (
+            <DeleteConnectorDialog
+              connectorId={deletingConnectorId}
+              open={!!deletingConnectorId}
+              onOpenChange={(open) => !open && setDeletingConnectorId(null)}
+            />
+          )}
+        </div>
+      </TableCardView>
     </KnowledgePageLayout>
   );
 }

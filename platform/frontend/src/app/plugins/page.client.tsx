@@ -35,6 +35,13 @@ import {
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import {
+  TableCard,
+  TableCardList,
+  TableCardView,
+  TableCardViewContent,
+  TableCardViewToggle,
+} from "@/components/table-card-view";
+import {
   type TableRowAction,
   TableRowActions,
 } from "@/components/table-row-actions";
@@ -308,6 +315,51 @@ function PluginsList() {
   const [installingPlugin, setInstallingPlugin] =
     useState<PluginListItem | null>(null);
 
+  const renderPluginActions = (plugin: PluginListItem) => {
+    const actionModel = getPluginActionModel({ pluginId: plugin.id });
+    const installAction = pluginAction(actionModel, "install");
+    const editAction = pluginAction(actionModel, "edit");
+    const deleteAction = pluginAction(actionModel, "delete");
+    const actions: TableRowAction[] = [
+      {
+        icon: <PackagePlus className="h-4 w-4" />,
+        label: installAction.label,
+        tooltip: isArchestraPlugin(plugin) ? "Install OpenAPPA" : undefined,
+        className: isArchestraPlugin(plugin)
+          ? "plugin-featured-action"
+          : undefined,
+        permissions: installAction.permissions,
+        onClick: () => setInstallingPlugin(plugin),
+        disabled: !plugin.enabled,
+        disabledTooltip: !plugin.enabled
+          ? "Disabled plugins cannot be installed"
+          : undefined,
+      },
+      {
+        icon: <Pencil className="h-4 w-4" />,
+        label: editAction.label,
+        permissions: editAction.permissions,
+        href: pluginActionHref(editAction),
+      },
+    ];
+    const dropdownActions: TableRowAction[] = [
+      {
+        icon: <Trash2 className="h-4 w-4" />,
+        label: deleteAction.label,
+        variant: "destructive",
+        permissions: deleteAction.permissions,
+        onClick: () => setDeletingPlugin(plugin),
+      },
+    ];
+    return (
+      <TableRowActions
+        actions={actions}
+        dropdownActions={dropdownActions}
+        itemName={plugin.displayName}
+      />
+    );
+  };
+
   const columns: ColumnDef<PluginListItem>[] = [
     {
       id: "displayName",
@@ -490,53 +542,11 @@ function PluginsList() {
       id: "actions",
       size: 110,
       header: () => <div className="text-right">Actions</div>,
-      cell: ({ row }) => {
-        const plugin = row.original;
-        const actionModel = getPluginActionModel({ pluginId: plugin.id });
-        const installAction = pluginAction(actionModel, "install");
-        const editAction = pluginAction(actionModel, "edit");
-        const deleteAction = pluginAction(actionModel, "delete");
-        const actions: TableRowAction[] = [
-          {
-            icon: <PackagePlus className="h-4 w-4" />,
-            label: installAction.label,
-            tooltip: isArchestraPlugin(plugin) ? "Install OpenAPPA" : undefined,
-            className: isArchestraPlugin(plugin)
-              ? "plugin-featured-action"
-              : undefined,
-            permissions: installAction.permissions,
-            onClick: () => setInstallingPlugin(plugin),
-            disabled: !plugin.enabled,
-            disabledTooltip: !plugin.enabled
-              ? "Disabled plugins cannot be installed"
-              : undefined,
-          },
-          {
-            icon: <Pencil className="h-4 w-4" />,
-            label: editAction.label,
-            permissions: editAction.permissions,
-            href: pluginActionHref(editAction),
-          },
-        ];
-        const dropdownActions: TableRowAction[] = [
-          {
-            icon: <Trash2 className="h-4 w-4" />,
-            label: deleteAction.label,
-            variant: "destructive",
-            permissions: deleteAction.permissions,
-            onClick: () => setDeletingPlugin(plugin),
-          },
-        ];
-        return (
-          <div className="flex justify-end">
-            <TableRowActions
-              actions={actions}
-              dropdownActions={dropdownActions}
-              itemName={plugin.displayName}
-            />
-          </div>
-        );
-      },
+      cell: ({ row }) => (
+        <div className="flex justify-end">
+          {renderPluginActions(row.original)}
+        </div>
+      ),
     },
   ];
   const tableColumns = [
@@ -582,177 +592,260 @@ function PluginsList() {
           )
         }
       >
-        {showEmptyState ? (
-          <PluginsEmptyState />
-        ) : (
-          <>
-            <div className="mb-6 flex flex-col gap-2">
-              <FilterBar
-                className="mb-0"
-                onClearFilters={hasActiveFilters ? clearFilters : undefined}
-              >
-                <SearchInput paramName="search" className={filterSearchClass} />
-                <ResourceScopeFilter
-                  ownerLabelPlural="plugins"
-                  adminPermission={{ plugin: ["admin"] }}
-                />
-                <FacetSelect
-                  label="Filter by client"
-                  value={client}
-                  onChange={(value) => setFilter("client", value)}
-                  options={[
-                    ["all", "All clients"],
-                    [
-                      "claude-code",
-                      "Claude Code",
-                      clientFilterIcon("claude-code"),
-                    ],
-                    ["codex", "Codex", clientFilterIcon("codex")],
-                    [
-                      "copilot-cli",
-                      "Copilot CLI",
-                      clientFilterIcon("copilot-cli"),
-                    ],
-                    ["cursor", "Cursor", clientFilterIcon("cursor")],
-                  ]}
-                />
-                <FacetSelect
-                  label="Filter by platform"
-                  value={platform}
-                  onChange={(value) => setFilter("platform", value)}
-                  options={[
-                    ["all", "All platforms"],
-                    [
-                      "posix",
-                      "macOS / Linux",
-                      <OsLogos key="posix" platform="macos" />,
-                    ],
-                    [
-                      "windows",
-                      "Windows",
-                      <OsLogos key="windows" platform="windows" />,
-                    ],
-                  ]}
-                />
-                <FacetSelect
-                  label="Filter by source"
-                  value={source}
-                  onChange={(value) => setFilter("source", value)}
-                  options={[
-                    ["all", "All sources"],
-                    [
-                      "github",
-                      "GitHub",
-                      <Github key="github" className="size-4" />,
-                    ],
-                    [
-                      "manual",
-                      "Manual",
-                      <Pencil key="manual" className="size-4" />,
-                    ],
-                  ]}
-                />
-                {sourceRepos.length > 0 && (
+        <TableCardView storageKey="archestra-plugins-view" defaultMode="table">
+          {showEmptyState ? (
+            <PluginsEmptyState />
+          ) : (
+            <>
+              <div className="mb-6 flex flex-col gap-2">
+                <FilterBar
+                  className="mb-0"
+                  onClearFilters={hasActiveFilters ? clearFilters : undefined}
+                  actions={<TableCardViewToggle />}
+                >
+                  <SearchInput
+                    paramName="search"
+                    className={filterSearchClass}
+                  />
+                  <ResourceScopeFilter
+                    ownerLabelPlural="plugins"
+                    adminPermission={{ plugin: ["admin"] }}
+                  />
                   <FacetSelect
-                    label="Filter by repository"
-                    value={sourceRepo || "all"}
-                    onChange={(value) =>
-                      setFilter("sourceRepo", value === "all" ? "" : value)
-                    }
+                    label="Filter by client"
+                    value={client}
+                    onChange={(value) => setFilter("client", value)}
                     options={[
-                      ["all", "All repositories"],
-                      ...[...sourceRepos]
-                        .sort(comparePluginRepositoryOrder)
-                        .map(
-                          (repo) =>
-                            [
-                              repo,
-                              repo,
-                              <RepositoryOwnerIcon key={repo} repo={repo} />,
-                              repo.toLowerCase() === "archestra-ai/openappa"
-                                ? "plugin-featured-repository-option"
-                                : undefined,
-                            ] as const,
-                        ),
+                      ["all", "All clients"],
+                      [
+                        "claude-code",
+                        "Claude Code",
+                        clientFilterIcon("claude-code"),
+                      ],
+                      ["codex", "Codex", clientFilterIcon("codex")],
+                      [
+                        "copilot-cli",
+                        "Copilot CLI",
+                        clientFilterIcon("copilot-cli"),
+                      ],
+                      ["cursor", "Cursor", clientFilterIcon("cursor")],
                     ]}
                   />
-                )}
-              </FilterBar>
-              <ActiveFilterBadges adminPermission={{ plugin: ["admin"] }} />
-            </div>
+                  <FacetSelect
+                    label="Filter by platform"
+                    value={platform}
+                    onChange={(value) => setFilter("platform", value)}
+                    options={[
+                      ["all", "All platforms"],
+                      [
+                        "posix",
+                        "macOS / Linux",
+                        <OsLogos key="posix" platform="macos" />,
+                      ],
+                      [
+                        "windows",
+                        "Windows",
+                        <OsLogos key="windows" platform="windows" />,
+                      ],
+                    ]}
+                  />
+                  <FacetSelect
+                    label="Filter by source"
+                    value={source}
+                    onChange={(value) => setFilter("source", value)}
+                    options={[
+                      ["all", "All sources"],
+                      [
+                        "github",
+                        "GitHub",
+                        <Github key="github" className="size-4" />,
+                      ],
+                      [
+                        "manual",
+                        "Manual",
+                        <Pencil key="manual" className="size-4" />,
+                      ],
+                    ]}
+                  />
+                  {sourceRepos.length > 0 && (
+                    <FacetSelect
+                      label="Filter by repository"
+                      value={sourceRepo || "all"}
+                      onChange={(value) =>
+                        setFilter("sourceRepo", value === "all" ? "" : value)
+                      }
+                      options={[
+                        ["all", "All repositories"],
+                        ...[...sourceRepos]
+                          .sort(comparePluginRepositoryOrder)
+                          .map(
+                            (repo) =>
+                              [
+                                repo,
+                                repo,
+                                <RepositoryOwnerIcon key={repo} repo={repo} />,
+                                repo.toLowerCase() === "archestra-ai/openappa"
+                                  ? "plugin-featured-repository-option"
+                                  : undefined,
+                              ] as const,
+                          ),
+                      ]}
+                    />
+                  )}
+                </FilterBar>
+                <ActiveFilterBadges adminPermission={{ plugin: ["admin"] }} />
+              </div>
 
-            <BulkActionsBar
-              count={bulkSelection.selected.length}
-              noun="plugin"
-              onClear={bulkSelection.clearSelection}
-              busy={bulkVisibility.isPending || bulkDelete.isPending}
-              selectAllMatching={bulkSelection.selectAllMatching}
-            >
-              <PermissionButton
-                permissions={{ plugin: ["read", "admin"] }}
-                variant="outline"
-                size="sm"
-                disabled={!!bulkInstall.error}
-                tooltip={bulkInstall.error ?? undefined}
-                onClick={() => setBulkInstallOpen(true)}
+              <BulkActionsBar
+                count={bulkSelection.selected.length}
+                noun="plugin"
+                onClear={bulkSelection.clearSelection}
+                busy={bulkVisibility.isPending || bulkDelete.isPending}
+                selectAllMatching={bulkSelection.selectAllMatching}
               >
-                <PackagePlus className="h-4 w-4" />
-                <span>Install</span>
-              </PermissionButton>
-              <PermissionButton
-                permissions={{ plugin: ["update", "admin"] }}
-                variant="outline"
-                size="sm"
-                onClick={() => setBulkVisibilityOpen(true)}
-              >
-                <Pencil className="h-4 w-4" />
-                <span>Edit visibility</span>
-              </PermissionButton>
-              <PermissionButton
-                permissions={{ plugin: ["delete", "admin"] }}
-                variant="destructive"
-                size="sm"
-                onClick={() => setBulkDeleteOpen(true)}
-              >
-                <Trash2 className="h-4 w-4" />
-                <span>Delete</span>
-              </PermissionButton>
-            </BulkActionsBar>
+                <PermissionButton
+                  permissions={{ plugin: ["read", "admin"] }}
+                  variant="outline"
+                  size="sm"
+                  disabled={!!bulkInstall.error}
+                  tooltip={bulkInstall.error ?? undefined}
+                  onClick={() => setBulkInstallOpen(true)}
+                >
+                  <PackagePlus className="h-4 w-4" />
+                  <span>Install</span>
+                </PermissionButton>
+                <PermissionButton
+                  permissions={{ plugin: ["update", "admin"] }}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setBulkVisibilityOpen(true)}
+                >
+                  <Pencil className="h-4 w-4" />
+                  <span>Edit visibility</span>
+                </PermissionButton>
+                <PermissionButton
+                  permissions={{ plugin: ["delete", "admin"] }}
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setBulkDeleteOpen(true)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span>Delete</span>
+                </PermissionButton>
+              </BulkActionsBar>
 
-            <DataTable
-              columns={tableColumns}
-              data={filteredPlugins}
-              getRowId={(row) => row.id}
-              emptyMessage="No plugins yet."
-              hasActiveFilters={hasActiveFilters}
-              filteredEmptyMessage="No plugins match the current filters."
-              onClearFilters={clearFilters}
-              hideSelectedCount
-              sorting={sorting}
-              onSortingChange={setSorting}
-              onRowClick={
-                canViewPluginDetails
-                  ? (row) => router.push(pluginDetailHref(row.id))
-                  : undefined
-              }
-              getRowClassName={(row) =>
-                isArchestraPlugin(row) ? "plugin-featured-row" : undefined
-              }
-              rowSelection={bulkSelection.rowSelection}
-              onRowSelectionChange={bulkSelection.setRowSelection}
-              onPageRowIdsChange={bulkSelection.onPageRowIdsChange}
-              isLoading={isFetching}
-              fixedWidthColumnIds={[
-                "client",
-                "visibility",
-                "platforms",
-                "files",
-                "updatedAt",
-              ]}
-              flexibleColumnIds={["displayName"]}
-            />
-          </>
-        )}
+              <TableCardViewContent
+                cards={
+                  <TableCardList
+                    itemCount={filteredPlugins.length}
+                    isLoading={isFetching}
+                    emptyMessage="No plugins yet."
+                    hasActiveFilters={hasActiveFilters}
+                    filteredEmptyMessage="No plugins match the current filters."
+                    onClearFilters={clearFilters}
+                  >
+                    {filteredPlugins.map((plugin) => (
+                      <TableCard
+                        key={plugin.id}
+                        icon={<PluginSourceIcon plugin={plugin} />}
+                        title={
+                          canViewPluginDetails ? (
+                            <Link href={pluginDetailHref(plugin.id)}>
+                              {plugin.displayName}
+                            </Link>
+                          ) : (
+                            <span>{plugin.displayName}</span>
+                          )
+                        }
+                        description={plugin.description}
+                        actions={renderPluginActions(plugin)}
+                        selected={!!bulkSelection.rowSelection[plugin.id]}
+                        onSelectedChange={(selected) => {
+                          const next = { ...bulkSelection.rowSelection };
+                          if (selected) next[plugin.id] = true;
+                          else delete next[plugin.id];
+                          bulkSelection.setRowSelection(next);
+                        }}
+                        selectionLabel={`Select ${plugin.displayName}`}
+                        footer={
+                          <div className="flex items-center justify-between gap-3">
+                            <span>
+                              {plugin.fileCount}{" "}
+                              {plugin.fileCount === 1 ? "file" : "files"}
+                            </span>
+                            <span>
+                              Updated{" "}
+                              {formatRelativeTimeFromNow(plugin.updatedAt)}
+                            </span>
+                          </div>
+                        }
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge
+                            variant="secondary"
+                            className="gap-1.5 font-normal [&_img]:size-3.5"
+                          >
+                            {clientFilterIcon(plugin.clientType)}
+                            <span>
+                              {CLIENT_LABELS[plugin.clientType] ??
+                                plugin.clientType}
+                            </span>
+                          </Badge>
+                          <ResourceVisibilityBadge
+                            scope={plugin.scope}
+                            teams={plugin.teams}
+                            users={plugin.users}
+                            authorId={plugin.authorId}
+                            authorName={undefined}
+                            currentUserId={currentUserId}
+                            showSelfAsMe
+                          />
+                          {!plugin.enabled ? (
+                            <Badge variant="outline">Disabled</Badge>
+                          ) : null}
+                        </div>
+                      </TableCard>
+                    ))}
+                  </TableCardList>
+                }
+                table={
+                  <DataTable
+                    columns={tableColumns}
+                    data={filteredPlugins}
+                    getRowId={(row) => row.id}
+                    emptyMessage="No plugins yet."
+                    hasActiveFilters={hasActiveFilters}
+                    filteredEmptyMessage="No plugins match the current filters."
+                    onClearFilters={clearFilters}
+                    hideSelectedCount
+                    sorting={sorting}
+                    onSortingChange={setSorting}
+                    onRowClick={
+                      canViewPluginDetails
+                        ? (row) => router.push(pluginDetailHref(row.id))
+                        : undefined
+                    }
+                    getRowClassName={(row) =>
+                      isArchestraPlugin(row) ? "plugin-featured-row" : undefined
+                    }
+                    rowSelection={bulkSelection.rowSelection}
+                    onRowSelectionChange={bulkSelection.setRowSelection}
+                    onPageRowIdsChange={bulkSelection.onPageRowIdsChange}
+                    isLoading={isFetching}
+                    fixedWidthColumnIds={[
+                      "client",
+                      "visibility",
+                      "platforms",
+                      "files",
+                      "updatedAt",
+                    ]}
+                    flexibleColumnIds={["displayName"]}
+                  />
+                }
+              />
+            </>
+          )}
+        </TableCardView>
       </PageLayout>
 
       {deletingPlugin && (

@@ -9,10 +9,16 @@ import {
   MessageSquare,
   Server,
 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
+import {
+  TableCard,
+  TableCardList,
+  TableCardViewContent,
+} from "@/components/table-card-view";
 import {
   type TableRowAction,
   TableRowActions,
@@ -59,6 +65,32 @@ export function ExternalMcpSkillsSection({
   const currentUserId = session?.user?.id;
   const [sorting, setSorting] = useState<SortingState>([]);
   const [usageSkill, setUsageSkill] = useState<ExternalSkill | null>(null);
+
+  const renderActions = (skill: ExternalSkill) => {
+    const actions: TableRowAction[] = [
+      {
+        icon: <MessageSquare className="h-4 w-4" />,
+        label: "Chat",
+        permissions: { chat: ["read", "create"] },
+        href: externalSkillChatHref(skill),
+      },
+      {
+        icon: <ChartColumn className="h-4 w-4" />,
+        label: "Usage",
+        permissions: {
+          skill: ["read"],
+          mcpServerInstallation: ["read"],
+        },
+        onClick: () => setUsageSkill(skill),
+      },
+      {
+        icon: <Server className="h-4 w-4" />,
+        label: "Manage MCP server",
+        href: externalSkillSourceHref(skill),
+      },
+    ];
+    return <TableRowActions actions={actions} itemName={skill.name} />;
+  };
 
   const columns: ColumnDef<ExternalSkill>[] = [
     {
@@ -195,36 +227,9 @@ export function ExternalMcpSkillsSection({
       id: "actions",
       size: 150,
       header: () => <div className="text-right">Actions</div>,
-      cell: ({ row }) => {
-        const skill = row.original;
-        const actions: TableRowAction[] = [
-          {
-            icon: <MessageSquare className="h-4 w-4" />,
-            label: "Chat",
-            permissions: { chat: ["read", "create"] },
-            href: externalSkillChatHref(skill),
-          },
-          {
-            icon: <ChartColumn className="h-4 w-4" />,
-            label: "Usage",
-            permissions: {
-              skill: ["read"],
-              mcpServerInstallation: ["read"],
-            },
-            onClick: () => setUsageSkill(skill),
-          },
-          {
-            icon: <Server className="h-4 w-4" />,
-            label: "Manage MCP server",
-            href: externalSkillSourceHref(skill),
-          },
-        ];
-        return (
-          <div className="flex justify-end">
-            <TableRowActions actions={actions} itemName={skill.name} />
-          </div>
-        );
-      },
+      cell: ({ row }) => (
+        <div className="flex justify-end">{renderActions(row.original)}</div>
+      ),
     },
   ];
 
@@ -243,15 +248,70 @@ export function ExternalMcpSkillsSection({
           Beta
         </Badge>
       </div>
-      <DataTable
-        columns={columns}
-        data={skills}
-        getRowId={(row) => `${row.mcpServerId}:${row.id}`}
-        emptyMessage="No MCP skills match the current filters."
-        hideSelectedCount
-        sorting={sorting}
-        onSortingChange={setSorting}
-        onRowClick={(row) => router.push(externalSkillHref(row))}
+      <TableCardViewContent
+        cards={
+          <TableCardList
+            itemCount={skills.length}
+            emptyMessage="No MCP skills match the current filters."
+          >
+            {skills.map((skill) => {
+              const fileCount = skill.resources?.length ?? 1;
+              return (
+                <TableCard
+                  key={`${skill.mcpServerId}:${skill.id}`}
+                  icon={
+                    <McpCatalogIcon
+                      icon={skill.icon}
+                      catalogId={skill.catalogId}
+                      size={20}
+                    />
+                  }
+                  title={
+                    <Link href={externalSkillHref(skill)}>{skill.name}</Link>
+                  }
+                  description={skill.description || "No description"}
+                  actions={renderActions(skill)}
+                  footer={
+                    <div className="flex items-center justify-between gap-3">
+                      <span>
+                        {fileCount} {fileCount === 1 ? "file" : "files"}
+                      </span>
+                      <span>
+                        {skill.usageCount}{" "}
+                        {skill.usageCount === 1 ? "use" : "uses"}
+                      </span>
+                    </div>
+                  }
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="secondary">{skill.serverName}</Badge>
+                    <ResourceVisibilityBadge
+                      scope={skill.scope}
+                      teams={undefined}
+                      users={undefined}
+                      authorId={currentUserId}
+                      authorName={session?.user?.name}
+                      currentUserId={currentUserId}
+                      showSelfAsMe
+                    />
+                  </div>
+                </TableCard>
+              );
+            })}
+          </TableCardList>
+        }
+        table={
+          <DataTable
+            columns={columns}
+            data={skills}
+            getRowId={(row) => `${row.mcpServerId}:${row.id}`}
+            emptyMessage="No MCP skills match the current filters."
+            hideSelectedCount
+            sorting={sorting}
+            onSortingChange={setSorting}
+            onRowClick={(row) => router.push(externalSkillHref(row))}
+          />
+        }
       />
       {usageSkill && (
         <SkillUsageDialog

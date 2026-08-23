@@ -52,6 +52,13 @@ import {
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import {
+  TableCard,
+  TableCardList,
+  TableCardView,
+  TableCardViewContent,
+  TableCardViewToggle,
+} from "@/components/table-card-view";
+import {
   type TableRowAction,
   TableRowActions,
 } from "@/components/table-row-actions";
@@ -389,6 +396,104 @@ function SkillsList() {
     router.push(`${pathname}?${params.toString()}`, { scroll: false });
   }, [pathname, router, searchParams]);
 
+  const handlePaginationChange = (newPagination: {
+    pageIndex: number;
+    pageSize: number;
+  }) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("page", String(newPagination.pageIndex + 1));
+    params.set("pageSize", String(newPagination.pageSize));
+    router.push(`${pathname}?${params.toString()}`, { scroll: false });
+  };
+
+  const renderSkillActions = (skill: SkillItem) => {
+    const actionModel = getSkillActionModel(skill.id);
+    const chatAction = skillAction(actionModel, "chat");
+    const editAction = skillAction(actionModel, "edit");
+    const usageAction = skillAction(actionModel, "usage");
+    const historyAction = skillAction(actionModel, "history");
+    const deleteAction = skillAction(actionModel, "delete");
+    const canModify = computeCanModifySkill({
+      skill,
+      isAdmin: !!isSkillAdmin,
+      isTeamAdmin: !!isSkillTeamAdmin,
+      currentUserId,
+      userTeamIds: userTeamIdSet,
+    });
+    const notYours = notYoursToChange({
+      resource: "skill",
+      scope: skill.scope,
+    });
+    const actions: TableRowAction[] = isDeletedView
+      ? [
+          {
+            icon: <ArchiveRestore className="h-4 w-4" />,
+            label: ACTION_LABEL.restore,
+            permissions: { skill: ["delete"] },
+            disabled: !canModify,
+            disabledTooltip: notYours,
+            onClick: () => restoreSkill.mutate(skill.id),
+          },
+        ]
+      : [
+          {
+            icon: <MessageSquare className="h-4 w-4" />,
+            label: chatAction.label,
+            permissions: chatAction.permissions,
+            href: skillActionHref(chatAction),
+          },
+          {
+            icon: <Pencil className="h-4 w-4" />,
+            label: editAction.label,
+            permissions: editAction.permissions,
+            disabled: !canModify,
+            disabledTooltip: notYours,
+            href: skillActionHref(editAction),
+          },
+        ];
+    const dropdownActions: TableRowAction[] = isDeletedView
+      ? [
+          permanentDeleteRowAction({
+            admin,
+            onClick: () => setPermanentlyDeletingSkill(skill),
+            disabledReason:
+              skill.sourceType === "built_in"
+                ? "A deleted built-in skill is already gone for good; its record is what stops it coming back on the next restart"
+                : undefined,
+          }),
+        ]
+      : [
+          {
+            icon: <ChartColumn className="h-4 w-4" />,
+            label: usageAction.label,
+            permissions: usageAction.permissions,
+            onClick: () => setUsageSkill(skill),
+          },
+          {
+            icon: <History className="h-4 w-4" />,
+            label: historyAction.label,
+            permissions: historyAction.permissions,
+            onClick: () => setHistorySkillId(skill.id),
+          },
+          {
+            icon: <Trash2 className="h-4 w-4" />,
+            label: deleteAction.label,
+            variant: "destructive",
+            permissions: deleteAction.permissions,
+            disabled: !canModify,
+            disabledTooltip: notYours,
+            onClick: () => setDeletingSkill(skill),
+          },
+        ];
+    return (
+      <TableRowActions
+        actions={actions}
+        dropdownActions={dropdownActions}
+        itemName={skill.name}
+      />
+    );
+  };
+
   const columns: ColumnDef<SkillItem>[] = [
     // A deleted row can only be restored or purged, neither of which this
     // selection drives, so the trash view keeps its rows unselectable rather
@@ -577,105 +682,11 @@ function SkillsList() {
       id: "actions",
       size: 200,
       header: () => <div className="pl-4 text-right">Actions</div>,
-      cell: ({ row }) => {
-        const skill = row.original;
-        const actionModel = getSkillActionModel(skill.id);
-        const chatAction = skillAction(actionModel, "chat");
-        const editAction = skillAction(actionModel, "edit");
-        const usageAction = skillAction(actionModel, "usage");
-        const historyAction = skillAction(actionModel, "history");
-        const deleteAction = skillAction(actionModel, "delete");
-        // RBAC alone let any `skill:update` holder press Edit, Delete and
-        // Restore on somebody else's skill and collect a 403 at save. The
-        // backend runs a skill through the same scope rule it runs an agent
-        // through, so the row applies it before offering the control.
-        const canModify = computeCanModifySkill({
-          skill,
-          isAdmin: !!isSkillAdmin,
-          isTeamAdmin: !!isSkillTeamAdmin,
-          currentUserId,
-          userTeamIds: userTeamIdSet,
-        });
-        const notYours = notYoursToChange({
-          resource: "skill",
-          scope: skill.scope,
-        });
-        // A soft-deleted skill can only be restored; edit/chat/usage/delete all
-        // act on active rows and would 404.
-        const actions: TableRowAction[] = isDeletedView
-          ? [
-              {
-                icon: <ArchiveRestore className="h-4 w-4" />,
-                label: ACTION_LABEL.restore,
-                permissions: { skill: ["delete"] },
-                disabled: !canModify,
-                disabledTooltip: notYours,
-                onClick: () => restoreSkill.mutate(skill.id),
-              },
-            ]
-          : [
-              {
-                icon: <MessageSquare className="h-4 w-4" />,
-                label: chatAction.label,
-                permissions: chatAction.permissions,
-                href: skillActionHref(chatAction),
-              },
-              {
-                icon: <Pencil className="h-4 w-4" />,
-                label: editAction.label,
-                permissions: editAction.permissions,
-                disabled: !canModify,
-                disabledTooltip: notYours,
-                href: skillActionHref(editAction),
-              },
-            ];
-        const dropdownActions: TableRowAction[] = isDeletedView
-          ? [
-              permanentDeleteRowAction({
-                admin,
-                onClick: () => setPermanentlyDeletingSkill(skill),
-                // A built-in's deleted row IS the opt-out: it is what stops the
-                // startup seeder recreating the skill, so the API refuses to
-                // destroy it and deleting it already removed it for good.
-                disabledReason:
-                  skill.sourceType === "built_in"
-                    ? "A deleted built-in skill is already gone for good; its record is what stops it coming back on the next restart"
-                    : undefined,
-              }),
-            ]
-          : [
-              {
-                icon: <ChartColumn className="h-4 w-4" />,
-                label: usageAction.label,
-                permissions: usageAction.permissions,
-                onClick: () => setUsageSkill(skill),
-              },
-              {
-                icon: <History className="h-4 w-4" />,
-                label: historyAction.label,
-                permissions: historyAction.permissions,
-                onClick: () => setHistorySkillId(skill.id),
-              },
-              {
-                icon: <Trash2 className="h-4 w-4" />,
-                label: deleteAction.label,
-                variant: "destructive",
-                permissions: deleteAction.permissions,
-                disabled: !canModify,
-                disabledTooltip: notYours,
-                onClick: () => setDeletingSkill(skill),
-              },
-            ];
-        return (
-          <div className="flex justify-end pl-4">
-            <TableRowActions
-              actions={actions}
-              dropdownActions={dropdownActions}
-              itemName={skill.name}
-            />
-          </div>
-        );
-      },
+      cell: ({ row }) => (
+        <div className="flex justify-end pl-4">
+          {renderSkillActions(row.original)}
+        </div>
+      ),
     },
   ];
 
@@ -709,209 +720,293 @@ function SkillsList() {
           )
         }
       >
-        {showEmptyState ? (
-          <SkillsEmptyState />
-        ) : (
-          <>
-            <div className="mb-6 flex flex-col gap-2">
-              <FilterBar
-                className="mb-0"
-                onClearFilters={hasActiveFilters ? clearFilters : undefined}
-              >
-                <SearchInput paramName="search" className={filterSearchClass} />
-                {mcpSkillsEnabled && !isDeletedView && (
-                  <Select value={kind} onValueChange={setKindFilter}>
-                    <SelectTrigger
-                      size="sm"
-                      aria-label="Filter by skill source"
-                      className={filterControlClass({
-                        active: kind !== "all",
-                      })}
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent
-                      position="popper"
-                      side="bottom"
-                      align="start"
-                    >
-                      <SelectItem value="all">All kinds</SelectItem>
-                      <SelectItem value="standalone">
-                        Standalone skills
-                      </SelectItem>
-                      <SelectItem value="mcp">MCP skills</SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
-                <ResourceScopeFilter
-                  ownerLabelPlural="skills"
-                  adminPermission={{ skill: ["admin"] }}
-                />
-                {/* Backend gates status=deleted on isAdmin||isTeamAdmin; the
+        <TableCardView storageKey="archestra-skills-view" defaultMode="table">
+          {showEmptyState ? (
+            <SkillsEmptyState />
+          ) : (
+            <>
+              <div className="mb-6 flex flex-col gap-2">
+                <FilterBar
+                  className="mb-0"
+                  onClearFilters={hasActiveFilters ? clearFilters : undefined}
+                  actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
+                >
+                  <SearchInput
+                    paramName="search"
+                    className={filterSearchClass}
+                  />
+                  {mcpSkillsEnabled && !isDeletedView && (
+                    <Select value={kind} onValueChange={setKindFilter}>
+                      <SelectTrigger
+                        size="sm"
+                        aria-label="Filter by skill source"
+                        className={filterControlClass({
+                          active: kind !== "all",
+                        })}
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent
+                        position="popper"
+                        side="bottom"
+                        align="start"
+                      >
+                        <SelectItem value="all">All kinds</SelectItem>
+                        <SelectItem value="standalone">
+                          Standalone skills
+                        </SelectItem>
+                        <SelectItem value="mcp">MCP skills</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <ResourceScopeFilter
+                    ownerLabelPlural="skills"
+                    adminPermission={{ skill: ["admin"] }}
+                  />
+                  {/* Backend gates status=deleted on isAdmin||isTeamAdmin; the
                     checker has no `skill:delete` boolean, so this shows the
                     trash toggle to skill admins to avoid a control that 403s. */}
-                <ResourceDeletedStatusFilter
-                  deletePermission={{ skill: ["admin"] }}
-                />
-                {/* Only imported skills have a repository, so the filter would
+                  <ResourceDeletedStatusFilter
+                    deletePermission={{ skill: ["admin"] }}
+                  />
+                  {/* Only imported skills have a repository, so the filter would
                     be a single inert "All repositories" entry until at least
                     one skill is imported. */}
-                {showStandaloneSkills && sourceRepos.length > 0 && (
-                  <Select
-                    value={sourceRepo || "all"}
-                    onValueChange={(value) =>
-                      setSourceRepoFilter(value === "all" ? "" : value)
-                    }
-                  >
-                    <SelectTrigger
-                      size="sm"
-                      aria-label="Filter by repository"
-                      className={filterControlClass({
-                        active: Boolean(sourceRepo),
-                      })}
+                  {showStandaloneSkills && sourceRepos.length > 0 && (
+                    <Select
+                      value={sourceRepo || "all"}
+                      onValueChange={(value) =>
+                        setSourceRepoFilter(value === "all" ? "" : value)
+                      }
                     >
-                      <SelectValue placeholder="All repositories">
-                        {sourceRepo ? (
-                          <span className="flex min-w-0 items-center gap-2">
-                            <span aria-hidden>
-                              <RepositoryOwnerIcon repo={sourceRepo} />
+                      <SelectTrigger
+                        size="sm"
+                        aria-label="Filter by repository"
+                        className={filterControlClass({
+                          active: Boolean(sourceRepo),
+                        })}
+                      >
+                        <SelectValue placeholder="All repositories">
+                          {sourceRepo ? (
+                            <span className="flex min-w-0 items-center gap-2">
+                              <span aria-hidden>
+                                <RepositoryOwnerIcon repo={sourceRepo} />
+                              </span>
+                              <span className="truncate">{sourceRepo}</span>
                             </span>
-                            <span className="truncate">{sourceRepo}</span>
-                          </span>
-                        ) : (
-                          <span>All repositories</span>
-                        )}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All repositories</SelectItem>
-                      {sourceRepos.map((repo) => (
-                        <SelectItem
-                          key={repo}
-                          value={repo}
-                          icon={
-                            <span aria-hidden>
-                              <RepositoryOwnerIcon repo={repo} />
-                            </span>
-                          }
+                          ) : (
+                            <span>All repositories</span>
+                          )}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All repositories</SelectItem>
+                        {sourceRepos.map((repo) => (
+                          <SelectItem
+                            key={repo}
+                            value={repo}
+                            icon={
+                              <span aria-hidden>
+                                <RepositoryOwnerIcon repo={repo} />
+                              </span>
+                            }
+                          >
+                            {repo}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </FilterBar>
+                <ActiveFilterBadges adminPermission={{ skill: ["admin"] }} />
+              </div>
+
+              <div className="space-y-6">
+                {showStandaloneSection && (
+                  <section
+                    className="space-y-3"
+                    aria-labelledby="standalone-skills-title"
+                  >
+                    <h2
+                      id="standalone-skills-title"
+                      className="text-sm font-medium uppercase tracking-wide text-muted-foreground"
+                    >
+                      {isDeletedView ? "Deleted skills" : "Standalone skills"}
+                    </h2>
+
+                    <BulkActionsBar
+                      count={selectedSkills.length}
+                      noun="skill"
+                      countTestId={E2eTestId.SkillsBulkSelectionCount}
+                      onClear={clearSelection}
+                      busy={isFetchingAllMatching}
+                      selectAllMatching={{
+                        total: totalSkills,
+                        pageFullySelected:
+                          items.length > 0 &&
+                          pageSelection.length === items.length,
+                        active: allMatchingSelected,
+                        onSelectAll: () => setEscalatedFor(filterSignature),
+                        matchDescription: search
+                          ? "match this search query"
+                          : "match the current filters",
+                        max: MAX_BULK_IDS,
+                      }}
+                    >
+                      <PermissionButton
+                        permissions={{ skill: ["update"] }}
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setBulkVisibilityOpen(true)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                        <span>Edit visibility</span>
+                      </PermissionButton>
+                      <PermissionButton
+                        permissions={{ skill: ["delete"] }}
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => setBulkDeleteOpen(true)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        <span>Delete</span>
+                      </PermissionButton>
+                    </BulkActionsBar>
+
+                    <TableCardViewContent
+                      forceTable={isDeletedView}
+                      cards={
+                        <TableCardList
+                          itemCount={items.length}
+                          emptyMessage="No standalone skills yet."
+                          hasActiveFilters={hasActiveFilters}
+                          filteredEmptyMessage="No standalone skills match the current filters."
+                          onClearFilters={clearFilters}
+                          pagination={{
+                            pageIndex,
+                            pageSize,
+                            total: totalSkills,
+                          }}
+                          onPaginationChange={handlePaginationChange}
                         >
-                          {repo}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                          {items.map((skill) => {
+                            const repo = parseRepoFromSourceRef(
+                              skill.sourceRef,
+                            );
+                            return (
+                              <TableCard
+                                key={skill.id}
+                                icon={
+                                  <SkillSourceIcon
+                                    repo={repo}
+                                    builtIn={skill.sourceType === "built_in"}
+                                    appIconLogo={appIconLogo}
+                                  />
+                                }
+                                title={
+                                  <Link href={`/skills/${skill.id}`}>
+                                    {skill.name}
+                                  </Link>
+                                }
+                                description={skill.description}
+                                actions={renderSkillActions(skill)}
+                                selected={!!rowSelection[skill.id]}
+                                onSelectedChange={(selected) => {
+                                  const next = { ...rowSelection };
+                                  if (selected) next[skill.id] = true;
+                                  else delete next[skill.id];
+                                  setRowSelection(next);
+                                }}
+                                selectionLabel={`Select ${skill.name}`}
+                                footer={
+                                  <div className="flex items-center justify-between gap-3">
+                                    <span>
+                                      {skill.fileCount}{" "}
+                                      {skill.fileCount === 1 ? "file" : "files"}
+                                    </span>
+                                    <span>
+                                      {skill.usageCount}{" "}
+                                      {skill.usageCount === 1 ? "use" : "uses"}
+                                    </span>
+                                  </div>
+                                }
+                              >
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <ResourceVisibilityBadge
+                                    scope={skill.scope}
+                                    teams={skill.teams}
+                                    users={skill.users}
+                                    authorId={skill.authorId}
+                                    authorName={skill.authorName}
+                                    currentUserId={currentUserId}
+                                    showSelfAsMe
+                                  />
+                                  {skill.templated ? (
+                                    <Badge variant="outline">
+                                      <Braces className="mr-1 h-3 w-3" />
+                                      <span>templated</span>
+                                    </Badge>
+                                  ) : null}
+                                </div>
+                              </TableCard>
+                            );
+                          })}
+                        </TableCardList>
+                      }
+                      table={
+                        <DataTable
+                          columns={columns}
+                          data={items}
+                          getRowId={(row) => row.id}
+                          emptyMessage="No standalone skills yet."
+                          hasActiveFilters={hasActiveFilters}
+                          filteredEmptyMessage={
+                            isDeletedView
+                              ? "No deleted skills found."
+                              : "No standalone skills match the current filters."
+                          }
+                          onClearFilters={clearFilters}
+                          hideSelectedCount
+                          manualPagination
+                          manualSorting
+                          sorting={sorting}
+                          onSortingChange={handleSortingChange}
+                          pagination={{
+                            pageIndex,
+                            pageSize,
+                            total: totalSkills,
+                          }}
+                          onPaginationChange={handlePaginationChange}
+                          onRowClick={
+                            isDeletedView
+                              ? undefined
+                              : (row) => router.push(`/skills/${row.id}`)
+                          }
+                          rowSelection={rowSelection}
+                          onRowSelectionChange={setRowSelection}
+                          isLoading={isFetching}
+                          fixedWidthColumnIds={[
+                            "visibility",
+                            "files",
+                            "usageCount",
+                          ]}
+                          flexibleColumnIds={["name"]}
+                        />
+                      }
+                    />
+                  </section>
                 )}
-              </FilterBar>
-              <ActiveFilterBadges adminPermission={{ skill: ["admin"] }} />
-            </div>
 
-            <div className="space-y-6">
-              {showStandaloneSection && (
-                <section
-                  className="space-y-3"
-                  aria-labelledby="standalone-skills-title"
-                >
-                  <h2
-                    id="standalone-skills-title"
-                    className="text-sm font-medium uppercase tracking-wide text-muted-foreground"
-                  >
-                    {isDeletedView ? "Deleted skills" : "Standalone skills"}
-                  </h2>
-
-                  <BulkActionsBar
-                    count={selectedSkills.length}
-                    noun="skill"
-                    countTestId={E2eTestId.SkillsBulkSelectionCount}
-                    onClear={clearSelection}
-                    busy={isFetchingAllMatching}
-                    selectAllMatching={{
-                      total: totalSkills,
-                      pageFullySelected:
-                        items.length > 0 &&
-                        pageSelection.length === items.length,
-                      active: allMatchingSelected,
-                      onSelectAll: () => setEscalatedFor(filterSignature),
-                      matchDescription: search
-                        ? "match this search query"
-                        : "match the current filters",
-                      max: MAX_BULK_IDS,
-                    }}
-                  >
-                    <PermissionButton
-                      permissions={{ skill: ["update"] }}
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setBulkVisibilityOpen(true)}
-                    >
-                      <Pencil className="h-4 w-4" />
-                      <span>Edit visibility</span>
-                    </PermissionButton>
-                    <PermissionButton
-                      permissions={{ skill: ["delete"] }}
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => setBulkDeleteOpen(true)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      <span>Delete</span>
-                    </PermissionButton>
-                  </BulkActionsBar>
-
-                  <DataTable
-                    columns={columns}
-                    data={items}
-                    getRowId={(row) => row.id}
-                    emptyMessage="No standalone skills yet."
-                    hasActiveFilters={hasActiveFilters}
-                    filteredEmptyMessage={
-                      isDeletedView
-                        ? "No deleted skills found."
-                        : "No standalone skills match the current filters."
-                    }
-                    onClearFilters={clearFilters}
-                    hideSelectedCount
-                    manualPagination
-                    manualSorting
-                    sorting={sorting}
-                    onSortingChange={handleSortingChange}
-                    pagination={{
-                      pageIndex,
-                      pageSize,
-                      total: totalSkills,
-                    }}
-                    onPaginationChange={(newPagination) => {
-                      const params = new URLSearchParams(
-                        searchParams.toString(),
-                      );
-                      params.set("page", String(newPagination.pageIndex + 1));
-                      params.set("pageSize", String(newPagination.pageSize));
-                      router.push(`${pathname}?${params.toString()}`, {
-                        scroll: false,
-                      });
-                    }}
-                    onRowClick={
-                      isDeletedView
-                        ? undefined
-                        : (row) => router.push(`/skills/${row.id}`)
-                    }
-                    rowSelection={rowSelection}
-                    onRowSelectionChange={setRowSelection}
-                    isLoading={isFetching}
-                    fixedWidthColumnIds={["visibility", "files", "usageCount"]}
-                    flexibleColumnIds={["name"]}
+                {showMcpSection && (
+                  <ExternalMcpSkillsSection
+                    skills={visibleExternalSkills}
+                    showWhenEmpty={kind === "mcp"}
                   />
-                </section>
-              )}
-
-              {showMcpSection && (
-                <ExternalMcpSkillsSection
-                  skills={visibleExternalSkills}
-                  showWhenEmpty={kind === "mcp"}
-                />
-              )}
-            </div>
-          </>
-        )}
+                )}
+              </div>
+            </>
+          )}
+        </TableCardView>
       </PageLayout>
 
       {bulkVisibilityOpen && (

@@ -10,6 +10,7 @@ import { useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
 import { IdentityProviderIcon } from "@/components/identity-provider-icons.ee";
 import { LoadingSpinner } from "@/components/loading";
+import { TableCardGrid } from "@/components/table-card-view";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -337,18 +338,18 @@ export function IdentityProvidersSettingsContent() {
 
   return (
     <div>
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+      <TableCardGrid>
         {IDP_CONFIGS.map((config) => {
           const existingProvider = getProviderStatus(config);
 
           return (
             <Card
               key={config.id}
-              className="cursor-pointer hover:shadow-md transition-shadow flex flex-col h-full"
+              className="h-full cursor-pointer gap-3 py-4 shadow-none transition-colors hover:bg-muted/30"
               onClick={() => handleProviderClick(config)}
               data-testid={`${E2eTestId.IdentityProviderCard}-${config.id}`}
             >
-              <CardHeader className="pb-3">
+              <CardHeader className="px-4 pb-0">
                 <div className="flex items-center justify-between">
                   <div
                     className={`p-2 rounded-lg ${config.bgColor} text-gray-900`}
@@ -362,10 +363,10 @@ export function IdentityProvidersSettingsContent() {
                     {existingProvider ? "Enabled" : "Not enabled"}
                   </Badge>
                 </div>
-                <CardTitle className="text-lg">{config.name}</CardTitle>
+                <CardTitle className="text-base">{config.name}</CardTitle>
               </CardHeader>
-              <CardContent className="flex flex-col flex-1">
-                <div className="flex-1 min-h-[2.5rem] flex flex-col justify-end mb-4">
+              <CardContent className="flex flex-1 flex-col px-4">
+                <div className="mb-4 flex min-h-[2.5rem] flex-1 flex-col justify-end">
                   <p className="text-sm text-muted-foreground">
                     {config.description}
                   </p>
@@ -382,7 +383,7 @@ export function IdentityProvidersSettingsContent() {
             </Card>
           );
         })}
-      </div>
+      </TableCardGrid>
 
       {/* Create Dialog */}
       {createConfig && (

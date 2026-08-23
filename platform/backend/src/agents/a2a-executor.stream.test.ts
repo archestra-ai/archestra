@@ -16,7 +16,7 @@ import {
   REPEAT_CALL_TERMINATION_NOTICE,
   type ToolCallRepeatTracker,
 } from "@/clients/tool-call-repeat-tracker";
-import { ProviderError } from "@/routes/chat/errors";
+import { ProviderError, SubagentProviderError } from "@/routes/chat/errors";
 import { THINKING_ONLY_NOTICE } from "@/utils/strip-thinking-blocks";
 import { executeA2AMessage } from "./a2a-executor";
 
@@ -411,6 +411,43 @@ describe("executeA2AMessage real stream boundary", () => {
 
     expect(error).toBeInstanceOf(ProviderError);
     expect((error as ProviderError).message).toContain("Insufficient credits");
+  });
+
+  test("preserves the subagent origin on a captured provider error", async ({
+    makeOrganization,
+    makeUser,
+    makeInternalAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    const providerError = new ProviderError({
+      code: ChatErrorCode.RateLimit,
+      message: "usage limit reached",
+      isRetryable: false,
+    });
+    const subagentError = new SubagentProviderError({
+      providerError,
+      subagentId: "00000000-0000-0000-0000-000000000099",
+      subagentName: "Research Helper",
+    });
+    primeAgent(
+      new MockLanguageModelV3({
+        doStream: async () => {
+          throw subagentError;
+        },
+      }),
+    );
+
+    const error = await executeA2AMessage({
+      agentId: agent.id,
+      message: "Handle this",
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: "conv-1",
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toBe(subagentError);
   });
 
   test("maps an exhausted empty response to a ProviderError EmptyResponse", async ({

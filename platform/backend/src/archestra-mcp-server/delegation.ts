@@ -17,7 +17,7 @@ import {
   AgentTeamModel,
   ToolModel,
 } from "@/models";
-import { ProviderError } from "@/routes/chat/errors";
+import { ProviderError, SubagentProviderError } from "@/routes/chat/errors";
 import type { Agent } from "@/types";
 import { errorResult, isAbortLikeError, successResult } from "./helpers";
 import type { ArchestraContext } from "./types";
@@ -258,10 +258,18 @@ export async function handleDelegation(
       { error, agentId, targetAgentId: target.id },
       "Agent delegation tool execution failed",
     );
-    // Re-throw ProviderError so it propagates to the parent stream's onError
-    // with the correct provider info (the subagent can't produce output)
+    // Re-throw provider failures so they propagate to the parent stream's
+    // onError with the correct provider info (the subagent can't produce
+    // output). Preserve the deepest origin when subagents delegate again.
     if (error instanceof ProviderError) {
-      throw error;
+      if (error instanceof SubagentProviderError) {
+        throw error;
+      }
+      throw new SubagentProviderError({
+        providerError: error,
+        subagentId: target.id,
+        subagentName: target.name,
+      });
     }
     return errorResult(
       error instanceof Error ? error.message : "Unknown error",

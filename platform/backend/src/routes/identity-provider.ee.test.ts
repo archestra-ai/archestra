@@ -1,4 +1,9 @@
+import { BUILT_IN_IDENTITY_PROVIDER_IDS } from "@archestra/shared";
+import { getCookies } from "better-auth/cookies";
+import { makeSignature } from "better-auth/crypto";
 import { vi } from "vitest";
+import { auth } from "@/auth/better-auth";
+import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -375,6 +380,58 @@ describe("identity provider routes", () => {
       expect(Array.isArray(data)).toBe(true);
       expect(data.length).toBeGreaterThanOrEqual(1);
       expect(data[0]).toHaveProperty("providerId", "route-test-provider");
+    });
+  });
+
+  describe("POST /api/identity-providers", () => {
+    test("creates every built-in provider through Better Auth", async ({
+      makeMember,
+      makeSession,
+    }) => {
+      await makeMember(user.id, organizationId, { role: "admin" });
+      const session = await makeSession(user.id, {
+        activeOrganizationId: organizationId,
+      });
+      const cookie = await createSessionCookie(session.token);
+
+      for (const providerId of BUILT_IN_IDENTITY_PROVIDER_IDS) {
+        const response = await app.inject({
+          method: "POST",
+          url: "/api/identity-providers",
+          headers: { cookie },
+          payload: {
+            providerId,
+            issuer: "https://idp.example.com",
+            domain: "",
+            oidcConfig: {
+              issuer: "https://idp.example.com",
+              skipDiscovery: true,
+              pkce: true,
+              clientId: "test-client-id",
+              clientSecret: "test-client-secret",
+              discoveryEndpoint:
+                "https://idp.example.com/.well-known/openid-configuration",
+              authorizationEndpoint: "https://idp.example.com/authorize",
+              tokenEndpoint: "https://idp.example.com/token",
+              userInfoEndpoint: "https://idp.example.com/userinfo",
+              jwksEndpoint: "https://idp.example.com/jwks",
+              scopes: ["openid", "email", "profile"],
+              mapping: {
+                id: "sub",
+                email: "email",
+                name: "name",
+              },
+            },
+          },
+        });
+
+        expect(response.statusCode, `failed to create ${providerId}`).toBe(200);
+        expect(response.json()).toMatchObject({
+          providerId,
+          organizationId,
+          userId: user.id,
+        });
+      }
     });
   });
 
@@ -899,3 +956,13 @@ describe("identity provider routes", () => {
     });
   });
 });
+
+async function createSessionCookie(sessionToken: string): Promise<string> {
+  if (!config.auth.secret) {
+    throw new Error("Auth secret is not configured");
+  }
+
+  const signature = await makeSignature(sessionToken, config.auth.secret);
+  const cookieName = getCookies(auth.options).sessionToken.name;
+  return `${cookieName}=${encodeURIComponent(`${sessionToken}.${signature}`)}`;
+}

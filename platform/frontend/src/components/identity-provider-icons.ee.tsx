@@ -19,13 +19,8 @@ export function IdentityProviderIcon({
   size = 16,
   className,
 }: IdentityProviderIconProps) {
-  const lowerProviderId = providerId.toLowerCase();
-
   // Google - use brand icon
-  if (
-    lowerProviderId === IDENTITY_PROVIDER_ID.GOOGLE.toLowerCase() ||
-    lowerProviderId.includes("google")
-  ) {
+  if (providerId === IDENTITY_PROVIDER_ID.GOOGLE) {
     return (
       <Image
         src="/icons/google.png"
@@ -38,10 +33,7 @@ export function IdentityProviderIcon({
   }
 
   // Okta - use brand icon
-  if (
-    lowerProviderId === IDENTITY_PROVIDER_ID.OKTA.toLowerCase() ||
-    lowerProviderId.includes("okta")
-  ) {
+  if (providerId === IDENTITY_PROVIDER_ID.OKTA) {
     return (
       <Image
         src="/icons/okta.png"
@@ -54,10 +46,7 @@ export function IdentityProviderIcon({
   }
 
   // GitHub - use SVG icon (better quality at small sizes)
-  if (
-    lowerProviderId === IDENTITY_PROVIDER_ID.GITHUB.toLowerCase() ||
-    lowerProviderId.includes("github")
-  ) {
+  if (providerId === IDENTITY_PROVIDER_ID.GITHUB) {
     return (
       <svg
         width={size}
@@ -73,10 +62,7 @@ export function IdentityProviderIcon({
   }
 
   // GitLab - use brand icon
-  if (
-    lowerProviderId === IDENTITY_PROVIDER_ID.GITLAB.toLowerCase() ||
-    lowerProviderId.includes("gitlab")
-  ) {
+  if (providerId === IDENTITY_PROVIDER_ID.GITLAB) {
     return (
       <Image
         src="/icons/gitlab.png"
@@ -89,12 +75,7 @@ export function IdentityProviderIcon({
   }
 
   // Microsoft Entra ID - use brand icon
-  if (
-    lowerProviderId === IDENTITY_PROVIDER_ID.ENTRA_ID.toLowerCase() ||
-    lowerProviderId.includes("microsoft") ||
-    lowerProviderId.includes("entra") ||
-    lowerProviderId.includes("azure")
-  ) {
+  if (providerId === IDENTITY_PROVIDER_ID.ENTRA_ID) {
     return (
       <Image
         src="/icons/microsoft.png"

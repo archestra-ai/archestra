@@ -1,9 +1,9 @@
 "use client";
 
 import {
+  BUILT_IN_IDENTITY_PROVIDER_IDS,
   E2eTestId,
   IDENTITY_PROVIDER_ID,
-  IDENTITY_TRUSTED_PROVIDER_IDS,
   type IdentityProviderId,
 } from "@archestra/shared";
 import { useSearchParams } from "next/navigation";
@@ -294,12 +294,12 @@ export function IdentityProvidersSettingsContent() {
           return p.providerId === config.providerId;
         }
 
-        // For generic providers (empty providerId), match by provider type as well
-        // Check if this is a non-trusted provider and matches the same type (OIDC vs SAML)
-        const isNonTrustedProvider = !IDENTITY_TRUSTED_PROVIDER_IDS.includes(
+        // For generic providers (empty providerId), match custom providers by
+        // provider type as well (OIDC vs SAML).
+        const isCustomProvider = !BUILT_IN_IDENTITY_PROVIDER_IDS.includes(
           p.providerId as IdentityProviderId,
         );
-        if (!isNonTrustedProvider) {
+        if (!isCustomProvider) {
           return false;
         }
 

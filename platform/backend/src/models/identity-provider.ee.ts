@@ -4,7 +4,6 @@ import type {
 } from "@archestra/shared";
 import {
   IDENTITY_PROVIDER_ID,
-  IDENTITY_TRUSTED_PROVIDER_IDS,
   MEMBER_ROLE_NAME,
   TimeInMs,
 } from "@archestra/shared";
@@ -57,27 +56,11 @@ export type IdpGetRoleData = Parameters<
 
 class IdentityProviderModel {
   /**
-   * Process-local cache for {@link getTrustedAccountLinkingProviderIds}. The
-   * lookup backs better-auth's account-linking `trustedProviders` option, which
-   * is evaluated on auth requests (including session reads), so without a cache
-   * it costs one `select distinct` per request for a list that only changes
-   * when an admin edits identity providers. Writes in this process clear the
-   * cache immediately; other pods converge within the TTL.
-   */
-  private static readonly trustedProviderIdsCache = registerProcessLocalCache(
-    new LRUCacheManager<string[]>({
-      maxSize: 1,
-      defaultTtl: TimeInMs.Minute,
-    }),
-  );
-
-  /**
    * Process-local cache for {@link findAllPublic}. Backs the unauthenticated
    * SSO-provider list the login page fetches on every render, so without a
    * cache each login-page view costs a database query for a list that only
-   * changes when an admin edits identity providers. Same invalidation story
-   * as {@link trustedProviderIdsCache}: writes in this process clear it
-   * immediately; other pods converge within the TTL.
+   * changes when an admin edits identity providers. Writes in this process
+   * clear it immediately; other pods converge within the TTL.
    */
   private static readonly publicProvidersCache = registerProcessLocalCache(
     new LRUCacheManager<PublicIdentityProvider[]>({
@@ -521,53 +504,6 @@ class IdentityProviderModel {
     return idpProviders;
   }
 
-  static async getTrustedAccountLinkingProviderIds(): Promise<string[]> {
-    const cached = IdentityProviderModel.trustedProviderIdsCache.get(
-      TRUSTED_PROVIDER_IDS_CACHE_KEY,
-    );
-    if (cached) {
-      return cached;
-    }
-
-    let configuredProviderIds: Array<{ providerId: string }> = [];
-
-    try {
-      configuredProviderIds = await db
-        .selectDistinct({
-          providerId: schema.identityProvidersTable.providerId,
-        })
-        .from(schema.identityProvidersTable);
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        error.message.includes("Database not initialized")
-      ) {
-        // Pre-initialization fallback: don't cache it, so the DB-backed list
-        // takes over on the first call after the database comes up.
-        return [...IDENTITY_TRUSTED_PROVIDER_IDS];
-      }
-
-      throw error;
-    }
-
-    const providerIds = [
-      ...new Set([
-        ...IDENTITY_TRUSTED_PROVIDER_IDS,
-        ...configuredProviderIds
-          .map(({ providerId }) => providerId)
-          .filter((providerId) => providerId.length > 0)
-          .sort((a, b) => a.localeCompare(b)),
-      ]),
-    ];
-
-    IdentityProviderModel.trustedProviderIdsCache.set(
-      TRUSTED_PROVIDER_IDS_CACHE_KEY,
-      providerIds,
-    );
-
-    return providerIds;
-  }
-
   /**
    * Find all identity providers with full configuration including secrets.
    * Use this only for authenticated admin endpoints.
@@ -778,7 +714,6 @@ class IdentityProviderModel {
       throw new Error("Failed to update identity provider after creation");
     }
 
-    IdentityProviderModel.trustedProviderIdsCache.clear();
     IdentityProviderModel.publicProvidersCache.clear();
 
     return {
@@ -860,7 +795,6 @@ class IdentityProviderModel {
 
     if (!updatedProvider) return null;
 
-    IdentityProviderModel.trustedProviderIdsCache.clear();
     IdentityProviderModel.publicProvidersCache.clear();
 
     return {
@@ -925,7 +859,6 @@ class IdentityProviderModel {
       }
     });
 
-    IdentityProviderModel.trustedProviderIdsCache.clear();
     IdentityProviderModel.publicProvidersCache.clear();
 
     return true;
@@ -1023,7 +956,6 @@ export default IdentityProviderModel;
 
 const OIDC_DISCOVERY_TIMEOUT_MS = 10_000;
 const SSO_REGISTRATION_PLACEHOLDER_DOMAIN = "sso-placeholder.example.com";
-const TRUSTED_PROVIDER_IDS_CACHE_KEY = "trusted-provider-ids";
 const PUBLIC_PROVIDERS_CACHE_KEY = "public-providers";
 
 function serializeConfigValue(

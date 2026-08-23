@@ -1,9 +1,5 @@
 import type { IdpRoleMappingConfig } from "@archestra/shared";
-import {
-  IDENTITY_TRUSTED_PROVIDER_IDS,
-  MEMBER_ROLE_NAME,
-  OAUTH_TOKEN_TYPE,
-} from "@archestra/shared";
+import { MEMBER_ROLE_NAME, OAUTH_TOKEN_TYPE } from "@archestra/shared";
 import { APIError } from "better-auth";
 import { vi } from "vitest";
 import { retrieveIdpGroups } from "@/auth/idp-team-sync-cache.ee";
@@ -797,117 +793,6 @@ describe("IdentityProviderModel", () => {
       await IdentityProviderModel.delete(provider.id, org.id);
       const fresh = await IdentityProviderModel.findAllPublic();
       expect(fresh.map((p) => p.providerId)).toEqual(["Google"]);
-    });
-  });
-
-  describe("getTrustedAccountLinkingProviderIds", () => {
-    test("returns built-in trusted providers when no custom identity providers exist", async () => {
-      await expect(
-        IdentityProviderModel.getTrustedAccountLinkingProviderIds(),
-      ).resolves.toEqual([...IDENTITY_TRUSTED_PROVIDER_IDS]);
-    });
-
-    test("includes configured generic OIDC and SAML provider IDs", async ({
-      makeOrganization,
-      makeIdentityProvider,
-    }) => {
-      const org = await makeOrganization();
-
-      await makeIdentityProvider(org.id, {
-        providerId: "custom-oidc",
-        oidcConfig: { clientId: "client-id" },
-      });
-      await makeIdentityProvider(org.id, {
-        providerId: "custom-saml",
-        samlConfig: { entryPoint: "https://example.com/saml" },
-      });
-
-      await expect(
-        IdentityProviderModel.getTrustedAccountLinkingProviderIds(),
-      ).resolves.toEqual([
-        ...IDENTITY_TRUSTED_PROVIDER_IDS,
-        "custom-oidc",
-        "custom-saml",
-      ]);
-    });
-
-    test("deduplicates built-in providers that are also configured in the database", async ({
-      makeOrganization,
-      makeIdentityProvider,
-    }) => {
-      const org = await makeOrganization();
-
-      await makeIdentityProvider(org.id, { providerId: "Okta" });
-
-      await expect(
-        IdentityProviderModel.getTrustedAccountLinkingProviderIds(),
-      ).resolves.toEqual([...IDENTITY_TRUSTED_PROVIDER_IDS]);
-    });
-
-    test("caches the trusted provider list until an identity provider write clears it", async ({
-      makeOrganization,
-      makeIdentityProvider,
-    }) => {
-      const org = await makeOrganization();
-
-      // Prime the cache before any custom provider exists.
-      await expect(
-        IdentityProviderModel.getTrustedAccountLinkingProviderIds(),
-      ).resolves.toEqual([...IDENTITY_TRUSTED_PROVIDER_IDS]);
-
-      // A row inserted behind the model's back stays invisible while the
-      // cached list is live...
-      const provider = await makeIdentityProvider(org.id, {
-        providerId: "cached-oidc",
-        oidcConfig: { clientId: "client-id" },
-      });
-      await expect(
-        IdentityProviderModel.getTrustedAccountLinkingProviderIds(),
-      ).resolves.toEqual([...IDENTITY_TRUSTED_PROVIDER_IDS]);
-
-      // ...a model write clears the cache, so the next read sees it...
-      await IdentityProviderModel.update(provider.id, {}, org.id);
-      await expect(
-        IdentityProviderModel.getTrustedAccountLinkingProviderIds(),
-      ).resolves.toEqual([...IDENTITY_TRUSTED_PROVIDER_IDS, "cached-oidc"]);
-
-      // ...and delete clears it again.
-      await IdentityProviderModel.delete(provider.id, org.id);
-      await expect(
-        IdentityProviderModel.getTrustedAccountLinkingProviderIds(),
-      ).resolves.toEqual([...IDENTITY_TRUSTED_PROVIDER_IDS]);
-    });
-
-    test("returns the built-in trusted providers before database initialization", async () => {
-      vi.resetModules();
-      vi.doMock("@/database", async () => {
-        const actual =
-          await vi.importActual<typeof import("@/database")>("@/database");
-
-        return {
-          ...actual,
-          default: new Proxy(
-            {},
-            {
-              get() {
-                throw new Error(
-                  "Database not initialized. Call initializeDatabase() first.",
-                );
-              },
-            },
-          ),
-        };
-      });
-
-      const { default: IsolatedIdentityProviderModel } = await import(
-        "./identity-provider.ee"
-      );
-
-      await expect(
-        IsolatedIdentityProviderModel.getTrustedAccountLinkingProviderIds(),
-      ).resolves.toEqual([...IDENTITY_TRUSTED_PROVIDER_IDS]);
-
-      vi.doUnmock("@/database");
     });
   });
 

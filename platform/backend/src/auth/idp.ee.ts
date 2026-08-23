@@ -56,8 +56,8 @@ export const ssoConfig = {
   disableImplicitSignUp: false,
   providersLimit: 10,
   trustEmailVerified: true, // Trust email verification from SSO providers
-  // Enable domain verification to allow SAML account linking for non-trusted providers
-  // When enabled, providers with domainVerified: true can link accounts by email domain
+  // Enable configured-domain trust for implicit OIDC and SAML account linking.
+  // Better Auth also requires domainVerified: true, which the provider model sets.
   domainVerification: {
     enabled: true,
   },

@@ -217,6 +217,19 @@ export function ConversationSearchPalette({
   const isTyping = searchQuery !== debouncedSearch;
   const isSearchingAndFetching = isSearching && (isTyping || isFetching);
 
+  const matchingNavigationItems = useMemo(() => {
+    if (recentChatsView) return [];
+
+    const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
+    if (!normalizedQuery) return navigationItems;
+
+    return navigationItems.filter((item) =>
+      `${item.label} ${item.value} ${item.keywords}`
+        .toLocaleLowerCase()
+        .includes(normalizedQuery),
+    );
+  }, [recentChatsView, searchQuery]);
+
   const browseConversations = useMemo(() => {
     if (debouncedSearch.trim()) {
       return null;
@@ -244,14 +257,14 @@ export function ConversationSearchPalette({
     setIsPendingDeletion(null);
   }, [selectedValue, searchQuery]);
 
-  // Search replaces the entire item set (nav items ↔ conv-<id> results). With a
-  // controlled value, cmdk only auto-selects the first item when the value is
-  // falsy — a stale selection leaves the fresh list with no selected option, so
-  // ArrowUp and Enter dead-end (WCAG 2.1.1). Clear it whenever the query flips.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally reacting to debouncedSearch changes to reset the selection
+  // Search replaces and filters the item set. With a controlled value, cmdk
+  // only auto-selects the first item when the value is falsy — a stale
+  // selection leaves the fresh list with no selected option, so ArrowUp and
+  // Enter dead-end (WCAG 2.1.1). Clear it as soon as the query changes.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally reacting to searchQuery changes to reset the selection
   useEffect(() => {
     setSelectedValue("");
-  }, [debouncedSearch]);
+  }, [searchQuery]);
 
   const handleSelectConversation = (conversationId: string) => {
     router.push(`/chat/${conversationId}`);
@@ -522,12 +535,31 @@ export function ConversationSearchPalette({
     );
   };
 
+  const renderNavigationItems = () =>
+    matchingNavigationItems.map((item) => {
+      const Icon = item.icon;
+      return (
+        <CommandItem
+          key={item.value}
+          value={`${item.value} ${item.keywords} ${item.label}`}
+          onSelect={() => {
+            router.push(item.href);
+            onOpenChange(false);
+          }}
+          className="flex items-center gap-3 px-3 py-2.5 cursor-pointer aria-selected:bg-accent rounded-sm"
+        >
+          <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="text-sm font-medium">{item.label}</span>
+        </CommandItem>
+      );
+    });
+
   return (
     <CommandDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Search conversations"
-      description="Search through your conversation history"
+      title="Search or navigate"
+      description="Search chats and navigate to pages"
       className="max-w-2xl"
       shouldFilter={false}
       value={selectedValue}
@@ -554,58 +586,68 @@ export function ConversationSearchPalette({
           <div className="py-6 text-center text-sm text-muted-foreground">
             Loading conversations...
           </div>
-        ) : isSearchingAndFetching ? (
-          <SearchSkeleton />
+        ) : isSearching ? (
+          <>
+            {matchingNavigationItems.length > 0 && (
+              <CommandGroup heading="Pages">
+                {renderNavigationItems()}
+              </CommandGroup>
+            )}
+
+            {isSearchingAndFetching ? (
+              <CommandGroup heading="Chats">
+                <SearchSkeleton />
+              </CommandGroup>
+            ) : conversations.length > 0 ? (
+              <CommandGroup heading="Chats">
+                {conversations.map((conv) => renderConversationItem(conv))}
+              </CommandGroup>
+            ) : matchingNavigationItems.length === 0 ? (
+              <CommandEmpty>
+                {recentChatsView
+                  ? "No conversations found."
+                  : "No chats or pages found."}
+              </CommandEmpty>
+            ) : null}
+          </>
         ) : (
           <>
-            {!searchQuery.trim() && (
+            <CommandGroup>
+              <CommandItem
+                value="new-chat"
+                onSelect={handleNewChat}
+                className="flex items-center gap-2 px-3 py-2.5 cursor-pointer aria-selected:bg-accent"
+              >
+                <Pencil className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="font-medium">New chat</span>
+              </CommandItem>
+              {lockedChatEnabled && (
+                <CommandItem
+                  value="new-locked-chat private locked"
+                  onSelect={handleNewLockedChat}
+                  className="flex items-center gap-2 px-3 py-2.5 cursor-pointer aria-selected:bg-accent"
+                >
+                  <LockedChatIcon className="h-4 w-4 shrink-0" />
+                  <span className="font-medium">New locked chat</span>
+                </CommandItem>
+              )}
+            </CommandGroup>
+
+            {!recentChatsView && (
               <>
-                <CommandGroup>
-                  <CommandItem
-                    value="new-chat"
-                    onSelect={handleNewChat}
-                    className="flex items-center gap-2 px-3 py-2.5 cursor-pointer aria-selected:bg-accent"
-                  >
-                    <Pencil className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    <span className="font-medium">New chat</span>
-                  </CommandItem>
-                  {lockedChatEnabled && (
-                    <CommandItem
-                      value="new-locked-chat private locked"
-                      onSelect={handleNewLockedChat}
-                      className="flex items-center gap-2 px-3 py-2.5 cursor-pointer aria-selected:bg-accent"
-                    >
-                      <LockedChatIcon className="h-4 w-4 shrink-0" />
-                      <span className="font-medium">New locked chat</span>
-                    </CommandItem>
-                  )}
-                </CommandGroup>
+                <CommandSeparator className="my-2" />
 
-                {!recentChatsView && (
-                  <>
-                    <CommandSeparator className="my-2" />
-
-                    <div className="px-2 pb-1.5">
-                      <div className="flex items-center justify-between px-1">
-                        <span className="text-xs font-medium text-muted-foreground">
-                          Chats
-                        </span>
-                      </div>
-                    </div>
-                  </>
-                )}
+                <div className="px-2 pb-1.5">
+                  <div className="flex items-center justify-between px-1">
+                    <span className="text-xs font-medium text-muted-foreground">
+                      Chats
+                    </span>
+                  </div>
+                </div>
               </>
             )}
 
-            {debouncedSearch.trim() ? (
-              conversations.length === 0 ? (
-                <CommandEmpty>No conversations found.</CommandEmpty>
-              ) : (
-                <CommandGroup heading="Search Results">
-                  {conversations.map((conv) => renderConversationItem(conv))}
-                </CommandGroup>
-              )
-            ) : browseConversations ? (
+            {browseConversations ? (
               <>
                 {browseConversations.pinned.length > 0 && (
                   <CommandGroup heading="Pinned">
@@ -634,7 +676,7 @@ export function ConversationSearchPalette({
               </>
             ) : null}
 
-            {!searchQuery.trim() && !recentChatsView && (
+            {!recentChatsView && (
               <>
                 <CommandSeparator className="my-2" />
 
@@ -648,27 +690,7 @@ export function ConversationSearchPalette({
                     </span>
                   </div>
                 </div>
-                <CommandGroup>
-                  {navigationItems.map((item) => {
-                    const Icon = item.icon;
-                    return (
-                      <CommandItem
-                        key={item.value}
-                        value={`${item.value} ${item.keywords} ${item.label}`}
-                        onSelect={() => {
-                          router.push(item.href);
-                          onOpenChange(false);
-                        }}
-                        className="flex items-center gap-3 px-3 py-2.5 cursor-pointer aria-selected:bg-accent rounded-sm"
-                      >
-                        <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-                        <span className="text-sm font-medium">
-                          {item.label}
-                        </span>
-                      </CommandItem>
-                    );
-                  })}
-                </CommandGroup>
+                <CommandGroup>{renderNavigationItems()}</CommandGroup>
               </>
             )}
           </>

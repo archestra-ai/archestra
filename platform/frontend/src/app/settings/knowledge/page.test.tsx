@@ -1321,15 +1321,21 @@ describe("KnowledgeSettingsPage", () => {
       expect(screen.getByLabelText("Length Normalization")).toBeDisabled();
     });
 
-    it("links each ranking section to its matching docs", () => {
+    it("orders ranking sections and links each one to its matching docs", () => {
       mockOrganization = { ...baseOrg, kbBm25K1: null, kbBm25B: null };
       mockFeatures();
       renderPage();
 
+      expect(
+        screen
+          .getAllByRole("heading", { level: 4 })
+          .map((heading) => heading.textContent),
+      ).toEqual(["Reranking", "Keyword ranking", "Contextual retrieval"]);
+
       const links = screen.getAllByRole("link", { name: /Learn more/ });
       expect(links.map((link) => link.getAttribute("href"))).toEqual([
-        "https://archestra.ai/docs/platform-knowledge#keyword-ranking",
         "https://archestra.ai/docs/platform-knowledge#reranking",
+        "https://archestra.ai/docs/platform-knowledge#keyword-ranking",
         "https://archestra.ai/docs/platform-knowledge#contextual-retrieval",
       ]);
     });

@@ -11,8 +11,12 @@
  * expects its caller to finish the job. A mocked resolver can't reproduce
  * that, so these cases live here.
  */
-import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
+import {
+  BUILT_IN_AGENT_IDS,
+  SupportedProvidersSchema,
+} from "@archestra/shared";
 import { vi } from "vitest";
+import config from "@/config";
 import { LlmProviderApiKeyModelLinkModel, ModelModel } from "@/models";
 import AgentModel from "@/models/agent";
 import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
@@ -141,6 +145,17 @@ describe("PolicyConfigurationService.resolveLlm (real resolution)", () => {
     makeOrganization,
     makeUser,
   }) => {
+    for (const provider of SupportedProvidersSchema.options) {
+      const providerConfig = config.chat[provider as keyof typeof config.chat];
+      if (
+        typeof providerConfig === "object" &&
+        providerConfig !== null &&
+        "apiKey" in providerConfig
+      ) {
+        providerConfig.apiKey = "";
+      }
+    }
+
     const org = await makeOrganization();
     const user = await makeUser();
     await makePolicyConfigAgent({

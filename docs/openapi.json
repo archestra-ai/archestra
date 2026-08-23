@@ -51170,6 +51170,7 @@
                           "type": "string"
                         },
                         "missingCredentialBehavior": {
+                          "default": "allow",
                           "type": "string"
                         },
                         "accessAllTools": {

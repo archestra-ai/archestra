@@ -3,6 +3,7 @@ import {
   BM25_B_MIN,
   BM25_K1_MAX,
   BM25_K1_MIN,
+  ContextualRetrievalModeSchema,
   EmbeddingDimensionsSchema,
   KnowledgeConnectorOverridesSchema,
   MessagingChannelOverridesSchema,
@@ -326,6 +327,7 @@ const extendedFields = {
   analyticsInstanceLastHeartbeatAt: z.date().nullable(),
   embeddingModel: z.string().nullable(),
   embeddingDimensions: EmbeddingDimensionsSchema.nullable(),
+  kbContextualRetrievalMode: ContextualRetrievalModeSchema.nullable(),
   defaultLlmModel: z.string().nullable(),
   defaultLlmProvider: SupportedProvidersSchema.nullable(),
   defaultUserLimitValue: z.number().int().positive().nullable(),
@@ -500,6 +502,8 @@ export const UpdateKnowledgeSettingsSchema = z.object({
     .max(BM25_B_MAX)
     .nullable()
     .optional(),
+  kbContextualRetrievalMode:
+    ContextualRetrievalModeSchema.nullable().optional(),
 });
 
 /**

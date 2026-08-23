@@ -5,16 +5,19 @@ import type {
 } from "@archestra/shared";
 import type { Span } from "@opentelemetry/api";
 import logger from "@/logging";
-import { InteractionModel, ModelModel } from "@/models";
+import { InteractionModel } from "@/models";
 import { metrics } from "@/observability";
 import {
   ATTR_ARCHESTRA_COST,
   ATTR_ARCHESTRA_TRIGGER_SOURCE,
   ATTR_GENAI_RESPONSE_MODEL,
+  ATTR_GENAI_USAGE_CACHE_CREATION_INPUT_TOKENS,
+  ATTR_GENAI_USAGE_CACHE_READ_INPUT_TOKENS,
   ATTR_GENAI_USAGE_INPUT_TOKENS,
   ATTR_GENAI_USAGE_OUTPUT_TOKENS,
 } from "@/observability/tracing/attributes";
 import { startActiveLlmSpan } from "@/observability/tracing/llm";
+import { calculateCost } from "@/routes/proxy/utils/cost-optimization";
 import type {
   GenAiOperationName,
   InteractionRequest,
@@ -37,6 +40,8 @@ interface KbInteractionData {
   model: string;
   inputTokens: number;
   outputTokens: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
 }
 
 interface KbObservabilityParams<T> {
@@ -81,18 +86,34 @@ export async function withKbObservability<T>(
         span.setAttribute(ATTR_GENAI_RESPONSE_MODEL, interaction.model);
         span.setAttribute(
           ATTR_GENAI_USAGE_INPUT_TOKENS,
-          interaction.inputTokens,
+          interaction.inputTokens +
+            (interaction.cacheReadTokens ?? 0) +
+            (interaction.cacheWriteTokens ?? 0),
         );
         span.setAttribute(
           ATTR_GENAI_USAGE_OUTPUT_TOKENS,
           interaction.outputTokens,
         );
+        if (interaction.cacheReadTokens) {
+          span.setAttribute(
+            ATTR_GENAI_USAGE_CACHE_READ_INPUT_TOKENS,
+            interaction.cacheReadTokens,
+          );
+        }
+        if (interaction.cacheWriteTokens) {
+          span.setAttribute(
+            ATTR_GENAI_USAGE_CACHE_CREATION_INPUT_TOKENS,
+            interaction.cacheWriteTokens,
+          );
+        }
 
         const cost = await calculateKbCost({
           model: interaction.model,
           provider: params.provider,
           inputTokens: interaction.inputTokens,
           outputTokens: interaction.outputTokens,
+          cacheReadTokens: interaction.cacheReadTokens ?? 0,
+          cacheWriteTokens: interaction.cacheWriteTokens ?? 0,
         });
         if (cost !== undefined) {
           span.setAttribute(ATTR_ARCHESTRA_COST, cost);
@@ -103,6 +124,8 @@ export async function withKbObservability<T>(
           model: interaction.model,
           inputTokens: interaction.inputTokens,
           outputTokens: interaction.outputTokens,
+          cacheReadTokens: interaction.cacheReadTokens ?? 0,
+          cacheWriteTokens: interaction.cacheWriteTokens ?? 0,
           durationSeconds,
           cost,
           source: params.source,
@@ -117,6 +140,8 @@ export async function withKbObservability<T>(
           model: interaction.model,
           inputTokens: interaction.inputTokens,
           outputTokens: interaction.outputTokens,
+          cacheReadTokens: interaction.cacheReadTokens ?? null,
+          cacheWriteTokens: interaction.cacheWriteTokens ?? null,
           cost: cost?.toFixed(10) ?? null,
         }).catch((error) => {
           logger.warn(
@@ -198,20 +223,20 @@ async function calculateKbCost(params: {
   provider: SupportedProvider;
   inputTokens: number;
   outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
 }): Promise<number | undefined> {
   try {
-    const modelEntry = await ModelModel.findByProviderAndModelId(
-      params.provider,
+    return await calculateCost(
       params.model,
+      params.inputTokens,
+      params.outputTokens,
+      params.provider,
+      {
+        readTokens: params.cacheReadTokens,
+        writeTokens: params.cacheWriteTokens,
+      },
     );
-    const pricing = ModelModel.getEffectivePricing(modelEntry, params.model);
-    const inputCost =
-      (params.inputTokens / 1_000_000) *
-      Number.parseFloat(pricing.pricePerMillionInput);
-    const outputCost =
-      (params.outputTokens / 1_000_000) *
-      Number.parseFloat(pricing.pricePerMillionOutput);
-    return inputCost + outputCost;
   } catch (error) {
     logger.warn(
       { error: error instanceof Error ? error.message : String(error) },

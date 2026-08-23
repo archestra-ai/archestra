@@ -4,7 +4,7 @@ import { KbChunkModel } from "@/models";
 import * as metrics from "@/observability/metrics";
 import type { AclEntry } from "@/types";
 import { chunkDocument } from "./chunker";
-import { buildDocumentContext } from "./contextual-retrieval";
+import { buildContextualHeaders } from "./contextual-retrieval";
 
 /**
  * Split a stored document into chunks and persist them.
@@ -75,22 +75,25 @@ export async function chunkAndStoreDocument(params: {
   if (chunks.length === 0) return;
 
   // Best-effort and non-fatal: a document indexes without context rather than
-  // failing the sync. Generated once here and copied onto every chunk.
-  const contextualHeader = await buildDocumentContext({
+  // failing the sync. The returned array is aligned with the chunk list: in
+  // document mode every entry is the same; in chunk mode each passage can
+  // carry its own header.
+  const contextualHeaders = await buildContextualHeaders({
     title,
     content,
+    chunks: chunks.map((chunk) => chunk.content),
     organizationId,
     connectorId,
   });
 
   await KbChunkModel.insertMany(
-    chunks.map((chunk) => ({
+    chunks.map((chunk, index) => ({
       documentId,
       content: chunk.content,
       chunkIndex: chunk.chunkIndex,
       metadataSuffixSemantic: chunk.metadataSuffixSemantic,
       metadataSuffixKeyword: chunk.metadataSuffixKeyword,
-      contextualHeader,
+      contextualHeader: contextualHeaders[index] ?? null,
       ftsLanguage,
       acl,
     })),
@@ -102,7 +105,9 @@ export async function chunkAndStoreDocument(params: {
     {
       documentId,
       chunkCount: chunks.length,
-      contextualHeader: contextualHeader !== null,
+      contextualizedChunkCount: contextualHeaders.filter(
+        (header) => header !== null,
+      ).length,
       ftsLanguage,
     },
     "Document chunked and stored",

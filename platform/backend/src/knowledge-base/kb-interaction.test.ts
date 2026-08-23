@@ -320,6 +320,70 @@ describe("withKbObservability", () => {
     expect(mockSpan.setAttribute).toHaveBeenCalledWith("archestra.cost", 3);
   });
 
+  it("records cached input separately and prices reads and writes accurately", async () => {
+    await ModelModel.create({
+      externalId: "openai/context-model",
+      provider: "openai",
+      modelId: "context-model",
+      inputModalities: null,
+      outputModalities: null,
+      customPricePerMillionInput: "4.00",
+      customPricePerMillionOutput: "10.00",
+      customPricePerMillionCacheRead: "0.50",
+      customPricePerMillionCacheWrite: "5.00",
+    });
+
+    await withKbObservability({
+      ...baseParams,
+      model: "context-model",
+      source: "knowledge:contextual-retrieval",
+      callback: async () => "result",
+      buildInteraction: () => ({
+        request: {},
+        response: {},
+        model: "context-model",
+        inputTokens: 500_000,
+        outputTokens: 100_000,
+        cacheReadTokens: 1_000_000,
+        cacheWriteTokens: 2_000_000,
+      }),
+    });
+
+    await vi.waitFor(async () => {
+      expect(
+        await kbInteractions("knowledge:contextual-retrieval"),
+      ).toHaveLength(1);
+    });
+
+    const [row] = await kbInteractions("knowledge:contextual-retrieval");
+    expect(row).toMatchObject({
+      inputTokens: 500_000,
+      outputTokens: 100_000,
+      cacheReadTokens: 1_000_000,
+      cacheWriteTokens: 2_000_000,
+      cost: "13.5000000000",
+    });
+    expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+      "gen_ai.usage.input_tokens",
+      3_500_000,
+    );
+    expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+      "gen_ai.usage.cache_read.input_tokens",
+      1_000_000,
+    );
+    expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+      "gen_ai.usage.cache_creation.input_tokens",
+      2_000_000,
+    );
+    expect(metrics.llm.reportKbLlmCall).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cacheReadTokens: 1_000_000,
+        cacheWriteTokens: 2_000_000,
+        cost: 13.5,
+      }),
+    );
+  });
+
   it("stores null cost when pricing lookup fails", async () => {
     // Simulate the pricing lookup throwing (calculateKbCost swallows → cost null).
     vi.spyOn(ModelModel, "findByProviderAndModelId").mockRejectedValueOnce(

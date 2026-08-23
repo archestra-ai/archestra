@@ -871,6 +871,56 @@ describe("KnowledgeSettingsPage", () => {
       ).toBeInTheDocument();
     });
 
+    it("saves per-passage context generation independently", async () => {
+      const user = userEvent.setup();
+      mockOrganization = {
+        embeddingChatApiKeyId: null,
+        embeddingModel: null,
+        rerankerChatApiKeyId: null,
+        rerankerModel: null,
+        kbContextualRetrievalMode: "document",
+      };
+      renderPage();
+
+      const mode = screen.getByRole("combobox", {
+        name: "Context generation",
+      });
+      expect(mode).toHaveTextContent("Per document — lower cost");
+      await user.click(mode);
+      await user.click(
+        screen.getByRole("option", { name: "Per passage — higher recall" }),
+      );
+      await user.click(screen.getByRole("button", { name: "Save" }));
+
+      expect(mockUpdateKnowledgeSettings).toHaveBeenCalledWith({
+        kbContextualRetrievalMode: "chunk",
+        kbBm25K1: null,
+        kbBm25B: null,
+      });
+    });
+
+    it("shows the deployment default without creating an organization override", () => {
+      mockOrganization = {
+        embeddingChatApiKeyId: null,
+        embeddingModel: null,
+        rerankerChatApiKeyId: null,
+        rerankerModel: null,
+        kbContextualRetrievalMode: null,
+      };
+      vi.mocked(useFeature).mockImplementation(((flag: string) =>
+        flag === "kbContextualRetrievalDefaultMode"
+          ? "document"
+          : false) as unknown as typeof useFeature);
+      renderPage();
+
+      expect(
+        screen.getByRole("combobox", { name: "Context generation" }),
+      ).toHaveTextContent("Per document — lower cost");
+      expect(
+        screen.queryByRole("button", { name: "Save" }),
+      ).not.toBeInTheDocument();
+    });
+
     it("shows 'Select a reranker API key first...' when no key selected", () => {
       mockOrganization = {
         embeddingChatApiKeyId: null,
@@ -1271,7 +1321,7 @@ describe("KnowledgeSettingsPage", () => {
       expect(screen.getByLabelText("Length Normalization")).toBeDisabled();
     });
 
-    it("links both ranking cards to the ranking docs, keyword ranking first", () => {
+    it("links each ranking section to its matching docs", () => {
       mockOrganization = { ...baseOrg, kbBm25K1: null, kbBm25B: null };
       mockFeatures();
       renderPage();
@@ -1280,6 +1330,7 @@ describe("KnowledgeSettingsPage", () => {
       expect(links.map((link) => link.getAttribute("href"))).toEqual([
         "https://archestra.ai/docs/platform-knowledge#keyword-ranking",
         "https://archestra.ai/docs/platform-knowledge#reranking",
+        "https://archestra.ai/docs/platform-knowledge#contextual-retrieval",
       ]);
     });
 

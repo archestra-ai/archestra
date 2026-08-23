@@ -1,4 +1,5 @@
 import type {
+  ContextualRetrievalMode,
   KnowledgeConnectorOverrides,
   MessagingChannelOverrides,
   ModelProviderOverrides,
@@ -185,6 +186,15 @@ const organizationsTable = pgTable("organization", {
    */
   kbBm25K1: doublePrecision("kb_bm25_k1"),
   kbBm25B: doublePrecision("kb_bm25_b"),
+
+  /**
+   * Organization override for contextual retrieval at ingest. Null preserves
+   * the deployment-level default for installations that configured the legacy
+   * `ARCHESTRA_KNOWLEDGE_BASE_CONTEXTUAL_RETRIEVAL_ENABLED` flag.
+   */
+  kbContextualRetrievalMode: varchar(
+    "kb_contextual_retrieval_mode",
+  ).$type<ContextualRetrievalMode>(),
 
   /** @deprecated Superseded by `defaultModelId` (FK). Retained, no longer read or written. */
   defaultLlmModel: text("default_llm_model"),

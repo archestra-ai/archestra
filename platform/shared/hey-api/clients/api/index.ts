@@ -1028,6 +1028,8 @@ export type {
   ConnectNgrokErrors,
   ConnectNgrokResponse,
   ConnectNgrokResponses,
+  ContextualRetrievalMode,
+  ContextualRetrievalModeInput,
   ConvertAgentToSkillData,
   ConvertAgentToSkillError,
   ConvertAgentToSkillErrors,

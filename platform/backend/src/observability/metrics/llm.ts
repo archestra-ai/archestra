@@ -891,6 +891,8 @@ export function reportKbLlmCall(params: {
   model: string;
   inputTokens: number;
   outputTokens: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
   durationSeconds: number;
   cost: number | undefined;
   source: InteractionSource;
@@ -939,8 +941,29 @@ export function reportKbLlmCall(params: {
     }
   }
 
+  if (llmCacheTokensCounter) {
+    if (params.cacheReadTokens && params.cacheReadTokens > 0) {
+      llmCacheTokensCounter.inc({
+        labels: { ...labels, cache_type: "read" },
+        value: params.cacheReadTokens,
+        exemplarLabels,
+      });
+    }
+    if (params.cacheWriteTokens && params.cacheWriteTokens > 0) {
+      llmCacheTokensCounter.inc({
+        labels: { ...labels, cache_type: "write" },
+        value: params.cacheWriteTokens,
+        exemplarLabels,
+      });
+    }
+  }
+
   if (llmTokenUsage) {
-    const totalTokens = params.inputTokens + params.outputTokens;
+    const totalTokens =
+      params.inputTokens +
+      params.outputTokens +
+      (params.cacheReadTokens ?? 0) +
+      (params.cacheWriteTokens ?? 0);
     if (totalTokens > 0) {
       llmTokenUsage.observe({
         labels,

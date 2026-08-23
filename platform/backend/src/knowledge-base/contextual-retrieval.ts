@@ -1,115 +1,88 @@
-import { generateText } from "ai";
-import config from "@/config";
+import type { SupportedProvider } from "@archestra/shared";
+import { generateObject, generateText, type ModelMessage } from "ai";
+import { z } from "zod";
+import { isAnthropicNativeEndpoint } from "@/clients/anthropic-endpoint";
 import logger from "@/logging";
 import {
   getProviderChatInteractionType,
   withKbObservability,
 } from "./kb-interaction";
-import { resolveRerankerConfig } from "./kb-llm-client";
+import { resolveContextualRetrievalConfig } from "./kb-llm-client";
 
 // ===== Exports =====
 
 /**
- * Summarize a document into a short passage of context that is indexed
- * alongside every chunk of that document.
+ * Generate search-only context headers aligned with a document's chunks.
  *
- * Chunking destroys the context a passage sits in: a chunk reading "the limit
- * was raised to 5,000" is a poor match for "what is the rate limit on the
- * billing API" because neither "rate limit" nor "billing API" appears in it.
- * Prefixing each chunk's indexed text with a document-level summary restores
- * enough of that context for both the embedding and the keyword index to match.
- *
- * Runs once per document at ingest — documents whose content hash is unchanged
- * are skipped by the sync, so a steady-state re-sync costs nothing. Returns
- * `null` whenever the context cannot be produced (no reranking model, a
- * rerank-only model, an empty document, or an LLM failure); callers index the
- * document without it rather than failing the sync.
+ * The organization chooses between disabled, document-level, and per-chunk
+ * context. Per-chunk generation is reserved for longer documents, batches
+ * several passages into each call, and marks the stable document prefix for
+ * prompt caching on providers that require an explicit breakpoint. Every
+ * failure is best-effort: the affected chunks are indexed without a header.
  */
-export async function buildDocumentContext(params: {
+export async function buildContextualHeaders(params: {
   title: string;
   content: string;
+  chunks: string[];
   organizationId: string;
   connectorId: string | null;
-}): Promise<string | null> {
-  const { title, content, organizationId, connectorId } = params;
+}): Promise<(string | null)[]> {
+  const { title, content, chunks, organizationId, connectorId } = params;
+  if (chunks.length === 0) return [];
 
-  if (!config.kb.contextualRetrievalEnabled) return null;
-  if (!content.trim()) return null;
+  const emptyHeaders = () => chunks.map(() => null);
+  if (!content.trim()) return emptyHeaders();
 
-  let rerankerConfig: Awaited<ReturnType<typeof resolveRerankerConfig>>;
+  let resolved: Awaited<ReturnType<typeof resolveContextualRetrievalConfig>>;
   try {
-    rerankerConfig = await resolveRerankerConfig(organizationId);
+    resolved = await resolveContextualRetrievalConfig(organizationId);
   } catch (error) {
-    // Contextual retrieval reuses the reranking model and is a best-effort
-    // enhancement: an unresolvable config must not fail an ingest. The fault is
-    // already surfaced at save time.
     logger.warn(
       {
         organizationId,
         error: error instanceof Error ? error.message : String(error),
       },
-      "[ContextualRetrieval] Reranker config unresolvable, indexing without context",
+      "[ContextualRetrieval] Configuration unresolvable, indexing without context",
     );
-    return null;
+    return emptyHeaders();
   }
 
-  if (!rerankerConfig) {
+  if (resolved.mode === "disabled") return emptyHeaders();
+  if (!resolved.reranker) {
     logger.debug(
       { organizationId },
       "[ContextualRetrieval] No reranking model configured, indexing without context",
     );
-    return null;
+    return emptyHeaders();
   }
-
-  if (rerankerConfig.kind !== "llm") {
-    // A dedicated rerank-API model (Cohere Rerank) only scores documents; it
-    // cannot generate text. Same degradation as query expansion.
+  if (resolved.reranker.kind !== "llm") {
     logger.debug(
       { organizationId },
       "[ContextualRetrieval] Reranking model is rerank-only, indexing without context",
     );
-    return null;
+    return emptyHeaders();
   }
 
-  try {
-    const result = await withKbObservability({
-      operationName: "chat",
-      provider: rerankerConfig.provider as Parameters<
-        typeof withKbObservability
-      >[0]["provider"],
-      model: rerankerConfig.modelName,
-      source: "knowledge:contextual-retrieval",
+  if (
+    resolved.mode === "document" ||
+    chunks.length < MIN_CHUNKS_FOR_PER_CHUNK_CONTEXT
+  ) {
+    const header = await buildDocumentContext({
+      title,
+      content,
       connectorId,
-      type: getProviderChatInteractionType(
-        rerankerConfig.provider as Parameters<
-          typeof getProviderChatInteractionType
-        >[0],
-      ),
-      callback: () =>
-        generateText({
-          model: rerankerConfig.llmModel,
-          system: DOCUMENT_CONTEXT_SYSTEM_PROMPT,
-          prompt: DOCUMENT_CONTEXT_USER_PROMPT.replace(
-            "{document_title}",
-            title,
-          ).replace("{document_content}", truncateForPrompt(content)),
-        }),
-      buildInteraction: (res) =>
-        buildContextualRetrievalInteraction(rerankerConfig, title, res),
+      config: resolved.reranker,
     });
-
-    return formatContext(result.text);
-  } catch (error) {
-    logger.warn(
-      {
-        organizationId,
-        connectorId,
-        error: error instanceof Error ? error.message : String(error),
-      },
-      "[ContextualRetrieval] Failed to generate document context, indexing without it",
-    );
-    return null;
+    return chunks.map(() => header);
   }
+
+  return buildChunkContexts({
+    title,
+    content,
+    chunks,
+    connectorId,
+    config: resolved.reranker,
+  });
 }
 
 /**
@@ -131,24 +104,222 @@ export function formatContext(rawText: string | undefined): string | null {
   return `CONTEXT: ${capped}\n\n`;
 }
 
-// ===== Internal constants =====
-
-/**
- * How much of a document is shown to the summarizer. A document-level summary
- * only needs the opening — enough to establish what the document is, who owns
- * it, and what it covers — and reading the whole of a large document would cost
- * more than the retrieval gain is worth.
- */
-const MAX_PROMPT_CHARS = 12_000;
-
-/**
- * Ceiling on the stored context. It is prepended to the indexed text of every
- * chunk in the document, so an over-long context would dilute the chunk's own
- * terms in both the embedding and the tsvector.
- */
-const MAX_CONTEXT_CHARS = 600;
-
 // ===== Internal helpers =====
+
+type LlmRerankerConfig = Extract<
+  NonNullable<
+    Awaited<ReturnType<typeof resolveContextualRetrievalConfig>>["reranker"]
+  >,
+  { kind: "llm" }
+>;
+
+async function buildDocumentContext(params: {
+  title: string;
+  content: string;
+  connectorId: string | null;
+  config: LlmRerankerConfig;
+}): Promise<string | null> {
+  const { title, content, connectorId, config } = params;
+  const prompt = DOCUMENT_CONTEXT_USER_PROMPT.replace(
+    "{document_title}",
+    title,
+  ).replace("{document_content}", truncateForPrompt(content));
+
+  try {
+    const result = await withKbObservability({
+      operationName: "chat",
+      provider: config.provider,
+      model: config.modelName,
+      source: "knowledge:contextual-retrieval",
+      connectorId,
+      type: getProviderChatInteractionType(config.provider),
+      callback: () =>
+        generateText({
+          model: config.llmModel,
+          system: DOCUMENT_CONTEXT_SYSTEM_PROMPT,
+          prompt,
+        }),
+      buildInteraction: (result) =>
+        buildContextualRetrievalInteraction({
+          config,
+          requestDescription: prompt,
+          responseText: result.text,
+          usage: result.usage,
+        }),
+    });
+
+    return formatContext(result.text);
+  } catch (error) {
+    logger.warn(
+      {
+        connectorId,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      "[ContextualRetrieval] Failed to generate document context, indexing without it",
+    );
+    return null;
+  }
+}
+
+async function buildChunkContexts(params: {
+  title: string;
+  content: string;
+  chunks: string[];
+  connectorId: string | null;
+  config: LlmRerankerConfig;
+}): Promise<(string | null)[]> {
+  const { title, content, chunks, connectorId, config } = params;
+  const contexts: (string | null)[] = chunks.map(() => null);
+  const sharedDocumentMessage = buildSharedDocumentMessage({
+    title,
+    content,
+    config,
+  });
+
+  // Sequential on purpose: explicit provider caches must finish writing the
+  // stable document prefix before the next batch can read it.
+  for (
+    let batchStart = 0;
+    batchStart < chunks.length;
+    batchStart += CHUNK_CONTEXT_BATCH_SIZE
+  ) {
+    const batch = chunks.slice(
+      batchStart,
+      batchStart + CHUNK_CONTEXT_BATCH_SIZE,
+    );
+    const batchPrompt = buildChunkBatchPrompt({
+      chunks,
+      batchStart,
+      batchLength: batch.length,
+    });
+
+    try {
+      const schema = z.object({
+        contexts: z
+          .array(z.string())
+          .length(batch.length)
+          .describe(
+            "One short context passage per requested chunk, in the same order",
+          ),
+      });
+      const result = await withKbObservability({
+        operationName: "chat",
+        provider: config.provider,
+        model: config.modelName,
+        source: "knowledge:contextual-retrieval",
+        connectorId,
+        type: getProviderChatInteractionType(config.provider),
+        callback: () =>
+          generateObject({
+            model: config.llmModel,
+            schema,
+            system: CHUNK_CONTEXT_SYSTEM_PROMPT,
+            messages: [
+              sharedDocumentMessage,
+              { role: "user", content: batchPrompt },
+            ],
+          }),
+        buildInteraction: (result) =>
+          buildContextualRetrievalInteraction({
+            config,
+            requestDescription: batchPrompt,
+            responseText: JSON.stringify(result.object),
+            usage: result.usage,
+          }),
+      });
+
+      for (const [offset, context] of result.object.contexts.entries()) {
+        contexts[batchStart + offset] = formatContext(context);
+      }
+    } catch (error) {
+      logger.warn(
+        {
+          connectorId,
+          batchStart,
+          batchSize: batch.length,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "[ContextualRetrieval] Failed to generate a chunk-context batch, indexing those chunks without context",
+      );
+    }
+  }
+
+  return contexts;
+}
+
+function buildSharedDocumentMessage(params: {
+  title: string;
+  content: string;
+  config: LlmRerankerConfig;
+}): ModelMessage {
+  const message: ModelMessage = {
+    role: "user",
+    content: CHUNK_CONTEXT_DOCUMENT_PROMPT.replace(
+      "{document_title}",
+      params.title,
+    ).replace("{document_content}", truncateForPrompt(params.content)),
+  };
+  const providerOptions = promptCacheProviderOptions(params.config);
+  return providerOptions ? { ...message, providerOptions } : message;
+}
+
+function promptCacheProviderOptions(
+  config: LlmRerankerConfig,
+): ModelMessage["providerOptions"] | undefined {
+  if (
+    isAnthropicNativeEndpoint({
+      provider: config.provider,
+      model: config.modelName,
+      baseUrl: config.baseUrl,
+    })
+  ) {
+    return { anthropic: { cacheControl: { type: "ephemeral" } } };
+  }
+
+  // Bedrock rejects cache points for unsupported model families. Match the
+  // same conservative set as the chat path so caching can never break ingest.
+  if (
+    config.provider === "bedrock" &&
+    BEDROCK_PROMPT_CACHE_MODEL.test(config.modelName)
+  ) {
+    return { bedrock: { cachePoint: { type: "default" } } };
+  }
+
+  // OpenAI and Gemini cache matching prefixes automatically. Other providers
+  // either do the same or do not expose a portable cache directive.
+  return undefined;
+}
+
+function buildChunkBatchPrompt(params: {
+  chunks: string[];
+  batchStart: number;
+  batchLength: number;
+}): string {
+  const targetEnd = params.batchStart + params.batchLength;
+  const windowStart = Math.max(0, params.batchStart - SURROUNDING_CHUNK_RADIUS);
+  const windowEnd = Math.min(
+    params.chunks.length,
+    targetEnd + SURROUNDING_CHUNK_RADIUS,
+  );
+  const passages = params.chunks
+    .slice(windowStart, windowEnd)
+    .map((chunk, offset) => {
+      const index = windowStart + offset;
+      const role =
+        index >= params.batchStart && index < targetEnd
+          ? "write context"
+          : "surrounding context only";
+      return `[Chunk ${index}; ${role}]\n${chunk}`;
+    })
+    .join("\n\n");
+
+  return CHUNK_CONTEXT_BATCH_PROMPT.replace(
+    "{first_chunk_index}",
+    String(params.batchStart),
+  )
+    .replace("{last_chunk_index}", String(targetEnd - 1))
+    .replace("{chunks}", passages);
+}
 
 function truncateForPrompt(content: string): string {
   return content.length > MAX_PROMPT_CHARS
@@ -156,20 +327,32 @@ function truncateForPrompt(content: string): string {
     : content;
 }
 
-function buildContextualRetrievalInteraction(
-  config: { modelName: string; provider: string },
-  prompt: string,
-  // biome-ignore lint/suspicious/noExplicitAny: Vercel AI SDK result type is complex
-  result: any,
-) {
-  const usage = result.usage as
-    | { promptTokens?: number; completionTokens?: number }
-    | undefined;
+function buildContextualRetrievalInteraction(params: {
+  config: { modelName: string; provider: SupportedProvider };
+  requestDescription: string;
+  responseText: string;
+  usage: {
+    inputTokens?: number;
+    inputTokenDetails?: {
+      noCacheTokens?: number;
+      cacheReadTokens?: number;
+      cacheWriteTokens?: number;
+    };
+    outputTokens?: number;
+  };
+}) {
+  const { config, requestDescription, responseText, usage } = params;
+  const cacheReadTokens = usage.inputTokenDetails?.cacheReadTokens ?? 0;
+  const cacheWriteTokens = usage.inputTokenDetails?.cacheWriteTokens ?? 0;
+  const inputTokens =
+    usage.inputTokenDetails?.noCacheTokens ??
+    Math.max(0, (usage.inputTokens ?? 0) - cacheReadTokens - cacheWriteTokens);
+  const outputTokens = usage.outputTokens ?? 0;
 
   return {
     request: {
       model: config.modelName,
-      messages: [{ role: "user" as const, content: prompt }],
+      messages: [{ role: "user" as const, content: requestDescription }],
     },
     response: {
       id: `contextual-retrieval-${crypto.randomUUID()}`,
@@ -181,7 +364,7 @@ function buildContextualRetrievalInteraction(
           index: 0,
           message: {
             role: "assistant" as const,
-            content: result.text ?? "",
+            content: responseText,
             refusal: null,
           },
           finish_reason: "stop" as const,
@@ -189,17 +372,41 @@ function buildContextualRetrievalInteraction(
         },
       ],
       usage: {
-        prompt_tokens: usage?.promptTokens ?? 0,
-        completion_tokens: usage?.completionTokens ?? 0,
+        prompt_tokens: inputTokens + cacheReadTokens + cacheWriteTokens,
+        completion_tokens: outputTokens,
         total_tokens:
-          (usage?.promptTokens ?? 0) + (usage?.completionTokens ?? 0),
+          inputTokens + cacheReadTokens + cacheWriteTokens + outputTokens,
       },
     },
     model: config.modelName,
-    inputTokens: usage?.promptTokens ?? 0,
-    outputTokens: usage?.completionTokens ?? 0,
+    inputTokens,
+    outputTokens,
+    cacheReadTokens,
+    cacheWriteTokens,
   };
 }
+
+// ===== Internal constants =====
+
+/** Short documents rarely benefit enough to justify more than one call. */
+const MIN_CHUNKS_FOR_PER_CHUNK_CONTEXT = 6;
+
+/** Several passages per structured-output call bounds both spend and latency. */
+const CHUNK_CONTEXT_BATCH_SIZE = 8;
+
+/** Include section-boundary context without asking the model to summarize it. */
+const SURROUNDING_CHUNK_RADIUS = 1;
+
+/**
+ * Stable document prefix shared across passage batches. It establishes the
+ * document's overall subject while staying small enough to cache cheaply.
+ */
+const MAX_PROMPT_CHARS = 12_000;
+
+/** Stored context is indexed repeatedly, so keep it from diluting chunk terms. */
+const MAX_CONTEXT_CHARS = 600;
+
+const BEDROCK_PROMPT_CACHE_MODEL = /claude|nova-(?:micro|lite|pro|premier)/;
 
 // ===== Prompts =====
 
@@ -220,3 +427,19 @@ Document title:
 
 Document content:
 {document_content}`;
+
+const CHUNK_CONTEXT_SYSTEM_PROMPT = `You write short search-index context passages. Each passage must situate one requested chunk within its document so a query naming the relevant subject can match text that omits that subject.
+
+Write plain declarative prose. Reuse only facts and terminology present in the document or supplied chunks. Preserve identifiers, ticket numbers, error codes, and version strings verbatim. Do not evaluate conclusions. Each passage must be at most 2 sentences and must describe its own chunk, not the document as a whole.`;
+
+const CHUNK_CONTEXT_DOCUMENT_PROMPT = `This stable document overview applies to every following passage batch.
+
+Document title:
+{document_title}
+
+Document opening:
+{document_content}`;
+
+const CHUNK_CONTEXT_BATCH_PROMPT = `Write one context passage for each target chunk from {first_chunk_index} through {last_chunk_index}, inclusive. Return passages in that exact order. Chunks marked "surrounding context only" may identify a section or subject, but must not receive their own output.
+
+{chunks}`;

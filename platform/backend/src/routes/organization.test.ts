@@ -1309,6 +1309,48 @@ describe("organization routes", () => {
       expect(untouched?.kbBm25K1).toBeNull();
       expect(untouched?.kbBm25B).toBeNull();
     });
+
+    test("saves and audits the contextual retrieval mode", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: { kbContextualRetrievalMode: "chunk" },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().kbContextualRetrievalMode).toBe("chunk");
+      expect(
+        (await OrganizationModel.getById(organizationId))
+          ?.kbContextualRetrievalMode,
+      ).toBe("chunk");
+
+      await vi.waitFor(async () => {
+        const [audit] = await db
+          .select()
+          .from(schema.auditLogsTable)
+          .where(eq(schema.auditLogsTable.action, "organization.updated"));
+        expect(audit?.before).toMatchObject({
+          kbContextualRetrievalMode: null,
+        });
+        expect(audit?.after).toMatchObject({
+          kbContextualRetrievalMode: "chunk",
+        });
+      });
+    });
+
+    test("rejects an unknown contextual retrieval mode", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: { kbContextualRetrievalMode: "expensive" },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(
+        (await OrganizationModel.getById(organizationId))
+          ?.kbContextualRetrievalMode,
+      ).toBeNull();
+    });
   });
 
   describe("PATCH /api/organization/auth-settings", () => {

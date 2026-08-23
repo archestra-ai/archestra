@@ -40,6 +40,14 @@
           "yiddish"
         ]
       },
+      "ContextualRetrievalModeInput": {
+        "type": "string",
+        "enum": [
+          "disabled",
+          "document",
+          "chunk"
+        ]
+      },
       "EmbeddingDimensionsInput": {
         "type": "integer",
         "minimum": -9007199254740991,
@@ -20381,6 +20389,14 @@
           "tamil",
           "turkish",
           "yiddish"
+        ]
+      },
+      "ContextualRetrievalMode": {
+        "type": "string",
+        "enum": [
+          "disabled",
+          "document",
+          "chunk"
         ]
       },
       "EmbeddingDimensions": {
@@ -125321,6 +125337,9 @@
                         "kbBm25DefaultB": {
                           "type": "number"
                         },
+                        "kbContextualRetrievalDefaultMode": {
+                          "$ref": "#/components/schemas/ContextualRetrievalMode"
+                        },
                         "kbGoogleDriveOAuth": {
                           "type": "object",
                           "properties": {
@@ -125403,6 +125422,7 @@
                         "kbMfilesOauthEnabled",
                         "kbBm25DefaultK1",
                         "kbBm25DefaultB",
+                        "kbContextualRetrievalDefaultMode",
                         "kbGoogleDriveOAuth",
                         "mcpGatewaySkillsEnabled",
                         "hackathonRecorderEnabled",
@@ -292406,6 +292426,14 @@
                       "minimum": -140737488355328,
                       "maximum": 140737488355327
                     },
+                    "kbContextualRetrievalMode": {
+                      "nullable": true,
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/ContextualRetrievalMode"
+                        }
+                      ]
+                    },
                     "defaultLlmModel": {
                       "nullable": true,
                       "type": "string"
@@ -292838,6 +292866,7 @@
                     "ocrModel",
                     "kbBm25K1",
                     "kbBm25B",
+                    "kbContextualRetrievalMode",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -293476,6 +293505,14 @@
                       "minimum": -140737488355328,
                       "maximum": 140737488355327
                     },
+                    "kbContextualRetrievalMode": {
+                      "nullable": true,
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/ContextualRetrievalMode"
+                        }
+                      ]
+                    },
                     "defaultLlmModel": {
                       "nullable": true,
                       "type": "string"
@@ -293908,6 +293945,7 @@
                     "ocrModel",
                     "kbBm25K1",
                     "kbBm25B",
+                    "kbContextualRetrievalMode",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -294801,6 +294839,14 @@
                       "minimum": -140737488355328,
                       "maximum": 140737488355327
                     },
+                    "kbContextualRetrievalMode": {
+                      "nullable": true,
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/ContextualRetrievalMode"
+                        }
+                      ]
+                    },
                     "defaultLlmModel": {
                       "nullable": true,
                       "type": "string"
@@ -295233,6 +295279,7 @@
                     "ocrModel",
                     "kbBm25K1",
                     "kbBm25B",
+                    "kbContextualRetrievalMode",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -295727,6 +295774,14 @@
                       "minimum": -140737488355328,
                       "maximum": 140737488355327
                     },
+                    "kbContextualRetrievalMode": {
+                      "nullable": true,
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/ContextualRetrievalMode"
+                        }
+                      ]
+                    },
                     "defaultLlmModel": {
                       "nullable": true,
                       "type": "string"
@@ -296159,6 +296214,7 @@
                     "ocrModel",
                     "kbBm25K1",
                     "kbBm25B",
+                    "kbContextualRetrievalMode",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -296649,6 +296705,14 @@
                       "minimum": -140737488355328,
                       "maximum": 140737488355327
                     },
+                    "kbContextualRetrievalMode": {
+                      "nullable": true,
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/ContextualRetrievalMode"
+                        }
+                      ]
+                    },
                     "defaultLlmModel": {
                       "nullable": true,
                       "type": "string"
@@ -297081,6 +297145,7 @@
                     "ocrModel",
                     "kbBm25K1",
                     "kbBm25B",
+                    "kbContextualRetrievalMode",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -297568,6 +297633,14 @@
                       "minimum": -140737488355328,
                       "maximum": 140737488355327
                     },
+                    "kbContextualRetrievalMode": {
+                      "nullable": true,
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/ContextualRetrievalMode"
+                        }
+                      ]
+                    },
                     "defaultLlmModel": {
                       "nullable": true,
                       "type": "string"
@@ -298000,6 +298073,7 @@
                     "ocrModel",
                     "kbBm25K1",
                     "kbBm25B",
+                    "kbContextualRetrievalMode",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -298502,6 +298576,14 @@
                       "minimum": -140737488355328,
                       "maximum": 140737488355327
                     },
+                    "kbContextualRetrievalMode": {
+                      "nullable": true,
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/ContextualRetrievalMode"
+                        }
+                      ]
+                    },
                     "defaultLlmModel": {
                       "nullable": true,
                       "type": "string"
@@ -298934,6 +299016,7 @@
                     "ocrModel",
                     "kbBm25K1",
                     "kbBm25B",
+                    "kbContextualRetrievalMode",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -299487,6 +299570,14 @@
                       "minimum": -140737488355328,
                       "maximum": 140737488355327
                     },
+                    "kbContextualRetrievalMode": {
+                      "nullable": true,
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/ContextualRetrievalMode"
+                        }
+                      ]
+                    },
                     "defaultLlmModel": {
                       "nullable": true,
                       "type": "string"
@@ -299919,6 +300010,7 @@
                     "ocrModel",
                     "kbBm25K1",
                     "kbBm25B",
+                    "kbContextualRetrievalMode",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -300447,6 +300539,14 @@
                       "minimum": -140737488355328,
                       "maximum": 140737488355327
                     },
+                    "kbContextualRetrievalMode": {
+                      "nullable": true,
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/ContextualRetrievalMode"
+                        }
+                      ]
+                    },
                     "defaultLlmModel": {
                       "nullable": true,
                       "type": "string"
@@ -300879,6 +300979,7 @@
                     "ocrModel",
                     "kbBm25K1",
                     "kbBm25B",
+                    "kbContextualRetrievalMode",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -301439,6 +301540,14 @@
                       "minimum": -140737488355328,
                       "maximum": 140737488355327
                     },
+                    "kbContextualRetrievalMode": {
+                      "nullable": true,
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/ContextualRetrievalMode"
+                        }
+                      ]
+                    },
                     "defaultLlmModel": {
                       "nullable": true,
                       "type": "string"
@@ -301871,6 +301980,7 @@
                     "ocrModel",
                     "kbBm25K1",
                     "kbBm25B",
+                    "kbContextualRetrievalMode",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -302374,6 +302484,14 @@
                       "minimum": -140737488355328,
                       "maximum": 140737488355327
                     },
+                    "kbContextualRetrievalMode": {
+                      "nullable": true,
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/ContextualRetrievalMode"
+                        }
+                      ]
+                    },
                     "defaultLlmModel": {
                       "nullable": true,
                       "type": "string"
@@ -302806,6 +302924,7 @@
                     "ocrModel",
                     "kbBm25K1",
                     "kbBm25B",
+                    "kbContextualRetrievalMode",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -303151,6 +303270,14 @@
                     "type": "number",
                     "minimum": 0,
                     "maximum": 1
+                  },
+                  "kbContextualRetrievalMode": {
+                    "nullable": true,
+                    "allOf": [
+                      {
+                        "$ref": "#/components/schemas/ContextualRetrievalModeInput"
+                      }
+                    ]
                   }
                 }
               }
@@ -303332,6 +303459,14 @@
                       "type": "number",
                       "minimum": -140737488355328,
                       "maximum": 140737488355327
+                    },
+                    "kbContextualRetrievalMode": {
+                      "nullable": true,
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/ContextualRetrievalMode"
+                        }
+                      ]
                     },
                     "defaultLlmModel": {
                       "nullable": true,
@@ -303765,6 +303900,7 @@
                     "ocrModel",
                     "kbBm25K1",
                     "kbBm25B",
+                    "kbContextualRetrievalMode",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -304237,6 +304373,14 @@
                       "minimum": -140737488355328,
                       "maximum": 140737488355327
                     },
+                    "kbContextualRetrievalMode": {
+                      "nullable": true,
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/ContextualRetrievalMode"
+                        }
+                      ]
+                    },
                     "defaultLlmModel": {
                       "nullable": true,
                       "type": "string"
@@ -304669,6 +304813,7 @@
                     "ocrModel",
                     "kbBm25K1",
                     "kbBm25B",
+                    "kbContextualRetrievalMode",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",
@@ -306329,6 +306474,14 @@
                       "minimum": -140737488355328,
                       "maximum": 140737488355327
                     },
+                    "kbContextualRetrievalMode": {
+                      "nullable": true,
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/ContextualRetrievalMode"
+                        }
+                      ]
+                    },
                     "defaultLlmModel": {
                       "nullable": true,
                       "type": "string"
@@ -306761,6 +306914,7 @@
                     "ocrModel",
                     "kbBm25K1",
                     "kbBm25B",
+                    "kbContextualRetrievalMode",
                     "defaultLlmModel",
                     "defaultLlmProvider",
                     "defaultModelId",

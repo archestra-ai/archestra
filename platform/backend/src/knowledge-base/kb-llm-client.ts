@@ -1,4 +1,5 @@
 import type {
+  ContextualRetrievalMode,
   EmbeddingModel,
   ModelInputModality,
   SupportedProvider,
@@ -8,7 +9,7 @@ import {
   providerRequiresPerUserCredential,
 } from "@archestra/shared";
 import { createDirectLLMModel, type LLMModel } from "@/clients/llm-client";
-import { getProviderConfiguredBaseUrl } from "@/config";
+import platformConfig, { getProviderConfiguredBaseUrl } from "@/config";
 import logger from "@/logging";
 import {
   LlmProviderApiKeyModel,
@@ -60,7 +61,7 @@ type RerankerConfig = {
   modelName: string;
   provider: SupportedProvider;
 } & (
-  | { kind: "llm"; llmModel: LLMModel }
+  | { kind: "llm"; llmModel: LLMModel; baseUrl: string | null }
   | { kind: "native-rerank"; apiKey: string | null; baseUrl: string | null }
 );
 
@@ -131,45 +132,31 @@ export async function resolveRerankerConfig(
   organizationId: string,
 ): Promise<RerankerConfig | null> {
   const org = await OrganizationModel.getById(organizationId);
-  if (!org?.rerankerChatApiKeyId || !org.rerankerModel) {
-    return null;
-  }
+  return resolveRerankerConfigForOrganization(org);
+}
 
-  const resolved = await resolveApiKeyFromChatApiKey(org.rerankerChatApiKeyId);
-  if (!resolved) {
-    // Configured but unresolvable. Reranking is optional and degrades at query
-    // time, so the caller catches this and continues unranked — but it is still a
-    // typed, surfaced fault (and blocks save).
-    logger.warn(
-      { organizationId, chatApiKeyId: org.rerankerChatApiKeyId },
-      "[KB] Reranker API key configured but secret could not be resolved",
-    );
-    throw new RerankerConfigUnresolvableError();
-  }
-
-  const modelName = org.rerankerModel;
-
-  if (isNativeRerankModel({ provider: resolved.provider, model: modelName })) {
-    return {
-      kind: "native-rerank",
-      apiKey: resolved.apiKey,
-      baseUrl: resolved.baseUrl,
-      modelName,
-      provider: resolved.provider,
-    };
-  }
+/**
+ * Resolve contextual retrieval's organization mode and chat model together.
+ * Keeping this as one organization lookup matters during large connector runs:
+ * the resolver is called once per changed document.
+ */
+export async function resolveContextualRetrievalConfig(
+  organizationId: string,
+): Promise<{
+  mode: ContextualRetrievalMode;
+  reranker: RerankerConfig | null;
+}> {
+  const org = await OrganizationModel.getById(organizationId);
+  const mode =
+    org?.kbContextualRetrievalMode ??
+    (platformConfig.kb.contextualRetrievalEnabled ? "document" : "disabled");
 
   return {
-    kind: "llm",
-    llmModel: createDirectLLMModel({
-      provider: resolved.provider,
-      // createDirectLLMModel expects `string | undefined`; map keyless `null`.
-      apiKey: resolved.apiKey ?? undefined,
-      modelName,
-      baseUrl: resolved.baseUrl,
-    }),
-    modelName,
-    provider: resolved.provider,
+    mode,
+    reranker:
+      mode === "disabled"
+        ? null
+        : await resolveRerankerConfigForOrganization(org),
   };
 }
 
@@ -295,6 +282,56 @@ export async function resolveApiKeyFromChatApiKey(
 }
 
 // ===== Internal helpers =====
+
+async function resolveRerankerConfigForOrganization(
+  org: {
+    id: string;
+    rerankerChatApiKeyId: string | null;
+    rerankerModel: string | null;
+  } | null,
+): Promise<RerankerConfig | null> {
+  if (!org?.rerankerChatApiKeyId || !org.rerankerModel) {
+    return null;
+  }
+
+  const resolved = await resolveApiKeyFromChatApiKey(org.rerankerChatApiKeyId);
+  if (!resolved) {
+    // Configured but unresolvable. Reranking is optional and degrades at query
+    // time, so the caller catches this and continues unranked — but it is still a
+    // typed, surfaced fault (and blocks save).
+    logger.warn(
+      { organizationId: org.id, chatApiKeyId: org.rerankerChatApiKeyId },
+      "[KB] Reranker API key configured but secret could not be resolved",
+    );
+    throw new RerankerConfigUnresolvableError();
+  }
+
+  const modelName = org.rerankerModel;
+
+  if (isNativeRerankModel({ provider: resolved.provider, model: modelName })) {
+    return {
+      kind: "native-rerank",
+      apiKey: resolved.apiKey,
+      baseUrl: resolved.baseUrl,
+      modelName,
+      provider: resolved.provider,
+    };
+  }
+
+  return {
+    kind: "llm",
+    baseUrl: resolved.baseUrl,
+    llmModel: createDirectLLMModel({
+      provider: resolved.provider,
+      // createDirectLLMModel expects `string | undefined`; map keyless `null`.
+      apiKey: resolved.apiKey ?? undefined,
+      modelName,
+      baseUrl: resolved.baseUrl,
+    }),
+    modelName,
+    provider: resolved.provider,
+  };
+}
 
 /**
  * Intersect the models table's (admin-editable) input modalities with what the

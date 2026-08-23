@@ -3,7 +3,7 @@ title: Knowledge
 category: Knowledge
 order: 1
 description: Built-in RAG knowledge — Knowledge Bases, connectors, and how retrieval works
-lastUpdated: 2026-08-20
+lastUpdated: 2026-08-23
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -24,7 +24,7 @@ Connectors run on a cron schedule. Each document goes through the same four step
 
 1. **Extract.** Text is pulled from the source. Office documents and PDFs are read through format-specific extractors; PDF text comes from the document's text layer. A PDF without a text layer — a scan, for example — is skipped and counted in the sync run details. With a multimodal embedding model configured, images are embedded directly rather than described.
 2. **Chunk.** The document is split into passages of roughly 512 tokens, on paragraph and sentence boundaries. Each chunk carries its document title and the document's metadata, so it can be matched on its own.
-3. **Add context.** Optionally, the document is summarized once and that summary is indexed with every one of its chunks. See [Contextual Retrieval](#contextual-retrieval).
+3. **Add context.** Optionally, add document-wide or passage-specific context to each chunk before indexing it. See [Contextual Retrieval](#contextual-retrieval).
 4. **Embed.** Each chunk is vectorized with the configured embedding model and stored alongside a keyword index of the same text.
 
 A document whose content has not changed since the last sync is skipped, so a re-sync only pays for what actually changed.
@@ -115,9 +115,15 @@ In the built-in chat, the agent also marks each claim with a numbered reference 
 
 Chunking separates a passage from the context it sits in. A chunk reading "the limit was raised to 5,000 per minute" is a poor match for "what is the rate limit on the billing API", because neither the product nor the subject appears in it.
 
-Turn contextual retrieval on and each document is summarized once at ingest. That summary is indexed with every chunk of the document, so the chunk above becomes findable by a question naming the billing API. The summary shapes matching only — it is never added to the text the agent reads.
+Under **Settings > Knowledge > Search Ranking Configuration**, choose how context is generated:
 
-It costs one LLM call per document per sync, billed against the reranking model, and needs a reranking model that can generate text. Enable it with `ARCHESTRA_KNOWLEDGE_BASE_CONTEXTUAL_RETRIEVAL_ENABLED`.
+- **Disabled** — index each chunk without generated context.
+- **Per document — lower cost** — generate one document-wide context and index it with every chunk. This costs one model call per changed document.
+- **Per passage — higher recall** — generate context specific to each chunk, so a passage can name its own section or subject instead of inheriting only a broad document summary. Longer documents are processed in batches of up to eight passages. Documents with fewer than six chunks use the lower-cost document mode because passage-specific calls rarely improve them enough to justify the extra spend.
+
+The generated context shapes matching only — it is never added to the text the agent reads. Per-passage generation reuses a stable document prefix so providers that support prompt caching can discount later batches. Calls and cache-token costs appear in [LLM cost statistics](/docs/platform-llm-proxy) under "Knowledge - Contextual Retrieval".
+
+Both enabled modes require a reranking model that can generate text. A dedicated Cohere Rerank model can only score results, so contextual retrieval is skipped with one configured. The deployment flag `ARCHESTRA_KNOWLEDGE_BASE_CONTEXTUAL_RETRIEVAL_ENABLED` sets the default for organizations that have not saved a mode; `true` means **Per document**.
 
 ### Context Expansion
 
@@ -140,13 +146,13 @@ These settings are deployment-wide. See [Deployment](/docs/platform-deployment#k
 | `ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED` | `true` | Whether keyword search runs alongside vector search |
 | `ARCHESTRA_KNOWLEDGE_BASE_CHUNK_SIZE_TOKENS` | `512` | Size of one chunk. Smaller is more precise, larger carries more context |
 | `ARCHESTRA_KNOWLEDGE_BASE_CONTEXT_EXPANSION_RADIUS` | `1` | How many neighbouring chunks are stitched onto a hit |
-| `ARCHESTRA_KNOWLEDGE_BASE_CONTEXTUAL_RETRIEVAL_ENABLED` | `false` | Whether documents are summarized into their chunks at ingest |
+| `ARCHESTRA_KNOWLEDGE_BASE_CONTEXTUAL_RETRIEVAL_ENABLED` | `false` | Default contextual retrieval mode for organizations without a saved choice (`true` = per document) |
 
-Chunk size and contextual retrieval apply at ingest, so a change takes effect as each connector re-syncs.
+Chunk size and contextual retrieval apply at ingest. A normal sync updates changed documents; force a connector re-sync to rebuild context for documents whose source content has not changed.
 
 ## Configuration
 
-Open **Settings > Knowledge**. An embedding model must be set before Knowledge Bases can be used. Document OCR and a reranking model are optional. Keyword ranking needs no setup, though two factors can be tuned — see [Keyword Ranking](#keyword-ranking).
+Open **Settings > Knowledge**. An embedding model must be set before Knowledge Bases can be used. Document OCR, a reranking model, and [contextual retrieval](#contextual-retrieval) are optional. Keyword ranking needs no setup, though two factors can be tuned — see [Keyword Ranking](#keyword-ranking).
 
 ### Embedding Configuration
 

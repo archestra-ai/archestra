@@ -1,4 +1,8 @@
-import { RouteId, SupportedProvidersSchema } from "@archestra/shared";
+import {
+  ContextualRetrievalModeSchema,
+  RouteId,
+  SupportedProvidersSchema,
+} from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getEmailProviderInfo } from "@/agents/incoming-email";
@@ -133,6 +137,11 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               kbBm25DefaultK1: z.number(),
               kbBm25DefaultB: z.number(),
               /**
+               * Effective fallback for organizations that have not selected a
+               * contextual retrieval mode in Knowledge settings.
+               */
+              kbContextualRetrievalDefaultMode: ContextualRetrievalModeSchema,
+              /**
                * Individual ("connect my own Drive") auth for the Google Drive
                * knowledge connector. `redirectUri` is the exact string that
                * has to be registered on the Google OAuth client, so the setup
@@ -241,6 +250,9 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           kbMfilesOauthEnabled: config.kb.mfilesOauthEnabled,
           kbBm25DefaultK1: config.kb.bm25K1,
           kbBm25DefaultB: config.kb.bm25B,
+          kbContextualRetrievalDefaultMode: config.kb.contextualRetrievalEnabled
+            ? "document"
+            : "disabled",
           kbGoogleDriveOAuth: {
             configured: isGoogleDriveOAuthConfigured(),
             redirectUri: getGoogleDriveOAuthRedirectUri(),

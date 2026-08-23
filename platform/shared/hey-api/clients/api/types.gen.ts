@@ -6,6 +6,8 @@ export type ClientOptions = {
 
 export type TextSearchLanguageInput = 'simple' | 'arabic' | 'armenian' | 'basque' | 'catalan' | 'danish' | 'dutch' | 'english' | 'finnish' | 'french' | 'german' | 'greek' | 'hindi' | 'hungarian' | 'indonesian' | 'irish' | 'italian' | 'lithuanian' | 'nepali' | 'norwegian' | 'portuguese' | 'romanian' | 'russian' | 'serbian' | 'spanish' | 'swedish' | 'tamil' | 'turkish' | 'yiddish';
 
+export type ContextualRetrievalModeInput = 'disabled' | 'document' | 'chunk';
+
 export type EmbeddingDimensionsInput = 3072 | 1536 | 1408 | 1024 | 768 | 384;
 
 export type LocalConfigEnvironmentDefaultInput = string | number | boolean;
@@ -6279,6 +6281,8 @@ export type UserConfigFieldInput = {
 };
 
 export type TextSearchLanguage = 'simple' | 'arabic' | 'armenian' | 'basque' | 'catalan' | 'danish' | 'dutch' | 'english' | 'finnish' | 'french' | 'german' | 'greek' | 'hindi' | 'hungarian' | 'indonesian' | 'irish' | 'italian' | 'lithuanian' | 'nepali' | 'norwegian' | 'portuguese' | 'romanian' | 'russian' | 'serbian' | 'spanish' | 'swedish' | 'tamil' | 'turkish' | 'yiddish';
+
+export type ContextualRetrievalMode = 'disabled' | 'document' | 'chunk';
 
 export type EmbeddingDimensions = 3072 | 1536 | 1408 | 1024 | 768 | 384;
 
@@ -34607,6 +34611,7 @@ export type GetConfigResponses = {
             kbMfilesOauthEnabled: boolean;
             kbBm25DefaultK1: number;
             kbBm25DefaultB: number;
+            kbContextualRetrievalDefaultMode: ContextualRetrievalMode;
             kbGoogleDriveOAuth: {
                 configured: boolean;
                 redirectUri: string;
@@ -75466,6 +75471,7 @@ export type GetOrganizationResponses = {
         ocrModel: string | null;
         kbBm25K1: number | null;
         kbBm25B: number | null;
+        kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
@@ -75782,6 +75788,7 @@ export type UpdateAppearanceSettingsResponses = {
         ocrModel: string | null;
         kbBm25K1: number | null;
         kbBm25B: number | null;
+        kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
@@ -75981,6 +75988,7 @@ export type UpdateSecuritySettingsResponses = {
         ocrModel: string | null;
         kbBm25K1: number | null;
         kbBm25B: number | null;
+        kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
@@ -76175,6 +76183,7 @@ export type UpdateLlmSettingsResponses = {
         ocrModel: string | null;
         kbBm25K1: number | null;
         kbBm25B: number | null;
+        kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
@@ -76369,6 +76378,7 @@ export type UpdateMcpSettingsResponses = {
         ocrModel: string | null;
         kbBm25K1: number | null;
         kbBm25B: number | null;
+        kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
@@ -76562,6 +76572,7 @@ export type UpdateSkillsSettingsResponses = {
         ocrModel: string | null;
         kbBm25K1: number | null;
         kbBm25B: number | null;
+        kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
@@ -76757,6 +76768,7 @@ export type UpdateAgentSettingsResponses = {
         ocrModel: string | null;
         kbBm25K1: number | null;
         kbBm25B: number | null;
+        kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
@@ -76963,6 +76975,7 @@ export type UpdateConnectionSettingsResponses = {
         ocrModel: string | null;
         kbBm25K1: number | null;
         kbBm25B: number | null;
+        kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
@@ -77171,6 +77184,7 @@ export type UpdateIntegrationSettingsResponses = {
         ocrModel: string | null;
         kbBm25K1: number | null;
         kbBm25B: number | null;
+        kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
@@ -77375,6 +77389,7 @@ export type UpdateDefaultEnvironmentResponses = {
         ocrModel: string | null;
         kbBm25K1: number | null;
         kbBm25B: number | null;
+        kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
@@ -77571,6 +77586,7 @@ export type UpdateAuthSettingsResponses = {
         ocrModel: string | null;
         kbBm25K1: number | null;
         kbBm25B: number | null;
+        kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
@@ -77666,6 +77682,7 @@ export type UpdateKnowledgeSettingsData = {
         ocrModel?: string | null;
         kbBm25K1?: number | null;
         kbBm25B?: number | null;
+        kbContextualRetrievalMode?: ContextualRetrievalModeInput | null;
     };
     path?: never;
     query?: never;
@@ -77771,6 +77788,7 @@ export type UpdateKnowledgeSettingsResponses = {
         ocrModel: string | null;
         kbBm25K1: number | null;
         kbBm25B: number | null;
+        kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
@@ -77962,6 +77980,7 @@ export type DropEmbeddingConfigResponses = {
         ocrModel: string | null;
         kbBm25K1: number | null;
         kbBm25B: number | null;
+        kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
@@ -78503,6 +78522,7 @@ export type CompleteOnboardingResponses = {
         ocrModel: string | null;
         kbBm25K1: number | null;
         kbBm25B: number | null;
+        kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
         defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;

@@ -622,6 +622,43 @@ describe("SharePointConnector", () => {
         "Drive items query failed",
       );
     });
+
+    it("reports unsupported drive files with the unsupported-type category", async () => {
+      const connector = new SharePointConnector();
+      const { mockGet } = setupMockClient(connector);
+
+      mockGet
+        .mockResolvedValueOnce({ id: "site-123" })
+        .mockResolvedValueOnce({ value: [{ id: "drive-1" }] })
+        .mockResolvedValueOnce({ value: [] }) // listDirectSubfolders("root")
+        .mockResolvedValueOnce({
+          value: [makeDriveItem("item-1", "archive.exe")],
+        })
+        .mockResolvedValueOnce({ value: [] }); // sitePages
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {
+          tenantId: "test-tenant-id",
+          siteUrl: "https://tenant.sharepoint.com/sites/test",
+        },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches[0].documents).toEqual([]);
+      expect(batches[0].skipped).toEqual([
+        {
+          itemId: "item-1",
+          name: "archive.exe",
+          reason: "unsupported_file_type",
+          category: "unsupported_type",
+          sourceScope: { metadataField: "driveId", value: "drive-1" },
+        },
+      ]);
+    });
   });
 
   describe("sync — site pages", () => {
@@ -660,6 +697,39 @@ describe("SharePointConnector", () => {
       expect(pageBatch.documents[0].content).toContain("Hello world");
       expect(pageBatch.documents[0].content).toContain("More content");
       expect(pageBatch.documents[0].id).toBe("page-page-1");
+    });
+
+    it("marks site-page text that exceeds the connector indexing limit", async () => {
+      const connector = new SharePointConnector();
+      const { mockGet } = setupMockClient(connector);
+
+      mockGet
+        .mockResolvedValueOnce({ id: "site-123" })
+        .mockResolvedValueOnce({ value: [] })
+        .mockResolvedValueOnce({
+          value: [makeSitePage("page-1", "Long Page")],
+        })
+        .mockResolvedValueOnce({
+          value: [{ innerHtml: `<p>${"x".repeat(500_001)}</p>` }],
+        });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {
+          tenantId: "test-tenant-id",
+          siteUrl: "https://tenant.sharepoint.com/sites/test",
+        },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      const page = batches.at(-1)?.documents[0];
+      expect(page?.contentTruncation).toMatchObject({
+        originalCharacterCount: 500_001,
+        indexedCharacterCount: 500_000,
+      });
     });
 
     it("reports a page with no extractable content as a categorized skip naming the page", async () => {

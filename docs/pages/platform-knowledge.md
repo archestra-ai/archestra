@@ -275,6 +275,8 @@ Connectors pull data from external tools into Knowledge Bases. A connector can b
 
 Open a connector to review its document sync runs and progress. You can cancel a running document sync from its **Actions** column. Cancellation stops new source batches and keeps documents already ingested by the run. A later sync continues from the saved connector checkpoint.
 
+Open a run's details to review warnings and connector errors. The logs name documents whose content exceeded an indexing limit. Unsupported file types are counted as skipped. A document that produces no chunks finishes with an error.
+
 ## Visibility
 
 Each connector has a visibility setting that determines which users can retrieve its data when an agent calls `query_knowledge_sources`. Connectors and Knowledge Bases are filtered by visibility throughout the UI: users only see sources they have access to, and only those can be assigned to agents and MCP Gateways.

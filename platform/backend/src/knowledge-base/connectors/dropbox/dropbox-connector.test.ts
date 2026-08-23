@@ -742,6 +742,28 @@ describe("DropboxConnector", () => {
       expect(batches[0].documents[0].content).toContain("Spend");
     });
 
+    it("marks text that exceeds the connector indexing limit", async () => {
+      stubFlatListing([makeFile("id:long", "long.txt")]);
+      mockFilesDownload.mockResolvedValueOnce(
+        makeDownloadResult("x".repeat(500_001)),
+      );
+
+      const connector = new DropboxConnector();
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {},
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches[0].documents[0].contentTruncation).toMatchObject({
+        originalCharacterCount: 500_001,
+        indexedCharacterCount: 500_000,
+      });
+    });
+
     it("records an unsupported-type skip instead of silently dropping unknown binaries", async () => {
       stubFlatListing([
         makeFile("id:v1", "video.mp4"),

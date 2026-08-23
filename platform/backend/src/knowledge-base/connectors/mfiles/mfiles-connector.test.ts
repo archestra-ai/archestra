@@ -325,6 +325,35 @@ describe("MFilesConnector content sync", () => {
     });
   });
 
+  test("marks text that exceeds the connector indexing limit", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse("token"))
+      .mockResolvedValueOnce(extensionResponse(capabilities("12")))
+      .mockResolvedValueOnce(
+        extensionResponse(objectPage([{ objectTypeId: 0, objectId: 123 }])),
+      )
+      .mockResolvedValueOnce(jsonResponse(objectVersion()))
+      .mockResolvedValueOnce(
+        new Response("x".repeat(500_001), { status: 200 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const [batch] = await collect(
+      new MFilesConnector().sync({
+        config: CONFIG,
+        credentials: CREDENTIALS,
+        checkpoint: null,
+      }),
+    );
+
+    expect(batch.documents[0].content).toHaveLength(500_000);
+    expect(batch.documents[0].contentTruncation).toMatchObject({
+      originalCharacterCount: 500_001,
+      indexedCharacterCount: 500_000,
+    });
+  });
+
   test("commits and sweeps an empty authoritative baseline", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()

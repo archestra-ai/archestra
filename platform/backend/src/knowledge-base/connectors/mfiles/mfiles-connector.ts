@@ -20,6 +20,7 @@ import {
   BaseConnector,
   extractErrorMessage,
   resolveIngestibleImageMimeTypes,
+  truncateConnectorContent,
 } from "../base-connector";
 import { extractTextFromDocx } from "../docx-text-extractor";
 import {
@@ -1046,10 +1047,15 @@ export class MFilesConnector extends BaseConnector {
       });
       if (!extracted) continue;
       const modifiedAt = file.ChangeTimeUtc ?? params.object.LastModifiedUtc;
+      const limited = truncateConnectorContent({
+        content: extracted.text,
+        maxLength: MAX_CONTENT_LENGTH,
+      });
       documents.push({
         id: buildSourceId(params.object, file),
         title: buildDocumentTitle(params.object, file),
-        content: extracted.text.slice(0, MAX_CONTENT_LENGTH),
+        content: limited.content,
+        contentTruncation: limited.truncation,
         sourceUrl: params.client.objectUrl(params.object),
         metadata: {
           source: "mfiles",

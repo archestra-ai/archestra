@@ -251,10 +251,9 @@ export async function indexFilesIntoKnowledgeBase(params: {
       }
 
       // Chunks — not the document row — are what retrieval searches, and the
-      // embedding pass only reads them. Without this the document is marked
-      // `completed` with zero chunks: indexed by every appearance, retrievable
-      // by nothing. Re-indexing replaces the previous chunks rather than
-      // appending to them.
+      // embedding pass only reads them. Without this the document fails with
+      // zero chunks and cannot be retrieved. Re-indexing replaces the previous
+      // chunks rather than appending to them.
       if (existing) {
         await KbChunkModel.deleteByDocument(document.id);
       }

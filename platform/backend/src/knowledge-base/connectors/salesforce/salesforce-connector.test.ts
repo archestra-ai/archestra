@@ -366,6 +366,40 @@ describe("SalesforceConnector", () => {
       expect(doc.content).not.toContain("**CaseComments:**");
     });
 
+    test("marks records that exceed the connector indexing limit", async () => {
+      const c = new SalesforceConnector();
+      mockLogin.mockResolvedValueOnce({});
+      mockQuery.mockResolvedValueOnce({
+        done: true,
+        totalSize: 1,
+        records: [
+          {
+            attributes: { type: "Account" },
+            Id: "001LONG",
+            Name: "Long Account",
+            Description: "x".repeat(500_001),
+            LastModifiedDate: "2026-04-20T09:00:00.000Z",
+          },
+        ],
+      });
+
+      const batches = await collectBatches(
+        c.sync({
+          config: { objects: ["Account"] },
+          credentials: CREDS,
+          checkpoint: null,
+        }),
+      );
+
+      expect(batches[0].documents[0].content).toHaveLength(500_000);
+      expect(batches[0].documents[0].contentTruncation).toMatchObject({
+        indexedCharacterCount: 500_000,
+      });
+      expect(
+        batches[0].documents[0].contentTruncation?.originalCharacterCount,
+      ).toBeGreaterThan(500_000);
+    });
+
     test("uses advanced object config fields and associations", async () => {
       const c = new SalesforceConnector();
       mockLogin.mockResolvedValueOnce({});

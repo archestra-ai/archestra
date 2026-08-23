@@ -5,6 +5,7 @@ import {
   buildCheckpoint,
   extractErrorMessage,
   resolveIngestibleImageMimeTypes,
+  truncateConnectorContent,
 } from "./base-connector";
 
 /**
@@ -63,6 +64,35 @@ class TestableConnector extends BaseConnector {
 }
 
 describe("BaseConnector", () => {
+  describe("truncateConnectorContent", () => {
+    test("returns short content without a truncation marker", () => {
+      expect(
+        truncateConnectorContent({ content: "short", maxLength: 10 }),
+      ).toEqual({ content: "short" });
+    });
+
+    test("retains a prefix and fingerprints the complete source text", () => {
+      const first = truncateConnectorContent({
+        content: "shared-prefix-first-tail",
+        maxLength: 13,
+      });
+      const second = truncateConnectorContent({
+        content: "shared-prefix-second-tail",
+        maxLength: 13,
+      });
+
+      expect(first.content).toBe("shared-prefix");
+      expect(first.truncation).toMatchObject({
+        originalCharacterCount: 24,
+        indexedCharacterCount: 13,
+      });
+      expect(first.truncation?.originalContentHash).toMatch(/^[a-f0-9]{64}$/);
+      expect(first.truncation?.originalContentHash).not.toBe(
+        second.truncation?.originalContentHash,
+      );
+    });
+  });
+
   describe("joinUrl", () => {
     const connector = new TestableConnector();
 

@@ -9,6 +9,7 @@ import type {
 import { extractPdfText, type OcrRunContext } from "@/knowledge-base/pdf-ocr";
 import * as metrics from "@/observability/metrics";
 import type {
+  ConnectorContentTruncation,
   ConnectorCredentials,
   ConnectorDocument,
   ConnectorSyncBatch,
@@ -30,6 +31,7 @@ import {
   buildCheckpoint,
   extractErrorMessage,
   resolveIngestibleImageMimeTypes,
+  truncateConnectorContent,
 } from "../base-connector";
 import { extractTextFromDocx } from "../docx-text-extractor";
 import {
@@ -928,7 +930,6 @@ export class SharePointConnector extends BaseConnector {
         (item) =>
           item.file &&
           !item.folder &&
-          isSupportedFile(item.name, imageMimeTypes) &&
           // Client-side incremental filter: Graph API does not support
           // $filter on lastModifiedDateTime for drive item children.
           isModifiedSince(item.lastModifiedDateTime, syncFrom),
@@ -937,6 +938,16 @@ export class SharePointConnector extends BaseConnector {
       const documents: ConnectorDocument[] = [];
 
       for (const item of items) {
+        if (!isSupportedFile(item.name, imageMimeTypes)) {
+          this.trackSkipped({
+            itemId: item.id,
+            name: item.name,
+            reason: "unsupported_file_type",
+            category: "unsupported_type",
+            sourceScope: { metadataField: "driveId", value: driveId },
+          });
+          continue;
+        }
         const doc = await this.safeItemFetch({
           fetch: async () => {
             const result = await this.downloadFileData(
@@ -959,12 +970,7 @@ export class SharePointConnector extends BaseConnector {
               });
               return null;
             }
-            return driveItemToDocument(
-              item,
-              driveId,
-              result.text,
-              result.mediaContent,
-            );
+            return driveItemToDocument({ item, driveId, ...result });
           },
           fallback: null,
           itemId: item.id,
@@ -1067,6 +1073,7 @@ export class SharePointConnector extends BaseConnector {
   ): Promise<{
     text: string;
     mediaContent?: { mimeType: string; data: string };
+    contentTruncation?: ConnectorContentTruncation;
     /** Why the text came back empty, for skip reporting on the run. */
     emptyReason?: string;
   }> {
@@ -1079,10 +1086,13 @@ export class SharePointConnector extends BaseConnector {
         .api(contentPath)
         .responseType(ResponseType.ARRAYBUFFER)
         .get()) as ArrayBuffer;
+      const limited = truncateConnectorContent({
+        content: Buffer.from(arrayBuffer).toString("utf-8"),
+        maxLength: MAX_CONTENT_LENGTH,
+      });
       return {
-        text: Buffer.from(arrayBuffer)
-          .toString("utf-8")
-          .slice(0, MAX_CONTENT_LENGTH),
+        text: limited.content,
+        contentTruncation: limited.truncation,
       };
     }
 
@@ -1104,8 +1114,13 @@ export class SharePointConnector extends BaseConnector {
           "SharePoint: PDF page extraction warning",
         );
       }
+      const limited = truncateConnectorContent({
+        content: extracted.text,
+        maxLength: MAX_CONTENT_LENGTH,
+      });
       return {
-        text: extracted.text.slice(0, MAX_CONTENT_LENGTH),
+        text: limited.content,
+        contentTruncation: limited.truncation,
         emptyReason: extracted.emptyReason,
       };
     }
@@ -1196,7 +1211,7 @@ export class SharePointConnector extends BaseConnector {
               });
               return null;
             }
-            return sitePageToDocument(page, siteId, content);
+            return sitePageToDocument({ page, siteId, content });
           },
           fallback: null,
           itemId: page.id,
@@ -1280,7 +1295,7 @@ export class SharePointConnector extends BaseConnector {
       }
     }
 
-    return parts.join("\n\n").slice(0, MAX_CONTENT_LENGTH);
+    return parts.join("\n\n");
   }
 
   private async countDriveItems(params: {
@@ -2601,12 +2616,20 @@ async function extractTextFromBinary(params: {
   }
 }
 
-function driveItemToDocument(
-  item: DriveItem,
-  driveId: string,
-  content: string,
-  mediaContent?: { mimeType: string; data: string },
-): ConnectorDocument {
+function driveItemToDocument(params: {
+  item: DriveItem;
+  driveId: string;
+  text: string;
+  mediaContent?: { mimeType: string; data: string };
+  contentTruncation?: ConnectorContentTruncation;
+}): ConnectorDocument {
+  const {
+    item,
+    driveId,
+    text: content,
+    mediaContent,
+    contentTruncation,
+  } = params;
   const title = item.name;
   const fullContent = content ? `# ${title}\n\n${content}` : `# ${title}`;
 
@@ -2629,16 +2652,24 @@ function driveItemToDocument(
     },
     updatedAt: new Date(item.lastModifiedDateTime),
     mediaContent,
+    contentTruncation,
   };
 }
 
-function sitePageToDocument(
-  page: SitePage,
-  siteId: string,
-  content: string,
-): ConnectorDocument {
+function sitePageToDocument(params: {
+  page: SitePage;
+  siteId: string;
+  content: string;
+}): ConnectorDocument {
+  const { page, siteId, content } = params;
   const title = page.title || page.name;
-  const fullContent = content ? `# ${title}\n\n${content}` : `# ${title}`;
+  const limited = truncateConnectorContent({
+    content,
+    maxLength: MAX_CONTENT_LENGTH,
+  });
+  const fullContent = limited.content
+    ? `# ${title}\n\n${limited.content}`
+    : `# ${title}`;
 
   return {
     id: `page-${page.id}`,
@@ -2654,5 +2685,6 @@ function sitePageToDocument(
       createdDateTime: page.createdDateTime,
     },
     updatedAt: new Date(page.lastModifiedDateTime),
+    contentTruncation: limited.truncation,
   };
 }

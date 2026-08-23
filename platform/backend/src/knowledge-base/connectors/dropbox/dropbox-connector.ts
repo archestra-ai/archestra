@@ -4,6 +4,7 @@ import { Dropbox } from "dropbox";
 import { extractPdfText, type OcrRunContext } from "@/knowledge-base/pdf-ocr";
 import * as metrics from "@/observability/metrics";
 import type {
+  ConnectorContentTruncation,
   ConnectorCredentials,
   ConnectorDocument,
   ConnectorSyncBatch,
@@ -24,6 +25,7 @@ import {
   buildCheckpoint,
   extractErrorMessage,
   resolveIngestibleImageMimeTypes,
+  truncateConnectorContent,
 } from "../base-connector";
 import { extractTextFromDocx } from "../docx-text-extractor";
 import {
@@ -932,7 +934,7 @@ export class DropboxConnector extends BaseConnector {
             });
             return null;
           }
-          return fileToDocument(file, extracted.text, extracted.mediaContent);
+          return fileToDocument({ file, ...extracted });
         },
         fallback: null,
         itemId: file.id,
@@ -990,6 +992,7 @@ export class DropboxConnector extends BaseConnector {
     text: string;
     mediaContent?: { mimeType: string; data: string };
     emptyReason?: string;
+    contentTruncation?: ConnectorContentTruncation;
   }> {
     const ext = getExtension(file.name);
 
@@ -1006,8 +1009,13 @@ export class DropboxConnector extends BaseConnector {
           "Dropbox: PDF page extraction warning",
         );
       }
+      const limited = truncateConnectorContent({
+        content: extracted.text,
+        maxLength: MAX_CONTENT_LENGTH,
+      });
       return {
-        text: extracted.text.slice(0, MAX_CONTENT_LENGTH),
+        text: limited.content,
+        contentTruncation: limited.truncation,
         emptyReason: extracted.emptyReason,
       };
     }
@@ -1026,7 +1034,14 @@ export class DropboxConnector extends BaseConnector {
       };
     }
 
-    return { text: buffer.toString("utf-8").slice(0, MAX_CONTENT_LENGTH) };
+    const limited = truncateConnectorContent({
+      content: buffer.toString("utf-8"),
+      maxLength: MAX_CONTENT_LENGTH,
+    });
+    return {
+      text: limited.content,
+      contentTruncation: limited.truncation,
+    };
   }
 
   /**
@@ -1599,11 +1614,13 @@ function laterOf(a: string, b: string): string {
   return a >= b ? a : b;
 }
 
-function fileToDocument(
-  file: DropboxFileMetadata,
-  content: string,
-  mediaContent?: { mimeType: string; data: string },
-): ConnectorDocument {
+function fileToDocument(params: {
+  file: DropboxFileMetadata;
+  text: string;
+  mediaContent?: { mimeType: string; data: string };
+  contentTruncation?: ConnectorContentTruncation;
+}): ConnectorDocument {
+  const { file, text: content, mediaContent, contentTruncation } = params;
   return {
     id: file.id,
     title: file.name,
@@ -1621,5 +1638,6 @@ function fileToDocument(
     },
     updatedAt: new Date(file.server_modified),
     ...(mediaContent ? { mediaContent } : {}),
+    contentTruncation,
   };
 }

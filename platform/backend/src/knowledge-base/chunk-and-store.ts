@@ -11,9 +11,9 @@ import { buildContextualHeaders } from "./contextual-retrieval";
  *
  * Every ingestion path has to go through here: chunks — not the document row —
  * are what retrieval searches, and the embedding pass only ever READS chunks
- * (a document with none is marked `completed` with `chunkCount: 0`). So a path
- * that stores a document without chunking it produces a document that looks
- * fully indexed and can never be retrieved.
+ * (a document with none is marked `failed` and surfaced on its connector run).
+ * So a path that stores a document without chunking it cannot silently look
+ * indexed while remaining impossible to retrieve.
  *
  * Callers replacing a document's content must delete its existing chunks first;
  * this appends.

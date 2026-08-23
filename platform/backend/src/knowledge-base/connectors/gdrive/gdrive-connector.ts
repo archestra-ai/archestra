@@ -3,6 +3,7 @@ import type { ModelInputModality } from "@archestra/shared";
 import type { admin_directory_v1, drive_v3 } from "googleapis";
 import { extractPdfText, type OcrRunContext } from "@/knowledge-base/pdf-ocr";
 import type {
+  ConnectorContentTruncation,
   ConnectorCredentials,
   ConnectorDocument,
   ConnectorSyncBatch,
@@ -19,6 +20,7 @@ import {
   buildCheckpoint,
   extractErrorMessage,
   resolveIngestibleImageMimeTypes,
+  truncateConnectorContent,
 } from "../base-connector";
 import { extractTextFromDocx } from "../docx-text-extractor";
 import {
@@ -1161,7 +1163,7 @@ export class GoogleDriveConnector extends BaseConnector {
               });
               return null;
             }
-            return fileToDocument(file, result.text, result.mediaContent);
+            return fileToDocument({ file, ...result });
           },
           fallback: null,
           itemId: file.id ?? "unknown",
@@ -1381,7 +1383,7 @@ export class GoogleDriveConnector extends BaseConnector {
               });
               return null;
             }
-            return fileToDocument(file, result.text, result.mediaContent);
+            return fileToDocument({ file, ...result });
           },
           fallback: null,
           itemId: file.id ?? "unknown",
@@ -1509,6 +1511,7 @@ export class GoogleDriveConnector extends BaseConnector {
   ): Promise<{
     text: string;
     mediaContent?: { mimeType: string; data: string };
+    contentTruncation?: ConnectorContentTruncation;
     /** Why the text came back empty, for skip reporting on the run. */
     emptyReason?: string;
   }> {
@@ -1525,11 +1528,15 @@ export class GoogleDriveConnector extends BaseConnector {
           { fileId, mimeType: resolved.exportMimeType },
           { responseType: "text" },
         );
-        const text =
-          typeof res.data === "string"
-            ? res.data.slice(0, MAX_CONTENT_LENGTH)
-            : "";
-        return { text };
+        if (typeof res.data !== "string") return { text: "" };
+        const limited = truncateConnectorContent({
+          content: res.data,
+          maxLength: MAX_CONTENT_LENGTH,
+        });
+        return {
+          text: limited.content,
+          contentTruncation: limited.truncation,
+        };
       } catch (error) {
         const message = extractErrorMessage(error);
         this.log.debug(
@@ -1566,8 +1573,13 @@ export class GoogleDriveConnector extends BaseConnector {
             "Google Drive: PDF page extraction warning",
           );
         }
+        const limited = truncateConnectorContent({
+          content: extracted.text,
+          maxLength: MAX_CONTENT_LENGTH,
+        });
         return {
-          text: extracted.text.slice(0, MAX_CONTENT_LENGTH),
+          text: limited.content,
+          contentTruncation: limited.truncation,
           emptyReason: extracted.emptyReason,
         };
       } catch (error) {
@@ -1583,8 +1595,13 @@ export class GoogleDriveConnector extends BaseConnector {
     // Plain text files: download and read as text
     if (resolved?.kind === "text") {
       const buffer = await this.downloadFileBuffer(drive, fileId);
+      const limited = truncateConnectorContent({
+        content: buffer.toString("utf-8"),
+        maxLength: MAX_CONTENT_LENGTH,
+      });
       return {
-        text: buffer.toString("utf-8").slice(0, MAX_CONTENT_LENGTH),
+        text: limited.content,
+        contentTruncation: limited.truncation,
       };
     }
 
@@ -1603,8 +1620,13 @@ export class GoogleDriveConnector extends BaseConnector {
           "Google Drive: PDF page extraction warning",
         );
       }
+      const limited = truncateConnectorContent({
+        content: extracted.text,
+        maxLength: MAX_CONTENT_LENGTH,
+      });
       return {
-        text: extracted.text.slice(0, MAX_CONTENT_LENGTH),
+        text: limited.content,
+        contentTruncation: limited.truncation,
         emptyReason: extracted.emptyReason,
       };
     }
@@ -1912,11 +1934,13 @@ function willEnumerateDomain(config: GoogleDriveConfig): boolean {
   );
 }
 
-function fileToDocument(
-  file: DriveFile,
-  content: string,
-  mediaContent?: { mimeType: string; data: string },
-): ConnectorDocument {
+function fileToDocument(params: {
+  file: DriveFile;
+  text: string;
+  mediaContent?: { mimeType: string; data: string };
+  contentTruncation?: ConnectorContentTruncation;
+}): ConnectorDocument {
+  const { file, text: content, mediaContent, contentTruncation } = params;
   const title = file.name ?? "Untitled";
   const fullContent = content ? `# ${title}\n\n${content}` : `# ${title}`;
 
@@ -1937,6 +1961,7 @@ function fileToDocument(
     },
     updatedAt: file.modifiedTime ? new Date(file.modifiedTime) : undefined,
     mediaContent,
+    contentTruncation,
   };
 }
 

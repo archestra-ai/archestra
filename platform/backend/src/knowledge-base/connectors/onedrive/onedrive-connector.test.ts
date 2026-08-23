@@ -243,6 +243,37 @@ describe("OneDriveConnector", () => {
       expect(batches[0].documents[0].content).toContain("Hello OneDrive");
     });
 
+    it("marks text that exceeds the connector indexing limit", async () => {
+      const connector = new OneDriveConnector();
+      const { mockGet } = setupMockClient(connector);
+      const source = Buffer.from("x".repeat(500_001));
+
+      mockGet.mockResolvedValueOnce({ value: [] });
+      mockGet.mockResolvedValueOnce({
+        value: [makeDriveItem("file-1", "long.txt")],
+      });
+      mockGet.mockResolvedValueOnce(
+        source.buffer.slice(
+          source.byteOffset,
+          source.byteOffset + source.byteLength,
+        ),
+      );
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: baseConfig,
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches[0].documents[0].contentTruncation).toMatchObject({
+        originalCharacterCount: 500_001,
+        indexedCharacterCount: 500_000,
+      });
+    });
+
     it("skips unsupported file types", async () => {
       const connector = new OneDriveConnector();
       const { mockGet } = setupMockClient(connector);

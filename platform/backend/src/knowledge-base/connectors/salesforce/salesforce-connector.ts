@@ -22,6 +22,7 @@ import {
   buildCheckpoint,
   extractErrorMessage,
   isoCursorWithSkewBuffer,
+  truncateConnectorContent,
 } from "../base-connector";
 
 const DEFAULT_BATCH_SIZE = 200;
@@ -1573,8 +1574,10 @@ function salesforceRecordToDocument(params: {
     }
   }
 
-  // Truncate content to MAX_CONTENT_LENGTH (matching GDrive pattern)
-  const content = contentParts.join("\n").slice(0, MAX_CONTENT_LENGTH);
+  const limited = truncateConnectorContent({
+    content: contentParts.join("\n"),
+    maxLength: MAX_CONTENT_LENGTH,
+  });
   const sourceUrl = params.instanceUrl
     ? `${params.instanceUrl}/${recordId}`
     : undefined;
@@ -1583,7 +1586,8 @@ function salesforceRecordToDocument(params: {
   return {
     id: `salesforce:${params.objectName}:${recordId}`,
     title,
-    content,
+    content: limited.content,
+    contentTruncation: limited.truncation,
     sourceUrl,
     metadata: {
       objectName: params.objectName,

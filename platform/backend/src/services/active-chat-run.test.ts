@@ -282,7 +282,7 @@ test("createReplayStream wakes from notifier without waiting for the polling int
     organizationId: organization.id,
   });
   const notifier = new InMemoryActiveChatRunNotifier();
-  const service = new ActiveChatRunService(notifier, 10_000, 10_000);
+  const service = new ActiveChatRunService(notifier, 10, 10_000);
 
   const streamPromise = Promise.race([
     readStream(service.createReplayStream(run?.id ?? "")),

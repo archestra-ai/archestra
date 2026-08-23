@@ -508,6 +508,11 @@ function ChatSessionHook({
   // Auto-retry state for transient errors
   const retryCountRef = useRef(0);
   const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // True from the moment the queue drain submits a turn until that turn
+  // finishes. A Stop can make the SDK ready before the backend marks the
+  // aborted run terminal, so the queued submit can briefly hit its 409 guard.
+  // Only that known auto-drain race is safe to retry silently.
+  const queuedTurnPendingRef = useRef(false);
   // Set while auto-retrying a *structured* (backend-persisted) error, so a
   // successful retry can wipe the now-stale persisted error card the backend
   // never clears on its own.
@@ -681,6 +686,7 @@ function ChatSessionHook({
       // either keeps a recovery in flight or clears the flag for terminal
       // errors.
       if (!isError) {
+        queuedTurnPendingRef.current = false;
         setIsRecovering(false);
         // A structured error we silently auto-retried just succeeded — clear the
         // stale persisted error card the backend leaves behind (it never clears it
@@ -808,10 +814,27 @@ function ChatSessionHook({
           queryKey: ["conversation", conversationId],
         });
       }, 500);
+      const isDuplicateRun = isDuplicateActiveRunError(chatError);
+      if (isDuplicateRun && queuedTurnPendingRef.current) {
+        if (retryCountRef.current < MAX_AUTO_RETRIES) {
+          retryCountRef.current++;
+          setIsRecovering(true);
+          retryTimerRef.current = setTimeout(() => {
+            frozenMessagesRef.current = previousMessagesRef.current;
+            previousMessagesRef.current = [];
+            regenerate();
+          }, AUTO_RETRY_DELAY_MS);
+          return;
+        }
+        queuedTurnPendingRef.current = false;
+        setIsRecovering(false);
+      }
+
       // Log the error itself, not just fields read off it: a stream failure can
       // arrive as a bare object with no name/message, and the destructured form
       // then serializes to "{}" — which is what this printed while a real
-      // failure was in flight, leaving nothing to diagnose.
+      // failure was in flight, leaving nothing to diagnose. The expected,
+      // retried queue-after-Stop race returns above and stays out of error logs.
       console.error("[ChatSession] Error occurred:", chatError, {
         conversationId,
         errorName: chatError.name,
@@ -820,7 +843,7 @@ function ChatSessionHook({
         retryCount: retryCountRef.current,
       });
 
-      if (isDuplicateActiveRunError(chatError)) {
+      if (isDuplicateRun) {
         if (!recoveringRef.current) {
           // A 409 outside auto-recovery is a genuine concurrent submit (e.g.
           // a second tab racing this conversation): reattaching would
@@ -925,6 +948,7 @@ function ChatSessionHook({
 
       // Terminal: no recovery in flight — surface the error (and keep its
       // persisted card, so drop any pending "clear on successful retry" intent).
+      queuedTurnPendingRef.current = false;
       recoveredPersistedErrorRef.current = false;
       setPendingMcpElicitation(null);
       setIsRecovering(false);
@@ -1231,6 +1255,7 @@ function ChatSessionHook({
       return;
     }
     queueDrainInFlightRef.current = true;
+    queuedTurnPendingRef.current = true;
     sendMessageRef.current?.({
       role: "user",
       // a bare skill command carries no text; keep an empty text part so the

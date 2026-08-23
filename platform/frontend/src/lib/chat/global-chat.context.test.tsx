@@ -1685,6 +1685,7 @@ describe("stopping with queued messages", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     chatMessageQueue.clear(conversationId);
   });
 
@@ -1718,6 +1719,48 @@ describe("stopping with queued messages", () => {
       parts: [{ type: "text", text: "show budget" }],
     });
     expect(chatMessageQueue.get(conversationId)).toHaveLength(0);
+  });
+
+  it("silently retries when the stopped run is still terminalizing", async () => {
+    const tree = () => (
+      <ChatProvider>
+        <RegisterChatSession conversationId={conversationId} />
+      </ChatProvider>
+    );
+    const { rerender } = render(tree());
+    await waitFor(() => expect(chatOptions).toBeDefined());
+
+    act(() => {
+      chatMessageQueue.enqueue(conversationId, { text: "show budget" });
+    });
+    await act(async () => {
+      await chatOptions?.onFinish?.({
+        message: { id: "assistant-stopped", role: "assistant", parts: [] },
+        isAbort: true,
+        isError: false,
+      });
+    });
+    status = "ready";
+    rerender(tree());
+    await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalledTimes(1));
+
+    vi.useFakeTimers();
+    act(() => {
+      chatOptions?.onError?.(
+        new Error(
+          "This conversation already has an active response. Stop it before sending another message.",
+        ),
+      );
+    });
+
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(mocks.clearError).not.toHaveBeenCalled();
+    expect(mocks.regenerate).not.toHaveBeenCalled();
+
+    act(() => {
+      vi.advanceTimersByTime(1500);
+    });
+    expect(mocks.regenerate).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -13,6 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
+import { AllowedEmailDomainsField } from "./allowed-email-domains-field.ee";
 import { RoleMappingForm } from "./role-mapping-form.ee";
 import { SsoLoginEnabledField } from "./sso-login-enabled-field.ee";
 import { TeamSyncConfigForm } from "./team-sync-config-form.ee";
@@ -78,6 +79,7 @@ export function SamlConfigForm({
           />
 
           <SsoLoginEnabledField form={form} />
+          <AllowedEmailDomainsField form={form} />
 
           <Separator />
 

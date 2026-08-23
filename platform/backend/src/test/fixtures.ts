@@ -1091,8 +1091,7 @@ async function makeIdentityProvider(
         ? (JSON.stringify(overrides.teamSyncConfig) as unknown as undefined)
         : undefined,
       userId: overrides.userId ?? null,
-      // WORKAROUND: With domainVerification enabled, all SSO providers need domainVerified: true
-      // See: https://github.com/better-auth/better-auth/issues/6481
+      // Model administrator-configured domains as trusted for account linking.
       domainVerified: true,
     })
     .returning();

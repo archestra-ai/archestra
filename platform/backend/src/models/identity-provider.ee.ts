@@ -2,11 +2,7 @@ import type {
   IdentityProviderOidcConfig,
   IdpRoleMappingConfig,
 } from "@archestra/shared";
-import {
-  IDENTITY_PROVIDER_ID,
-  MEMBER_ROLE_NAME,
-  TimeInMs,
-} from "@archestra/shared";
+import { MEMBER_ROLE_NAME, TimeInMs } from "@archestra/shared";
 import type { SSOOptions } from "@better-auth/sso";
 import { APIError } from "better-auth";
 import { and, eq } from "drizzle-orm";
@@ -610,11 +606,7 @@ class IdentityProviderModel {
     const parsedData = {
       providerId: data.providerId,
       issuer: data.issuer,
-      domain:
-        normalizePersistedAllowedEmailDomain({
-          providerId: data.providerId,
-          domain: data.domain,
-        }) || SSO_REGISTRATION_PLACEHOLDER_DOMAIN,
+      domain: data.domain || SSO_REGISTRATION_PLACEHOLDER_DOMAIN,
       ssoLoginEnabled: data.ssoLoginEnabled ?? true,
       organizationId,
       ...(data.oidcConfig && {
@@ -669,11 +661,10 @@ class IdentityProviderModel {
     }
 
     /**
-     * WORKAROUND: With `domainVerification: { enabled: true }` in Better Auth's SSO plugin,
-     * all identity providers require `domainVerified: true` for sign-in to work without DNS verification.
-     * We auto-set this for all providers to bypass the DNS verification requirement.
-     * See: https://github.com/better-auth/better-auth/issues/6481
-     * TODO: Remove this workaround once the upstream issue is fixed.
+     * Better Auth trusts an SSO provider for implicit account linking only
+     * when its configured domain is verified and matches the returned email.
+     * Archestra administrators explicitly configure these allowed domains, so
+     * mark the provider domain as verified without Better Auth's DNS flow.
      */
     // Also store roleMapping and teamSyncConfig if provided (Better Auth doesn't handle these fields)
     // Note: These are stored as JSON text but typed as objects in Drizzle schema
@@ -683,14 +674,10 @@ class IdentityProviderModel {
     const samlConfigJson = serializeConfigValue(data.samlConfig);
     const roleMappingJson = serializeConfigValue(data.roleMapping);
     const teamSyncConfigJson = serializeConfigValue(data.teamSyncConfig);
-    const persistedDomain = normalizePersistedAllowedEmailDomain({
-      providerId: data.providerId,
-      domain: data.domain,
-    });
     const [updatedProvider] = await db
       .update(schema.identityProvidersTable)
       .set({
-        domain: persistedDomain,
+        domain: data.domain,
         domainVerified: true,
         ssoLoginEnabled: data.ssoLoginEnabled ?? true,
         ...(oidcConfigJson !== undefined && {
@@ -756,15 +743,10 @@ class IdentityProviderModel {
     const samlConfigJson = serializeConfigValue(samlConfig);
     const roleMappingJson = serializeConfigValue(roleMapping);
     const teamSyncConfigJson = serializeConfigValue(teamSyncConfig);
-    const nextProviderId = restData.providerId ?? existingProvider.providerId;
-    const nextDomain = normalizePersistedAllowedEmailDomain({
-      providerId: nextProviderId,
-      domain: restData.domain ?? existingProvider.domain,
-    });
+    const nextDomain = restData.domain ?? existingProvider.domain;
 
     // Update in database
-    // WORKAROUND: Always ensure domainVerified is true to enable account linking
-    // See: https://github.com/better-auth/better-auth/issues/6481
+    // Keep administrator-configured domains trusted for implicit account linking.
     const [updatedProvider] = await db
       .update(schema.identityProvidersTable)
       .set({
@@ -866,10 +848,8 @@ class IdentityProviderModel {
 
   /**
    * Sets domainVerified flag directly (TEST ONLY)
-   * This is used to simulate legacy data that has domainVerified: false
-   * to test the workaround in update() that sets it back to true.
-   * TODO: Remove this when upstream issue is fixed:
-   * https://github.com/better-auth/better-auth/issues/6481
+   * Used to verify that updating a provider restores the trusted state for
+   * its administrator-configured allowed domains.
    */
   static async setDomainVerifiedForTesting(
     id: string,
@@ -970,17 +950,6 @@ function serializeConfigValue(
   }
 
   return JSON.stringify(value);
-}
-
-function normalizePersistedAllowedEmailDomain(params: {
-  providerId: string;
-  domain: string;
-}): string {
-  if (params.providerId === IDENTITY_PROVIDER_ID.GOOGLE) {
-    return params.domain;
-  }
-
-  return "";
 }
 
 async function hydrateOidcConfigForRegistration<

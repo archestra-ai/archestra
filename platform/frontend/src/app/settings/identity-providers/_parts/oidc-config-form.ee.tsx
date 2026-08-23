@@ -32,6 +32,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { AllowedEmailDomainsField } from "./allowed-email-domains-field.ee";
 import {
   type EnterpriseSubjectTokenType,
   getDefaultSubjectTokenType,
@@ -76,7 +77,6 @@ export function OidcConfigForm({
   const scopes = form.watch("oidcConfig.scopes") || [];
   const issuer = form.watch("issuer") || "";
   const providerId = form.watch("providerId") || "";
-  const showAllowedEmailDomains = providerId === "Google";
   const inferredEnterpriseExchangeType = inferEnterpriseExchangeType({
     issuer,
     providerId,
@@ -236,30 +236,7 @@ export function OidcConfigForm({
           />
 
           <SsoLoginEnabledField form={form} />
-
-          {showAllowedEmailDomains && (
-            <FormField
-              control={form.control}
-              name="domain"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Allowed Email Domains</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="company.com, subsidiary.com"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Users can sign in with this provider only when their
-                    returned email matches one of these domains. Separate
-                    multiple domains with commas.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
+          <AllowedEmailDomainsField form={form} />
 
           <Separator />
 

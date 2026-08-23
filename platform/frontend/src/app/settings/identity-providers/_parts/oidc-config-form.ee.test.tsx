@@ -100,16 +100,14 @@ describe("OidcConfigForm", () => {
     );
   });
 
-  it("hides allowed email domains for non-Google providers", () => {
+  it("shows allowed email domains for non-Google providers", () => {
     render(<TestWrapper />);
 
-    expect(
-      screen.queryByLabelText("Allowed Email Domains"),
-    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Allowed Email Domains")).toBeInTheDocument();
   });
 
-  it("explains that allowed email domains gate Google SSO sign-in", () => {
-    render(<TestWrapper providerId="Google" />);
+  it("explains that allowed email domains gate SSO sign-in", () => {
+    render(<TestWrapper />);
 
     expect(screen.getByLabelText("Allowed Email Domains")).toBeInTheDocument();
     expect(
@@ -150,5 +148,8 @@ describe("OidcConfigForm", () => {
     render(<TestWrapper activeSection="attribute-mapping" />);
 
     expect(screen.getByLabelText("User ID Claim")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Email Verified Claim (Optional)"),
+    ).toBeInTheDocument();
   });
 });

@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import {
   type archestraApiTypes,
-  IDENTITY_PROVIDER_ID,
   type IdentityProviderFormValues,
   isEntraHostname,
   isOktaHostname,
@@ -20,22 +19,21 @@ export function normalizeIdentityProviderFormValues(
   data: IdentityProviderFormValues,
 ): IdentityProviderFormValues {
   if (data.providerType !== "oidc" || !data.oidcConfig) {
-    return normalizeAllowedEmailDomains(data);
+    return data;
   }
 
-  const normalizedData = normalizeAllowedEmailDomains(data);
-  const oidcConfig = normalizeOidcIssuerFields(normalizedData);
+  const oidcConfig = normalizeOidcIssuerFields(data);
   const enterpriseManagedCredentials = oidcConfig.enterpriseManagedCredentials;
   if (!enterpriseManagedCredentials) {
     return {
-      ...normalizedData,
+      ...data,
       oidcConfig,
     };
   }
 
   const inferredExchangeType = inferEnterpriseExchangeType({
-    issuer: normalizedData.issuer,
-    providerId: normalizedData.providerId,
+    issuer: data.issuer,
+    providerId: data.providerId,
   });
 
   const hasConfiguredEnterpriseManagedFields = Object.values(
@@ -50,7 +48,7 @@ export function normalizeIdentityProviderFormValues(
 
   if (!hasConfiguredEnterpriseManagedFields) {
     return {
-      ...normalizedData,
+      ...data,
       oidcConfig,
     };
   }
@@ -59,7 +57,7 @@ export function normalizeIdentityProviderFormValues(
     enterpriseManagedCredentials.exchangeStrategy || inferredExchangeType;
 
   return {
-    ...normalizedData,
+    ...data,
     oidcConfig: normalizeOidcConfigForEnterpriseExchange({
       oidcConfig,
       exchangeStrategy,
@@ -76,19 +74,6 @@ export function normalizeIdentityProviderFormValues(
           getDefaultSubjectTokenType(inferredExchangeType),
       },
     }),
-  };
-}
-
-export function normalizeAllowedEmailDomains(
-  data: IdentityProviderFormValues,
-): IdentityProviderFormValues {
-  if (data.providerId === IDENTITY_PROVIDER_ID.GOOGLE) {
-    return data;
-  }
-
-  return {
-    ...data,
-    domain: "",
   };
 }
 

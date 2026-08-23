@@ -395,6 +395,7 @@ describe("identity provider routes", () => {
       const cookie = await createSessionCookie(session.token);
 
       for (const providerId of BUILT_IN_IDENTITY_PROVIDER_IDS) {
+        const domain = `${providerId.toLowerCase()}.example.com`;
         const response = await app.inject({
           method: "POST",
           url: "/api/identity-providers",
@@ -402,7 +403,7 @@ describe("identity provider routes", () => {
           payload: {
             providerId,
             issuer: "https://idp.example.com",
-            domain: "",
+            domain,
             oidcConfig: {
               issuer: "https://idp.example.com",
               skipDiscovery: true,
@@ -428,6 +429,7 @@ describe("identity provider routes", () => {
         expect(response.statusCode, `failed to create ${providerId}`).toBe(200);
         expect(response.json()).toMatchObject({
           providerId,
+          domain,
           organizationId,
           userId: user.id,
         });

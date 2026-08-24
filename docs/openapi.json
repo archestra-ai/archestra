@@ -131504,6 +131504,14 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "user",
+                              "service_account",
+                              "unattributed"
+                            ]
+                          },
                           "total": {
                             "type": "number"
                           }
@@ -131511,6 +131519,7 @@
                         "required": [
                           "userId",
                           "name",
+                          "kind",
                           "total"
                         ],
                         "additionalProperties": false

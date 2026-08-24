@@ -3,7 +3,7 @@ title: Skills
 category: Agents
 order: 3
 description: Reusable SKILL.md instruction sets that agents load on demand
-lastUpdated: 2026-08-22
+lastUpdated: 2026-08-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

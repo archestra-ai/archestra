@@ -10,6 +10,13 @@ vi.mock("@/lib/hooks/use-app-name", () => ({
 vi.mock("@/lib/auth/auth.query", () => ({
   useSession: () => ({ data: { user: { id: "user-1" } } }),
   useHasPermissions: () => ({ data: true }),
+  // The Agents-section tab bar at the top of the page asks which of its pages
+  // this reader may open.
+  usePermissionMap: () => ({
+    "/agents": true,
+    "/skills": true,
+    "/plugins": true,
+  }),
 }));
 vi.mock("@/components/resource-scope-filter", () => ({
   ActiveFilterBadges: () => null,

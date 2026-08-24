@@ -176,25 +176,6 @@ export default function ApiKeysPage() {
   });
   const { data: organization } = useOrganization();
   const providerCatalog = useModelProviderCatalog();
-  const providerSettingsItems = useMemo(
-    () =>
-      Object.entries(PROVIDER_CONFIG)
-        .map(([provider, config]) => ({
-          id: provider as LlmProviderApiKeyResponse["provider"],
-          label: config.name,
-          icon: (
-            <Image
-              src={config.icon}
-              alt=""
-              width={18}
-              height={18}
-              className="rounded dark:invert"
-            />
-          ),
-        }))
-        .sort((a, b) => a.label.localeCompare(b.label)),
-    [],
-  );
   // Read defensively: suites that render this page mock the auth query module
   // wholesale, and the Access column should fall back to the scope label
   // rather than crash the table (same convention as `user-share-field.tsx`).
@@ -236,11 +217,14 @@ export default function ApiKeysPage() {
       offset: 0,
       enabled: !!selectedApiKeyId && isDeleteDialogOpen,
     });
-  const { data: blockingOauthClients = [], isPending: isLoadingOauthClients } =
+  const { data: blockingOauthClientsData, isPending: isLoadingOauthClients } =
     useLlmOauthClients({
       providerApiKeyId: selectedApiKeyId ?? undefined,
+      limit: 100,
+      offset: 0,
       enabled: !!selectedApiKeyId && isDeleteDialogOpen,
     });
+  const blockingOauthClients = blockingOauthClientsData?.data ?? [];
 
   const getKeyUsage = useCallback(
     (keyId: string): string | null => {
@@ -913,7 +897,7 @@ function DeleteApiKeyDescription({
   apiKey: LlmProviderApiKeyResponse | null;
   virtualKeys: archestraApiTypes.GetAllVirtualApiKeysResponses["200"]["data"];
   totalVirtualKeys: number;
-  oauthClients: archestraApiTypes.GetLlmOauthClientsResponses["200"];
+  oauthClients: archestraApiTypes.GetLlmOauthClientsResponses["200"]["data"];
   isLoading: boolean;
 }) {
   if (!apiKey) {
@@ -949,7 +933,7 @@ function DeleteApiKeyDescription({
             <p className="font-medium">Virtual API keys</p>
             <Link
               className="text-primary underline-offset-4 hover:underline"
-              href="/llm/proxies"
+              href="/llm/proxy/virtual-keys"
             >
               View all
             </Link>
@@ -987,7 +971,7 @@ function DeleteApiKeyDescription({
             <p className="font-medium">OAuth clients</p>
             <Link
               className="text-primary underline-offset-4 hover:underline"
-              href="/llm/proxies"
+              href="/llm/proxy/oauth-clients"
             >
               View all
             </Link>

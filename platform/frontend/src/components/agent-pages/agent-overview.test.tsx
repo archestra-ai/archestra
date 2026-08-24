@@ -102,7 +102,7 @@ const baseAgent = {
 };
 
 function renderOverview(
-  kind: "agent" | "llm_proxy" | "mcp_gateway",
+  kind: "agent" | "mcp_gateway",
   overrides: Partial<typeof baseAgent> = {},
 ) {
   return render(
@@ -625,18 +625,14 @@ describe("AgentOverview", () => {
     ).toBeNull();
   });
 
-  it("omits agent-only Subagents from gateways, legacy profiles, and LLM proxies", () => {
+  it("omits agent-only Subagents from gateways and legacy profiles", () => {
     const gateway = renderOverview("mcp_gateway", {
       agentType: "mcp_gateway",
     });
     expect(screen.queryByRole("heading", { name: "Subagents" })).toBeNull();
     gateway.unmount();
 
-    const profile = renderOverview("llm_proxy", { agentType: "profile" });
-    expect(screen.queryByRole("heading", { name: "Subagents" })).toBeNull();
-    profile.unmount();
-
-    renderOverview("llm_proxy", { agentType: "llm_proxy" });
+    renderOverview("mcp_gateway", { agentType: "profile" });
     expect(screen.queryByRole("heading", { name: "Subagents" })).toBeNull();
   });
 

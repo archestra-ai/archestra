@@ -82,9 +82,7 @@ function renderPanel({ withGateway = false }: { withGateway?: boolean } = {}) {
       mcpGatewayId={withGateway ? gateway.id : null}
       onMcpGatewaySelect={() => {}}
       gatewaySlug={withGateway ? gateway.id : null}
-      llmProxies={[proxy]}
       llmProxyId={proxy.id}
-      onLlmProxySelect={() => {}}
       baseUrl="http://localhost:9000/v1"
       candidateBaseUrls={["http://localhost:9000/v1"]}
       baseUrlMetadata={null}

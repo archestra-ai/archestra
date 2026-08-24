@@ -68,7 +68,7 @@ const baseAgent = {
   authorId: "me",
 };
 
-function mount(kind: "agent" | "llm_proxy" | "mcp_gateway", search = "") {
+function mount(kind: "agent" | "mcp_gateway", search = "") {
   vi.mocked(useSearchParams).mockReturnValue(
     new URLSearchParams(search) as unknown as ReturnType<
       typeof useSearchParams
@@ -267,11 +267,11 @@ describe("AgentEditPage", () => {
 
   it("hands an id of another family to that family's edit page", () => {
     vi.mocked(useProfile).mockReturnValue({
-      data: { ...baseAgent, agentType: "llm_proxy" },
+      data: { ...baseAgent, agentType: "agent" },
       isPending: false,
     } as unknown as ReturnType<typeof useProfile>);
     mount("mcp_gateway");
-    expect(replace).toHaveBeenCalledWith("/llm/proxies/a1/edit");
+    expect(replace).toHaveBeenCalledWith("/agents/a1/edit");
   });
 
   it("renders the form read-only for a reader who may not change the record", () => {
@@ -342,20 +342,6 @@ describe("AgentEditPage", () => {
     rerender(<AgentEditPage kind="agent" id="a1" />);
 
     expect(screen.getByTestId(E2eTestId.AgentSetupSubmitButton)).toBeDisabled();
-  });
-
-  it("rewrites a ?step= the record has no step for to the one it fell back to", () => {
-    vi.mocked(useProfile).mockReturnValue({
-      data: { ...baseAgent, agentType: "llm_proxy" },
-      isPending: false,
-    } as unknown as ReturnType<typeof useProfile>);
-    vi.mocked(usePathname).mockReturnValue("/llm/proxies/a1/edit");
-    // An LLM proxy has no tools step, and the URL should stop saying it does.
-    mount("llm_proxy", "step=tools&name=foo");
-    expect(replace).toHaveBeenCalledWith(
-      "/llm/proxies/a1/edit?step=configuration&name=foo",
-      expect.anything(),
-    );
   });
 
   it("leaves a ?step= the record does have alone", () => {

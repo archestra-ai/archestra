@@ -85,7 +85,7 @@ export function AgentOverview({
   agent: Agent;
 }) {
   const isBuiltIn = !!agent.builtIn;
-  const showsTools = kind !== "llm_proxy" && !isBuiltIn;
+  const showsTools = !isBuiltIn;
   const showsInstruction = kind === "agent" && !!agent.systemPrompt?.trim();
   const showsSubagents = kind === "agent" && !isBuiltIn;
 

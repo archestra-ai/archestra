@@ -4,7 +4,6 @@ import type { archestraApiTypes } from "@archestra/shared";
 import { A2AConnectionInstructions } from "@/components/a2a-connection-instructions";
 import {
   type ConnectInstructionsOrigin,
-  LlmProxyConnectInstructions,
   McpGatewayConnectInstructions,
 } from "@/components/agent-connect-instructions";
 import type { AgentPageKind } from "./agent-page-config";
@@ -20,9 +19,6 @@ export function AgentConnectContent({
   agent: Agent;
   origin: ConnectInstructionsOrigin;
 }) {
-  if (kind === "llm_proxy") {
-    return <LlmProxyConnectInstructions proxy={agent} origin={origin} />;
-  }
   if (kind === "mcp_gateway") {
     return <McpGatewayConnectInstructions gateway={agent} origin={origin} />;
   }

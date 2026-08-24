@@ -3,17 +3,15 @@ import type { AgentIconVariant } from "@/components/agent-icon";
 import type { WizardStepDefinition } from "@/components/wizard-stepper";
 
 /**
- * The three route families that host an agent-shaped resource. Legacy
- * `profile` rows (one record acting as both gateway and proxy) have no family
- * of their own: they are listed under both gateways and proxies, and either
- * family's pages accept them.
+ * The two route families that host an agent-shaped resource. Legacy
+ * `profile` rows have no family of their own: the gateway pages accept them.
  */
-export type AgentPageKind = "agent" | "llm_proxy" | "mcp_gateway";
+export type AgentPageKind = "agent" | "mcp_gateway";
 
 export interface AgentPageConfig {
   kind: AgentPageKind;
   /** The list route; detail/new/edit routes hang off it. */
-  basePath: "/agents" | "/llm/proxies" | "/mcp/gateways";
+  basePath: "/agents" | "/mcp/gateways";
   singular: string;
   /** `singular` mid-sentence — acronyms keep their case ("this MCP gateway"). */
   singularInSentence: string;
@@ -45,20 +43,6 @@ export const AGENT_PAGE_CONFIGS: Record<AgentPageKind, AgentPageConfig> = {
     permanentDeleteDescription: (name) =>
       `This destroys "${name}" and everything it owns. Its chats and LLM interaction history are kept, no longer pointing at the agent. Nothing recovers the agent itself.`,
   },
-  llm_proxy: {
-    kind: "llm_proxy",
-    basePath: "/llm/proxies",
-    singular: "LLM Proxy",
-    singularInSentence: "LLM proxy",
-    plural: "LLM Proxies",
-    resource: "llmProxy",
-    defaultIconType: "llm_proxy",
-    createDescription:
-      "Name the proxy and choose who can use it, then connect your app to its endpoint.",
-    editDescription: "Configure the proxy and set its advanced options.",
-    permanentDeleteDescription: (name) =>
-      `This destroys "${name}" and everything it owns. Its LLM interaction history is kept for cost reporting, no longer pointing at the proxy. Nothing recovers the proxy itself.`,
-  },
   mcp_gateway: {
     kind: "mcp_gateway",
     basePath: "/mcp/gateways",
@@ -79,11 +63,9 @@ export const AGENT_PAGE_CONFIGS: Record<AgentPageKind, AgentPageConfig> = {
 /** The route family a stored agent type belongs to. */
 export function agentPageKindForType(agentType: AgentType): AgentPageKind {
   switch (agentType) {
-    case "llm_proxy":
-      return "llm_proxy";
     case "mcp_gateway":
-    // Legacy profiles serve both roles; the gateway routes are their canonical
-    // home when nothing else says which side the caller came from.
+    // Legacy profiles have no family of their own; the gateway routes are
+    // their canonical home.
     case "profile":
       return "mcp_gateway";
     default:
@@ -93,7 +75,7 @@ export function agentPageKindForType(agentType: AgentType): AgentPageKind {
 
 /**
  * Whether a route family may render an agent of the given type. A mismatch
- * (an agent id under `/llm/proxies/`) is redirected to the type's own family
+ * (a gateway id under `/agents/`) is redirected to the type's own family
  * rather than shown under the wrong header.
  */
 export function isAgentTypeAllowedOnPage(
@@ -103,8 +85,6 @@ export function isAgentTypeAllowedOnPage(
   switch (kind) {
     case "agent":
       return agentType === "agent";
-    case "llm_proxy":
-      return agentType === "llm_proxy" || agentType === "profile";
     case "mcp_gateway":
       return agentType === "mcp_gateway" || agentType === "profile";
   }
@@ -150,21 +130,18 @@ const ADVANCED_STEP: AgentSetupStep = { id: "advanced", title: "Advanced" };
 /**
  * The setup wizard's steps for one agent — the same on create and on edit.
  * Configuration is what the record is and who can use it; Tools & Knowledge
- * holds everything the agent reaches, which LLM proxies do not have; Advanced
- * the settings a record rarely needs. A built-in agent is a single-step edit,
- * so its host renders no stepper. Connecting is not a step: it is the detail
- * page's Connect section, where a record lands once created and which the
- * list's Connect action opens.
+ * holds everything the agent reaches; Advanced the settings a record rarely
+ * needs. A built-in agent is a single-step edit, so its host renders no
+ * stepper. Connecting is not a step: it is the detail page's Connect section,
+ * where a record lands once created and which the list's Connect action opens.
  */
 export function getAgentSetupSteps({
-  agentType,
   builtIn,
 }: {
   agentType: AgentType;
   builtIn: boolean;
 }): AgentSetupStep[] {
   if (builtIn) return [CONFIGURATION_STEP];
-  if (agentType === "llm_proxy") return [CONFIGURATION_STEP, ADVANCED_STEP];
   return [CONFIGURATION_STEP, TOOLS_STEP, ADVANCED_STEP];
 }
 

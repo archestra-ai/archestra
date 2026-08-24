@@ -710,7 +710,6 @@ describe("AgentForm delegation state", () => {
   it.each([
     "mcp_gateway",
     "profile",
-    "llm_proxy",
   ] as const)("omits agent-only Subagents for %s forms", (agentType) => {
     render(
       <AgentForm agentType={agentType} agent={{ ...baseAgent, agentType }} />,

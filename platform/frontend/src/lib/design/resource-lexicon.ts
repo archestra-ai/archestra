@@ -45,7 +45,6 @@ export interface ResourceNames {
 
 export const RESOURCE_LEXICON: Record<ResourceKey, ResourceNames> = {
   agent: agentShapedNames("agent"),
-  llm_proxy: agentShapedNames("llm_proxy"),
   mcp_gateway: agentShapedNames("mcp_gateway"),
   skill: {
     singular: "Skill",

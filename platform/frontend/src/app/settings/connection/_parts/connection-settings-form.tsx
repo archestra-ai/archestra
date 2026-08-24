@@ -24,7 +24,6 @@ import {
   SettingsSaveBar,
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
@@ -51,12 +50,8 @@ export function ConnectionSettingsForm() {
   const { data: mcpGateways } = useProfiles({
     filters: { agentTypes: ["profile", "mcp_gateway"] },
   });
-  const { data: llmProxies } = useProfiles({
-    filters: { agentTypes: ["profile", "llm_proxy"] },
-  });
 
   const [gatewayId, setGatewayId] = useState<string | null>(null);
-  const [proxyId, setProxyId] = useState<string | null>(null);
   const [defaultClientId, setDefaultClientId] = useState<string | null>(null);
   // UI stores the set of visible clients/providers; null in DB = show all.
   const [shownClientIds, setShownClientIds] =
@@ -81,7 +76,6 @@ export function ConnectionSettingsForm() {
   useEffect(() => {
     if (!organization) return;
     setGatewayId(organization.connectionDefaultMcpGatewayId ?? null);
-    setProxyId(organization.connectionDefaultLlmProxyId ?? null);
     setDefaultClientId(organization.connectionDefaultClientId ?? null);
     setShownClientIds(organization.connectionShownClientIds ?? ALL_CLIENT_IDS);
     setBaseUrlMeta(buildBaseUrlMeta(organization.connectionBaseUrls ?? null));
@@ -99,7 +93,6 @@ export function ConnectionSettingsForm() {
   );
 
   const serverGatewayId = organization?.connectionDefaultMcpGatewayId ?? null;
-  const serverProxyId = organization?.connectionDefaultLlmProxyId ?? null;
   const serverDefaultClientId = organization?.connectionDefaultClientId ?? null;
   const serverShownClients = (
     organization?.connectionShownClientIds ?? ALL_CLIENT_IDS
@@ -135,7 +128,6 @@ export function ConnectionSettingsForm() {
     JSON.stringify(defaultProviderKeys) !==
       JSON.stringify(serverDefaultProviderKeys) ||
     gatewayId !== serverGatewayId ||
-    proxyId !== serverProxyId ||
     defaultClientId !== serverDefaultClientId ||
     JSON.stringify([...shownClientIds].sort()) !==
       JSON.stringify(serverShownClients) ||
@@ -151,7 +143,6 @@ export function ConnectionSettingsForm() {
   const handleSave = () => {
     updateMutation.mutate({
       connectionDefaultMcpGatewayId: gatewayId,
-      connectionDefaultLlmProxyId: proxyId,
       connectionDefaultClientId: defaultClientId,
       connectionShownClientIds: collapseIfAll(shownClientIds, ALL_CLIENT_IDS),
       connectionBaseUrls: collapseBaseUrlMeta(envBaseUrls, baseUrlMeta),
@@ -164,7 +155,6 @@ export function ConnectionSettingsForm() {
 
   const handleCancel = () => {
     setGatewayId(serverGatewayId);
-    setProxyId(serverProxyId);
     setDefaultClientId(serverDefaultClientId);
     setShownClientIds(serverShownClients);
     setBaseUrlMeta(serverBaseUrlMeta);
@@ -189,7 +179,6 @@ export function ConnectionSettingsForm() {
   const currentDefaultUrl = resolveDefaultBaseUrl(envBaseUrls, baseUrlMeta);
 
   const gatewayItems = mcpGateways ?? [];
-  const proxyItems = llmProxies ?? [];
 
   const providerKeysByProvider = useMemo(() => {
     const grouped = new Map<string, { id: string; name: string }[]>();
@@ -229,28 +218,6 @@ export function ConnectionSettingsForm() {
                     label: "Each user personal",
                   }}
                   searchPlaceholder="Search gateways…"
-                  disabled={locked}
-                />
-              </SettingRow>
-
-              <SettingRow
-                title="Default LLM Proxy"
-                description="Pre-selected for everyone; users can still switch."
-              >
-                <AgentSelector
-                  mode="single"
-                  flat
-                  className="w-60"
-                  agents={proxyItems.filter((p) => !p.isDefault)}
-                  value={proxyId ?? DEFAULT_VALUE}
-                  onValueChange={(value) =>
-                    setProxyId(value === DEFAULT_VALUE ? null : value)
-                  }
-                  sentinelOption={{
-                    value: DEFAULT_VALUE,
-                    label: "Each user personal",
-                  }}
-                  searchPlaceholder="Search proxies…"
                   disabled={locked}
                 />
               </SettingRow>

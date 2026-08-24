@@ -19,18 +19,12 @@ const RESOURCES = Object.keys(RESOURCE_LEXICON) as ResourceKey[];
  * of the same date.
  */
 describe("resource lexicon", () => {
-  it("covers the five entity surfaces", () => {
-    expect(RESOURCES).toEqual([
-      "agent",
-      "llm_proxy",
-      "mcp_gateway",
-      "skill",
-      "mcp_server",
-    ]);
+  it("covers the four entity surfaces", () => {
+    expect(RESOURCES).toEqual(["agent", "mcp_gateway", "skill", "mcp_server"]);
   });
 
   it("takes the agent-shaped names from the route configs rather than repeating them", () => {
-    for (const kind of ["agent", "llm_proxy", "mcp_gateway"] as const) {
+    for (const kind of ["agent", "mcp_gateway"] as const) {
       expect(RESOURCE_LEXICON[kind]).toEqual({
         singular: AGENT_PAGE_CONFIGS[kind].singular,
         singularInSentence: AGENT_PAGE_CONFIGS[kind].singularInSentence,
@@ -78,9 +72,9 @@ describe("resource lexicon", () => {
     expect(notYoursToChange({ resource: "mcp_gateway", scope: "org" })).toBe(
       "Only an admin can change this org-wide MCP gateway",
     );
-    expect(notYoursToChange({ resource: "llm_proxy", scope: "personal" })).toBe(
-      "Only this LLM proxy's author or an admin can change it",
-    );
+    expect(
+      notYoursToChange({ resource: "mcp_gateway", scope: "personal" }),
+    ).toBe("Only this MCP gateway's author or an admin can change it");
   });
 
   it("names each shared verb once", () => {

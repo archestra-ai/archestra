@@ -1062,7 +1062,7 @@ export default function StatisticsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>LLM Proxies</CardTitle>
+          <CardTitle>LLM Proxy</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">

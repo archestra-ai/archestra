@@ -333,12 +333,11 @@ function AgentDetails({
             type={isBuiltIn ? "builtIn" : agent.scope}
             className="font-normal"
           />
-          {(kind === "llm_proxy" || kind === "mcp_gateway") &&
-            environmentName && (
-              <Badge variant="outline" className="font-normal">
-                {environmentName}
-              </Badge>
-            )}
+          {kind === "mcp_gateway" && environmentName && (
+            <Badge variant="outline" className="font-normal">
+              {environmentName}
+            </Badge>
+          )}
         </div>
       }
       documentTitle={agent.name}
@@ -439,24 +438,22 @@ function AgentDetails({
       }
     >
       <div className="space-y-10">
-        {kind !== "llm_proxy" && (
-          <section aria-labelledby="agent-overview-heading">
-            <Collapsible>
-              <CollapsibleTrigger className="group flex w-full items-center justify-between gap-4 py-1 text-left">
-                <h2
-                  id="agent-overview-heading"
-                  className="text-base font-semibold tracking-tight text-foreground"
-                >
-                  Overview
-                </h2>
-                <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
-              </CollapsibleTrigger>
-              <CollapsibleContent className="pt-4">
-                <AgentOverview kind={kind} agent={agent} />
-              </CollapsibleContent>
-            </Collapsible>
-          </section>
-        )}
+        <section aria-labelledby="agent-overview-heading">
+          <Collapsible>
+            <CollapsibleTrigger className="group flex w-full items-center justify-between gap-4 py-1 text-left">
+              <h2
+                id="agent-overview-heading"
+                className="text-base font-semibold tracking-tight text-foreground"
+              >
+                Overview
+              </h2>
+              <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-4">
+              <AgentOverview kind={kind} agent={agent} />
+            </CollapsibleContent>
+          </Collapsible>
+        </section>
         {showConnect && (
           <section
             id={AGENT_CONNECT_SECTION_ID}

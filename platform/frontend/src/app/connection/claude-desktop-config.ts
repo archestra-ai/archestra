@@ -49,14 +49,13 @@ export interface ClaudeDesktopConfigProfile {
 }
 
 /**
- * Build the importable profile. `baseUrl` already includes the `/v1` segment, so
- * the inference endpoint uses the proxy **id** and the MCP server uses the
- * gateway **slug** — matching how the rest of the connect page builds URLs.
- * The `mcp` block is omitted when no gateway is provided.
+ * Build the importable profile. `baseUrl` already includes the `/v1` segment;
+ * the inference endpoint is the id-less Anthropic proxy route and the MCP
+ * server uses the gateway **slug** — matching how the rest of the connect page
+ * builds URLs. The `mcp` block is omitted when no gateway is provided.
  */
 export function buildClaudeDesktopConfigProfile(input: {
   baseUrl: string;
-  llmProxyId: string;
   passthroughKey: string;
   virtualKey: string;
   gateway?: { slug: string; name: string } | null;
@@ -67,7 +66,7 @@ export function buildClaudeDesktopConfigProfile(input: {
     $schemaVersion: 2,
     inference: {
       provider: "gateway",
-      baseUrl: `${input.baseUrl}/anthropic/${input.llmProxyId}`,
+      baseUrl: `${input.baseUrl}/anthropic`,
       customHeaders: {
         [EXTERNAL_AGENT_ID_HEADER]: CLAUDE_DESKTOP_CLIENT_ID,
         [VIRTUAL_KEY_HEADER]: input.passthroughKey,

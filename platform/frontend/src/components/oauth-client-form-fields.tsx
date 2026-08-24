@@ -76,36 +76,3 @@ export function GatewayGrantField({
     </div>
   );
 }
-
-export function ProxyGrantField({
-  llmProxies,
-  value,
-  onValueChange,
-}: {
-  llmProxies: AgentSelectorAgent[];
-  value: string[];
-  onValueChange: (value: string[]) => void;
-}) {
-  return (
-    <div className="space-y-2">
-      <Label>LLM proxy access grant (optional)</Label>
-      <AgentSelector
-        mode="multiple"
-        flat
-        agents={llmProxies}
-        value={value}
-        onValueChange={onValueChange}
-        placeholder="Select LLM proxies to grant"
-        searchPlaceholder="Search LLM proxies"
-        emptyMessage="No LLM proxies found"
-      />
-      <p className="text-sm text-muted-foreground">
-        Grants any user who authenticates through this client access to the
-        selected LLM proxies — <strong>in addition to</strong> their own
-        role-based access, even proxies they otherwise couldn't reach. Leave
-        empty for pure identity passthrough (access stays governed by each
-        user's permissions). Each user's own provider keys are still used.
-      </p>
-    </div>
-  );
-}

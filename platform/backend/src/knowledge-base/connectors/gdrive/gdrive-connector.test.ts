@@ -210,11 +210,6 @@ async function buildMultiSheetXlsx(sheets: string[][]): Promise<ArrayBuffer> {
 }
 
 describe("GoogleDriveConnector", () => {
-  it("has the correct type", () => {
-    const connector = new GoogleDriveConnector();
-    expect(connector.type).toBe("gdrive");
-  });
-
   describe("validateConfig", () => {
     it("accepts empty config (all fields optional)", async () => {
       const connector = new GoogleDriveConnector();

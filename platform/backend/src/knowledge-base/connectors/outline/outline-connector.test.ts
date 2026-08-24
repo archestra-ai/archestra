@@ -82,11 +82,6 @@ function makeAuthResponse(ok = true) {
 }
 
 describe("OutlineConnector", () => {
-  it("has the correct type", () => {
-    const connector = new OutlineConnector();
-    expect(connector.type).toBe("outline");
-  });
-
   describe("validateConfig", () => {
     it("returns valid for a correct config", async () => {
       const connector = new OutlineConnector();

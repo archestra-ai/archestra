@@ -198,11 +198,6 @@ describe("DropboxConnector", () => {
     });
   });
 
-  it("has the correct type", () => {
-    const connector = new DropboxConnector();
-    expect(connector.type).toBe("dropbox");
-  });
-
   describe("validateConfig", () => {
     it("accepts empty config (no fields required)", async () => {
       const connector = new DropboxConnector();

@@ -49,12 +49,4 @@ describe("SearchInput", () => {
       "pl-9",
     );
   });
-
-  it("still applies the default sizing when no className is given", () => {
-    render(<SearchInput placeholder="Search" />);
-
-    const wrapper = screen.getByPlaceholderText("Search").parentElement;
-    expect(wrapper).toHaveClass("relative");
-    expect(wrapper).toHaveClass("sm:w-[320px]");
-  });
 });

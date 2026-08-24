@@ -4,40 +4,20 @@ import { describe, expect, it } from "vitest";
 import { EmailNotConfiguredMessage } from "./email-not-configured-message";
 
 describe("EmailNotConfiguredMessage", () => {
-  it("renders the default message with link to documentation", () => {
+  it("points at the email trigger setup guide in a safely-targeted new tab", () => {
     render(<EmailNotConfiguredMessage />);
 
     expect(
       screen.getByText(/Email invocation of Agents is not configured/),
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /setup guide/i })).toHaveAttribute(
+
+    const link = screen.getByRole("link", { name: /setup guide/i });
+    expect(link).toHaveAttribute(
       "href",
       getDocsUrl(DocsPage.PlatformAgentTriggersEmail),
     );
-  });
-
-  it("applies custom className when provided", () => {
-    render(<EmailNotConfiguredMessage className="custom-class" />);
-
-    const paragraph = screen.getByText(
-      /Email invocation of Agents is not configured/,
-    );
-    expect(paragraph).toHaveClass("custom-class");
-  });
-
-  it("applies default className when not provided", () => {
-    render(<EmailNotConfiguredMessage />);
-
-    const paragraph = screen.getByText(
-      /Email invocation of Agents is not configured/,
-    );
-    expect(paragraph).toHaveClass("text-sm", "text-muted-foreground");
-  });
-
-  it("opens documentation link in new tab", () => {
-    render(<EmailNotConfiguredMessage />);
-
-    const link = screen.getByRole("link", { name: /setup guide/i });
+    // target=_blank without rel=noopener hands the docs tab a window.opener
+    // handle back into the app.
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });

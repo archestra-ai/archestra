@@ -30189,6 +30189,7 @@ export type UpdateChatConversationData = {
         chatApiKeyId?: string | null;
         agentId?: string;
         artifact?: string | null;
+        projectId?: string | null;
         pinnedAt?: string | null;
         thinkingEffort?: 'low' | 'medium' | 'high';
     };

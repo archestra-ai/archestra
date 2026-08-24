@@ -104,6 +104,7 @@ export type LockedChatBlockedAction =
   | "share"
   | "fork"
   | "createProject"
+  | "changeProject"
   | "generateTitle"
   | "compaction";
 

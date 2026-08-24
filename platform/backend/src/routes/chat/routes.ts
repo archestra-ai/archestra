@@ -2847,7 +2847,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.UpdateChatConversation,
-        description: "Update conversation title, model, agent, or API key",
+        description:
+          "Update conversation title, model, agent, API key, or project",
         tags: ["Chat"],
         params: z.object({ id: UuidIdSchema }),
         body: UpdateConversationSchema,
@@ -2855,6 +2856,29 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, body, user, organizationId }, reply) => {
+      if (body.projectId) {
+        const project = await ProjectModel.findById(body.projectId);
+        if (
+          !project ||
+          !(await ProjectShareModel.userCanAccessProject({
+            project,
+            userId: user.id,
+            organizationId,
+          }))
+        ) {
+          throw new ApiError(404, "Project not found");
+        }
+
+        const currentConversation = await ConversationModel.findById({
+          id,
+          userId: user.id,
+          organizationId,
+        });
+        if (currentConversation?.lockedChat) {
+          throw new ApiError(400, "Locked chats cannot be moved to a project");
+        }
+      }
+
       // Validate chatApiKeyId if provided
       // Skip validation if it matches the agent's configured key (permission flows through agent access)
       if (body.chatApiKeyId) {

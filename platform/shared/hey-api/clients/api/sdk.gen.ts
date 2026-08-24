@@ -2303,7 +2303,7 @@ export const deleteChatConversation = <ThrowOnError extends boolean = false>(opt
 export const getChatConversation = <ThrowOnError extends boolean = false>(options: Options<GetChatConversationData, ThrowOnError>) => (options.client ?? client).get<GetChatConversationResponses, GetChatConversationErrors, ThrowOnError>({ url: '/api/chat/conversations/{id}', ...options });
 
 /**
- * Update conversation title, model, agent, or API key
+ * Update conversation title, model, agent, API key, or project
  *
  * Authentication:
  *

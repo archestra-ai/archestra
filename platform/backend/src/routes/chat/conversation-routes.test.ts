@@ -163,6 +163,95 @@ describe("chat conversation and message routes", () => {
     expect(unpinResponse.json().pinnedAt).toBeNull();
   });
 
+  test("moves a conversation into a project and removes it again", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const conversation = await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+    });
+    const project = await projectService.create({
+      organizationId,
+      userId: currentUser.id,
+      name: "Research workspace",
+      description: null,
+    });
+
+    const moveResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/chat/conversations/${conversation.id}`,
+      payload: { projectId: project.id },
+    });
+
+    expect(moveResponse.statusCode).toBe(200);
+    expect(moveResponse.json().projectId).toBe(project.id);
+    expect(
+      (
+        await ConversationModel.findById({
+          id: conversation.id,
+          userId: currentUser.id,
+          organizationId,
+        })
+      )?.projectId,
+    ).toBe(project.id);
+
+    const removeResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/chat/conversations/${conversation.id}`,
+      payload: { projectId: null },
+    });
+
+    expect(removeResponse.statusCode).toBe(200);
+    expect(removeResponse.json().projectId).toBeNull();
+  });
+
+  test("does not move a conversation into an inaccessible project", async ({
+    makeAgent,
+    makeUser,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const conversation = await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+    });
+    const otherUser = await makeUser();
+    const otherProject = await projectService.create({
+      organizationId,
+      userId: otherUser.id,
+      name: "Private workspace",
+      description: null,
+    });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/chat/conversations/${conversation.id}`,
+      payload: { projectId: otherProject.id },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.message).toBe("Project not found");
+    expect(
+      (
+        await ConversationModel.findById({
+          id: conversation.id,
+          userId: currentUser.id,
+          organizationId,
+        })
+      )?.projectId,
+    ).toBeNull();
+  });
+
   test("persists a thinking effort and rejects an unknown one", async ({
     makeAgent,
   }) => {

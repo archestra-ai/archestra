@@ -36,6 +36,12 @@ export interface VectorSearchResult {
   id: string;
   content: string;
   chunkIndex: number;
+  /**
+   * The passage this chunk was sliced out of, or `null` when the chunk IS the
+   * passage. Retrieval reads it to decide whether a hit resolves to a parent
+   * passage or is widened by context expansion instead.
+   */
+  parentIndex: number | null;
   documentId: string;
   sourceId?: string | null;
   title: string;
@@ -163,6 +169,7 @@ class KbChunkModel {
       sql`
       SELECT
         c.id, c.content, c.chunk_index AS "chunkIndex", c.document_id AS "documentId",
+        c.parent_index AS "parentIndex",
         d.source_id AS "sourceId", d.title, d.source_url AS "sourceUrl", d.metadata,
         kbc.connector_type AS "connectorType",
         1 - (c.${col} <=> ${embeddingStr}${vectorCast}) AS score
@@ -248,6 +255,7 @@ class KbChunkModel {
     const rows = await db.execute(sql`
       SELECT
         c.id, c.content, c.chunk_index AS "chunkIndex",
+        c.parent_index AS "parentIndex",
         c.document_id AS "documentId", d.source_id AS "sourceId", d.title,
         d.source_url AS "sourceUrl", d.metadata,
         kbc.connector_type AS "connectorType"
@@ -502,6 +510,96 @@ class KbChunkModel {
     }>;
   }
 
+  /**
+   * Every child chunk of the given parent passages, for reassembling the
+   * passage behind a search hit.
+   *
+   * ACL-filtered per row exactly like {@link KbChunkModel.findNeighbors}: a
+   * permission pass can legitimately leave two chunks of one document with
+   * different audiences, so a sibling the user cannot read is simply absent and
+   * the passage is served without it. Media chunks are excluded on the same
+   * grounds — a base64 data URL stitched into prose is megabytes of noise.
+   *
+   * Ordered by `chunk_index` so callers can stitch without re-sorting.
+   */
+  static async findParentSiblings(params: {
+    parents: Array<{ documentId: string; parentIndex: number }>;
+    userAcl: AclEntry[];
+    bypassAcl?: boolean;
+    environmentId?: string | null;
+  }): Promise<
+    Array<{
+      id: string;
+      documentId: string;
+      parentIndex: number;
+      chunkIndex: number;
+      content: string;
+    }>
+  > {
+    const { parents, userAcl, bypassAcl = false, environmentId } = params;
+    if (parents.length === 0) return [];
+    if (!bypassAcl && userAcl.length === 0) return [];
+
+    const seen = new Set<string>();
+    const unique: Array<{ documentId: string; parentIndex: number }> = [];
+    for (const parent of parents) {
+      const key = `${parent.documentId}:${parent.parentIndex}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      unique.push(parent);
+    }
+
+    // Explicit (document_id, parent_index) pairs so the partial index on those
+    // two columns is usable, rather than a per-document scan that would pull in
+    // every other passage of a long document.
+    const pairList = sql.join(
+      unique.map((p) => sql`(${p.documentId}::uuid, ${p.parentIndex})`),
+      sql`, `,
+    );
+    const documentIds = sql.join(
+      [...new Set(unique.map((p) => p.documentId))].map(
+        (id) => sql`${id}::uuid`,
+      ),
+      sql`, `,
+    );
+    const aclEntries = bypassAcl
+      ? null
+      : sql.join(
+          userAcl.map((entry) => sql`${entry}`),
+          sql`, `,
+        );
+    const envFilter =
+      environmentId !== undefined
+        ? sql`AND kbc.environment_id IS NOT DISTINCT FROM ${environmentId}`
+        : sql``;
+
+    const rows = await db.execute(sql`
+      SELECT
+        c.id, c.document_id AS "documentId",
+        c.parent_index AS "parentIndex",
+        c.chunk_index AS "chunkIndex", c.content
+      FROM kb_chunks c
+      JOIN kb_documents d ON d.id = c.document_id
+      LEFT JOIN knowledge_base_connectors kbc ON kbc.id = d.connector_id
+      WHERE c.document_id IN (${documentIds})
+        AND c.parent_index IS NOT NULL
+        AND (c.document_id, c.parent_index) IN (${pairList})
+        AND kbc.deleted_at IS NULL
+        AND c.content NOT LIKE 'data:image/%'
+        ${envFilter}
+        ${bypassAcl ? sql`` : sql`AND c.acl ?| ARRAY[${aclEntries}]`}
+      ORDER BY c.document_id, c.parent_index, c.chunk_index
+    `);
+
+    return rows.rows as unknown as Array<{
+      id: string;
+      documentId: string;
+      parentIndex: number;
+      chunkIndex: number;
+      content: string;
+    }>;
+  }
+
   static async updateEmbeddings(
     updates: Array<{ chunkId: string; embedding: number[] }>,
     dimensions: number,
@@ -656,6 +754,7 @@ class KbChunkModel {
       : sql`
       SELECT
         c.id, c.content, c.chunk_index AS "chunkIndex", c.document_id AS "documentId",
+        c.parent_index AS "parentIndex",
         d.source_id AS "sourceId", d.title, d.source_url AS "sourceUrl", d.metadata,
         kbc.connector_type AS "connectorType",
         GREATEST(${scoreExpression}) AS score
@@ -960,8 +1059,8 @@ class KbChunkModel {
       ),
       candidates AS (
         SELECT
-          c.id, c.content, c.chunk_index, c.document_id, c.search_vector,
-          c.tok_len, c.fts_language,
+          c.id, c.content, c.chunk_index, c.parent_index, c.document_id,
+          c.search_vector, c.tok_len, c.fts_language,
           d.source_id, d.title, d.source_url, d.metadata,
           kbc.connector_type
         FROM candidate_ids
@@ -989,6 +1088,7 @@ class KbChunkModel {
       )
       SELECT
         c.id, c.content, c.chunk_index AS "chunkIndex", c.document_id AS "documentId",
+        c.parent_index AS "parentIndex",
         c.source_id AS "sourceId", c.title, c.source_url AS "sourceUrl", c.metadata,
         c.connector_type AS "connectorType",
         -- Cast to double precision, not the bare numeric this sum produces:
@@ -1057,8 +1157,8 @@ class KbChunkModel {
       ) tf
       WHERE c.tok_len IS NOT NULL
       GROUP BY
-        c.id, c.content, c.chunk_index, c.document_id, c.source_id, c.title,
-        c.source_url, c.metadata, c.connector_type
+        c.id, c.content, c.chunk_index, c.parent_index, c.document_id,
+        c.source_id, c.title, c.source_url, c.metadata, c.connector_type
       -- c.id breaks ties deterministically, so pagination and the eval
       -- harness see a stable order for equally-scored chunks.
       ORDER BY score DESC, c.id ASC

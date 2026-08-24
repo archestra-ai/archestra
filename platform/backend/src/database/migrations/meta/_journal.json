@@ -3039,6 +3039,13 @@
       "when": 1787487754938,
       "tag": "0433_exotic_master_chief",
       "breakpoints": true
+    },
+    {
+      "idx": 434,
+      "version": "7",
+      "when": 1787575676581,
+      "tag": "0434_certain_kate_bishop",
+      "breakpoints": true
     }
   ]
 }

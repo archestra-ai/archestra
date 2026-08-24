@@ -16,6 +16,7 @@ import {
   DEFAULT_APP_NAME,
   DEFAULT_CHAT_ATTACHMENT_INLINE_BYTES,
   DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
+  DEFAULT_CHILD_CHUNK_SIZE_TOKENS,
   DEFAULT_CHUNK_SIZE_TOKENS,
   DEFAULT_CONTEXT_EXPANSION_RADIUS,
   DEFAULT_MODELS,
@@ -25,6 +26,7 @@ import {
   MAX_CHUNK_SIZE_TOKENS,
   MAX_CONTEXT_EXPANSION_RADIUS,
   MCP_ORCHESTRATOR_DEFAULTS,
+  MIN_CHILD_CHUNK_SIZE_TOKENS,
   MIN_CHUNK_SIZE_TOKENS,
   type SupportedProvider,
   SupportedProviders,
@@ -957,6 +959,33 @@ export const parseClampedInt = (
   if (!envValue) return defaultValue;
   const parsed = Number.parseInt(envValue, 10);
   if (Number.isNaN(parsed)) return defaultValue;
+  return Math.min(Math.max(parsed, min), max);
+};
+
+/**
+ * Like {@link parseClampedInt} for a setting whose "off" value sits outside its
+ * own valid range — a child-chunk size of 0 means "do not subdivide", while any
+ * size that IS set has a floor below which a chunk cannot carry a coherent
+ * passage.
+ *
+ * Clamping alone cannot express that: a plain clamp into [min, max] would turn
+ * an explicit 0 into the floor and silently switch the feature ON. So 0 is
+ * honoured exactly, and every other value is clamped into [min, max] — which
+ * also means a too-small non-zero value is corrected upward rather than
+ * disabling the feature by accident.
+ *
+ * @public — exported for the config unit tests; used within this module.
+ */
+export const parseClampedIntOrZero = (
+  envValue: string | undefined,
+  defaultValue: number,
+  min: number,
+  max: number,
+): number => {
+  if (!envValue) return defaultValue;
+  const parsed = Number.parseInt(envValue, 10);
+  if (Number.isNaN(parsed)) return defaultValue;
+  if (parsed <= 0) return 0;
   return Math.min(Math.max(parsed, min), max);
 };
 
@@ -3153,6 +3182,26 @@ const config = {
       process.env.ARCHESTRA_KNOWLEDGE_BASE_CHUNK_SIZE_TOKENS,
       DEFAULT_CHUNK_SIZE_TOKENS,
       MIN_CHUNK_SIZE_TOKENS,
+      MAX_CHUNK_SIZE_TOKENS,
+    ),
+    /**
+     * Parent/child (multi-granularity) indexing. When set, each chunk produced
+     * at `chunkSizeTokens` is subdivided into children of this size, and only
+     * the children are indexed and embedded. A search hit then resolves back to
+     * its parent, so matching happens at the finer size while the model reads
+     * the same passage it would have read before.
+     *
+     * 0 (the default) disables the second pass entirely: one chunk per parent,
+     * byte-for-byte the single-pass behaviour.
+     *
+     * Ingest-only, like `chunkSizeTokens`: chunks already written keep their
+     * granularity until their connector re-syncs, and a chunk written without a
+     * parent link is served through context expansion as before.
+     */
+    childChunkSizeTokens: parseClampedIntOrZero(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_CHILD_CHUNK_SIZE_TOKENS,
+      DEFAULT_CHILD_CHUNK_SIZE_TOKENS,
+      MIN_CHILD_CHUNK_SIZE_TOKENS,
       MAX_CHUNK_SIZE_TOKENS,
     ),
     /**

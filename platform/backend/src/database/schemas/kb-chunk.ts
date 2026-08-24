@@ -2,6 +2,7 @@ import {
   DEFAULT_TEXT_SEARCH_LANGUAGE,
   type TextSearchLanguage,
 } from "@archestra/shared";
+import { sql } from "drizzle-orm";
 import {
   customType,
   index,
@@ -89,6 +90,20 @@ const kbChunksTable = pgTable(
      * ranker is in use; the `ts_rank` path never reads it.
      */
     tokLen: integer("tok_len"),
+    /**
+     * Which parent passage this chunk is a slice of, or NULL when the chunk IS
+     * the passage (single-pass indexing, and every chunk written before
+     * parent/child indexing existed).
+     *
+     * An ordinal within the document rather than a foreign key to a parent row,
+     * because no parent row exists: storing one would put a second copy of every
+     * document in `content`, in the same keyword index its own children compete
+     * in, and in the same `chunk_index` space that citation refs and context
+     * expansion's adjacency walk depend on. The passage is instead reassembled
+     * from the children that share this ordinal — they partition the parent's
+     * text and are contiguous in `chunk_index`, so the stitch is exact.
+     */
+    parentIndex: integer("parent_index"),
     metadataSuffixSemantic: text("metadata_suffix_semantic"),
     metadataSuffixKeyword: text("metadata_suffix_keyword"),
     /**
@@ -113,7 +128,15 @@ const kbChunksTable = pgTable(
     acl: jsonb("acl").$type<string[]>().notNull().default([]),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
-  (table) => [index("kb_chunks_document_id_idx").on(table.documentId)],
+  (table) => [
+    index("kb_chunks_document_id_idx").on(table.documentId),
+    // Parent-passage resolution looks up every child of one (document, parent)
+    // pair. Partial: only parent/child corpora have a non-NULL parent_index, so
+    // a deployment that never enables it pays nothing for this index.
+    index("kb_chunks_document_id_parent_index_idx")
+      .on(table.documentId, table.parentIndex)
+      .where(sql`${table.parentIndex} IS NOT NULL`),
+  ],
 );
 
 export default kbChunksTable;

@@ -4,6 +4,7 @@ import * as metrics from "@/observability/metrics";
 import type { AclEntry } from "@/types";
 import { chunkDocument } from "./chunker";
 import { buildContextualHeaders } from "./contextual-retrieval";
+import { stitchChunkContents } from "./parent-passage";
 import { knowledgeRetrievalBackend } from "./retrieval-backends/registry";
 
 /**
@@ -74,14 +75,23 @@ export async function chunkAndStoreDocument(params: {
 
   if (chunks.length === 0) return;
 
+  // Context is generated per PASSAGE, not per stored chunk. Under parent/child
+  // indexing the stored chunks are children, and a child is a slice of its
+  // parent — the context that explains one slice explains all of them. Asking
+  // per child would multiply the generation calls by the child-to-parent ratio
+  // to produce near-identical text, so the passages are contextualized and each
+  // child inherits its parent's header. Without parent/child indexing every
+  // chunk is its own passage and this is exactly the previous behaviour.
+  //
   // Best-effort and non-fatal: a document indexes without context rather than
-  // failing the sync. The returned array is aligned with the chunk list: in
+  // failing the sync. The returned array is aligned with the passage list: in
   // document mode every entry is the same; in chunk mode each passage can
   // carry its own header.
-  const contextualHeaders = await buildContextualHeaders({
+  const passages = collectPassages(chunks);
+  const passageHeaders = await buildContextualHeaders({
     title,
     content,
-    chunks: chunks.map((chunk) => chunk.content),
+    chunks: passages.texts,
     organizationId,
     connectorId,
   });
@@ -91,9 +101,10 @@ export async function chunkAndStoreDocument(params: {
       documentId,
       content: chunk.content,
       chunkIndex: chunk.chunkIndex,
+      parentIndex: chunk.parentIndex,
       metadataSuffixSemantic: chunk.metadataSuffixSemantic,
       metadataSuffixKeyword: chunk.metadataSuffixKeyword,
-      contextualHeader: contextualHeaders[index] ?? null,
+      contextualHeader: passageHeaders[passages.passageOfChunk[index]] ?? null,
       ftsLanguage,
       acl,
     })),
@@ -105,11 +116,51 @@ export async function chunkAndStoreDocument(params: {
     {
       documentId,
       chunkCount: chunks.length,
-      contextualizedChunkCount: contextualHeaders.filter(
+      passageCount: passages.texts.length,
+      contextualizedPassageCount: passageHeaders.filter(
         (header) => header !== null,
       ).length,
       ftsLanguage,
     },
     "Document chunked and stored",
   );
+}
+
+// ===== Internal helpers =====
+
+/**
+ * The passages the chunks came from, and which passage each chunk belongs to.
+ *
+ * Single-pass chunks are each their own passage; children are grouped by their
+ * parent ordinal and their texts stitched back into the passage they were cut
+ * from, so what gets contextualized is the same text a search hit will return.
+ */
+function collectPassages(
+  chunks: Array<{ content: string; parentIndex: number | null }>,
+): { texts: string[]; passageOfChunk: number[] } {
+  const texts: string[] = [];
+  const passageOfChunk: number[] = [];
+  const positionByParent = new Map<number, number>();
+
+  for (const chunk of chunks) {
+    if (chunk.parentIndex === null) {
+      passageOfChunk.push(texts.length);
+      texts.push(chunk.content);
+      continue;
+    }
+
+    const existing = positionByParent.get(chunk.parentIndex);
+    if (existing === undefined) {
+      const position = texts.length;
+      positionByParent.set(chunk.parentIndex, position);
+      passageOfChunk.push(position);
+      texts.push(chunk.content);
+      continue;
+    }
+
+    passageOfChunk.push(existing);
+    texts[existing] = stitchChunkContents([texts[existing], chunk.content]);
+  }
+
+  return { texts, passageOfChunk };
 }

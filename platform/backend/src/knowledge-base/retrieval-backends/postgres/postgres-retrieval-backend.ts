@@ -15,6 +15,7 @@ export const postgresRetrievalBackend: KnowledgeRetrievalBackend = {
   vectorSearch: (params) => KbChunkModel.vectorSearch(params),
   keywordSearch: (params) => KbChunkModel.fullTextSearch(params),
   findNeighbors: (params) => KbChunkModel.findNeighbors(params),
+  findParentSiblings: (params) => KbChunkModel.findParentSiblings(params),
   getTextSearchLanguages: (connectorIds) =>
     KbChunkModel.getTextSearchLanguages(connectorIds),
   getPopulatedEmbeddingDimensions: (connectorIds) =>

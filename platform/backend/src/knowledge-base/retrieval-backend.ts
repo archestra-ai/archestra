@@ -13,7 +13,7 @@ import type {
  * Storage and search operations required by the knowledge retrieval pipeline.
  *
  * Implementations own chunk indexing, vector and keyword search, adjacency,
- * and deletion. Every read method receives the caller's ACL and environment
+ * parent-passage reassembly, and deletion. Every read method receives the caller's ACL and environment
  * scope. An implementation must apply both before returning any content.
  * Search results must retain document and chunk identity because citations and
  * context expansion depend on those fields after ranking.
@@ -47,6 +47,9 @@ export interface KnowledgeRetrievalBackend {
   vectorSearch(params: VectorSearchParams): Promise<VectorSearchResult[]>;
   keywordSearch(params: KeywordSearchParams): Promise<VectorSearchResult[]>;
   findNeighbors(params: FindNeighborsParams): Promise<NeighborChunk[]>;
+  findParentSiblings(
+    params: FindParentSiblingsParams,
+  ): Promise<ParentSiblingChunk[]>;
   getTextSearchLanguages(connectorIds: string[]): Promise<TextSearchLanguage[]>;
   getPopulatedEmbeddingDimensions(connectorIds: string[]): Promise<Set<number>>;
   hasKeywordStatistics(
@@ -79,6 +82,14 @@ export interface NeighborChunk {
   documentId: string;
   chunkIndex: number;
   content: string;
+}
+
+export interface FindParentSiblingsParams extends AccessScope {
+  parents: Array<{ documentId: string; parentIndex: number }>;
+}
+
+export interface ParentSiblingChunk extends NeighborChunk {
+  parentIndex: number;
 }
 
 // ===== Internal types =====

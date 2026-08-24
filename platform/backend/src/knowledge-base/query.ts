@@ -23,6 +23,10 @@ import {
 import { type EmbeddingConfig, resolveEmbeddingConfig } from "./kb-llm-client";
 import { isMediaChunkContent, parseImageDataUrl } from "./media-chunk";
 import {
+  collapseParentSiblings,
+  resolveParentPassages,
+} from "./parent-passage";
+import {
   expandQuery,
   KEYWORD_QUERY_HYBRID_ALPHA_WEIGHT,
 } from "./query-expansion";
@@ -205,7 +209,25 @@ export class QueryService {
       }
     }
 
-    let topResults = merged.slice(0, overFetchLimit);
+    // Under parent/child indexing, small chunks make near-duplicate hits
+    // likely: several children of one passage match, and each would resolve to
+    // that same passage below. Collapse to the best-ranked child of each
+    // passage here — on the full fused list, before ANY truncation — so both
+    // the rerank and the final result set are spent on distinct passages
+    // rather than on the same text repeated.
+    //
+    // Doing it here rather than after the rerank is what keeps the pattern
+    // affordable. Collapsing later would leave the over-fetch window filled
+    // with duplicates and force it wider to compensate, which costs a bigger
+    // rerank on every query. The price is that a passage is represented by its
+    // fusion-best child rather than its rerank-best one — and since every
+    // sibling resolves to the very same passage text, that choice only decides
+    // which chunk the citation names.
+    const preCollapseCount = merged.length;
+    const deduped = collapseParentSiblings(merged);
+    const collapsedCount = preCollapseCount - deduped.length;
+
+    let topResults = deduped.slice(0, overFetchLimit);
 
     const preRerankCount = topResults.length;
     topResults = await rerank({
@@ -216,14 +238,33 @@ export class QueryService {
     });
     topResults = topResults.slice(0, limit);
 
-    // Widen each surviving hit with its neighbouring chunks. Deliberately after
-    // the rerank and the slice: expansion must not change what ranks or how
-    // many results come back, and expanding chunks the rerank was about to drop
-    // would be wasted queries.
+    // Widen each surviving hit into the passage the model should read, by
+    // whichever of the two mechanisms applies to it: a child chunk is resolved
+    // to its parent passage, and a chunk that IS a passage is widened by its
+    // neighbours. Never both on one hit — see parent-passage.ts.
     //
-    // Strictly an enhancement, so it degrades rather than fails: a user asking a
-    // question is far better served by the ranked chunks than by an error
-    // because the widening query failed.
+    // Deliberately after the rerank and the slice: widening must not change
+    // what ranks or how many results come back, and widening chunks the rerank
+    // was about to drop would be wasted queries.
+    //
+    // Both are strictly enhancements, so they degrade rather than fail: a user
+    // asking a question is far better served by the ranked chunks than by an
+    // error because a widening query failed.
+    try {
+      topResults = await resolveParentPassages({
+        results: topResults,
+        userAcl: params.userAcl,
+        bypassAcl,
+        environmentId,
+        retrievalBackend: this.retrievalBackend,
+      });
+    } catch (error) {
+      logger.warn(
+        { error: error instanceof Error ? error.message : String(error) },
+        "[QueryService] Parent passage resolution failed, returning child chunks",
+      );
+    }
+
     try {
       topResults = await expandChunkContext({
         results: topResults,
@@ -244,6 +285,7 @@ export class QueryService {
       {
         preRerankCount,
         postRerankCount: topResults.length,
+        siblingHitsCollapsed: collapsedCount,
         expandedQueryCount: expandedQueries.length,
         contextExpansionRadius: config.kb.contextExpansionRadius,
         resultIds: topResults.map((r) => r.id),

@@ -506,11 +506,6 @@ export default function KnowledgeFilesPage() {
     >
       <div className="space-y-6">
         <FilterBar
-          // Not `mb-0`: tailwind's `space-y-*` spaces a stack by setting
-          // margin-bottom on every child but the last, so zeroing the bar's own
-          // bottom margin cancels the stack's gap rather than deferring to it,
-          // leaving the bar flush against the table.
-          className="mb-6"
           onClearFilters={
             search
               ? () => {

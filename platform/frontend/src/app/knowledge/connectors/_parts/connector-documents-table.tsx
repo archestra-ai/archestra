@@ -271,7 +271,7 @@ export function ConnectorDocumentsTable({
 
   return (
     <div className="space-y-4">
-      <FilterBar>
+      <FilterBar className="mb-4">
         <SearchInput
           value={search}
           syncQueryParams={false}

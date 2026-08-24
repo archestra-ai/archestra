@@ -208,7 +208,6 @@ function NewSkillWizard() {
                         </Badge>
                       </div>
                       <FilterBar
-                        className="mb-0"
                         onClearFilters={
                           search ? () => setSearch("") : undefined
                         }

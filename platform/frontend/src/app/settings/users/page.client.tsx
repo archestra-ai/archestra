@@ -567,6 +567,7 @@ function MembersTab({
   return (
     <>
       <FilterBar
+        className="mb-4"
         actions={<TabButtons activeTab={activeTab} onTabChange={onTabChange} />}
       >
         <SearchInput

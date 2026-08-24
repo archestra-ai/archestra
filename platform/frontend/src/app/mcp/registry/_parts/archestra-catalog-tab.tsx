@@ -148,7 +148,7 @@ export function ArchestraCatalogTab({
   return (
     <div className="w-full space-y-2">
       <FilterBar
-        className="mb-0 ml-1"
+        className="ml-1"
         onClearFilters={
           searchQuery || filters.type !== "all" || filters.category !== "all"
             ? () => {

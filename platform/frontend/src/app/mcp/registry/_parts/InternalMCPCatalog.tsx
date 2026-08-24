@@ -1115,7 +1115,6 @@ export function InternalMCPCatalog({
       <div className="space-y-4">
         <div className="space-y-3">
           <FilterBar
-            className="mb-0"
             onClearFilters={
               hasAppliedBarFilters ? handleClearBarFilters : undefined
             }

@@ -396,7 +396,6 @@ export function ChannelsSection({
         <>
           {/* Search + filters + bulk assign */}
           <FilterBar
-            className="mb-0"
             onClearFilters={hasActiveFilters ? clearFilters : undefined}
             actions={
               <BulkAssignButton

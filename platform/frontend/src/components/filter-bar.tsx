@@ -51,6 +51,14 @@ export type OverflowFilter = {
  * currently narrowing the table — a hidden active filter reads as an empty
  * table with no explanation.
  * @param actions - Trailing controls (sort, view toggle) pinned to the right.
+ *
+ * The bar carries no outer margin: the surrounding stack owns the gap between
+ * it and the table. It used to default to `mb-4`, which made "let my parent
+ * space this" and "have no spacing at all" the same string — callers wrote
+ * `className="mb-0"` meaning the former and silently got the latter, because
+ * tailwind's `space-y-*` spaces a stack via margin-bottom on every child but
+ * the last, which `mb-0` then cancelled. Six pages had a collapsed gap this
+ * way. Pass an explicit margin here only when there is no stack to own it.
  */
 export function FilterBar({
   children,
@@ -71,7 +79,7 @@ export function FilterBar({
   return (
     <div
       className={cn(
-        "mb-4 flex flex-wrap items-center gap-1.5",
+        "flex flex-wrap items-center gap-1.5",
         // Search boxes are the one control whose height isn't set by
         // `filterControlClass` (callers render an <Input>, not a trigger
         // button), so the bar pulls them down to the compact height itself

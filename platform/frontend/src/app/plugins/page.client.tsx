@@ -614,7 +614,6 @@ function PluginsList() {
             <>
               <div className="mb-6 flex flex-col gap-2">
                 <FilterBar
-                  className="mb-0"
                   onClearFilters={hasActiveFilters ? clearFilters : undefined}
                   moreFilters={[
                     {

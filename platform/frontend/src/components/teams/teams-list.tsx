@@ -296,7 +296,7 @@ export function TeamsList() {
   return (
     <>
       <div className="space-y-6">
-        <FilterBar className="mb-0">
+        <FilterBar>
           <SearchInput
             objectNamePlural="teams"
             searchFields={["name"]}

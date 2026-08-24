@@ -642,7 +642,7 @@ export function AssignedToolsTable({
 
   return (
     <div className="space-y-6">
-      <FilterBar>
+      <FilterBar className="mb-4">
         <SearchInput
           objectNamePlural="tools"
           searchFields={["name"]}

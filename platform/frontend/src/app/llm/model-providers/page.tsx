@@ -740,7 +740,7 @@ export default function ApiKeysPage() {
       actionButton={addApiKeyButton}
     >
       <div className="space-y-4">
-        <FilterBar>
+        <FilterBar className="mb-4">
           <SearchInput
             objectNamePlural="credentials"
             searchFields={["name"]}

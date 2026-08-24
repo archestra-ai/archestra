@@ -3,6 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useProfiles } from "@/lib/agent.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { useMcpToolCalls } from "@/lib/mcp/mcp-tool-call.query";
 import McpGatewayLogsPage from "./page.client";
@@ -20,8 +22,13 @@ globalThis.ResizeObserver = class {
 };
 
 vi.mock("next/navigation");
+vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/hooks/use-app-name");
 
 vi.mock("@/lib/agent.query", () => ({ useProfiles: vi.fn() }));
+vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
+  useInternalMcpCatalog: vi.fn(),
+}));
 vi.mock("@/lib/mcp/mcp-server.query", () => ({ useMcpServers: vi.fn() }));
 vi.mock("@/lib/mcp/mcp-tool-call.query", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/mcp/mcp-tool-call.query")>()),
@@ -69,6 +76,12 @@ describe("McpGatewayLogsPage gateway filter", () => {
     vi.mocked(useMcpServers).mockReturnValue({
       data: [],
     } as unknown as ReturnType<typeof useMcpServers>);
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useInternalMcpCatalog).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useInternalMcpCatalog>);
     vi.mocked(useMcpToolCalls).mockReturnValue({
       data: { data: [], pagination: { total: 0 } },
       isFetching: false,
@@ -126,5 +139,71 @@ describe("McpGatewayLogsPage gateway filter", () => {
     expect(vi.mocked(useMcpToolCalls)).toHaveBeenLastCalledWith(
       expect.objectContaining({ agentId: "g1" }),
     );
+  });
+
+  it("presents the call context without separate method, server, and arguments columns", () => {
+    vi.mocked(useMcpServers).mockReturnValue({
+      data: [
+        {
+          name: "document-search-deployment",
+          catalogName: "Document Search",
+          catalogId: "document-search-catalog",
+        },
+      ],
+    } as unknown as ReturnType<typeof useMcpServers>);
+    vi.mocked(useInternalMcpCatalog).mockReturnValue({
+      data: [
+        {
+          id: "document-search-catalog",
+          name: "Document Search",
+          icon: "📚",
+        },
+      ],
+    } as unknown as ReturnType<typeof useInternalMcpCatalog>);
+    vi.mocked(useMcpToolCalls).mockReturnValue({
+      data: {
+        data: [
+          {
+            id: "call-1",
+            ownerType: "agent",
+            agentId: orgGateway.id,
+            appId: null,
+            mcpServerName: "document-search-deployment",
+            method: "tools/call",
+            toolCall: {
+              id: "tool-call-1",
+              name: "documents__search_documents",
+              arguments: { query: "raw argument only belongs in details" },
+            },
+            toolResult: { isError: false, content: [] },
+            userId: "user-1",
+            authMethod: "session",
+            createdAt: "2026-08-23T16:30:00.000Z",
+            userName: "Demo Admin",
+            appName: null,
+          },
+        ],
+        pagination: { total: 1 },
+      },
+      isFetching: false,
+    } as unknown as ReturnType<typeof useMcpToolCalls>);
+
+    render(<McpGatewayLogsPage />);
+
+    for (const header of ["Call", "Gateway", "Identity", "Result", "Time"]) {
+      expect(
+        screen.getByRole("columnheader", { name: header }),
+      ).toBeInTheDocument();
+    }
+    expect(screen.getByText("search_documents")).toBeVisible();
+    expect(screen.getByText("Document Search")).toBeVisible();
+    expect(screen.getByText("📚")).toBeInTheDocument();
+    expect(screen.getByText("Demo Admin")).toBeVisible();
+    expect(screen.getByText("Success")).toBeVisible();
+    expect(screen.queryByRole("columnheader", { name: "Method" })).toBeNull();
+    expect(
+      screen.queryByRole("columnheader", { name: "Arguments" }),
+    ).toBeNull();
+    expect(screen.queryByText(/raw argument only belongs/)).toBeNull();
   });
 });

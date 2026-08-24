@@ -12,16 +12,10 @@ import {
 } from "@/components/filter-bar";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
-import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { DateTimeRangePicker } from "@/components/ui/date-time-range-picker";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useProfilesPaginated } from "@/lib/agent.query";
 import { useApps } from "@/lib/app.query";
@@ -42,9 +36,8 @@ import { useMemberSearch } from "@/lib/member.query";
 import { useRolesPaginated } from "@/lib/role.query";
 import { useSkillsPaginated } from "@/lib/skills/skill.query";
 import { useTeams } from "@/lib/teams/team.query";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils";
 import {
-  ACTION_BADGE_VARIANT,
   ACTOR_TYPE_LABEL,
   ALL_ACTIONS,
   ALL_ACTOR_TYPES,
@@ -65,7 +58,7 @@ const ALL_VALUE = "all";
 
 // The high-signal types whose names render in the Resource column and whose
 // entities populate the "Filter by resource" picker. Every other type keeps a
-// bare type chip in the list; its full identity lives in the detail dialog.
+// bare type label in the list; its full identity lives in the detail dialog.
 const LIST_NAME_RESOURCE_TYPES: ReadonlySet<string> = new Set([
   "agent",
   "app",
@@ -416,6 +409,91 @@ export function AuditLogTable() {
   const columns = useMemo<ColumnDef<AuditLogRow>[]>(
     () => [
       {
+        id: "activity",
+        header: "Activity",
+        size: 300,
+        minSize: 240,
+        cell: ({ row }) => (
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="min-w-0 truncate text-sm font-medium">
+              {formatAction(row.original.action)}
+            </span>
+            <Badge
+              variant={OUTCOME_BADGE_VARIANT[row.original.outcome]}
+              className="px-1.5 py-0 text-[10px]"
+            >
+              {OUTCOME_LABEL[row.original.outcome]}
+            </Badge>
+          </div>
+        ),
+      },
+      {
+        id: "actor",
+        header: "Actor",
+        size: 240,
+        minSize: 190,
+        cell: ({ row }) => {
+          const {
+            actorName,
+            actorEmail,
+            actorType,
+            impersonatedBy,
+            impersonatedByEmail,
+          } = row.original;
+          const label = actorName ?? actorEmail ?? "Deleted user";
+          return (
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                <User className="size-3.5" />
+              </span>
+              <div className="min-w-0">
+                <div className="truncate text-sm font-medium">{label}</div>
+                <div className="truncate text-xs text-muted-foreground">
+                  {impersonatedBy
+                    ? `via ${impersonatedByEmail ?? "deleted user"}`
+                    : ACTOR_TYPE_LABEL[actorType]}
+                </div>
+              </div>
+            </div>
+          );
+        },
+      },
+      {
+        id: "resource",
+        header: "Resource",
+        size: 280,
+        minSize: 220,
+        cell: ({ row }) => {
+          const { resourceType } = row.original;
+          const name =
+            resourceType && LIST_NAME_RESOURCE_TYPES.has(resourceType)
+              ? resourceDisplayName(row.original)
+              : null;
+          if (!resourceType && !name) {
+            return <span className="text-xs text-muted-foreground">—</span>;
+          }
+          const displayName =
+            name && name.length > RESOURCE_NAME_TRUNCATE_LENGTH
+              ? `${name.slice(0, RESOURCE_NAME_TRUNCATE_LENGTH)}…`
+              : name;
+          return (
+            <div className="min-w-0">
+              <div
+                className="truncate text-sm font-medium"
+                title={name ?? undefined}
+              >
+                {displayName ?? formatResourceType(resourceType ?? "")}
+              </div>
+              {name && resourceType ? (
+                <div className="truncate text-xs text-muted-foreground">
+                  {formatResourceType(resourceType)}
+                </div>
+              ) : null}
+            </div>
+          );
+        },
+      },
+      {
         id: "createdAt",
         header: ({ column }) => (
           <Button
@@ -423,133 +501,25 @@ export function AuditLogTable() {
             className="h-auto !p-0 font-medium hover:bg-transparent"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
           >
-            When
+            Time
             <SortIcon isSorted={column.getIsSorted()} />
           </Button>
         ),
+        size: 190,
+        minSize: 175,
         cell: ({ row }) => (
-          <div className="font-mono text-xs">
-            {formatDate({ date: row.original.createdAt })}
+          <div className="min-w-0">
+            <div className="text-sm">
+              {formatRelativeTimeFromNow(row.original.createdAt)}
+            </div>
+            <div className="truncate font-mono text-[11px] text-muted-foreground">
+              {formatDate({
+                date: row.original.createdAt,
+                dateFormat: "MMM d, yyyy · HH:mm:ss",
+              })}
+            </div>
           </div>
         ),
-      },
-      {
-        id: "actor",
-        header: "Actor",
-        cell: ({ row }) => {
-          const { actorName, actorEmail, impersonatedBy, impersonatedByEmail } =
-            row.original;
-          const label = actorName ?? actorEmail ?? "Deleted user";
-          return (
-            <div className="flex flex-col items-start gap-0.5">
-              <Badge variant="outline" className="text-xs">
-                <User className="mr-1 h-3 w-3 shrink-0" />
-                <TruncatedText message={label} maxLength={24} />
-              </Badge>
-              {impersonatedBy && (
-                <span
-                  className="text-[10px] text-amber-600 dark:text-amber-500"
-                  title="This action ran in an impersonated session; the named actor was being impersonated by this admin."
-                >
-                  via {impersonatedByEmail ?? "deleted user"}
-                </span>
-              )}
-            </div>
-          );
-        },
-      },
-      {
-        id: "action",
-        header: "Action",
-        cell: ({ row }) => (
-          <Badge
-            variant={
-              ACTION_BADGE_VARIANT[row.original.action as AuditEventName]
-            }
-            className="text-xs whitespace-nowrap"
-          >
-            {formatAction(row.original.action)}
-          </Badge>
-        ),
-      },
-      {
-        id: "outcome",
-        header: "Outcome",
-        cell: ({ row }) => (
-          <Badge
-            variant={OUTCOME_BADGE_VARIANT[row.original.outcome]}
-            className="text-xs"
-          >
-            {OUTCOME_LABEL[row.original.outcome]}
-          </Badge>
-        ),
-      },
-      {
-        id: "resource",
-        header: "Resource",
-        cell: ({ row }) => {
-          const { resourceType: rt } = row.original;
-          const name =
-            rt && LIST_NAME_RESOURCE_TYPES.has(rt)
-              ? resourceDisplayName(row.original)
-              : null;
-          if (!rt && !name) {
-            return <span className="text-xs text-muted-foreground">—</span>;
-          }
-          const displayName =
-            name && name.length > RESOURCE_NAME_TRUNCATE_LENGTH
-              ? `${name.slice(0, RESOURCE_NAME_TRUNCATE_LENGTH)}…`
-              : name;
-          // One chip holding "Type: name" as a single text flow (not flex
-          // columns). break-all splits machine names mid-word (the Model
-          // providers convention) so every line fills the cell width instead
-          // of breaking ragged at each hyphen; rounded-md instead of the
-          // badge's pill rounding keeps multiline corners off the text.
-          return (
-            <Badge
-              variant="secondary"
-              className="max-w-full rounded-md whitespace-normal text-xs"
-            >
-              <span className="break-all font-normal">
-                {rt && (
-                  <span className="font-semibold">
-                    {formatResourceType(rt)}
-                  </span>
-                )}
-                {rt && name ? <span>: </span> : null}
-                {name && <span title={name}>{displayName}</span>}
-              </span>
-            </Badge>
-          );
-        },
-      },
-      {
-        id: "where",
-        header: "Where",
-        cell: ({ row }) => {
-          const { sourceIp, userAgent } = row.original;
-          if (!sourceIp && !userAgent) {
-            return <span className="text-xs text-muted-foreground">—</span>;
-          }
-          const ipDisplay = sourceIp ?? "—";
-          if (!userAgent) {
-            return (
-              <code className="text-xs text-muted-foreground">{ipDisplay}</code>
-            );
-          }
-          return (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <code className="text-xs text-muted-foreground">
-                  {ipDisplay}
-                </code>
-              </TooltipTrigger>
-              <TooltipContent className="max-w-sm break-all">
-                {userAgent}
-              </TooltipContent>
-            </Tooltip>
-          );
-        },
       },
     ],
     [],

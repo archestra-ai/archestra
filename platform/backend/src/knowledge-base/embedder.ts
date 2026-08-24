@@ -1,6 +1,6 @@
 import { addNomicTaskPrefix, EMBEDDING_BATCH_SIZE } from "@archestra/shared";
 import logger from "@/logging";
-import { KbChunkModel, KbDocumentModel } from "@/models";
+import { KbDocumentModel } from "@/models";
 import {
   callEmbedding,
   type EmbeddingApiResponse,
@@ -20,6 +20,7 @@ import {
   getDefaultOrgEmbeddingConfig,
 } from "./kb-llm-client";
 import { parseImageDataUrl } from "./media-chunk";
+import { knowledgeRetrievalBackend } from "./retrieval-backends/registry";
 
 const RETRY_MAX_ATTEMPTS = 3;
 const RETRY_BASE_DELAY_MS = 1000;
@@ -59,7 +60,8 @@ class EmbeddingService {
     await KbDocumentModel.update(documentId, { embeddingStatus: "processing" });
 
     try {
-      const chunks = await KbChunkModel.findByDocument(documentId);
+      const chunks =
+        await knowledgeRetrievalBackend.getDocumentChunks(documentId);
 
       if (chunks.length === 0) {
         await KbDocumentModel.update(documentId, {
@@ -122,7 +124,10 @@ class EmbeddingService {
         }
       }
 
-      await KbChunkModel.updateEmbeddings(allUpdates, ctx.dimensions);
+      await knowledgeRetrievalBackend.indexEmbeddings({
+        updates: allUpdates,
+        dimensions: ctx.dimensions,
+      });
 
       await KbDocumentModel.update(documentId, {
         embeddingStatus: "completed",
@@ -201,7 +206,8 @@ class EmbeddingService {
         embeddingStatus: "processing",
       });
 
-      const chunks = await KbChunkModel.findByDocument(documentId);
+      const chunks =
+        await knowledgeRetrievalBackend.getDocumentChunks(documentId);
 
       if (chunks.length === 0) {
         await KbDocumentModel.update(documentId, {
@@ -378,7 +384,10 @@ class EmbeddingService {
     );
     if (successfulUpdates.length > 0) {
       try {
-        await KbChunkModel.updateEmbeddings(successfulUpdates, ctx.dimensions);
+        await knowledgeRetrievalBackend.indexEmbeddings({
+          updates: successfulUpdates,
+          dimensions: ctx.dimensions,
+        });
       } catch (error) {
         // Persistence failed (e.g. a pgvector dimension error on write). Fail the
         // affected documents and surface the cause rather than crashing.

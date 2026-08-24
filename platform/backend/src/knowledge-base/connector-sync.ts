@@ -7,7 +7,6 @@ import config from "@/config";
 import defaultLogger from "@/logging";
 import {
   ConnectorRunModel,
-  KbChunkModel,
   KbDocumentModel,
   KnowledgeBaseConnectorModel,
 } from "@/models";
@@ -31,6 +30,7 @@ import { toKnowledgeBaseUserMessage } from "./errors";
 import { resolveEmbeddingConfig, resolveOcrConfig } from "./kb-llm-client";
 import { OCR_RUN_PAGE_BUDGET } from "./pdf-ocr";
 import { enqueuePermissionSyncAfterContentSync } from "./permission-sync-trigger";
+import { knowledgeRetrievalBackend } from "./retrieval-backends/registry";
 import { knowledgeSourceAccessControlService } from "./source-access-control";
 
 /**
@@ -990,9 +990,8 @@ class ConnectorSyncService {
 
       // Same content hash → skip (unchanged)
       if (existing.contentHash === contentHash) {
-        const existingChunkCount = await KbChunkModel.countByDocument(
-          existing.id,
-        );
+        const existingChunkCount =
+          await knowledgeRetrievalBackend.countDocumentChunks(existing.id);
 
         if (existingChunkCount === 0) {
           await this.chunkAndStore({
@@ -1088,7 +1087,7 @@ class ConnectorSyncService {
       const chunkAcl = isAutoSync ? [] : acl;
 
       // Re-chunk: content changed, so replace stale chunks
-      await KbChunkModel.deleteByDocument(existing.id);
+      await knowledgeRetrievalBackend.deleteDocumentChunks(existing.id);
       await this.chunkAndStore({
         documentId: existing.id,
         title,

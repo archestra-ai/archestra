@@ -1,10 +1,10 @@
 import type { TextSearchLanguage } from "@archestra/shared";
 import type pino from "pino";
-import { KbChunkModel } from "@/models";
 import * as metrics from "@/observability/metrics";
 import type { AclEntry } from "@/types";
 import { chunkDocument } from "./chunker";
 import { buildContextualHeaders } from "./contextual-retrieval";
+import { knowledgeRetrievalBackend } from "./retrieval-backends/registry";
 
 /**
  * Split a stored document into chunks and persist them.
@@ -50,7 +50,7 @@ export async function chunkAndStoreDocument(params: {
   // multimodal embedding API instead of text embedding.
   if (mediaContent) {
     const dataUrl = `data:${mediaContent.mimeType};base64,${mediaContent.data}`;
-    await KbChunkModel.insertMany([
+    await knowledgeRetrievalBackend.insertChunks([
       {
         documentId,
         content: dataUrl,
@@ -86,7 +86,7 @@ export async function chunkAndStoreDocument(params: {
     connectorId,
   });
 
-  await KbChunkModel.insertMany(
+  await knowledgeRetrievalBackend.insertChunks(
     chunks.map((chunk, index) => ({
       documentId,
       content: chunk.content,

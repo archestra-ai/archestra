@@ -4,9 +4,8 @@ import {
   type TextSearchLanguage,
 } from "@archestra/shared";
 import config from "@/config";
-import { isDbStatementTimeoutError } from "@/database/retry";
 import logger from "@/logging";
-import { KbChunkModel, OrganizationModel } from "@/models";
+import { OrganizationModel } from "@/models";
 import type { Bm25Tuning, VectorSearchResult } from "@/models/kb-chunk";
 import * as metrics from "@/observability/metrics";
 import type { AclEntry } from "@/types";
@@ -28,6 +27,9 @@ import {
   KEYWORD_QUERY_HYBRID_ALPHA_WEIGHT,
 } from "./query-expansion";
 import rerank from "./reranker";
+import type { KnowledgeRetrievalBackend } from "./retrieval-backend";
+import { knowledgeRetrievalBackend } from "./retrieval-backends/registry";
+import { verifyExternalRetrievalResults } from "./retrieval-result-verifier";
 import reciprocalRankFusion from "./rrf";
 
 interface ChunkResult {
@@ -62,7 +64,12 @@ interface ChunkResult {
   };
 }
 
-class QueryService {
+/** @public — extension point for alternate knowledge retrieval backends. */
+export class QueryService {
+  constructor(
+    private readonly retrievalBackend: KnowledgeRetrievalBackend = knowledgeRetrievalBackend,
+  ) {}
+
   async query(params: {
     connectorIds: string[];
     organizationId: string;
@@ -110,7 +117,7 @@ class QueryService {
     const [expandedQueries, searchLanguages] = await Promise.all([
       expandQuery({ queryText, organizationId, connectorId }),
       hybridEnabled
-        ? KbChunkModel.getTextSearchLanguages(connectorIds)
+        ? this.retrievalBackend.getTextSearchLanguages(connectorIds)
         : Promise.resolve([]),
     ]);
 
@@ -173,7 +180,9 @@ class QueryService {
     // actionable error instead of a puzzling empty result.
     if (merged.length === 0) {
       const populated =
-        await KbChunkModel.getPopulatedEmbeddingDimensions(connectorIds);
+        await this.retrievalBackend.getPopulatedEmbeddingDimensions(
+          connectorIds,
+        );
       const mismatch = findEmbeddingDimensionMismatch(
         populated,
         embeddingConfig.dimensions,
@@ -213,6 +222,7 @@ class QueryService {
         userAcl: params.userAcl,
         bypassAcl,
         environmentId,
+        retrievalBackend: this.retrievalBackend,
       });
     } catch (error) {
       logger.warn(
@@ -347,9 +357,9 @@ class QueryService {
     // Each lane is cut individually by the search statement timeout (`null` =
     // timed out): dropping one lane degrades the merge instead of failing the
     // whole query, and the caller escalates only when every lane is gone.
-    const [vectorRows, fullTextRows] = await Promise.all([
-      runSearchLane("vector", () =>
-        KbChunkModel.vectorSearch({
+    const [unverifiedVectorRows, unverifiedFullTextRows] = await Promise.all([
+      runSearchLane("vector", this.retrievalBackend, () =>
+        this.retrievalBackend.vectorSearch({
           connectorIds,
           queryEmbedding,
           dimensions: embeddingConfig.dimensions,
@@ -360,8 +370,8 @@ class QueryService {
         }),
       ),
       hybridEnabled
-        ? runSearchLane("keyword", () =>
-            KbChunkModel.fullTextSearch({
+        ? runSearchLane("keyword", this.retrievalBackend, () =>
+            this.retrievalBackend.keywordSearch({
               connectorIds,
               queryText,
               languages: searchLanguages,
@@ -373,6 +383,23 @@ class QueryService {
             }),
           )
         : Promise.resolve<VectorSearchResult[] | null>([]),
+    ]);
+
+    const [vectorRows, fullTextRows] = await Promise.all([
+      this.verifyResults({
+        candidates: unverifiedVectorRows,
+        connectorIds,
+        userAcl,
+        bypassAcl,
+        environmentId,
+      }),
+      this.verifyResults({
+        candidates: unverifiedFullTextRows,
+        connectorIds,
+        userAcl,
+        bypassAcl,
+        environmentId,
+      }),
     ]);
 
     const lanesAttempted = hybridEnabled ? 2 : 1;
@@ -424,7 +451,7 @@ class QueryService {
    * can be missing right after the upgrade that introduced them, or for a
    * language first indexed since the last rebuild. Until they exist, `ts_rank`
    * ranks instead. A language with nothing indexed never triggers this (see
-   * {@link KbChunkModel.hasBm25Stats}).
+   * the retrieval backend's keyword-statistics check).
    *
    * The constants are an organization's Knowledge-settings override where set,
    * else the deployment default — resolved per query so a change saved in the
@@ -437,7 +464,7 @@ class QueryService {
     connectorIds: string[],
   ): Promise<Bm25Tuning | undefined> {
     const [statsReady, org] = await Promise.all([
-      KbChunkModel.hasBm25Stats(searchLanguages, connectorIds),
+      this.retrievalBackend.hasKeywordStatistics(searchLanguages, connectorIds),
       OrganizationModel.getById(organizationId),
     ]);
     if (!statsReady) {
@@ -451,6 +478,25 @@ class QueryService {
       k1: org?.kbBm25K1 ?? config.kb.bm25K1,
       b: org?.kbBm25B ?? config.kb.bm25B,
     };
+  }
+
+  private async verifyResults(params: {
+    candidates: VectorSearchResult[] | null;
+    connectorIds: string[];
+    userAcl: AclEntry[];
+    bypassAcl: boolean;
+    environmentId?: string | null;
+  }): Promise<VectorSearchResult[] | null> {
+    if (
+      params.candidates === null ||
+      !this.retrievalBackend.requiresResultVerification
+    ) {
+      return params.candidates;
+    }
+    return verifyExternalRetrievalResults({
+      ...params,
+      candidates: params.candidates,
+    });
   }
 
   private mapResults(rows: VectorSearchResult[]): ChunkResult[] {
@@ -488,12 +534,13 @@ interface SingleQuerySearchResult {
  */
 async function runSearchLane(
   lane: "vector" | "keyword",
+  retrievalBackend: KnowledgeRetrievalBackend,
   run: () => Promise<VectorSearchResult[]>,
 ): Promise<VectorSearchResult[] | null> {
   try {
     return await run();
   } catch (error) {
-    if (!isDbStatementTimeoutError(error)) throw error;
+    if (!retrievalBackend.isSearchTimeout(error)) throw error;
     metrics.rag.reportSearchLaneTimeout(lane);
     logger.warn(
       { lane },

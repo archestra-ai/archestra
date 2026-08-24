@@ -1,7 +1,9 @@
 import logger from "@/logging";
-import { KbChunkModel } from "@/models";
 import type { VectorSearchResult } from "@/models/kb-chunk";
 import type { AclEntry } from "@/types";
+import type { KnowledgeRetrievalBackend } from "./retrieval-backend";
+import { knowledgeRetrievalBackend } from "./retrieval-backends/registry";
+import { verifyExternalNeighborChunks } from "./retrieval-result-verifier";
 
 // ===== Exports =====
 
@@ -31,8 +33,16 @@ export async function expandChunkContext(params: {
   userAcl: AclEntry[];
   bypassAcl?: boolean;
   environmentId?: string | null;
+  retrievalBackend?: KnowledgeRetrievalBackend;
 }): Promise<VectorSearchResult[]> {
-  const { results, radius, userAcl, bypassAcl = false, environmentId } = params;
+  const {
+    results,
+    radius,
+    userAcl,
+    bypassAcl = false,
+    environmentId,
+    retrievalBackend = knowledgeRetrievalBackend,
+  } = params;
 
   if (radius <= 0 || results.length === 0) return results;
 
@@ -40,7 +50,7 @@ export async function expandChunkContext(params: {
   const expandable = results.filter((r) => !isMediaChunk(r.content));
   if (expandable.length === 0) return results;
 
-  const neighbors = await KbChunkModel.findNeighbors({
+  const neighborParams = {
     anchors: expandable.map((r) => ({
       documentId: r.documentId,
       chunkIndex: r.chunkIndex,
@@ -49,7 +59,11 @@ export async function expandChunkContext(params: {
     userAcl,
     bypassAcl,
     environmentId,
-  });
+  };
+  const candidates = await retrievalBackend.findNeighbors(neighborParams);
+  const neighbors = retrievalBackend.requiresResultVerification
+    ? await verifyExternalNeighborChunks({ ...neighborParams, candidates })
+    : candidates;
 
   if (neighbors.length === 0) return results;
 

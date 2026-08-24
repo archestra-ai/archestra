@@ -54,8 +54,9 @@ export async function markChannelThreadActive(params: {
 /**
  * Whether the bot was @mentioned in this channel thread recently enough to keep replying.
  *
- * @public — applyChannelGate is the only production caller; also exercised
- * directly in channel-activation.test.ts (knip --production can't see tests).
+ * @public — called by applyChannelGate and by the Slack provider's
+ * isTrackedThreadRoot; also exercised directly in channel-activation.test.ts
+ * (knip --production can't see tests).
  */
 export async function isChannelThreadActive(params: {
   provider: ChatOpsProviderType;
@@ -196,8 +197,9 @@ export async function muteChannelThreadAndNotify(params: {
  * off — is false (mentions-only). The cache is short-lived and also invalidated
  * on toggle (see invalidateChannelAnswerAll), so a change takes effect promptly.
  *
- * @public — applyChannelGate is the only production caller; also exercised
- * directly in channel-activation.test.ts (knip --production can't see tests).
+ * @public — called by applyChannelGate and by both providers' mute-reaction
+ * paths, which resolve it to decide whether to confirm; also exercised directly
+ * in channel-activation.test.ts (knip --production can't see tests).
  */
 export async function isChannelAnswerAllEnabled(params: {
   provider: ChatOpsProviderType;
@@ -297,8 +299,10 @@ export async function markChannelThreadMuted(params: {
 /**
  * Whether an answer-all channel thread was muted and not yet re-mentioned.
  *
- * @public — applyChannelGate is the only production caller; also exercised
- * directly in channel-activation.test.ts (knip --production can't see tests).
+ * @public — read by applyChannelGate, by muteChannelThreadAndNotify (to tell a
+ * first mute from a repeat) and by the Slack provider's isTrackedThreadRoot;
+ * also exercised directly in channel-activation.test.ts (knip --production
+ * can't see tests).
  */
 export async function isChannelThreadMuted(params: {
   provider: ChatOpsProviderType;
@@ -430,8 +434,13 @@ export function mightBeAddressedMuteCommand(text: string): boolean {
  * Accepts either platform's identifier for the same two glyphs: 🔇 muted
  * speaker (Slack `mute`, Teams `1f507_mutedspeaker`) and 🤫 shushing face
  * (Slack `shushing_face`, Teams `lipssealed`). Matching a single shared Set
- * avoids a per-provider mapping. Callers gate on the reaction being on the
- * bot's OWN message before consulting this.
+ * avoids a per-provider mapping.
+ *
+ * Whether the reacted message has to be the bot's own is the caller's business,
+ * and the two providers differ: Teams only ever delivers reaction activities for
+ * the bot's own messages, while Slack honors the reaction anywhere in a channel
+ * thread (see handleMuteReaction) because a mute is about the thread, not about
+ * the message carrying it.
  */
 export function isMuteReaction(reactionId: string): boolean {
   return THREAD_MUTE_REACTIONS.has(reactionId.trim().toLowerCase());

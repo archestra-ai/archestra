@@ -1057,6 +1057,9 @@ describe("SlackProvider.parseWebhookNotification — mute reaction", () => {
     });
   }
 
+  // reactionPayload deliberately carries no `item_user`: the field is optional
+  // on reaction_added and Slack does not populate it for every app-authored
+  // message, so muting must not depend on it.
   test("🔇 on a bot reply in an active thread mutes it and posts the notice", async () => {
     const { provider, postMessage, replies } = createReactionProvider();
     await markChannelThreadActive({
@@ -1120,20 +1123,6 @@ describe("SlackProvider.parseWebhookNotification — mute reaction", () => {
         `${CacheKey.SlackThreadActive}-${CHANNEL}::${ROOT}`,
       ),
     ).toBeUndefined();
-  });
-
-  test("🔇 still mutes when Slack omits item_user", async () => {
-    // item_user is optional on reaction_added and is not populated for every
-    // app-authored message; the mute must not hinge on it.
-    const { provider, postMessage } = createReactionProvider();
-    await markChannelThreadActive({
-      provider: "slack",
-      channelId: CHANNEL,
-      threadId: ROOT,
-    });
-
-    await provider.parseWebhookNotification(reactionPayload("mute"), {});
-    expect(postMessage).toHaveBeenCalledTimes(1);
   });
 
   test("the bot's own 🔇 reaction is ignored", async () => {

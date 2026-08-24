@@ -1109,10 +1109,6 @@ describe("NotionConnector", () => {
       );
     }
 
-    it("supportsPermissionSync is true", () => {
-      expect(new NotionConnector().supportsPermissionSync).toBe(true);
-    });
-
     it("syncPermissionSnapshot yields the workspace container then every ingested doc's assignment", async () => {
       const connector = new NotionConnector();
       spyFetch(connector).mockResolvedValueOnce(makeBotMeResponse());

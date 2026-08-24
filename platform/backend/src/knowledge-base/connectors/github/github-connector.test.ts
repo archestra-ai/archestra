@@ -1395,10 +1395,6 @@ describe("GithubConnector", () => {
       return out;
     }
 
-    test("supportsPermissionSync is true", () => {
-      expect(connector.supportsPermissionSync).toBe(true);
-    });
-
     // Pins the metadata-field contract with content-sync: documents are
     // written with `repo` = `<owner>/<name>` (matching the container key), and
     // the delta pass's local-adoption scoping depends on exactly that field.

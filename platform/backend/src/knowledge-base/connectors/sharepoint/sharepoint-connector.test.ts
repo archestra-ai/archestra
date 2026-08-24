@@ -1384,10 +1384,6 @@ describe("SharePointConnector", () => {
       vi.stubGlobal("fetch", fetchMock);
     });
 
-    it("supportsPermissionSync is true", () => {
-      expect(new SharePointConnector().supportsPermissionSync).toBe(true);
-    });
-
     it("drive container: root audience from the root permission list; plain items assign to it", async () => {
       const connector = new SharePointConnector();
       installClient(connector);

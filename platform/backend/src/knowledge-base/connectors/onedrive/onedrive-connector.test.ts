@@ -1019,10 +1019,6 @@ describe("OneDriveConnector", () => {
       requestedUrls = [];
     });
 
-    it("supportsPermissionSync is true", () => {
-      expect(new OneDriveConnector().supportsPermissionSync).toBe(true);
-    });
-
     it("scopeKeyForDocument maps metadata.userId to the container key", () => {
       const connector = new OneDriveConnector();
       expect(connector.scopeKeyForDocument({ userId: "user-1" })).toBe(

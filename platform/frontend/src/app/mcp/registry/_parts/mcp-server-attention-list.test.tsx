@@ -156,9 +156,10 @@ describe("McpServerAttentionList", () => {
       />,
     );
 
-    for (const name of ["MCP Server", "Issue", "Owner", "Actions"]) {
+    for (const name of ["MCP Server", "Issue", "Actions"]) {
       expect(screen.getByRole("columnheader", { name })).toBeInTheDocument();
     }
+    expect(screen.queryByRole("columnheader", { name: "Owner" })).toBeNull();
     expect(
       screen.queryByRole("columnheader", { name: "Issue types" }),
     ).toBeNull();
@@ -190,7 +191,7 @@ describe("McpServerAttentionList", () => {
     await user.click(
       screen.getByRole("checkbox", { name: "Select First server" }),
     );
-    expect(screen.getByText("MCP server selected")).toBeInTheDocument();
+    expect(screen.getAllByText("1 MCP server selected")).toHaveLength(2);
 
     await user.click(screen.getByRole("button", { name: "Dismiss selected" }));
     expect(
@@ -208,9 +209,7 @@ describe("McpServerAttentionList", () => {
         reason: "Owner is away",
       }),
     );
-    expect(
-      screen.getByText("Select MCP servers to apply bulk actions"),
-    ).toBeInTheDocument();
+    expect(screen.queryByText("1 MCP server selected")).toBeNull();
   });
 
   it("renders the same server metadata as the All-facet name column", () => {
@@ -265,8 +264,8 @@ describe("McpServerAttentionList", () => {
       />,
     );
 
-    const owner = screen.getByText("admin@example.com");
-    expect(owner).toHaveClass("break-words");
+    const owner = screen.getByText(/admin@example.com/);
+    expect(owner.closest("p")).toHaveClass("break-words");
     expect(owner).not.toHaveClass("truncate");
   });
 
@@ -292,13 +291,15 @@ describe("McpServerAttentionList", () => {
       />,
     );
 
-    const removeSelected = screen.getByRole("button", {
-      name: "Remove connections",
-    });
-    expect(removeSelected).toBeDisabled();
+    expect(
+      screen.queryByRole("button", { name: "Remove connections" }),
+    ).toBeNull();
     await user.click(
       screen.getByRole("checkbox", { name: "Select all alerts" }),
     );
+    const removeSelected = screen.getByRole("button", {
+      name: "Remove connections",
+    });
     expect(removeSelected).toBeEnabled();
     await user.click(removeSelected);
 
@@ -444,7 +445,7 @@ describe("McpServerAttentionList", () => {
     await user.click(
       screen.getByRole("checkbox", { name: "Select all alerts" }),
     );
-    expect(screen.getByText("MCP servers selected")).toBeInTheDocument();
+    expect(screen.getAllByText("2 MCP servers selected")).toHaveLength(2);
     expect(
       screen.getByRole("checkbox", { name: "Select First server" }),
     ).toBeChecked();
@@ -524,7 +525,7 @@ describe("McpServerAttentionList", () => {
     );
 
     const row = screen.getByRole("row", { name: /Shared provider/ });
-    expect(within(row).getByText("Multiple actors")).toBeInTheDocument();
+    expect(within(row).getByText(/Multiple actors/)).toBeInTheDocument();
     expect(within(row).queryByText("first@example.com")).toBeNull();
   });
 
@@ -638,7 +639,7 @@ describe("McpServerAttentionList", () => {
     expect(
       screen.getByRole("checkbox", { name: "Select Second server" }),
     ).toBeChecked();
-    expect(screen.getByText("MCP server selected")).toBeInTheDocument();
+    expect(screen.getAllByText("1 MCP server selected")).toHaveLength(2);
   });
 
   it("does not retarget a selected row to a newly failing connection", async () => {
@@ -691,8 +692,8 @@ describe("McpServerAttentionList", () => {
       screen.getByRole("checkbox", { name: "Select First server" }),
     ).not.toBeChecked();
     expect(
-      screen.getByRole("button", { name: "Dismiss selected" }),
-    ).toBeDisabled();
+      screen.queryByRole("button", { name: "Dismiss selected" }),
+    ).toBeNull();
   });
 
   it("does not revive selection after leaving and returning to a filter", async () => {
@@ -770,7 +771,7 @@ describe("McpServerAttentionList", () => {
     );
   });
 
-  it("shows supplied and empty dismissal reasons in the Dismissed table", () => {
+  it("shows dismissal context inside the compact Issue column", () => {
     const first = item("cat-1", "First server");
     const second = item("cat-2", "Second server");
     const withReason = reauthIssue({
@@ -806,27 +807,19 @@ describe("McpServerAttentionList", () => {
     );
 
     expect(
-      screen.getByRole("columnheader", { name: "Dismiss reason" }),
-    ).toBeInTheDocument();
-    expect(
       screen
         .getAllByRole("columnheader")
         .map((header) => header.textContent?.trim()),
-    ).toEqual([
-      "",
-      "MCP Server",
-      "Dismiss reason",
-      "Issue",
-      "Owner",
-      "Actions",
-    ]);
+    ).toEqual(["", "MCP Server", "Issue", "Actions"]);
     expect(
       within(screen.getByRole("row", { name: /First server/ })).getByText(
-        "Deferred",
+        /Reason: Deferred/,
       ),
     ).toBeInTheDocument();
     expect(
-      within(screen.getByRole("row", { name: /Second server/ })).getByText("—"),
+      within(screen.getByRole("row", { name: /Second server/ })).getByText(
+        /No dismissal reason/,
+      ),
     ).toBeInTheDocument();
   });
 });

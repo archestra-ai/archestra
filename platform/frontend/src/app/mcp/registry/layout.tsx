@@ -1,13 +1,26 @@
 "use client";
 
+import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
 import { Plus } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { PageLayout } from "@/components/page-layout";
+import { Badge } from "@/components/ui/badge";
 import { PermissionButton } from "@/components/ui/permission-button";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
+import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
+import {
+  useMcpDeploymentStatuses,
+  useMcpServers,
+} from "@/lib/mcp/mcp-server.query";
+import { useMcpServerIssues } from "@/lib/mcp/use-mcp-server-issues";
+import { waitingActionFacetLabel } from "./_parts/mcp-server-attention-owner";
 import {
   ATTENTION_FACET_STATUS_VALUES,
+  mcpRegistryFacetHref,
   REGISTRY_STATUS_PARAM,
+  selectedAttentionFacet,
 } from "./_parts/registry-list-controls";
 
 /**
@@ -67,18 +80,11 @@ export default function McpCatalogLayout({
     return <div className="mx-auto w-full px-6 py-6 md:px-6">{children}</div>;
   }
 
-  // The main list navigates to the routed setup wizard.
-  const registryActionButton = isMainRegistry ? (
-    <PermissionButton
-      permissions={{ mcpRegistry: ["create"] }}
-      onClick={() => router.push("/mcp/registry/new")}
-    >
-      <Plus className="h-4 w-4" />
-      Add MCP Server
-    </PermissionButton>
-  ) : undefined;
-
-  return (
+  return isMainRegistry ? (
+    <McpRegistryListLayout onAdd={() => router.push("/mcp/registry/new")}>
+      {children}
+    </McpRegistryListLayout>
+  ) : (
     <PageLayout
       title="MCP Registry"
       description={
@@ -86,10 +92,127 @@ export default function McpCatalogLayout({
           Manage your own list of MCP servers and make them available to agents.
         </>
       }
-      actionButton={registryActionButton}
     >
       {children}
     </PageLayout>
+  );
+}
+
+function McpRegistryListLayout({
+  children,
+  onAdd,
+}: {
+  children: React.ReactNode;
+  onAdd: () => void;
+}) {
+  const searchParams = useSearchParams();
+  const alertingEnabled = useFeature("mcpServerAlertingEnabled") === true;
+  const { data: catalogItems } = useInternalMcpCatalog();
+  const { data: servers } = useMcpServers();
+  const { statuses } = useMcpDeploymentStatuses();
+  const { issuesByCatalog, facetCounts } = useMcpServerIssues(statuses);
+  const { data: userIsMcpServerAdmin } = useHasPermissions({
+    mcpServerInstallation: ["admin"],
+  });
+  const selectedFacet = selectedAttentionFacet(
+    new Set(searchParams.getAll(REGISTRY_STATUS_PARAM)),
+  );
+  const totalCount = (catalogItems ?? []).filter(
+    (item) => item.id !== ARCHESTRA_MCP_CATALOG_ID,
+  ).length;
+  const othersLabel = waitingActionFacetLabel({
+    issuesByCatalog,
+    servers: servers ?? [],
+  });
+  const tabs = alertingEnabled
+    ? [
+        {
+          label: <RegistryTabLabel label="All" count={totalCount} />,
+          href: "/mcp/registry",
+          active: selectedFacet === null,
+        },
+        {
+          label: (
+            <RegistryTabLabel
+              label="Action required"
+              count={facetCounts.you}
+              beta
+            />
+          ),
+          href: mcpRegistryFacetHref("you"),
+          active: selectedFacet === "you",
+          testId: "mcp-registry-action-required-tab",
+        },
+        ...(!userIsMcpServerAdmin && facetCounts.others > 0
+          ? [
+              {
+                label: (
+                  <RegistryTabLabel
+                    label={othersLabel}
+                    count={facetCounts.others}
+                  />
+                ),
+                href: mcpRegistryFacetHref("others"),
+                active: selectedFacet === "others",
+              },
+            ]
+          : []),
+        ...(facetCounts.muted > 0
+          ? [
+              {
+                label: (
+                  <RegistryTabLabel
+                    label="Dismissed"
+                    count={facetCounts.muted}
+                  />
+                ),
+                href: mcpRegistryFacetHref("muted"),
+                active: selectedFacet === "muted",
+              },
+            ]
+          : []),
+      ]
+    : [];
+
+  return (
+    <PageLayout
+      title="MCP Registry"
+      description="Manage your own list of MCP servers and make them available to agents."
+      tabs={tabs}
+      actionButton={
+        <PermissionButton
+          permissions={{ mcpRegistry: ["create"] }}
+          onClick={onAdd}
+        >
+          <Plus className="h-4 w-4" />
+          <span>Add MCP Server</span>
+        </PermissionButton>
+      }
+    >
+      {children}
+    </PageLayout>
+  );
+}
+
+function RegistryTabLabel({
+  label,
+  count,
+  beta = false,
+}: {
+  label: string;
+  count: number;
+  beta?: boolean;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span>{label}</span>
+      <span className="tabular-nums text-muted-foreground">({count})</span>
+      {beta ? (
+        <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+          Beta
+        </Badge>
+      ) : null}
+    </span>
   );
 }
 

@@ -233,8 +233,11 @@ describe("PluginDetailPage", () => {
     ).toHaveAttribute("data-language", "powershell");
   });
 
-  it("marks OpenAPPA as Archestra while retaining regular GitHub actions", async () => {
+  it("uses the configured app name for the featured plugin", async () => {
     const user = userEvent.setup();
+    vi.mocked(useAppearanceSettings).mockReturnValue({
+      data: { appName: "Northstar" },
+    } as unknown as ReturnType<typeof useAppearanceSettings>);
     renderPage({
       ...BASE_PLUGIN,
       sourceKind: "github",
@@ -244,7 +247,7 @@ describe("PluginDetailPage", () => {
       sourceMarketplacePluginName: "appa-runtime",
     });
 
-    expect(screen.getByText("Archestra")).toBeVisible();
+    expect(screen.getByText("Northstar")).toBeVisible();
     expect(screen.queryByText("Imported from GitHub")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "More actions" }));
     expect(screen.getByRole("menuitem", { name: "Updates" })).toBeVisible();

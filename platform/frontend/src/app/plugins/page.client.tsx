@@ -65,6 +65,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import {
   type PluginListItem,
@@ -83,7 +84,6 @@ import { PluginClientIcon } from "./_parts/plugin-client-icon";
 import { PluginGithubSyncBadge } from "./_parts/plugin-github-sync-badge";
 import { PluginInstallDialog } from "./_parts/plugin-install-dialog";
 import {
-  ARCHESTRA_PLUGIN_PROVENANCE_LABEL,
   CLIENT_LABELS,
   comparePinnedPluginTableOrder,
   comparePluginCatalogOrder,
@@ -151,6 +151,7 @@ function PluginsList() {
   } = usePlugins();
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
+  const appName = useAppName();
 
   const setFilter = useCallback(
     (name: string, value: string) => {
@@ -387,7 +388,6 @@ function PluginsList() {
       size: 420,
       cell: ({ row }) => {
         const plugin = row.original;
-        const repo = plugin.sourceMarketplaceRepo ?? plugin.sourceRepo;
         return (
           <div className="flex min-w-0 items-center gap-3">
             <PluginSourceIcon plugin={plugin} />
@@ -398,31 +398,8 @@ function PluginsList() {
                 </span>
                 {isArchestraPlugin(plugin) && (
                   <Badge variant="secondary" className="shrink-0">
-                    {ARCHESTRA_PLUGIN_PROVENANCE_LABEL}
+                    {appName}
                   </Badge>
-                )}
-                {repo && (
-                  <span className="truncate font-mono text-xs text-muted-foreground">
-                    {repo}
-                  </span>
-                )}
-                <PluginGithubSyncBadge plugin={plugin} />
-                {plugin.pendingSourceSha && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Badge
-                        variant="outline"
-                        className="shrink-0 gap-1 border-amber-500/40 text-amber-600 dark:text-amber-400"
-                      >
-                        <Github className="h-3 w-3" />
-                        update
-                      </Badge>
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-xs">
-                      A new source commit is waiting for review on the plugin
-                      page.
-                    </TooltipContent>
-                  </Tooltip>
                 )}
                 {!plugin.enabled && (
                   <Badge variant="outline" className="shrink-0">
@@ -441,18 +418,41 @@ function PluginsList() {
       },
     },
     {
-      id: "client",
-      size: 120,
-      header: "Client",
-      cell: ({ row }) => (
-        <Badge
-          variant="secondary"
-          className="gap-1.5 font-normal [&_img]:size-3.5"
-        >
-          {clientFilterIcon(row.original.clientType)}
-          {CLIENT_LABELS[row.original.clientType] ?? row.original.clientType}
-        </Badge>
-      ),
+      id: "compatibility",
+      size: 190,
+      header: "Compatibility",
+      cell: ({ row }) => {
+        const plugin = row.original;
+        const platforms = plugin.supportedPlatforms;
+        const platformLabel = [
+          platforms.includes("posix") ? "macOS and Linux" : null,
+          platforms.includes("windows") ? "Windows" : null,
+        ]
+          .filter(Boolean)
+          .join(", ");
+        return (
+          <div className="flex min-w-0 items-center gap-2">
+            <Badge
+              variant="secondary"
+              className="min-w-0 gap-1.5 font-normal [&_img]:size-3.5"
+            >
+              {clientFilterIcon(plugin.clientType)}
+              <span className="truncate">
+                {CLIENT_LABELS[plugin.clientType] ?? plugin.clientType}
+              </span>
+            </Badge>
+            <span
+              className="flex shrink-0 items-center gap-1.5"
+              role="img"
+              aria-label={`Supported platforms: ${platformLabel}`}
+              title={platformLabel}
+            >
+              {platforms.includes("posix") && <OsLogos platform="macos" />}
+              {platforms.includes("windows") && <OsLogos platform="windows" />}
+            </span>
+          </div>
+        );
+      },
     },
     {
       id: "visibility",
@@ -471,40 +471,50 @@ function PluginsList() {
       ),
     },
     {
-      id: "platforms",
-      size: 100,
-      header: "Platforms",
+      id: "source",
+      size: 250,
+      header: "Source",
       cell: ({ row }) => {
-        const platforms = row.original.supportedPlatforms;
-        const label = [
-          platforms.includes("posix") ? "macOS and Linux" : null,
-          platforms.includes("windows") ? "Windows" : null,
-        ]
-          .filter(Boolean)
-          .join(", ");
+        const plugin = row.original;
+        const repo = plugin.sourceMarketplaceRepo ?? plugin.sourceRepo;
+        if (plugin.sourceKind !== "github") {
+          return (
+            <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+              <Pencil className="size-3.5" />
+              Manual
+            </span>
+          );
+        }
         return (
-          <div
-            className="flex items-center gap-2"
-            role="img"
-            aria-label={`Supported platforms: ${label}`}
-            title={label}
-          >
-            {platforms.includes("posix") && <OsLogos platform="macos" />}
-            {platforms.includes("windows") && <OsLogos platform="windows" />}
+          <div className="min-w-0 space-y-1">
+            <div className="flex items-center gap-1.5">
+              <PluginGithubSyncBadge plugin={plugin} />
+              {plugin.pendingSourceSha && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge
+                      variant="outline"
+                      className="shrink-0 gap-1 border-amber-500/40 text-amber-600 dark:text-amber-400"
+                    >
+                      <Github className="h-3 w-3" />
+                      Update
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    A new source commit is waiting for review on the plugin
+                    page.
+                  </TooltipContent>
+                </Tooltip>
+              )}
+            </div>
+            {repo ? (
+              <div className="truncate font-mono text-xs text-muted-foreground">
+                {repo}
+              </div>
+            ) : null}
           </div>
         );
       },
-    },
-    {
-      id: "files",
-      size: 90,
-      header: () => <div className="text-right">Files</div>,
-      cell: ({ row }) => (
-        <div className="text-right text-sm text-muted-foreground">
-          {row.original.fileCount}{" "}
-          {row.original.fileCount === 1 ? "file" : "files"}
-        </div>
-      ),
     },
     {
       id: "updatedAt",
@@ -519,7 +529,7 @@ function PluginsList() {
             new Date(left.original.updatedAt).getTime() -
             new Date(right.original.updatedAt).getTime(),
         }),
-      size: 130,
+      size: 160,
       header: ({ column }) => (
         <div className="flex justify-end pr-4">
           <Button
@@ -527,14 +537,20 @@ function PluginsList() {
             className="h-auto !p-0 font-medium hover:bg-transparent"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
           >
-            Updated
+            Activity
             <SortIcon isSorted={column.getIsSorted()} />
           </Button>
         </div>
       ),
       cell: ({ row }) => (
-        <div className="pr-4 text-right text-sm text-muted-foreground">
-          {formatRelativeTimeFromNow(row.original.updatedAt)}
+        <div className="space-y-0.5 pr-4 text-right text-sm">
+          <div>
+            {row.original.fileCount}{" "}
+            {row.original.fileCount === 1 ? "file" : "files"}
+          </div>
+          <div className="text-xs text-muted-foreground">
+            Updated {formatRelativeTimeFromNow(row.original.updatedAt)}
+          </div>
         </div>
       ),
     },
@@ -601,15 +617,115 @@ function PluginsList() {
                 <FilterBar
                   className="mb-0"
                   onClearFilters={hasActiveFilters ? clearFilters : undefined}
+                  moreFilters={[
+                    {
+                      key: "visibility",
+                      label: "Visibility",
+                      active: scopeFilter.hasActiveScopeFilters,
+                      control: (
+                        <ResourceScopeFilter
+                          ownerLabelPlural="plugins"
+                          adminPermission={{ plugin: ["admin"] }}
+                        />
+                      ),
+                    },
+                    {
+                      key: "platform",
+                      label: "Platform",
+                      active: platform !== "all",
+                      control: (
+                        <FacetSelect
+                          label="Filter by platform"
+                          value={platform}
+                          onChange={(value) => setFilter("platform", value)}
+                          options={[
+                            ["all", "All platforms"],
+                            [
+                              "posix",
+                              "macOS / Linux",
+                              <OsLogos key="posix" platform="macos" />,
+                            ],
+                            [
+                              "windows",
+                              "Windows",
+                              <OsLogos key="windows" platform="windows" />,
+                            ],
+                          ]}
+                        />
+                      ),
+                    },
+                    {
+                      key: "source",
+                      label: "Source",
+                      active: source !== "all",
+                      control: (
+                        <FacetSelect
+                          label="Filter by source"
+                          value={source}
+                          onChange={(value) => setFilter("source", value)}
+                          options={[
+                            ["all", "All sources"],
+                            [
+                              "github",
+                              "GitHub",
+                              <Github key="github" className="size-4" />,
+                            ],
+                            [
+                              "manual",
+                              "Manual",
+                              <Pencil key="manual" className="size-4" />,
+                            ],
+                          ]}
+                        />
+                      ),
+                    },
+                    ...(sourceRepos.length > 0
+                      ? [
+                          {
+                            key: "repository",
+                            label: "Repository",
+                            active: !!sourceRepo,
+                            control: (
+                              <FacetSelect
+                                label="Filter by repository"
+                                value={sourceRepo || "all"}
+                                onChange={(value) =>
+                                  setFilter(
+                                    "sourceRepo",
+                                    value === "all" ? "" : value,
+                                  )
+                                }
+                                options={[
+                                  ["all", "All repositories"],
+                                  ...[...sourceRepos]
+                                    .sort(comparePluginRepositoryOrder)
+                                    .map(
+                                      (repo) =>
+                                        [
+                                          repo,
+                                          repo,
+                                          <RepositoryOwnerIcon
+                                            key={repo}
+                                            repo={repo}
+                                          />,
+                                          repo.toLowerCase() ===
+                                          "archestra-ai/openappa"
+                                            ? "plugin-featured-repository-option"
+                                            : undefined,
+                                        ] as const,
+                                    ),
+                                ]}
+                              />
+                            ),
+                          },
+                        ]
+                      : []),
+                  ]}
                   actions={<TableCardViewToggle />}
                 >
                   <SearchInput
                     paramName="search"
                     className={filterSearchClass}
-                  />
-                  <ResourceScopeFilter
-                    ownerLabelPlural="plugins"
-                    adminPermission={{ plugin: ["admin"] }}
                   />
                   <FacetSelect
                     label="Filter by client"
@@ -631,67 +747,6 @@ function PluginsList() {
                       ["cursor", "Cursor", clientFilterIcon("cursor")],
                     ]}
                   />
-                  <FacetSelect
-                    label="Filter by platform"
-                    value={platform}
-                    onChange={(value) => setFilter("platform", value)}
-                    options={[
-                      ["all", "All platforms"],
-                      [
-                        "posix",
-                        "macOS / Linux",
-                        <OsLogos key="posix" platform="macos" />,
-                      ],
-                      [
-                        "windows",
-                        "Windows",
-                        <OsLogos key="windows" platform="windows" />,
-                      ],
-                    ]}
-                  />
-                  <FacetSelect
-                    label="Filter by source"
-                    value={source}
-                    onChange={(value) => setFilter("source", value)}
-                    options={[
-                      ["all", "All sources"],
-                      [
-                        "github",
-                        "GitHub",
-                        <Github key="github" className="size-4" />,
-                      ],
-                      [
-                        "manual",
-                        "Manual",
-                        <Pencil key="manual" className="size-4" />,
-                      ],
-                    ]}
-                  />
-                  {sourceRepos.length > 0 && (
-                    <FacetSelect
-                      label="Filter by repository"
-                      value={sourceRepo || "all"}
-                      onChange={(value) =>
-                        setFilter("sourceRepo", value === "all" ? "" : value)
-                      }
-                      options={[
-                        ["all", "All repositories"],
-                        ...[...sourceRepos]
-                          .sort(comparePluginRepositoryOrder)
-                          .map(
-                            (repo) =>
-                              [
-                                repo,
-                                repo,
-                                <RepositoryOwnerIcon key={repo} repo={repo} />,
-                                repo.toLowerCase() === "archestra-ai/openappa"
-                                  ? "plugin-featured-repository-option"
-                                  : undefined,
-                              ] as const,
-                          ),
-                      ]}
-                    />
-                  )}
                 </FilterBar>
                 <ActiveFilterBadges adminPermission={{ plugin: ["admin"] }} />
               </div>
@@ -833,10 +888,8 @@ function PluginsList() {
                     onPageRowIdsChange={bulkSelection.onPageRowIdsChange}
                     isLoading={isFetching}
                     fixedWidthColumnIds={[
-                      "client",
+                      "compatibility",
                       "visibility",
-                      "platforms",
-                      "files",
                       "updatedAt",
                     ]}
                     flexibleColumnIds={["displayName"]}

@@ -55,7 +55,13 @@ export function PageLayout({
    * the desktop link only, which is the copy visible at the desktop viewports
    * the e2e suite runs at, so it resolves to exactly one element.
    */
-  tabs?: { label: React.ReactNode; href: string; testId?: string }[];
+  tabs?: {
+    label: React.ReactNode;
+    href: string;
+    testId?: string;
+    /** Override URL matching for tabs that represent query-owned views. */
+    active?: boolean;
+  }[];
   title: React.ReactNode;
   /**
    * Browser tab title, for pages whose visible `title` is composed markup (an
@@ -114,8 +120,8 @@ export function PageLayout({
   const mobileOverflowTabs = tabs.slice(mobileVisibleCount);
 
   // Check if the active tab is in the overflow
-  const activeOverflowTab = mobileOverflowTabs.find((tab) =>
-    isTabActive(pathname, tab.href, tabs),
+  const activeOverflowTab = mobileOverflowTabs.find(
+    (tab) => tab.active ?? isTabActive(currentUrl, tab.href, tabs),
   );
 
   return (
@@ -160,7 +166,8 @@ export function PageLayout({
               {/* Desktop: Show all tabs */}
               <div className="hidden md:flex gap-4 mb-0 overflow-x-auto whitespace-nowrap">
                 {tabs.map((tab) => {
-                  const isActive = isTabActive(currentUrl, tab.href, tabs);
+                  const isActive =
+                    tab.active ?? isTabActive(currentUrl, tab.href, tabs);
                   return (
                     <Link
                       key={tab.href}
@@ -185,7 +192,8 @@ export function PageLayout({
               {/* Mobile: Show first N tabs + overflow dropdown */}
               <div className="flex md:hidden gap-3 mb-0 items-center whitespace-nowrap overflow-x-auto">
                 {mobileVisibleTabs.map((tab) => {
-                  const isActive = isTabActive(currentUrl, tab.href, tabs);
+                  const isActive =
+                    tab.active ?? isTabActive(currentUrl, tab.href, tabs);
                   return (
                     <Link
                       key={tab.href}
@@ -242,11 +250,9 @@ export function PageLayout({
                         align="end"
                       >
                         {mobileOverflowTabs.map((tab) => {
-                          const isActive = isTabActive(
-                            currentUrl,
-                            tab.href,
-                            tabs,
-                          );
+                          const isActive =
+                            tab.active ??
+                            isTabActive(currentUrl, tab.href, tabs);
                           return (
                             <Link
                               key={tab.href}

@@ -18,12 +18,10 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { typeRole } from "@/lib/design/type-scale";
 import {
   MCP_SERVER_ISSUE_KINDS,
   type McpServerAttentionFacet,
 } from "@/lib/mcp/mcp-server-issues";
-import type { McpServerFacetCounts } from "@/lib/mcp/use-mcp-server-issues";
 import { cn } from "@/lib/utils";
 
 export type SortKey =
@@ -199,85 +197,6 @@ export function RegistrySortMenu({
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
-  );
-}
-
-/**
- * The list's audience facets, always visible rather than folded into the
- * Status popover. Installation admins omit the others facet because every
- * visible issue is actionable for them.
- *
- * Each count comes from `attentionCatalogIds`, so the numbers here and the
- * rows the list renders are the same computation.
- */
-export function RegistryAttentionFacets({
-  counts,
-  totalCount,
-  othersLabel,
-  showOthers,
-  selected,
-  onSelect,
-}: {
-  counts: McpServerFacetCounts;
-  /** Catalog items the list would show with no facet applied. */
-  totalCount: number;
-  othersLabel: string;
-  /** Installation admins can act on every visible issue. */
-  showOthers: boolean;
-  selected: McpServerAttentionFacet | null;
-  onSelect: (facet: McpServerAttentionFacet | null) => void;
-}) {
-  const facets: {
-    facet: McpServerAttentionFacet | null;
-    label: string;
-    count: number;
-  }[] = [
-    { facet: null, label: "All", count: totalCount },
-    { facet: "you", label: "Action required", count: counts.you },
-  ];
-  if (showOthers) {
-    facets.push({ facet: "others", label: othersLabel, count: counts.others });
-  }
-  // Dismissed is a facet the viewer created; nobody else needs a button for an
-  // empty box they have never used.
-  if (counts.muted > 0) {
-    facets.push({ facet: "muted", label: "Dismissed", count: counts.muted });
-  }
-
-  return (
-    <div className="flex w-max items-center gap-2">
-      <fieldset
-        className="flex w-max items-stretch rounded-md border p-0.5"
-        data-testid="mcp-registry-attention-facets"
-      >
-        <legend className="sr-only">
-          Filter MCP servers by who has to act
-        </legend>
-        {facets.map(({ facet, label, count }) => (
-          <button
-            key={facet ?? "all"}
-            type="button"
-            aria-label={`${label} (${count})`}
-            aria-pressed={selected === facet}
-            onClick={() => onSelect(facet)}
-            data-testid={`mcp-registry-facet-${facet ?? "all"}`}
-            className={cn(
-              typeRole({ role: "body" }),
-              "inline-flex flex-none items-center justify-center gap-1 whitespace-nowrap rounded-[5px] px-2.5 py-1 transition-colors hover:bg-accent",
-              selected === facet && "bg-secondary font-medium",
-            )}
-          >
-            <span>{label}</span>
-            <span className="tabular-nums text-muted-foreground">
-              ({count})
-            </span>
-          </button>
-        ))}
-      </fieldset>
-      <Badge variant="secondary" className="shrink-0 px-1.5 py-0 text-[10px]">
-        Beta
-      </Badge>
-    </div>
   );
 }
 

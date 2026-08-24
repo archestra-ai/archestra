@@ -332,51 +332,10 @@ export function McpServerTable({
             );
           },
         },
-        ...(attention.facet === "muted"
-          ? [
-              {
-                id: "dismissReason",
-                header: "Dismiss reason",
-                size: 280,
-                cell: ({ row }) => {
-                  const reasons = Array.from(
-                    new Set(
-                      attentionRawIssues(row.original)
-                        .map((issue) => issue.mutedReason?.trim())
-                        .filter((reason): reason is string => !!reason),
-                    ),
-                  );
-                  return reasons.length > 0 ? (
-                    <span className="block break-words">
-                      {reasons.join("; ")}
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
-                  );
-                },
-              } satisfies ColumnDef<CatalogItem>,
-            ]
-          : []),
         {
           id: "issue",
           header: "Issue",
-          size: 220,
-          cell: ({ row }) => (
-            <div className="flex min-w-0 flex-wrap gap-1.5">
-              {attentionIssues(row.original).map((issue) => (
-                <McpServerIssueBadge
-                  key={issue.kind}
-                  issue={issue}
-                  showDetail={false}
-                />
-              ))}
-            </div>
-          ),
-        },
-        {
-          id: "owner",
-          header: "Owner",
-          size: 220,
+          size: 440,
           cell: ({ row }) => {
             const item = row.original;
             const issues = attentionRawIssues(item);
@@ -386,10 +345,36 @@ export function McpServerTable({
                   servers: attentionServers(item),
                 }).label
               : "—";
+            const reasons = Array.from(
+              new Set(
+                issues
+                  .map((issue) => issue.mutedReason?.trim())
+                  .filter((reason): reason is string => !!reason),
+              ),
+            );
             return (
-              <span className="block break-words" title={owner}>
-                {owner}
-              </span>
+              <div className="min-w-0 space-y-1.5">
+                <div className="flex min-w-0 flex-wrap gap-1.5">
+                  {attentionIssues(item).map((issue) => (
+                    <McpServerIssueBadge
+                      key={issue.kind}
+                      issue={issue}
+                      showDetail={false}
+                    />
+                  ))}
+                </div>
+                <p className="break-words text-xs text-muted-foreground">
+                  {attention.facet === "muted" ? (
+                    <>
+                      {reasons.length > 0
+                        ? `Reason: ${reasons.join("; ")}`
+                        : "No dismissal reason"}
+                      <span aria-hidden> · </span>
+                    </>
+                  ) : null}
+                  <span title={owner}>Owner: {owner}</span>
+                </p>
+              </div>
             );
           },
         },
@@ -467,12 +452,7 @@ export function McpServerTable({
         }
         emptyMessage="No MCP servers found."
         hidePaginationWhenSinglePage
-        fixedWidthColumnIds={
-          attention
-            ? ["select", "issue", "owner", "dismissReason", "actions"]
-            : undefined
-        }
-        flexibleColumnIds={attention ? ["name"] : undefined}
+        fixedWidthColumnIds={attention ? ["select", "actions"] : undefined}
       />
     </>
   );

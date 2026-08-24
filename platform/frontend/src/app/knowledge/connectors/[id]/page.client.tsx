@@ -47,7 +47,7 @@ import { EditConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/edit
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FilterBar, filterControlClass } from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
-import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
+import { LoadingState, LoadingWrapper } from "@/components/loading";
 import { MetadataItem } from "@/components/metadata-card";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -251,7 +251,11 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
     "all" | "changes" | "no-changes"
   >("all");
 
-  const { data: runsData, isPending: isRunsPending } = useConnectorRuns({
+  const {
+    data: runsData,
+    isPending: isRunsPending,
+    isFetching: isRunsFetching,
+  } = useConnectorRuns({
     connectorId,
     limit: pageSize,
     offset: pageIndex * pageSize,
@@ -448,7 +452,7 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
   );
 
   if (isPending) {
-    return <LoadingSpinner />;
+    return <LoadingState label="Loading connector…" variant="viewport" />;
   }
 
   if (isLoadingError) {
@@ -807,8 +811,10 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
               </Select>
             </FilterBar>
             <LoadingWrapper
-              isPending={isRunsPending}
-              loadingFallback={<LoadingSpinner />}
+              isPending={
+                (isRunsPending || isRunsFetching) && runRows.length === 0
+              }
+              loadingFallback={<LoadingState />}
             >
               {runRows.length === 0 ? (
                 <div className="text-muted-foreground">
@@ -1193,7 +1199,7 @@ function KnowledgeBasesMetadataItem({ connectorId }: { connectorId: string }) {
   return (
     <MetadataItem label="Knowledge Bases">
       {isPending ? (
-        <LoadingSpinner />
+        <LoadingState label="Loading knowledge bases…" variant="inline" />
       ) : kbItems.length === 0 ? (
         <div className="flex items-center gap-2">
           <span className="text-muted-foreground">None</span>

@@ -19,7 +19,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ToolDetailsDialog } from "@/app/mcp/tool-guardrails/_parts/tool-details-dialog";
 import { CallPolicyToggle } from "@/components/call-policy-toggle";
-import { LoadingSpinner } from "@/components/loading";
+import { LoadingState } from "@/components/loading";
 import {
   OAuthConfirmationDialog,
   type OAuthInstallResult,
@@ -771,9 +771,7 @@ function ToolReviewCard({
                       disabled={callUpdating || !hasPermission}
                       size="sm"
                     />
-                    {callUpdating && (
-                      <LoadingSpinner className="h-3 w-3 text-muted-foreground" />
-                    )}
+                    {callUpdating && <LoadingState variant="inline" />}
                   </div>
                 )}
               </div>
@@ -819,9 +817,7 @@ function ToolReviewCard({
                         )}
                       </SelectContent>
                     </Select>
-                    {resultUpdating && (
-                      <LoadingSpinner className="h-3 w-3 text-muted-foreground" />
-                    )}
+                    {resultUpdating && <LoadingState variant="inline" />}
                   </div>
                 )}
               </div>

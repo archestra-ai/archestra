@@ -124,7 +124,7 @@ export function ConnectorDocumentsTable({
 
   const {
     data: documentsResponse,
-    isPending,
+    isFetching,
     isError,
   } = useConnectorDocuments({
     path: { id: connectorId },
@@ -349,7 +349,7 @@ export function ConnectorDocumentsTable({
         rowSelection={rowSelection}
         onRowSelectionChange={setRowSelection}
         hideSelectedCount
-        isLoading={isPending}
+        isLoading={isFetching}
         manualPagination
         pagination={{
           pageIndex,

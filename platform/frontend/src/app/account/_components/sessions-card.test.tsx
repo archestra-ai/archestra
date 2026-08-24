@@ -77,7 +77,9 @@ describe("SessionsCard", () => {
 
     renderCard();
 
-    expect(screen.getByText("Loading...")).toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: "Loading results…" }),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Revoke/ })).toBeNull();
   });
 

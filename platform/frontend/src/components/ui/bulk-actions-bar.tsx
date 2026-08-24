@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { LoadingSpinner } from "@/components/loading";
+import { LoadingState } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -141,9 +141,7 @@ export function BulkActionsBar({
             >
               {text}
             </span>
-            {busy && (
-              <LoadingSpinner className="h-4 w-4 text-muted-foreground" />
-            )}
+            {busy && <LoadingState variant="inline" />}
             {onClear && (
               <Button variant="ghost" size="sm" onClick={onClear}>
                 <span>Clear</span>

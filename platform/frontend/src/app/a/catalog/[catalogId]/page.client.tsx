@@ -4,6 +4,7 @@ import { ArrowLeft, Loader2, MessageSquare } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { LoadingState } from "@/components/loading";
 import { AppFrame } from "@/components/mcp-app/app-frame";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Button } from "@/components/ui/button";
@@ -78,6 +79,16 @@ export default function CatalogAppRunPage({
       router.replace(`/mcp/registry?search=${encodeURIComponent(data.name)}`);
     }
   }, [isPending, data, activeInstallId, router]);
+
+  if (isPending) {
+    return (
+      <LoadingState
+        className="h-app-viewport"
+        label="Loading app…"
+        variant="page"
+      />
+    );
+  }
 
   if (isLoadingError) {
     return (

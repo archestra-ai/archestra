@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import type { UseFormReturn } from "react-hook-form";
-import { LoadingSpinner } from "@/components/loading";
+import { LoadingState } from "@/components/loading";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -118,7 +118,7 @@ export default function NewMcpCatalogItemPage() {
   // Resolve the catalog setting before rendering so a disabled org never
   // flashes the source chooser before falling back to the form.
   if (isOrganizationPending) {
-    return <LoadingSpinner className="my-8" />;
+    return <LoadingState variant="page" />;
   }
 
   return (

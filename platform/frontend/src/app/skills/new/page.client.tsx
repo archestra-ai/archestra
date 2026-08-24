@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { FilterBar } from "@/components/filter-bar";
-import { LoadingSpinner } from "@/components/loading";
+import { LoadingState } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { SearchInput } from "@/components/search-input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -162,7 +162,7 @@ function NewSkillWizard() {
       >
         <div className="space-y-6">
           {isOrganizationPending ? (
-            <LoadingSpinner className="my-8" />
+            <LoadingState variant="page" />
           ) : (
             <>
               <WizardStepper

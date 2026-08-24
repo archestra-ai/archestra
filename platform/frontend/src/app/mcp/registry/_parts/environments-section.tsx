@@ -94,7 +94,7 @@ type EnvironmentTableRow =
   | (EnvironmentWithAssignedCount & { kind: "environment" });
 
 export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
-  const { data: environmentList, isLoading } = useEnvironments();
+  const { data: environmentList, isFetching: isLoading } = useEnvironments();
   const environments = environmentList?.environments ?? [];
   const defaultAssignedCatalogCount =
     environmentList?.defaultAssignedCatalogCount ?? 0;

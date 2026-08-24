@@ -83,7 +83,7 @@ export function TeamsList() {
   const hasLabelFilters =
     !!parsedLabels && Object.keys(parsedLabels).length > 0;
 
-  const { data: teams, isLoading } = useTeams({
+  const { data: teams, isFetching: isLoading } = useTeams({
     name: search,
     labels: labelsParam ?? undefined,
   });

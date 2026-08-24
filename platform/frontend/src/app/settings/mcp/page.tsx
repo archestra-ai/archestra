@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { DisabledEnterpriseSection } from "@/components/disabled-enterprise-section";
 // SPDX-SnippetEnd
-import { LoadingSpinner } from "@/components/loading";
+import { LoadingState } from "@/components/loading";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   SettingsBlock,
@@ -124,7 +124,7 @@ export default function McpSettingsPage() {
   };
 
   if (isPending) {
-    return <LoadingSpinner className="my-8" />;
+    return <LoadingState variant="page" />;
   }
 
   return (

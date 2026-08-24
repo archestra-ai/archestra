@@ -74,7 +74,7 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
   const nameFilter = searchParams.get("name") || undefined;
   const {
     data: rolesResponse,
-    isLoading,
+    isFetching: isLoading,
     isLoadingError,
     refetch,
   } = useRolesPaginated({

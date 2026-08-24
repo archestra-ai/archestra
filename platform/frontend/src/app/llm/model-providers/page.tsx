@@ -166,7 +166,7 @@ export default function ApiKeysPage() {
   const { data: allApiKeys = [] } = useLlmProviderApiKeys({
     enabled: apiKeyQueriesEnabled,
   });
-  const { data: queriedApiKeys = [], isPending } = useLlmProviderApiKeys({
+  const { data: queriedApiKeys = [], isFetching } = useLlmProviderApiKeys({
     search: search || undefined,
     provider:
       providerFilter === "all"
@@ -790,7 +790,7 @@ export default function ApiKeysPage() {
             data={rows}
             getRowId={(row) => row.id}
             hideSelectedCount
-            isLoading={permissionsPending || isPending}
+            isLoading={permissionsPending || isFetching}
             emptyMessage="No credentials configured"
             hasActiveFilters={Boolean(search || providerFilter !== "all")}
             filteredEmptyMessage="No LLM provider credentials match your filters. Try adjusting your search."

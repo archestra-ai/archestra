@@ -21,6 +21,7 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { LoadingState } from "@/components/loading";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -312,12 +313,12 @@ export function AuthViewWithErrorHandling({
   const isSignInPage = path === "sign-in";
 
   if (isLoadingPublicConfig && isSignInPage) {
-    return null;
+    return <LoadingState label="Loading sign-in…" variant="compact" />;
   }
 
   // When basic auth is disabled and SSO providers are still loading, wait (only for sign-in)
   if (isBasicAuthDisabled && isLoadingIdentityProviders && isSignInPage) {
-    return null;
+    return <LoadingState label="Loading sign-in…" variant="compact" />;
   }
 
   // When basic auth is disabled and no SSO providers are configured, show a message

@@ -5,12 +5,12 @@ import {
   AlertCircle,
   CheckCircle2,
   ExternalLink,
-  Loader2,
   RefreshCcw,
   ServerOff,
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { LoadingState } from "@/components/loading";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -155,7 +155,12 @@ function ConnectionStatusView({
             {isUnreachable ? (
               <ServerOff className="h-6 w-6 text-destructive" />
             ) : (
-              <Loader2 className="h-6 w-6 text-muted-foreground animate-spin" />
+              <LoadingState
+                className="min-h-0 p-0"
+                label="Connecting…"
+                showLabel={false}
+                variant="compact"
+              />
             )}
           </div>
           <CardTitle>

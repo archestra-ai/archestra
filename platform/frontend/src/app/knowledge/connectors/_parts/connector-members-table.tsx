@@ -87,7 +87,7 @@ export function ConnectorMembersTable({
   noun?: RosterNoun;
 }) {
   const appName = useAppName();
-  const { data: userGroups, isPending } = useConnectorUserGroups({
+  const { data: userGroups, isFetching } = useConnectorUserGroups({
     connectorId,
     enabled: true,
   });
@@ -355,7 +355,7 @@ export function ConnectorMembersTable({
       <DataTable
         columns={columns}
         data={visibleMembers}
-        isLoading={isPending}
+        isLoading={isFetching}
         emptyMessage={
           members.length > 0
             ? "No users match your search or filter."

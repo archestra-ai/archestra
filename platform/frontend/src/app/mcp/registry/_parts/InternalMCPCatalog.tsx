@@ -22,6 +22,7 @@ import {
   parseLabelsParam,
   serializeLabels,
 } from "@/components/label-select";
+import { LoadingState } from "@/components/loading";
 import {
   OAuthConfirmationDialog,
   type OAuthInstallResult,
@@ -132,7 +133,11 @@ export function InternalMCPCatalog({
   // Get search query from URL
   const searchQueryFromUrl = searchParams.get("search") || "";
 
-  const { data: catalogItems } = useInternalMcpCatalog({
+  const {
+    data: catalogItems,
+    isPending: isCatalogPending,
+    isFetching: isCatalogFetching,
+  } = useInternalMcpCatalog({
     initialData,
   });
   const { data: installedServers } = useMcpServers({
@@ -1109,6 +1114,13 @@ export function InternalMCPCatalog({
       .map((server) => server.catalogId)
       .filter((id): id is string => !!id && id !== ARCHESTRA_MCP_CATALOG_ID),
   ).size;
+
+  if (
+    (isCatalogPending || isCatalogFetching) &&
+    (catalogItems?.length ?? 0) === 0
+  ) {
+    return <LoadingState label="Loading MCP servers…" variant="page" />;
+  }
 
   return (
     <TableCardView storageKey="archestra-mcp-registry-view" defaultMode="table">

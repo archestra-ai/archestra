@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AuthPageWithInvitationCheck } from "@/app/auth/[path]/auth-page-with-invitation-check";
-import { LoadingSpinner } from "@/components/loading";
+import { LoadingState } from "@/components/loading";
 
 export const dynamicParams = false;
 
@@ -32,9 +32,7 @@ export default async function AuthPage({
 
   return (
     <ErrorBoundary>
-      <Suspense
-        fallback={<LoadingSpinner className="top-1/2 left-1/2 absolute" />}
-      >
+      <Suspense fallback={<LoadingState variant="page" />}>
         <AuthPageWithInvitationCheck path={path} />
       </Suspense>
     </ErrorBoundary>

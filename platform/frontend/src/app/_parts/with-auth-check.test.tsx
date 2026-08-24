@@ -286,16 +286,19 @@ describe("WithAuthCheck", () => {
       } as unknown as ReturnType<typeof useSession>);
     });
 
-    it("should render nothing while checking auth", () => {
+    it("should render the shared loading state while checking auth", () => {
       vi.mocked(usePathname).mockReturnValue("/dashboard");
 
-      const { container } = render(
+      render(
         <WithAuthCheck>
           <MockChild />
         </WithAuthCheck>,
       );
 
-      expect(container.firstChild).toBeNull();
+      expect(
+        screen.getByRole("status", { name: "Loading your workspace…" }),
+      ).toBeVisible();
+      expect(screen.queryByTestId("protected-content")).toBeNull();
       expect(mockRouterPush).not.toHaveBeenCalled();
     });
   });

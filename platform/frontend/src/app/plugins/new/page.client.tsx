@@ -9,7 +9,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { FilterBar } from "@/components/filter-bar";
-import { LoadingSpinner } from "@/components/loading";
+import { LoadingState } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { SearchInput } from "@/components/search-input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -70,7 +70,7 @@ function NewPluginGate() {
   const enabled = useFeature("plugins");
 
   if (enabled === undefined) {
-    return <LoadingSpinner className="mt-24" label="Loading plugins" />;
+    return <LoadingState label="Loading plugins…" variant="page" />;
   }
 
   if (!enabled) {

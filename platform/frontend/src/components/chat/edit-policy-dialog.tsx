@@ -4,7 +4,7 @@ import { TOOL_SEARCH_MAX_LENGTH } from "@archestra/shared";
 import { ToolCallPolicies } from "@/app/mcp/tool-guardrails/_parts/tool-call-policies";
 import { ToolResultPolicies } from "@/app/mcp/tool-guardrails/_parts/tool-result-policies";
 import { FormDialog } from "@/components/form-dialog";
-import { LoadingSpinner } from "@/components/loading";
+import { LoadingState } from "@/components/loading";
 import { DialogBody } from "@/components/ui/dialog";
 import { useAllProfileTools } from "@/lib/agent-tools.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -81,9 +81,7 @@ export function EditPolicyDialog({
     >
       <DialogBody className="space-y-4">
         {isLoadingTool ? (
-          <div className="flex items-center justify-center py-6">
-            <LoadingSpinner />
-          </div>
+          <LoadingState label="Loading policies…" variant="compact" />
         ) : canUpdateToolPolicy === false ? (
           <p className="text-muted-foreground text-sm">
             {supportMessage ||

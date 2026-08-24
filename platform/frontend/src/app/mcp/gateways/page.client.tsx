@@ -32,7 +32,7 @@ import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { FilterBar, filterSearchClass } from "@/components/filter-bar";
-import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
+import { LoadingState, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
@@ -255,6 +255,7 @@ function McpGateways({
   const {
     data: agentsResponse,
     isPending,
+    isFetching,
     isLoadingError: isGatewaysLoadError,
     refetch: refetchGateways,
   } = useProfilesPaginated({
@@ -351,7 +352,7 @@ function McpGateways({
 
   const agents = agentsResponse?.data || [];
   const pagination = agentsResponse?.pagination;
-  const showLoading = isPending && !initialData?.agents;
+  const showLoading = (isPending || isFetching) && agents.length === 0;
 
   // Derived from what is on screen rather than read straight out of
   // `rowSelection`: the table is server-paginated, so ids left behind by
@@ -626,7 +627,9 @@ function McpGateways({
   return (
     <LoadingWrapper
       isPending={showLoading}
-      loadingFallback={<LoadingSpinner />}
+      loadingFallback={
+        <LoadingState label="Loading MCP gateways…" variant="viewport" />
+      }
     >
       <PageLayout
         title="MCP Gateways"

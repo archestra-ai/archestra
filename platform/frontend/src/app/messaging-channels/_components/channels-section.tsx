@@ -18,7 +18,7 @@ import { useCallback, useMemo, useState } from "react";
 import { AgentBadge } from "@/components/agent-badge";
 import Divider from "@/components/divider";
 import { FilterBar, filterSearchClass } from "@/components/filter-bar";
-import { LoadingSpinner } from "@/components/loading";
+import { LoadingState } from "@/components/loading";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { Button } from "@/components/ui/button";
@@ -353,7 +353,10 @@ export function ChannelsSection({
           <h2 className="text-lg font-semibold relative">
             Channels
             {isFetching && (
-              <LoadingSpinner className="h-3 w-3 animate-spin text-muted-foreground absolute right-[-20px] top-[7px]" />
+              <LoadingState
+                className="absolute right-[-24px] top-[5px]"
+                variant="inline"
+              />
             )}
           </h2>
         </div>

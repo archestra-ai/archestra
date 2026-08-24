@@ -56,9 +56,11 @@ export function filterExternalMcpSkills({
 export function ExternalMcpSkillsSection({
   skills,
   showWhenEmpty = false,
+  isLoading = false,
 }: {
   skills: ExternalSkill[];
   showWhenEmpty?: boolean;
+  isLoading?: boolean;
 }) {
   const router = useRouter();
   const { data: session } = useSession();
@@ -221,7 +223,7 @@ export function ExternalMcpSkillsSection({
     },
   ];
 
-  if (skills.length === 0 && !showWhenEmpty) return null;
+  if (skills.length === 0 && !showWhenEmpty && !isLoading) return null;
 
   return (
     <section className="space-y-3" aria-labelledby="external-skills-title">
@@ -240,6 +242,7 @@ export function ExternalMcpSkillsSection({
         cards={
           <TableCardList
             itemCount={skills.length}
+            isLoading={isLoading}
             emptyMessage="No MCP skills match the current filters."
           >
             {skills.map((skill) => {
@@ -292,6 +295,7 @@ export function ExternalMcpSkillsSection({
           <DataTable
             columns={columns}
             data={skills}
+            isLoading={isLoading}
             getRowId={(row) => `${row.mcpServerId}:${row.id}`}
             emptyMessage="No MCP skills match the current filters."
             hideSelectedCount

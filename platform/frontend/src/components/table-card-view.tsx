@@ -1,6 +1,6 @@
 "use client";
 
-import { Inbox, LayoutGrid, List, Loader2, Search } from "lucide-react";
+import { Inbox, LayoutGrid, List, Search } from "lucide-react";
 import {
   createContext,
   type ReactNode,
@@ -9,6 +9,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import { LoadingState } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { TablePagination } from "@/components/ui/table-pagination";
@@ -181,11 +182,7 @@ export function TableCardList({
   gridClassName?: string;
 }) {
   if (isLoading && itemCount === 0) {
-    return (
-      <div className="flex justify-center py-16">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <LoadingState label="Loading results…" variant="page" />;
   }
 
   if (itemCount === 0) {

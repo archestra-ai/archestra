@@ -7,7 +7,7 @@ import { BackendConnectivityStatus } from "@/app/auth/_components/backend-connec
 import { AppLogo } from "@/components/app-logo";
 import { CommunityLinks } from "@/components/community-links";
 import { DefaultCredentialsWarning } from "@/components/default-credentials-warning";
-import { LoadingSpinner } from "@/components/loading";
+import { LoadingState } from "@/components/loading";
 import {
   Card,
   CardContent,
@@ -47,7 +47,7 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
   if (invitationId && isSignUpPath) {
     return (
       <main className="h-full flex items-center justify-center">
-        <LoadingSpinner />
+        <LoadingState />
       </main>
     );
   }

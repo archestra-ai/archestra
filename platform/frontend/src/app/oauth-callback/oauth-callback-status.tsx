@@ -4,7 +4,7 @@ import {
   LockKeyhole,
   ShieldCheck,
 } from "lucide-react";
-import { LoadingSpinner } from "@/components/loading";
+import { LoadingState } from "@/components/loading";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -75,10 +75,7 @@ export function OAuthCallbackStatus(props: OAuthCallbackStatusProps) {
 
       <CardContent className="space-y-4">
         <div className="flex items-center gap-3 rounded-md border bg-muted/50 p-4">
-          <LoadingSpinner
-            className="mx-0 size-5 shrink-0"
-            label={copy.loadingLabel}
-          />
+          <LoadingState label={copy.loadingLabel} variant="inline" />
           <div>
             <p className="text-sm font-medium text-foreground">
               {copy.statusTitle}

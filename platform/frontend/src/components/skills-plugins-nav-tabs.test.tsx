@@ -49,7 +49,7 @@ describe("useSkillsPluginsNavTabs", () => {
     expect(screen.getByTestId("tabs")).toBeEmptyDOMElement();
   });
 
-  it("marks both pages beta, as the sidebar rows did", () => {
+  it("chips each page at its own stage: Skills new, Plugins beta", () => {
     setPageAccess({ "/skills": true, "/plugins": true });
 
     function TabLabels() {
@@ -66,7 +66,8 @@ describe("useSkillsPluginsNavTabs", () => {
     }
     render(<TabLabels />);
 
-    expect(screen.getByTestId("/skills")).toHaveTextContent("SkillsBeta");
+    // Different chips on purpose: Skills has shipped, Plugins has not.
+    expect(screen.getByTestId("/skills")).toHaveTextContent("SkillsNew");
     expect(screen.getByTestId("/plugins")).toHaveTextContent("PluginsBeta");
   });
 });

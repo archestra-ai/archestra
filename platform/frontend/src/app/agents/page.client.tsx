@@ -19,6 +19,10 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import {
+  AgentAccessBadges,
+  AgentLastUsedFooter,
+} from "@/components/agent-card-meta";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentNameCell } from "@/components/agent-name-cell";
 import {
@@ -704,6 +708,11 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                             setRowSelection(next);
                           }}
                           selectionLabel={`Select ${agent.name}`}
+                          footer={
+                            <AgentLastUsedFooter
+                              lastUsedAt={agent.lastUsedAt}
+                            />
+                          }
                         >
                           <div className="flex flex-wrap items-center gap-2">
                             <ResourceVisibilityBadge
@@ -720,6 +729,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                                 source={effectiveDefault.source}
                               />
                             ) : null}
+                            <AgentAccessBadges agent={agent} />
                           </div>
                         </TableCard>
                       ))}

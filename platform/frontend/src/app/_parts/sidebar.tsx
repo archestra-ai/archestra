@@ -293,8 +293,9 @@ const contentNavGroups: NavGroup[] = [
         icon: Sparkles,
         customIsActive: (pathname: string) =>
           SKILLS_SECTION_PREFIXES.some((prefix) => pathname.startsWith(prefix)),
+        // "New", the default: the row is named for Skills, which is new. The
+        // Plugins tab keeps its own Beta chip in the tab bar.
         beta: true,
-        badgeLabel: "Beta",
       },
       {
         title: "Messaging Channels",

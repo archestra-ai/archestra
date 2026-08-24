@@ -174,7 +174,7 @@ export function McpServerTable({
       id: "name",
       accessorKey: "name",
       header: "MCP Server",
-      size: 540,
+      size: 300,
       cell: ({ row }) => {
         const item = row.original;
         return (
@@ -197,7 +197,9 @@ export function McpServerTable({
     },
     {
       id: "author",
-      size: 140,
+      // Visibility badges cap their label at 180px. Include the cell padding
+      // so the full badge fits without donating extra space to this column.
+      size: 212,
       header: "Accessible to",
       cell: ({ row }) => (
         <ResourceVisibilityBadge
@@ -470,9 +472,9 @@ export function McpServerTable({
         fixedWidthColumnIds={
           attention
             ? ["select", "issue", "owner", "dismissReason", "actions"]
-            : undefined
+            : ["tools", "author", "status", "actions"]
         }
-        flexibleColumnIds={attention ? ["name"] : undefined}
+        flexibleColumnIds={["name"]}
       />
     </>
   );

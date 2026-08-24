@@ -16,10 +16,10 @@ import {
   ChevronDown,
   ChevronUp,
   Network,
-  Pencil,
   Server,
 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useMemo, useState } from "react";
+import { RowClickShield } from "@/components/agent-pages/row-click-shield";
 import { CallPolicyToggle } from "@/components/call-policy-toggle";
 import {
   FilterBar,
@@ -31,10 +31,8 @@ import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { ResultPolicyToggle } from "@/components/result-policy-toggle";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { SearchInput } from "@/components/search-input";
-import { TableRowActions } from "@/components/table-row-actions";
 import { ToolPolicyBulkActionsBar } from "@/components/tool-policy-bulk-actions";
 import { TruncatedText } from "@/components/truncated-text";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
@@ -96,6 +94,8 @@ type ToolsSortByValues = NonNullable<
 type ToolsSortDirectionValues = NonNullable<
   GetToolsWithAssignmentsQueryParams["sortDirection"]
 > | null;
+type InternalMcpCatalogItem =
+  archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
 
 interface AssignedToolsTableProps {
   onToolClick: (tool: ToolWithAssignmentsData) => void;
@@ -465,187 +465,29 @@ export function AssignedToolsTable({
             className="-ml-4 h-auto px-4 py-2 font-medium hover:bg-transparent"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
           >
-            Tool Name
+            Tool
             <SortIcon isSorted={column.getIsSorted()} />
           </Button>
         ),
-        cell: ({ row }) => {
-          // Only trim prefix for MCP tools (which have catalogId set and were slugified with server name)
-          // LLM proxy discovered tools (no catalogId) should show the full name as-is.
-          // It's needed to show the full name in the table to distinguish them from catalog tools. (After prefix-stripping they might look the same)
-          const displayName = row.original.catalogId
-            ? parseFullToolName(row.original.name).toolName || row.original.name
-            : row.original.name;
-          // A delegation tool is named after its target agent, so the personal
-          // agents seeded one per member all mint an `agent__my_assistant`.
-          // The owner is the only thing separating those rows.
-          const source = getToolSource(row.original, internalMcpCatalogItems);
-          const owner = source.kind === "agent" ? source.ownerEmail : null;
-          return (
-            <div className="max-w-[260px] md:max-w-none truncate">
-              <TruncatedText
-                message={displayName}
-                className="break-all"
-                maxLength={60}
-              />
-              {owner && (
-                <div className="truncate text-xs text-muted-foreground">
-                  {owner}
-                </div>
-              )}
-            </div>
-          );
-        },
-        size: 200,
-      },
-      {
-        id: "origin",
-        // Mirrors the backend's origin ordering (catalog-backed first, then
-        // delegation, then observed); app launch tools are catalog-backed.
-        accessorFn: (row) => {
-          const kind = getToolSource(row, internalMcpCatalogItems).kind;
-          if (kind === "app" || kind === "mcp") return "1-mcp";
-          return kind === "agent" ? "2-agent" : "3-intercepted";
-        },
-        size: 180,
-        header: ({ column }) => (
-          <Button
-            variant="ghost"
-            className="-ml-4 h-auto px-4 py-2 font-medium hover:bg-transparent"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Source
-            <SortIcon isSorted={column.getIsSorted()} />
-          </Button>
+        cell: ({ row }) => (
+          <ToolIdentityCell
+            tool={row.original}
+            catalogItems={internalMcpCatalogItems}
+            onOpen={() => onToolClick(row.original)}
+          />
         ),
-        cell: ({ row }) => {
-          const source = getToolSource(row.original, internalMcpCatalogItems);
-
-          if (source.kind === "app") {
-            return (
-              <div className="min-w-0 max-w-full">
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Badge
-                        variant="default"
-                        className="bg-sky-600 text-white inline-flex max-w-full gap-1.5 overflow-hidden align-middle"
-                      >
-                        <AppWindow className="h-3.5 w-3.5 shrink-0" />
-                        <span className="min-w-0 truncate">
-                          {source.appName || APP_TOOL_SOURCE_LABEL}
-                        </span>
-                      </Badge>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>{APP_TOOL_SOURCE_DESCRIPTION}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
-            );
-          }
-
-          if (source.kind === "mcp") {
-            const { catalogItem } = source;
-            return (
-              <div className="min-w-0 max-w-full">
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Badge
-                        variant="default"
-                        className="bg-indigo-500 text-white inline-flex max-w-full gap-1.5 overflow-hidden align-middle"
-                      >
-                        {catalogItem ? (
-                          <McpCatalogIcon
-                            icon={catalogItem.icon}
-                            catalogId={catalogItem.id}
-                            size={14}
-                          />
-                        ) : (
-                          <Server className="h-3.5 w-3.5 shrink-0" />
-                        )}
-                        <span className="min-w-0 truncate">
-                          {catalogItem?.name ?? MCP_TOOL_SOURCE_LABEL}
-                        </span>
-                      </Badge>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>{catalogItem?.name ?? MCP_TOOL_SOURCE_LABEL}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
-            );
-          }
-
-          if (source.kind === "agent") {
-            return (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Badge
-                      variant="secondary"
-                      className="bg-violet-600 text-white gap-1.5"
-                    >
-                      <Bot className="h-3.5 w-3.5 shrink-0" />
-                      Agent
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>
-                      Delegates to {source.agentName} agent
-                      {source.ownerEmail ? ` (${source.ownerEmail})` : ""}
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            );
-          }
-
-          return (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge
-                    variant="secondary"
-                    className="bg-amber-700 text-white gap-1.5"
-                  >
-                    <Network className="h-3.5 w-3.5 shrink-0" />
-                    {OBSERVED_TOOL_SOURCE_LABEL}
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{OBSERVED_TOOL_SOURCE_DESCRIPTION}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          );
-        },
-      },
-      {
-        id: "assignmentCount",
-        header: "Assignments",
-        size: 140,
-        cell: ({ row }) => {
-          const count = row.original.assignmentCount;
-          return (
-            <Badge variant="outline" className="text-xs">
-              {count} {count === 1 ? "assignment" : "assignments"}
-            </Badge>
-          );
-        },
+        size: 360,
       },
       {
         id: "callPolicy",
+        size: 230,
         header: ({ column }) => (
           <Button
             variant="ghost"
             className="-ml-4 h-auto px-4 py-2 font-medium hover:bg-transparent"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
           >
-            Call Policy
+            Calls
             <SortIcon isSorted={column.getIsSorted()} />
           </Button>
         ),
@@ -660,12 +502,15 @@ export function AssignedToolsTable({
           if (hasCustomPolicy) {
             return (
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
-                className="w-[90px] text-xs"
-                onClick={() => onToolClick(row.original)}
+                className="h-8 w-[200px] justify-start bg-muted px-3 text-xs"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onToolClick(row.original);
+                }}
               >
-                Custom
+                Custom rules
               </Button>
             );
           }
@@ -683,7 +528,7 @@ export function AssignedToolsTable({
               noPermissionHandle="tooltip"
             >
               {({ hasPermission }) => (
-                <div className="flex items-center gap-2">
+                <RowClickShield className="flex items-center gap-2">
                   <CallPolicyToggle
                     value={currentAction}
                     onChange={(action) =>
@@ -694,12 +539,12 @@ export function AssignedToolsTable({
                       )
                     }
                     disabled={isUpdating || !hasPermission}
-                    size="sm"
+                    size="table"
                   />
                   {isUpdating && (
                     <LoadingSpinner className="ml-1 h-3 w-3 text-muted-foreground" />
                   )}
-                </div>
+                </RowClickShield>
               )}
             </WithPermissions>
           );
@@ -707,7 +552,8 @@ export function AssignedToolsTable({
       },
       {
         id: "toolResultTreatment",
-        header: "Results are",
+        size: 180,
+        header: "Results",
         cell: ({ row }) => {
           const policies =
             resultPolicies?.byProfileToolId[row.original.id] || [];
@@ -719,12 +565,15 @@ export function AssignedToolsTable({
           if (hasCustomPolicy) {
             return (
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
-                className="w-[90px] text-xs"
-                onClick={() => onToolClick(row.original)}
+                className="h-8 w-[150px] justify-start bg-muted px-3 text-xs"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onToolClick(row.original);
+                }}
               >
-                Custom
+                Custom rules
               </Button>
             );
           }
@@ -745,7 +594,7 @@ export function AssignedToolsTable({
               noPermissionHandle="tooltip"
             >
               {({ hasPermission }) => (
-                <div className="flex items-center gap-2">
+                <RowClickShield className="flex items-center gap-2">
                   <ResultPolicyToggle
                     size="sm"
                     value={resultAction}
@@ -762,28 +611,11 @@ export function AssignedToolsTable({
                   {isUpdating && (
                     <LoadingSpinner className="h-3 w-3 text-muted-foreground" />
                   )}
-                </div>
+                </RowClickShield>
               )}
             </WithPermissions>
           );
         },
-      },
-      {
-        id: "actions",
-        header: "Actions",
-        cell: ({ row }) => (
-          <TableRowActions
-            itemName={row.original.name}
-            actions={[
-              {
-                icon: <Pencil className="h-4 w-4" />,
-                label: "Edit policies",
-                permissions: { toolPolicy: ["update"] },
-                onClick: () => onToolClick(row.original),
-              },
-            ]}
-          />
-        ),
       },
     ],
     [
@@ -951,6 +783,7 @@ export function AssignedToolsTable({
         data={tools}
         sorting={sorting}
         onSortingChange={handleSortingChange}
+        onRowClick={onToolClick}
         manualSorting
         manualPagination
         pagination={{
@@ -974,7 +807,102 @@ export function AssignedToolsTable({
         emptyMessage="No tools have been assigned yet."
         filteredEmptyMessage="No tools match your filters. Try adjusting your search."
         onClearFilters={clearFilters}
+        flexibleColumnIds={["name"]}
+        fixedWidthColumnIds={["callPolicy", "toolResultTreatment"]}
       />
+    </div>
+  );
+}
+
+function ToolIdentityCell({
+  tool,
+  catalogItems,
+  onOpen,
+}: {
+  tool: ToolWithAssignmentsData;
+  catalogItems?: InternalMcpCatalogItem[];
+  onOpen: () => void;
+}) {
+  // Catalog-backed names include a source prefix. Observed names do not, and
+  // keeping those intact prevents unrelated tools from looking identical.
+  const displayName = tool.catalogId
+    ? parseFullToolName(tool.name).toolName || tool.name
+    : tool.name;
+  const source = getToolSource(tool, catalogItems);
+  const assignmentLabel =
+    tool.assignmentCount === 0
+      ? "Not assigned"
+      : `${tool.assignmentCount} ${tool.assignmentCount === 1 ? "assignment" : "assignments"}`;
+
+  let sourceLabel: string;
+  let sourceDescription: string;
+  let sourceIcon: ReactNode;
+
+  if (source.kind === "app") {
+    sourceLabel = source.appName || APP_TOOL_SOURCE_LABEL;
+    sourceDescription = APP_TOOL_SOURCE_DESCRIPTION;
+    sourceIcon = <AppWindow className="size-4" />;
+  } else if (source.kind === "mcp") {
+    sourceLabel = source.catalogItem?.name ?? MCP_TOOL_SOURCE_LABEL;
+    sourceDescription = `Provided by ${sourceLabel}`;
+    sourceIcon = source.catalogItem ? (
+      <McpCatalogIcon
+        icon={source.catalogItem.icon}
+        catalogId={source.catalogItem.id}
+        size={16}
+      />
+    ) : (
+      <Server className="size-4" />
+    );
+  } else if (source.kind === "agent") {
+    sourceLabel = `Agent · ${source.agentName}`;
+    sourceDescription = source.ownerEmail
+      ? `Delegates to ${source.agentName} (${source.ownerEmail})`
+      : `Delegates to ${source.agentName}`;
+    sourceIcon = <Bot className="size-4" />;
+  } else {
+    sourceLabel = OBSERVED_TOOL_SOURCE_LABEL;
+    sourceDescription = OBSERVED_TOOL_SOURCE_DESCRIPTION;
+    sourceIcon = <Network className="size-4" />;
+  }
+
+  return (
+    <div className="flex min-w-0 items-center gap-3 py-1">
+      <TooltipProvider delayDuration={200}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border bg-muted/50 text-muted-foreground">
+              {sourceIcon}
+            </div>
+          </TooltipTrigger>
+          <TooltipContent>{sourceDescription}</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+
+      <div className="min-w-0">
+        <button
+          type="button"
+          className="block max-w-full text-left text-sm font-medium hover:underline"
+          aria-label={`View policies for ${displayName}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onOpen();
+          }}
+        >
+          <TruncatedText
+            message={displayName}
+            className="block truncate"
+            maxLength={60}
+          />
+        </button>
+        <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+          <span className="truncate">{sourceLabel}</span>
+          <span aria-hidden className="shrink-0 text-border">
+            ·
+          </span>
+          <span className="shrink-0">{assignmentLabel}</span>
+        </div>
+      </div>
     </div>
   );
 }

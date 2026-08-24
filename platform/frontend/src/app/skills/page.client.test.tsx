@@ -177,6 +177,7 @@ describe("SkillsPage rows", () => {
   it("shows Chat and Edit in the row and folds the rest into the row menu", async () => {
     render(<SkillsPage />);
 
+    expect(screen.queryByText("Standalone skills")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Chat pdf-tools")).toBeInTheDocument();
     expect(screen.getByLabelText("Edit pdf-tools")).toBeInTheDocument();
     // Delete is one click away from Edit no longer.

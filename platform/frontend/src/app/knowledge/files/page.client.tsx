@@ -322,11 +322,13 @@ export default function KnowledgeFilesPage() {
                   clearSelection();
                   updateQueryParams({ page: "1" });
                 }}
-                className="flex items-center gap-2 text-left font-medium hover:underline"
+                className="flex w-full min-w-0 items-center gap-2 text-left font-medium hover:underline"
               >
                 <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <span className="truncate">{directory.name}</span>
-                <span className="text-muted-foreground text-xs">
+                <span className="truncate" title={directory.name}>
+                  {directory.name}
+                </span>
+                <span className="shrink-0 text-muted-foreground text-xs">
                   {directory.fileCount}
                 </span>
               </button>
@@ -339,7 +341,7 @@ export default function KnowledgeFilesPage() {
             // downloading it.
             <button
               type="button"
-              className="flex items-center gap-2 text-left"
+              className="flex w-full min-w-0 items-center gap-2 text-left"
               onClick={() =>
                 setPreviewFile({
                   name: file.filename,
@@ -349,7 +351,10 @@ export default function KnowledgeFilesPage() {
               }
             >
               <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-              <span className="truncate font-medium underline-offset-4 hover:underline">
+              <span
+                className="truncate font-medium underline-offset-4 hover:underline"
+                title={file.filename}
+              >
                 {file.filename}
               </span>
             </button>

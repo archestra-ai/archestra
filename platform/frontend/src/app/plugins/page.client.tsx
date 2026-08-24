@@ -65,7 +65,6 @@ import {
 } from "@/components/ui/tooltip";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
-import { useAppName } from "@/lib/hooks/use-app-name";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import {
   type PluginListItem,
@@ -84,6 +83,7 @@ import { PluginClientIcon } from "./_parts/plugin-client-icon";
 import { PluginGithubSyncBadge } from "./_parts/plugin-github-sync-badge";
 import { PluginInstallDialog } from "./_parts/plugin-install-dialog";
 import {
+  ARCHESTRA_PLUGIN_AUTHOR_LABEL,
   CLIENT_LABELS,
   comparePinnedPluginTableOrder,
   comparePluginCatalogOrder,
@@ -151,7 +151,6 @@ function PluginsList() {
   } = usePlugins();
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
-  const appName = useAppName();
 
   const setFilter = useCallback(
     (name: string, value: string) => {
@@ -398,7 +397,7 @@ function PluginsList() {
                 </span>
                 {isArchestraPlugin(plugin) && (
                   <Badge variant="secondary" className="shrink-0">
-                    {appName}
+                    {ARCHESTRA_PLUGIN_AUTHOR_LABEL}
                   </Badge>
                 )}
                 {!plugin.enabled && (

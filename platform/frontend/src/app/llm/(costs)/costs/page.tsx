@@ -38,6 +38,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -90,25 +91,77 @@ interface ChartContainerWrapperProps {
   config: ChartConfig;
   data: Record<string, string | number>[];
   emptyMessage?: string;
+  /** First load, before the timeframe's numbers are known. */
+  isPending?: boolean;
   children: React.ReactNode;
 }
 
+/**
+ * Holds the chart's footprint from the first paint. Until the request lands
+ * there is no answer to give, and "No data available" is a different answer
+ * from "not yet" — reading the empty state before the numbers arrive is what
+ * made a loading page look like an idle organization.
+ */
 const ChartContainerWrapper = ({
   config,
   data,
   emptyMessage = "No data available",
+  isPending = false,
   children,
-}: ChartContainerWrapperProps) => (
-  <ChartContainer config={config} className="aspect-auto h-80 w-full relative">
-    {data.length > 0 ? (
-      children
-    ) : (
-      <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
-        {emptyMessage}
-      </div>
-    )}
-  </ChartContainer>
-);
+}: ChartContainerWrapperProps) => {
+  if (isPending) {
+    return <Skeleton className={`w-full ${STATISTICS_CHART_HEIGHT_CLASS}`} />;
+  }
+
+  return (
+    <ChartContainer
+      config={config}
+      className={`aspect-auto w-full relative ${STATISTICS_CHART_HEIGHT_CLASS}`}
+    >
+      {data.length > 0 ? (
+        children
+      ) : (
+        <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
+          {emptyMessage}
+        </div>
+      )}
+    </ChartContainer>
+  );
+};
+
+/** Kept identical between the chart and its loading placeholder. */
+const STATISTICS_CHART_HEIGHT_CLASS = "h-80";
+
+/**
+ * Placeholder rows that keep a statistics table at a plausible height while
+ * its request is in flight, rather than collapsing to a single "no data" row
+ * and then jumping when the data lands.
+ */
+function StatisticsSkeletonRows({
+  columns,
+  rows = 3,
+}: {
+  columns: number;
+  rows?: number;
+}) {
+  // Keyed off the generated ids rather than the map index: the placeholder set
+  // is fixed for the life of the load, so the ids are stable identities.
+  const rowKeys = Array.from({ length: rows }, (_, index) => `row-${index}`);
+  const columnKeys = Array.from(
+    { length: columns },
+    (_, index) => `column-${index}`,
+  );
+
+  return rowKeys.map((rowKey) => (
+    <TableRow key={rowKey}>
+      {columnKeys.map((columnKey) => (
+        <TableCell key={`${rowKey}-${columnKey}`}>
+          <Skeleton className="h-4 w-full" />
+        </TableCell>
+      ))}
+    </TableRow>
+  ));
+}
 
 const TIMEFRAME_STORAGE_KEY = "cost-statistics-timeframe";
 const STATISTICS_TABLE_MAX_HEIGHT_CLASS = "max-h-[280px]";
@@ -149,45 +202,52 @@ export default function StatisticsPage() {
   const organizationStatisticsEnabled = isTimeframeResolved;
 
   // Statistics data fetching hooks
-  const { data: teamStatistics = [] } = useTeamStatistics({
-    timeframe,
-    enabled: organizationStatisticsEnabled,
-  });
-  const { data: agentStatistics = [] } = useProfileStatistics({
-    timeframe,
-    enabled: organizationStatisticsEnabled,
-  });
-  const { data: modelStatistics = [] } = useModelStatistics({
-    timeframe,
-    enabled: organizationStatisticsEnabled,
-  });
-  const { data: costSavingsData } = useCostSavingsStatistics({
-    timeframe,
-    enabled: organizationStatisticsEnabled,
-  });
-  const { data: userStatisticsPage } = useUserStatistics({
-    timeframe,
-    limit: USER_STATISTICS_PAGE_SIZE,
-    includeModels: true,
-    enabled: organizationStatisticsEnabled,
-  });
+  const { data: teamStatistics = [], isPending: isTeamStatisticsPending } =
+    useTeamStatistics({
+      timeframe,
+      enabled: organizationStatisticsEnabled,
+    });
+  const { data: agentStatistics = [], isPending: isAgentStatisticsPending } =
+    useProfileStatistics({
+      timeframe,
+      enabled: organizationStatisticsEnabled,
+    });
+  const { data: modelStatistics = [], isPending: isModelStatisticsPending } =
+    useModelStatistics({
+      timeframe,
+      enabled: organizationStatisticsEnabled,
+    });
+  const { data: costSavingsData, isPending: isCostSavingsPending } =
+    useCostSavingsStatistics({
+      timeframe,
+      enabled: organizationStatisticsEnabled,
+    });
+  const { data: userStatisticsPage, isPending: isUserStatisticsPending } =
+    useUserStatistics({
+      timeframe,
+      limit: USER_STATISTICS_PAGE_SIZE,
+      includeModels: true,
+      enabled: organizationStatisticsEnabled,
+    });
   const userStatistics = userStatisticsPage?.data ?? [];
   const userStatisticsTotal = userStatisticsPage?.pagination?.total ?? 0;
-  const { data: appStatisticsPage } = useAppStatistics({
-    timeframe,
-    limit: ENTITY_STATISTICS_PAGE_SIZE,
-    enabled: organizationStatisticsEnabled,
-  });
+  const { data: appStatisticsPage, isPending: isAppStatisticsPending } =
+    useAppStatistics({
+      timeframe,
+      limit: ENTITY_STATISTICS_PAGE_SIZE,
+      enabled: organizationStatisticsEnabled,
+    });
   const appStatistics = appStatisticsPage?.data ?? [];
   const appStatisticsTotal = appStatisticsPage?.pagination?.total ?? 0;
   const chatBaselineCostPerSession =
     appStatisticsPage?.chatBaselineCostPerSession ?? 0;
   const chatBaselineSessions = appStatisticsPage?.chatBaselineSessions ?? 0;
-  const { data: skillStatisticsPage } = useSkillStatistics({
-    timeframe,
-    limit: ENTITY_STATISTICS_PAGE_SIZE,
-    enabled: organizationStatisticsEnabled,
-  });
+  const { data: skillStatisticsPage, isPending: isSkillStatisticsPending } =
+    useSkillStatistics({
+      timeframe,
+      limit: ENTITY_STATISTICS_PAGE_SIZE,
+      enabled: organizationStatisticsEnabled,
+    });
   const skillStatistics = skillStatisticsPage?.data ?? [];
   const skillStatisticsTotal = skillStatisticsPage?.pagination?.total ?? 0;
 
@@ -619,6 +679,8 @@ export default function StatisticsPage() {
         subscriptionCost={costSavingsData?.totalSubscriptionCost ?? 0}
         requests={organizationRequestCount}
         tokens={organizationTokenCount}
+        isCostPending={isCostSavingsPending}
+        isUsagePending={isModelStatisticsPending}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -630,6 +692,7 @@ export default function StatisticsPage() {
             <ChartContainerWrapper
               config={costSavingsChartConfig}
               data={costSavingsChartData}
+              isPending={isCostSavingsPending}
             >
               <LineChart
                 accessibilityLayer
@@ -703,6 +766,7 @@ export default function StatisticsPage() {
             <ChartContainerWrapper
               config={savingsBreakdownChartConfig}
               data={savingsBreakdownChartData}
+              isPending={isCostSavingsPending}
             >
               <LineChart
                 accessibilityLayer
@@ -765,6 +829,7 @@ export default function StatisticsPage() {
                 config={teamChartConfig}
                 data={teamChartData}
                 emptyMessage="No team data available"
+                isPending={isTeamStatisticsPending}
               >
                 <LineChart
                   accessibilityLayer
@@ -835,7 +900,9 @@ export default function StatisticsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sortedTeamStatistics.length === 0 ? (
+                  {isTeamStatisticsPending ? (
+                    <StatisticsSkeletonRows columns={6} />
+                  ) : sortedTeamStatistics.length === 0 ? (
                     <TableRow>
                       <TableCell
                         colSpan={6}
@@ -882,6 +949,7 @@ export default function StatisticsPage() {
                 config={agentChartConfig}
                 data={agentChartData}
                 emptyMessage="No agent data available"
+                isPending={isAgentStatisticsPending}
               >
                 <LineChart
                   accessibilityLayer
@@ -952,7 +1020,9 @@ export default function StatisticsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sortedChatAgentStatistics.length === 0 ? (
+                  {isAgentStatisticsPending ? (
+                    <StatisticsSkeletonRows columns={6} />
+                  ) : sortedChatAgentStatistics.length === 0 ? (
                     <TableRow>
                       <TableCell
                         colSpan={6}
@@ -1001,6 +1071,7 @@ export default function StatisticsPage() {
                 config={llmProxyChartConfig}
                 data={llmProxyChartData}
                 emptyMessage="No LLM proxy data available"
+                isPending={isAgentStatisticsPending}
               >
                 <LineChart
                   accessibilityLayer
@@ -1068,7 +1139,9 @@ export default function StatisticsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sortedLlmProxyStatistics.length === 0 ? (
+                  {isAgentStatisticsPending ? (
+                    <StatisticsSkeletonRows columns={5} />
+                  ) : sortedLlmProxyStatistics.length === 0 ? (
                     <TableRow>
                       <TableCell
                         colSpan={5}
@@ -1114,6 +1187,7 @@ export default function StatisticsPage() {
                 config={modelChartConfig}
                 data={modelChartData}
                 emptyMessage="No model data available"
+                isPending={isModelStatisticsPending}
               >
                 <LineChart
                   accessibilityLayer
@@ -1184,7 +1258,9 @@ export default function StatisticsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sortedModelStatistics.length === 0 ? (
+                  {isModelStatisticsPending ? (
+                    <StatisticsSkeletonRows columns={6} />
+                  ) : sortedModelStatistics.length === 0 ? (
                     <TableRow>
                       <TableCell
                         colSpan={6}
@@ -1266,7 +1342,9 @@ export default function StatisticsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {userStatistics.length === 0 ? (
+                {isUserStatisticsPending ? (
+                  <StatisticsSkeletonRows columns={7} />
+                ) : userStatistics.length === 0 ? (
                   <TableRow>
                     <TableCell
                       colSpan={7}
@@ -1382,7 +1460,9 @@ export default function StatisticsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {appStatistics.length === 0 ? (
+                {isAppStatisticsPending ? (
+                  <StatisticsSkeletonRows columns={7} />
+                ) : appStatistics.length === 0 ? (
                   <TableRow>
                     <TableCell
                       colSpan={7}
@@ -1477,7 +1557,9 @@ export default function StatisticsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {skillStatistics.length === 0 ? (
+                {isSkillStatisticsPending ? (
+                  <StatisticsSkeletonRows columns={7} />
+                ) : skillStatistics.length === 0 ? (
                   <TableRow>
                     <TableCell
                       colSpan={7}
@@ -1579,16 +1661,25 @@ function AppBuildCostCell({
   return <span>${app.buildCost.toFixed(2)}</span>;
 }
 
+/**
+ * The two spend tiles and the two usage tiles come from different endpoints, so
+ * they are allowed to settle independently rather than making the whole row
+ * wait on the slower of the two.
+ */
 function OrganizationSummary({
   billedSpend,
   subscriptionCost,
   requests,
   tokens,
+  isCostPending,
+  isUsagePending,
 }: {
   billedSpend: number;
   subscriptionCost: number;
   requests: number;
   tokens: number;
+  isCostPending: boolean;
+  isUsagePending: boolean;
 }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -1596,21 +1687,25 @@ function OrganizationSummary({
         label="Billed spend"
         value={`$${billedSpend.toFixed(2)}`}
         description="Metered usage charged at API rates"
+        isPending={isCostPending}
       />
       <OrganizationSummaryCard
         label="Subscription-covered"
         value={`$${subscriptionCost.toFixed(2)}`}
         description="List-price value not billed"
+        isPending={isCostPending}
       />
       <OrganizationSummaryCard
         label="Requests"
         value={requests.toLocaleString()}
         description="Across all models"
+        isPending={isUsagePending}
       />
       <OrganizationSummaryCard
         label="Tokens"
         value={tokens.toLocaleString()}
         description="Input, output, and cache reads"
+        isPending={isUsagePending}
       />
     </div>
   );
@@ -1620,16 +1715,22 @@ function OrganizationSummaryCard({
   label,
   value,
   description,
+  isPending,
 }: {
   label: string;
   value: string;
   description: string;
+  isPending: boolean;
 }) {
   return (
     <Card>
       <CardHeader className="gap-1">
         <CardDescription>{label}</CardDescription>
-        <CardTitle className="text-2xl tabular-nums">{value}</CardTitle>
+        {/* The placeholder matches the rendered title's line box, so the tile
+            does not resize when the real figure replaces it. */}
+        <CardTitle className="text-2xl tabular-nums">
+          {isPending ? <Skeleton className="h-7 w-24" /> : value}
+        </CardTitle>
         <p className="text-muted-foreground text-xs">{description}</p>
       </CardHeader>
     </Card>

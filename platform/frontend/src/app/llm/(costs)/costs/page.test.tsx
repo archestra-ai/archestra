@@ -127,6 +127,45 @@ describe("OrganizationCostsPage", () => {
     });
   });
 
+  it("holds the layout with placeholders instead of reporting zeros before the numbers arrive", async () => {
+    // Every statistics request still in flight — the state the page is in on
+    // its very first paint.
+    for (const hook of [
+      mockUseTeamStatistics,
+      mockUseProfileStatistics,
+      mockUseModelStatistics,
+      mockUseCostSavingsStatistics,
+      mockUseUserStatistics,
+      mockUseAppStatistics,
+      mockUseSkillStatistics,
+    ]) {
+      hook.mockReturnValue({ data: undefined, isPending: true });
+    }
+
+    const { container } = render(<OrganizationCostsPage />);
+
+    await waitFor(() => {
+      expect(
+        container.querySelectorAll('[data-slot="skeleton"]').length,
+      ).toBeGreaterThan(0);
+    });
+
+    // A loading page must not answer questions it cannot answer yet: "$0.00"
+    // and "No data available" are claims about the organization, not about the
+    // request.
+    expect(screen.queryByText("$0.00")).not.toBeInTheDocument();
+    expect(screen.queryByText("No data available")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("No team data available for the selected timeframe"),
+    ).not.toBeInTheDocument();
+
+    // The tiles keep their labels so the page reads as itself while it loads.
+    expect(
+      screen.getByText("Metered usage charged at API rates"),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Teams").length).toBeGreaterThan(0);
+  });
+
   it("shows the organization-wide analytics", async () => {
     render(<OrganizationCostsPage />);
 

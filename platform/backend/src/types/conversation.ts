@@ -160,6 +160,7 @@ export const UpdateConversationSchema = createUpdateSchema(
     chatApiKeyId: true,
     agentId: true,
     artifact: true,
+    projectId: true,
     pinnedAt: true,
     thinkingEffort: true,
   })

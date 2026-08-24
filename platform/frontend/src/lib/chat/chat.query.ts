@@ -130,6 +130,9 @@ export function mergeUpdatedConversationIntoCache(
   if (variables.pinnedAt !== undefined) {
     merged.pinnedAt = updatedConversation.pinnedAt;
   }
+  if (variables.projectId !== undefined) {
+    merged.projectId = updatedConversation.projectId;
+  }
 
   return merged;
 }
@@ -439,6 +442,7 @@ export function useUpdateConversation() {
       modelId,
       chatApiKeyId,
       agentId,
+      projectId,
       pinnedAt,
       thinkingEffort,
     }: { id: string } & WithThinkingEffortSetting<
@@ -453,6 +457,7 @@ export function useUpdateConversation() {
               modelId,
               chatApiKeyId,
               agentId,
+              projectId,
               pinnedAt,
               // The generated body type drops `nullable: true` from enum
               // schemas, so null (auto) has to be re-asserted here.
@@ -463,6 +468,16 @@ export function useUpdateConversation() {
       ),
     onSuccess: (data, variables) => {
       if (!data) return;
+      const previousProjectId =
+        queryClient.getQueryData<
+          archestraApiTypes.GetChatConversationResponses["200"]
+        >(["conversation", variables.id])?.projectId ??
+        queryClient
+          .getQueriesData<
+            archestraApiTypes.GetChatConversationsResponses["200"]
+          >({ queryKey: ["conversations"] })
+          .flatMap(([, conversations]) => conversations ?? [])
+          .find((conversation) => conversation.id === variables.id)?.projectId;
       // `mergeUpdatedConversationIntoCache` deliberately has no branch for the
       // reasoning depth: the composer owns what it displays, including the
       // clicks its write queue coalesces away. Echoing a response back would
@@ -486,8 +501,33 @@ export function useUpdateConversation() {
       // Only invalidate the conversations list for sidebar-relevant changes
       // (pin status, agent). Model/key updates don't affect the sidebar
       // and unnecessary invalidation causes cascading re-renders.
-      if (variables.pinnedAt !== undefined || variables.agentId) {
+      if (
+        variables.pinnedAt !== undefined ||
+        variables.agentId ||
+        variables.projectId !== undefined
+      ) {
         queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      }
+      if (variables.projectId !== undefined) {
+        toast.success(
+          variables.projectId
+            ? "Chat moved to project"
+            : "Chat removed from project",
+        );
+        queryClient.invalidateQueries({ queryKey: ["projects", "list"] });
+        queryClient.invalidateQueries({
+          queryKey: ["conversation-files", variables.id],
+        });
+        if (previousProjectId) {
+          queryClient.invalidateQueries({
+            queryKey: ["projects", previousProjectId, "conversations"],
+          });
+        }
+        if (variables.projectId) {
+          queryClient.invalidateQueries({
+            queryKey: ["projects", variables.projectId, "conversations"],
+          });
+        }
       }
       if (variables.agentId) {
         // Agent changed — invalidate tools-related queries

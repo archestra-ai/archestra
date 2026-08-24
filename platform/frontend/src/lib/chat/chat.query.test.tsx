@@ -370,6 +370,22 @@ describe("mergeUpdatedConversationIntoCache", () => {
 
     expect(merged.titleIsPlaceholder).toBe(true);
   });
+
+  test("applies a project change to the cached conversation", () => {
+    const oldConversation = makeConversation();
+    const updatedConversation = {
+      ...oldConversation,
+      projectId: "project-1",
+    } satisfies archestraApiTypes.UpdateChatConversationResponses["200"];
+
+    const merged = mergeUpdatedConversationIntoCache(
+      oldConversation,
+      updatedConversation,
+      { id: "conversation-1", projectId: "project-1" },
+    );
+
+    expect(merged.projectId).toBe("project-1");
+  });
 });
 
 describe("invalidateConversationFileQueries", () => {
@@ -695,7 +711,7 @@ describe("useClearChatErrors", () => {
   });
 });
 
-describe("thinking effort reaches the wire", () => {
+describe("conversation settings reach the wire", () => {
   // Both mutations rebuild the request body from an explicit field list, so a
   // new field is dropped silently unless it is added there. Type-checking does
   // not catch it: the extra property is accepted by the argument type.
@@ -723,6 +739,30 @@ describe("thinking effort reaches the wire", () => {
     expect(archestraApiSdk.updateChatConversation).toHaveBeenCalledWith(
       expect.objectContaining({
         body: expect.objectContaining({ thinkingEffort: "high" }),
+      }),
+    );
+  });
+
+  it("sends a project assignment when updating a conversation", async () => {
+    vi.mocked(archestraApiSdk.updateChatConversation).mockResolvedValue({
+      data: { ...makeConversation(), projectId: "project-1" },
+      error: undefined,
+    } as Awaited<ReturnType<typeof archestraApiSdk.updateChatConversation>>);
+
+    const { result } = renderHook(() => useUpdateConversation(), {
+      wrapper: createWrapper(),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        id: "c1",
+        projectId: "project-1",
+      });
+    });
+
+    expect(archestraApiSdk.updateChatConversation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.objectContaining({ projectId: "project-1" }),
       }),
     );
   });

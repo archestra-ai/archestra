@@ -97,15 +97,14 @@ jobs:
       matrix:
         include:
           - name: Platform
-            # 16-vcpu Blacksmith (CI_RUNNER_XL overrides — see the lint job
-            # in on-pull-requests.yml). The platform image build is
-            # compile-bound (pnpm install + turbo build + Rust NAPI inside
-            # docker build) and is merge-queue critical path — the lite legs
-            # serialize behind it. Measured 12-13 min on 4-vcpu ubuntu-latest
-            # vs ~30s on a 16-vcpu Blacksmith runner whose sticky disk keeps
-            # the local layer cache warm; the registry cache-from misses the
+            # 16-vcpu Blacksmith: the platform image build is compile-bound
+            # (pnpm install + turbo build + Rust NAPI inside docker build)
+            # and is merge-queue critical path — the lite legs serialize
+            # behind it. Measured 12-13 min on 4-vcpu ubuntu-latest vs ~30s
+            # on a 16-vcpu Blacksmith runner whose sticky disk keeps the
+            # local layer cache warm; the registry cache-from misses the
             # compile-heavy layers on every source change.
-            runner: ${{ vars.CI_RUNNER_XL || 'blacksmith-16vcpu-ubuntu-2404' }}
+            runner: blacksmith-16vcpu-ubuntu-2404
             context: ./platform
             dockerfile: ""
             artifact-name: platform-docker-image
@@ -412,10 +411,9 @@ jobs:
     # instead of being skipped — the merge is still blocked either way by the
     # required "Build ... Image" checks.
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' || github.event.label.name == 'run-e2e-hibernation' }}
-    # 8-vcpu Blacksmith, as before the runner migration (CI_RUNNER_L
-    # overrides — see the lint job in on-pull-requests.yml). See the
-    # setup-time measurements in the job comment above.
-    runs-on: ${{ vars.CI_RUNNER_L || 'blacksmith-8vcpu-ubuntu-2404' }}
+    # 8-vcpu Blacksmith, as before the runner migration. See the setup-time
+    # measurements in the job comment above.
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     # Two budgets, matched to which legs run. The ordinary K8s leg (merge
     # queue and run-e2e PRs) fits inside 60 minutes. Nightly, dispatch, and
     # the explicit hibernation label add a hibernation leg allowed 120
@@ -638,12 +636,11 @@ jobs:
     name: Platform E2E Tests (Lite ${{ matrix.name }})
     needs: [platform-e2e-build]
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' || github.event.label.name == 'run-e2e-hibernation' }}
-    # 8-vcpu Blacksmith, as before the runner migration (CI_RUNNER_L
-    # overrides — see the lint job in on-pull-requests.yml). Each leg boots
-    # the full lite stack and then runs Playwright next to it: the
-    # pre-migration single lite job ran 6.9 min on 8 vcpu where the 4-vcpu
-    # legs ran 8-9 min each.
-    runs-on: ${{ vars.CI_RUNNER_L || 'blacksmith-8vcpu-ubuntu-2404' }}
+    # 8-vcpu Blacksmith, as before the runner migration. Each leg boots the
+    # full lite stack and then runs Playwright next to it: the pre-migration
+    # single lite job ran 6.9 min on 8 vcpu where the 4-vcpu legs ran 8-9
+    # min each.
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 30
     strategy:
       # A failing leg must not cancel its siblings; we want the full failure

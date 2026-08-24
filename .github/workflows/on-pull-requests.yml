@@ -267,10 +267,8 @@ jobs:
     # check tasks and @frontend:check:ci itself runs tsc/vitest/knip/biome
     # concurrently — so it scales with cores: the same all-cache-miss
     # check:ci measured 1m51s on 16 vcpu vs 10m16s on 4-vcpu ubuntu-latest
-    # (whole job 3 min avg vs 15.2 min avg). CI_RUNNER_XL is the kill
-    # switch, same repo-variable pattern as MAC_MINI_CI below: set it to
-    # another label (e.g. ubuntu-latest) to reroute with no workflow change.
-    runs-on: ${{ vars.CI_RUNNER_XL || 'blacksmith-16vcpu-ubuntu-2404' }}
+    # (whole job 3 min avg vs 15.2 min avg).
+    runs-on: blacksmith-16vcpu-ubuntu-2404
     # Backstop: on a turbo remote-cache hit every check here finishes well
     # under 10m, but leaked test-runner processes (vitest fork workers /
     # esbuild) occasionally orphan and hold the step's log pipe open, leaving

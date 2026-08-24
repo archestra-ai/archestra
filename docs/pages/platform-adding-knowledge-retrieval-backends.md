@@ -56,7 +56,18 @@ Ingestion and query code call this interface. A new implementation must not add 
 
 ## Implementation
 
-Create a backend module under `backend/src/knowledge-base/retrieval-backends/`. Use a class when the client owns connections or cached state.
+Create `backend/src/knowledge-base/retrieval-backends/opensearch/opensearch-retrieval-backend.ts`. Use one subdirectory per backend, as knowledge connectors do.
+
+```text
+retrieval-backends/
+├── registry.ts
+├── postgres/
+│   └── postgres-retrieval-backend.ts
+└── opensearch/
+    └── opensearch-retrieval-backend.ts
+```
+
+Use a class when the client owns connections or cached state.
 
 ```typescript
 import type { Client as OpenSearchClient } from "@opensearch-project/opensearch";
@@ -67,7 +78,7 @@ import type {
   KeywordSearchParams,
   KnowledgeRetrievalBackend,
   VectorSearchParams,
-} from "../retrieval-backend";
+} from "../../retrieval-backend";
 
 export class OpenSearchRetrievalBackend
   implements KnowledgeRetrievalBackend
@@ -206,7 +217,7 @@ Do not expose the selector through the frontend. Retrieval storage is deployment
 
 ## Registration
 
-Construct one backend singleton from the selector. Keep the PostgreSQL object as the default.
+Register the implementation in `retrieval-backends/registry.ts`. Construct one singleton from the selector. Keep the PostgreSQL object as the default.
 
 ```typescript
 export const knowledgeRetrievalBackend = createKnowledgeRetrievalBackend();

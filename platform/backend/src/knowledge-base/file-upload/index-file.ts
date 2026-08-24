@@ -8,7 +8,7 @@ import {
   OCR_RUN_PAGE_BUDGET,
   type OcrRunContext,
 } from "@/knowledge-base/pdf-ocr";
-import { knowledgeRetrievalBackend } from "@/knowledge-base/retrieval-backend";
+import { knowledgeRetrievalBackend } from "@/knowledge-base/retrieval-backends/registry";
 import logger from "@/logging";
 import { KbDocumentModel, KbFileModel } from "@/models";
 import { readRowBytes } from "@/skills-sandbox/file-storage";

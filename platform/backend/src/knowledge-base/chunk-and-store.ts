@@ -4,7 +4,7 @@ import * as metrics from "@/observability/metrics";
 import type { AclEntry } from "@/types";
 import { chunkDocument } from "./chunker";
 import { buildContextualHeaders } from "./contextual-retrieval";
-import { knowledgeRetrievalBackend } from "./retrieval-backend";
+import { knowledgeRetrievalBackend } from "./retrieval-backends/registry";
 
 /**
  * Split a stored document into chunks and persist them.

@@ -1,6 +1,4 @@
 import type { TextSearchLanguage } from "@archestra/shared";
-import { isDbStatementTimeoutError } from "@/database/retry";
-import { KbChunkModel } from "@/models";
 import type { Bm25Tuning, VectorSearchResult } from "@/models/kb-chunk";
 import type { AclEntry, InsertKbChunk, KbChunk } from "@/types";
 
@@ -70,28 +68,6 @@ export interface NeighborChunk {
   chunkIndex: number;
   content: string;
 }
-
-/** The built-in backend. No retrieval-specific configuration is required. */
-export const knowledgeRetrievalBackend: KnowledgeRetrievalBackend = {
-  requiresResultVerification: false,
-  insertChunks: (chunks) => KbChunkModel.insertMany(chunks),
-  getDocumentChunks: (documentId) => KbChunkModel.findByDocument(documentId),
-  countDocumentChunks: (documentId) => KbChunkModel.countByDocument(documentId),
-  deleteDocumentChunks: (documentId) =>
-    KbChunkModel.deleteByDocument(documentId),
-  indexEmbeddings: ({ updates, dimensions }) =>
-    KbChunkModel.updateEmbeddings(updates, dimensions),
-  vectorSearch: (params) => KbChunkModel.vectorSearch(params),
-  keywordSearch: (params) => KbChunkModel.fullTextSearch(params),
-  findNeighbors: (params) => KbChunkModel.findNeighbors(params),
-  getTextSearchLanguages: (connectorIds) =>
-    KbChunkModel.getTextSearchLanguages(connectorIds),
-  getPopulatedEmbeddingDimensions: (connectorIds) =>
-    KbChunkModel.getPopulatedEmbeddingDimensions(connectorIds),
-  hasKeywordStatistics: (languages, connectorIds) =>
-    KbChunkModel.hasBm25Stats(languages, connectorIds),
-  isSearchTimeout: (error) => isDbStatementTimeoutError(error),
-};
 
 // ===== Internal types =====
 

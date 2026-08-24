@@ -32,8 +32,9 @@ outside the PostgreSQL model:
 
 Ingestion, embedding, querying, and context expansion call this contract. The
 PostgreSQL object delegates to `KbChunkModel`, which keeps the current behavior.
-`QueryService` accepts a backend in its constructor. The application singleton
-uses the PostgreSQL object.
+Implementations live under `retrieval-backends/<name>/`. The registry at
+`retrieval-backends/registry.ts` constructs the application singleton.
+`QueryService` accepts a backend in its constructor.
 
 ## Required Guarantees
 
@@ -95,15 +96,17 @@ document lifecycle paths before it can be selected in production.
 
 ## Adding an Implementation
 
-1. Implement every `KnowledgeRetrievalBackend` method.
-2. Keep PostgreSQL as the canonical document, ACL, and citation store.
-3. Set `requiresResultVerification` to `true`.
-4. Push connector, ACL, and environment filters into both search methods.
-5. Store Archestra chunk and document identities in the external index.
-6. Normalize timeout detection through `isSearchTimeout`.
-7. Add the document-deletion lifecycle hook described above.
-8. Run the query behavior suite against the implementation.
-9. Add backend-specific tests for indexing, deletion, filtering, and timeout
+1. Create `retrieval-backends/<name>/<name>-retrieval-backend.ts`.
+2. Implement every `KnowledgeRetrievalBackend` method.
+3. Keep PostgreSQL as the canonical document, ACL, and citation store.
+4. Set `requiresResultVerification` to `true`.
+5. Push connector, ACL, and environment filters into both search methods.
+6. Store Archestra chunk and document identities in the external index.
+7. Normalize timeout detection through `isSearchTimeout`.
+8. Add the document-deletion lifecycle hook described above.
+9. Register the implementation in `retrieval-backends/registry.ts`.
+10. Run the query behavior suite against the implementation.
+11. Add backend-specific tests for indexing, deletion, filtering, and timeout
    behavior.
 
 `query.test.ts` includes an alternate backend that returns forged fields and an

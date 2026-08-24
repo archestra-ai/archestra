@@ -30,7 +30,7 @@ import { toKnowledgeBaseUserMessage } from "./errors";
 import { resolveEmbeddingConfig, resolveOcrConfig } from "./kb-llm-client";
 import { OCR_RUN_PAGE_BUDGET } from "./pdf-ocr";
 import { enqueuePermissionSyncAfterContentSync } from "./permission-sync-trigger";
-import { knowledgeRetrievalBackend } from "./retrieval-backend";
+import { knowledgeRetrievalBackend } from "./retrieval-backends/registry";
 import { knowledgeSourceAccessControlService } from "./source-access-control";
 
 /**

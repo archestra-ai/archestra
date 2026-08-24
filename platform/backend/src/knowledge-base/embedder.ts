@@ -20,7 +20,7 @@ import {
   getDefaultOrgEmbeddingConfig,
 } from "./kb-llm-client";
 import { parseImageDataUrl } from "./media-chunk";
-import { knowledgeRetrievalBackend } from "./retrieval-backend";
+import { knowledgeRetrievalBackend } from "./retrieval-backends/registry";
 
 const RETRY_MAX_ATTEMPTS = 3;
 const RETRY_BASE_DELAY_MS = 1000;

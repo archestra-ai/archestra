@@ -27,10 +27,8 @@ import {
   KEYWORD_QUERY_HYBRID_ALPHA_WEIGHT,
 } from "./query-expansion";
 import rerank from "./reranker";
-import {
-  type KnowledgeRetrievalBackend,
-  knowledgeRetrievalBackend,
-} from "./retrieval-backend";
+import type { KnowledgeRetrievalBackend } from "./retrieval-backend";
+import { knowledgeRetrievalBackend } from "./retrieval-backends/registry";
 import { verifyExternalRetrievalResults } from "./retrieval-result-verifier";
 import reciprocalRankFusion from "./rrf";
 

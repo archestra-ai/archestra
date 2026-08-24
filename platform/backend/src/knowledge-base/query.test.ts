@@ -91,10 +91,8 @@ import {
   QueryService,
   queryService,
 } from "./query";
-import {
-  type KnowledgeRetrievalBackend,
-  knowledgeRetrievalBackend,
-} from "./retrieval-backend";
+import type { KnowledgeRetrievalBackend } from "./retrieval-backend";
+import { knowledgeRetrievalBackend } from "./retrieval-backends/registry";
 
 function makeFakeEmbedding(seed: number): number[] {
   return Array.from({ length: 1536 }, (_, i) => Math.cos(seed + i * 0.01));

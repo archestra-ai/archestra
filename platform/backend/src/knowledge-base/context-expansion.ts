@@ -1,10 +1,8 @@
 import logger from "@/logging";
 import type { VectorSearchResult } from "@/models/kb-chunk";
 import type { AclEntry } from "@/types";
-import {
-  type KnowledgeRetrievalBackend,
-  knowledgeRetrievalBackend,
-} from "./retrieval-backend";
+import type { KnowledgeRetrievalBackend } from "./retrieval-backend";
+import { knowledgeRetrievalBackend } from "./retrieval-backends/registry";
 import { verifyExternalNeighborChunks } from "./retrieval-result-verifier";
 
 // ===== Exports =====

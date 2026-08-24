@@ -90,7 +90,7 @@ describe("PageLayout tabs", () => {
     ).toHaveLength(0);
   });
 
-  it("accepts an explicit active tab for query-owned views", () => {
+  it("accepts an explicitly selected tab for query-owned views", () => {
     vi.mocked(usePathname).mockReturnValue("/mcp/registry");
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams("status=needs-my-action") as ReturnType<
@@ -102,11 +102,11 @@ describe("PageLayout tabs", () => {
       <PageLayout
         title="MCP Registry"
         tabs={[
-          { label: "All", href: "/mcp/registry", active: false },
+          { label: "All", href: "/mcp/registry", selected: false },
           {
             label: "Action required",
             href: "/mcp/registry?status=needs-my-action",
-            active: true,
+            selected: true,
             testId: "action-required-tab",
           },
         ]}
@@ -121,6 +121,58 @@ describe("PageLayout tabs", () => {
     );
     expect(screen.getAllByRole("link", { name: "All" })[0]).not.toHaveAttribute(
       "aria-current",
+    );
+  });
+
+  /**
+   * The reader is on exactly one page, so exactly one tab may carry the
+   * selected treatment. A caller that hands `selected` something other than
+   * "this is the open page" — a per-tab status, say — used to light up every
+   * tab it was true for, and left several links claiming `aria-current="page"`
+   * at once.
+   */
+  it("marks a single tab as the current page even when several claim to be selected", () => {
+    vi.mocked(usePathname).mockReturnValue("/mcp/registry/abc/tools");
+
+    render(
+      <PageLayout
+        title="Server"
+        tabs={[
+          { label: "Overview", href: "/mcp/registry/abc", selected: true },
+          {
+            label: "Tools",
+            href: "/mcp/registry/abc/tools",
+            selected: true,
+          },
+          { label: "Logs", href: "/mcp/registry/abc/logs", selected: true },
+        ]}
+      >
+        <div />
+      </PageLayout>,
+    );
+
+    // The winner is rendered once per breakpoint row, so count distinct tabs.
+    const current = [...document.querySelectorAll('[aria-current="page"]')];
+    expect(current.length).toBeGreaterThan(0);
+    expect(new Set(current.map((el) => el.getAttribute("href")))).toEqual(
+      new Set(["/mcp/registry/abc"]),
+    );
+  });
+
+  it("underlines only the tab matching the URL when no tab declares selection", () => {
+    vi.mocked(usePathname).mockReturnValue("/mcp/registry/abc/logs");
+
+    render(
+      <PageLayout title="Server" tabs={FIVE_TABS} mobileVisibleCount={5}>
+        <div />
+      </PageLayout>,
+    );
+
+    // Desktop row plus mobile row: the same one tab, and nothing else.
+    const current = [...document.querySelectorAll('[aria-current="page"]')];
+    expect(current.length).toBeGreaterThan(0);
+    expect(new Set(current.map((el) => el.getAttribute("href")))).toEqual(
+      new Set(["/mcp/registry/abc/logs"]),
     );
   });
 

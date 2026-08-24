@@ -10,17 +10,21 @@ import AgentTriggersLayout from "./layout";
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/organization.query");
+
+/** Mutable so a test can say which channels are set up; reset in `beforeEach`. */
+const triggerStatuses = {
+  msTeams: false,
+  slack: false,
+  telegram: false,
+  telegramAvailable: false,
+  email: false,
+  a2a: true,
+  firstActiveHref: null,
+  isLoading: false,
+};
+
 vi.mock("./_components/use-trigger-statuses", () => ({
-  useTriggerStatuses: () => ({
-    msTeams: false,
-    slack: false,
-    telegram: false,
-    telegramAvailable: false,
-    email: false,
-    a2a: true,
-    firstActiveHref: null,
-    isLoading: false,
-  }),
+  useTriggerStatuses: () => triggerStatuses,
 }));
 
 import { usePathname, useSearchParams } from "next/navigation";
@@ -47,6 +51,14 @@ const ALL_OFF = {
 describe("messaging channels layout", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    Object.assign(triggerStatuses, {
+      msTeams: false,
+      slack: false,
+      telegram: false,
+      telegramAvailable: false,
+      email: false,
+      a2a: true,
+    });
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
     } as unknown as ReturnType<typeof useHasPermissions>);
@@ -96,6 +108,30 @@ describe("messaging channels layout", () => {
     expect(
       screen.getByText("No messaging channels are available"),
     ).toBeInTheDocument();
+  });
+
+  /**
+   * The tab labels carry an "Active"/"Configure" status badge, and the setup
+   * status used to be handed to `PageLayout` as its selection override too.
+   * Every connected channel then rendered as the open page — underline,
+   * foreground text and `aria-current="page"` — whichever one the reader was
+   * actually on.
+   */
+  it("selects only the channel whose page is open, whatever the others' status", () => {
+    vi.mocked(usePathname).mockReturnValue("/messaging-channels/slack");
+    Object.assign(triggerStatuses, { msTeams: true, a2a: true, slack: false });
+
+    renderLayout(null);
+
+    const current = document.querySelectorAll('[aria-current="page"]');
+    expect(current.length).toBeGreaterThan(0);
+    for (const link of current) {
+      expect(link).toHaveAttribute("href", "/messaging-channels/slack");
+    }
+
+    // The badges still report status, they just no longer select anything.
+    expect(screen.getAllByText("Active").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Configure").length).toBeGreaterThan(0);
   });
 
   it("explains a single turned-off channel reached by its own URL", () => {

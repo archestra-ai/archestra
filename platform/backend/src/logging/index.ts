@@ -11,10 +11,9 @@ import {
 } from "@opentelemetry/api-logs";
 import pino from "pino";
 import pretty from "pino-pretty";
+import { createLogger } from "@/logging/create-logger";
 import { LOG_FORMAT } from "@/logging/log-format";
-import { LOG_LEVEL } from "@/logging/log-level";
 import { logRingBuffer } from "@/logging/log-ring-buffer";
-import { REDACTED_LOG_PATHS, serializeErrorBounded } from "@/logging/redaction";
 import { getActiveSessionId } from "@/observability/request-context";
 
 /**
@@ -45,46 +44,31 @@ import { getActiveSessionId } from "@/observability/request-context";
 
 let _instance: pino.Logger | null = null;
 
-function createLogger(): pino.Logger {
+function createDefaultLogger(): pino.Logger {
   // Write raw JSON to stdout via an async, buffered destination so log writes
   // don't block the event loop when the container log pipe is backpressured.
-  return pino(
-    {
-      level: LOG_LEVEL,
-      // Keep `time` as epoch ms (pino default) so OTEL and log shippers can
-      // read it without parsing. Add a sibling `timeIso` for human readers
-      // looking at raw stdout.
-      mixin: () => ({
-        ...injectTraceContext(),
-        timeIso: new Date().toISOString(),
-      }),
-      // Drop `pid` and `hostname` — they're noise in a containerized
-      // environment where pod metadata already identifies the host.
-      base: undefined,
-      // Defense-in-depth: censor credential-shaped keys in every record
-      // before any stream (stdout, OTLP, ring buffer) sees it. Call sites
-      // must still avoid logging payloads — this only catches the common
-      // credential key names at the top and second level of a merge object.
-      redact: { paths: REDACTED_LOG_PATHS, censor: "[Redacted]" },
-      serializers: {
-        err: serializeErrorBounded,
-        error: serializeErrorBounded,
-      },
-    },
-    pino.multistream([
+  return createLogger({
+    // Keep `time` as epoch ms (pino default) so OTEL and log shippers can
+    // read it without parsing. Add a sibling `timeIso` for human readers
+    // looking at raw stdout.
+    mixin: () => ({
+      ...injectTraceContext(),
+      timeIso: new Date().toISOString(),
+    }),
+    streams: [
       { level: "trace", stream: createStdoutStream() },
       { level: "trace", stream: createOtelLogStream() },
       // Retain a rolling window of recent records so captured backend
       // exceptions can carry the log lines that preceded them (see
       // `log-ring-buffer.ts` and the PostHog error-tracking service).
       { level: "trace", stream: logRingBuffer.createStream() },
-    ]),
-  );
+    ],
+  });
 }
 
 const logger: pino.Logger = new Proxy({} as pino.Logger, {
   get(_, prop) {
-    if (!_instance) _instance = createLogger();
+    if (!_instance) _instance = createDefaultLogger();
     const value = (_instance as unknown as Record<string | symbol, unknown>)[
       prop
     ];

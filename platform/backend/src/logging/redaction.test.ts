@@ -1,12 +1,10 @@
 import { Writable } from "node:stream";
-import pino from "pino";
 import { describe, expect, test } from "@/test";
-import { REDACTED_LOG_PATHS, serializeErrorBounded } from "./redaction";
+import { createLogger } from "./create-logger";
 
 /**
- * Builds a pino logger with the same redact/serializer options the real
- * logger uses (see ./index.ts), writing into an in-memory sink so tests can
- * assert on the exact records that would reach stdout/OTLP.
+ * Builds a production-configured logger writing into an in-memory sink so
+ * tests can assert on the exact records that would reach any logger stream.
  */
 function createCapturingLogger() {
   const records: Record<string, unknown>[] = [];
@@ -16,17 +14,10 @@ function createCapturingLogger() {
       callback();
     },
   });
-  const logger = pino(
-    {
-      redact: { paths: REDACTED_LOG_PATHS, censor: "[Redacted]" },
-      serializers: {
-        err: serializeErrorBounded,
-        error: serializeErrorBounded,
-      },
-      base: undefined,
-    },
-    sink,
-  );
+  const logger = createLogger({
+    streams: [{ stream: sink }],
+    level: "info",
+  });
   return { logger, records };
 }
 

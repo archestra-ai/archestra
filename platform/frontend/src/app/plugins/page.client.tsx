@@ -16,6 +16,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { OsLogos } from "@/app/connection/os-logos";
+import { useAgentsNavTabs } from "@/components/agent-pages/agents-nav-tabs";
 import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
@@ -107,6 +108,7 @@ export default function PluginsPage() {
 }
 
 function PluginsGate() {
+  const tabs = useAgentsNavTabs();
   const enabled = useFeature("plugins");
 
   if (enabled === undefined) {
@@ -118,6 +120,7 @@ function PluginsGate() {
       <PageLayout
         title="Plugins"
         description="Plugins are disabled for this deployment."
+        tabs={tabs}
       >
         <div />
       </PageLayout>
@@ -128,6 +131,7 @@ function PluginsGate() {
 }
 
 function PluginsList() {
+  const tabs = useAgentsNavTabs();
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -574,7 +578,7 @@ function PluginsList() {
 
   if (isLoadingError) {
     return (
-      <PageLayout title="Plugins" description={PLUGINS_DESCRIPTION}>
+      <PageLayout title="Plugins" description={PLUGINS_DESCRIPTION} tabs={tabs}>
         <QueryLoadError
           title="Couldn't load your plugins"
           onRetry={() => refetch()}
@@ -594,6 +598,7 @@ function PluginsList() {
       <PageLayout
         title="Plugins"
         description={PLUGINS_DESCRIPTION}
+        tabs={tabs}
         actionButton={
           !showEmptyState && (
             <PermissionButton

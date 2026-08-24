@@ -28,6 +28,7 @@ import {
   agentNewHref,
   resolveLegacyAgentDialogRedirect,
 } from "@/components/agent-pages/agent-page-config";
+import { useAgentsNavTabs } from "@/components/agent-pages/agents-nav-tabs";
 import {
   openRowOnPlainClick,
   RowClickShield,
@@ -140,6 +141,7 @@ function SortIcon({
 }
 
 function Agents({ initialData }: { initialData?: AgentsInitialData }) {
+  const tabs = useAgentsNavTabs();
   const {
     searchParams,
     pageIndex,
@@ -553,6 +555,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             sources, and integrations like ChatOps, email, and A2A.
           </p>
         }
+        tabs={tabs}
       >
         <QueryLoadError
           title="Couldn't load your agents"
@@ -575,6 +578,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             sources, and integrations like ChatOps, email, and A2A.
           </p>
         }
+        tabs={tabs}
         actionButton={
           <div className="flex gap-2">
             <PermissionButton

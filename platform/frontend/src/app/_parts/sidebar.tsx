@@ -30,10 +30,8 @@ import {
   Settings,
   ShieldCheck,
   Slack,
-  Sparkles,
   Star,
   Waypoints,
-  Webhook,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -64,7 +62,6 @@ import {
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
-import { useFeature } from "@/lib/config/config.query";
 import { useGithubStars } from "@/lib/github/github.query";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { useOnce } from "@/lib/hooks/use-once";
@@ -164,6 +161,12 @@ const chatsNavItems: NavItem[] = [
   },
 ];
 
+/**
+ * The Agents section: one sidebar row, three pages reached through the tab bar
+ * at the top of each (see `components/agent-pages/agents-nav-tabs.ts`).
+ */
+const AGENTS_SECTION_PREFIXES = ["/agents", "/skills", "/plugins"];
+
 /** Which tab a route belongs to; null = no opinion (keep the current tab). */
 function routeSidebarMode(pathname: string): SidebarMode | null {
   const chatPrefixes = ["/chat", "/projects", "/apps", "/connection"];
@@ -173,8 +176,7 @@ function routeSidebarMode(pathname: string): SidebarMode | null {
     return "chats";
   }
   const studioPrefixes = [
-    "/agents",
-    "/plugins",
+    ...AGENTS_SECTION_PREFIXES,
     "/mcp",
     "/llm",
     "/knowledge",
@@ -275,22 +277,10 @@ const contentNavGroups: NavGroup[] = [
         title: "Agents",
         url: "/agents",
         icon: Bot,
-        customIsActive: (pathname: string) => pathname.startsWith("/agents"),
-      },
-      {
-        title: "Skills",
-        url: "/skills",
-        icon: Sparkles,
-        customIsActive: (pathname: string) => pathname.startsWith("/skills"),
-        beta: true,
-      },
-      {
-        title: "Plugins",
-        url: "/plugins",
-        icon: Webhook,
-        customIsActive: (pathname: string) => pathname.startsWith("/plugins"),
-        beta: true,
-        badgeLabel: "Beta",
+        // Skills and Plugins live as tabs on the Agents page rather than as
+        // their own sidebar rows, so keep this item lit on those routes too.
+        customIsActive: (pathname: string) =>
+          AGENTS_SECTION_PREFIXES.some((prefix) => pathname.startsWith(prefix)),
       },
       {
         title: "Messaging Channels",
@@ -700,7 +690,6 @@ export function AppSidebar() {
     mcpGateway: ["read"],
   });
   const showConnect = canReadMcpGateway && canReadLlmProxy;
-  const pluginsEnabled = useFeature("plugins");
 
   const [sidebarMode, pickSidebarMode] = useSidebarMode(pathname);
   const chatListFadeIn = useOnce();
@@ -720,13 +709,11 @@ export function AppSidebar() {
 
   const filteredNavGroups = contentNavGroups.map((group) => ({
     ...group,
-    items: group.items
-      .filter((item) => item.url !== "/plugins" || pluginsEnabled)
-      .map((item) =>
-        item.url === "/llm/costs"
-          ? { ...item, url: getCostsNavigationUrl(permissionMap) }
-          : item,
-      ),
+    items: group.items.map((item) =>
+      item.url === "/llm/costs"
+        ? { ...item, url: getCostsNavigationUrl(permissionMap) }
+        : item,
+    ),
   }));
 
   return (

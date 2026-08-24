@@ -29,6 +29,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { useAgentsNavTabs } from "@/components/agent-pages/agents-nav-tabs";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
   FilterBar,
@@ -140,6 +141,7 @@ export default function SkillsPage() {
 }
 
 function SkillsList() {
+  const tabs = useAgentsNavTabs();
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -670,7 +672,7 @@ function SkillsList() {
 
   if (isSkillsLoadError) {
     return (
-      <PageLayout title="Skills" description={SKILLS_DESCRIPTION}>
+      <PageLayout title="Skills" description={SKILLS_DESCRIPTION} tabs={tabs}>
         <QueryLoadError
           title="Couldn't load your skills"
           onRetry={() => refetchSkills()}
@@ -687,6 +689,7 @@ function SkillsList() {
       <PageLayout
         title="Skills"
         description={SKILLS_DESCRIPTION}
+        tabs={tabs}
         actionButton={
           !showEmptyState && (
             <PermissionButton permissions={{ skill: ["create"] }} asChild>

@@ -174,7 +174,7 @@ export function McpServerTable({
       id: "name",
       accessorKey: "name",
       header: "MCP Server",
-      size: 460,
+      size: 320,
       cell: ({ row }) => {
         const item = row.original;
         return (
@@ -187,7 +187,7 @@ export function McpServerTable({
     },
     {
       id: "tools",
-      size: 72,
+      size: 64,
       header: () => <div className="text-right">Tools</div>,
       cell: ({ row }) => (
         <div className="text-right text-sm text-muted-foreground">
@@ -197,7 +197,7 @@ export function McpServerTable({
     },
     {
       id: "author",
-      size: 160,
+      size: 120,
       header: "Accessible to",
       cell: ({ row }) => (
         <ResourceVisibilityBadge
@@ -214,7 +214,7 @@ export function McpServerTable({
       id: "status",
       // The table is a scanning surface: the status label is enough here.
       // Diagnosis and remediation live on the server page and attention facet.
-      size: 180,
+      size: 260,
       header: "Status",
       cell: ({ row }) => {
         const item = row.original;
@@ -263,7 +263,7 @@ export function McpServerTable({
     },
     {
       id: "actions",
-      size: 180,
+      size: 160,
       header: () => <div className="text-right">Actions</div>,
       cell: ({ row }) => {
         const item = row.original;
@@ -321,7 +321,7 @@ export function McpServerTable({
           id: "name",
           accessorKey: "name",
           header: "MCP Server",
-          size: 420,
+          size: 280,
           cell: ({ row }) => {
             const item = row.original;
             return (
@@ -335,7 +335,7 @@ export function McpServerTable({
         {
           id: "issue",
           header: "Issue",
-          size: 360,
+          size: 420,
           cell: ({ row }) => {
             const item = row.original;
             const issues = attentionRawIssues(item);
@@ -717,6 +717,7 @@ function McpServerRowActions({
     (issue) => issue.kind === "failed-to-start" || issue.kind === "not-running",
   );
   const actions: TableRowAction[] = [];
+  const alertActions: TableRowAction[] = [];
   if (reauthIssue) {
     actions.push({
       icon: <KeyRound className="h-4 w-4" />,
@@ -792,17 +793,17 @@ function McpServerRowActions({
       });
     }
   }
-  // Dismiss/Restore is queue management, not an overflow action. Keep it
-  // visible beside the row's other first-class actions.
+  // Dismiss/Restore is queue management, so reserve inline space for it even
+  // when the row has enough capabilities to overflow its action cluster.
   if (dismissTargets.length > 0) {
-    actions.push({
+    alertActions.push({
       icon: <BellOff className="h-4 w-4" />,
       label: dismissTargets.length === 1 ? "Dismiss alert" : "Dismiss alerts",
       onClick: () => setDismissOpen(true),
     });
   }
   if (restoreTargets.length > 0) {
-    actions.push({
+    alertActions.push({
       icon: <Bell className="h-4 w-4" />,
       label: restoreTargets.length === 1 ? "Restore alert" : "Restore alerts",
       disabled: restoreMutation.isPending,
@@ -833,12 +834,23 @@ function McpServerRowActions({
       href: logsAction.href,
     });
   }
-  if (actions.length === 0) return null;
+  if (actions.length === 0 && alertActions.length === 0) return null;
+
+  const inlineActionCount = Math.max(0, 3 - alertActions.length);
+  const inlineActions = [
+    ...actions.slice(0, inlineActionCount),
+    ...alertActions,
+  ];
+  const dropdownActions = actions.slice(inlineActionCount);
 
   return (
     <>
       <div className="flex justify-end">
-        <TableRowActions itemName={item.name} actions={actions} />
+        <TableRowActions
+          itemName={item.name}
+          actions={inlineActions}
+          dropdownActions={dropdownActions}
+        />
       </div>
 
       <UninstallServerDialog

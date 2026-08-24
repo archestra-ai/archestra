@@ -166,7 +166,7 @@ describe("McpServerTable uninstall permission", () => {
     expect(screen.queryByText("Uninstall MCP Server")).not.toBeInTheDocument();
   });
 
-  it("renders Dismiss as a visible row action, never an overflow item", async () => {
+  it("keeps queue actions inline and moves lower-priority actions into overflow", async () => {
     const user = userEvent.setup();
     const issue = {
       kind: "needs-reauth",
@@ -215,14 +215,18 @@ describe("McpServerTable uninstall permission", () => {
       }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("link", {
+      screen.queryByRole("link", {
         name: "Credentials some-remote-server",
       }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", {
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", {
         name: "More actions some-remote-server",
       }),
-    ).toBeNull();
+    );
+    expect(
+      screen.getByRole("menuitem", { name: "Credentials" }),
+    ).toBeInTheDocument();
   });
 });

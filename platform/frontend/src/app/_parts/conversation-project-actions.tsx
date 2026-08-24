@@ -33,7 +33,7 @@ export function ConversationProjectActions({
     <Fragment>
       <DropdownMenuSub>
         <DropdownMenuSubTrigger disabled={isPending}>
-          <FolderInput />
+          <FolderInput className="h-4 w-4 mr-2" />
           <span>Change project</span>
         </DropdownMenuSubTrigger>
         <DropdownMenuSubContent className="w-64 p-0">
@@ -77,7 +77,7 @@ export function ConversationProjectActions({
           disabled={isPending}
           onSelect={() => onProjectChange(null)}
         >
-          <FolderX />
+          <FolderX className="h-4 w-4 mr-2" />
           <span>Remove from project</span>
         </DropdownMenuItem>
       )}

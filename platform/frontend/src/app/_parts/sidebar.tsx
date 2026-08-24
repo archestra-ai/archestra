@@ -30,6 +30,7 @@ import {
   Settings,
   ShieldCheck,
   Slack,
+  Sparkles,
   Star,
   Waypoints,
 } from "lucide-react";
@@ -39,6 +40,7 @@ import React from "react";
 import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
 import { getCostsNavigationUrl } from "@/app/_parts/costs-navigation";
 import { SidebarUserMenu } from "@/app/_parts/sidebar-user-menu";
+import { getSkillsNavigation } from "@/app/_parts/skills-navigation";
 import { AppLogo } from "@/components/app-logo";
 import { McpRegistryAttentionBadge } from "@/components/mcp-registry-attention-badge";
 import { OnboardingDot } from "@/components/onboarding-dot";
@@ -62,6 +64,7 @@ import {
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
+import { useFeature } from "@/lib/config/config.query";
 import { useGithubStars } from "@/lib/github/github.query";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { useOnce } from "@/lib/hooks/use-once";
@@ -162,10 +165,11 @@ const chatsNavItems: NavItem[] = [
 ];
 
 /**
- * The Agents section: one sidebar row, three pages reached through the tab bar
- * at the top of each (see `components/agent-pages/agents-nav-tabs.ts`).
+ * The Skills & Plugins section: one sidebar row landing on Skills, with
+ * Plugins reached through the tab bar at the top of both pages (see
+ * `components/skills-plugins-nav-tabs.tsx`).
  */
-const AGENTS_SECTION_PREFIXES = ["/agents", "/skills", "/plugins"];
+const SKILLS_SECTION_PREFIXES = ["/skills", "/plugins"];
 
 /** Which tab a route belongs to; null = no opinion (keep the current tab). */
 function routeSidebarMode(pathname: string): SidebarMode | null {
@@ -176,7 +180,8 @@ function routeSidebarMode(pathname: string): SidebarMode | null {
     return "chats";
   }
   const studioPrefixes = [
-    ...AGENTS_SECTION_PREFIXES,
+    "/agents",
+    ...SKILLS_SECTION_PREFIXES,
     "/mcp",
     "/llm",
     "/knowledge",
@@ -277,10 +282,19 @@ const contentNavGroups: NavGroup[] = [
         title: "Agents",
         url: "/agents",
         icon: Bot,
-        // Skills and Plugins live as tabs on the Agents page rather than as
-        // their own sidebar rows, so keep this item lit on those routes too.
+        customIsActive: (pathname: string) => pathname.startsWith("/agents"),
+      },
+      {
+        // Plugins is the second tab of this page rather than a row of its own,
+        // so the row is lit on both routes. Its title and target are rewritten
+        // per reader by `getSkillsNavigation`.
+        title: "Skills & Plugins",
+        url: "/skills",
+        icon: Sparkles,
         customIsActive: (pathname: string) =>
-          AGENTS_SECTION_PREFIXES.some((prefix) => pathname.startsWith(prefix)),
+          SKILLS_SECTION_PREFIXES.some((prefix) => pathname.startsWith(prefix)),
+        beta: true,
+        badgeLabel: "Beta",
       },
       {
         title: "Messaging Channels",
@@ -690,6 +704,7 @@ export function AppSidebar() {
     mcpGateway: ["read"],
   });
   const showConnect = canReadMcpGateway && canReadLlmProxy;
+  const pluginsEnabled = useFeature("plugins");
 
   const [sidebarMode, pickSidebarMode] = useSidebarMode(pathname);
   const chatListFadeIn = useOnce();
@@ -709,11 +724,20 @@ export function AppSidebar() {
 
   const filteredNavGroups = contentNavGroups.map((group) => ({
     ...group,
-    items: group.items.map((item) =>
-      item.url === "/llm/costs"
-        ? { ...item, url: getCostsNavigationUrl(permissionMap) }
-        : item,
-    ),
+    items: group.items.map((item) => {
+      if (item.url === "/llm/costs") {
+        return { ...item, url: getCostsNavigationUrl(permissionMap) };
+      }
+      // Naming a page after a feature this deployment turned off sends the
+      // reader looking for a tab that isn't there.
+      if (item.url === "/skills") {
+        return {
+          ...item,
+          ...getSkillsNavigation({ permissionMap, pluginsEnabled }),
+        };
+      }
+      return item;
+    }),
   }));
 
   return (

@@ -6,37 +6,44 @@ import { usePermissionMap } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 
 /**
- * Tabs shared by the three pages of the Agents section — Agents
- * (`/agents`), Skills (`/skills`) and Plugins (`/plugins`). Agents is the
- * section's landing page and the only one the sidebar links to; its siblings
- * are reached through this tab bar.
+ * Tabs shared by the two pages of the Skills & Plugins section — Skills
+ * (`/skills`) and Plugins (`/plugins`). Skills is the section's landing page
+ * and the one the sidebar links to; Plugins is reached through this tab bar.
  *
  * A tab is dropped when the deployment has the feature turned off or the user
  * can't open the page behind it, so the bar never offers a link that would
  * only render a forbidden page. While the permission answer is still loading
  * the gated tabs stay hidden rather than flashing in and back out.
+ *
+ * One surviving tab means there is nowhere to switch to — the common case,
+ * since plugins are off by default — so the bar collapses entirely rather
+ * than underlining the page you are already on.
  */
-export function useAgentsNavTabs() {
+export function useSkillsPluginsNavTabs() {
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
   const pluginsEnabled = useFeature("plugins");
 
-  return AGENTS_NAV_TABS.filter(({ href }) => {
+  const reachable = NAV_TABS.filter(({ href }) => {
     if (href === "/plugins" && !pluginsEnabled) {
       return false;
     }
     const required = requiredPagePermissionsMap[href];
     const isGated = required && Object.keys(required).length > 0;
     return isGated ? permissionMap?.[href] === true : true;
-  }).map(({ href, title, beta }) => ({
+  });
+
+  if (reachable.length < 2) {
+    return [];
+  }
+  return reachable.map(({ href, title }) => ({
     href,
-    label: beta ? <BetaTabLabel title={title} /> : title,
+    label: <BetaTabLabel title={title} />,
   }));
 }
 
-const AGENTS_NAV_TABS = [
-  { title: "Agents", href: "/agents", beta: false },
-  { title: "Skills", href: "/skills", beta: true },
-  { title: "Plugins", href: "/plugins", beta: true },
+const NAV_TABS = [
+  { title: "Skills", href: "/skills" },
+  { title: "Plugins", href: "/plugins" },
 ];
 
 function BetaTabLabel({ title }: { title: string }) {

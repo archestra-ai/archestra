@@ -16,7 +16,7 @@ Plugins run on developer machines. Review every file before you approve an impor
 
 > **Beta feature** — set `ARCHESTRA_PLUGINS_ENABLED=true`, or enable the `ARCHESTRA_BETA` switch. See [Deployment](/docs/platform-deployment#skills-marketplace).
 
-Plugins live on the **Plugins** tab of the Agents page, under **Studio** in the sidebar. The catalog shows each plugin's client, platform support, source, visibility, and sync state.
+Plugins live on the second tab of the **Skills & Plugins** page, under **Studio** in the sidebar. The catalog shows each plugin's client, platform support, source, visibility, and sync state.
 
 ## Creating a Plugin
 

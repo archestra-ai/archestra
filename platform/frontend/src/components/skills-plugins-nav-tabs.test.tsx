@@ -2,13 +2,13 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { usePermissionMap } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
-import { useAgentsNavTabs } from "./agents-nav-tabs";
+import { useSkillsPluginsNavTabs } from "./skills-plugins-nav-tabs";
 
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
 
 function TabHrefs() {
-  const tabs = useAgentsNavTabs();
+  const tabs = useSkillsPluginsNavTabs();
   return <div data-testid="tabs">{tabs.map((tab) => tab.href).join(",")}</div>;
 }
 
@@ -18,46 +18,42 @@ const setPageAccess = (pages: Record<string, boolean>) => {
   );
 };
 
-describe("useAgentsNavTabs", () => {
+describe("useSkillsPluginsNavTabs", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useFeature).mockReturnValue(true);
   });
 
-  it("offers the whole section to a reader who may open every page", () => {
-    setPageAccess({ "/agents": true, "/skills": true, "/plugins": true });
+  it("offers both pages to a reader who may open them", () => {
+    setPageAccess({ "/skills": true, "/plugins": true });
 
     render(<TabHrefs />);
 
-    expect(screen.getByTestId("tabs")).toHaveTextContent(
-      "/agents,/skills,/plugins",
-    );
+    expect(screen.getByTestId("tabs")).toHaveTextContent("/skills,/plugins");
   });
 
-  it("drops the pages the reader would only be forbidden from", () => {
-    setPageAccess({ "/agents": true, "/skills": false, "/plugins": false });
+  it("shows no bar at all when the reader may open only one of the pages", () => {
+    setPageAccess({ "/skills": true, "/plugins": false });
 
     render(<TabHrefs />);
 
-    expect(screen.getByTestId("tabs")).toHaveTextContent("/agents");
-    expect(screen.getByTestId("tabs")).not.toHaveTextContent("/skills");
-    expect(screen.getByTestId("tabs")).not.toHaveTextContent("/plugins");
+    expect(screen.getByTestId("tabs")).toBeEmptyDOMElement();
   });
 
-  it("drops Plugins when the deployment has the feature turned off", () => {
+  it("shows no bar when the deployment has plugins turned off", () => {
     vi.mocked(useFeature).mockReturnValue(false);
-    setPageAccess({ "/agents": true, "/skills": true, "/plugins": true });
+    setPageAccess({ "/skills": true, "/plugins": true });
 
     render(<TabHrefs />);
 
-    expect(screen.getByTestId("tabs")).toHaveTextContent("/agents,/skills");
+    expect(screen.getByTestId("tabs")).toBeEmptyDOMElement();
   });
 
-  it("marks the beta pages so the badge the sidebar carried is not lost", () => {
-    setPageAccess({ "/agents": true, "/skills": true, "/plugins": true });
+  it("marks both pages beta, as the sidebar rows did", () => {
+    setPageAccess({ "/skills": true, "/plugins": true });
 
     function TabLabels() {
-      const tabs = useAgentsNavTabs();
+      const tabs = useSkillsPluginsNavTabs();
       return (
         <ul>
           {tabs.map((tab) => (
@@ -70,7 +66,6 @@ describe("useAgentsNavTabs", () => {
     }
     render(<TabLabels />);
 
-    expect(screen.getByTestId("/agents")).not.toHaveTextContent("Beta");
     expect(screen.getByTestId("/skills")).toHaveTextContent("SkillsBeta");
     expect(screen.getByTestId("/plugins")).toHaveTextContent("PluginsBeta");
   });

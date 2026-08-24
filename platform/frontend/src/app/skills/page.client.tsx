@@ -29,7 +29,6 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { useAgentsNavTabs } from "@/components/agent-pages/agents-nav-tabs";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
   FilterBar,
@@ -52,6 +51,7 @@ import {
 } from "@/components/resource-scope-filter";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
+import { useSkillsPluginsNavTabs } from "@/components/skills-plugins-nav-tabs";
 import {
   TableCard,
   TableCardList,
@@ -141,7 +141,7 @@ export default function SkillsPage() {
 }
 
 function SkillsList() {
-  const tabs = useAgentsNavTabs();
+  const tabs = useSkillsPluginsNavTabs();
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();

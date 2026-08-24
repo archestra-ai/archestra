@@ -312,8 +312,11 @@ describe("KbChunkModel", () => {
       expect(results).toEqual([]);
     });
 
-    // vectorSearch is not covered here: it needs the pgvector extension,
-    // which PGlite does not provide. It is exercised against real Postgres.
+    // vectorSearch is not exercised by this suite — it is covered against
+    // real Postgres. (The original skip blamed a missing pgvector extension,
+    // but the PGlite client in test/setup.ts is constructed with the `vector`
+    // extension, so that reason does not hold; the actual obstacle has not
+    // been re-established.)
   });
 
   describe("fullTextSearch", () => {
@@ -831,8 +834,8 @@ describe("KbChunkModel", () => {
       ).resolves.toBeUndefined();
     });
 
-    // updateEmbeddings writes vector columns, so it needs pgvector and is
-    // likewise only exercised against real Postgres.
+    // updateEmbeddings writes vector columns and is likewise only exercised
+    // against real Postgres, with the same caveat as vectorSearch above.
   });
 });
 

@@ -1,5 +1,5 @@
 import { BUILT_IN_AGENT_IDS, E2eTestId } from "@archestra/shared";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { forwardRef, useImperativeHandle } from "react";
 import { toast } from "sonner";
@@ -1685,6 +1685,45 @@ describe("AgentForm save payload and failure handling", () => {
     });
     useAvailableLlmProviderApiKeysMock.mockReturnValue({ data: [] });
     useLlmModelsByProviderMock.mockReturnValue({ modelsByProvider: {} });
+  });
+
+  /**
+   * `canSubmit` clears while `isSaving` is true, so a second click cannot start
+   * a second save. Observing that needs the save held open: the mocked write
+   * hooks hardcode `isPending: false`, so the component's own `isSaving` state
+   * is what gates the button, and it only stays true while the awaited
+   * mutation is still in flight.
+   */
+  it("keeps Update disabled while a save is in flight", async () => {
+    const user = userEvent.setup();
+    let releaseSave: (agent: unknown) => void = () => {};
+    updateAgent.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          releaseSave = resolve;
+        }),
+    );
+
+    renderConfiguration();
+
+    const updateButton = screen.getByRole("button", { name: /update/i });
+    expect(updateButton).not.toBeDisabled();
+
+    await user.click(updateButton);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /update/i })).toBeDisabled();
+    });
+
+    await act(async () => {
+      releaseSave(baseAgent);
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /update/i }),
+      ).not.toBeDisabled();
+    });
   });
 
   it("sends the configuration step's own fields, and nothing the step does not show", async () => {

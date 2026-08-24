@@ -113,21 +113,45 @@ expect(comp.props.thing).toBe(false);
 
 Each of these shipped, ran on every CI build, and caught nothing:
 
-**A literal field compared to its own literal.** Fifteen knowledge-base
-connectors override `supportsPermissionSync` with a literal `true`, and each
-declares its own `type = "notion" as const`. Tests asserted exactly that back:
+**A literal field compared to its own literal.** Every knowledge-base connector
+declares its own `type = "notion" as const`, and eight tests asserted exactly
+that back:
 
 ```ts
 // Removed — cannot fail unless someone edits the line above it.
-it("supportsPermissionSync is true", () => {
-  expect(new NotionConnector().supportsPermissionSync).toBe(true);
+it("has the correct type", () => {
+  expect(new NotionConnector().type).toBe("notion");
 });
 ```
 
-A rename here is a TypeScript error (`type` is typed `ConnectorType`) or a
-`registry.ts` break — both louder than a test. Note the counter-example:
-`perforce` computes `supportsPermissionSync = isK8sConfigured()`. *That* would
-be worth a test, because it can be wrong.
+`BaseConnector` types that field as `ConnectorType` and `registry.ts` keys by
+it, so a rename is a compile error or a registry break — both louder than a
+test.
+
+**But check the claim before you lean on it.** The same suites also asserted
+`expect(connector.supportsPermissionSync).toBe(true)`, which *looks* like the
+identical pattern and is not. That field is a plain boolean: flipping it to
+`false` compiles cleanly, and — verified by doing it — every one of the
+connector's own tests still passes. Meanwhile five call sites gate real
+behaviour on it, so the flip would silently stop permission syncing for that
+source.
+
+The fix was not to keep fifteen copies of the literal, and not to delete the
+coverage either — it was to move it to the level where it has a consumer:
+
+```ts
+// One capability matrix, pinned where the scheduler actually reads it.
+test("pins the connector types that implement permission sync", () => {
+  expect(getPermissionSyncConnectorTypes().filter((t) => t !== "perforce").sort())
+    .toEqual([...]);
+});
+```
+
+`perforce` is excluded because it computes the flag from `isK8sConfigured()`.
+The lesson generalises: *"the type system already covers this"* and *"the
+neighbouring tests already cover this"* are both claims you can test in about
+two minutes by breaking the code and running the suite. Do that before deleting
+anything.
 
 **Prop pass-through.** Asserting that a `className` prop reaches the element it
 is spread onto tests JSX, not the component:
@@ -149,10 +173,13 @@ expect(status).toHaveClass("min-h-[calc(var(--visual-viewport-height,100dvh)-12r
 expect(wrapper).toHaveClass("sm:w-[320px]");
 ```
 
-**Assertions the type system already proves.** `resourceLabels` is a
-`Record<Resource, string>`, so "every resource has a label" cannot fail at
-runtime. If a type guarantees it, the test only earns its place by asserting the
-part the type cannot — an empty string, say.
+**Assertions the type system already proves.** Not a removal, but the pattern
+to watch for: `resourceLabels` is a `Record<Resource, string>`, so a bare
+"every resource has a label" existence check cannot fail at runtime. Where a
+type guarantees the shape, a test earns its place only by asserting what the
+type cannot — an empty string, say, which is why
+`shared/permission.types.test.ts` also checks length and category membership and
+stays.
 
 ### Class names are not automatically fluff
 

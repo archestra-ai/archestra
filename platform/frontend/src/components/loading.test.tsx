@@ -9,6 +9,9 @@ describe("LoadingState", () => {
     expect(
       screen.getByRole("status", { name: "Loading connectors…" }),
     ).toBeVisible();
+    // `showLabel` defaults to `variant !== "inline"`, so every other variant
+    // renders the label on screen as well as naming the live region.
+    expect(screen.getByText("Loading connectors…")).toBeVisible();
     // The spinner is a CSS animation, so reduced-motion users need it stopped
     // rather than merely slowed.
     expect(container.querySelector(".animate-spin")).toHaveClass(

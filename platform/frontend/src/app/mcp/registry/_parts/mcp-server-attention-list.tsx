@@ -1,8 +1,9 @@
 "use client";
 
 import type { RowSelectionState } from "@tanstack/react-table";
-import { Bell, BellOff, Loader2, Trash2 } from "lucide-react";
+import { Bell, BellOff, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
 import { Button } from "@/components/ui/button";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useRestoreMcpServerAlerts } from "@/lib/mcp/mcp-server.query";
@@ -93,9 +94,6 @@ export function McpServerAttentionList({
     return map;
   }, [items, issuesByCatalog, facet]);
 
-  const selectableItemIds = items
-    .filter((item) => (selectableIssuesByItem.get(item.id)?.length ?? 0) > 0)
-    .map((item) => item.id);
   const selectableIssues = items.flatMap(
     (item) => selectableIssuesByItem.get(item.id) ?? [],
   );
@@ -217,86 +215,57 @@ export function McpServerAttentionList({
 
   return (
     <div className="space-y-3" data-testid="mcp-registry-attention-list">
-      <div className="flex flex-col gap-3 rounded-lg border bg-muted/50 p-3 sm:flex-row sm:items-center">
-        <div className="flex items-center gap-2">
-          {selectedItems.length > 0 ? (
-            <>
-              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-                {selectedItems.length}
-              </span>
-              <span className="text-sm font-medium">
-                {selectedItems.length === 1
-                  ? "MCP server selected"
-                  : "MCP servers selected"}
-              </span>
-            </>
-          ) : (
-            <span className="text-sm text-muted-foreground">
-              {selectableItemIds.length > 0
-                ? "Select MCP servers to apply bulk actions"
-                : restoringDismissed
-                  ? "No restorable alerts in this view"
-                  : "No actionable alerts in this view"}
-            </span>
-          )}
-          {restoring && (
-            <Loader2
-              aria-label="Restoring selected alerts"
-              className="h-4 w-4 animate-spin text-muted-foreground"
-            />
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
-          {restoringDismissed ? (
+      <BulkActionsBar
+        count={selectedItems.length}
+        noun="MCP server"
+        plural="MCP servers"
+        onClear={clearSelection}
+        busy={restoring}
+      >
+        {restoringDismissed ? (
+          <Button
+            variant="outline"
+            size="sm"
+            aria-label="Restore selected"
+            disabled={selectedDismissTargets.length === 0 || restoring}
+            onClick={() => void restoreSelected()}
+          >
+            <Bell className="h-4 w-4" />
+            <span>Restore</span>
+          </Button>
+        ) : (
+          <>
             <Button
               variant="outline"
               size="sm"
-              disabled={selectedDismissTargets.length === 0 || restoring}
-              onClick={() => void restoreSelected()}
+              aria-label="Dismiss selected"
+              disabled={selectedDismissTargets.length === 0}
+              onClick={() => setDismissOpen(true)}
             >
-              <Bell className="h-4 w-4" />
-              Restore selected
+              <BellOff className="h-4 w-4" />
+              <span>Dismiss</span>
             </Button>
-          ) : (
-            <>
+            {facet === "you" ? (
               <Button
-                variant="outline"
+                variant="destructive"
                 size="sm"
-                disabled={selectedDismissTargets.length === 0}
-                onClick={() => setDismissOpen(true)}
+                disabled={!canRemoveSelected}
+                title={
+                  !canDeleteInstalls
+                    ? "You do not have permission to remove MCP connections"
+                    : !everySelectedItemIsRemovable
+                      ? "Every selected row must identify connections you can remove"
+                      : undefined
+                }
+                onClick={() => setUninstallOpen(true)}
               >
-                <BellOff className="h-4 w-4" />
-                Dismiss selected
+                <Trash2 className="h-4 w-4" />
+                <span>Remove connections</span>
               </Button>
-              {facet === "you" && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!canRemoveSelected}
-                  title={
-                    !canDeleteInstalls
-                      ? "You do not have permission to remove MCP connections"
-                      : selectedItems.length === 0
-                        ? "Select MCP servers to remove their connections"
-                        : !everySelectedItemIsRemovable
-                          ? "Every selected row must identify connections you can remove"
-                          : undefined
-                  }
-                  onClick={() => setUninstallOpen(true)}
-                >
-                  <Trash2 className="h-4 w-4 text-destructive" />
-                  Remove connections
-                </Button>
-              )}
-            </>
-          )}
-          {selectedItems.length > 0 && (
-            <Button variant="ghost" size="sm" onClick={clearSelection}>
-              Clear selection
-            </Button>
-          )}
-        </div>
-      </div>
+            ) : null}
+          </>
+        )}
+      </BulkActionsBar>
 
       <McpServerTable
         items={items}

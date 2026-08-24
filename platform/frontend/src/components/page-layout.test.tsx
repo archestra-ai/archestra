@@ -90,6 +90,40 @@ describe("PageLayout tabs", () => {
     ).toHaveLength(0);
   });
 
+  it("accepts an explicit active tab for query-owned views", () => {
+    vi.mocked(usePathname).mockReturnValue("/mcp/registry");
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("status=needs-my-action") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+
+    render(
+      <PageLayout
+        title="MCP Registry"
+        tabs={[
+          { label: "All", href: "/mcp/registry", active: false },
+          {
+            label: "Action required",
+            href: "/mcp/registry?status=needs-my-action",
+            active: true,
+            testId: "action-required-tab",
+          },
+        ]}
+      >
+        <div />
+      </PageLayout>,
+    );
+
+    expect(screen.getByTestId("action-required-tab")).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getAllByRole("link", { name: "All" })[0]).not.toHaveAttribute(
+      "aria-current",
+    );
+  });
+
   /**
    * Below `md` the tab row shows the first `mobileVisibleCount` tabs and folds
    * the rest into a popover. Both rows are in the DOM at once, so a tab past

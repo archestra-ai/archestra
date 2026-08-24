@@ -153,27 +153,27 @@ describe("McpServerTable uninstall permission", () => {
     expect(await screen.findByText("Uninstall MCP Server")).toBeInTheDocument();
   });
 
-  it("keeps compact registry columns fixed while the server name fills the remaining width", () => {
+  it("keeps server metadata compact while status fills the remaining width", () => {
     const { container } = renderTable(table);
 
     expect(container.querySelector("table")).toHaveStyle({
-      minWidth: "1108px",
+      minWidth: "1068px",
     });
-    expect(
-      (container.querySelector('th[data-column-id="name"]') as HTMLElement)
-        .style.width,
-    ).toBe("");
+    expect(container.querySelector('th[data-column-id="name"]')).toHaveStyle({
+      width: "360px",
+    });
     expect(container.querySelector('th[data-column-id="tools"]')).toHaveStyle({
       width: "90px",
     });
     expect(container.querySelector('th[data-column-id="author"]')).toHaveStyle({
       width: "212px",
     });
-    expect(container.querySelector('th[data-column-id="status"]')).toHaveStyle({
-      width: "190px",
-    });
+    expect(
+      (container.querySelector('th[data-column-id="status"]') as HTMLElement)
+        .style.width,
+    ).toBe("");
     expect(container.querySelector('th[data-column-id="actions"]')).toHaveStyle(
-      { width: "260px" },
+      { width: "160px" },
     );
   });
 
@@ -190,7 +190,7 @@ describe("McpServerTable uninstall permission", () => {
     expect(screen.queryByText("Uninstall MCP Server")).not.toBeInTheDocument();
   });
 
-  it("renders Dismiss as a visible row action, never an overflow item", async () => {
+  it("keeps queue actions inline and moves lower-priority actions into overflow", async () => {
     const user = userEvent.setup();
     const issue = {
       kind: "needs-reauth",
@@ -239,14 +239,18 @@ describe("McpServerTable uninstall permission", () => {
       }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("link", {
+      screen.queryByRole("link", {
         name: "Credentials some-remote-server",
       }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", {
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", {
         name: "More actions some-remote-server",
       }),
-    ).toBeNull();
+    );
+    expect(
+      screen.getByRole("menuitem", { name: "Credentials" }),
+    ).toBeInTheDocument();
   });
 });

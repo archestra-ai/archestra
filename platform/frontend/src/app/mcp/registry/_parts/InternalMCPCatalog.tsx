@@ -85,7 +85,6 @@ import {
 } from "./local-server-install-dialog";
 import { ManageUsersDialog } from "./manage-users-dialog";
 import { McpServerAttentionList } from "./mcp-server-attention-list";
-import { waitingActionFacetLabel } from "./mcp-server-attention-owner";
 import {
   type CatalogItem,
   type InstalledServer,
@@ -101,7 +100,6 @@ import {
   ISSUE_OPTIONS,
   NOT_INSTALLED_STATUS_VALUE,
   REGISTRY_STATUS_PARAM,
-  RegistryAttentionFacets,
   RegistryFilterChips,
   RegistryFilterDropdown,
   type RegistryFilters,
@@ -891,19 +889,10 @@ export function InternalMCPCatalog({
   }, [catalogItems]);
   // Outstanding issues per catalog item, from the same signals every registry
   // surface renders. This feeds the audience facets, Issue filter and table.
-  const { issuesByCatalog, facetCounts } =
-    useMcpServerIssues(deploymentStatuses);
+  const { issuesByCatalog } = useMcpServerIssues(deploymentStatuses);
   const selectedFacet = alertingEnabled
     ? selectedAttentionFacet(filters.status)
     : null;
-  const othersFacetLabel = useMemo(
-    () =>
-      waitingActionFacetLabel({
-        issuesByCatalog,
-        servers: installedServers ?? [],
-      }),
-    [issuesByCatalog, installedServers],
-  );
   useEffect(() => {
     const requestedFacet = selectedAttentionFacet(filters.status);
     if (alertingFeature === false && requestedFacet) {
@@ -1112,9 +1101,6 @@ export function InternalMCPCatalog({
     ? clearFiltersKeepingFacet
     : handleClearAllFilters;
 
-  const registryItems = (catalogItems ?? []).filter(
-    (item) => item.id !== ARCHESTRA_MCP_CATALOG_ID,
-  );
   // The healthy-fleet line counts servers somebody actually installed. Over
   // the catalog it read "All 40 MCP servers are healthy" on a deployment with
   // three connections and thirty-seven entries nobody had ever touched.
@@ -1128,18 +1114,6 @@ export function InternalMCPCatalog({
     <TableCardView storageKey="archestra-mcp-registry-view" defaultMode="table">
       <div className="space-y-4">
         <div className="space-y-3">
-          {alertingEnabled && (
-            <div className="min-w-0 overflow-x-auto">
-              <RegistryAttentionFacets
-                counts={facetCounts}
-                totalCount={registryItems.length}
-                othersLabel={othersFacetLabel}
-                showOthers={!userIsMcpServerAdmin}
-                selected={selectedFacet}
-                onSelect={selectFacet}
-              />
-            </div>
-          )}
           <FilterBar
             className="mb-0"
             onClearFilters={

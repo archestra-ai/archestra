@@ -55,7 +55,6 @@ import {
 import { PluginGithubUpdatesDialog } from "../_parts/plugin-github-updates-dialog";
 import { PluginInstallDialog } from "../_parts/plugin-install-dialog";
 import {
-  ARCHESTRA_PLUGIN_PROVENANCE_LABEL,
   CLIENT_LABELS,
   isArchestraPlugin,
   PLUGIN_DESCRIPTION_FALLBACK,
@@ -144,6 +143,7 @@ function PluginDetailView({
   const { data: canUpdate } = useHasPermissions({
     plugin: ["update", "admin"],
   });
+  const appName = useAppName();
 
   const isGithubPlugin = plugin.sourceKind === "github";
   const isArchestra = isArchestraPlugin(plugin);
@@ -191,7 +191,7 @@ function PluginDetailView({
           )}
           {isArchestra && (
             <Badge variant="secondary" className="font-normal">
-              {ARCHESTRA_PLUGIN_PROVENANCE_LABEL}
+              {appName}
             </Badge>
           )}
           {!plugin.enabled && (

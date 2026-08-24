@@ -174,7 +174,7 @@ export function McpServerTable({
       id: "name",
       accessorKey: "name",
       header: "MCP Server",
-      size: 300,
+      size: 360,
       cell: ({ row }) => {
         const item = row.original;
         return (
@@ -265,7 +265,7 @@ export function McpServerTable({
     },
     {
       id: "actions",
-      size: 260,
+      size: 160,
       header: () => <div className="text-right">Actions</div>,
       cell: ({ row }) => {
         const item = row.original;
@@ -323,7 +323,7 @@ export function McpServerTable({
           id: "name",
           accessorKey: "name",
           header: "MCP Server",
-          size: 540,
+          size: 360,
           cell: ({ row }) => {
             const item = row.original;
             return (
@@ -334,51 +334,10 @@ export function McpServerTable({
             );
           },
         },
-        ...(attention.facet === "muted"
-          ? [
-              {
-                id: "dismissReason",
-                header: "Dismiss reason",
-                size: 280,
-                cell: ({ row }) => {
-                  const reasons = Array.from(
-                    new Set(
-                      attentionRawIssues(row.original)
-                        .map((issue) => issue.mutedReason?.trim())
-                        .filter((reason): reason is string => !!reason),
-                    ),
-                  );
-                  return reasons.length > 0 ? (
-                    <span className="block break-words">
-                      {reasons.join("; ")}
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
-                  );
-                },
-              } satisfies ColumnDef<CatalogItem>,
-            ]
-          : []),
         {
           id: "issue",
           header: "Issue",
-          size: 220,
-          cell: ({ row }) => (
-            <div className="flex min-w-0 flex-wrap gap-1.5">
-              {attentionIssues(row.original).map((issue) => (
-                <McpServerIssueBadge
-                  key={issue.kind}
-                  issue={issue}
-                  showDetail={false}
-                />
-              ))}
-            </div>
-          ),
-        },
-        {
-          id: "owner",
-          header: "Owner",
-          size: 220,
+          size: 420,
           cell: ({ row }) => {
             const item = row.original;
             const issues = attentionRawIssues(item);
@@ -388,17 +347,43 @@ export function McpServerTable({
                   servers: attentionServers(item),
                 }).label
               : "—";
+            const reasons = Array.from(
+              new Set(
+                issues
+                  .map((issue) => issue.mutedReason?.trim())
+                  .filter((reason): reason is string => !!reason),
+              ),
+            );
             return (
-              <span className="block break-words" title={owner}>
-                {owner}
-              </span>
+              <div className="min-w-0 space-y-1.5">
+                <div className="flex min-w-0 flex-wrap gap-1.5">
+                  {attentionIssues(item).map((issue) => (
+                    <McpServerIssueBadge
+                      key={issue.kind}
+                      issue={issue}
+                      showDetail={false}
+                    />
+                  ))}
+                </div>
+                <p className="break-words text-xs text-muted-foreground">
+                  {attention.facet === "muted" ? (
+                    <>
+                      {reasons.length > 0
+                        ? `Reason: ${reasons.join("; ")}`
+                        : "No dismissal reason"}
+                      <span aria-hidden> · </span>
+                    </>
+                  ) : null}
+                  <span title={owner}>Owner: {owner}</span>
+                </p>
+              </div>
             );
           },
         },
         {
           id: "actions",
           header: () => <div className="text-right">Actions</div>,
-          size: 160,
+          size: 112,
           cell: ({ row }) => {
             const item = row.original;
             return (
@@ -471,10 +456,10 @@ export function McpServerTable({
         hidePaginationWhenSinglePage
         fixedWidthColumnIds={
           attention
-            ? ["select", "issue", "owner", "dismissReason", "actions"]
-            : ["tools", "author", "status", "actions"]
+            ? ["select", "name", "actions"]
+            : ["name", "tools", "author", "actions"]
         }
-        flexibleColumnIds={["name"]}
+        flexibleColumnIds={[attention ? "issue" : "status"]}
       />
     </>
   );
@@ -739,6 +724,7 @@ function McpServerRowActions({
     (issue) => issue.kind === "failed-to-start" || issue.kind === "not-running",
   );
   const actions: TableRowAction[] = [];
+  const alertActions: TableRowAction[] = [];
   if (reauthIssue) {
     actions.push({
       icon: <KeyRound className="h-4 w-4" />,
@@ -814,17 +800,17 @@ function McpServerRowActions({
       });
     }
   }
-  // Dismiss/Restore is queue management, not an overflow action. Keep it
-  // visible beside the row's other first-class actions.
+  // Dismiss/Restore is queue management, so reserve inline space for it even
+  // when the row has enough capabilities to overflow its action cluster.
   if (dismissTargets.length > 0) {
-    actions.push({
+    alertActions.push({
       icon: <BellOff className="h-4 w-4" />,
       label: dismissTargets.length === 1 ? "Dismiss alert" : "Dismiss alerts",
       onClick: () => setDismissOpen(true),
     });
   }
   if (restoreTargets.length > 0) {
-    actions.push({
+    alertActions.push({
       icon: <Bell className="h-4 w-4" />,
       label: restoreTargets.length === 1 ? "Restore alert" : "Restore alerts",
       disabled: restoreMutation.isPending,
@@ -855,12 +841,23 @@ function McpServerRowActions({
       href: logsAction.href,
     });
   }
-  if (actions.length === 0) return null;
+  if (actions.length === 0 && alertActions.length === 0) return null;
+
+  const inlineActionCount = Math.max(0, 3 - alertActions.length);
+  const inlineActions = [
+    ...actions.slice(0, inlineActionCount),
+    ...alertActions,
+  ];
+  const dropdownActions = actions.slice(inlineActionCount);
 
   return (
     <>
       <div className="flex justify-end">
-        <TableRowActions itemName={item.name} actions={actions} />
+        <TableRowActions
+          itemName={item.name}
+          actions={inlineActions}
+          dropdownActions={dropdownActions}
+        />
       </div>
 
       <UninstallServerDialog

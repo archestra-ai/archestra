@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  ChevronDown,
   Github,
   MoreHorizontal,
   PackagePlus,
@@ -14,16 +13,15 @@ import { useRouter } from "next/navigation";
 import { type ReactNode, useId, useState } from "react";
 import { AgentBadge } from "@/components/agent-badge";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import {
+  type OverviewFact,
+  OverviewSummary,
+} from "@/components/overview-summary";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,14 +33,12 @@ import { PermissionButton } from "@/components/ui/permission-button";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { formatPermissionConstraint } from "@/lib/auth/auth.utils";
 import { useFeature } from "@/lib/config/config.query";
-import { typeRole } from "@/lib/design/type-scale";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   type PluginDetail,
   useDeletePlugin,
   usePlugin,
 } from "@/lib/plugins/plugin.query";
-import { formatDate } from "@/lib/utils";
 import {
   SKILL_DETAIL_EDITOR_CLASS,
   SkillContentEditor,
@@ -165,6 +161,51 @@ function PluginDetailView({
       : undefined;
   const updateReasonId = useId();
   const deleteReasonId = useId();
+  // The values a reader scans this page for, in one row. The rest of the
+  // record is behind the same link the header's Edit uses.
+  const overviewFacts: OverviewFact[] = [
+    {
+      label: "Accessible to",
+      value: (
+        <ResourceVisibilityBadge
+          scope={plugin.scope}
+          teams={plugin.teams}
+          users={plugin.users}
+          authorId={plugin.authorId}
+          authorName={undefined}
+          currentUserId={currentUserId}
+          showSelfAsMe
+        />
+      ),
+    },
+    {
+      label: "Client",
+      value: (
+        <Badge variant="secondary" className="font-normal">
+          {CLIENT_LABELS[plugin.clientType] ?? plugin.clientType}
+        </Badge>
+      ),
+    },
+    {
+      label: "Platforms",
+      value: (
+        <span className="flex flex-wrap items-center gap-1.5">
+          {plugin.supportedPlatforms.includes("posix") && (
+            <Badge variant="outline" className="font-normal">
+              macOS / Linux
+            </Badge>
+          )}
+          {plugin.supportedPlatforms.includes("windows") && (
+            <Badge variant="outline" className="font-normal">
+              Windows
+            </Badge>
+          )}
+        </span>
+      ),
+    },
+    { label: "Source", value: <SourceFact plugin={plugin} /> },
+  ];
+
   const [deleteRequested, setDeleteRequested] = useState(false);
   const [updatesOpen, setUpdatesOpen] = useState(false);
   const [installOpen, setInstallOpen] = useState(false);
@@ -303,76 +344,13 @@ function PluginDetailView({
       }
     >
       <div className="space-y-10">
-        <section aria-labelledby="plugin-overview-heading">
-          <Collapsible>
-            <CollapsibleTrigger className="group flex w-full items-center justify-between gap-4 py-1 text-left">
-              <h2
-                id="plugin-overview-heading"
-                className="text-base font-semibold tracking-tight text-foreground"
-              >
-                Overview
-              </h2>
-              <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
-            </CollapsibleTrigger>
-            <CollapsibleContent className="pt-4">
-              <section className="space-y-4 rounded-lg border bg-card p-4">
-                <h3 className="text-sm font-semibold text-foreground">
-                  Access and source
-                </h3>
-                <FactGrid>
-                  <Fact label="Accessible to">
-                    <ResourceVisibilityBadge
-                      scope={plugin.scope}
-                      teams={plugin.teams}
-                      users={plugin.users}
-                      authorId={plugin.authorId}
-                      authorName={undefined}
-                      currentUserId={currentUserId}
-                      showSelfAsMe
-                    />
-                  </Fact>
-                  <Fact label="Client">
-                    <Badge variant="secondary" className="font-normal">
-                      {CLIENT_LABELS[plugin.clientType] ?? plugin.clientType}
-                    </Badge>
-                  </Fact>
-                  <Fact label="Platforms">
-                    <span className="flex flex-wrap items-center gap-1.5">
-                      {plugin.supportedPlatforms.includes("posix") && (
-                        <Badge variant="outline" className="font-normal">
-                          macOS / Linux
-                        </Badge>
-                      )}
-                      {plugin.supportedPlatforms.includes("windows") && (
-                        <Badge variant="outline" className="font-normal">
-                          Windows
-                        </Badge>
-                      )}
-                    </span>
-                  </Fact>
-                  <Fact label="Source">
-                    <SourceFact plugin={plugin} />
-                  </Fact>
-                  <Fact label="Created">
-                    <span>
-                      {formatDate({ date: plugin.createdAt, dateFormat: "PP" })}
-                    </span>
-                  </Fact>
-                  {plugin.updatedAt !== plugin.createdAt && (
-                    <Fact label="Last updated">
-                      <span>
-                        {formatDate({
-                          date: plugin.updatedAt,
-                          dateFormat: "PPp",
-                        })}
-                      </span>
-                    </Fact>
-                  )}
-                </FactGrid>
-              </section>
-            </CollapsibleContent>
-          </Collapsible>
-        </section>
+        <OverviewSummary
+          headingId="plugin-overview-heading"
+          facts={overviewFacts}
+          configHref={
+            canUpdate === false ? undefined : pluginActionHref(editAction)
+          }
+        />
 
         <PluginCard title="Payload files" spacious>
           <SkillContentEditor
@@ -472,23 +450,6 @@ function PluginCard({
       </h2>
       <div className={spacious ? "min-h-0" : undefined}>{children}</div>
     </section>
-  );
-}
-
-function FactGrid({ children }: { children: ReactNode }) {
-  return (
-    <dl className="grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
-      {children}
-    </dl>
-  );
-}
-
-function Fact({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="min-w-0 space-y-1">
-      <dt className={typeRole({ role: "label" })}>{label}</dt>
-      <dd className="break-words">{children}</dd>
-    </div>
   );
 }
 

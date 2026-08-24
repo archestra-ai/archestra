@@ -3,7 +3,7 @@
 import { APP_RECORDING_RENDER_ROUTE } from "@archestra/shared";
 import type { Permissions } from "@archestra/shared/permission.types";
 import { usePathname } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MOBILE_HEADER_ACTIONS_CONTAINER_ID } from "@/components/chat/chat-help-link";
 import { ConnectivityStatusBar } from "@/components/connectivity-status-bar";
 import { ConversationSearchProvider } from "@/components/conversation-search-provider";
@@ -28,6 +28,7 @@ import {
   useConnectivity,
 } from "@/lib/config/connectivity";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useIsAppLoading } from "@/lib/hooks/use-is-app-loading";
 import { useNavOnboarding } from "@/lib/onboarding/use-nav-onboarding";
 import { useOrganization } from "@/lib/organization.query";
 import { useActiveSiteNotification } from "@/lib/site-notification.query";
@@ -105,6 +106,10 @@ export function AppShell({ children }: AppShellProps) {
   const isViewportLocked = isChat || isProjectDetail;
   const { data: shouldCollapse, isSuccess: permissionLoaded } =
     useHasPermissions(SIDEBAR_COLLAPSED_PERMISSION);
+  const [sidebarOpen, setSidebarOpen] = useSidebarOpenState({
+    shouldCollapse: shouldCollapse === true,
+    permissionLoaded,
+  });
   const { data: canReadSiteNotification } = useHasPermissions(
     SITE_NOTIFICATION_READ_PERMISSION,
   );
@@ -157,77 +162,70 @@ export function AppShell({ children }: AppShellProps) {
     );
   }
 
-  // Authenticated shell. ConnectivityProvider wraps both the permission-loading
-  // skeleton and the full shell so /health polling and useConnectivity() are
-  // available on every page rendered here — including before the sidebar mounts
-  // (a page like /chat calls useConnectivity() unconditionally). The
-  // auth/preview/runtime branches above are intentionally outside it (no poll).
+  // Authenticated shell. It renders as soon as we know the visitor is signed
+  // in — the permission check that decides the sidebar's default width no
+  // longer gates it. Waiting for that check used to mean a full-screen
+  // "Loading your workspace…" ahead of the shell, and then a second loader
+  // inside the shell once it appeared: two indicators, at two different
+  // centres, in the space of a few hundred milliseconds. Boot progress is
+  // reported in the sidebar toggle instead (see NavAwareSidebarCircleToggle).
+  //
+  // ConnectivityProvider wraps the shell so /health polling and
+  // useConnectivity() are available on every page rendered here (a page like
+  // /chat calls useConnectivity() unconditionally). The auth/preview/runtime
+  // branches above are intentionally outside it (no poll).
   return (
     <ConnectivityProvider>
       <McpDeploymentStatusFeed />
-      {!permissionLoaded ? (
-        // Wait for the permission check before rendering the sidebar to avoid a
-        // flash. Don't render Version here — the full-width layout centers
-        // differently than the sidebar layout, so the footer would visibly jump.
-        <main className="h-app-viewport w-full flex flex-col bg-background min-w-0 relative">
-          <MaintenanceModeOverlay />
-          <div className="hidden" aria-hidden="true">
-            {children}
-          </div>
-          <LoadingState label="Loading your workspace…" variant="viewport" />
-          <Toaster />
-        </main>
-      ) : (
-        <NavigationStatusProvider>
-          <SidebarProvider defaultOpen={!shouldCollapse}>
-            <SkipToContentLink />
-            {/* The toggle is position:fixed, so DOM order only affects focus
+      <NavigationStatusProvider>
+        <SidebarProvider open={sidebarOpen} onOpenChange={setSidebarOpen}>
+          <SkipToContentLink />
+          {/* The toggle is position:fixed, so DOM order only affects focus
                 order: keeping it before the sidebar means expanding it with
                 the keyboard tabs forward into the revealed sidebar content
                 instead of skipping to <main> (WCAG 2.4.3). */}
-            <NavAwareSidebarCircleToggle />
-            <AppSidebar />
-            <MaintenanceModeOverlay />
-            <main
-              id={MAIN_CONTENT_ID}
-              tabIndex={-1}
-              className="h-app-viewport w-full flex flex-col bg-background min-w-0 relative overflow-y-auto focus:outline-none"
-            >
-              <ConnectivityBar />
-              <EnvSiteNotificationBar />
-              {notification && (
-                <SiteNotificationBar
-                  content={notification.content}
-                  notificationId={notification.id}
-                />
-              )}
-              <ImpersonationBanner />
-              <header className="h-14 border-b border-border flex md:hidden items-center justify-between px-6 bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/50">
-                <NavAwareSidebarTrigger />
-                <div
-                  id={MOBILE_HEADER_ACTIONS_CONTAINER_ID}
-                  className="flex items-center gap-2"
-                />
-              </header>
-              <div className="flex-1 min-h-0 min-w-0 flex flex-col">
-                <div
-                  className={cn(
-                    "flex-1 flex flex-col",
-                    isViewportLocked && "min-h-0",
-                  )}
-                >
-                  {children}
-                </div>
-                <Version />
+          <NavAwareSidebarCircleToggle />
+          <AppSidebar />
+          <MaintenanceModeOverlay />
+          <main
+            id={MAIN_CONTENT_ID}
+            tabIndex={-1}
+            className="h-app-viewport w-full flex flex-col bg-background min-w-0 relative overflow-y-auto focus:outline-none"
+          >
+            <ConnectivityBar />
+            <EnvSiteNotificationBar />
+            {notification && (
+              <SiteNotificationBar
+                content={notification.content}
+                notificationId={notification.id}
+              />
+            )}
+            <ImpersonationBanner />
+            <header className="h-14 border-b border-border flex md:hidden items-center justify-between px-6 bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/50">
+              <NavAwareSidebarTrigger />
+              <div
+                id={MOBILE_HEADER_ACTIONS_CONTAINER_ID}
+                className="flex items-center gap-2"
+              />
+            </header>
+            <div className="flex-1 min-h-0 min-w-0 flex flex-col">
+              <div
+                className={cn(
+                  "flex-1 flex flex-col",
+                  isViewportLocked && "min-h-0",
+                )}
+              >
+                {children}
               </div>
-            </main>
-            <Toaster />
-            <ConversationSearchProvider />
-            <OnboardingSurveyDialog />
-            <FeedbackPopupDialog />
-          </SidebarProvider>
-        </NavigationStatusProvider>
-      )}
+              <Version />
+            </div>
+          </main>
+          <Toaster />
+          <ConversationSearchProvider />
+          <OnboardingSurveyDialog />
+          <FeedbackPopupDialog />
+        </SidebarProvider>
+      </NavigationStatusProvider>
     </ConnectivityProvider>
   );
 }
@@ -240,15 +238,56 @@ function ConnectivityBar() {
   );
 }
 
+/**
+ * The app's only loading indicator. It sits in a fixed position on the sidebar
+ * edge, so it reports progress without moving anything on the page — which is
+ * the whole point: page-level loaders were appearing at three different
+ * heights during a single refresh.
+ */
 function NavAwareSidebarCircleToggle() {
   const { isNavigating } = useNavigationStatus();
   const { showCollapsedToggleDot } = useNavOnboarding();
+  const isAppLoading = useIsAppLoading();
   return (
     <SidebarCircleToggle
-      loading={isNavigating}
+      loading={isNavigating || isAppLoading}
       showDot={showCollapsedToggleDot}
     />
   );
+}
+
+/**
+ * Sidebar width, resolved without a jump.
+ *
+ * The width a user ends up with depends on a permission that arrives over the
+ * network, so rendering the shell before it lands means guessing. Guess with
+ * the width this browser last used (the sidebar already writes it to a cookie
+ * on every toggle) and the guess is right for everyone but a first-ever
+ * visitor. Once the permission resolves it wins, unless the user has since
+ * moved the sidebar themselves.
+ */
+function useSidebarOpenState({
+  shouldCollapse,
+  permissionLoaded,
+}: {
+  shouldCollapse: boolean;
+  permissionLoaded: boolean;
+}): [boolean, (open: boolean) => void] {
+  const [userChoice, setUserChoice] = useState<boolean | null>(null);
+  const lastKnown = useRef<boolean | null>(null);
+  lastKnown.current ??= readSidebarStateCookie();
+
+  const open =
+    userChoice ??
+    (permissionLoaded ? !shouldCollapse : (lastKnown.current ?? true));
+
+  return [open, setUserChoice];
+}
+
+function readSidebarStateCookie(): boolean | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(/(?:^|;\s*)sidebar_state=(true|false)/);
+  return match ? match[1] === "true" : null;
 }
 
 // Visually hidden until focused; the first tab stop on every authenticated

@@ -33,6 +33,17 @@ describe("LoadingState", () => {
     expect(status.querySelector("span")).toHaveClass("size-8");
   });
 
+  it("holds the area open and announces itself while drawing nothing when quiet", () => {
+    const { container } = render(
+      <LoadingState label="Loading…" variant="quiet" />,
+    );
+
+    const status = screen.getByRole("status", { name: "Loading…" });
+    expect(status).toHaveClass("min-h-app-viewport");
+    expect(container.querySelector(".animate-spin")).toBeNull();
+    expect(status).toHaveTextContent("");
+  });
+
   it("keeps inline loading states compact and accessible", () => {
     render(<LoadingState label="Loading token" variant="inline" />);
 

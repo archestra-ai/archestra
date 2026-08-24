@@ -13,6 +13,7 @@ import {
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   AlertTriangle,
+  Boxes,
   CheckCircle2,
   Loader2,
   Pencil,
@@ -791,9 +792,10 @@ export default function ApiKeysPage() {
             getRowId={(row) => row.id}
             hideSelectedCount
             isLoading={permissionsPending || isFetching}
+            emptyIcon={Boxes}
             emptyMessage="No credentials configured"
             hasActiveFilters={Boolean(search || providerFilter !== "all")}
-            filteredEmptyMessage="No LLM provider credentials match your filters. Try adjusting your search."
+            filteredEmptyMessage="No LLM provider credentials match your filters"
             onClearFilters={() =>
               updateQueryParams({
                 search: null,

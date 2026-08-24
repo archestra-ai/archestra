@@ -4,6 +4,7 @@ import type { archestraApiTypes } from "@archestra/shared";
 import { AppWindow, Plus } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
+import { EmptyState } from "@/components/empty-state";
 import {
   FilterBar,
   filterControlClass,
@@ -111,6 +112,20 @@ export default function AppsPage() {
   const ownedApps = unpinnedApps.filter((app) => app.source === "owned");
   const externalApps = unpinnedApps.filter((app) => app.source === "external");
 
+  const hasActiveFilters =
+    Boolean(search) || kind !== "all" || Boolean(labelsFromUrl);
+
+  // Resets the filters this bar owns. Scope/owner is deliberately left alone:
+  // it is a view of whose apps you are looking at rather than a narrowing of
+  // the list, and clearing it would silently move the user to another view.
+  const clearFilters = useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    for (const name of ["search", "kind", "labels"]) {
+      params.delete(name);
+    }
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [searchParams, router, pathname]);
+
   const handleRemoveLabel = useCallback(
     (key: string, value: string) => {
       if (!parsedLabels) return;
@@ -207,17 +222,21 @@ export default function AppsPage() {
               onRetry={() => refetch()}
             />
           ) : filtered.length === 0 ? (
-            <div className="flex min-h-[40vh] flex-col items-center justify-center text-center">
-              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border bg-background shadow-sm">
-                <AppWindow className="h-6 w-6 text-primary" />
-              </div>
-              <h2 className="mb-1 text-lg font-semibold">
-                {search ? "No apps match your search" : "No apps here yet"}
-              </h2>
-              <p className="max-w-sm text-sm text-muted-foreground">
-                Create an app to get started.
-              </p>
-            </div>
+            <EmptyState
+              className="min-h-[40vh]"
+              icon={AppWindow}
+              title={
+                hasActiveFilters
+                  ? "No apps match your search"
+                  : "No apps here yet"
+              }
+              description={
+                hasActiveFilters
+                  ? "Try adjusting your search or filters."
+                  : "Create an app to get started."
+              }
+              onClearFilters={hasActiveFilters ? clearFilters : undefined}
+            />
           ) : (
             <div className="space-y-6">
               <AppSection

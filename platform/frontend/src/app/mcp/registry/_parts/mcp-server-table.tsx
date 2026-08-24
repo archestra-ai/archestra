@@ -12,6 +12,7 @@ import {
   MessageSquare,
   Pencil,
   RefreshCw,
+  Route,
   Server,
   Trash2,
   User,
@@ -452,6 +453,7 @@ export function McpServerTable({
             ? undefined
             : (row) => router.push(`/mcp/registry/${row.id}`)
         }
+        emptyIcon={Route}
         emptyMessage="No MCP servers found."
         hidePaginationWhenSinglePage
         fixedWidthColumnIds={

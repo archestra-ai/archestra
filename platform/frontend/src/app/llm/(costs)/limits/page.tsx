@@ -5,6 +5,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import {
   Boxes,
   Building2,
+  CircleDollarSign,
   Edit,
   Info,
   Key,
@@ -793,9 +794,10 @@ export default function LimitsPage() {
         <DataTable
           columns={columns}
           data={filteredLimits}
+          emptyIcon={CircleDollarSign}
           emptyMessage="No limits configured"
           hasActiveFilters={hasActiveFilters}
-          filteredEmptyMessage="No limits match your filters. Try adjusting your search."
+          filteredEmptyMessage="No limits match your filters"
           onClearFilters={() => {
             updateQueryParams({ status: null, appliedTo: null, model: null });
           }}

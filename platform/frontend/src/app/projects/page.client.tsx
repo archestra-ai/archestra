@@ -16,6 +16,7 @@ import { AgentIconPicker } from "@/components/agent-icon-picker";
 import { AgentSelector } from "@/components/agent-selector";
 import { ApiKeyLoadError } from "@/components/api-key-load-error";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { EmptyState } from "@/components/empty-state";
 import { FilterBar, filterSearchClass } from "@/components/filter-bar";
 import { LoadingState } from "@/components/loading";
 import { NoApiKeySetup } from "@/components/no-api-key-setup";
@@ -266,10 +267,7 @@ function ProjectsList() {
             <LoadingState label="Loading projects…" variant="page" />
           ) : isDeletedView ? (
             projects.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 py-16 text-center text-sm text-muted-foreground">
-                <FolderKanban className="h-8 w-8 opacity-50" />
-                <p>No deleted projects</p>
-              </div>
+              <EmptyState icon={FolderKanban} title="No deleted projects" />
             ) : (
               <DeletedProjectsTable
                 projects={projects}
@@ -280,14 +278,19 @@ function ProjectsList() {
               />
             )
           ) : projects.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 py-16 text-center text-sm text-muted-foreground">
-              <FolderKanban className="h-8 w-8 opacity-50" />
-              <p>
-                {hasActiveFilter
+            <EmptyState
+              icon={FolderKanban}
+              title={
+                hasActiveFilter
                   ? "No projects match your filters"
-                  : "No projects yet"}
-              </p>
-            </div>
+                  : "No projects yet"
+              }
+              description={
+                hasActiveFilter
+                  ? "Try adjusting your search or filters."
+                  : undefined
+              }
+            />
           ) : (
             <>
               {pinnedProjects.length > 0 && (

@@ -64,13 +64,14 @@ describe("DataTable page index clamping", () => {
     });
   });
 
-  it("uses the shared loading state without rendering the table or pagination", () => {
+  it("keeps the table in place while the first page is still loading", () => {
     const onPaginationChange = vi.fn();
     const { container } = render(
       <DataTable
         columns={columns}
         data={[]}
         isLoading
+        emptyMessage="No results"
         manualPagination
         pagination={{ pageIndex: 3, pageSize: 10, total: 0 }}
         onPaginationChange={onPaginationChange}
@@ -78,11 +79,53 @@ describe("DataTable page index clamping", () => {
     );
 
     expect(onPaginationChange).not.toHaveBeenCalled();
+    // The header and the surrounding chrome stay put so rows land in place
+    // rather than replacing a loader that sat at a different height.
+    expect(container.querySelector("table")).not.toBeNull();
+    expect(screen.getByRole("columnheader", { name: "Name" })).toBeVisible();
+    // Nothing claims the result is empty while a fetch is still out.
+    expect(screen.queryByText("No results")).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("reports an empty result only once the fetch has settled", () => {
+    render(<DataTable columns={columns} data={[]} emptyMessage="No results" />);
+
+    expect(screen.getByText("No results")).toBeVisible();
+  });
+
+  it("distinguishes an empty list from one filtered down to nothing", () => {
+    const onClearFilters = vi.fn();
+    const { rerender } = render(
+      <DataTable columns={columns} data={[]} emptyMessage="No results" />,
+    );
+
+    // Nothing is narrowing the list, so there is nothing to reset.
     expect(
-      screen.getByRole("status", { name: "Loading results…" }),
-    ).toBeVisible();
-    expect(container.querySelector("table")).toBeNull();
-    expect(screen.queryByText("Page 4 of 0")).toBeNull();
+      screen.queryByRole("button", { name: /clear filters/i }),
+    ).not.toBeInTheDocument();
+
+    rerender(
+      <DataTable
+        columns={columns}
+        data={[]}
+        emptyMessage="No results"
+        hasActiveFilters
+        filteredEmptyMessage="No results match your filters"
+        onClearFilters={onClearFilters}
+      />,
+    );
+
+    expect(screen.getByText("No results match your filters")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: /clear filters/i }));
+    expect(onClearFilters).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not disturb rows already on screen while refetching", () => {
+    render(<DataTable columns={columns} data={makeRows(2)} isLoading />);
+
+    expect(screen.getByText("row-0")).toBeVisible();
+    expect(screen.queryByRole("status")).toBeNull();
   });
 });
 

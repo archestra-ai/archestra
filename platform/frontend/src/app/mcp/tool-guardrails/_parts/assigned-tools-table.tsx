@@ -17,6 +17,7 @@ import {
   ChevronUp,
   Network,
   Server,
+  ShieldCheck,
 } from "lucide-react";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { RowClickShield } from "@/components/agent-pages/row-click-shield";
@@ -802,8 +803,9 @@ export function AssignedToolsTable({
           observedByFilter !== DEFAULT_FILTER_ALL ||
           clientFilter !== DEFAULT_FILTER_ALL
         }
+        emptyIcon={ShieldCheck}
         emptyMessage="No tools have been assigned yet."
-        filteredEmptyMessage="No tools match your filters. Try adjusting your search."
+        filteredEmptyMessage="No tools match your filters"
         onClearFilters={clearFilters}
         flexibleColumnIds={["name"]}
         fixedWidthColumnIds={["callPolicy", "toolResultTreatment"]}

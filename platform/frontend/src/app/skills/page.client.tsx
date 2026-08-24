@@ -23,6 +23,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Sparkles,
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
@@ -30,12 +31,12 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { EmptyState } from "@/components/empty-state";
 import {
   FilterBar,
   filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
-import { LoadingState, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import {
   PERMANENT_DELETE_LABEL,
@@ -183,7 +184,6 @@ function SkillsList() {
 
   const {
     data: skills,
-    isPending,
     isFetching,
     isLoadingError: isSkillsLoadError,
     refetch: refetchSkills,
@@ -680,12 +680,7 @@ function SkillsList() {
   }
 
   return (
-    <LoadingWrapper
-      isPending={isPending && !skills}
-      loadingFallback={
-        <LoadingState label="Loading skills…" variant="viewport" />
-      }
-    >
+    <>
       <PageLayout
         title="Skills"
         description={SKILLS_DESCRIPTION}
@@ -866,6 +861,7 @@ function SkillsList() {
                         <TableCardList
                           itemCount={items.length}
                           isLoading={isFetching}
+                          emptyIcon={Sparkles}
                           emptyMessage="No standalone skills yet."
                           hasActiveFilters={hasActiveFilters}
                           filteredEmptyMessage="No standalone skills match the current filters."
@@ -946,6 +942,7 @@ function SkillsList() {
                           columns={columns}
                           data={items}
                           getRowId={(row) => row.id}
+                          emptyIcon={Sparkles}
                           emptyMessage="No standalone skills yet."
                           hasActiveFilters={hasActiveFilters}
                           filteredEmptyMessage={
@@ -1057,7 +1054,7 @@ function SkillsList() {
           onOpenChange={(open) => !open && setHistorySkillId(null)}
         />
       )}
-    </LoadingWrapper>
+    </>
   );
 }
 
@@ -1149,26 +1146,20 @@ function SkillSourceIcon({
 
 function SkillsEmptyState() {
   return (
-    <div className="flex min-h-[60vh] items-center justify-center">
-      <div className="max-w-md text-center">
-        <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl border bg-background shadow-sm">
-          <BookOpen className="h-7 w-7 text-primary" />
-        </div>
-        <h2 className="mb-2 text-xl font-semibold">No skills yet</h2>
-        <p className="mb-6 text-sm text-muted-foreground">
-          A skill is a set of instructions and files. Agents pick the right one
-          by name and follow it on demand.
-        </p>
-        <div className="flex items-center justify-center">
-          <PermissionButton permissions={{ skill: ["create"] }} asChild>
-            <Link href="/skills/new">
-              <Plus className="mr-2 h-4 w-4" />
-              Add your first skill
-            </Link>
-          </PermissionButton>
-        </div>
-      </div>
-    </div>
+    <EmptyState
+      className="min-h-[60vh]"
+      icon={BookOpen}
+      title="No skills yet"
+      description="A skill is a set of instructions and files. Agents pick the right one by name and follow it on demand."
+      action={
+        <PermissionButton permissions={{ skill: ["create"] }} asChild>
+          <Link href="/skills/new">
+            <Plus className="mr-2 h-4 w-4" />
+            Add your first skill
+          </Link>
+        </PermissionButton>
+      }
+    />
   );
 }
 

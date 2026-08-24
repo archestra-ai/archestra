@@ -4,6 +4,7 @@ import { archestraApiSdk } from "@archestra/shared";
 import { useEffect, useRef } from "react";
 import { LoadingState } from "@/components/loading";
 import { clearSsoSignInAttempt } from "@/lib/auth/sso-sign-in-attempt";
+import { clearPersistedQueryCache } from "@/lib/query-persistence";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed; reset is a no-op when RUM never started
 import { rumClient } from "@/lib/rum.ee";
 
@@ -22,6 +23,11 @@ export function SignOutWithIdpLogout() {
 
 async function performSignOut() {
   clearSsoSignInAttempt();
+
+  // Drop the refresh snapshot before the session goes: it is what makes a
+  // reload paint instantly, and nothing of this user's should survive into
+  // the next sign-in on this browser.
+  clearPersistedQueryCache();
 
   // Flush pending usage telemetry while the session cookie is still valid,
   // then forget the RUM session and last-user markers: a telemetry session

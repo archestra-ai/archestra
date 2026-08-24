@@ -3,6 +3,7 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
+  AppWindow,
   Loader2,
   Pin,
   PinOff,
@@ -322,6 +323,7 @@ export function AppsTable({
         onPageRowIdsChange={onPageRowIdsChange}
         hideSelectedCount
         onRowClick={(app) => void handleOpen(app)}
+        emptyIcon={AppWindow}
         emptyMessage="No apps here yet"
         hidePaginationWhenSinglePage
       />

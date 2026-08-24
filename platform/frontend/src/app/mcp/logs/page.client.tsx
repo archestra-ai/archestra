@@ -7,7 +7,13 @@ import {
   parseFullToolName,
 } from "@archestra/shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
-import { Boxes, ChevronDown, ChevronUp, User } from "lucide-react";
+import {
+  Boxes,
+  ChevronDown,
+  ChevronUp,
+  MessagesSquare,
+  User,
+} from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AgentSelector } from "@/components/agent-selector";
@@ -548,8 +554,9 @@ function McpToolCallsTable({
         onSortingChange={setSorting}
         isLoading={isFetching}
         hasActiveFilters={hasFilters}
+        emptyIcon={MessagesSquare}
         emptyMessage="No MCP tool calls found. Tool calls will appear here when agents use MCP tools."
-        filteredEmptyMessage="No MCP logs match your filters. Try adjusting your search."
+        filteredEmptyMessage="No MCP logs match your filters"
         onClearFilters={clearFilters}
         onRowClick={(row) => {
           router.push(`/mcp/logs/${row.id}`);

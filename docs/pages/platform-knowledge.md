@@ -1044,3 +1044,7 @@ A connector can be assigned a deployment environment. Only agents and gateways i
 ## Adding New Connector Types
 
 See [Adding Knowledge Connectors](/docs/platform-adding-knowledge-connectors) for a developer guide on implementing new connector types.
+
+## Adding Retrieval Backends
+
+See [Adding Knowledge Retrieval Backends](/docs/platform-adding-knowledge-retrieval-backends) for a developer guide on implementing a new search index.

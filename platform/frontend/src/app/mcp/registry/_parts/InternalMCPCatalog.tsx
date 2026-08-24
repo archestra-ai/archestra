@@ -101,6 +101,7 @@ import {
   ISSUE_OPTIONS,
   NOT_INSTALLED_STATUS_VALUE,
   REGISTRY_STATUS_PARAM,
+  RegistryDismissedFilter,
   RegistryFilterChips,
   RegistryFilterDropdown,
   type RegistryFilters,
@@ -894,7 +895,8 @@ export function InternalMCPCatalog({
   }, [catalogItems]);
   // Outstanding issues per catalog item, from the same signals every registry
   // surface renders. This feeds the audience facets, Issue filter and table.
-  const { issuesByCatalog } = useMcpServerIssues(deploymentStatuses);
+  const { issuesByCatalog, facetCounts } =
+    useMcpServerIssues(deploymentStatuses);
   const selectedFacet = alertingEnabled
     ? selectedAttentionFacet(filters.status)
     : null;
@@ -1165,6 +1167,21 @@ export function InternalMCPCatalog({
                 onToggle={(value) => toggleFilter("status", value)}
               />
             )}
+            {/* Dismissed alerts are the same question with the silenced ones
+                instead of without them, so they narrow this list rather than
+                occupying a tab of their own. Offered while there is something
+                to see and while the reader is looking at it, so the way back
+                off never disappears under them. */}
+            {(selectedFacet === "you" || selectedFacet === "muted") &&
+              (facetCounts.muted > 0 || selectedFacet === "muted") && (
+                <RegistryDismissedFilter
+                  count={facetCounts.muted}
+                  pressed={selectedFacet === "muted"}
+                  onToggle={() =>
+                    selectFacet(selectedFacet === "muted" ? "you" : "muted")
+                  }
+                />
+              )}
             {environmentOptions.length > 0 && (
               <RegistryFilterDropdown
                 label="Environment"

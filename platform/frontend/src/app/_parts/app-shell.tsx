@@ -248,11 +248,18 @@ function NavAwareSidebarCircleToggle() {
   const { isNavigating } = useNavigationStatus();
   const { showCollapsedToggleDot } = useNavOnboarding();
   const isAppLoading = useIsAppLoading();
+  const loading = isNavigating || isAppLoading;
   return (
-    <SidebarCircleToggle
-      loading={isNavigating || isAppLoading}
-      showDot={showCollapsedToggleDot}
-    />
+    <>
+      {/* The toggle's spinner is decorative, so the same state is announced
+          here (WCAG 4.1.3). This is the only announcement left now that the
+          page-level loaders are gone, and it is polite and unlabelled while
+          idle, so it does not interrupt or repeat. */}
+      <output aria-live="polite" className="sr-only">
+        {loading ? <span>Loading…</span> : null}
+      </output>
+      <SidebarCircleToggle loading={loading} showDot={showCollapsedToggleDot} />
+    </>
   );
 }
 

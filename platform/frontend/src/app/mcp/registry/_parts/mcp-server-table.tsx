@@ -174,7 +174,7 @@ export function McpServerTable({
       id: "name",
       accessorKey: "name",
       header: "MCP Server",
-      size: 540,
+      size: 460,
       cell: ({ row }) => {
         const item = row.original;
         return (
@@ -187,7 +187,7 @@ export function McpServerTable({
     },
     {
       id: "tools",
-      size: 90,
+      size: 72,
       header: () => <div className="text-right">Tools</div>,
       cell: ({ row }) => (
         <div className="text-right text-sm text-muted-foreground">
@@ -197,7 +197,7 @@ export function McpServerTable({
     },
     {
       id: "author",
-      size: 140,
+      size: 160,
       header: "Accessible to",
       cell: ({ row }) => (
         <ResourceVisibilityBadge
@@ -214,7 +214,7 @@ export function McpServerTable({
       id: "status",
       // The table is a scanning surface: the status label is enough here.
       // Diagnosis and remediation live on the server page and attention facet.
-      size: 190,
+      size: 180,
       header: "Status",
       cell: ({ row }) => {
         const item = row.original;
@@ -263,7 +263,7 @@ export function McpServerTable({
     },
     {
       id: "actions",
-      size: 260,
+      size: 180,
       header: () => <div className="text-right">Actions</div>,
       cell: ({ row }) => {
         const item = row.original;
@@ -321,7 +321,7 @@ export function McpServerTable({
           id: "name",
           accessorKey: "name",
           header: "MCP Server",
-          size: 540,
+          size: 420,
           cell: ({ row }) => {
             const item = row.original;
             return (
@@ -335,7 +335,7 @@ export function McpServerTable({
         {
           id: "issue",
           header: "Issue",
-          size: 440,
+          size: 360,
           cell: ({ row }) => {
             const item = row.original;
             const issues = attentionRawIssues(item);
@@ -381,7 +381,7 @@ export function McpServerTable({
         {
           id: "actions",
           header: () => <div className="text-right">Actions</div>,
-          size: 160,
+          size: 112,
           cell: ({ row }) => {
             const item = row.original;
             return (

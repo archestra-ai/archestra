@@ -113,9 +113,9 @@ expect(comp.props.thing).toBe(false);
 
 Each of these shipped, ran on every CI build, and caught nothing:
 
-**A literal field compared to its own literal.** Sixteen knowledge-base
-connectors declare `supportsPermissionSync = true` and `type = "notion"`. Tests
-asserted exactly that:
+**A literal field compared to its own literal.** Fifteen knowledge-base
+connectors override `supportsPermissionSync` with a literal `true`, and each
+declares its own `type = "notion" as const`. Tests asserted exactly that back:
 
 ```ts
 // Removed — cannot fail unless someone edits the line above it.
@@ -193,9 +193,10 @@ what it covers:
   wired that schema up, and each is one extra `app.inject` on an app the suite
   already built — microseconds.
 - **Keep** the parallel team-scope suites for `mcp-oauth-clients` and
-  `llm-oauth-clients`. The bodies are byte-identical, but they guard two
-  independent authorization surfaces; deleting either half would let a
-  privilege-escalation bug through on one of them.
+  `llm-oauth-clients`. Eleven of their test bodies are byte-identical, but they
+  guard two independent authorization surfaces with separately-implemented
+  scope sequencing; deleting either half would let a privilege-escalation bug
+  through on one of them.
 - **Remove** repetition that re-asserts a shared literal per instantiation with
   no per-instance wiring to prove — the connector flags above.
 

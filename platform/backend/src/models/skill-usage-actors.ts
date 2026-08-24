@@ -34,7 +34,9 @@ export async function describeUsageActors({
 }): Promise<SkillUsageStatistics["users"]> {
   const actorIds = [...totals.keys()].filter((id): id is string => id !== null);
   const [userNames, serviceAccountNames] = await Promise.all([
-    UserModel.getNamesByIds(actorIds.filter((id) => !isServiceAccountUserId(id))),
+    UserModel.getNamesByIds(
+      actorIds.filter((id) => !isServiceAccountUserId(id)),
+    ),
     ServiceAccountModel.getNamesByIds(
       actorIds.map(serviceAccountId).filter((id): id is string => id !== null),
       organizationId,

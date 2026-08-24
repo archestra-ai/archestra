@@ -42,7 +42,9 @@
     ".next-pw/dev/types/**/*.ts",
     ".next-pw/dev/dev/types/**/*.ts",
     ".next-demo/types/**/*.ts",
-    ".next-demo/dev/types/**/*.ts"
+    ".next-demo/dev/types/**/*.ts",
+    ".next-msw-demo/types/**/*.ts",
+    ".next-msw-demo/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

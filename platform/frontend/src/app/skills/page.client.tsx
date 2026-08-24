@@ -113,10 +113,7 @@ import {
   skillAction,
   skillActionHref,
 } from "./_parts/skill-actions-model";
-import {
-  skillEditHref,
-  skillUsageHref,
-} from "./_parts/skill-page-config";
+import { skillEditHref, skillUsageHref } from "./_parts/skill-page-config";
 import { SkillUsageSummary } from "./_parts/skill-usage-summary";
 import { SkillVersionHistoryDialog } from "./_parts/skill-version-history-dialog";
 
@@ -1060,7 +1057,6 @@ function SkillsList() {
           onOpenChange={(open) => !open && setHistorySkillId(null)}
         />
       )}
-
     </LoadingWrapper>
   );
 }

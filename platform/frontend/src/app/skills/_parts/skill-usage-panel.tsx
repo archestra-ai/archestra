@@ -240,8 +240,13 @@ function ActorBreakdown({
         </p>
       ) : (
         // Long lists scroll inside the section rather than pushing the chart
-        // off the top of the page.
-        <div className="max-h-[26rem] overflow-y-auto rounded-lg border">
+        // off the top of the page. The height caps `Table`'s own container
+        // rather than a wrapper around it: that container already sets
+        // `overflow-x`, which makes it the scroll box on both axes, and a
+        // sticky header inside it only sticks to the box that actually
+        // scrolls. Capping a parent instead left the header behind on the
+        // first scroll, which is when 40 rows most need their columns named.
+        <div className="rounded-lg border [&_[data-slot=table-container]]:max-h-[26rem] [&_[data-slot=table-container]]:overflow-y-auto">
           <Table>
             <TableHeader className="sticky top-0 z-10 bg-card">
               <TableRow>

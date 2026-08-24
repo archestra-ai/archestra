@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
+import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
 import { throwOnApiError } from "@/lib/utils";
 import appConfig, { DEFAULT_BACKEND_URL } from "./config";
 
@@ -22,6 +23,7 @@ export function useConfig() {
     },
     staleTime: 5 * 60 * 1000,
     enabled: isAuthenticated,
+    meta: PERSISTED_QUERY_META,
   });
 }
 
@@ -34,6 +36,7 @@ export function usePublicConfig() {
       return data ?? null;
     },
     staleTime: 5 * 60 * 1000,
+    meta: PERSISTED_QUERY_META,
   });
 }
 

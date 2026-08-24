@@ -79,4 +79,26 @@ describe("McpCatalogLayout", () => {
       screen.queryByTestId("mcp-registry-attention-facets"),
     ).not.toBeInTheDocument();
   });
+
+  it("has no Dismissed tab, and keeps Action required selected while it is on", () => {
+    vi.mocked(useMcpServerIssues).mockReturnValue({
+      issuesByCatalog: new Map(),
+      facetCounts: { you: 1, others: 1, muted: 4 },
+    });
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("status=muted") as ReturnType<typeof useSearchParams>,
+    );
+    render(
+      <McpCatalogLayout>
+        <div>Registry content</div>
+      </McpCatalogLayout>,
+    );
+
+    // Dismissed is a filter on the list below, not a third tab: the strip must
+    // not grow and shrink with the dismissal count.
+    expect(screen.queryByRole("link", { name: /Dismissed/ })).toBeNull();
+    expect(
+      screen.getByTestId("mcp-registry-action-required-tab"),
+    ).toHaveAttribute("aria-current", "page");
+  });
 });

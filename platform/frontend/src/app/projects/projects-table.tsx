@@ -2,7 +2,14 @@
 
 import type { archestraApiTypes } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { ArchiveRestore, Pencil, Pin, PinOff, Trash2 } from "lucide-react";
+import {
+  ArchiveRestore,
+  FolderKanban,
+  Pencil,
+  Pin,
+  PinOff,
+  Trash2,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
@@ -227,6 +234,7 @@ export function ProjectsTable({
         onPageRowIdsChange={onPageRowIdsChange}
         hideSelectedCount
         onRowClick={(row) => router.push(`/projects/${row.id}`)}
+        emptyIcon={FolderKanban}
         emptyMessage="No projects yet"
         hidePaginationWhenSinglePage
       />

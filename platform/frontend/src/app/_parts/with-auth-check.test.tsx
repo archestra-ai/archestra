@@ -286,7 +286,7 @@ describe("WithAuthCheck", () => {
       } as unknown as ReturnType<typeof useSession>);
     });
 
-    it("should render the shared loading state while checking auth", () => {
+    it("holds the page steady, without a visible loader, while checking auth", () => {
       vi.mocked(usePathname).mockReturnValue("/dashboard");
 
       render(
@@ -295,11 +295,29 @@ describe("WithAuthCheck", () => {
         </WithAuthCheck>,
       );
 
-      expect(
-        screen.getByRole("status", { name: "Loading your workspace…" }),
-      ).toBeVisible();
+      // Announced to assistive tech but drawn as nothing: until the session
+      // resolves we cannot know whether the app or the sign-in page comes
+      // next, and a spinner that is replaced by a different layout a beat
+      // later reads as a flash.
+      const status = screen.getByRole("status", { name: "Loading…" });
+      expect(status).toBeInTheDocument();
+      expect(status.querySelector(".animate-spin")).toBeNull();
+      expect(status).toHaveTextContent("");
       expect(screen.queryByTestId("protected-content")).toBeNull();
       expect(mockRouterPush).not.toHaveBeenCalled();
+    });
+
+    it("keeps a centred indicator on auth pages, which have no shell to hold", () => {
+      vi.mocked(usePathname).mockReturnValue("/auth/sign-in");
+
+      render(
+        <WithAuthCheck>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      const status = screen.getByRole("status", { name: "Loading…" });
+      expect(status.querySelector(".animate-spin")).not.toBeNull();
     });
   });
 

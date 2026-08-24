@@ -382,7 +382,7 @@ function ApiKeysCardContent() {
                   hideSelectedCount
                   emptyMessage="No API keys yet"
                   hasActiveFilters={search.trim().length > 0}
-                  filteredEmptyMessage="No API keys match your search. Try adjusting your search."
+                  filteredEmptyMessage="No API keys match your search"
                   onClearFilters={() =>
                     updateQueryParams({ search: null, page: "1" })
                   }

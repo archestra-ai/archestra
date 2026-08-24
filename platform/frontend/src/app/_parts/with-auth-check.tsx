@@ -174,10 +174,24 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
     queryClient,
   ]);
 
-  // Show loading while checking auth/permissions
+  // Auth surfaces are their own layout with no shell behind them, so a single
+  // centred indicator is still the right call while the session resolves.
+  if (inProgress && (isAuthPage || isSpecialAuth)) {
+    return <LoadingState label="Loading…" variant="viewport" />;
+  }
+
+  // Everywhere else, an unresolved session means we do not yet know whether
+  // this person gets the app or the sign-in page. Rendering either one's
+  // chrome now would flash the wrong layout, and a full-screen spinner is the
+  // jumpy boot loader this screen is meant to be rid of — so hold the
+  // background steady and say nothing visually. A refresh normally skips this
+  // branch entirely: the session comes back with the restored cache, already
+  // resolved.
   if (inProgress) {
-    return <LoadingState label="Loading your workspace…" variant="viewport" />;
-  } else if (isSpecialAuth) {
+    return <LoadingState label="Loading…" variant="quiet" />;
+  }
+
+  if (isSpecialAuth) {
     // Special auth pages are always rendered (handles both 2FA verification and setup)
     return <>{children}</>;
   } else if (isAuthPage && isLoggedIn) {

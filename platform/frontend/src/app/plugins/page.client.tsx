@@ -18,12 +18,12 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { OsLogos } from "@/app/connection/os-logos";
 import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { EmptyState } from "@/components/empty-state";
 import {
   FilterBar,
   filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
-import { LoadingState, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RepositoryOwnerIcon } from "@/components/repository-owner-icon";
@@ -111,8 +111,12 @@ function PluginsGate() {
   const tabs = useSkillsPluginsNavTabs();
   const enabled = useFeature("plugins");
 
+  // The feature flag arrives with the rest of the config; until it does this
+  // page cannot know whether it is a plugins page or a "disabled" notice. It
+  // waits without drawing anything rather than stacking a second loader in
+  // front of the one the list would show a moment later.
   if (enabled === undefined) {
-    return <LoadingState label="Loading plugins…" variant="viewport" />;
+    return null;
   }
 
   if (!enabled) {
@@ -146,13 +150,7 @@ function PluginsList() {
   const sourceRepo = searchParams.get("sourceRepo") ?? "";
   const scopeFilter = useScopeFilterParams();
 
-  const {
-    data: plugins,
-    isPending,
-    isFetching,
-    isLoadingError,
-    refetch,
-  } = usePlugins();
+  const { data: plugins, isFetching, isLoadingError, refetch } = usePlugins();
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
 
@@ -590,12 +588,7 @@ function PluginsList() {
     !isFetching && (plugins?.length ?? 0) === 0 && !hasActiveFilters;
 
   return (
-    <LoadingWrapper
-      isPending={(isPending || isFetching) && (plugins?.length ?? 0) === 0}
-      loadingFallback={
-        <LoadingState label="Loading plugins…" variant="viewport" />
-      }
-    >
+    <>
       <PageLayout
         title="Plugins"
         description={PLUGINS_DESCRIPTION}
@@ -799,6 +792,7 @@ function PluginsList() {
                   <TableCardList
                     itemCount={filteredPlugins.length}
                     isLoading={isFetching}
+                    emptyIcon={Braces}
                     emptyMessage="No plugins yet."
                     hasActiveFilters={hasActiveFilters}
                     filteredEmptyMessage="No plugins match the current filters."
@@ -873,6 +867,7 @@ function PluginsList() {
                     columns={tableColumns}
                     data={filteredPlugins}
                     getRowId={(row) => row.id}
+                    emptyIcon={Braces}
                     emptyMessage="No plugins yet."
                     hasActiveFilters={hasActiveFilters}
                     filteredEmptyMessage="No plugins match the current filters."
@@ -971,36 +966,26 @@ function PluginsList() {
           }}
         />
       )}
-    </LoadingWrapper>
+    </>
   );
 }
 
 function PluginsEmptyState() {
   return (
-    <div className="flex min-h-[60vh] items-center justify-center">
-      <div className="max-w-md text-center">
-        <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl border bg-background shadow-sm">
-          <Braces className="h-7 w-7 text-primary" />
-        </div>
-        <h2 className="mb-2 text-xl font-semibold">No plugins yet</h2>
-        <p className="mb-6 text-sm text-muted-foreground">
-          A plugin packages a client&apos;s native hooks file and its companion
-          scripts. The platform stores the payload verbatim and delivers it to
-          connected coding agents.
-        </p>
-        <div className="flex items-center justify-center">
-          <PermissionButton
-            permissions={{ plugin: ["create", "admin"] }}
-            asChild
-          >
-            <Link href="/plugins/new">
-              <Plus className="mr-2 h-4 w-4" />
-              Add your first plugin
-            </Link>
-          </PermissionButton>
-        </div>
-      </div>
-    </div>
+    <EmptyState
+      className="min-h-[60vh]"
+      icon={Braces}
+      title="No plugins yet."
+      description="A plugin packages a client's native hooks file and its companion scripts. The platform stores the payload verbatim and delivers it to connected coding agents."
+      action={
+        <PermissionButton permissions={{ plugin: ["create", "admin"] }} asChild>
+          <Link href="/plugins/new">
+            <Plus className="mr-2 h-4 w-4" />
+            Add your first plugin
+          </Link>
+        </PermissionButton>
+      }
+    />
   );
 }
 

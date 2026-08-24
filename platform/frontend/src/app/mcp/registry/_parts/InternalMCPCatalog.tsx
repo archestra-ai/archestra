@@ -6,10 +6,11 @@ import {
   MCP_CATALOG_REAUTH_QUERY_PARAM,
   MCP_CATALOG_SERVER_QUERY_PARAM,
 } from "@archestra/shared";
-import { CheckCircle2, Search } from "lucide-react";
+import { CheckCircle2, Route } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { EmptyState } from "@/components/empty-state";
 import {
   FilterBar,
   filterControlClass,
@@ -101,6 +102,7 @@ import {
   ISSUE_OPTIONS,
   NOT_INSTALLED_STATUS_VALUE,
   REGISTRY_STATUS_PARAM,
+  RegistryDismissedFilter,
   RegistryFilterChips,
   RegistryFilterDropdown,
   type RegistryFilters,
@@ -894,7 +896,8 @@ export function InternalMCPCatalog({
   }, [catalogItems]);
   // Outstanding issues per catalog item, from the same signals every registry
   // surface renders. This feeds the audience facets, Issue filter and table.
-  const { issuesByCatalog } = useMcpServerIssues(deploymentStatuses);
+  const { issuesByCatalog, facetCounts } =
+    useMcpServerIssues(deploymentStatuses);
   const selectedFacet = alertingEnabled
     ? selectedAttentionFacet(filters.status)
     : null;
@@ -1165,6 +1168,21 @@ export function InternalMCPCatalog({
                 onToggle={(value) => toggleFilter("status", value)}
               />
             )}
+            {/* Dismissed alerts are the same question with the silenced ones
+                instead of without them, so they narrow this list rather than
+                occupying a tab of their own. Offered while there is something
+                to see and while the reader is looking at it, so the way back
+                off never disappears under them. */}
+            {(selectedFacet === "you" || selectedFacet === "muted") &&
+              (facetCounts.muted > 0 || selectedFacet === "muted") && (
+                <RegistryDismissedFilter
+                  count={facetCounts.muted}
+                  pressed={selectedFacet === "muted"}
+                  onToggle={() =>
+                    selectFacet(selectedFacet === "muted" ? "you" : "muted")
+                  }
+                />
+              )}
             {environmentOptions.length > 0 && (
               <RegistryFilterDropdown
                 label="Environment"
@@ -1224,21 +1242,12 @@ export function InternalMCPCatalog({
                 </Empty>
               </div>
             ) : (
-              <div
-                className="flex flex-col items-center justify-center py-12 text-center"
-                data-testid="mcp-registry-attention-list"
-              >
-                <Search className="mb-4 h-10 w-10 text-muted-foreground" />
-                <p className="text-muted-foreground">
-                  No MCP servers match your filters. Try adjusting your search.
-                </p>
-                <Button
-                  variant="outline"
-                  className="mt-4"
-                  onClick={clearFiltersKeepingFacet}
-                >
-                  Clear filters
-                </Button>
+              <div data-testid="mcp-registry-attention-list">
+                <EmptyState
+                  icon={Route}
+                  title="No MCP servers match your filters"
+                  onClearFilters={clearFiltersKeepingFacet}
+                />
               </div>
             )
           ) : (
@@ -1403,28 +1412,17 @@ export function InternalMCPCatalog({
               </div>
             ) : (
               personalItems.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  {hasActiveFilters ? (
-                    <>
-                      <Search className="mb-4 h-10 w-10 text-muted-foreground" />
-                      <p className="text-muted-foreground">
-                        No MCP servers match your filters. Try adjusting your
-                        search.
-                      </p>
-                      <Button
-                        variant="outline"
-                        className="mt-4"
-                        onClick={handleClearFilters}
-                      >
-                        Clear filters
-                      </Button>
-                    </>
-                  ) : (
-                    <p className="text-muted-foreground">
-                      No MCP servers found.
-                    </p>
-                  )}
-                </div>
+                <EmptyState
+                  icon={Route}
+                  title={
+                    hasActiveFilters
+                      ? "No MCP servers match your filters"
+                      : "No MCP servers found"
+                  }
+                  onClearFilters={
+                    hasActiveFilters ? handleClearFilters : undefined
+                  }
+                />
               )
             )}
           </div>

@@ -22,6 +22,7 @@ import {
   useOrganization,
   useUpdateAuthSettings,
 } from "@/lib/organization.query";
+import { clearPersistedQueryCache } from "@/lib/query-persistence";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed; reset is a no-op when RUM never started
 import { rumClient } from "@/lib/rum.ee";
 import {
@@ -140,6 +141,7 @@ export default function AuthSettingsPage() {
       // Direct sign-out (bypasses /auth/sign-out): tear down RUM state the
       // same way that page does.
       rumClient.reset();
+      clearPersistedQueryCache();
       await authClient.signOut();
       window.location.assign("/auth/sign-in");
       return;

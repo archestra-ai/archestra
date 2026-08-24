@@ -9,7 +9,8 @@ type LoadingStateVariant =
   | "page"
   | "content"
   | "compact"
-  | "inline";
+  | "inline"
+  | "quiet";
 
 const INDICATOR_SIZE_BY_VARIANT: Record<LoadingStateVariant, string> = {
   viewport: "size-8",
@@ -17,6 +18,7 @@ const INDICATOR_SIZE_BY_VARIANT: Record<LoadingStateVariant, string> = {
   content: "size-8",
   compact: "size-6",
   inline: "size-4",
+  quiet: "size-0",
 };
 
 export function LoadingSkeletons({
@@ -40,7 +42,7 @@ export function LoadingState({
   className,
   label = "Loading…",
   variant = "content",
-  showLabel = variant !== "inline",
+  showLabel = variant !== "inline" && variant !== "quiet",
 }: {
   className?: string;
   /**
@@ -50,7 +52,15 @@ export function LoadingState({
    * generic default is unhelpful.
    */
   label?: string;
-  /** Controls the centered loading area's height and mascot size. */
+  /**
+   * Controls the centered loading area's height and indicator size.
+   *
+   * `quiet` holds the area open and announces itself to assistive tech while
+   * drawing nothing. Use it where a visible indicator would be a flash rather
+   * than information — a boot step short enough that the eye reads the spinner
+   * as a glitch, or one where the app cannot yet tell which layout it is about
+   * to show.
+   */
   variant?: LoadingStateVariant;
   /** Compact controls can hide the visible label while retaining its accessible name. */
   showLabel?: boolean;
@@ -66,19 +76,22 @@ export function LoadingState({
         variant === "content" && "min-h-48 py-10",
         variant === "compact" && "min-h-24 py-4",
         variant === "inline" && "inline-flex min-h-0 p-0 align-middle",
+        variant === "quiet" && "min-h-app-viewport",
         className,
       )}
     >
-      <span
-        aria-hidden="true"
-        className={cn(
-          "relative block shrink-0",
-          INDICATOR_SIZE_BY_VARIANT[variant],
-        )}
-      >
-        <span className="absolute inset-0 rounded-full border-2 border-muted-foreground/20" />
-        <span className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-t-muted-foreground motion-reduce:animate-none" />
-      </span>
+      {variant !== "quiet" && (
+        <span
+          aria-hidden="true"
+          className={cn(
+            "relative block shrink-0",
+            INDICATOR_SIZE_BY_VARIANT[variant],
+          )}
+        >
+          <span className="absolute inset-0 rounded-full border-2 border-muted-foreground/20" />
+          <span className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-t-muted-foreground motion-reduce:animate-none" />
+        </span>
+      )}
       {showLabel && (
         <span className="mt-2 text-sm text-muted-foreground">{label}</span>
       )}

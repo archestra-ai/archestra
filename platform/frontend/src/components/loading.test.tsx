@@ -9,14 +9,27 @@ describe("LoadingState", () => {
     expect(
       screen.getByRole("status", { name: "Loading connectors…" }),
     ).toBeVisible();
-    // `showLabel` defaults to `variant !== "inline"`, so every other variant
-    // renders the label on screen as well as naming the live region.
+    // `showLabel` defaults to on for every variant that draws an indicator, so
+    // the label renders on screen as well as naming the live region.
     expect(screen.getByText("Loading connectors…")).toBeVisible();
     // The spinner is a CSS animation, so reduced-motion users need it stopped
     // rather than merely slowed.
     expect(container.querySelector(".animate-spin")).toHaveClass(
       "motion-reduce:animate-none",
     );
+  });
+
+  it("holds the area open and announces itself while drawing nothing when quiet", () => {
+    const { container } = render(
+      <LoadingState label="Loading…" variant="quiet" />,
+    );
+
+    const status = screen.getByRole("status", { name: "Loading…" });
+    // The point of `quiet` is reserving the space without the flash, so the
+    // height has to survive even though nothing is drawn inside it.
+    expect(status).toHaveClass("min-h-app-viewport");
+    expect(container.querySelector(".animate-spin")).toBeNull();
+    expect(status).toHaveTextContent("");
   });
 
   it("keeps inline loading states compact and visually label-free", () => {

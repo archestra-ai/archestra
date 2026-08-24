@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronUp,
   Hash,
+  Inbox,
   Plus,
   Search,
   TriangleAlert,
@@ -17,6 +18,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { AgentBadge } from "@/components/agent-badge";
 import Divider from "@/components/divider";
+import { EmptyState } from "@/components/empty-state";
 import { FilterBar, filterSearchClass } from "@/components/filter-bar";
 import { LoadingState } from "@/components/loading";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -541,26 +543,12 @@ export function ChannelsSection({
                       colSpan={providerConfig.supportsAnswerAll ? 6 : 5}
                       className="h-48"
                     >
-                      <div className="flex flex-col items-center justify-center gap-4 text-center">
-                        <div className="bg-muted flex h-12 w-12 items-center justify-center rounded-full">
-                          <Search className="text-muted-foreground h-5 w-5" />
-                        </div>
-                        <div className="space-y-1">
-                          <p className="font-medium">
-                            No channels match your filters.
-                          </p>
-                          <p className="text-muted-foreground text-sm">
-                            Try adjusting your search.
-                          </p>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={clearFilters}
-                        >
-                          Clear filters
-                        </Button>
-                      </div>
+                      <EmptyState
+                        className="py-0"
+                        icon={Inbox}
+                        title="No channels match your filters"
+                        onClearFilters={clearFilters}
+                      />
                     </TableCell>
                   </TableRow>
                 </TableBody>

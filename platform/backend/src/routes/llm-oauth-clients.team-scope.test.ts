@@ -20,19 +20,11 @@ describe("LLM OAuth clients — team-scope RBAC", () => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;
   let currentUser: User;
-  let proxyId: string;
   let providerApiKeyId: string;
 
   beforeEach(
-    async ({
-      makeOrganization,
-      makeAgent,
-      makeSecret,
-      makeLlmProviderApiKey,
-    }) => {
+    async ({ makeOrganization, makeSecret, makeLlmProviderApiKey }) => {
       organizationId = (await makeOrganization()).id;
-      proxyId = (await makeAgent({ organizationId, agentType: "llm_proxy" }))
-        .id;
       const secret = await makeSecret({
         secret: { apiKey: "sk-svc-anthropic" },
       });
@@ -66,7 +58,6 @@ describe("LLM OAuth clients — team-scope RBAC", () => {
   function payload(overrides: Record<string, unknown> = {}) {
     return {
       name: `client-${crypto.randomUUID().slice(0, 8)}`,
-      allowedLlmProxyIds: [proxyId],
       providerApiKeys: [{ provider: "anthropic", providerApiKeyId }],
       ...overrides,
     };
@@ -225,7 +216,7 @@ describe("LLM OAuth clients — team-scope RBAC", () => {
     currentUser = admin;
     const adminNames = (await list())
       .json()
-      .map((c: { name: string }) => c.name);
+      .data.map((c: { name: string }) => c.name);
     expect(adminNames.sort()).toEqual(
       [
         "org-client",
@@ -239,7 +230,7 @@ describe("LLM OAuth clients — team-scope RBAC", () => {
     currentUser = editor;
     const editorNames = (await list())
       .json()
-      .map((c: { name: string }) => c.name);
+      .data.map((c: { name: string }) => c.name);
     expect(editorNames.sort()).toEqual(
       ["org-client", "my-personal", "my-team-client"].sort(),
     );
@@ -255,7 +246,7 @@ describe("LLM OAuth clients — team-scope RBAC", () => {
     await makeMember(member.id, organizationId, { role: MEMBER_ROLE_NAME });
 
     // Simulate a row created before team scoping existed: metadata has no
-    // scope/authorId (and no grantType/allowedLlmProxyIds/providerApiKeys).
+    // scope/authorId (and no grantType/providerApiKeys).
     await db.insert(schema.oauthClientsTable).values({
       id: crypto.randomUUID(),
       clientId: `llm_oauth_legacy_${crypto.randomUUID().slice(0, 8)}`,
@@ -272,7 +263,7 @@ describe("LLM OAuth clients — team-scope RBAC", () => {
     expect(res.statusCode).toBe(200);
     const legacy = res
       .json()
-      .find((c: { name: string }) => c.name === "legacy-client");
+      .data.find((c: { name: string }) => c.name === "legacy-client");
     expect(legacy).toBeDefined();
     expect(legacy.scope).toBe("org");
     expect(legacy.authorId).toBeNull();

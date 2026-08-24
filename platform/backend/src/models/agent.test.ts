@@ -10,7 +10,7 @@ import {
   TOOL_SEARCH_TOOLS_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
 } from "@archestra/shared";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import AgentModel from "./agent";
@@ -2792,101 +2792,47 @@ describe("AgentModel", () => {
     });
   });
 
-  describe("ensurePersonalLlmProxy", () => {
-    test("creates a personal llm_proxy with the expected fields when none exists", async ({
-      makeUser,
+  describe("getOrgLlmProxy", () => {
+    test("creates the organization's LLM Proxy on first call and returns the same row after", async ({
       makeOrganization,
-      makeMember,
     }) => {
-      const user = await makeUser();
       const org = await makeOrganization();
-      await makeMember(user.id, org.id);
 
-      const proxy = await AgentModel.ensurePersonalLlmProxy({
-        userId: user.id,
-        organizationId: org.id,
-      });
+      const first = await AgentModel.getOrgLlmProxy(org.id);
+      expect(first.name).toBe("LLM Proxy");
+      expect(first.agentType).toBe("llm_proxy");
+      expect(first.scope).toBe("org");
+      expect(first.isDefault).toBe(true);
+      expect(first.organizationId).toBe(org.id);
 
-      expect(proxy.name).toBe("My Proxy");
-      expect(proxy.agentType).toBe("llm_proxy");
-      expect(proxy.scope).toBe("personal");
-      expect(proxy.isPersonalProxy).toBe(true);
-      expect(proxy.authorId).toBe(user.id);
-      expect(proxy.organizationId).toBe(org.id);
+      const second = await AgentModel.getOrgLlmProxy(org.id);
+      expect(second.id).toBe(first.id);
     });
 
-    test("is idempotent within the same (user, org) - second call returns the same row", async ({
-      makeUser,
+    test("concurrent calls settle on a single row", async ({
       makeOrganization,
-      makeMember,
-    }) => {
-      const user = await makeUser();
-      const org = await makeOrganization();
-      await makeMember(user.id, org.id);
-
-      const first = await AgentModel.ensurePersonalLlmProxy({
-        userId: user.id,
-        organizationId: org.id,
-      });
-      const second = await AgentModel.ensurePersonalLlmProxy({
-        userId: user.id,
-        organizationId: org.id,
-      });
-
-      expect(first.id).toBe(second.id);
-
-      const allAgents = await AgentModel.findAll(user.id, true);
-      const personalProxies = allAgents.filter(
-        (a) =>
-          a.agentType === "llm_proxy" &&
-          a.isPersonalProxy === true &&
-          a.authorId === user.id,
-      );
-      expect(personalProxies).toHaveLength(1);
-    });
-  });
-
-  describe("bulkBackfillPersonalLlmProxies", () => {
-    test("creates rows for members who lack a personal proxy and is idempotent on a second call", async ({
-      makeUser,
-      makeOrganization,
-      makeMember,
     }) => {
       const org = await makeOrganization();
-      const userA = await makeUser();
-      const userB = await makeUser();
-      await makeMember(userA.id, org.id);
-      await makeMember(userB.id, org.id);
 
-      const firstCount = await AgentModel.bulkBackfillPersonalLlmProxies();
-      expect(firstCount).toBeGreaterThanOrEqual(2);
+      const [a, b] = await Promise.all([
+        AgentModel.getOrgLlmProxy(org.id),
+        AgentModel.getOrgLlmProxy(org.id),
+      ]);
+      expect(a.id).toBe(b.id);
 
-      const proxyA = await AgentModel.getPersonalLlmProxy(userA.id, org.id);
-      const proxyB = await AgentModel.getPersonalLlmProxy(userB.id, org.id);
-      expect(proxyA?.isPersonalProxy).toBe(true);
-      expect(proxyB?.isPersonalProxy).toBe(true);
-      expect(proxyA?.id).not.toBe(proxyB?.id);
-
-      const secondCount = await AgentModel.bulkBackfillPersonalLlmProxies();
-      expect(secondCount).toBe(0);
-    });
-
-    test("deletePersonalLlmProxiesForUser soft-deletes the user's personal proxy", async ({
-      makeUser,
-      makeOrganization,
-      makeMember,
-    }) => {
-      const user = await makeUser();
-      const org = await makeOrganization();
-      await makeMember(user.id, org.id);
-
-      await AgentModel.ensurePersonalLlmProxy({
-        userId: user.id,
-        organizationId: org.id,
-      });
-      await AgentModel.deletePersonalLlmProxiesForUser(user.id);
-
-      expect(await AgentModel.getPersonalLlmProxy(user.id, org.id)).toBeNull();
+      // Race safety comes from the partial unique index
+      // `agents_org_default_llm_proxy_idx`: at most one live default
+      // llm_proxy row per organization.
+      const rows = await db
+        .select({ id: schema.agentsTable.id })
+        .from(schema.agentsTable)
+        .where(
+          and(
+            eq(schema.agentsTable.organizationId, org.id),
+            eq(schema.agentsTable.agentType, "llm_proxy"),
+          ),
+        );
+      expect(rows).toHaveLength(1);
     });
   });
 

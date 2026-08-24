@@ -26,9 +26,6 @@ export const TOOL_LIST_HOOKS_SHORT_NAME = "list_hooks";
 export const TOOL_CREATE_HOOK_SHORT_NAME = "create_hook";
 export const TOOL_UPDATE_HOOK_SHORT_NAME = "update_hook";
 export const TOOL_DELETE_HOOK_SHORT_NAME = "delete_hook";
-export const TOOL_CREATE_LLM_PROXY_SHORT_NAME = "create_llm_proxy";
-export const TOOL_GET_LLM_PROXY_SHORT_NAME = "get_llm_proxy";
-export const TOOL_EDIT_LLM_PROXY_SHORT_NAME = "edit_llm_proxy";
 export const TOOL_CREATE_MCP_GATEWAY_SHORT_NAME = "create_mcp_gateway";
 export const TOOL_GET_MCP_GATEWAY_SHORT_NAME = "get_mcp_gateway";
 export const TOOL_EDIT_MCP_GATEWAY_SHORT_NAME = "edit_mcp_gateway";
@@ -195,9 +192,6 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_CREATE_HOOK_SHORT_NAME,
   TOOL_UPDATE_HOOK_SHORT_NAME,
   TOOL_DELETE_HOOK_SHORT_NAME,
-  TOOL_CREATE_LLM_PROXY_SHORT_NAME,
-  TOOL_GET_LLM_PROXY_SHORT_NAME,
-  TOOL_EDIT_LLM_PROXY_SHORT_NAME,
   TOOL_CREATE_MCP_GATEWAY_SHORT_NAME,
   TOOL_GET_MCP_GATEWAY_SHORT_NAME,
   TOOL_EDIT_MCP_GATEWAY_SHORT_NAME,
@@ -320,7 +314,6 @@ export type ArchestraToolFullName<
 export const ARCHESTRA_TOOL_GROUPS = [
   { id: "identity", label: "Identity" },
   { id: "agents", label: "Agents" },
-  { id: "llm_proxies", label: "LLM Proxies" },
   { id: "mcp_gateways", label: "MCP Gateways" },
   { id: "mcp_servers", label: "MCP Servers" },
   { id: "teams", label: "Teams" },
@@ -362,10 +355,6 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   create_hook: "agents",
   update_hook: "agents",
   delete_hook: "agents",
-
-  create_llm_proxy: "llm_proxies",
-  get_llm_proxy: "llm_proxies",
-  edit_llm_proxy: "llm_proxies",
 
   create_mcp_gateway: "mcp_gateways",
   get_mcp_gateway: "mcp_gateways",
@@ -520,12 +509,6 @@ export const TOOL_LIST_AGENTS_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_LIST_AGENTS_SHORT_NAME}` as const;
 export const TOOL_EDIT_AGENT_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_EDIT_AGENT_SHORT_NAME}` as const;
-export const TOOL_CREATE_LLM_PROXY_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_CREATE_LLM_PROXY_SHORT_NAME}` as const;
-export const TOOL_GET_LLM_PROXY_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_GET_LLM_PROXY_SHORT_NAME}` as const;
-export const TOOL_EDIT_LLM_PROXY_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_EDIT_LLM_PROXY_SHORT_NAME}` as const;
 export const TOOL_CREATE_MCP_GATEWAY_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_CREATE_MCP_GATEWAY_SHORT_NAME}` as const;
 export const TOOL_GET_MCP_GATEWAY_FULL_NAME =

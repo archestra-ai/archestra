@@ -466,6 +466,70 @@ class VirtualApiKeyModel {
   }
 
   /**
+   * Load the named keys within one organization for a bulk operation, with
+   * the team ids each key is shared to. Ids outside the organization are
+   * simply absent, indistinguishable from ids that never existed.
+   */
+  static async findForBulk(params: {
+    organizationId: string;
+    ids: string[];
+  }): Promise<
+    Array<{
+      id: string;
+      name: string;
+      keyType: VirtualApiKeyType;
+      scope: ResourceVisibilityScope;
+      authorId: string | null;
+      teamIds: string[];
+    }>
+  > {
+    if (params.ids.length === 0) return [];
+
+    const rows = await db
+      .select({
+        id: schema.virtualApiKeysTable.id,
+        name: schema.virtualApiKeysTable.name,
+        keyType: schema.virtualApiKeysTable.keyType,
+        scope: schema.virtualApiKeysTable.scope,
+        authorId: schema.virtualApiKeysTable.authorId,
+      })
+      .from(schema.virtualApiKeysTable)
+      .where(
+        and(
+          eq(schema.virtualApiKeysTable.organizationId, params.organizationId),
+          inArray(schema.virtualApiKeysTable.id, params.ids),
+        ),
+      );
+
+    const teamRows =
+      rows.length > 0
+        ? await db
+            .select({
+              virtualApiKeyId: schema.virtualApiKeyTeamsTable.virtualApiKeyId,
+              teamId: schema.virtualApiKeyTeamsTable.teamId,
+            })
+            .from(schema.virtualApiKeyTeamsTable)
+            .where(
+              inArray(
+                schema.virtualApiKeyTeamsTable.virtualApiKeyId,
+                rows.map((row) => row.id),
+              ),
+            )
+        : [];
+    const teamIdsByKey = new Map<string, string[]>();
+    for (const teamRow of teamRows) {
+      const teamIds = teamIdsByKey.get(teamRow.virtualApiKeyId) ?? [];
+      teamIds.push(teamRow.teamId);
+      teamIdsByKey.set(teamRow.virtualApiKeyId, teamIds);
+    }
+
+    return rows.map((row) => ({
+      ...row,
+      teamIds: teamIdsByKey.get(row.id) ?? [],
+    }));
+  }
+
+  /**
    * Delete a virtual key and its associated secret.
    */
   static async delete(id: string): Promise<boolean> {
@@ -536,6 +600,7 @@ class VirtualApiKeyModel {
     search?: string;
     providerApiKeyId?: string;
     keyType?: VirtualApiKeyType;
+    scope?: ResourceVisibilityScope;
   }): Promise<PaginatedResult<VirtualApiKeyWithParentInfo>> {
     const {
       organizationId,
@@ -546,6 +611,7 @@ class VirtualApiKeyModel {
       search,
       providerApiKeyId,
       keyType,
+      scope,
     } = params;
 
     const accessibleIds = await VirtualApiKeyModel.getAccessibleIds({
@@ -581,6 +647,10 @@ class VirtualApiKeyModel {
 
     if (keyType) {
       whereConditions.push(eq(schema.virtualApiKeysTable.keyType, keyType));
+    }
+
+    if (scope) {
+      whereConditions.push(eq(schema.virtualApiKeysTable.scope, scope));
     }
 
     const whereClause = and(...whereConditions);

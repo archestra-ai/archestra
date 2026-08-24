@@ -312,8 +312,10 @@ const organizationsTable = pgTable("organization", {
   connectionDefaultMcpGatewayId: uuid("connection_default_mcp_gateway_id"),
 
   /**
-   * Admin-selected LLM proxy pre-filled on /connection.
-   * FK to agents(id) ON DELETE SET NULL — enforced by migration only.
+   * No longer read or written at runtime — the LLM Proxy needs no selection.
+   * The column stays for the rolling-deploy window (older pods still select
+   * it) and as migration input.
+   * TODO(phase-2): drop the column once no release reads it.
    */
   connectionDefaultLlmProxyId: uuid("connection_default_llm_proxy_id"),
 

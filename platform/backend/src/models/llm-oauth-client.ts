@@ -2,11 +2,13 @@ import { randomBytes } from "node:crypto";
 import {
   LLM_PROXY_OAUTH_SCOPE,
   OFFLINE_ACCESS_OAUTH_SCOPE,
+  type PaginationQuery,
 } from "@archestra/shared";
 import { hashPassword, verifyPassword } from "better-auth/crypto";
-import { and, eq, ilike, inArray, sql } from "drizzle-orm";
+import { and, count, eq, ilike, inArray, sql } from "drizzle-orm";
 import { hashOauthClientSecret } from "@/auth/oauth-client-secret";
 import db, { schema, withDbTransaction } from "@/database";
+import { createPaginatedResult } from "@/database/utils/pagination";
 import {
   LLM_OAUTH_CLIENT_METADATA_TYPE,
   type LlmOauthClientGrantType,
@@ -34,27 +36,65 @@ class LlmOauthClientModel {
     const rows = await db
       .select()
       .from(schema.oauthClientsTable)
+      .where(listWhereClause(params))
+      .orderBy(schema.oauthClientsTable.createdAt);
+
+    return hydrateOauthClients(rows);
+  }
+
+  /**
+   * Paginated listing for the management table. Internal callers that must
+   * see every client (e.g. the provider-API-key delete guard) use
+   * {@link LlmOauthClientModel.findAllByOrganization} instead.
+   */
+  static async findPageByOrganization(params: {
+    organizationId: string;
+    pagination: PaginationQuery;
+    search?: string;
+    providerApiKeyId?: string;
+    grantType?: LlmOauthClientGrantType;
+    viewer?: { userId: string; isAdmin: boolean };
+  }) {
+    const whereClause = listWhereClause(params);
+    const [rows, [{ total }]] = await Promise.all([
+      db
+        .select()
+        .from(schema.oauthClientsTable)
+        .where(whereClause)
+        .orderBy(schema.oauthClientsTable.createdAt)
+        .limit(params.pagination.limit)
+        .offset(params.pagination.offset),
+      db
+        .select({ total: count() })
+        .from(schema.oauthClientsTable)
+        .where(whereClause),
+    ]);
+
+    return createPaginatedResult(
+      await hydrateOauthClients(rows),
+      Number(total),
+      params.pagination,
+    );
+  }
+
+  /**
+   * Load the named clients within one organization for a bulk operation. Ids
+   * outside the organization are simply absent, indistinguishable from ids
+   * that never existed.
+   */
+  static async findByIds(params: { ids: string[]; organizationId: string }) {
+    if (params.ids.length === 0) return [];
+
+    const rows = await db
+      .select()
+      .from(schema.oauthClientsTable)
       .where(
         and(
+          inArray(schema.oauthClientsTable.id, params.ids),
           sql`${schema.oauthClientsTable.metadata}->>'type' = ${LLM_OAUTH_CLIENT_METADATA_TYPE}`,
           sql`${schema.oauthClientsTable.metadata}->>'organizationId' = ${params.organizationId}`,
-          params.search
-            ? ilike(
-                schema.oauthClientsTable.name,
-                `%${escapeLikePattern(params.search.trim())}%`,
-              )
-            : undefined,
-          params.providerApiKeyId
-            ? sql`${schema.oauthClientsTable.metadata}->'providerApiKeys' @> ${JSON.stringify([{ providerApiKeyId: params.providerApiKeyId }])}::jsonb`
-            : undefined,
-          params.viewer && !params.viewer.isAdmin
-            ? OauthClientTeamModel.accessibleScopeCondition(
-                params.viewer.userId,
-              )
-            : undefined,
         ),
-      )
-      .orderBy(schema.oauthClientsTable.createdAt);
+      );
 
     return hydrateOauthClients(rows);
   }
@@ -63,7 +103,6 @@ class LlmOauthClientModel {
     organizationId: string;
     name: string;
     grantType?: LlmOauthClientGrantType;
-    allowedLlmProxyIds?: string[];
     providerApiKeys?: LlmOauthClientProviderKey[];
     redirectUris?: string[];
     scope?: ResourceVisibilityScope;
@@ -78,19 +117,12 @@ class LlmOauthClientModel {
     const clientSecretHash = isAuthorizationCode
       ? hashOauthClientSecret(clientSecret)
       : await hashClientSecret(clientSecret);
-    // allowedLlmProxyIds governs both grant types, but differently:
-    // - client_credentials: the SOLE authority — the token may only reach the
-    //   listed proxies (there is no acting user).
-    // - authorization_code: an ADDITIVE, admin-controlled grant — a user who
-    //   authenticates through the client may reach these proxies IN ADDITION to
-    //   their own RBAC. Empty = pure identity passthrough.
     // providerApiKeys never apply to authorization_code clients: the acting
     // user's own keys are resolved at call time.
     const metadata = {
       type: LLM_OAUTH_CLIENT_METADATA_TYPE,
       organizationId: params.organizationId,
       grantType,
-      allowedLlmProxyIds: params.allowedLlmProxyIds ?? [],
       providerApiKeys: isAuthorizationCode
         ? []
         : (params.providerApiKeys ?? []),
@@ -247,7 +279,6 @@ class LlmOauthClientModel {
     id: string;
     organizationId: string;
     name: string;
-    allowedLlmProxyIds?: string[];
     providerApiKeys?: LlmOauthClientProviderKey[];
     redirectUris?: string[];
     scope?: ResourceVisibilityScope;
@@ -263,15 +294,12 @@ class LlmOauthClientModel {
     if (!existing) return null;
     const isAuthorizationCode = existing.grantType === "authorization_code";
 
-    // allowedLlmProxyIds applies to both grant types (see create()); update it
-    // for either. providerApiKeys never apply to authorization_code clients.
+    // providerApiKeys never apply to authorization_code clients.
     // The author is fixed at creation; scope falls back to the existing value.
     const metadata = {
       type: LLM_OAUTH_CLIENT_METADATA_TYPE,
       organizationId: params.organizationId,
       grantType: existing.grantType,
-      allowedLlmProxyIds:
-        params.allowedLlmProxyIds ?? existing.allowedLlmProxyIds,
       providerApiKeys: isAuthorizationCode
         ? []
         : (params.providerApiKeys ??
@@ -340,7 +368,6 @@ class LlmOauthClientModel {
       clientId: client.clientId,
       organizationId: client.organizationId,
       grantType: client.grantType,
-      allowedLlmProxyIds: [...client.allowedLlmProxyIds].sort(),
       // Sort by providerApiKeyId so audit diffs ignore source ordering and
       // only flag genuine add/remove changes.
       providerApiKeys: [...client.providerApiKeys]
@@ -362,6 +389,41 @@ class LlmOauthClientModel {
 }
 
 export default LlmOauthClientModel;
+
+/**
+ * Where-clause shared by the list queries: fences to LLM OAuth clients of one
+ * organization and applies the optional search / provider-key / grant-type /
+ * viewer-visibility filters.
+ */
+function listWhereClause(params: {
+  organizationId: string;
+  search?: string;
+  providerApiKeyId?: string;
+  grantType?: LlmOauthClientGrantType;
+  viewer?: { userId: string; isAdmin: boolean };
+}) {
+  return and(
+    sql`${schema.oauthClientsTable.metadata}->>'type' = ${LLM_OAUTH_CLIENT_METADATA_TYPE}`,
+    sql`${schema.oauthClientsTable.metadata}->>'organizationId' = ${params.organizationId}`,
+    params.search
+      ? ilike(
+          schema.oauthClientsTable.name,
+          `%${escapeLikePattern(params.search.trim())}%`,
+        )
+      : undefined,
+    params.providerApiKeyId
+      ? sql`${schema.oauthClientsTable.metadata}->'providerApiKeys' @> ${JSON.stringify([{ providerApiKeyId: params.providerApiKeyId }])}::jsonb`
+      : undefined,
+    // Rows created before authorization_code support carry no grantType and
+    // behave as client_credentials everywhere, so the filter treats them so.
+    params.grantType
+      ? sql`COALESCE(${schema.oauthClientsTable.metadata}->>'grantType', 'client_credentials') = ${params.grantType}`
+      : undefined,
+    params.viewer && !params.viewer.isAdmin
+      ? OauthClientTeamModel.accessibleScopeCondition(params.viewer.userId)
+      : undefined,
+  );
+}
 
 function createClientSecret() {
   return `llm_secret_${randomBytes(32).toString("base64url")}`;
@@ -429,7 +491,6 @@ async function hydrateOauthClients(
         name: client.name ?? client.clientId,
         organizationId: metadata.organizationId,
         grantType: metadata.grantType,
-        allowedLlmProxyIds: metadata.allowedLlmProxyIds,
         providerApiKeys: metadata.providerApiKeys.map((mapping) => ({
           ...mapping,
           providerApiKeyName:

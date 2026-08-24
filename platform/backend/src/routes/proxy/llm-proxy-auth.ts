@@ -60,7 +60,13 @@ function requestedModelFromBody(request: FastifyRequest): string | null {
 }
 
 /**
- * Resolve the target agent from the request URL or fall back to the default profile.
+ * Resolve the target agent for a proxy request.
+ *
+ * An id-less URL resolves to THE LLM Proxy. An id in the URL is a legacy
+ * alias: an `llm_proxy` (or legacy `profile`) id collapses to its
+ * organization's LLM Proxy, while any other agent id (in-app chat, app
+ * runtime, delegation) resolves to that agent unchanged so its attribution
+ * is preserved.
  */
 export async function resolveAgent(
   agentId: string | undefined,
@@ -70,14 +76,20 @@ export async function resolveAgent(
     if (!agent) {
       throw new ApiError(404, `Agent with ID ${agentId} not found`);
     }
+    if (agent.agentType === "llm_proxy" || agent.agentType === "profile") {
+      if (agent.agentType === "llm_proxy" && agent.isDefault) {
+        return agent;
+      }
+      return AgentModel.getOrgLlmProxy(agent.organizationId);
+    }
     return agent;
   }
 
-  const defaultProfile = await AgentModel.getDefaultGatewayProfile();
-  if (!defaultProfile) {
-    throw new ApiError(400, "Please specify an LLMProxy ID in the URL path.");
+  const llmProxy = await AgentModel.getDeploymentLlmProxy();
+  if (!llmProxy) {
+    throw new ApiError(503, "No organization exists yet.");
   }
-  return defaultProfile;
+  return llmProxy;
 }
 
 // =========================================================================
@@ -131,11 +143,29 @@ export async function validateVirtualApiKeyToken(
  *
  * Throws ApiError on validation failure.
  */
-export async function validateVirtualApiKey(
-  tokenValue: string,
-  expectedProvider: string,
-): Promise<VirtualKeyValidationResult> {
+export async function validateVirtualApiKey(params: {
+  tokenValue: string;
+  expectedProvider: string;
+  /**
+   * Organization of the resolved proxy agent the request will be attributed
+   * to, or null for pure credential-swap sinks with no agent attribution
+   * (model listing, Gemini query-key rewriting). When set, a key from another
+   * organization is rejected so its traffic can never be attributed — or
+   * limit-checked — against a different organization's proxy.
+   */
+  expectedOrganizationId: string | null;
+}): Promise<VirtualKeyValidationResult> {
+  const { tokenValue, expectedProvider, expectedOrganizationId } = params;
   const resolved = await validateVirtualApiKeyToken(tokenValue);
+  if (
+    expectedOrganizationId !== null &&
+    resolved.virtualKey.organizationId !== expectedOrganizationId
+  ) {
+    throw new ApiError(
+      403,
+      "Virtual API key does not belong to this organization.",
+    );
+  }
   if (resolved.virtualKey.keyType === "passthrough") {
     throw new ApiError(
       400,
@@ -271,6 +301,18 @@ export async function validatePassthroughVirtualKey(params: {
     "Your passthrough virtual key does not grant access to this LLM proxy. Contact your administrator.",
   );
   if (virtualKey.organizationId !== agent.organizationId) {
+    throw noAccessError;
+  }
+
+  // The key acts as its owner, so the owner must still be a member of the
+  // proxy's organization — keys are not purged on membership removal, and the
+  // agent-access check below passes for any org-scoped agent regardless of
+  // membership.
+  const member = await MemberModel.getByUserId(
+    virtualKey.authorId,
+    agent.organizationId,
+  );
+  if (!member) {
     throw noAccessError;
   }
 
@@ -896,9 +938,6 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
   if (oauthClient.organizationId !== params.agent.organizationId) {
     throw new ApiError(403, "LLM OAuth client cannot access this LLM Proxy.");
   }
-  if (!oauthClient.allowedLlmProxyIds.includes(params.agent.id)) {
-    throw new ApiError(403, "LLM OAuth client cannot access this LLM Proxy.");
-  }
   const mappedProviderKey = oauthClient.providerApiKeys.find(
     (mapping) => mapping.provider === params.expectedProvider,
   );
@@ -964,28 +1003,20 @@ async function validateUserLlmOAuthAccessToken(params: {
   agent: GatewayAgent;
   requestedModel?: string | null;
 }): Promise<LlmOAuthAccessTokenValidationResult> {
-  const member = await MemberModel.getFirstMembershipForUser(params.userId);
-  if (!member || member.organizationId !== params.agent.organizationId) {
+  const member = await MemberModel.getByUserId(
+    params.userId,
+    params.agent.organizationId,
+  );
+  if (!member) {
     throw new ApiError(401, "OAuth user is no longer available.");
   }
 
-  // Access has two additive sources: the user's own RBAC, or an admin-controlled
-  // grant on the authorization_code LLM OAuth client that minted this token — its
-  // allowedLlmProxyIds may grant access to proxies the user could not otherwise
-  // reach (e.g. a proxy reachable only through a specific pre-registered app).
   const hasAgentAccess = await AgentTeamModel.userHasAgentAccess(
     params.userId,
     params.agent.id,
     false,
   );
-  const hasClientGrant = hasAgentAccess
-    ? false
-    : await llmOauthClientGrantsProxyAccess({
-        clientId: params.clientId,
-        proxyId: params.agent.id,
-        organizationId: member.organizationId,
-      });
-  if (!hasAgentAccess && !hasClientGrant) {
+  if (!hasAgentAccess) {
     throw new ApiError(403, "OAuth user cannot access this LLM Proxy.");
   }
   if (!isSupportedProvider(params.expectedProvider)) {
@@ -1017,30 +1048,6 @@ async function validateUserLlmOAuthAccessToken(params: {
       : undefined,
     userId: params.userId,
   };
-}
-
-/**
- * Whether the authorization_code LLM OAuth client that minted a user-bound token
- * grants access to an LLM proxy beyond the user's own RBAC. Additive,
- * admin-controlled grant (see the MCP gateway equivalent). Disabled or deleted
- * clients grant nothing.
- */
-async function llmOauthClientGrantsProxyAccess(params: {
-  clientId: string;
-  proxyId: string;
-  organizationId: string;
-}): Promise<boolean> {
-  const oauthClient = await LlmOauthClientModel.findByClientId(params.clientId);
-  if (!oauthClient || oauthClient.disabled) {
-    return false;
-  }
-  if (oauthClient.grantType !== "authorization_code") {
-    return false;
-  }
-  if (oauthClient.organizationId !== params.organizationId) {
-    return false;
-  }
-  return oauthClient.allowedLlmProxyIds.includes(params.proxyId);
 }
 
 async function resolveOAuthProviderApiKey(params: {

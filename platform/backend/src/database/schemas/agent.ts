@@ -229,6 +229,17 @@ const agentsTable = softDeletablePgTable(
       .where(
         sql`${table.agentType} = 'llm_proxy' AND ${table.isPersonalProxy} = true AND ${table.deletedAt} IS NULL`,
       ),
+    /**
+     * One LLM Proxy per organization: the `llm_proxy` row with
+     * `is_default = true` is THE organization's proxy, and every proxy
+     * request resolves to it. Backs the race-safe ON CONFLICT ensure in
+     * `AgentModel.getOrgLlmProxy`.
+     */
+    uniqueIndex("agents_org_default_llm_proxy_idx")
+      .on(table.organizationId)
+      .where(
+        sql`${table.agentType} = 'llm_proxy' AND ${table.isDefault} = true AND ${table.deletedAt} IS NULL`,
+      ),
   ],
 );
 

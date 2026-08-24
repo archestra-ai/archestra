@@ -140,7 +140,8 @@ describe("GET /api/connection-setups/script/:token", () => {
       "claude mcp add --scope user --transport http 'prod_gateway'",
     );
     expect(script).toContain(`/v1/mcp/${gateway.slug ?? gateway.id}`);
-    expect(script).toContain(`/v1/anthropic/${proxy.id}`);
+    expect(script).toContain("/v1/anthropic");
+    expect(script).not.toContain("/v1/anthropic/");
     // the real virtual key value is injected, no placeholders
     expect(script).toMatch(/arch_[0-9a-f]{64}/);
     expect(script).not.toMatch(/<your-[a-z-]+>/);
@@ -222,7 +223,8 @@ describe("GET /api/connection-setups/script/:token", () => {
     const response = await fetchScript(rawToken);
     expect(response.statusCode).toBe(200);
     const script = response.body;
-    expect(script).toContain(`/v1/anthropic/${proxy.id}`);
+    expect(script).toContain("/v1/anthropic");
+    expect(script).not.toContain("/v1/anthropic/");
     expect(script).toContain("ANTHROPIC_BASE_URL");
     // passthrough, attribution off: no injected virtual key, no auth token — but
     // the client-app agent-id header always rides along, so the header block is
@@ -319,7 +321,8 @@ describe("GET /api/connection-setups/script/:token", () => {
     expect(response.statusCode).toBe(200);
     const script = response.body;
     expect(script).toContain("CLAUDE_CODE_USE_BEDROCK");
-    expect(script).toContain(`/v1/bedrock/${proxy.id}`);
+    expect(script).toContain("/v1/bedrock");
+    expect(script).not.toContain("/v1/bedrock/");
     // The provisioned passthrough key rides in the attribution header alongside
     // the agent-id line, exactly like the Anthropic passthrough; the user's own
     // AWS credentials keep passing through (no bearer token is printed).
@@ -387,7 +390,8 @@ describe("GET /api/connection-setups/script/:token", () => {
     const response = await fetchScript(rawToken);
     expect(response.statusCode).toBe(200);
     const script = response.body;
-    expect(script).toContain(`/v1/github-copilot/${proxy.id}`);
+    expect(script).toContain("/v1/github-copilot");
+    expect(script).not.toContain("/v1/github-copilot/");
     // device-flow endpoints come from backend config
     expect(script).toContain("/login/device/code");
     expect(script).toContain("copilot_internal/v2/token");

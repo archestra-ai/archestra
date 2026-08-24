@@ -1,4 +1,4 @@
-import { count, countDistinct } from "drizzle-orm";
+import { and, count, countDistinct, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type { AgentType, InstanceEntityCounts } from "@/types";
@@ -12,6 +12,7 @@ class InstanceUsageModel {
       [users],
       [teams],
       agentRows,
+      [llmProxies],
       [llmProviders],
       [virtualApiKeys],
       [mcpServers],
@@ -27,6 +28,19 @@ class InstanceUsageModel {
         .from(schema.agentsTable)
         .where(notDeleted(schema.agentsTable))
         .groupBy(schema.agentsTable.agentType),
+      // The LLM Proxy is a singleton per organization (its `is_default` row);
+      // legacy inert llm_proxy rows are excluded so the gauge reports logical
+      // proxies, not historical attribution anchors.
+      db
+        .select({ total: count() })
+        .from(schema.agentsTable)
+        .where(
+          and(
+            eq(schema.agentsTable.agentType, "llm_proxy"),
+            eq(schema.agentsTable.isDefault, true),
+            notDeleted(schema.agentsTable),
+          ),
+        ),
       db
         .select({
           total: countDistinct(schema.llmProviderApiKeysTable.provider),
@@ -73,7 +87,7 @@ class InstanceUsageModel {
       agents: agentCountsByType.agent,
       profiles: agentCountsByType.profile,
       mcpGateways: agentCountsByType.mcp_gateway,
-      llmProxies: agentCountsByType.llm_proxy,
+      llmProxies: llmProxies?.total ?? 0,
       llmProviders: llmProviders?.total ?? 0,
       virtualApiKeys: virtualApiKeys?.total ?? 0,
       mcpServers: mcpServers?.total ?? 0,

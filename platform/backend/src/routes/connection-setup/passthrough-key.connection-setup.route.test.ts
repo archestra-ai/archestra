@@ -77,14 +77,18 @@ describe("POST /api/connection-setups/passthrough-key", () => {
     expect(response.json().error.message).toContain("llmVirtualKey:create");
   });
 
-  test("404s when the LLM proxy is not accessible", async () => {
+  test("403s without llmProxy read access", async () => {
+    mockUserHasPermission.mockImplementation(
+      async (_userId, _orgId, resource) => resource !== "llmProxy",
+    );
+
     const response = await app.inject({
       method: "POST",
       url: "/api/connection-setups/passthrough-key",
       payload: { llmProxyId: "00000000-0000-0000-0000-000000000000" },
     });
 
-    expect(response.statusCode).toBe(404);
-    expect(response.json().error.message).toContain("LLM proxy not found");
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.message).toContain("llmProxy:read");
   });
 });

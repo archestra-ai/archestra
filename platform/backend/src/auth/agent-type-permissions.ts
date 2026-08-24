@@ -5,12 +5,7 @@ import {
 } from "@archestra/shared";
 import { buildForbiddenErrorMessage } from "@archestra/shared/access-control";
 import { TeamModel } from "@/models";
-import {
-  type AgentScope,
-  type AgentType,
-  AgentTypeSchema,
-  ApiError,
-} from "@/types";
+import { type AgentScope, type AgentType, ApiError } from "@/types";
 import { getPermissionsForUserContext, userHasPermission } from "./utils";
 
 /** @public — re-exported for testability */
@@ -61,7 +56,7 @@ export async function isAgentTypeAdmin(params: {
 }
 
 /**
- * Returns true if the user has read permission on ANY of the three agent-type resources.
+ * Returns true if the user has read permission on ANY of the agent-type resources.
  * Used when no agentType filter is provided on list endpoints.
  */
 export async function hasAnyAgentTypeReadPermission(params: {
@@ -72,7 +67,7 @@ export async function hasAnyAgentTypeReadPermission(params: {
 }
 
 /**
- * Returns true if the user has admin permission on ANY of the three agent-type resources.
+ * Returns true if the user has admin permission on ANY of the agent-type resources.
  * Used when no agentType filter is provided on list endpoints to determine
  * whether to bypass team-based access filtering.
  */
@@ -119,7 +114,7 @@ export async function getAgentTypePermissionChecker(params: {
       );
     },
     getAgentTypesWithPermission(action: Action): AgentType[] {
-      return AgentTypeSchema.options.filter((agentType) => {
+      return GENERIC_AGENT_TYPES.filter((agentType) => {
         const resource = getResourceForAgentType(agentType);
         return permissions[resource]?.includes(action) ?? false;
       });
@@ -312,17 +307,26 @@ export interface AgentTypePermissionChecker {
   isAdmin(agentType: AgentType): boolean;
   /** Returns true if the user has team-admin on the agent type's resource. */
   isTeamAdmin(agentType: AgentType): boolean;
-  /** Returns true if the user has read on any of the three agent-type resources. */
+  /** Returns true if the user has read on any of the agent-type resources. */
   hasAnyReadPermission(): boolean;
   /** Returns agent types for which the user has the requested permission. */
   getAgentTypesWithPermission(action: Action): AgentType[];
-  /** Returns true if the user has admin on any of the three agent-type resources. */
+  /** Returns true if the user has admin on any of the agent-type resources. */
   hasAnyAdminPermission(): boolean;
 }
 
 // ===== Internal helpers =====
 
-const AGENT_TYPE_RESOURCES: Resource[] = ["agent", "mcpGateway", "llmProxy"];
+// The LLM Proxy is managed exclusively through its dedicated routes, so the
+// generic agent surface only ever deals in these resources.
+const AGENT_TYPE_RESOURCES: Resource[] = ["agent", "mcpGateway"];
+
+/**
+ * Agent types that flow through the generic agent CRUD routes. `llm_proxy`
+ * rows live in the same table but are managed through the dedicated LLM Proxy
+ * routes, so they are never enumerated here.
+ */
+const GENERIC_AGENT_TYPES: AgentType[] = ["profile", "mcp_gateway", "agent"];
 
 async function hasAnyAgentTypePermission(params: {
   userId: string;

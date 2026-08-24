@@ -1,5 +1,7 @@
 import {
+  createPaginatedResponseSchema,
   credentialRequiresPerUserScope,
+  PaginationQuerySchema,
   perUserCredentialLabel,
   providerRequiresPerUserCredential,
   ResourceVisibilityScopeSchema,
@@ -18,7 +20,6 @@ import {
   withOauthClientTeamFkErrorMapped,
 } from "@/auth/oauth-client-permissions";
 import {
-  AgentModel,
   LlmOauthClientModel,
   LlmProviderApiKeyModel,
   TeamModel,
@@ -32,6 +33,7 @@ import {
   LlmOauthClientWithSecretSchema,
 } from "@/types";
 import type { LlmOauthClient } from "@/types/llm-oauth-client";
+import { BulkDeleteBodySchema, BulkOutcomeSchema, runBulk } from "./bulk-route";
 
 const LlmOauthClientProviderKeyBodySchema = z.object({
   provider: SupportedProvidersSchema,
@@ -41,13 +43,12 @@ const LlmOauthClientProviderKeyBodySchema = z.object({
 /**
  * Both grant types share one body shape. `grantType` defaults to
  * `client_credentials` so existing callers keep working unchanged.
- * - client_credentials: requires `allowedLlmProxyIds` (the sole authority) and
- *   `providerApiKeys`; `redirectUris` is ignored.
- * - authorization_code: requires `redirectUris`. `allowedLlmProxyIds` is optional
- *   here and acts as an additive, admin-controlled grant (users who authenticate
- *   through the client may reach those proxies on top of their own RBAC).
- *   `providerApiKeys` never apply — the acting user's own keys resolve at call
- *   time.
+ * - client_credentials: a shared application credential scoped to the
+ *   organization; requires `providerApiKeys`. `redirectUris` is ignored.
+ * - authorization_code: requires `redirectUris`; its tokens are user-bound, so
+ *   the proxy resolves the acting user's own provider keys, cost limits, and
+ *   policies. `providerApiKeys` never apply — the acting user's own keys
+ *   resolve at call time.
  *
  * `scope`/`teams` control who can see and manage the client (3-tier visibility
  * like agents), not what its tokens can reach at runtime. Create defaults to
@@ -57,7 +58,6 @@ const LlmOauthClientBodySchema = z
   .object({
     name: z.string().min(1).max(256),
     grantType: LlmOauthClientGrantTypeSchema.default("client_credentials"),
-    allowedLlmProxyIds: z.array(z.string().uuid()).optional(),
     providerApiKeys: z.array(LlmOauthClientProviderKeyBodySchema).optional(),
     redirectUris: z.array(z.string().url()).optional(),
     scope: ResourceVisibilityScopeSchema.optional(),
@@ -74,14 +74,6 @@ const LlmOauthClientBodySchema = z
         });
       }
       return;
-    }
-    if (!value.allowedLlmProxyIds || value.allowedLlmProxyIds.length === 0) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["allowedLlmProxyIds"],
-        message:
-          "At least one LLM proxy is required for client_credentials clients",
-      });
     }
     if (!value.providerApiKeys || value.providerApiKeys.length === 0) {
       ctx.addIssue({
@@ -104,11 +96,14 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetLlmOauthClients,
         description: "List LLM OAuth clients that can access LLM proxies",
         tags: ["LLM OAuth Clients"],
-        querystring: z.object({
+        querystring: PaginationQuerySchema.extend({
           search: z.string().trim().min(1).optional(),
           providerApiKeyId: z.string().uuid().optional(),
+          grantType: LlmOauthClientGrantTypeSchema.optional(),
         }),
-        response: constructResponseSchema(z.array(LlmOauthClientSchema)),
+        response: constructResponseSchema(
+          createPaginatedResponseSchema(LlmOauthClientSchema),
+        ),
       },
     },
     async ({ user, organizationId, query }, reply) => {
@@ -117,13 +112,15 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         resource: "llmOauthClient",
       });
-      const oauthClients = await LlmOauthClientModel.findAllByOrganization({
+      const result = await LlmOauthClientModel.findPageByOrganization({
         organizationId,
+        pagination: { limit: query.limit, offset: query.offset },
         search: query.search,
         providerApiKeyId: query.providerApiKeyId,
+        grantType: query.grantType,
         viewer: { userId: user.id, isAdmin: checker.isAdmin },
       });
-      return reply.send(oauthClients);
+      return reply.send(result);
     },
   );
 
@@ -162,7 +159,6 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       await validateLlmOauthClientConfig({
         organizationId,
-        allowedLlmProxyIds: body.allowedLlmProxyIds ?? [],
         // provider keys only apply to client_credentials clients.
         providerApiKeys:
           body.grantType === "client_credentials"
@@ -175,7 +171,6 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             organizationId,
             name: body.name,
             grantType: body.grantType,
-            allowedLlmProxyIds: body.allowedLlmProxyIds,
             providerApiKeys: body.providerApiKeys,
             redirectUris: body.redirectUris,
             scope,
@@ -231,7 +226,6 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       await validateLlmOauthClientConfig({
         organizationId,
-        allowedLlmProxyIds: body.allowedLlmProxyIds ?? [],
         // provider keys only apply to client_credentials clients.
         providerApiKeys:
           body.grantType === "client_credentials"
@@ -243,7 +237,6 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: params.id,
           organizationId,
           name: body.name,
-          allowedLlmProxyIds: body.allowedLlmProxyIds,
           providerApiKeys: body.providerApiKeys,
           redirectUris: body.redirectUris,
           scope: body.scope,
@@ -315,6 +308,82 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send({ success });
     },
   );
+
+  fastify.delete(
+    "/api/llm-oauth-clients/bulk",
+    {
+      schema: {
+        operationId: RouteId.BulkDeleteLlmOauthClients,
+        description:
+          "Delete several LLM OAuth clients in one request. Each id is " +
+          "authorized exactly as the single-client delete authorizes its " +
+          "own, so a client the caller cannot see or manage is reported in " +
+          "`failed` while the rest of the batch still applies.",
+        tags: ["LLM OAuth Clients"],
+        body: BulkDeleteBodySchema,
+        response: constructResponseSchema(BulkOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const { organizationId, user, body } = request;
+      const checker = await getOauthClientPermissionChecker({
+        userId: user.id,
+        organizationId,
+        resource: "llmOauthClient",
+      });
+      const userTeamIds = checker.isAdmin
+        ? []
+        : await TeamModel.getUserTeamIds(user.id);
+
+      const snapshot = async (ids: string[]) => {
+        const clients = await LlmOauthClientModel.findByIds({
+          ids,
+          organizationId,
+        });
+        return {
+          llmOauthClients: clients
+            .map(({ id, name }) => ({ id, name }))
+            .sort((a, b) => a.id.localeCompare(b.id)),
+        };
+      };
+
+      const outcome = await runBulk({
+        ids: body.ids,
+        logLabel: "LLM OAuth clients bulk delete",
+        notFoundMessage: "LLM OAuth client not found",
+        unexpectedMessage: "Could not delete this LLM OAuth client",
+        load: async (ids) =>
+          new Map(
+            (await LlmOauthClientModel.findByIds({ ids, organizationId })).map(
+              (client) => [client.id, client],
+            ),
+          ),
+        describe: (client) => client.name,
+        authorize: (client) => {
+          requireOauthClientModifyPermission({
+            checker,
+            scope: client.scope,
+            authorId: client.authorId,
+            clientTeamIds: client.teams.map((team) => team.id),
+            userTeamIds,
+            userId: user.id,
+          });
+        },
+        applyEach: async (_client, id) => {
+          const deleted = await LlmOauthClientModel.delete({
+            id,
+            organizationId,
+          });
+          if (!deleted) {
+            throw new ApiError(404, "LLM OAuth client not found");
+          }
+        },
+        audit: { target: request, snapshot },
+      });
+
+      return reply.send(outcome);
+    },
+  );
 };
 
 export default llmOauthClientsRoutes;
@@ -361,7 +430,6 @@ async function authorizeLlmOauthClientModify(params: {
 
 async function validateLlmOauthClientConfig(params: {
   organizationId: string;
-  allowedLlmProxyIds: string[];
   providerApiKeys: Array<{
     provider: z.infer<typeof SupportedProvidersSchema>;
     providerApiKeyId: string;
@@ -376,17 +444,6 @@ async function validateLlmOauthClientConfig(params: {
       );
     }
     seenProviders.add(mapping.provider);
-  }
-
-  for (const proxyId of params.allowedLlmProxyIds) {
-    const agent = await AgentModel.findById(proxyId);
-    if (
-      !agent ||
-      agent.organizationId !== params.organizationId ||
-      agent.agentType !== "llm_proxy"
-    ) {
-      throw new ApiError(404, "LLM proxy not found");
-    }
   }
 
   for (const mapping of params.providerApiKeys) {

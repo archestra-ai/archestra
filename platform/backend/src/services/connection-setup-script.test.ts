@@ -42,7 +42,7 @@ const PROXY = {
   authMode: "virtual-key" as const,
   provider: "anthropic" as const,
   providerLabel: "Anthropic",
-  url: "https://archestra.example.com/v1/anthropic/profile-123",
+  url: "https://archestra.example.com/v1/anthropic",
   proxyName: "default_proxy",
   virtualKey: "arch_deadbeefcafe",
   virtualKeyName: "Connection setup — user@example.com",
@@ -58,7 +58,7 @@ const ANTHROPIC_PASSTHROUGH_PROXY = {
   authMode: "provider-key" as const,
   provider: "anthropic" as const,
   providerLabel: "Anthropic",
-  url: "https://archestra.example.com/v1/anthropic/profile-123",
+  url: "https://archestra.example.com/v1/anthropic",
   proxyName: "default_proxy",
   virtualKey: null,
   virtualKeyName: null,
@@ -75,7 +75,7 @@ const OPENAI_PASSTHROUGH_PROXY = {
   authMode: "provider-key" as const,
   provider: "openai" as const,
   providerLabel: "OpenAI",
-  url: "https://archestra.example.com/v1/openai/profile-123",
+  url: "https://archestra.example.com/v1/openai",
   proxyName: "default_proxy",
   virtualKey: null,
   virtualKeyName: null,
@@ -87,7 +87,7 @@ const GITHUB_COPILOT_PROXY = {
   authMode: "provider-key" as const,
   provider: "github-copilot" as const,
   providerLabel: "GitHub Copilot",
-  url: "https://archestra.example.com/v1/github-copilot/profile-123",
+  url: "https://archestra.example.com/v1/github-copilot",
   proxyName: "default_proxy",
   virtualKey: null,
   virtualKeyName: null,
@@ -575,7 +575,7 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
     // URLs, so the guard can tell a resource the platform reports down
     // (prompt immediately) from an unreachable platform (retry ladder).
     expect(script).toContain(
-      "https://archestra.example.com/v1/health?mcp=prod-gateway&llm=profile-123",
+      "https://archestra.example.com/v1/health?mcp=prod-gateway",
     );
   });
 
@@ -727,7 +727,7 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
         ...PROXY,
         provider: "bedrock",
         providerLabel: "Bedrock",
-        url: "https://archestra.example.com/v1/bedrock/profile-123",
+        url: "https://archestra.example.com/v1/bedrock",
       },
     });
     await expectValidBash(script);
@@ -755,7 +755,7 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
         ...PROXY,
         provider: "bedrock",
         providerLabel: "Bedrock",
-        url: "https://archestra.example.com/v1/bedrock/profile-123",
+        url: "https://archestra.example.com/v1/bedrock",
       },
     });
     expect(script).toContain("CLAUDE_CODE_USE_BEDROCK");
@@ -817,7 +817,7 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
         ...ANTHROPIC_PASSTHROUGH_PROXY,
         provider: "bedrock",
         providerLabel: "Bedrock",
-        url: "https://archestra.example.com/v1/bedrock/profile-123",
+        url: "https://archestra.example.com/v1/bedrock",
       },
     });
     await expectValidBash(script);
@@ -1051,7 +1051,7 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
       ...fullContext("copilot-cli"),
       proxy: {
         ...GITHUB_COPILOT_PROXY,
-        url: `${hostile}/v1/github-copilot/profile-123`,
+        url: `${hostile}/v1/github-copilot`,
         githubCopilot: {
           tokenExchangeUrl: `${hostile}/token`,
           deviceAuthBaseUrl: hostile,
@@ -1193,7 +1193,7 @@ describe("renderSetupScript (windows)", () => {
         ...ANTHROPIC_PASSTHROUGH_PROXY,
         provider: "bedrock",
         providerLabel: "Bedrock",
-        url: "https://archestra.example.com/v1/bedrock/profile-123",
+        url: "https://archestra.example.com/v1/bedrock",
       },
     });
     expect(script).toContain("ANTHROPIC_CUSTOM_HEADERS");
@@ -1284,7 +1284,7 @@ describe("renderSetupScript (windows)", () => {
       "[Environment]::SetEnvironmentVariable('COPILOT_PROVIDER_TYPE', 'openai', 'User')",
     );
     expect(script).toContain(
-      "$env:COPILOT_PROVIDER_BASE_URL = 'https://archestra.example.com/v1/anthropic/profile-123'",
+      "$env:COPILOT_PROVIDER_BASE_URL = 'https://archestra.example.com/v1/anthropic'",
     );
     expect(script).toContain(
       "[Environment]::SetEnvironmentVariable('COPILOT_PROVIDER_API_KEY', 'arch_deadbeefcafe', 'User')",
@@ -1311,7 +1311,7 @@ describe("renderSetupScript (windows)", () => {
       proxy: OPENAI_PASSTHROUGH_PROXY,
     });
     expect(script).toContain(
-      "[Environment]::SetEnvironmentVariable('COPILOT_PROVIDER_BASE_URL', 'https://archestra.example.com/v1/openai/profile-123', 'User')",
+      "[Environment]::SetEnvironmentVariable('COPILOT_PROVIDER_BASE_URL', 'https://archestra.example.com/v1/openai', 'User')",
     );
     expect(script).not.toContain(
       "[Environment]::SetEnvironmentVariable('COPILOT_PROVIDER_API_KEY'",

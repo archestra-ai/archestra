@@ -200,7 +200,11 @@ const bedrockOpenaiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           credential: bearerToken,
         });
         try {
-          const resolved = await validateVirtualApiKey(bearerToken, "bedrock");
+          const resolved = await validateVirtualApiKey({
+            tokenValue: bearerToken,
+            expectedProvider: "bedrock",
+            expectedOrganizationId: resolvedAgent.organizationId,
+          });
           await virtualKeyRateLimiter.recordSuccess({
             credential: bearerToken,
           });

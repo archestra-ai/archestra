@@ -51,10 +51,6 @@ import {
 } from "./knowledge-management";
 import { toolEntries as limitToolEntries, tools as limitTools } from "./limits";
 import {
-  toolEntries as llmProxyToolEntries,
-  tools as llmProxyTools,
-} from "./llm-proxies";
-import {
   toolEntries as mcpGatewayToolEntries,
   tools as mcpGatewayTools,
 } from "./mcp-gateways";
@@ -144,7 +140,6 @@ function getToolEntries(): Partial<
       ...identityToolEntries,
       ...agentToolEntries,
       ...hookToolEntries,
-      ...llmProxyToolEntries,
       ...mcpGatewayToolEntries,
       ...mcpServerToolEntries,
       ...teamToolEntries,
@@ -179,7 +174,6 @@ function getAllTools(): (typeof identityTools)[number][] {
     allToolsCache = [
       ...identityTools,
       ...agentTools,
-      ...llmProxyTools,
       ...mcpGatewayTools,
       ...mcpServerTools,
       ...teamTools,

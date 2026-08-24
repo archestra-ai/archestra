@@ -116,7 +116,6 @@ describe("auth routes", () => {
   });
 
   test("issues LLM OAuth client access tokens with client credentials", async ({
-    makeAgent,
     makeLlmProviderApiKey,
     makeOrganization,
     makeSecret,
@@ -124,10 +123,6 @@ describe("auth routes", () => {
     const organization = await makeOrganization();
     await OrganizationModel.patch(organization.id, {
       oauthAccessTokenLifetimeSeconds: 31_536_000,
-    });
-    const agent = await makeAgent({
-      organizationId: organization.id,
-      agentType: "llm_proxy",
     });
     const secret = await makeSecret({ secret: { apiKey: "sk-openai" } });
     const providerKey = await makeLlmProviderApiKey(
@@ -139,7 +134,6 @@ describe("auth routes", () => {
       organizationId: organization.id,
       authorId: crypto.randomUUID(),
       name: "Backend Service",
-      allowedLlmProxyIds: [agent.id],
       providerApiKeys: [
         { provider: "openai", providerApiKeyId: providerKey.id },
       ],
@@ -174,16 +168,11 @@ describe("auth routes", () => {
   });
 
   test("rejects LLM OAuth client credentials with an invalid secret", async ({
-    makeAgent,
     makeLlmProviderApiKey,
     makeOrganization,
     makeSecret,
   }) => {
     const organization = await makeOrganization();
-    const agent = await makeAgent({
-      organizationId: organization.id,
-      agentType: "llm_proxy",
-    });
     const secret = await makeSecret({ secret: { apiKey: "sk-openai" } });
     const providerKey = await makeLlmProviderApiKey(
       organization.id,
@@ -194,7 +183,6 @@ describe("auth routes", () => {
       organizationId: organization.id,
       authorId: crypto.randomUUID(),
       name: "Backend Service",
-      allowedLlmProxyIds: [agent.id],
       providerApiKeys: [
         { provider: "openai", providerApiKeyId: providerKey.id },
       ],
@@ -216,16 +204,11 @@ describe("auth routes", () => {
   });
 
   test("rejects LLM OAuth client credentials without the proxy scope", async ({
-    makeAgent,
     makeLlmProviderApiKey,
     makeOrganization,
     makeSecret,
   }) => {
     const organization = await makeOrganization();
-    const agent = await makeAgent({
-      organizationId: organization.id,
-      agentType: "llm_proxy",
-    });
     const secret = await makeSecret({ secret: { apiKey: "sk-openai" } });
     const providerKey = await makeLlmProviderApiKey(
       organization.id,
@@ -236,7 +219,6 @@ describe("auth routes", () => {
       organizationId: organization.id,
       authorId: crypto.randomUUID(),
       name: "Backend Service",
-      allowedLlmProxyIds: [agent.id],
       providerApiKeys: [
         { provider: "openai", providerApiKeyId: providerKey.id },
       ],

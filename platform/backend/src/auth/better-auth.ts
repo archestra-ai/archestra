@@ -407,14 +407,6 @@ export const auth = betterAuth({
               "[databaseHooks:user] Failed to delete personal MCP gateways",
             );
           }
-          try {
-            await AgentModel.deletePersonalLlmProxiesForUser(user.id);
-          } catch (error) {
-            logger.error(
-              { err: error, userId: user.id },
-              "[databaseHooks:user] Failed to delete personal LLM proxies",
-            );
-          }
           // Personal skills must not outlive their author either: author_id
           // is `set null`, and a personal row without an author can be named
           // by no `skill://` URI, seen by no one, and edited by no one.
@@ -2212,17 +2204,6 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
           logger.error(
             { err: error },
             "Failed to ensure personal MCP gateway on sign-in",
-          );
-        }
-        try {
-          await AgentModel.ensurePersonalLlmProxy({
-            userId,
-            organizationId: orgId,
-          });
-        } catch (error) {
-          logger.error(
-            { err: error },
-            "Failed to ensure personal LLM proxy on sign-in",
           );
         }
       }

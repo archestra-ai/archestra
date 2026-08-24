@@ -330,7 +330,7 @@ async function validateMcpOauthClientConfig(params: {
     const agent = await AgentModel.findById(gatewayId);
     // An OAuth client may be scoped to MCP gateways and/or A2A agents (both are
     // reached by id through validateMCPGatewayToken). llm_proxy agents have
-    // their own OAuth clients (allowedLlmProxyIds) and are not eligible here.
+    // their own LLM OAuth clients and are not eligible here.
     if (
       !agent ||
       agent.organizationId !== params.organizationId ||

@@ -33,11 +33,6 @@ export const TOOL_PERMISSIONS: Record<
   update_hook: { resource: "agent", action: "update" },
   delete_hook: { resource: "agent", action: "update" },
 
-  // LLM Proxies
-  create_llm_proxy: { resource: "llmProxy", action: "create" },
-  get_llm_proxy: { resource: "llmProxy", action: "read" },
-  edit_llm_proxy: { resource: "llmProxy", action: "update" },
-
   // MCP Gateways
   create_mcp_gateway: { resource: "mcpGateway", action: "create" },
   get_mcp_gateway: { resource: "mcpGateway", action: "read" },

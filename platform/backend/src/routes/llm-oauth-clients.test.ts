@@ -39,15 +39,9 @@ describe("llmOauthClientsRoutes", () => {
   });
 
   test("creates, lists, updates, rotates, and deletes an LLM OAuth client", async ({
-    makeAgent,
     makeSecret,
     makeLlmProviderApiKey,
   }) => {
-    const agent = await makeAgent({
-      organizationId,
-      name: "Production Model Router",
-      agentType: "llm_proxy",
-    });
     const secret = await makeSecret({ secret: { apiKey: "sk-openai" } });
     const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "openai",
@@ -58,7 +52,6 @@ describe("llmOauthClientsRoutes", () => {
       url: "/api/llm-oauth-clients",
       payload: {
         name: "Backend Service",
-        allowedLlmProxyIds: [agent.id],
         providerApiKeys: [
           {
             provider: "openai",
@@ -84,15 +77,15 @@ describe("llmOauthClientsRoutes", () => {
       url: "/api/llm-oauth-clients",
     });
     expect(listResponse.statusCode).toBe(200);
-    expect(listResponse.json()).toHaveLength(1);
-    expect(listResponse.json()[0].name).toBe("Backend Service");
+    expect(listResponse.json().data).toHaveLength(1);
+    expect(listResponse.json().data[0].name).toBe("Backend Service");
+    expect(listResponse.json().pagination.total).toBe(1);
 
     const updateResponse = await app.inject({
       method: "PUT",
       url: `/api/llm-oauth-clients/${created.id}`,
       payload: {
         name: "Updated Backend Service",
-        allowedLlmProxyIds: [agent.id],
         providerApiKeys: [
           {
             provider: "openai",
@@ -105,7 +98,6 @@ describe("llmOauthClientsRoutes", () => {
     expect(updateResponse.json()).toMatchObject({
       id: created.id,
       name: "Updated Backend Service",
-      allowedLlmProxyIds: [agent.id],
       providerApiKeys: [
         {
           provider: "openai",
@@ -131,15 +123,9 @@ describe("llmOauthClientsRoutes", () => {
   });
 
   test("filters LLM OAuth clients by search and provider API key", async ({
-    makeAgent,
     makeSecret,
     makeLlmProviderApiKey,
   }) => {
-    const agent = await makeAgent({
-      organizationId,
-      name: "Filter Proxy",
-      agentType: "llm_proxy",
-    });
     const firstSecret = await makeSecret({ secret: { apiKey: "sk-first" } });
     const secondSecret = await makeSecret({ secret: { apiKey: "sk-second" } });
     const firstKey = await makeLlmProviderApiKey(
@@ -158,7 +144,6 @@ describe("llmOauthClientsRoutes", () => {
       url: "/api/llm-oauth-clients",
       payload: {
         name: "Searchable Service",
-        allowedLlmProxyIds: [agent.id],
         providerApiKeys: [
           { provider: "openai", providerApiKeyId: firstKey.id },
         ],
@@ -169,7 +154,6 @@ describe("llmOauthClientsRoutes", () => {
       url: "/api/llm-oauth-clients",
       payload: {
         name: "Other Client",
-        allowedLlmProxyIds: [agent.id],
         providerApiKeys: [
           { provider: "anthropic", providerApiKeyId: secondKey.id },
         ],
@@ -182,7 +166,7 @@ describe("llmOauthClientsRoutes", () => {
     });
     expect(searchResponse.statusCode).toBe(200);
     expect(
-      searchResponse.json().map((client: { name: string }) => client.name),
+      searchResponse.json().data.map((client: { name: string }) => client.name),
     ).toEqual(["Searchable Service"]);
 
     const providerKeyResponse = await app.inject({
@@ -191,20 +175,16 @@ describe("llmOauthClientsRoutes", () => {
     });
     expect(providerKeyResponse.statusCode).toBe(200);
     expect(
-      providerKeyResponse.json().map((client: { name: string }) => client.name),
+      providerKeyResponse
+        .json()
+        .data.map((client: { name: string }) => client.name),
     ).toEqual(["Other Client"]);
   });
 
   test("rejects duplicate provider mappings", async ({
-    makeAgent,
     makeSecret,
     makeLlmProviderApiKey,
   }) => {
-    const agent = await makeAgent({
-      organizationId,
-      name: "Duplicate Mapping Proxy",
-      agentType: "llm_proxy",
-    });
     const firstSecret = await makeSecret({ secret: { apiKey: "sk-first" } });
     const secondSecret = await makeSecret({ secret: { apiKey: "sk-second" } });
     const firstKey = await makeLlmProviderApiKey(
@@ -223,7 +203,6 @@ describe("llmOauthClientsRoutes", () => {
       url: "/api/llm-oauth-clients",
       payload: {
         name: "Duplicate Mapping Client",
-        allowedLlmProxyIds: [agent.id],
         providerApiKeys: [
           { provider: "openai", providerApiKeyId: firstKey.id },
           { provider: "openai", providerApiKeyId: secondKey.id },
@@ -238,15 +217,9 @@ describe("llmOauthClientsRoutes", () => {
   });
 
   test("rejects a credential-level subscription mapping for client credentials", async ({
-    makeAgent,
     makeSecret,
     makeLlmProviderApiKey,
   }) => {
-    const agent = await makeAgent({
-      organizationId,
-      name: "Subscription Mapping Proxy",
-      agentType: "llm_proxy",
-    });
     const secret = await makeSecret({
       secret: {
         apiKey: `bearer ${encodeXaiSubscriptionCredential({
@@ -264,7 +237,6 @@ describe("llmOauthClientsRoutes", () => {
       url: "/api/llm-oauth-clients",
       payload: {
         name: "Unsafe Subscription Client",
-        allowedLlmProxyIds: [agent.id],
         providerApiKeys: [{ provider: "xai", providerApiKeyId: apiKey.id }],
       },
     });
@@ -294,8 +266,7 @@ describe("llmOauthClientsRoutes", () => {
     expect(created.redirectUris).toEqual([
       "https://chat.example.com/oauth/callback",
     ]);
-    // authorization_code access + provider keys are governed by the acting user.
-    expect(created.allowedLlmProxyIds).toEqual([]);
+    // authorization_code provider keys are governed by the acting user.
     expect(created.providerApiKeys).toEqual([]);
 
     // The underlying oauth_client row must be wired for better-auth's
@@ -343,9 +314,9 @@ describe("llmOauthClientsRoutes", () => {
     expect(response.statusCode).toBe(400);
   });
 
-  test("does not require proxies or provider keys for authorization_code clients", async () => {
-    // No LLM proxy or provider key exists, yet an authorization_code client must
-    // still be creatable — its access and keys come from the acting user.
+  test("does not require provider keys for authorization_code clients", async () => {
+    // No provider key exists, yet an authorization_code client must still be
+    // creatable — its keys come from the acting user.
     const response = await app.inject({
       method: "POST",
       url: "/api/llm-oauth-clients",
@@ -392,55 +363,100 @@ describe("llmOauthClientsRoutes", () => {
     ]);
   });
 
-  test("creates an authorization_code client with an additive proxy grant", async ({
-    makeAgent,
+  test("filters LLM OAuth clients by grant type", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
   }) => {
-    const proxy = await makeAgent({
-      organizationId,
-      name: "Chat Proxy",
-      agentType: "llm_proxy",
+    const secret = await makeSecret({ secret: { apiKey: "sk-grant" } });
+    const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
     });
 
-    const response = await app.inject({
+    await app.inject({
       method: "POST",
       url: "/api/llm-oauth-clients",
       payload: {
-        name: "Chat Interface",
+        name: "Service Credential",
+        providerApiKeys: [{ provider: "openai", providerApiKeyId: apiKey.id }],
+      },
+    });
+    await app.inject({
+      method: "POST",
+      url: "/api/llm-oauth-clients",
+      payload: {
+        name: "Chat Login",
         grantType: "authorization_code",
         redirectUris: ["https://chat.example.com/oauth/callback"],
-        allowedLlmProxyIds: [proxy.id],
       },
     });
 
-    expect(response.statusCode).toBe(200);
-    expect(response.json().grantType).toBe("authorization_code");
-    expect(response.json().allowedLlmProxyIds).toEqual([proxy.id]);
-    // provider keys never apply to authorization_code clients.
-    expect(response.json().providerApiKeys).toEqual([]);
+    const clientCredentials = await app.inject({
+      method: "GET",
+      url: "/api/llm-oauth-clients?grantType=client_credentials",
+    });
+    expect(clientCredentials.statusCode).toBe(200);
+    expect(
+      clientCredentials
+        .json()
+        .data.map((client: { name: string }) => client.name),
+    ).toEqual(["Service Credential"]);
+    expect(clientCredentials.json().pagination.total).toBe(1);
+
+    const authorizationCode = await app.inject({
+      method: "GET",
+      url: "/api/llm-oauth-clients?grantType=authorization_code",
+    });
+    expect(authorizationCode.statusCode).toBe(200);
+    expect(
+      authorizationCode
+        .json()
+        .data.map((client: { name: string }) => client.name),
+    ).toEqual(["Chat Login"]);
   });
 
-  test("validates the proxy grant on an authorization_code client", async ({
-    makeAgent,
-  }) => {
-    // A non-llm_proxy agent in the grant list is rejected.
-    const gateway = await makeAgent({
-      organizationId,
-      name: "Not A Proxy",
-      agentType: "mcp_gateway",
+  test("paginates LLM OAuth clients", async () => {
+    for (const name of ["page-a", "page-b", "page-c"]) {
+      await app.inject({
+        method: "POST",
+        url: "/api/llm-oauth-clients",
+        payload: {
+          name,
+          grantType: "authorization_code",
+          redirectUris: ["https://chat.example.com/oauth/callback"],
+        },
+      });
+    }
+
+    const firstPage = await app.inject({
+      method: "GET",
+      url: "/api/llm-oauth-clients?limit=2&offset=0",
+    });
+    expect(firstPage.statusCode).toBe(200);
+    const firstBody = firstPage.json();
+    expect(firstBody.data).toHaveLength(2);
+    expect(firstBody.pagination).toMatchObject({
+      total: 3,
+      limit: 2,
+      totalPages: 2,
+      hasNext: true,
+      hasPrev: false,
     });
 
-    const response = await app.inject({
-      method: "POST",
-      url: "/api/llm-oauth-clients",
-      payload: {
-        name: "Chat Interface",
-        grantType: "authorization_code",
-        redirectUris: ["https://chat.example.com/oauth/callback"],
-        allowedLlmProxyIds: [gateway.id],
-      },
+    const secondPage = await app.inject({
+      method: "GET",
+      url: "/api/llm-oauth-clients?limit=2&offset=2",
+    });
+    expect(secondPage.statusCode).toBe(200);
+    const secondBody = secondPage.json();
+    expect(secondBody.data).toHaveLength(1);
+    expect(secondBody.pagination).toMatchObject({
+      hasNext: false,
+      hasPrev: true,
     });
 
-    expect(response.statusCode).toBe(404);
-    expect(response.json().error.message).toContain("LLM proxy not found");
+    const seen = [...firstBody.data, ...secondBody.data].map(
+      (client: { name: string }) => client.name,
+    );
+    expect([...seen].sort()).toEqual(["page-a", "page-b", "page-c"]);
   });
 });

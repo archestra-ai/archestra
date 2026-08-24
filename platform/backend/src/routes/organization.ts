@@ -368,18 +368,6 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      if (body.connectionDefaultLlmProxyId) {
-        const agent = await AgentModel.findById(
-          body.connectionDefaultLlmProxyId,
-        );
-        if (!agent || agent.organizationId !== organizationId) {
-          throw new ApiError(404, "LLM proxy not found");
-        }
-        if (agent.agentType !== "llm_proxy" && agent.agentType !== "profile") {
-          throw new ApiError(400, "Agent is not an LLM proxy");
-        }
-      }
-
       if (body.connectionDefaultProviderKeys) {
         const keyIds = Object.values(body.connectionDefaultProviderKeys);
         const keys = await LlmProviderApiKeyModel.findByIds(keyIds);

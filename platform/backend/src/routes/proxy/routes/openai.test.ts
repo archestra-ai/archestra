@@ -423,6 +423,7 @@ describe("OpenAI cost tracking", () => {
     const agent = await makeAgent({
       name: "Test Embedding Agent",
       agentType: "llm_proxy",
+      isDefault: true,
     });
 
     let capturedApiKey: string | undefined;
@@ -496,12 +497,12 @@ describe("OpenAI cost tracking", () => {
       organizationId: organization.id,
       name: "OAuth OpenAI Proxy",
       agentType: "llm_proxy",
+      isDefault: true,
     });
     const { oauthClient } = await LlmOauthClientModel.create({
       organizationId: organization.id,
       authorId: crypto.randomUUID(),
       name: "Backend Service",
-      allowedLlmProxyIds: [agent.id],
       providerApiKeys: [
         { provider: "openai", providerApiKeyId: providerKey.id },
       ],
@@ -577,6 +578,7 @@ describe("OpenAI cost tracking", () => {
       organizationId: organization.id,
       name: "User OAuth OpenAI Proxy",
       agentType: "llm_proxy",
+      isDefault: true,
       scope: "org",
     });
     const clientId = `https://example.com/${crypto.randomUUID()}/client.json`;
@@ -662,12 +664,12 @@ describe("OpenAI cost tracking", () => {
       organizationId: organization.id,
       name: "Unmapped OAuth OpenAI Proxy",
       agentType: "llm_proxy",
+      isDefault: true,
     });
     const { oauthClient } = await LlmOauthClientModel.create({
       organizationId: organization.id,
       authorId: crypto.randomUUID(),
       name: "Unmapped Backend Service",
-      allowedLlmProxyIds: [agent.id],
       providerApiKeys: [
         { provider: "anthropic", providerApiKeyId: providerKey.id },
       ],
@@ -722,12 +724,12 @@ describe("OpenAI cost tracking", () => {
       organizationId: organization.id,
       name: "Expired OAuth OpenAI Proxy",
       agentType: "llm_proxy",
+      isDefault: true,
     });
     const { oauthClient } = await LlmOauthClientModel.create({
       organizationId: organization.id,
       authorId: crypto.randomUUID(),
       name: "Expired Backend Service",
-      allowedLlmProxyIds: [agent.id],
       providerApiKeys: [
         { provider: "openai", providerApiKeyId: providerKey.id },
       ],
@@ -782,12 +784,12 @@ describe("OpenAI cost tracking", () => {
       organizationId: organization.id,
       name: "Disabled OAuth OpenAI Proxy",
       agentType: "llm_proxy",
+      isDefault: true,
     });
     const { oauthClient } = await LlmOauthClientModel.create({
       organizationId: organization.id,
       authorId: crypto.randomUUID(),
       name: "Disabled Backend Service",
-      allowedLlmProxyIds: [agent.id],
       providerApiKeys: [
         { provider: "openai", providerApiKeyId: providerKey.id },
       ],
@@ -846,12 +848,12 @@ describe("OpenAI cost tracking", () => {
       organizationId: organization.id,
       name: "Revoked OAuth OpenAI Proxy",
       agentType: "llm_proxy",
+      isDefault: true,
     });
     const { oauthClient } = await LlmOauthClientModel.create({
       organizationId: organization.id,
       authorId: user.id,
       name: "Revoked Backend Service",
-      allowedLlmProxyIds: [agent.id],
       providerApiKeys: [
         { provider: "openai", providerApiKeyId: providerKey.id },
       ],
@@ -921,12 +923,12 @@ describe("OpenAI cost tracking", () => {
       organizationId: organization.id,
       name: "Wrong Scope OAuth OpenAI Proxy",
       agentType: "llm_proxy",
+      isDefault: true,
     });
     const { oauthClient } = await LlmOauthClientModel.create({
       organizationId: organization.id,
       authorId: crypto.randomUUID(),
       name: "Wrong Scope Backend Service",
-      allowedLlmProxyIds: [agent.id],
       providerApiKeys: [
         { provider: "openai", providerApiKeyId: providerKey.id },
       ],

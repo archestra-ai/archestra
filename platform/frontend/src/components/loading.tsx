@@ -1,12 +1,6 @@
 "use client";
 
-import { usePathname } from "next/navigation";
-import {
-  type ComponentProps,
-  type ReactNode,
-  useEffect,
-  useState,
-} from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "./ui/skeleton";
 
@@ -17,27 +11,12 @@ type LoadingStateVariant =
   | "compact"
   | "inline";
 
-const LOADING_MASCOTS = [
-  {
-    light: "/loading/openappa-headphones-light.gif",
-    dark: "/loading/openappa-headphones-dark.gif",
-  },
-  {
-    light: "/loading/openappa-step-light.gif",
-    dark: "/loading/openappa-step-dark.gif",
-  },
-  {
-    light: "/loading/openappa-bop-light.gif",
-    dark: "/loading/openappa-bop-dark.gif",
-  },
-] as const;
-
-const MASCOT_SIZE_BY_VARIANT: Record<LoadingStateVariant, number> = {
-  viewport: 75,
-  page: 75,
-  content: 75,
-  compact: 41,
-  inline: 17,
+const INDICATOR_SIZE_BY_VARIANT: Record<LoadingStateVariant, string> = {
+  viewport: "size-8",
+  page: "size-8",
+  content: "size-8",
+  compact: "size-6",
+  inline: "size-4",
 };
 
 export function LoadingSkeletons({
@@ -76,29 +55,6 @@ export function LoadingState({
   /** Compact controls can hide the visible label while retaining its accessible name. */
   showLabel?: boolean;
 }) {
-  const pathname = usePathname();
-  const startingMascot =
-    hashLoadingKey(pathname ?? "/") % LOADING_MASCOTS.length;
-  const [mascotOffset, setMascotOffset] = useState(0);
-  const mascot =
-    LOADING_MASCOTS[(startingMascot + mascotOffset) % LOADING_MASCOTS.length];
-  const mascotSize = MASCOT_SIZE_BY_VARIANT[variant];
-
-  useEffect(() => {
-    if (
-      typeof window.matchMedia === "function" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) {
-      return;
-    }
-
-    const interval = window.setInterval(() => {
-      setMascotOffset((offset) => offset + 1);
-    }, 6480);
-
-    return () => window.clearInterval(interval);
-  }, []);
-
   return (
     <output
       aria-label={label}
@@ -115,22 +71,13 @@ export function LoadingState({
     >
       <span
         aria-hidden="true"
-        className="relative block"
-        style={{
-          height: mascotSize,
-          width: mascotSize,
-        }}
+        className={cn(
+          "relative block shrink-0",
+          INDICATOR_SIZE_BY_VARIANT[variant],
+        )}
       >
-        <img
-          alt=""
-          className="absolute inset-0 h-full w-full object-contain dark:hidden"
-          src={mascot.light}
-        />
-        <img
-          alt=""
-          className="absolute inset-0 hidden h-full w-full object-contain dark:block"
-          src={mascot.dark}
-        />
+        <span className="absolute inset-0 rounded-full border-2 border-muted-foreground/20" />
+        <span className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-t-muted-foreground motion-reduce:animate-none" />
       </span>
       {showLabel && (
         <span className="mt-2 text-sm text-muted-foreground">{label}</span>
@@ -157,12 +104,4 @@ export function LoadingWrapper({
   if (isPending) return <>{loadingFallback}</>;
   if (error) return <>{errorFallback}</>;
   return <>{children}</>;
-}
-
-function hashLoadingKey(value: string): number {
-  let hash = 0;
-  for (let index = 0; index < value.length; index += 1) {
-    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
-  }
-  return hash;
 }

@@ -3,31 +3,25 @@ import { describe, expect, it } from "vitest";
 import { LoadingState } from "./loading";
 
 describe("LoadingState", () => {
-  it("renders a theme-aware mascot pair from the shared loading component", () => {
+  it("renders a theme-aware generic indicator from the shared component", () => {
     const { container } = render(<LoadingState label="Loading connectors…" />);
 
     expect(
       screen.getByRole("status", { name: "Loading connectors…" }),
     ).toBeVisible();
-    const images = Array.from(container.querySelectorAll("img"));
-    expect(images).toHaveLength(2);
-    expect(images[0]).toHaveClass("dark:hidden");
-    expect(images[1]).toHaveClass("hidden", "dark:block");
-    expect(
-      images[0].getAttribute("src")?.replace("-light.gif", "-dark.gif"),
-    ).toBe(images[1].getAttribute("src"));
-    expect(images[0]).toHaveAttribute("src", expect.stringMatching(/\.gif$/));
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.querySelector(".animate-spin")).toHaveClass(
+      "border-t-muted-foreground",
+      "motion-reduce:animate-none",
+    );
   });
 
-  it("uses one mascot size while centering viewport and page loading states", () => {
+  it("uses one indicator size while centering viewport and page loading states", () => {
     const { rerender } = render(<LoadingState variant="viewport" />);
 
     const status = screen.getByRole("status");
     expect(status).toHaveClass("min-h-app-viewport");
-    expect(status.querySelector("span")).toHaveStyle({
-      height: "75px",
-      width: "75px",
-    });
+    expect(status.querySelector("span")).toHaveClass("size-8");
 
     rerender(<LoadingState variant="page" />);
 
@@ -36,10 +30,7 @@ describe("LoadingState", () => {
       "items-center",
       "justify-center",
     );
-    expect(status.querySelector("span")).toHaveStyle({
-      height: "75px",
-      width: "75px",
-    });
+    expect(status.querySelector("span")).toHaveClass("size-8");
   });
 
   it("keeps inline loading states compact and accessible", () => {

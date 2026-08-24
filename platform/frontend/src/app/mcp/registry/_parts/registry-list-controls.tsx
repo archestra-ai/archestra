@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDownUp, Check, ChevronDown, X } from "lucide-react";
+import { ArrowDownUp, BellOff, Check, ChevronDown, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { filterControlClass } from "@/components/filter-bar";
 import { Badge } from "@/components/ui/badge";
@@ -197,6 +197,41 @@ export function RegistrySortMenu({
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+/**
+ * Dismissed alerts, as a filter on the list rather than a tab of its own.
+ *
+ * They used to be a third tab beside "Action required", which put a view
+ * almost nobody opens on the same footing as the one everybody works in and
+ * made the tab strip grow and shrink with the dismissal count. It is the same
+ * question — "what needs me?" — asked with the silenced ones instead of
+ * without them, so it belongs next to the list's other filters.
+ */
+export function RegistryDismissedFilter({
+  count,
+  pressed,
+  onToggle,
+}: {
+  count: number;
+  pressed: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      aria-pressed={pressed}
+      className={filterControlClass({ active: pressed })}
+      onClick={onToggle}
+    >
+      <BellOff aria-hidden className="h-4 w-4" />
+      <span>Dismissed</span>
+      {/* Inherits the button's foreground: muted-foreground dips below the
+          4.5:1 contrast minimum on some themes (WCAG 1.4.3). */}
+      <span className="tabular-nums">({count})</span>
+    </Button>
   );
 }
 

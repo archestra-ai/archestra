@@ -381,8 +381,8 @@ export function useDeleteProfile() {
 }
 
 /**
- * Deletes a selection of profiles — agents, LLM proxies and MCP gateways are
- * all profiles, so all three tables share this.
+ * Deletes a selection of profiles — agents and MCP gateways are both
+ * profiles, so their tables share this.
  *
  * There is no bulk delete route, so this fans out over the single-item one.
  * It deliberately does NOT go through `useDeleteProfile`: that reports each

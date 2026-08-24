@@ -14,7 +14,7 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { useSetLlmProxyAction } from "@/app/llm/proxy/layout";
+import { useSetLlmProxyAction } from "@/app/llm/proxy/_parts/llm-proxy-action-context";
 import {
   CreateVirtualKeyDialogWithData,
   type VirtualKeyType,

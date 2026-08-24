@@ -904,9 +904,8 @@ export function AgentForm({
   } = useAgentSubagentExclusions(supportsSubagents ? agent?.id : undefined);
   // Which skills this gateway publishes over `skill://` (SEP-2640). Offered on
   // exactly the agent types that serve MCP resources — the same set that gets
-  // the tool control, so LLM proxies have neither — and only where the
-  // deployment has enabled the draft extension. The API enforces the same
-  // split, so a proxy cannot be given a published set out of band.
+  // the tool control — and only where the deployment has enabled the draft
+  // extension. The API enforces the same split.
   const mcpGatewaySkillsEnabled = useFeature("mcpGatewaySkillsEnabled");
   // `skill:read` is the API's floor on these endpoints — publishing a skill
   // hands its body to every holder of the gateway's token, so it is not
@@ -1167,10 +1166,10 @@ export function AgentForm({
 
   // Determine type-specific visibility based on agentType prop
   const isInternalAgent = agentType === "agent";
-  // Agents, LLM proxies, and MCP gateways can all be assigned a deployment
-  // environment. For agents it binds the code sandbox runtime; for LLM proxies
-  // / MCP gateways it is an attribution label so their
-  // inference/usage falls under environment-scoped cost limits.
+  // Agents and MCP gateways can be assigned a deployment environment. For
+  // agents it binds the code sandbox runtime; for MCP gateways it is an
+  // attribution label so their usage falls under environment-scoped cost
+  // limits.
   const supportsEnvironment = isInternalAgent || agentType === "mcp_gateway";
   const environmentHelpText =
     agentType === "mcp_gateway"

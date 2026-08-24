@@ -1,6 +1,6 @@
 /**
  * The text roles every entity surface is built from: agents, skills,
- * LLM proxies, MCP gateways, the MCP registry. Before this existed the
+ * MCP gateways, the MCP registry. Before this existed the
  * frontend carried 141 distinct typography signatures and 190 arbitrary
  * `text-[Npx]` sizes in twelve different sizes, which is what a page looks
  * like when each screen picks its own type.

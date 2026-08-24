@@ -1056,11 +1056,13 @@ async function findAccessibleLlmProxy(params: {
   userId: string;
 }) {
   const { organizationId, userId } = params;
-  const [canRead, isAdmin] = await Promise.all([
-    userHasPermission(userId, organizationId, "llmProxy", "read"),
-    userHasPermission(userId, organizationId, "llmProxy", "admin"),
-  ]);
-  if (!canRead && !isAdmin) return null;
+  const canRead = await userHasPermission(
+    userId,
+    organizationId,
+    "llmProxy",
+    "read",
+  );
+  if (!canRead) return null;
   return AgentModel.getOrgLlmProxy(organizationId);
 }
 

@@ -5,8 +5,8 @@ import {
 } from "@/components/agent-pages/agent-page-config";
 
 /**
- * One vocabulary for the five entity surfaces: agents, skills, LLM proxies,
- * MCP gateways, MCP servers.
+ * One vocabulary for the entity surfaces: agents, skills, MCP gateways,
+ * MCP servers.
  *
  * Before this existed the same field carried a different name per page
  * ("Environment" on the agents list, "Environments" on a skill), the same

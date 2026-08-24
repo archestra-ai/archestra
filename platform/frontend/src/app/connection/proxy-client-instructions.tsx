@@ -710,7 +710,7 @@ function endpointTabClass(active: boolean) {
  * the proxy URL for the active tab renders below. Also used by the admin
  * connect dialog on the proxies table (with a custom caption).
  */
-export function GenericEndpointCard({
+function GenericEndpointCard({
   baseUrl,
   providers,
   routerSelected,
@@ -720,8 +720,6 @@ export function GenericEndpointCard({
   caption,
 }: {
   baseUrl: string;
-  /** Unused — proxy URLs are id-less now; kept so existing call sites compile. */
-  profileId?: string;
   providers: ChatProvider[];
   routerSelected: boolean;
   selectedProvider: ChatProvider | null;
@@ -950,7 +948,7 @@ function StepList({
  * Inline reveal for the manual attribution step: auto-provisions the caller's
  * personal passthrough virtual key (scoped to this proxy) and shows the header
  * name + copyable value to paste into the client's custom-headers field. Gated
- * on llmVirtualKey:create; otherwise points to the LLM Proxies page.
+ * on llmVirtualKey:create; otherwise points to the LLM Proxy page.
  */
 type PassthroughKeyState =
   | { status: "loading" }

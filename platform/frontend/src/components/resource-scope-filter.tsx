@@ -41,7 +41,7 @@ const OrganizationScopeIcon = SCOPE_META.org.icon;
 
 /**
  * Shared Personal / Team / Organization visibility filter for resource list
- * pages (agents, MCP gateways, LLM proxies, skills, projects, apps). Scope is
+ * pages (agents, MCP gateways, skills, projects, apps). Scope is
  * the resource's share visibility; state lives entirely in URL search params
  * (`scope`, `teamIds`, `authorIds`, `excludeAuthorIds`). A resource admin
  * additionally gets a "My … / Other users" sub-filter under Personal and can

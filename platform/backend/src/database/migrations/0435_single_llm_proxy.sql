@@ -42,13 +42,17 @@ BEGIN
       CASE
         WHEN a."id" = o."connection_default_llm_proxy_id" THEN 0
         WHEN a."is_default" THEN 1
-        WHEN NOT a."is_personal_proxy" THEN 2
-        ELSE 3
+        ELSE 2
       END AS "rank",
       a."created_at"
     FROM "agents" a
     JOIN "organization" o ON o."id" = a."organization_id"
-    WHERE a."agent_type" = 'llm_proxy' AND a."deleted_at" IS NULL
+    -- Personal proxies are never elected: an organization whose only live
+    -- rows are personal gets a fresh row below instead of promoting one
+    -- member's personal configuration to the organization's proxy.
+    WHERE a."agent_type" = 'llm_proxy'
+      AND a."deleted_at" IS NULL
+      AND NOT a."is_personal_proxy"
   )
   SELECT DISTINCT ON ("organization_id") "organization_id", "id"
   FROM "candidates"
@@ -163,6 +167,9 @@ BEGIN
   -- Re-key cost limits from the organization's other proxy-capable rows to
   -- the LLM Proxy, preserving row ids and accumulated usage. No dedupe: the
   -- runtime evaluates every limit on an entity, so the most restrictive wins.
+  -- Live donors only: a limit keyed to a soft-deleted row has been inert
+  -- (deleted rows receive no traffic) and must not come back to life against
+  -- the LLM Proxy's aggregate traffic.
   UPDATE "limits" l
   SET "entity_id" = e."id"::text
   FROM "agents" d
@@ -170,6 +177,7 @@ BEGIN
   WHERE l."entity_type" = 'agent'
     AND l."entity_id" = d."id"::text
     AND d."id" <> e."id"
+    AND d."deleted_at" IS NULL
     AND d."agent_type" IN ('llm_proxy', 'profile');
 
   -- The `llmProxy` resource keeps only `read` and `update`. Roles that

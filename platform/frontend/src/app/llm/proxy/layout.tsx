@@ -2,7 +2,8 @@
 
 import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import { usePathname } from "next/navigation";
-import { createContext, useContext, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { LlmProxyLayoutContext } from "@/app/llm/proxy/_parts/llm-proxy-action-context";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { PageLayout } from "@/components/page-layout";
 import { usePermissionMap } from "@/lib/auth/auth.query";
@@ -31,18 +32,6 @@ const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
       "Applications registered to authenticate to the LLM Proxy with OAuth, as themselves or on behalf of signed-in users.",
   },
 };
-
-type LlmProxyLayoutContextType = {
-  setActionButton: (button: React.ReactNode) => void;
-};
-
-const LlmProxyLayoutContext = createContext<LlmProxyLayoutContextType>({
-  setActionButton: () => {},
-});
-
-export function useSetLlmProxyAction() {
-  return useContext(LlmProxyLayoutContext).setActionButton;
-}
 
 export default function LlmProxyLayout({
   children,

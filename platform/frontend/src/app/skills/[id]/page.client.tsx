@@ -2,7 +2,6 @@
 
 import {
   AlertTriangle,
-  ChartColumn,
   ChevronDown,
   Github,
   History,
@@ -11,7 +10,7 @@ import {
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useId, useMemo, useState } from "react";
 import { AgentBadge } from "@/components/agent-badge";
 import { PageLayout } from "@/components/page-layout";
@@ -67,7 +66,7 @@ import {
   SkillNotFound,
   SkillPageLoading,
 } from "../_parts/skill-page-shell";
-import { SkillUsageDialog } from "../_parts/skill-usage-dialog";
+import { SkillUsagePanel } from "../_parts/skill-usage-panel";
 import { SkillVersionHistoryDialog } from "../_parts/skill-version-history-dialog";
 
 /**
@@ -141,12 +140,22 @@ function SkillDetailView({
   const manifest = useMemo(() => composeManifest(skill), [skill]);
   const actionModel = getSkillActionModel(skill.id);
   const editAction = skillAction(actionModel, "edit");
-  const usageAction = skillAction(actionModel, "usage");
   const historyAction = skillAction(actionModel, "history");
   const deleteAction = skillAction(actionModel, "delete");
 
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [usageOpen, setUsageOpen] = useState(false);
+
+  // Which tab is showing lives in the URL, not in state: the skills list links
+  // straight at a skill's usage, and a tab someone is looking at should be a
+  // link they can send. Overview is the bare page and carries no `tab`, the
+  // same shape the MCP server detail page uses.
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const isUsageTab = searchParams.get("tab") === "usage";
+  const tabs = [
+    { label: "Overview", href: pathname, active: !isUsageTab },
+    { label: "Usage", href: `${pathname}?tab=usage`, active: isUsageTab },
+  ];
   const [deleteRequested, setDeleteRequested] = useState(false);
 
   return (
@@ -176,6 +185,7 @@ function SkillDetailView({
         <SkillBackLink href="/skills" label={backToListLabel("skill")} />
       }
       maxWidth="wizard"
+      tabs={tabs}
       actionButton={
         // One primary (Edit), one secondary (Chat), everything else in the
         // kebab with the destructive item under a divider. This header used to
@@ -216,10 +226,6 @@ function SkillDetailView({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setUsageOpen(true)}>
-                <ChartColumn className="h-4 w-4" />
-                {usageAction.label}
-              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setHistoryOpen(true)}>
                 <History className="h-4 w-4" />
                 {historyAction.label}
@@ -268,90 +274,85 @@ function SkillDetailView({
         </div>
       }
     >
-      <div className="space-y-10">
-        <section aria-labelledby="skill-overview-heading">
-          <Collapsible>
-            <CollapsibleTrigger className="group flex w-full items-center justify-between gap-4 py-1 text-left">
-              <h2
-                id="skill-overview-heading"
-                className="text-base font-semibold tracking-tight text-foreground"
-              >
-                Overview
-              </h2>
-              <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
-            </CollapsibleTrigger>
-            <CollapsibleContent className="pt-4">
-              <section className="space-y-4 rounded-lg border bg-card p-4">
-                <h3 className="text-sm font-semibold text-foreground">
+      {isUsageTab ? (
+        <SkillUsagePanel skillRef={{ kind: "standalone", skillId: skill.id }} />
+      ) : (
+        <div className="space-y-10">
+          {/* Named for what it holds. The tab bar above already says "Overview",
+            and a section by that name inside it named nothing. */}
+          <section aria-labelledby="skill-access-heading">
+            <Collapsible>
+              <CollapsibleTrigger className="group flex w-full items-center justify-between gap-4 py-1 text-left">
+                <h2
+                  id="skill-access-heading"
+                  className="text-base font-semibold tracking-tight text-foreground"
+                >
                   Access and source
-                </h3>
-                <FactGrid>
-                  <Fact label="Environment">
-                    {skill.environments.length === 0 ? (
-                      <span>All environments</span>
-                    ) : (
-                      <ul className="flex flex-wrap gap-1.5">
-                        {skill.environments.map((environment) => (
-                          <li key={environment.id}>
-                            <Badge variant="outline" className="font-normal">
-                              {environment.name}
-                            </Badge>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </Fact>
-                  {isShared && (
-                    <Fact label="Shared with">
-                      <ResourceVisibilityBadge
-                        scope={skill.scope}
-                        teams={skill.teams}
-                        users={skill.users}
-                        authorId={skill.authorId}
-                        authorName={undefined}
-                        currentUserId={currentUserId}
-                        showSelfAsMe={false}
-                      />
+                </h2>
+                <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-4">
+                <section className="space-y-4 rounded-lg border bg-card p-4">
+                  <FactGrid>
+                    <Fact label="Environment">
+                      {skill.environments.length === 0 ? (
+                        <span>All environments</span>
+                      ) : (
+                        <ul className="flex flex-wrap gap-1.5">
+                          {skill.environments.map((environment) => (
+                            <li key={environment.id}>
+                              <Badge variant="outline" className="font-normal">
+                                {environment.name}
+                              </Badge>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </Fact>
-                  )}
-                  <Fact label="Source">
-                    <SourceFact skill={skill} />
-                  </Fact>
-                  <Fact label="Version">
-                    <span>v{skill.latestVersion}</span>
-                  </Fact>
-                </FactGrid>
-              </section>
-            </CollapsibleContent>
-          </Collapsible>
-        </section>
+                    {isShared && (
+                      <Fact label="Shared with">
+                        <ResourceVisibilityBadge
+                          scope={skill.scope}
+                          teams={skill.teams}
+                          users={skill.users}
+                          authorId={skill.authorId}
+                          authorName={undefined}
+                          currentUserId={currentUserId}
+                          showSelfAsMe={false}
+                        />
+                      </Fact>
+                    )}
+                    <Fact label="Source">
+                      <SourceFact skill={skill} />
+                    </Fact>
+                    <Fact label="Version">
+                      <span>v{skill.latestVersion}</span>
+                    </Fact>
+                  </FactGrid>
+                </section>
+              </CollapsibleContent>
+            </Collapsible>
+          </section>
 
-        <SkillCard title="Instructions and files" spacious>
-          <SkillContentEditor
-            manifest={manifest}
-            files={skill.files}
-            onManifestChange={noop}
-            onFilesChange={noop}
-            readOnly
-            readOnlyMarker={false}
-            className={SKILL_DETAIL_EDITOR_CLASS}
-          />
-        </SkillCard>
-      </div>
+          <SkillCard title="Instructions and files" spacious>
+            <SkillContentEditor
+              manifest={manifest}
+              files={skill.files}
+              onManifestChange={noop}
+              onFilesChange={noop}
+              readOnly
+              readOnlyMarker={false}
+              className={SKILL_DETAIL_EDITOR_CLASS}
+            />
+          </SkillCard>
+        </div>
+      )}
 
       {historyOpen && (
         <SkillVersionHistoryDialog
           skillId={skill.id}
           open={historyOpen}
           onOpenChange={setHistoryOpen}
-        />
-      )}
-      {usageOpen && (
-        <SkillUsageDialog
-          skillRef={{ kind: "standalone", skillId: skill.id }}
-          skillName={skill.name}
-          open={usageOpen}
-          onOpenChange={setUsageOpen}
         />
       )}
       {deleteRequested && (

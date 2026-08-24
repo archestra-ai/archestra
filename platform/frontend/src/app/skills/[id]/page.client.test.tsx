@@ -15,8 +15,8 @@ vi.mock("@/lib/skills/skill.query", () => ({
 vi.mock("../_parts/skill-version-history-dialog", () => ({
   SkillVersionHistoryDialog: () => null,
 }));
-vi.mock("../_parts/skill-usage-dialog", () => ({
-  SkillUsageDialog: () => null,
+vi.mock("../_parts/skill-usage-panel", () => ({
+  SkillUsagePanel: () => null,
 }));
 vi.mock("../_parts/delete-skill-dialog", () => ({
   DeleteSkillDialog: () => null,
@@ -106,7 +106,7 @@ describe("SkillDetailPage", () => {
     mockSkill();
   });
 
-  it("keeps content primary and reveals access/source facts from a collapsed Overview", async () => {
+  it("keeps content primary and reveals access/source facts from a collapsed section", async () => {
     const user = userEvent.setup();
     render(<SkillDetailPage id="skill-1" />);
 
@@ -125,11 +125,10 @@ describe("SkillDetailPage", () => {
     // No save anywhere: editing goes through the wizard.
     expect(screen.queryByRole("button", { name: /save/i })).toBeNull();
 
-    const overview = screen.getByRole("button", { name: "Overview" });
+    const overview = screen.getByRole("button", { name: "Access and source" });
     expect(overview).toHaveAttribute("aria-expanded", "false");
-    expect(
-      screen.queryByRole("heading", { name: "Access and source" }),
-    ).toBeNull();
+    // Collapsed: the heading names the section, but none of its facts show.
+    expect(screen.queryByText("All environments")).toBeNull();
 
     await user.click(overview);
     expect(overview).toHaveAttribute("aria-expanded", "true");
@@ -176,7 +175,7 @@ describe("SkillDetailPage", () => {
     render(<SkillDetailPage id="skill-1" />);
 
     expect(screen.getByText("Synced from GitHub")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Overview" }));
+    await user.click(screen.getByRole("button", { name: "Access and source" }));
     expect(screen.getByRole("link", { name: /acme\/skills/ })).toHaveAttribute(
       "href",
       "https://github.com/acme/skills/tree/main",

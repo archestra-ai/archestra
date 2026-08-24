@@ -1,9 +1,11 @@
 import type { archestraApiTypes } from "@archestra/shared";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useSkillUsageStatistics } from "@/lib/skills/skill.query";
-import { SkillUsageDialog } from "./skill-usage-dialog";
+import { SkillUsagePanel } from "./skill-usage-panel";
 
+vi.mock("next/navigation");
 vi.mock("@/lib/hooks/use-app-name");
 
 vi.mock("@/lib/skills/skill.query", () => ({
@@ -55,18 +57,13 @@ type UsageActor = UsageStatistics["users"][number];
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-function renderDialog(stats: UsageStatistics | null, isPending = false) {
+function renderPanel(stats: UsageStatistics | null, isPending = false) {
   vi.mocked(useSkillUsageStatistics).mockReturnValue({
     data: stats,
     isPending,
   } as unknown as ReturnType<typeof useSkillUsageStatistics>);
   return render(
-    <SkillUsageDialog
-      skillId="skill-1"
-      skillName="jira-task"
-      open
-      onOpenChange={vi.fn()}
-    />,
+    <SkillUsagePanel skillRef={{ kind: "standalone", skillId: "skill-1" }} />,
   );
 }
 
@@ -83,9 +80,10 @@ function statistics(users: UsageActor[]): UsageStatistics {
   };
 }
 
-function seriesRows() {
-  // The per-actor breakdown is the only list in the dialog.
-  return within(screen.getByRole("list")).getAllByRole("listitem");
+/** The per-actor breakdown, minus its header row. */
+function breakdownRows() {
+  const [, ...rows] = within(screen.getByRole("table")).getAllByRole("row");
+  return rows;
 }
 
 /** The headline tile carrying `label`, value and caption together. */
@@ -95,13 +93,23 @@ function summaryTile(label: string) {
   return tile;
 }
 
-describe("SkillUsageDialog", () => {
+/** A crowd of ordinary users, busiest first. */
+function people(count: number, prefix = "user"): UsageActor[] {
+  return Array.from({ length: count }, (_, index) => ({
+    userId: `${prefix}-${index}`,
+    name: `User ${index}`,
+    kind: "user" as const,
+    total: count - index,
+  }));
+}
+
+describe("SkillUsagePanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it("labels each kind of actor distinctly instead of one shared unknown", () => {
-    renderDialog(
+    renderPanel(
       statistics([
         { userId: "user-1", name: "Ada Lovelace", kind: "user", total: 8 },
         {
@@ -121,7 +129,7 @@ describe("SkillUsageDialog", () => {
       ]),
     );
 
-    const labels = seriesRows().map((row) => row.textContent);
+    const labels = breakdownRows().map((row) => row.textContent);
     expect(labels[0]).toContain("Ada Lovelace");
     expect(labels[1]).toContain("Nightly sync");
     expect(labels[1]).toContain("service account");
@@ -131,16 +139,7 @@ describe("SkillUsageDialog", () => {
   });
 
   it("gives every rendered series its own colour", () => {
-    renderDialog(
-      statistics(
-        Array.from({ length: 5 }, (_, index) => ({
-          userId: `user-${index}`,
-          name: `User ${index}`,
-          kind: "user" as const,
-          total: 10 - index,
-        })),
-      ),
-    );
+    renderPanel(statistics(people(5)));
 
     const config: Record<string, { color: string }> = JSON.parse(
       screen.getByTestId("chart").dataset.config ?? "{}",
@@ -151,29 +150,17 @@ describe("SkillUsageDialog", () => {
   });
 
   it("folds actors past the colour ramp into one others series rather than dropping them", () => {
-    renderDialog(
-      statistics(
-        Array.from({ length: 8 }, (_, index) => ({
-          userId: `user-${index}`,
-          name: `User ${index}`,
-          kind: "user" as const,
-          total: 10 - index,
-        })),
-      ),
-    );
+    renderPanel(statistics(people(8)));
 
-    const rows = seriesRows();
-    expect(rows).toHaveLength(6);
-    expect(rows[5].textContent).toContain("3 others");
-    // 10+9+8+7+6 named, 5+4+3 folded together
-    expect(rows[5].textContent).toContain("12 uses");
-
-    // and the folded actors still reach the chart, so its bars keep summing to
-    // the headline total rather than quietly losing the tail
+    // The chart is bounded by the colour ramp, so its tail shares one series...
     const keys = screen
       .getAllByTestId("chart-bar")
       .map((bar) => bar.dataset.key);
+    expect(keys).toHaveLength(6);
     expect(new Set(keys).size).toBe(keys.length);
+
+    // ...and the folded actors still reach it, so its bars keep summing to the
+    // headline total rather than quietly losing the tail.
     const points: Record<string, number>[] = JSON.parse(
       screen.getByTestId("chart-data").dataset.points ?? "[]",
     );
@@ -182,11 +169,55 @@ describe("SkillUsageDialog", () => {
         sum + keys.reduce((day, key) => day + Number(point[key ?? ""] ?? 0), 0),
       0,
     );
-    expect(charted).toBe(52);
+    expect(charted).toBe(36);
+  });
+
+  it("lists every actor in the breakdown, not only the ones the chart named", () => {
+    renderPanel(statistics(people(8)));
+
+    // The chart folds past five; the breakdown is where you go to find one
+    // person among many, so it must not fold with it.
+    expect(breakdownRows()).toHaveLength(8);
+    expect(screen.getByText("User 7")).toBeInTheDocument();
+  });
+
+  it("filters the breakdown to the searched user", async () => {
+    const user = userEvent.setup();
+    renderPanel(
+      statistics([
+        { userId: "user-ada", name: "Ada Lovelace", kind: "user", total: 9 },
+        { userId: "user-grace", name: "Grace Hopper", kind: "user", total: 8 },
+        ...people(6, "filler"),
+      ]),
+    );
+
+    await user.type(screen.getByRole("textbox"), "grace");
+
+    await waitFor(() => expect(breakdownRows()).toHaveLength(1));
+    expect(breakdownRows()[0].textContent).toContain("Grace Hopper");
+  });
+
+  it("sorts the breakdown by name when that column is chosen", async () => {
+    const user = userEvent.setup();
+    renderPanel(
+      statistics([
+        { userId: "user-1", name: "Zoe Zhang", kind: "user", total: 9 },
+        { userId: "user-2", name: "Ada Lovelace", kind: "user", total: 2 },
+      ]),
+    );
+
+    // Busiest-first by default, so the order is not already alphabetical.
+    expect(breakdownRows()[0].textContent).toContain("Zoe Zhang");
+
+    await user.click(screen.getByRole("button", { name: /sort by user/i }));
+
+    await waitFor(() =>
+      expect(breakdownRows()[0].textContent).toContain("Ada Lovelace"),
+    );
   });
 
   it("counts attributed actors as users and leaves unattributed activations out", () => {
-    renderDialog(
+    renderPanel(
       statistics([
         { userId: "user-1", name: "Ada Lovelace", kind: "user", total: 3 },
         { userId: "user-2", name: "Grace Hopper", kind: "user", total: 2 },
@@ -199,9 +230,9 @@ describe("SkillUsageDialog", () => {
   });
 
   it("shows an empty state when nothing was activated in the window", () => {
-    renderDialog(statistics([]));
+    renderPanel(statistics([]));
 
     expect(screen.getByText("No activations yet")).toBeInTheDocument();
-    expect(screen.queryByRole("list")).not.toBeInTheDocument();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
   });
 });

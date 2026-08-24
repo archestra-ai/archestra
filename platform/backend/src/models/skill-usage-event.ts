@@ -1,16 +1,7 @@
 import { and, count, countDistinct, eq, gte, inArray, sql } from "drizzle-orm";
-import {
-  isServiceAccountUserId,
-  SERVICE_ACCOUNT_USER_ID_PREFIX,
-} from "@/auth/utils";
 import db, { schema } from "@/database";
-import {
-  type SkillUsageActorKind,
-  type SkillUsageStatistics,
-  UuidIdSchema,
-} from "@/types";
-import ServiceAccountModel from "./service-account";
-import UserModel from "./user";
+import type { SkillUsageStatistics } from "@/types";
+import { describeUsageActors } from "./skill-usage-actors";
 
 class SkillUsageEventModel {
   /**
@@ -72,27 +63,10 @@ class SkillUsageEventModel {
     for (const row of rows) {
       totals.set(row.userId, (totals.get(row.userId) ?? 0) + row.count);
     }
-    const actorIds = [...totals.keys()].filter(
-      (id): id is string => id !== null,
-    );
-    const [userNames, serviceAccountNames] = await Promise.all([
-      UserModel.getNamesByIds(
-        actorIds.filter((id) => !isServiceAccountUserId(id)),
-      ),
-      ServiceAccountModel.getNamesByIds(
-        actorIds
-          .map(serviceAccountId)
-          .filter((id): id is string => id !== null),
-        params.organizationId,
-      ),
-    ]);
-
-    const users = [...totals.entries()]
-      .map(([userId, total]) => ({
-        ...resolveActor({ userId, userNames, serviceAccountNames }),
-        total,
-      }))
-      .sort((a, b) => b.total - a.total);
+    const users = await describeUsageActors({
+      totals,
+      organizationId: params.organizationId,
+    });
 
     return {
       since: params.since.toISOString(),
@@ -103,41 +77,3 @@ class SkillUsageEventModel {
 }
 
 export default SkillUsageEventModel;
-
-// === internal ===
-
-/**
- * The `service_accounts.id` a synthetic `service-account:<id>` user id points
- * at, or null when it is not one — or when the suffix is not a uuid. The
- * column is `uuid`, so passing a malformed value to the lookup would fail the
- * whole query rather than simply miss, and the activation log is append-only
- * text that no constraint keeps well-formed.
- */
-function serviceAccountId(userId: string): string | null {
-  if (!isServiceAccountUserId(userId)) return null;
-  const id = userId.slice(SERVICE_ACCOUNT_USER_ID_PREFIX.length);
-  return UuidIdSchema.safeParse(id).success ? id : null;
-}
-
-function resolveActor({
-  userId,
-  userNames,
-  serviceAccountNames,
-}: {
-  userId: string | null;
-  userNames: Map<string, string>;
-  serviceAccountNames: Map<string, string>;
-}): { userId: string | null; name: string | null; kind: SkillUsageActorKind } {
-  if (userId === null) {
-    return { userId, name: null, kind: "unattributed" };
-  }
-  if (isServiceAccountUserId(userId)) {
-    const id = serviceAccountId(userId);
-    return {
-      userId,
-      name: (id === null ? null : serviceAccountNames.get(id)) ?? null,
-      kind: "service_account",
-    };
-  }
-  return { userId, name: userNames.get(userId) ?? null, kind: "user" };
-}

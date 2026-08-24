@@ -36373,6 +36373,7 @@ export type GetExternalMcpSkillUsageStatisticsResponses = {
         users: Array<{
             userId: string | null;
             name: string | null;
+            kind: 'user' | 'service_account' | 'unattributed';
             total: number;
         }>;
         daily: Array<{

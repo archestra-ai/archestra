@@ -273,16 +273,13 @@ jobs:
     # under 10m, but leaked test-runner processes (vitest fork workers /
     # esbuild) occasionally orphan and hold the step's log pipe open, leaving
     # a *finished* job hanging until GitHub's 6h default. Fail fast instead.
-    # 30 was sized for fork PRs, which run without cache secrets and pay a
-    # full cold build on a 4vcpu runner. That is too tight for the private
-    # mirror, where task-env sessions open their PRs: ubuntu-latest is
-    # 4-vCPU/16-GB for public repos but 2-vCPU/7-GB for private ones, and the
-    # job that finishes in ~5 min here needed 22m28s on its one clean mirror
-    # run while 9 of the other 11 burned the whole budget (30m19s-30m42s,
-    # including one run started after remote caching was configured there).
-    # So those cancellations were the ceiling, not a hang. Sized for the
-    # slowest hardware this runs on, as backend-unit-tests below already is.
-    timeout-minutes: 45
+    # Sized for the slowest path this runs on: fork PRs, which run without
+    # cache secrets and pay a full cold build. On these 16-vcpu Blacksmith
+    # runners the job ran with this same 20-minute budget for months before
+    # the runner migration, and the private mirror's task-env PRs now use
+    # the same Blacksmith installation — so the 45-minute sizing for its
+    # 2-vCPU private ubuntu-latest runners no longer applies.
+    timeout-minutes: 20
     permissions:
       contents: write # Required to push generated code updates back to release-please PRs.
     defaults:
@@ -478,8 +475,8 @@ jobs:
   # the merge queue in minutes instead of blocking it for hours.
   #
   # The backend unit test shards deliberately stay off the mac mini: the
-  # merge queue runs several stacked groups concurrently, and 16 shards per
-  # group oversubscribe the machine's 3 runner slots — queued-behind-saturation
+  # merge queue runs several stacked groups concurrently, and even 4 shards
+  # per group oversubscribe the machine's 3 runner slots — queued-behind-saturation
   # is indistinguishable from dead for the jobs involved and adds minutes of
   # merge latency per group.
   #
@@ -593,23 +590,25 @@ jobs:
 
   # Backend unit tests, sharded across parallel runners. Vitest's --shard
   # slices the file list deterministically (SHA1 of each path), so the
-  # sixteen jobs partition the suite exactly once. Splitting this out of the
-  # lint job takes the suite off the workflow's critical path. Standard
-  # GitHub-hosted runners are free on public repos, so the wide shard count
-  # trades (free) per-shard setup for wall-clock.
+  # four jobs partition the suite exactly once. Splitting this out of the
+  # lint job takes the suite off the workflow's critical path. Four shards
+  # on 16-vcpu Blacksmith runners are the measured sweet spot (the July
+  # shape, ~3-3.5 min per shard): the wide 16-shard fan-out on free 4-vcpu
+  # runners paid the per-shard module-import overhead sixteen times (vitest
+  # measured import 365s of a 402s shard wall) and still ran 6-9 min per
+  # shard.
   backend-unit-tests:
-    name: Backend Unit Tests (shard ${{ matrix.shard }}/16)
+    name: Backend Unit Tests (shard ${{ matrix.shard }}/4)
     # bot-pr-guard (see comment above platform-lint-and-unit-tests)
     if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-16vcpu-ubuntu-2404
     # A full local suite run is ~4 min on comparable hardware; a shard is a
-    # sixteenth of that plus setup. Sized for the slowest hardware this runs
-    # on rather than this repo's: ubuntu-latest is 4-vCPU/16-GB for public
-    # repos but 2-vCPU/7-GB for private ones, and on the private mirror where
-    # task-env sessions open their PRs the same shard takes ~2x as long (9-14
-    # min observed, against the 15 the public runners never came close to).
-    # Beyond this, something is hung.
-    timeout-minutes: 25
+    # quarter of that plus setup and the cargo build (~3-3.5 min/shard in
+    # the pre-migration July runs on these same runners). The private
+    # mirror's task-env PRs run on the same Blacksmith installation now, so
+    # the old 2-vCPU private ubuntu-latest sizing no longer applies. Beyond
+    # this, something is hung.
+    timeout-minutes: 15
     permissions:
       contents: read
     defaults:
@@ -623,7 +622,7 @@ jobs:
       # failure picture in one pass.
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+        shard: [1, 2, 3, 4]
     steps:
       - name: Checkout project
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -641,7 +640,7 @@ jobs:
       # platform-specific and the remote cache is shared with dev machines),
       # so every shard really compiles the three Rust crates: measured at
       # 2m30s-3m22s per shard on a cold 4vcpu runner. A warm cargo target
-      # dir turns that into an incremental no-op. All sixteen shards restore
+      # dir turns that into an incremental no-op. All four shards restore
       # the same entry (shared-key); only shard 1 saves. Fresh PR branches
       # restore the entry maintained by the warm-backend-build-cache job on
       # main pushes (Actions caches only flow down from the default branch).
@@ -667,11 +666,11 @@ jobs:
             pnpm exec turbo build --filter="@backend^..."
           }
 
-      - name: Run backend unit tests (shard ${{ matrix.shard }} of 16)
+      - name: Run backend unit tests (shard ${{ matrix.shard }} of 4)
         working-directory: ./platform/backend
         env:
           SHARD: ${{ matrix.shard }}
-        run: pnpm exec vitest run --shard="${SHARD}/16"
+        run: pnpm exec vitest run --shard="${SHARD}/4"
 
   # Stable-named gate over the shard matrix so branch protection / merge queue
   # can require a single check ("Backend Unit Tests") regardless of shard count.

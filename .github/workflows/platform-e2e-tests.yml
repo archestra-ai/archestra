@@ -648,15 +648,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Each leg boots its own full lite stack — on free runners that
-          # duplicated ~4 min setup buys test wall-clock. The nightly
+          # Each leg boots its own full lite stack — the duplicated setup
+          # buys test wall-clock. The nightly
           # cross-browser projects ride the api leg: they only carry the
           # small @firefox/@webkit-tagged subset.
-          # The chromium legs cap Playwright at 2 workers: the config's CI
-          # default (90% of cores ≈ 3) oversubscribes a standard runner that
-          # is also hosting the whole lite stack, and the resulting CPU
-          # starvation is what makes the heavy dialog-interaction specs
-          # (static-credentials, chat) miss their interaction windows. The
+          # The chromium legs cap Playwright at 2 workers: sized on 4-vcpu
+          # standard runners, where the CI default (90% of cores) oversubscribed
+          # a runner that was also hosting the whole lite stack, and the
+          # resulting CPU starvation made the heavy dialog-interaction specs
+          # (static-credentials, chat) miss their interaction windows.
+          # Conservative on the 8-vcpu runners; raising it is a follow-up. The
           # api leg keeps the default — API-bound specs gain from parallelism
           # and don't fight for paint time.
           - name: api

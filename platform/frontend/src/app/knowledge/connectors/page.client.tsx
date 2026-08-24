@@ -496,9 +496,10 @@ function ConnectorsList() {
                   <TableCardList
                     itemCount={items.length}
                     isLoading={isFetching || isPending}
+                    emptyIcon={Database}
                     emptyMessage="No connectors found"
                     hasActiveFilters={hasActiveFilters}
-                    filteredEmptyMessage="No connectors match your filters. Try adjusting your search."
+                    filteredEmptyMessage="No connectors match your filters"
                     onClearFilters={clearFilters}
                     pagination={{
                       pageIndex,
@@ -562,13 +563,14 @@ function ConnectorsList() {
                     }
                     // The deleted view always counts as filtered (see
                     // hasActiveFilters), so its empty state is the filtered one below.
+                    emptyIcon={Database}
                     emptyMessage="No connectors found"
                     hasActiveFilters={hasActiveFilters}
                     onClearFilters={clearFilters}
                     filteredEmptyMessage={
                       isDeletedView
                         ? "No deleted connectors found."
-                        : "No connectors match your filters. Try adjusting your search."
+                        : "No connectors match your filters"
                     }
                     hideSelectedCount
                     manualPagination

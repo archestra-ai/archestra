@@ -5,11 +5,12 @@ import {
   DocsPage,
   MESSAGING_CHANNEL_LABELS,
 } from "@archestra/shared";
-import { AlertTriangle, RefreshCw, Settings2, Trash2 } from "lucide-react";
+import { AlertTriangle, Bot, RefreshCw, Settings2, Trash2 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { CopyButton } from "@/components/copy-button";
 import Divider from "@/components/divider";
+import { EmptyState } from "@/components/empty-state";
 import { FilterBar, filterSearchClass } from "@/components/filter-bar";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
@@ -356,25 +357,23 @@ export default function EmailPage() {
                         colSpan={5}
                         className="h-40 text-center text-sm text-muted-foreground"
                       >
-                        <div className="flex flex-col items-center justify-center gap-4">
-                          <p>
-                            {hasActiveFilters
-                              ? "No agents match your current filters."
-                              : "No internal agents are available yet."}
-                          </p>
-                          {hasActiveFilters && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setSearch("");
-                                setStatusFilter("all");
-                              }}
-                            >
-                              Clear filters
-                            </Button>
-                          )}
-                        </div>
+                        <EmptyState
+                          className="py-0"
+                          icon={Bot}
+                          title={
+                            hasActiveFilters
+                              ? "No agents match your filters"
+                              : "No internal agents are available yet."
+                          }
+                          onClearFilters={
+                            hasActiveFilters
+                              ? () => {
+                                  setSearch("");
+                                  setStatusFilter("all");
+                                }
+                              : undefined
+                          }
+                        />
                       </TableCell>
                     </TableRow>
                   )}

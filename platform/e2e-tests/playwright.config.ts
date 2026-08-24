@@ -61,6 +61,7 @@ const uiTestMatch = [
   "**/identity-providers.ee.spec.ts",
   "**/invitation.spec.ts",
   "**/llm-logs-slack-source.spec.ts",
+  "**/loading-states.spec.ts",
   "**/mcp-edit.spec.ts",
   "**/mcp-install.spec.ts",
   "**/model-limits.spec.ts",

@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { EmptyState } from "@/components/empty-state";
 import { FilterBar, filterSearchClass } from "@/components/filter-bar";
 import { LoadingState } from "@/components/loading";
 import {
@@ -503,12 +504,13 @@ function KnowledgeBasesList() {
                 hideSelectedCount
                 // The deleted view always counts as filtered (see hasActiveFilters),
                 // so its empty state is the filtered one below.
+                emptyIcon={Database}
                 emptyMessage="No knowledge bases found"
                 hasActiveFilters={hasActiveFilters}
                 filteredEmptyMessage={
                   isDeletedView
                     ? "No deleted knowledge bases found."
-                    : "No knowledge bases match your filters. Try adjusting your search."
+                    : "No knowledge bases match your filters"
                 }
                 onClearFilters={clearFilters}
                 manualPagination
@@ -681,19 +683,15 @@ function KnowledgeBaseCardGrid({
 
   if (knowledgeBases.length === 0) {
     return (
-      <div className="flex flex-col items-center gap-3 py-16 text-center text-sm text-muted-foreground">
-        <Database className="h-8 w-8 opacity-50" />
-        <p>
-          {hasActiveFilters
-            ? "No knowledge bases match your filters. Try adjusting your search."
-            : "No knowledge bases found"}
-        </p>
-        {hasActiveFilters && (
-          <Button variant="outline" size="sm" onClick={onClearFilters}>
-            Clear filters
-          </Button>
-        )}
-      </div>
+      <EmptyState
+        icon={Database}
+        title={
+          hasActiveFilters
+            ? "No knowledge bases match your filters"
+            : "No knowledge bases found"
+        }
+        onClearFilters={hasActiveFilters ? onClearFilters : undefined}
+      />
     );
   }
 

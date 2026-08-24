@@ -344,7 +344,7 @@ export function TeamsList() {
           onClearFilters={() =>
             updateQueryParams({ search: null, labels: null, page: "1" })
           }
-          emptyIcon={<Users className="h-10 w-10" />}
+          emptyIcon={Users}
           emptyMessage="No teams found"
           hideSelectedCount
         />

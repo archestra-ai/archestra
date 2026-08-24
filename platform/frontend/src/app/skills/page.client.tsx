@@ -378,6 +378,7 @@ function SkillsList() {
       (kind === "all" && noVisibleFilterResults));
   const showMcpSection =
     showMcpSkills && (visibleExternalSkills.length > 0 || kind === "mcp");
+  const showStandaloneHeading = isDeletedView || mcpSkillsEnabled;
 
   const clearFilters = useCallback(() => {
     const params = new URLSearchParams(searchParams.toString());
@@ -628,7 +629,7 @@ function SkillsList() {
     {
       id: "usageCount",
       accessorKey: "usageCount",
-      size: 280,
+      size: 100,
       header: ({ column }) => (
         // Right padding keeps the right-aligned value from sitting flush
         // against the Actions buttons in the next cell.
@@ -802,14 +803,21 @@ function SkillsList() {
                 {showStandaloneSection && (
                   <section
                     className="space-y-3"
-                    aria-labelledby="standalone-skills-title"
+                    aria-label={showStandaloneHeading ? undefined : "Skills"}
+                    aria-labelledby={
+                      showStandaloneHeading
+                        ? "standalone-skills-title"
+                        : undefined
+                    }
                   >
-                    <h2
-                      id="standalone-skills-title"
-                      className="text-sm font-medium uppercase tracking-wide text-muted-foreground"
-                    >
-                      {isDeletedView ? "Deleted skills" : "Standalone skills"}
-                    </h2>
+                    {showStandaloneHeading && (
+                      <h2
+                        id="standalone-skills-title"
+                        className="text-sm font-medium uppercase tracking-wide text-muted-foreground"
+                      >
+                        {isDeletedView ? "Deleted skills" : "Standalone skills"}
+                      </h2>
+                    )}
 
                     <BulkActionsBar
                       count={selectedSkills.length}

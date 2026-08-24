@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
@@ -21,46 +22,49 @@ export function SkillUsageSummary({
   const lastUsed = formatRelativeTimeFromNow(lastUsedAt, {
     neverLabel: "Never used",
   });
-  const summary = (
-    <span className="inline-flex max-w-full items-center justify-end gap-1.5 whitespace-nowrap tabular-nums">
-      <span className="font-medium text-foreground">{usageCount}</span>
-      {usageUserCount > 0 && (
-        <>
-          <span aria-hidden className="text-muted-foreground/60">
-            ·
-          </span>
-          <span className="text-muted-foreground">
-            {usageUserCount} {usageUserCount === 1 ? "user" : "users"}
-          </span>
-        </>
-      )}
-      <span aria-hidden className="text-muted-foreground/60">
-        ·
-      </span>
-      <span className="truncate text-xs text-muted-foreground" title={lastUsed}>
-        {lastUsed}
-      </span>
+  const usesLabel = `${usageCount} ${usageCount === 1 ? "use" : "uses"}`;
+  const usersLabel =
+    usageUserCount > 0
+      ? `${usageUserCount} ${usageUserCount === 1 ? "user" : "users"}`
+      : null;
+  const activityLabel = usersLabel
+    ? `${usesLabel}, ${usersLabel}, ${lastUsed}`
+    : `${usesLabel}, ${lastUsed}`;
+  const count = (
+    <span className="font-medium tabular-nums text-foreground">
+      {usageCount}
     </span>
   );
-
-  if (!onClick) return summary;
 
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button
-          type="button"
-          className="flex w-full justify-end rounded px-1.5 py-1 text-sm hover:bg-muted"
-          aria-label={label}
-          onClick={(event) => {
-            event.stopPropagation();
-            onClick();
-          }}
-        >
-          {summary}
-        </button>
+        {onClick ? (
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-7 w-full justify-end px-1.5"
+            aria-label={label ? `${label}: ${activityLabel}` : activityLabel}
+            onClick={(event) => {
+              event.stopPropagation();
+              onClick();
+            }}
+          >
+            {count}
+          </Button>
+        ) : (
+          <span className="flex h-7 w-full items-center justify-end px-1.5">
+            <span className="sr-only">{activityLabel}</span>
+            <span aria-hidden>{count}</span>
+          </span>
+        )}
       </TooltipTrigger>
-      <TooltipContent>View usage over the last month</TooltipContent>
+      <TooltipContent className="space-y-0.5">
+        <p className="font-medium">{usesLabel}</p>
+        <p className="text-xs text-muted-foreground">
+          {usersLabel ? `${usersLabel} · ${lastUsed}` : lastUsed}
+        </p>
+      </TooltipContent>
     </Tooltip>
   );
 }

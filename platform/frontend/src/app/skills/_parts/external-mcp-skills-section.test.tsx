@@ -76,7 +76,8 @@ describe("ExternalMcpSkillsSection", () => {
     ).toBeNull();
     expect(screen.getByText("2 files")).toBeInTheDocument();
     expect(screen.getByText("7")).toBeInTheDocument();
-    expect(screen.getByText("2 users")).toBeInTheDocument();
+    expect(screen.getByText(/7 uses, 2 users,/)).toBeInTheDocument();
+    expect(screen.queryByText("2 users")).not.toBeInTheDocument();
     expect(screen.getAllByText("Rows per page").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Page 1 of 1").length).toBeGreaterThan(0);
     const chatParams = new URLSearchParams({

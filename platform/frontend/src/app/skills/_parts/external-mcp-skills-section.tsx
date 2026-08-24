@@ -188,7 +188,7 @@ export function ExternalMcpSkillsSection({
     {
       id: "usageCount",
       accessorKey: "usageCount",
-      size: 280,
+      size: 100,
       header: ({ column }) => (
         <div className="flex justify-end pr-4">
           <Button

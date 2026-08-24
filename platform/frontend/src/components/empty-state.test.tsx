@@ -14,9 +14,12 @@ describe("EmptyState", () => {
       />,
     );
 
+    expect(screen.getByText("No agents match your filters")).toBeVisible();
+    // The title must not be a heading: it would make every page-title
+    // locator ambiguous, "Agents" being a substring of "No agents found".
     expect(
-      screen.getByRole("heading", { name: "No agents match your filters" }),
-    ).toBeVisible();
+      screen.queryByRole("heading", { name: /no agents/i }),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByText("Try adjusting your search or filters."),
     ).toBeVisible();

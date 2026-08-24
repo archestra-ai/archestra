@@ -56,7 +56,13 @@ export function EmptyState({
       <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border bg-background shadow-sm">
         <Icon className="h-6 w-6 text-primary" />
       </div>
-      <h2 className="mb-1 text-lg font-semibold">{title}</h2>
+      {/* Deliberately not a heading. The panel sits inside a table body and
+          its text names the current filter result, not a section of the page,
+          so it does not belong in the document outline — and as a heading it
+          made every page-title locator ambiguous, because "Agents" is a
+          substring of "No agents found". `ui/empty.tsx` renders its own title
+          as a plain element for the same reason. */}
+      <p className="mb-1 text-lg font-semibold">{title}</p>
       {description ? (
         <p className="max-w-sm text-sm text-muted-foreground">{description}</p>
       ) : null}

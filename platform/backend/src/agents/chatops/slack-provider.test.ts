@@ -1038,12 +1038,28 @@ describe("SlackProvider.parseWebhookNotification — mute reaction", () => {
         ts: undefined,
         reaction,
         item: { type: "message", channel: CHANNEL, ts: BOT_REPLY_TS },
-        item_user: BOT,
         ...overrides,
       },
     );
   }
 
+  async function enableAnswerAll(): Promise<void> {
+    const binding = await ChatOpsChannelBindingModel.create({
+      organizationId: `org-${CHANNEL}-${Math.random()}`,
+      provider: "slack",
+      channelId: CHANNEL,
+      // Must match makeEventPayload's team_id: the setting is stored per
+      // workspace, and a reaction has to look it up under the same key.
+      workspaceId: "T12345",
+    });
+    await ChatOpsChannelBindingModel.update(binding.id, {
+      answerAllMessages: true,
+    });
+  }
+
+  // reactionPayload deliberately carries no `item_user`: the field is optional
+  // on reaction_added and Slack does not populate it for every app-authored
+  // message, so muting must not depend on it.
   test("🔇 on a bot reply in an active thread mutes it and posts the notice", async () => {
     const { provider, postMessage, replies } = createReactionProvider();
     await markChannelThreadActive({
@@ -1084,7 +1100,32 @@ describe("SlackProvider.parseWebhookNotification — mute reaction", () => {
     expect(postMessage).toHaveBeenCalledTimes(1);
   });
 
-  test("reaction on a NON-bot message is ignored (no API call, no notice)", async () => {
+  test("🔇 on a teammate's message mutes the thread it belongs to", async () => {
+    // The reaction is about the thread, not about whoever wrote the message
+    // carrying it — reacting on a colleague's reply has to work.
+    const { provider, postMessage } = createReactionProvider();
+    await markChannelThreadActive({
+      provider: "slack",
+      channelId: CHANNEL,
+      threadId: ROOT,
+    });
+
+    const result = await provider.parseWebhookNotification(
+      reactionPayload("mute", {
+        item: { type: "message", channel: CHANNEL, ts: "7777777777.000042" },
+      }),
+      {},
+    );
+    expect(result).toBeNull();
+    expect(postMessage).toHaveBeenCalledTimes(1);
+    expect(
+      await cacheManager.get(
+        `${CacheKey.SlackThreadActive}-${CHANNEL}::${ROOT}`,
+      ),
+    ).toBeUndefined();
+  });
+
+  test("the bot's own 🔇 reaction is ignored", async () => {
     const { provider, postMessage, replies } = createReactionProvider();
     await markChannelThreadActive({
       provider: "slack",
@@ -1093,12 +1134,33 @@ describe("SlackProvider.parseWebhookNotification — mute reaction", () => {
     });
 
     const result = await provider.parseWebhookNotification(
-      reactionPayload("mute", { item_user: "U_SOMEONE_ELSE" }),
+      reactionPayload("mute", { user: BOT }),
       {},
     );
     expect(result).toBeNull();
     expect(replies).not.toHaveBeenCalled();
     expect(postMessage).not.toHaveBeenCalled();
+  });
+
+  test("🔇 on the thread root itself needs no API lookup", async () => {
+    // The likeliest target of a mute reaction is the message that started the
+    // thread; resolving it from state also keeps the mute working when
+    // conversations.replies is unavailable.
+    const { provider, postMessage, replies } = createReactionProvider(null);
+    await markChannelThreadActive({
+      provider: "slack",
+      channelId: CHANNEL,
+      threadId: ROOT,
+    });
+
+    await provider.parseWebhookNotification(
+      reactionPayload("mute", {
+        item: { type: "message", channel: CHANNEL, ts: ROOT },
+      }),
+      {},
+    );
+    expect(replies).not.toHaveBeenCalled();
+    expect(postMessage).toHaveBeenCalledTimes(1);
   });
 
   test("a non-mute reaction is ignored", async () => {
@@ -1110,6 +1172,26 @@ describe("SlackProvider.parseWebhookNotification — mute reaction", () => {
     expect(result).toBeNull();
     expect(replies).not.toHaveBeenCalled();
     expect(postMessage).not.toHaveBeenCalled();
+  });
+
+  test("🔇 in an answer-all channel confirms the mute", async () => {
+    // An answer-all thread has no activation to clear, so the mute is invisible
+    // unless the confirmation keys off the mute marker instead — and a mute
+    // nobody can see is indistinguishable from one that was ignored.
+    const { provider, postMessage } = createReactionProvider();
+    await enableAnswerAll();
+
+    await provider.parseWebhookNotification(reactionPayload("mute"), {});
+    expect(postMessage).toHaveBeenCalledTimes(1);
+  });
+
+  test("a repeated 🔇 in an answer-all channel confirms only once", async () => {
+    const { provider, postMessage } = createReactionProvider();
+    await enableAnswerAll();
+
+    await provider.parseWebhookNotification(reactionPayload("mute"), {});
+    await provider.parseWebhookNotification(reactionPayload("mute"), {});
+    expect(postMessage).toHaveBeenCalledTimes(1);
   });
 
   test("mute reaction on an inactive thread posts no notice (transition rule)", async () => {
@@ -1141,15 +1223,7 @@ describe("SlackProvider.parseWebhookNotification — mute reaction", () => {
 
   test("🔇 keeps an answer-all thread quiet on the following message", async () => {
     const { provider } = createReactionProvider();
-    const binding = await ChatOpsChannelBindingModel.create({
-      organizationId: "org-react-answer-all",
-      provider: "slack",
-      channelId: CHANNEL,
-      workspaceId: "T12345",
-    });
-    await ChatOpsChannelBindingModel.update(binding.id, {
-      answerAllMessages: true,
-    });
+    await enableAnswerAll();
 
     await provider.parseWebhookNotification(reactionPayload("mute"), {});
 

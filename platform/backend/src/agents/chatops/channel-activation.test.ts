@@ -37,6 +37,7 @@ import {
   markChannelThreadMuted,
   mightBeAddressedMuteCommand,
   muteChannelThread,
+  muteChannelThreadAndNotify,
   recordUnmentionedChannelTraffic,
   resolveChannelGateAction,
 } from "./channel-activation";
@@ -207,6 +208,74 @@ describe("muteChannelThread (mute side-effects)", () => {
     await clearChannelThreadMuted(TEAMS);
 
     expect(await isChannelThreadMuted(TEAMS)).toBe(false);
+  });
+});
+
+describe("muteChannelThreadAndNotify (confirming a mute)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  function mute(params: { answerAll: boolean; notice: Mock }) {
+    return muteChannelThreadAndNotify({
+      ...TEAMS,
+      resolveAnswerAll: async () => params.answerAll,
+      postMutedNotice: async () => {
+        params.notice();
+      },
+    });
+  }
+
+  test("confirms when a mentions-only thread goes active→muted", async () => {
+    const notice = vi.fn();
+    await markChannelThreadActive(TEAMS);
+
+    expect(await mute({ answerAll: false, notice })).toBe(true);
+    expect(notice).toHaveBeenCalledTimes(1);
+  });
+
+  test("stays silent when there was nothing to mute", async () => {
+    const notice = vi.fn();
+
+    expect(await mute({ answerAll: false, notice })).toBe(false);
+    expect(notice).not.toHaveBeenCalled();
+  });
+
+  test("confirms the first mute of an answer-all thread, which has no activation to clear", async () => {
+    const notice = vi.fn();
+
+    // muteChannelThread returns false here — an answer-all channel never has a
+    // sticky activation — so keying the confirmation off it alone leaves the
+    // user with no sign the mute registered at all.
+    expect(await mute({ answerAll: true, notice })).toBe(true);
+    expect(notice).toHaveBeenCalledTimes(1);
+  });
+
+  test("does not confirm a repeat mute of an answer-all thread", async () => {
+    const notice = vi.fn();
+    await mute({ answerAll: true, notice });
+
+    expect(await mute({ answerAll: true, notice })).toBe(false);
+    expect(notice).toHaveBeenCalledTimes(1);
+  });
+
+  test("a failing answer-all lookup still mutes, silently", async () => {
+    const notice = vi.fn();
+
+    const confirmed = await muteChannelThreadAndNotify({
+      ...TEAMS,
+      resolveAnswerAll: async () => {
+        throw new Error("cache down");
+      },
+      postMutedNotice: async () => {
+        notice();
+      },
+    });
+
+    // A lost notice beats a reply arriving after someone asked for quiet.
+    expect(confirmed).toBe(false);
+    expect(notice).not.toHaveBeenCalled();
+    expect(await isChannelThreadMuted(TEAMS)).toBe(true);
   });
 });
 

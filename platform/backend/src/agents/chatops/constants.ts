@@ -106,10 +106,12 @@ const THREAD_MUTED_LEAD_INS = [
  * thread (see claimThreadMuteHint), teaching users the off switch for sticky
  * auto-reply without the verbosity of the /help command. Plain text (no
  * provider-specific markup) so it renders identically in Slack and MS Teams; the
- * 🔇 glyph matches the mute reaction users can add to any bot reply.
+ * 🔇 glyph matches the mute reaction, which is honored on any message in the
+ * thread rather than only the bot's own replies — so the hint says so, and
+ * nobody has to hunt for the right message to react to.
  */
 export const THREAD_MUTE_HINT =
-  'Reply "mute" or react 🔇 to any of my messages to stop auto-replies in this thread';
+  'Reply "mute" or react 🔇 to any message in this thread to stop auto-replies';
 
 /**
  * In group conversations the agent hears every message but should not answer

@@ -11,9 +11,10 @@
  * there, so callers should only consult these helpers for channel messages.
  *
  * A user can end the sticky behavior early — a mute command (see
- * isThreadMuteCommand), a mute reaction on a bot reply (see isMuteReaction), or
- * a "Mute this thread" button all call clearChannelThreadActive, which drops the
- * activation so the bot goes quiet until it is @mentioned again.
+ * isThreadMuteCommand), a mute reaction (see isMuteReaction), or a "Mute this
+ * thread" button all go through muteChannelThreadAndNotify, which drops the
+ * activation so the bot goes quiet until it is @mentioned again and confirms
+ * that it did.
  */
 
 import { randomUUID } from "node:crypto";
@@ -53,8 +54,9 @@ export async function markChannelThreadActive(params: {
 /**
  * Whether the bot was @mentioned in this channel thread recently enough to keep replying.
  *
- * @public — applyChannelGate is the only production caller; also exercised
- * directly in channel-activation.test.ts (knip --production can't see tests).
+ * @public — called by applyChannelGate and by the Slack provider's
+ * isTrackedThreadRoot; also exercised directly in channel-activation.test.ts
+ * (knip --production can't see tests).
  */
 export async function isChannelThreadActive(params: {
   provider: ChatOpsProviderType;
@@ -104,9 +106,14 @@ export async function clearChannelThreadActive(params: {
  *     enabled. Doing it here means every mute path — command, reaction, or
  *     "Mute this thread" button — persists the mute by construction.
  *
- * Returns whether the thread was active (i.e. whether this actually muted it),
- * so callers post the "muted" confirmation ONLY on a true active→muted
- * transition, exactly like clearChannelThreadActive.
+ * Returns whether the thread was active (i.e. whether this actually muted it).
+ * That is only half of "did this mute anything" — see
+ * muteChannelThreadAndNotify, which every mute path goes through to decide
+ * whether to confirm.
+ *
+ * @public — muteChannelThreadAndNotify is the only production caller; the
+ * side effects have their own suite in channel-activation.test.ts, which
+ * knip --production cannot see.
  */
 export async function muteChannelThread(params: {
   provider: ChatOpsProviderType;
@@ -117,6 +124,66 @@ export async function muteChannelThread(params: {
   chatOpsRunRegistry.cancelThread(params);
   await markChannelThreadMuted(params);
   return await clearChannelThreadActive(params);
+}
+
+/**
+ * Mute a channel thread and confirm it exactly when the mute changed something.
+ *
+ * "Changed something" is not the same question in the two kinds of channel, and
+ * getting it wrong in either direction is what makes muting feel broken:
+ *
+ *  - A mentions-only channel replies because a thread carries a sticky
+ *    activation, so the transition is activation → gone (muteChannelThread's
+ *    return value).
+ *  - An answer-all channel replies without one, so there is no activation to
+ *    clear and muteChannelThread always returns false. Its transition is the
+ *    mute marker appearing, which has to be read BEFORE the mute — afterwards
+ *    the marker muteChannelThread just wrote makes every mute look like a
+ *    repeat and swallows the one confirmation the user should see.
+ *
+ * Every mute path — the gate's command branch, a mute reaction, the "Mute this
+ * thread" button — shares this one implementation, so none of them can quietly
+ * mute a thread without saying so. A mute that lands with no visible answer is
+ * indistinguishable from one that was ignored, which is how a working mute gets
+ * reported as a broken one.
+ *
+ * Neither read may hold up the mute: quiet is the safe default, and a lost
+ * notice beats a reply arriving after someone asked for quiet. A failure
+ * degrades to the mentions-only answer rather than propagating.
+ *
+ * Returns whether the confirmation was posted.
+ */
+export async function muteChannelThreadAndNotify(params: {
+  provider: ChatOpsProviderType;
+  channelId: string;
+  threadId: string;
+  /** Whether this channel answers every message (see isChannelAnswerAllEnabled). */
+  resolveAnswerAll: () => Promise<boolean>;
+  postMutedNotice: () => Promise<void>;
+}): Promise<boolean> {
+  const activation = {
+    provider: params.provider,
+    channelId: params.channelId,
+    threadId: params.threadId,
+  };
+  const answerAll = await params.resolveAnswerAll().catch((error) => {
+    logger.warn(
+      {
+        error: errorMessage(error),
+        provider: params.provider,
+        channelId: params.channelId,
+      },
+      "[ChatOps] Could not read the answer-all setting while muting; treating the channel as mentions-only",
+    );
+    return false;
+  });
+  const alreadyMuted = answerAll
+    ? await isChannelThreadMuted(activation).catch(() => false)
+    : false;
+  const wasActive = await muteChannelThread(activation);
+  const changed = wasActive || (answerAll && !alreadyMuted);
+  if (changed) await params.postMutedNotice();
+  return changed;
 }
 
 // =============================================================================
@@ -130,8 +197,9 @@ export async function muteChannelThread(params: {
  * off — is false (mentions-only). The cache is short-lived and also invalidated
  * on toggle (see invalidateChannelAnswerAll), so a change takes effect promptly.
  *
- * @public — applyChannelGate is the only production caller; also exercised
- * directly in channel-activation.test.ts (knip --production can't see tests).
+ * @public — called by applyChannelGate and by both providers' mute-reaction
+ * paths, which resolve it to decide whether to confirm; also exercised directly
+ * in channel-activation.test.ts (knip --production can't see tests).
  */
 export async function isChannelAnswerAllEnabled(params: {
   provider: ChatOpsProviderType;
@@ -231,8 +299,10 @@ export async function markChannelThreadMuted(params: {
 /**
  * Whether an answer-all channel thread was muted and not yet re-mentioned.
  *
- * @public — applyChannelGate is the only production caller; also exercised
- * directly in channel-activation.test.ts (knip --production can't see tests).
+ * @public — read by applyChannelGate, by muteChannelThreadAndNotify (to tell a
+ * first mute from a repeat) and by the Slack provider's isTrackedThreadRoot;
+ * also exercised directly in channel-activation.test.ts (knip --production
+ * can't see tests).
  */
 export async function isChannelThreadMuted(params: {
   provider: ChatOpsProviderType;
@@ -364,8 +434,13 @@ export function mightBeAddressedMuteCommand(text: string): boolean {
  * Accepts either platform's identifier for the same two glyphs: 🔇 muted
  * speaker (Slack `mute`, Teams `1f507_mutedspeaker`) and 🤫 shushing face
  * (Slack `shushing_face`, Teams `lipssealed`). Matching a single shared Set
- * avoids a per-provider mapping. Callers gate on the reaction being on the
- * bot's OWN message before consulting this.
+ * avoids a per-provider mapping.
+ *
+ * Whether the reacted message has to be the bot's own is the caller's business,
+ * and the two providers differ: Teams only ever delivers reaction activities for
+ * the bot's own messages, while Slack honors the reaction anywhere in a channel
+ * thread (see handleMuteReaction) because a mute is about the thread, not about
+ * the message carrying it.
  */
 export function isMuteReaction(reactionId: string): boolean {
   return THREAD_MUTE_REACTIONS.has(reactionId.trim().toLowerCase());
@@ -416,8 +491,9 @@ export function resolveChannelGateAction(params: {
  * resolveChannelGateAction and apply that action's state transitions.
  *
  * Every provider gates channel messages the same way, so this owns the whole
- * sequence — the reads, the branch, and all cache writes (muteChannelThread,
- * markChannelThreadActive, clearChannelThreadMuted). Callers supply only what
+ * sequence — the reads, the branch, and all cache writes
+ * (muteChannelThreadAndNotify, markChannelThreadActive,
+ * clearChannelThreadMuted). Callers supply only what
  * is provider-specific: how to post the "muted" confirmation, and how to reach
  * the workspace id the "answer all messages" setting is stored under.
  *
@@ -497,20 +573,15 @@ export async function applyChannelGate(params: {
       isMuted,
     })
   ) {
-    case "mute": {
-      // muteChannelThread persists the mute marker, so the thread's prior state
-      // has to be read before it — the confirmation is one-shot per mute, and an
-      // answer-all thread that was never "active" still deserves one. Only the
-      // notice depends on this, so a read failure must not hold up the mute.
-      const alreadyMuted = answerAll
-        ? await isChannelThreadMuted(activation).catch(() => false)
-        : false;
-      const wasActive = await muteChannelThread(activation);
-      if (wasActive || (answerAll && !alreadyMuted)) {
-        await params.postMutedNotice();
-      }
+    case "mute":
+      // answerAll is already known here (the branch above resolves it whenever
+      // wantsMute), so the shared helper is handed it rather than re-reading it.
+      await muteChannelThreadAndNotify({
+        ...activation,
+        resolveAnswerAll: async () => answerAll,
+        postMutedNotice: params.postMutedNotice,
+      });
       return { proceed: false, addressed: false };
-    }
     case "activate":
       await markChannelThreadActive(activation);
       // A re-mention lifts an answer-all mute.

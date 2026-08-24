@@ -3,7 +3,7 @@ title: Knowledge
 category: Knowledge
 order: 1
 description: Built-in RAG knowledge — Knowledge Bases, connectors, and how retrieval works
-lastUpdated: 2026-08-23
+lastUpdated: 2026-08-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -270,6 +270,31 @@ The output of `query_knowledge_sources` is treated as sensitive by default, whic
 ![Selecting Knowledge Bases and connectors on an agent](/docs/automated_screenshots/platform-knowledge-bases_assign-to-agent.webp)
 
 Connectors pull data from external tools into Knowledge Bases. A connector can be assigned to multiple Knowledge Bases.
+
+## Narrowing a Search
+
+A search covers every document in the sources an agent can reach. Some questions only concern a slice of that — the docs for the current release, for example.
+
+`query_knowledge_sources` takes an optional `documentFilter` for this. It matches documents on the metadata their connector supplied, such as `spaceKey`, `labels`, `repo`, or `state`.
+
+Keys are combined with AND. Several values for one key are combined with OR.
+
+```json
+{
+  "query": "how do we roll back a deploy?",
+  "documentFilter": { "spaceKey": "DEV", "labels": ["release-2.0"] }
+}
+```
+
+That searches only pages in the DEV space labelled `release-2.0`. One agent can answer for the current release and another for the archive, from the same connector.
+
+A filter reads single values and lists the same way. Confluence stores one `spaceKey` per page and many `labels`, and the syntax above matches both.
+
+Filtering never widens access. [Visibility](#visibility) is applied separately, so a filter only ever removes documents from what you could already read.
+
+If a filter matches nothing, the reply names the values that do exist for the keys you used. The agent retries with a real one instead of reporting that it found nothing.
+
+Tell the agent which slice to search in your instructions or your question. It filters when a request names a subset, not when it guesses one from the topic.
 
 ## Sync Runs
 

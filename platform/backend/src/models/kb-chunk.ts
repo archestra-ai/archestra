@@ -6,7 +6,12 @@ import {
 import { count, eq, type SQL, sql } from "drizzle-orm";
 import config from "@/config";
 import db, { schema } from "@/database";
-import type { AclEntry, InsertKbChunk, KbChunk } from "@/types";
+import type {
+  AclEntry,
+  InsertKbChunk,
+  KbChunk,
+  KbDocumentMetadataFilter,
+} from "@/types";
 
 /**
  * BM25 tuning constants for one query. Resolved per organization by the query
@@ -116,6 +121,8 @@ class KbChunkModel {
     bypassAcl?: boolean;
     /** Defense-in-depth env isolation: require the connector to be in this env. */
     environmentId?: string | null;
+    /** Narrows to documents whose metadata satisfies the predicate. */
+    metadataFilter?: KbDocumentMetadataFilter;
     limit?: number;
   }): Promise<VectorSearchResult[]> {
     const {
@@ -125,6 +132,7 @@ class KbChunkModel {
       userAcl,
       bypassAcl = false,
       environmentId,
+      metadataFilter,
       limit = 10,
     } = params;
     if (connectorIds.length === 0) return [];
@@ -146,9 +154,13 @@ class KbChunkModel {
         ? sql`AND kbc.environment_id IS NOT DISTINCT FROM ${environmentId}`
         : sql``;
 
+    const metadataPredicate = buildMetadataFilterPredicate(metadataFilter);
+    const hasMetadataFilter = hasUsableMetadataFilter(metadataFilter);
+
     const col = sql.raw(getEmbeddingColumnName(dimensions));
     const vectorCast = sql.raw(`::vector(${dimensions})`);
-    const rows = await executeWithSearchTimeout(sql`
+    const rows = await executeWithSearchTimeout(
+      sql`
       SELECT
         c.id, c.content, c.chunk_index AS "chunkIndex", c.document_id AS "documentId",
         d.source_id AS "sourceId", d.title, d.source_url AS "sourceUrl", d.metadata,
@@ -166,10 +178,13 @@ class KbChunkModel {
         AND kbc.deleted_at IS NULL
         AND c.${col} IS NOT NULL
         ${envFilter}
+        ${metadataPredicate}
         ${bypassAcl ? sql`` : sql`AND c.acl ?| ARRAY[${aclEntries}]`}
       ORDER BY c.${col} <=> ${embeddingStr}${vectorCast}
       LIMIT ${limit}
-    `);
+    `,
+      { iterativeVectorScan: hasMetadataFilter },
+    );
 
     return rows.rows as unknown as VectorSearchResult[];
   }
@@ -180,6 +195,12 @@ class KbChunkModel {
    * are deliberately ignored: only the backend's rank and stable chunk id are
    * trusted. This keeps ACL, environment isolation, and soft-delete filtering
    * under Archestra's control even when ranking runs outside PostgreSQL.
+   *
+   * The metadata filter is re-applied here for a different reason than the
+   * others: it is a correctness predicate, not a security one. An external
+   * index may not know the filter at all, or may hold a stale copy of a
+   * document's metadata, so a candidate it returns is only kept if PostgreSQL
+   * — the source of truth for `kb_documents.metadata` — still agrees.
    */
   static async verifyExternalSearchResults(params: {
     candidates: VectorSearchResult[];
@@ -187,6 +208,8 @@ class KbChunkModel {
     userAcl: AclEntry[];
     bypassAcl?: boolean;
     environmentId?: string | null;
+    /** Narrows to documents whose metadata satisfies the predicate. */
+    metadataFilter?: KbDocumentMetadataFilter;
   }): Promise<VectorSearchResult[]> {
     const {
       candidates,
@@ -194,6 +217,7 @@ class KbChunkModel {
       userAcl,
       bypassAcl = false,
       environmentId,
+      metadataFilter,
     } = params;
     if (candidates.length === 0 || connectorIds.length === 0) return [];
     if (!bypassAcl && userAcl.length === 0) return [];
@@ -219,6 +243,8 @@ class KbChunkModel {
         ? sql`AND kbc.environment_id IS NOT DISTINCT FROM ${environmentId}`
         : sql``;
 
+    const metadataPredicate = buildMetadataFilterPredicate(metadataFilter);
+
     const rows = await db.execute(sql`
       SELECT
         c.id, c.content, c.chunk_index AS "chunkIndex",
@@ -232,6 +258,7 @@ class KbChunkModel {
         AND d.connector_id IN (${scopedConnectorIds})
         AND kbc.deleted_at IS NULL
         ${environmentFilter}
+        ${metadataPredicate}
         ${bypassAcl ? sql`` : sql`AND c.acl ?| ARRAY[${aclEntries}]`}
     `);
 
@@ -333,6 +360,8 @@ class KbChunkModel {
     bypassAcl?: boolean;
     /** Defense-in-depth env isolation: require the connector to be in this env. */
     environmentId?: string | null;
+    /** Narrows to documents whose metadata satisfies the predicate. */
+    metadataFilter?: KbDocumentMetadataFilter;
     limit?: number;
   }): Promise<VectorSearchResult[]> {
     const { connectorIds, queryText, userAcl, bypassAcl = false } = params;
@@ -512,6 +541,8 @@ class KbChunkModel {
     userAcl: AclEntry[];
     bypassAcl?: boolean;
     environmentId?: string | null;
+    /** Narrows to documents whose metadata satisfies the predicate. */
+    metadataFilter?: KbDocumentMetadataFilter;
     limit?: number;
   }): Promise<VectorSearchResult[]> {
     const {
@@ -522,6 +553,7 @@ class KbChunkModel {
       userAcl,
       bypassAcl = false,
       environmentId,
+      metadataFilter,
       limit = 10,
     } = params;
     const ids = sql.join(
@@ -539,6 +571,8 @@ class KbChunkModel {
       environmentId !== undefined
         ? sql`AND kbc.environment_id IS NOT DISTINCT FROM ${environmentId}`
         : sql``;
+
+    const metadataPredicate = buildMetadataFilterPredicate(metadataFilter);
 
     // The query is parsed once per text-search configuration present, and the
     // per-language predicates are OR-ed together.
@@ -591,6 +625,11 @@ class KbChunkModel {
     // and the BM25 ranker cannot drift from it. It also fixes the ordering
     // that matters — filters run BEFORE any recall cap below, so capping can
     // never hand a user a shorter list than their permissions allow.
+    //
+    // The metadata predicate joins them here for the same reason. It is not a
+    // security filter — it only narrows — but a set that narrowed under one
+    // ranker and not the other would silently change what an agent can find
+    // depending on whether BM25 statistics happen to exist yet.
     const matchedSet = sql`
       FROM kb_chunks c
       JOIN kb_documents d ON d.id = c.document_id
@@ -602,6 +641,7 @@ class KbChunkModel {
         AND kbc.deleted_at IS NULL
         AND (${matchPredicate})
         ${envFilter}
+        ${metadataPredicate}
         ${bypassAcl ? sql`` : sql`AND c.acl ?| ARRAY[${aclEntries}]`}
     `;
 
@@ -1037,14 +1077,129 @@ export default KbChunkModel;
  * statement_timeout in force for everything else. SET LOCAL semantics via
  * set_config(..., true) scope the override to the wrapping transaction, and
  * set_config takes the value as a bound parameter (plain SET cannot).
+ *
+ * `iterativeVectorScan` additionally turns on pgvector's iterative index scan
+ * for the statement. See {@link buildMetadataFilterPredicate}'s callers for why
+ * it is needed: pgvector applies a WHERE clause AFTER the HNSW index has
+ * already chosen its `hnsw.ef_search` candidates, so a filter that is selective
+ * relative to the corpus discards most of them and the search returns fewer
+ * rows than asked for — or none at all — while matching documents plainly
+ * exist. That failure is silent, and for a scoped search it is indistinguishable
+ * from "this set is empty". Iterative scan keeps pulling candidates until the
+ * limit is met or `hnsw.max_scan_tuples` trips.
+ *
+ * `relaxed_order` rather than `strict_order`: it recovers more rows, and the
+ * approximate ordering it returns costs nothing here because rank fusion and
+ * the reranker both reorder these rows downstream anyway.
+ *
+ * Only set when a filter is actually present — an unfiltered search already
+ * fills its limit from the first candidate batch, and iterative scan would make
+ * it do strictly more work for the same rows.
+ *
+ * Safe on any pooled connection: pgvector registers this GUC when its module
+ * loads, which is lazy, but PostgreSQL accepts a set value for a not-yet-loaded
+ * extension's namespace as a placeholder and reconciles it when the module does
+ * load — verified against pgvector 0.8.5 by setting it before any vector
+ * expression in the transaction and reading it back afterwards.
  */
-async function executeWithSearchTimeout(query: SQL) {
+async function executeWithSearchTimeout(
+  query: SQL,
+  options: { iterativeVectorScan?: boolean } = {},
+) {
   const timeoutMillis = config.kb.searchStatementTimeoutMillis;
-  if (timeoutMillis <= 0) return db.execute(query);
+  const applyTimeout = timeoutMillis > 0;
+  const applyIterativeScan = options.iterativeVectorScan === true;
+  // Both overrides are transaction-local, so there has to be a transaction to
+  // scope them to even when the timeout alone would not have required one.
+  if (!applyTimeout && !applyIterativeScan) return db.execute(query);
   return db.transaction(async (tx) => {
-    await tx.execute(
-      sql`SELECT set_config('statement_timeout', ${String(timeoutMillis)}, true)`,
-    );
+    if (applyTimeout) {
+      await tx.execute(
+        sql`SELECT set_config('statement_timeout', ${String(timeoutMillis)}, true)`,
+      );
+    }
+    if (applyIterativeScan) {
+      await tx.execute(
+        sql`SELECT set_config('hnsw.iterative_scan', 'relaxed_order', true)`,
+      );
+    }
     return tx.execute(query);
   });
+}
+
+/**
+ * Render a {@link KbDocumentMetadataFilter} as an additional WHERE predicate on
+ * the joined `kb_documents d` row, or the empty fragment when there is nothing
+ * to narrow by.
+ *
+ * Each value is tested twice — once as a scalar (`{"k":"v"}`) and once as a
+ * single-element array (`{"k":["v"]}`) — because connectors store both shapes
+ * under keys a caller cannot distinguish by name (Confluence `spaceKey` is a
+ * string, `labels` is an array). JSONB containment reaches into arrays, so
+ * `'{"labels":["a","b"]}' @> '{"labels":["b"]}'` is true.
+ *
+ * Deliberately containment (`@>`) on the whole `metadata` column rather than
+ * the `->>` text equality used elsewhere in this codebase: `@>` is servable by
+ * a GIN `jsonb_path_ops` index, and `->>` is not. That opclass supports exactly
+ * the containment operator used here — the mismatch that retired
+ * `kb_chunks_acl_idx`, whose `jsonb_path_ops` index could not serve `?|`.
+ *
+ * This narrows only. It is applied alongside — never instead of — the ACL
+ * predicate, so it cannot surface a document the caller could not already read.
+ */
+/**
+ * The JSON values a caller-supplied string should be tested against.
+ *
+ * Filter values arrive as strings — that is all a tool schema or a query string
+ * can carry — but connectors write JSON numbers and booleans as well as strings
+ * (`depth: 1`, `archived: false`, an issue's `number`). JSONB containment is
+ * type-strict, so `'{"depth":1}' @> '{"depth":"1"}'` is FALSE, and a
+ * string-only filter would silently miss every numeric or boolean field.
+ *
+ * So a value that round-trips exactly through `Number` is also tried as a
+ * number, and `"true"`/`"false"` are also tried as booleans. The round-trip
+ * check is what keeps `"1.0"`, `"007"`, and integers beyond float precision
+ * from being coerced into something that is not the same value.
+ */
+function metadataMatchCandidates(
+  value: string,
+): Array<string | number | boolean> {
+  const candidates: Array<string | number | boolean> = [value];
+  if (value === "true") candidates.push(true);
+  else if (value === "false") candidates.push(false);
+  else if (value.trim() !== "" && String(Number(value)) === value) {
+    candidates.push(Number(value));
+  }
+  return candidates;
+}
+
+function hasUsableMetadataFilter(
+  filter: KbDocumentMetadataFilter | undefined,
+): filter is KbDocumentMetadataFilter {
+  if (!filter) return false;
+  return Object.values(filter).some((value) =>
+    Array.isArray(value) ? value.length > 0 : true,
+  );
+}
+
+function buildMetadataFilterPredicate(
+  filter: KbDocumentMetadataFilter | undefined,
+): SQL {
+  if (!hasUsableMetadataFilter(filter)) return sql``;
+  const perKey: SQL[] = [];
+  for (const [key, rawValue] of Object.entries(filter)) {
+    const values = Array.isArray(rawValue) ? rawValue : [rawValue];
+    // An empty value list would render `()`. The schema rejects it, but this
+    // runs on a security-adjacent path, so never emit invalid SQL.
+    if (values.length === 0) continue;
+    const alternatives = values.flatMap((value) =>
+      metadataMatchCandidates(value).flatMap((candidate) => [
+        sql`d.metadata @> ${JSON.stringify({ [key]: candidate })}::jsonb`,
+        sql`d.metadata @> ${JSON.stringify({ [key]: [candidate] })}::jsonb`,
+      ]),
+    );
+    perKey.push(sql`(${sql.join(alternatives, sql` OR `)})`);
+  }
+  if (perKey.length === 0) return sql``;
+  return sql`AND ${sql.join(perKey, sql` AND `)}`;
 }

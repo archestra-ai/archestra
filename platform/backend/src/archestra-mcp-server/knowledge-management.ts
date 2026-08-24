@@ -47,6 +47,7 @@ import {
   AgentConnectorAssignmentModel,
   AgentKnowledgeBaseModel,
   AgentModel,
+  KbDocumentModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
   UserModel,
@@ -58,6 +59,8 @@ import {
   ConnectorTypeSchema,
   InsertKnowledgeBaseConnectorSchema,
   InsertKnowledgeBaseSchema,
+  type KbDocumentMetadataFilter,
+  KbDocumentMetadataFilterSchema,
   type KnowledgeBaseConnector,
   KnowledgeSourceVisibilitySchema,
   UpdateKnowledgeBaseConnectorSchema,
@@ -194,6 +197,12 @@ const QueryKnowledgeSourcesOutputSchema = z.object({
     .describe(
       "How to cite these results: back each claim with a verbatim quote tagged with the source chunk's ref.",
     ),
+  filterDiagnostic: z
+    .string()
+    .optional()
+    .describe(
+      "Present only when documentFilter matched no documents. Names the values that do exist for the keys that were filtered on, so the search can be retried.",
+    ),
 });
 
 const KnowledgeBaseOutputItemSchema = z.object({
@@ -256,6 +265,18 @@ const QueryKnowledgeSourcesToolArgsSchema = z
       .describe(
         "The user's original query, passed verbatim without rephrasing or expansion.",
       ),
+    documentFilter: KbDocumentMetadataFilterSchema.optional().describe(
+      [
+        "Optional. Narrows the search to a subset of the indexed documents by their",
+        'source metadata — for example {"spaceKey": "DEV"} or',
+        '{"labels": ["release-2.0"]}. Keys are ANDed; a list of values for one key',
+        "is ORed. Matches both single values and list-valued metadata.",
+        "Only use this when the user's request explicitly names a subset to search;",
+        "do NOT infer one from the topic of the question, and do NOT guess key or",
+        "value names. If a filter matches nothing, the response lists the values that",
+        "actually exist so the call can be retried with a real one.",
+      ].join(" "),
+    ),
   })
   .strict();
 
@@ -674,17 +695,37 @@ async function handleQueryKnowledgeSources(params: {
       }
     }
 
+    const bypassAcl = access?.canReadAll ?? false;
+    const documentFilter = args.documentFilter;
     const results = await queryService.query({
       connectorIds,
       organizationId,
       queryText: args.query,
       userAcl,
-      bypassAcl: access?.canReadAll ?? false,
+      bypassAcl,
       // Defense-in-depth: even though connectorIds is already env-filtered above,
       // the chunk search re-checks the connector environment.
       environmentId: agentEnvironmentId,
+      metadataFilter: documentFilter,
       limit: 10,
     });
+
+    // A filter that matches nothing is the failure mode worth spending a query
+    // on. It is structurally valid, so it produces an ordinary empty result the
+    // model reads as "this knowledge base has no answer" — when in fact it
+    // asked for `Release 2.0` and the corpus stores `release-2.0`. Answer with
+    // the values that do exist, scoped to what this caller can read, so the
+    // model can retry against the real vocabulary instead of giving up.
+    const filterDiagnostic =
+      documentFilter && results.length === 0
+        ? await describeUnmatchedFilter({
+            documentFilter,
+            connectorIds,
+            userAcl,
+            bypassAcl,
+            environmentId: agentEnvironmentId,
+          })
+        : undefined;
 
     // The quote-citation instruction rides on the result (not the always-on
     // tool description) so it reaches the model exactly when there are chunks to
@@ -733,6 +774,7 @@ async function handleQueryKnowledgeSources(params: {
     const output = {
       results: wireResults,
       totalChunks: wireResults.length,
+      ...(filterDiagnostic && { filterDiagnostic }),
       ...(config.kb.quoteVerificationEnabled &&
         wireResults.length > 0 && {
           citationInstruction:
@@ -1616,3 +1658,61 @@ const MAX_INLINE_RESULT_IMAGES = 3;
  * would fail the whole tool result.
  */
 const MAX_INLINE_RESULT_IMAGE_BASE64_CHARS = 7_000_000;
+
+/**
+ * Explain a `documentFilter` that matched nothing, by naming the values that
+ * actually exist for the keys it used.
+ *
+ * Best-effort by construction: this runs only on an already-empty result, so a
+ * failure here must degrade to a plain empty result rather than turn a
+ * successful search into an error.
+ */
+async function describeUnmatchedFilter(params: {
+  documentFilter: KbDocumentMetadataFilter;
+  connectorIds: string[];
+  userAcl: AclEntry[];
+  bypassAcl: boolean;
+  environmentId?: string | null;
+}): Promise<string | undefined> {
+  const keys = Object.keys(params.documentFilter);
+  if (keys.length === 0) return undefined;
+  try {
+    const facets = await KbDocumentModel.findMetadataFacetValues({
+      connectorIds: params.connectorIds,
+      keys,
+      userAcl: params.userAcl,
+      bypassAcl: params.bypassAcl,
+      environmentId: params.environmentId,
+    });
+
+    const known: string[] = [];
+    const unknown: string[] = [];
+    for (const key of keys) {
+      const values = facets.get(key);
+      if (values?.length) known.push(`${key}: ${values.join(", ")}`);
+      else unknown.push(key);
+    }
+
+    const parts = [
+      "The documentFilter matched no documents, so nothing was searched.",
+    ];
+    if (unknown.length > 0) {
+      parts.push(
+        `No indexed document carries ${unknown.length === 1 ? "the key" : "the keys"} ${unknown.join(", ")}.`,
+      );
+    }
+    if (known.length > 0) {
+      parts.push(`Values available here — ${known.join("; ")}.`);
+    }
+    parts.push(
+      "Retry with one of these values, or without documentFilter to search everything.",
+    );
+    return parts.join(" ");
+  } catch (error) {
+    logger.warn(
+      { err: error },
+      "[query_knowledge_sources] Could not describe an unmatched document filter",
+    );
+    return undefined;
+  }
+}

@@ -1,6 +1,11 @@
 import type { TextSearchLanguage } from "@archestra/shared";
 import type { Bm25Tuning, VectorSearchResult } from "@/models/kb-chunk";
-import type { AclEntry, InsertKbChunk, KbChunk } from "@/types";
+import type {
+  AclEntry,
+  InsertKbChunk,
+  KbChunk,
+  KbDocumentMetadataFilter,
+} from "@/types";
 
 // ===== Public contract =====
 
@@ -12,6 +17,13 @@ import type { AclEntry, InsertKbChunk, KbChunk } from "@/types";
  * scope. An implementation must apply both before returning any content.
  * Search results must retain document and chunk identity because citations and
  * context expansion depend on those fields after ranking.
+ *
+ * A search scope may also carry a document metadata filter. Unlike the ACL and
+ * environment predicates it is not a security control — it only ever removes
+ * documents — but an implementation that ignores it silently returns results
+ * from outside the set the caller asked for, so it must be honored (or the
+ * backend must set `requiresResultVerification`, which re-applies it in
+ * PostgreSQL).
  *
  * PostgreSQL is the only implementation shipped by Archestra. Keeping callers
  * behind this contract lets another implementation be added at construction
@@ -79,4 +91,12 @@ interface AccessScope {
 
 interface SearchScope extends AccessScope {
   connectorIds: string[];
+  /**
+   * Narrows the search to documents whose `metadata` satisfies this predicate.
+   * Deliberately on the search scope rather than {@link AccessScope}: a set
+   * decides what is *searched*, access decides what may be *read*. An
+   * implementation must treat it as an additional AND, never as a substitute
+   * for the ACL predicate — narrowing a search must never be able to widen it.
+   */
+  metadataFilter?: KbDocumentMetadataFilter;
 }

@@ -1,11 +1,13 @@
 import { KbChunkModel } from "@/models";
 import type { VectorSearchResult } from "@/models/kb-chunk";
-import type { AclEntry } from "@/types";
+import type { AclEntry, KbDocumentMetadataFilter } from "@/types";
 import type { FindNeighborsParams, NeighborChunk } from "./retrieval-backend";
 
 /**
  * Verify candidates returned by an external retrieval backend against
- * Archestra's canonical PostgreSQL access-control state.
+ * Archestra's canonical PostgreSQL access-control state, and against the
+ * document metadata filter the search was scoped to — an external index may
+ * not implement the filter, or may hold stale metadata.
  */
 export async function verifyExternalRetrievalResults(params: {
   candidates: VectorSearchResult[];
@@ -13,6 +15,7 @@ export async function verifyExternalRetrievalResults(params: {
   userAcl: AclEntry[];
   bypassAcl?: boolean;
   environmentId?: string | null;
+  metadataFilter?: KbDocumentMetadataFilter;
 }): Promise<VectorSearchResult[]> {
   return KbChunkModel.verifyExternalSearchResults(params);
 }

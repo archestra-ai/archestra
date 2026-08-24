@@ -41,6 +41,30 @@ export type EmbeddingStatus = z.infer<typeof EmbeddingStatusSchema>;
 export const KbDocumentMetadataSchema = z.record(z.string(), z.unknown());
 export type KbDocumentMetadata = z.infer<typeof KbDocumentMetadataSchema>;
 
+/**
+ * A predicate over a document's connector-supplied `metadata`, narrowing a
+ * search to a subset of the documents a connector has already indexed.
+ *
+ * Each entry is one metadata key and the value(s) that satisfy it. A document
+ * matches when EVERY key matches (AND across keys) and, for each key, its
+ * stored value is — or contains — ANY of the listed values (OR within a key).
+ *
+ * Both shapes are accepted per key because connectors emit both: Confluence
+ * writes a scalar `spaceKey` and an array `labels`, GitHub writes a scalar
+ * `state` and an array `labels`. A caller should not have to know which.
+ *
+ * Narrowing only. This never widens what a user may read: the ACL predicate is
+ * applied separately and unconditionally, so a filter can only ever remove
+ * documents from a result the user was already entitled to see.
+ */
+export const KbDocumentMetadataFilterSchema = z.record(
+  z.string().trim().min(1),
+  z.union([z.string(), z.array(z.string()).min(1)]),
+);
+export type KbDocumentMetadataFilter = z.infer<
+  typeof KbDocumentMetadataFilterSchema
+>;
+
 // Shared field overrides for drizzle-zod schema generation
 const extendedFields = {
   embeddingStatus: EmbeddingStatusSchema,

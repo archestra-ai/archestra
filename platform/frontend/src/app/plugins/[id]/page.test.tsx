@@ -233,7 +233,7 @@ describe("PluginDetailPage", () => {
     ).toHaveAttribute("data-language", "powershell");
   });
 
-  it("uses the configured app name for the featured plugin", async () => {
+  it("attributes the vendor's own plugin to its author, not the deployment", async () => {
     const user = userEvent.setup();
     vi.mocked(useAppearanceSettings).mockReturnValue({
       data: { appName: "Northstar" },
@@ -247,7 +247,10 @@ describe("PluginDetailPage", () => {
       sourceMarketplacePluginName: "appa-runtime",
     });
 
-    expect(screen.getByText("Northstar")).toBeVisible();
+    // The deployment is rebranded "Northstar" above, but the plugin is published
+    // by Archestra either way — rebranding must not rewrite someone else's byline.
+    expect(screen.getByText("Archestra")).toBeVisible();
+    expect(screen.queryByText("Northstar")).not.toBeInTheDocument();
     expect(screen.queryByText("Imported from GitHub")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "More actions" }));
     expect(screen.getByRole("menuitem", { name: "Updates" })).toBeVisible();

@@ -129,7 +129,7 @@ function McpRegistryListLayout({
         {
           label: <RegistryTabLabel label="All" count={totalCount} />,
           href: "/mcp/registry",
-          active: selectedFacet === null,
+          selected: selectedFacet === null,
         },
         {
           label: (
@@ -140,7 +140,7 @@ function McpRegistryListLayout({
             />
           ),
           href: mcpRegistryFacetHref("you"),
-          active: selectedFacet === "you",
+          selected: selectedFacet === "you",
           testId: "mcp-registry-action-required-tab",
         },
         ...(!userIsMcpServerAdmin && facetCounts.others > 0
@@ -153,7 +153,7 @@ function McpRegistryListLayout({
                   />
                 ),
                 href: mcpRegistryFacetHref("others"),
-                active: selectedFacet === "others",
+                selected: selectedFacet === "others",
               },
             ]
           : []),
@@ -167,7 +167,7 @@ function McpRegistryListLayout({
                   />
                 ),
                 href: mcpRegistryFacetHref("muted"),
-                active: selectedFacet === "muted",
+                selected: selectedFacet === "muted",
               },
             ]
           : []),

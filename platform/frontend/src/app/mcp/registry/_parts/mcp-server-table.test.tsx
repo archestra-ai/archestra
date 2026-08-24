@@ -153,6 +153,30 @@ describe("McpServerTable uninstall permission", () => {
     expect(await screen.findByText("Uninstall MCP Server")).toBeInTheDocument();
   });
 
+  it("keeps compact registry columns fixed while the server name fills the remaining width", () => {
+    const { container } = renderTable(table);
+
+    expect(container.querySelector("table")).toHaveStyle({
+      minWidth: "1108px",
+    });
+    expect(
+      (container.querySelector('th[data-column-id="name"]') as HTMLElement)
+        .style.width,
+    ).toBe("");
+    expect(container.querySelector('th[data-column-id="tools"]')).toHaveStyle({
+      width: "90px",
+    });
+    expect(container.querySelector('th[data-column-id="author"]')).toHaveStyle({
+      width: "212px",
+    });
+    expect(container.querySelector('th[data-column-id="status"]')).toHaveStyle({
+      width: "190px",
+    });
+    expect(container.querySelector('th[data-column-id="actions"]')).toHaveStyle(
+      { width: "260px" },
+    );
+  });
+
   it("refuses the uninstall for a user without the delete permission", async () => {
     const user = userEvent.setup();
     grantAllExcept({ mcpServerInstallation: ["delete"] });

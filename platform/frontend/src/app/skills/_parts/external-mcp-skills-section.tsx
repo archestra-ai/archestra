@@ -27,8 +27,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { useSession } from "@/lib/auth/auth.query";
-import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { SkillUsageDialog } from "./skill-usage-dialog";
+import { SkillUsageSummary } from "./skill-usage-summary";
 
 type ExternalSkill =
   archestraApiTypes.GetExternalMcpSkillsResponses["200"][number];
@@ -188,7 +188,7 @@ export function ExternalMcpSkillsSection({
     {
       id: "usageCount",
       accessorKey: "usageCount",
-      size: 120,
+      size: 280,
       header: ({ column }) => (
         <div className="flex justify-end pr-4">
           <Button
@@ -203,23 +203,11 @@ export function ExternalMcpSkillsSection({
       ),
       cell: ({ row }) => (
         <div className="flex justify-end pr-4">
-          <div className="w-full px-1.5 py-0.5 text-right text-sm">
-            <div>
-              {row.original.usageCount}
-              {row.original.usageUserCount > 0 && (
-                <span className="text-muted-foreground">
-                  {" "}
-                  by {row.original.usageUserCount}{" "}
-                  {row.original.usageUserCount === 1 ? "user" : "users"}
-                </span>
-              )}
-            </div>
-            <div className="text-xs text-muted-foreground">
-              {formatRelativeTimeFromNow(row.original.lastUsedAt, {
-                neverLabel: "Never used",
-              })}
-            </div>
-          </div>
+          <SkillUsageSummary
+            usageCount={row.original.usageCount}
+            usageUserCount={row.original.usageUserCount}
+            lastUsedAt={row.original.lastUsedAt}
+          />
         </div>
       ),
     },
@@ -310,6 +298,14 @@ export function ExternalMcpSkillsSection({
             sorting={sorting}
             onSortingChange={setSorting}
             onRowClick={(row) => router.push(externalSkillHref(row))}
+            tableClassName="[&_td]:py-1.5"
+            fixedWidthColumnIds={[
+              "serverName",
+              "visibility",
+              "files",
+              "usageCount",
+            ]}
+            flexibleColumnIds={["name"]}
           />
         }
       />

@@ -35,23 +35,28 @@ export function useSkillsPluginsNavTabs() {
   if (reachable.length < 2) {
     return [];
   }
-  return reachable.map(({ href, title }) => ({
+  return reachable.map(({ href, title, badge }) => ({
     href,
-    label: <BetaTabLabel title={title} />,
+    label: <NavTabLabel title={title} badge={badge} />,
   }));
 }
 
+/**
+ * The two tabs carry different chips because they are at different stages:
+ * Skills is newly released, Plugins is still in beta. The sidebar row is
+ * named for Skills and so carries the matching "New".
+ */
 const NAV_TABS = [
-  { title: "Skills", href: "/skills" },
-  { title: "Plugins", href: "/plugins" },
+  { title: "Skills", href: "/skills", badge: "New" },
+  { title: "Plugins", href: "/plugins", badge: "Beta" },
 ];
 
-function BetaTabLabel({ title }: { title: string }) {
+function NavTabLabel({ title, badge }: { title: string; badge: string }) {
   return (
     <span className="flex items-center gap-1.5">
       {title}
       <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
-        Beta
+        {badge}
       </Badge>
     </span>
   );

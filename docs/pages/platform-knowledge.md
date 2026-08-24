@@ -3,7 +3,7 @@ title: Knowledge
 category: Knowledge
 order: 1
 description: Built-in RAG knowledge — Knowledge Bases, connectors, and how retrieval works
-lastUpdated: 2026-08-23
+lastUpdated: 2026-08-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -23,7 +23,7 @@ The whole pipeline runs inside Archestra on PostgreSQL with pgvector. There is n
 Connectors run on a cron schedule. Each document goes through the same four steps.
 
 1. **Extract.** Text is pulled from the source. Office documents and PDFs are read through format-specific extractors; PDF text comes from the document's text layer. A PDF without a text layer — a scan, for example — is skipped and counted in the sync run details. With a multimodal embedding model configured, images are embedded directly rather than described.
-2. **Chunk.** The document is split into passages of roughly 512 tokens, on paragraph and sentence boundaries. Each chunk carries its document title and the document's metadata, so it can be matched on its own.
+2. **Chunk.** The document is split into passages of roughly 512 tokens, on paragraph and sentence boundaries. Each chunk carries its document title and the document's metadata, so it can be matched on its own. Each passage can be split again into smaller chunks — see [Multi-Granularity Indexing](#multi-granularity-indexing).
 3. **Add context.** Optionally, add document-wide or passage-specific context to each chunk before indexing it. See [Contextual Retrieval](#contextual-retrieval).
 4. **Embed.** Each chunk is vectorized with the configured embedding model and stored alongside a keyword index of the same text.
 
@@ -47,7 +47,7 @@ A search runs both a semantic and a keyword pass, then narrows the results.
 3. **Fuse.** Results are merged with Reciprocal Rank Fusion, which favors chunks that rank well across several variants rather than one.
 4. **Rerank.** The reranking model scores each surviving chunk against the original question and drops the irrelevant ones. See [Query Results Ranking](#query-results-ranking).
 5. **Filter by access.** Chunks the asking user cannot read are removed. This applies to every result, at every stage.
-6. **Widen.** The chunks either side of each hit are stitched back on, so a passage that starts mid-sentence arrives with its surroundings. See [Context Expansion](#context-expansion).
+6. **Widen.** The chunks either side of each hit are stitched back on, so a passage that starts mid-sentence arrives with its surroundings. See [Context Expansion](#context-expansion). A hit on a child chunk is widened to its own passage instead.
 
 ```mermaid
 flowchart LR
@@ -131,6 +131,20 @@ Search ranks chunks, but a chunk boundary falls wherever the chunker put it. A h
 
 After ranking, the neighbouring chunks are stitched back onto each hit. Ranking is unaffected — this only widens the passage the agent reads. Expansion stops at any chunk the user cannot read, so it never becomes a way around access control. Set the radius with `ARCHESTRA_KNOWLEDGE_BASE_CONTEXT_EXPANSION_RADIUS`.
 
+### Multi-Granularity Indexing
+
+One chunk size serves one kind of question. A chunk small enough that a port number stands out is too small to explain what the port belongs to. A chunk large enough to carry that explanation buries the port number among everything else in it.
+
+Multi-granularity indexing splits each passage a second time, into smaller child chunks, and indexes only the children. A search matches a child, and the agent reads the whole passage that child came from. Precise lookups and broad questions are then served by the same corpus.
+
+Set the child size with `ARCHESTRA_KNOWLEDGE_BASE_CHILD_CHUNK_SIZE_TOKENS`. It is off by default, and `0` turns it off.
+
+Two consequences are worth knowing. Several children of one passage often match together, so only the best-ranked one is kept — a passage is never returned twice in one result set. And [context expansion](#context-expansion) does not apply to a hit served this way, because the passage around it has already been returned.
+
+The cost lands on index size rather than on your embedding bill. The children cover the same text the passages did, so the tokens sent to the embedding model barely change — a measured 4% more on a sample document. What grows is the number of stored vectors, roughly the ratio of the two sizes. Contextual retrieval is unaffected: context is still generated once per passage.
+
+Like chunk size, this applies at ingest. Documents already indexed keep their existing shape until their connector re-syncs, and both shapes are searched together in the meantime.
+
 ### Keyword Search Language
 
 The keyword index stems words so that different forms of one word match. Stemming is language-specific: "Katzen" and "Katze" only collapse to the same term under German rules.
@@ -145,10 +159,11 @@ These settings are deployment-wide. See [Deployment](/docs/platform-deployment#k
 | --- | --- | --- |
 | `ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED` | `true` | Whether keyword search runs alongside vector search |
 | `ARCHESTRA_KNOWLEDGE_BASE_CHUNK_SIZE_TOKENS` | `512` | Size of one chunk. Smaller is more precise, larger carries more context |
+| `ARCHESTRA_KNOWLEDGE_BASE_CHILD_CHUNK_SIZE_TOKENS` | `0` | Size of one child chunk. `0` indexes passages only |
 | `ARCHESTRA_KNOWLEDGE_BASE_CONTEXT_EXPANSION_RADIUS` | `1` | How many neighbouring chunks are stitched onto a hit |
 | `ARCHESTRA_KNOWLEDGE_BASE_CONTEXTUAL_RETRIEVAL_ENABLED` | `false` | Default contextual retrieval mode for organizations without a saved choice (`true` = per document) |
 
-Chunk size and contextual retrieval apply at ingest. A normal sync updates changed documents; force a connector re-sync to rebuild context for documents whose source content has not changed.
+Chunk sizes and contextual retrieval apply at ingest. A normal sync updates changed documents; force a connector re-sync to rebuild context for documents whose source content has not changed.
 
 ## Configuration
 

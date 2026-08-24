@@ -17,6 +17,7 @@ function asResult(chunk: {
     id: chunk.id,
     content: chunk.content,
     chunkIndex: chunk.chunkIndex,
+    parentIndex: null,
     documentId: chunk.documentId,
     sourceId: null,
     title: "Test Document",
@@ -271,5 +272,38 @@ describe("expandChunkContext", () => {
     });
 
     expect(expanded.content).toBe("data:image/png;base64,AAAA");
+  });
+
+  test("does not widen a hit that already arrived as a whole passage", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    // A child chunk has been resolved to its parent passage upstream. Adding a
+    // radius of neighbouring passages on top would return several passages
+    // where one was earned — the bloated result parent/child indexing exists to
+    // avoid.
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+    const { chunks } = await seedDocument({
+      organizationId: org.id,
+      connectorId: connector.id,
+      hash: "no-expansion-for-children",
+      chunks: [
+        { content: "Chunk zero." },
+        { content: "Chunk one." },
+        { content: "Chunk two." },
+      ],
+    });
+
+    const [expanded] = await expandChunkContext({
+      results: [{ ...asResult(chunks[1]), parentIndex: 0 }],
+      radius: 1,
+      userAcl: ["org:*"],
+    });
+
+    expect(expanded.content).toBe("Chunk one.");
   });
 });

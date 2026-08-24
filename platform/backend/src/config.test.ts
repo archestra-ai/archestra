@@ -40,6 +40,7 @@ import config, {
   parseChatRateMeteredMaxOutputTokens,
   parseClampedFloat,
   parseClampedInt,
+  parseClampedIntOrZero,
   parseCodeRuntimeDaggerRunnerHost,
   parseCommaSeparatedList,
   parseConnectorSyncMaxDuration,
@@ -3247,6 +3248,38 @@ describe("parseClampedInt", () => {
 
   test("allows zero when the range permits it", () => {
     expect(parseClampedInt("0", 1, 0, 4)).toBe(0);
+  });
+});
+
+describe("parseClampedIntOrZero", () => {
+  test("falls back when unset or unparseable", () => {
+    expect(parseClampedIntOrZero(undefined, 0, 32, 2048)).toBe(0);
+    expect(parseClampedIntOrZero("", 0, 32, 2048)).toBe(0);
+    expect(parseClampedIntOrZero("not-a-number", 0, 32, 2048)).toBe(0);
+  });
+
+  test("passes through a value inside the range", () => {
+    expect(parseClampedIntOrZero("128", 0, 32, 2048)).toBe(128);
+  });
+
+  test("honours an explicit zero instead of clamping it up to the floor", () => {
+    // The whole point of this parser: 0 means "off", which sits outside the
+    // valid range. A plain clamp would turn it into 32 and switch the feature
+    // ON for an operator who wrote 0 to switch it off.
+    expect(parseClampedIntOrZero("0", 0, 32, 2048)).toBe(0);
+  });
+
+  test("corrects a too-small non-zero value upward rather than disabling", () => {
+    // An operator who wrote 8 wanted "smaller", not "off".
+    expect(parseClampedIntOrZero("8", 0, 32, 2048)).toBe(32);
+  });
+
+  test("treats a negative value as off", () => {
+    expect(parseClampedIntOrZero("-5", 0, 32, 2048)).toBe(0);
+  });
+
+  test("clamps above the ceiling", () => {
+    expect(parseClampedIntOrZero("999999", 0, 32, 2048)).toBe(2048);
   });
 });
 

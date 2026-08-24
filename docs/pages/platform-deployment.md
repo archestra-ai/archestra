@@ -1729,6 +1729,11 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
   - Default: `512`. Clamped to `128`–`2048`.
   - Smaller chunks make a hit more precise but carry less surrounding context; larger chunks do the reverse. Applies at ingest only — existing chunks keep the size they were written at until their connector re-syncs, so changing this mid-corpus leaves a mix until everything has been re-indexed.
 
+- **`ARCHESTRA_KNOWLEDGE_BASE_CHILD_CHUNK_SIZE_TOKENS`** - Token budget for one child chunk under [multi-granularity indexing](/docs/platform-knowledge#multi-granularity-indexing). Each passage produced at `ARCHESTRA_KNOWLEDGE_BASE_CHUNK_SIZE_TOKENS` is split again into children of this size, and only the children are indexed and embedded. A search hit resolves back to its passage, so matching happens at the smaller size while the agent reads the same passage it would have read before.
+  - Default: `0`, which disables it. Any other value is clamped to `32`–`2048`.
+  - Set it below the chunk size — a child budget that is not smaller leaves each passage undivided, so nothing changes but the bookkeeping. Several children of one passage often match at once; only the best-ranked one is kept, so a passage never appears twice in one result set. Context expansion does not apply to a hit served this way.
+  - The cost is index size, not embedding spend: the children cover the same text, so token volume barely moves while the stored vector count grows by roughly the ratio of the two sizes. Contextual retrieval still runs once per passage. Applies at ingest only, so existing chunks keep their shape until their connector re-syncs; both shapes are searched together in the meantime.
+
 - **`ARCHESTRA_KNOWLEDGE_BASE_CONTEXT_EXPANSION_RADIUS`** - How many neighbouring chunks either side of a search hit are stitched back onto it before the result is returned.
   - Default: `1`. Clamped to `0`–`4`; `0` disables it.
   - Ranking is unaffected — this only widens the passage the model reads around a hit it already earned, so a hit landing mid-sentence or mid-table still arrives with its surroundings. Each step of radius adds up to two more chunks per result, so raising it increases the tokens sent to the model roughly proportionally.

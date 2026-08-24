@@ -116,6 +116,21 @@ export const DEFAULT_CONTEXT_EXPANSION_RADIUS = 1;
 export const MAX_CONTEXT_EXPANSION_RADIUS = 4;
 
 /**
+ * Bounds for the child-chunk size used by parent/child (multi-granularity)
+ * indexing. A document is split at {@link DEFAULT_CHUNK_SIZE_TOKENS} into
+ * parent passages, and each parent is subdivided into children of this size.
+ * Only the children are indexed and embedded; a hit resolves back to the
+ * enclosing parent, so retrieval matches at the finer size while the model
+ * still reads the wider passage.
+ *
+ * 0 disables the second pass, leaving one chunk per parent — the single-pass
+ * behaviour, and the default.
+ */
+export const MIN_CHILD_CHUNK_SIZE_TOKENS = 32;
+export const MAX_CHILD_CHUNK_SIZE_TOKENS = MAX_CHUNK_SIZE_TOKENS;
+export const DEFAULT_CHILD_CHUNK_SIZE_TOKENS = 0;
+
+/**
  * How document context is generated and added to the search index.
  *
  * `disabled` indexes chunks as-is. `document` generates one inexpensive

@@ -1,6 +1,7 @@
 import logger from "@/logging";
 import type { VectorSearchResult } from "@/models/kb-chunk";
 import type { AclEntry } from "@/types";
+import { stitchChunkContents } from "./parent-passage";
 import type { KnowledgeRetrievalBackend } from "./retrieval-backend";
 import { knowledgeRetrievalBackend } from "./retrieval-backends/registry";
 import { verifyExternalNeighborChunks } from "./retrieval-result-verifier";
@@ -26,6 +27,11 @@ import { verifyExternalNeighborChunks } from "./retrieval-result-verifier";
  *   highest-ranked hit that wants them, so overlapping hits do not repeat the
  *   same surrounding text — but a hit's own chunk is always present, so every
  *   returned citation still has the passage it refers to.
+ *
+ * A hit that carries a `parentIndex` is skipped: it is a child chunk that has
+ * already been resolved to its whole parent passage, and widening that by a
+ * further radius of passages would produce exactly the bloated result
+ * parent/child indexing exists to avoid. See `parent-passage.ts`.
  */
 export async function expandChunkContext(params: {
   results: VectorSearchResult[];
@@ -46,8 +52,9 @@ export async function expandChunkContext(params: {
 
   if (radius <= 0 || results.length === 0) return results;
 
-  // Media chunks are opaque data URLs with no surrounding prose to stitch.
-  const expandable = results.filter((r) => !isMediaChunk(r.content));
+  // Media chunks are opaque data URLs with no surrounding prose to stitch, and
+  // a child chunk already arrives as its whole parent passage.
+  const expandable = results.filter((r) => isExpandable(r));
   if (expandable.length === 0) return results;
 
   const neighborParams = {
@@ -86,7 +93,7 @@ export async function expandChunkContext(params: {
 
   let expandedCount = 0;
   const expanded = results.map((result) => {
-    if (isMediaChunk(result.content)) return result;
+    if (!isExpandable(result)) return result;
 
     const available = byDocument.get(result.documentId);
     if (!available) return result;
@@ -110,7 +117,7 @@ export async function expandChunkContext(params: {
 
     return {
       ...result,
-      content: stitch(ordered.map((c) => c.content)),
+      content: stitchChunkContents(ordered.map((c) => c.content)),
     };
   });
 
@@ -124,16 +131,12 @@ export async function expandChunkContext(params: {
 
 // ===== Internal helpers =====
 
-/**
- * A chunk's stored content carries a `TITLE: ...` prefix so it can be embedded
- * standalone. Repeating it once per stitched chunk would waste context and read
- * as three separate documents, so every chunk after the first in a window has
- * it removed.
- */
-const TITLE_PREFIX_PATTERN = /^TITLE: [^\n]*\n\n/;
-
 function isMediaChunk(content: string): boolean {
   return content.startsWith("data:image/");
+}
+
+function isExpandable(result: VectorSearchResult): boolean {
+  return result.parentIndex === null && !isMediaChunk(result.content);
 }
 
 function chunkKey(documentId: string, chunkIndex: number): string {
@@ -172,13 +175,4 @@ function collectContiguousWindow(params: {
   }
 
   return window;
-}
-
-function stitch(contents: string[]): string {
-  return contents
-    .map((content, index) =>
-      index === 0 ? content : content.replace(TITLE_PREFIX_PATTERN, ""),
-    )
-    .join("\n\n")
-    .trim();
 }

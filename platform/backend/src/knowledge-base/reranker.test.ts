@@ -26,6 +26,7 @@ function makeChunk(id: string, content: string): VectorSearchResult {
     id,
     content,
     chunkIndex: 0,
+    parentIndex: null,
     documentId: `doc-${id}`,
     title: `Title ${id}`,
     sourceUrl: null,

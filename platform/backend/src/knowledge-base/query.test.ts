@@ -275,6 +275,7 @@ describe("QueryService", () => {
       id: visibleChunk.id,
       content: "Forged external content",
       chunkIndex: 1,
+      parentIndex: null,
       documentId: visibleDocument.id,
       sourceId: "forged-source",
       title: "Forged external title",
@@ -593,6 +594,7 @@ describe("QueryService", () => {
       id: "vec-1",
       content: "Vector only result",
       chunkIndex: 0,
+      parentIndex: null,
       documentId: "doc-1",
       title: "Doc 1",
       sourceUrl: null,
@@ -605,6 +607,7 @@ describe("QueryService", () => {
       id: "ft-1",
       content: "Full text only result",
       chunkIndex: 1,
+      parentIndex: null,
       documentId: "doc-2",
       title: "Doc 2",
       sourceUrl: null,
@@ -617,6 +620,7 @@ describe("QueryService", () => {
       id: "shared-1",
       content: "Shared result from both",
       chunkIndex: 0,
+      parentIndex: null,
       documentId: "doc-3",
       title: "Doc 3",
       sourceUrl: "https://example.com",
@@ -668,6 +672,7 @@ describe("QueryService", () => {
       id: "vec-1",
       content: "Semantic match",
       chunkIndex: 0,
+      parentIndex: null,
       documentId: "doc-1",
       title: "Doc 1",
       sourceUrl: null,
@@ -715,6 +720,7 @@ describe("QueryService", () => {
       id: "r-1",
       content: "First result",
       chunkIndex: 0,
+      parentIndex: null,
       documentId: "doc-1",
       title: "Doc 1",
       sourceUrl: null,
@@ -727,6 +733,7 @@ describe("QueryService", () => {
       id: "r-2",
       content: "Second result",
       chunkIndex: 1,
+      parentIndex: null,
       documentId: "doc-2",
       title: "Doc 2",
       sourceUrl: null,
@@ -814,6 +821,7 @@ describe("QueryService", () => {
       id: "chunk-a",
       content: "Content A",
       chunkIndex: 0,
+      parentIndex: null,
       documentId: "doc-a",
       title: "Doc A",
       sourceUrl: null,
@@ -826,6 +834,7 @@ describe("QueryService", () => {
       id: "chunk-b",
       content: "Content B",
       chunkIndex: 0,
+      parentIndex: null,
       documentId: "doc-b",
       title: "Doc B",
       sourceUrl: null,
@@ -838,6 +847,7 @@ describe("QueryService", () => {
       id: "chunk-c",
       content: "Content C",
       chunkIndex: 0,
+      parentIndex: null,
       documentId: "doc-c",
       title: "Doc C",
       sourceUrl: null,
@@ -1237,6 +1247,105 @@ describe("QueryService", () => {
       expect(fullTextSearchSpy.mock.calls[0]?.[0].bm25).toBeUndefined();
       fullTextSearchSpy.mockRestore();
     });
+  });
+
+  test("matches a child chunk and serves its whole passage, once", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    // The end-to-end contract of parent/child indexing: retrieval ranks the
+    // small chunk that actually carries the fact, the model reads the passage
+    // around it, and two children of one passage do not return that passage
+    // twice.
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    setupEmbeddingConfig();
+    setupSingleQueryExpansion();
+
+    const doc = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      title: "Ingest runbook",
+      content: "irrelevant",
+      contentHash: "hash-parent-child",
+      embeddingStatus: "completed",
+    });
+
+    await KbChunkModel.insertMany([
+      {
+        documentId: doc.id,
+        content: "The ingest pipeline receives batched telemetry.",
+        chunkIndex: 0,
+        parentIndex: 0,
+        acl: ["org:*"],
+      },
+      {
+        documentId: doc.id,
+        content: "The ingest service listens on port 8080.",
+        chunkIndex: 1,
+        parentIndex: 0,
+        acl: ["org:*"],
+      },
+      {
+        documentId: doc.id,
+        content: "Batches are written to the durable queue.",
+        chunkIndex: 2,
+        parentIndex: 0,
+        acl: ["org:*"],
+      },
+      {
+        documentId: doc.id,
+        content: "An unrelated passage about reporting.",
+        chunkIndex: 3,
+        parentIndex: 1,
+        acl: ["org:*"],
+      },
+    ]);
+
+    const chunks = await KbChunkModel.findByDocument(doc.id);
+    // The two children of passage 0 are the closest matches, then the child of
+    // passage 1 — so without collapsing, the top two hits would be siblings.
+    await KbChunkModel.updateEmbeddings(
+      [
+        { chunkId: chunks[1].id, embedding: makeFakeEmbedding(1) },
+        { chunkId: chunks[0].id, embedding: makeFakeEmbedding(1.05) },
+        { chunkId: chunks[2].id, embedding: makeFakeEmbedding(3) },
+        { chunkId: chunks[3].id, embedding: makeFakeEmbedding(9) },
+      ],
+      1536,
+    );
+
+    embeddingQueue.push(makeFakeEmbedding(1));
+
+    const results = await queryService.query({
+      connectorIds: [connector.id],
+      organizationId: org.id,
+      queryText: "what port does the ingest service listen on",
+      userAcl: ["org:*"],
+    });
+
+    // One result per passage, never the same passage twice.
+    const passages = results.map((r) => r.content);
+    expect(new Set(passages).size).toBe(passages.length);
+
+    // The best hit was a child; what came back is its whole passage.
+    expect(results[0].content).toBe(
+      [
+        "The ingest pipeline receives batched telemetry.",
+        "The ingest service listens on port 8080.",
+        "Batches are written to the durable queue.",
+      ].join("\n\n"),
+    );
+
+    // The citation still names the child that matched, not the passage — so a
+    // quote from the passage resolves back to the chunk that earned the hit.
+    expect(results[0].chunkIndex).toBe(1);
+    expect(results[0].ref).toBe(`${doc.id}#1`);
+
+    // The other passage is present exactly once, and is its own text.
+    expect(passages).toContain("An unrelated passage about reporting.");
   });
 });
 

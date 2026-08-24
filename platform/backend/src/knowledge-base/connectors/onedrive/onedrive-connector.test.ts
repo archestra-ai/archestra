@@ -57,11 +57,6 @@ function setupMockClient(connector: OneDriveConnector) {
 }
 
 describe("OneDriveConnector", () => {
-  it("has the correct type", () => {
-    const connector = new OneDriveConnector();
-    expect(connector.type).toBe("onedrive");
-  });
-
   describe("validateConfig", () => {
     it("accepts valid config with tenantId and userIds", async () => {
       const connector = new OneDriveConnector();

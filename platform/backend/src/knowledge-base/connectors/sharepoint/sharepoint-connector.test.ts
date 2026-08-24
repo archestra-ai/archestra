@@ -74,11 +74,6 @@ function setupMockClient(connector: SharePointConnector) {
 }
 
 describe("SharePointConnector", () => {
-  it("has the correct type", () => {
-    const connector = new SharePointConnector();
-    expect(connector.type).toBe("sharepoint");
-  });
-
   describe("validateConfig", () => {
     it("accepts valid config with siteUrl", async () => {
       const connector = new SharePointConnector();

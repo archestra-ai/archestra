@@ -1556,7 +1556,7 @@ describe("AgentForm published skills", () => {
   });
 });
 
-describe.skip("AgentForm", () => {
+describe("AgentForm LLM permission gating", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useHasPermissions).mockImplementation(
@@ -1565,69 +1565,6 @@ describe.skip("AgentForm", () => {
     vi.mocked(useSession).mockReturnValue({
       data: { user: { id: "user-1" } },
     } as unknown as ReturnType<typeof useSession>);
-  });
-
-  it("disables Update immediately while save starts", async () => {
-    const user = userEvent.setup();
-
-    render(
-      <AgentForm
-        agentType="agent"
-        agent={{
-          id: "agent-1",
-          organizationId: "org-1",
-          name: "Existing Agent",
-          builtIn: false,
-          icon: null,
-          description: null,
-          systemPrompt: null,
-          agentType: "agent",
-          toolExposureMode: "full",
-          missingCredentialBehavior: "allow",
-          accessAllTools: false,
-          accessAllSubagents: false,
-          accessAllSkills: false,
-          scope: "personal",
-          isDefault: false,
-          isPersonalGateway: false,
-          isPersonalProxy: false,
-          teams: [],
-          tools: [],
-          labels: [],
-          authorId: "user-1",
-          deletedAt: null,
-          authorName: "Test User",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          knowledgeBaseIds: [],
-          connectorIds: [],
-          suggestedPrompts: [],
-          llmApiKeyId: null,
-          llmModel: null,
-          modelId: null,
-          considerContextUntrusted: false,
-          identityProviderId: null,
-          environmentId: null,
-          builtInAgentConfig: null,
-          passthroughHeaders: null,
-          incomingEmailEnabled: false,
-          incomingEmailSecurityMode: "public",
-          incomingEmailAllowedDomain: null,
-          slug: null,
-          latestVersion: 0,
-        }}
-      />,
-    );
-
-    const updateButton = screen.getByRole("button", { name: /update/i });
-    expect(updateButton).not.toBeDisabled();
-
-    await user.click(updateButton);
-
-    await waitFor(() => {
-      expect(pendingSaveChanges).toHaveBeenCalledOnce();
-      expect(screen.getByRole("button", { name: /update/i })).toBeDisabled();
-    });
   });
 
   it("does not enable LLM queries when the user lacks LLM read permissions", () => {

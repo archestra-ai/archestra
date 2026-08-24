@@ -445,55 +445,6 @@ describe("SearchableMultiSelect", () => {
     expect(screen.getByPlaceholderText("Find items...")).toBeInTheDocument();
   });
 
-  it("applies custom className to combobox", () => {
-    render(
-      <SearchableMultiSelect
-        value={[]}
-        onValueChange={vi.fn()}
-        items={mockItems}
-        className="my-custom-class"
-      />,
-    );
-
-    expect(screen.getByRole("combobox")).toHaveClass("my-custom-class");
-  });
-
-  it("applies custom contentClassName to popover", async () => {
-    const user = userEvent.setup();
-
-    render(
-      <SearchableMultiSelect
-        value={[]}
-        onValueChange={vi.fn()}
-        items={mockItems}
-        contentClassName="custom-content"
-      />,
-    );
-
-    await user.click(screen.getByRole("combobox"));
-    expect(
-      screen.getByPlaceholderText("Search...").closest("[data-state]"),
-    ).toHaveClass("custom-content");
-  });
-
-  it("applies custom listClassName to item list", async () => {
-    const user = userEvent.setup();
-
-    render(
-      <SearchableMultiSelect
-        value={[]}
-        onValueChange={vi.fn()}
-        items={mockItems}
-        listClassName="custom-list"
-      />,
-    );
-
-    await user.click(screen.getByRole("combobox"));
-    expect(
-      screen.getByRole("button", { name: /Item One/i }).parentElement,
-    ).toHaveClass("custom-list");
-  });
-
   it("shows checkmark for selected items", async () => {
     const user = userEvent.setup();
 

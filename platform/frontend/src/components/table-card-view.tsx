@@ -9,7 +9,6 @@ import {
   useEffect,
   useState,
 } from "react";
-import { LoadingState } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { TablePagination } from "@/components/ui/table-pagination";
@@ -181,11 +180,14 @@ export function TableCardList({
   }) => void;
   gridClassName?: string;
 }) {
-  if (isLoading && itemCount === 0) {
-    return <LoadingState label="Loading results…" variant="page" />;
-  }
-
   if (itemCount === 0) {
+    // Same reasoning as the table view: while a fetch is still out this is an
+    // area with nothing in it yet, not an empty result, so it holds its height
+    // and says nothing rather than flashing an empty state before the cards
+    // land.
+    if (isLoading) {
+      return <div className="min-h-[164px] py-12" />;
+    }
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <div className="mb-3 text-muted-foreground">

@@ -32,7 +32,6 @@ import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { FilterBar, filterSearchClass } from "@/components/filter-bar";
-import { LoadingState, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
@@ -625,393 +624,383 @@ function McpGateways({
   }
 
   return (
-    <LoadingWrapper
-      isPending={showLoading}
-      loadingFallback={
-        <LoadingState label="Loading MCP gateways…" variant="viewport" />
+    <PageLayout
+      title="MCP Gateways"
+      description={
+        <p className="text-sm text-muted-foreground">
+          MCP Gateways provide a unified MCP endpoint for your AI agents to
+          access tools and subagents.
+          {docsUrl && (
+            <>
+              {" "}
+              <ExternalDocsLink
+                href={docsUrl}
+                className="underline hover:text-foreground"
+                showIcon={false}
+              >
+                Read more in the docs
+              </ExternalDocsLink>
+            </>
+          )}
+        </p>
+      }
+      actionButton={
+        <PermissionButton
+          permissions={{ mcpGateway: ["create"] }}
+          onClick={() => router.push(agentNewHref("mcp_gateway"))}
+          data-testid={E2eTestId.CreateAgentButton}
+        >
+          <Plus className="h-4 w-4" />
+          Create MCP Gateway
+        </PermissionButton>
       }
     >
-      <PageLayout
-        title="MCP Gateways"
-        description={
-          <p className="text-sm text-muted-foreground">
-            MCP Gateways provide a unified MCP endpoint for your AI agents to
-            access tools and subagents.
-            {docsUrl && (
-              <>
-                {" "}
-                <ExternalDocsLink
-                  href={docsUrl}
-                  className="underline hover:text-foreground"
-                  showIcon={false}
-                >
-                  Read more in the docs
-                </ExternalDocsLink>
-              </>
-            )}
-          </p>
-        }
-        actionButton={
-          <PermissionButton
-            permissions={{ mcpGateway: ["create"] }}
-            onClick={() => router.push(agentNewHref("mcp_gateway"))}
-            data-testid={E2eTestId.CreateAgentButton}
-          >
-            <Plus className="h-4 w-4" />
-            Create MCP Gateway
-          </PermissionButton>
-        }
-      >
-        <TableCardView storageKey="archestra-mcp-gateways-view">
+      <TableCardView storageKey="archestra-mcp-gateways-view">
+        <div>
           <div>
-            <div>
-              <div className="mb-6 flex flex-col gap-2">
-                <FilterBar
-                  actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
-                >
-                  <SearchInput
-                    objectNamePlural="gateways"
-                    searchFields={["name"]}
-                    paramName="name"
-                    className={filterSearchClass}
-                  />
-                  <ResourceScopeFilter
-                    showLabels
-                    ownerLabelPlural="MCP gateways"
-                    adminPermission={{ mcpGateway: ["admin"] }}
-                  />
-                  <ResourceDeletedStatusFilter
-                    deletePermission={{ mcpGateway: ["delete"] }}
-                  />
-                </FilterBar>
-                {!canReadTeams && (
-                  <PermissionRequirementHint
-                    message="Team-based filters and sharing details are unavailable without"
-                    permissions={[{ resource: "team", action: "read" }]}
-                  />
-                )}
-                <ActiveFilterBadges
+            <div className="mb-6 flex flex-col gap-2">
+              <FilterBar
+                actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
+              >
+                <SearchInput
+                  objectNamePlural="gateways"
+                  searchFields={["name"]}
+                  paramName="name"
+                  className={filterSearchClass}
+                />
+                <ResourceScopeFilter
+                  showLabels
+                  ownerLabelPlural="MCP gateways"
                   adminPermission={{ mcpGateway: ["admin"] }}
                 />
-              </div>
+                <ResourceDeletedStatusFilter
+                  deletePermission={{ mcpGateway: ["delete"] }}
+                />
+              </FilterBar>
+              {!canReadTeams && (
+                <PermissionRequirementHint
+                  message="Team-based filters and sharing details are unavailable without"
+                  permissions={[{ resource: "team", action: "read" }]}
+                />
+              )}
+              <ActiveFilterBadges adminPermission={{ mcpGateway: ["admin"] }} />
+            </div>
 
-              <div data-testid={E2eTestId.AgentsTable}>
-                <BulkActionsBar
-                  count={selectedGateways.length}
-                  noun="gateway"
-                  plural="gateways"
-                  onClear={clearSelection}
-                  busy={bulkDelete.isPending || isFetchingAllMatching}
-                  selectAllMatching={{
-                    total: pagination?.total ?? 0,
-                    pageFullySelected:
-                      agents.length > 0 &&
-                      pageSelection.length === agents.length,
-                    active: allMatchingSelected,
-                    onSelectAll: () => setEscalatedFor(filterSignature),
-                    matchDescription: nameFilter
-                      ? "match this search query"
-                      : "match the current filters",
-                  }}
-                  className="mb-3"
+            <div data-testid={E2eTestId.AgentsTable}>
+              <BulkActionsBar
+                count={selectedGateways.length}
+                noun="gateway"
+                plural="gateways"
+                onClear={clearSelection}
+                busy={bulkDelete.isPending || isFetchingAllMatching}
+                selectAllMatching={{
+                  total: pagination?.total ?? 0,
+                  pageFullySelected:
+                    agents.length > 0 && pageSelection.length === agents.length,
+                  active: allMatchingSelected,
+                  onSelectAll: () => setEscalatedFor(filterSignature),
+                  matchDescription: nameFilter
+                    ? "match this search query"
+                    : "match the current filters",
+                }}
+                className="mb-3"
+              >
+                <PermissionButton
+                  permissions={{ agent: ["update"] }}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setBulkVisibilityOpen(true)}
                 >
-                  <PermissionButton
-                    permissions={{ agent: ["update"] }}
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setBulkVisibilityOpen(true)}
+                  <Pencil className="h-4 w-4" />
+                  <span>Edit visibility</span>
+                </PermissionButton>
+                <PermissionButton
+                  permissions={{ agent: ["delete"] }}
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setBulkDeleteOpen(true)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span>Delete</span>
+                </PermissionButton>
+              </BulkActionsBar>
+
+              <TableCardViewContent
+                forceTable={isDeletedView}
+                cards={
+                  <TableCardList
+                    itemCount={agents.length}
+                    isLoading={showLoading}
+                    hasActiveFilters={Boolean(
+                      nameFilter ||
+                        scopeFilter.hasActiveScopeFilters ||
+                        labelsFromUrl,
+                    )}
+                    filteredEmptyMessage="No MCP gateways match your filters. Try adjusting your search."
+                    onClearFilters={() =>
+                      updateQueryParams({
+                        name: null,
+                        scope: null,
+                        teamIds: null,
+                        authorIds: null,
+                        excludeAuthorIds: null,
+                        labels: null,
+                        status: null,
+                        page: "1",
+                      })
+                    }
+                    pagination={{
+                      pageIndex,
+                      pageSize,
+                      total: pagination?.total ?? 0,
+                    }}
+                    onPaginationChange={handlePaginationChange}
                   >
-                    <Pencil className="h-4 w-4" />
-                    <span>Edit visibility</span>
-                  </PermissionButton>
-                  <PermissionButton
-                    permissions={{ agent: ["delete"] }}
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => setBulkDeleteOpen(true)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    <span>Delete</span>
-                  </PermissionButton>
-                </BulkActionsBar>
-
-                <TableCardViewContent
-                  forceTable={isDeletedView}
-                  cards={
-                    <TableCardList
-                      itemCount={agents.length}
-                      hasActiveFilters={Boolean(
-                        nameFilter ||
-                          scopeFilter.hasActiveScopeFilters ||
-                          labelsFromUrl,
-                      )}
-                      filteredEmptyMessage="No MCP gateways match your filters. Try adjusting your search."
-                      onClearFilters={() =>
-                        updateQueryParams({
-                          name: null,
-                          scope: null,
-                          teamIds: null,
-                          authorIds: null,
-                          excludeAuthorIds: null,
-                          labels: null,
-                          status: null,
-                          page: "1",
-                        })
-                      }
-                      pagination={{
-                        pageIndex,
-                        pageSize,
-                        total: pagination?.total ?? 0,
-                      }}
-                      onPaginationChange={handlePaginationChange}
-                    >
-                      {agents.map((agent) => (
-                        <TableCard
-                          key={agent.id}
-                          icon={
-                            <AgentIcon
-                              icon={agent.icon}
-                              size={20}
-                              fallbackType="mcp_gateway"
-                            />
-                          }
-                          title={
-                            <Link
-                              href={agentDetailHref("mcp_gateway", agent.id)}
-                            >
-                              {agent.name}
-                            </Link>
-                          }
-                          description={agent.description}
-                          actions={renderGatewayActions(agent)}
-                          selected={!!rowSelection[agent.id]}
-                          onSelectedChange={(selected) => {
-                            const next = { ...rowSelection };
-                            if (selected) next[agent.id] = true;
-                            else delete next[agent.id];
-                            setRowSelection(next);
-                          }}
-                          selectionLabel={`Select ${agent.name}`}
-                          footer={
-                            <span>
-                              Last used{" "}
-                              {formatRelativeTimeFromNow(
-                                agent.lastUsedAt ?? null,
-                              )}
-                            </span>
-                          }
-                        >
-                          <div className="flex flex-wrap items-center gap-2">
-                            <ResourceVisibilityBadge
-                              scope={agent.scope}
-                              teams={agent.teams}
-                              users={agent.users}
-                              authorId={agent.authorId}
-                              authorName={agent.authorName}
-                              currentUserId={currentUserId}
-                              showSelfAsMe
-                            />
-                            <Badge variant="outline">
-                              {agent.accessAllTools
-                                ? "All tools"
-                                : `${agent.tools.filter((tool) => !tool.delegateToAgentId).length} tools`}
-                            </Badge>
-                            <Badge variant="outline">
-                              {agent.accessAllSubagents
-                                ? "All subagents"
-                                : `${agent.tools.filter((tool) => tool.delegateToAgentId).length} subagents`}
-                            </Badge>
-                          </div>
-                        </TableCard>
-                      ))}
-                    </TableCardList>
-                  }
-                  table={
-                    <DataTable
-                      columns={columns}
-                      data={agents}
-                      getRowId={(row) => row.id}
-                      rowSelection={rowSelection}
-                      onRowSelectionChange={setRowSelection}
-                      hideSelectedCount
-                      sorting={sorting}
-                      onSortingChange={handleSortingChange}
-                      manualSorting={true}
-                      manualPagination={true}
-                      pagination={{
-                        pageIndex,
-                        pageSize,
-                        total: pagination?.total ?? 0,
-                      }}
-                      onPaginationChange={handlePaginationChange}
-                      // Trashed rows have no page to open — Restore and permanent
-                      // delete stay row actions.
-                      onRowClick={
-                        isDeletedView
-                          ? undefined
-                          : (row, event) =>
-                              openRowOnPlainClick(event, () =>
-                                router.push(
-                                  agentDetailHref("mcp_gateway", row.id),
-                                ),
-                              )
-                      }
-                      hasActiveFilters={Boolean(
-                        nameFilter ||
-                          scopeFilter.hasActiveScopeFilters ||
-                          labelsFromUrl ||
-                          isDeletedView,
-                      )}
-                      onClearFilters={() =>
-                        updateQueryParams({
-                          name: null,
-                          scope: null,
-                          teamIds: null,
-                          authorIds: null,
-                          excludeAuthorIds: null,
-                          labels: null,
-                          status: null,
-                          page: "1",
-                        })
-                      }
-                      emptyMessage={
-                        isDeletedView
-                          ? "No deleted MCP gateways found"
-                          : "No MCP gateways found"
-                      }
-                      filteredEmptyMessage={
-                        isDeletedView
-                          ? "No deleted MCP gateways found."
-                          : "No MCP gateways match your filters. Try adjusting your search."
-                      }
-                    />
-                  }
-                />
-              </div>
-
-              {bulkVisibilityOpen && (
-                <BulkVisibilityDialog
-                  items={selectedGateways.map((profile) => ({
-                    ...profile,
-                    teams: profile.teams ?? [],
-                    users: profile.users ?? [],
-                  }))}
-                  noun="gateway"
-                  plural="gateways"
-                  open={bulkVisibilityOpen}
-                  onOpenChange={setBulkVisibilityOpen}
-                  isPending={bulkVisibility.isPending}
-                  onApply={async (change) => {
-                    const outcome = await bulkVisibility.mutateAsync({
-                      profiles: selectedGateways,
-                      scope: change.scope,
-                      teamIds: change.teamIds,
-                      userIds: change.userIds,
-                    });
-                    reportBulkOutcome({
-                      outcome,
-                      verb: "Updated",
-                      failureVerb: "update",
-                      noun: "gateway",
-                      plural: "gateways",
-                    });
-                    if (outcome.succeeded.length === 0) return false;
-                    if (outcome.failed.length === 0) clearSelection();
-                    return true;
-                  }}
-                />
-              )}
-
-              {bulkDeleteOpen && (
-                <DeleteConfirmDialog
-                  open={bulkDeleteOpen}
-                  onOpenChange={setBulkDeleteOpen}
-                  title="Delete gateways"
-                  description={`Delete ${selectedGateways.length} ${
-                    selectedGateways.length === 1 ? "gateway" : "gateways"
-                  }? This cannot be undone.`}
-                  isPending={bulkDelete.isPending}
-                  onConfirm={() => {
-                    bulkDelete.mutate(selectedGateways, {
-                      onSuccess: (outcome) => {
-                        reportBulkOutcome({
-                          outcome,
-                          verb: "Deleted",
-                          failureVerb: "delete",
-                          noun: "gateway",
-                          plural: "gateways",
-                        });
-                        setBulkDeleteOpen(false);
-                        // Rows that failed stay ticked so the selection can be
-                        // retried rather than rebuilt.
-                        if (outcome.failed.length === 0) clearSelection();
-                      },
-                    });
-                  }}
-                  confirmLabel="Delete gateways"
-                  pendingLabel="Deleting..."
-                />
-              )}
-
-              {deletingGatewayId && (
-                <DeleteGatewayDialog
-                  agentId={deletingGatewayId}
-                  open={!!deletingGatewayId}
-                  onOpenChange={(open) => !open && setDeletingGatewayId(null)}
-                />
-              )}
-
-              {permanentlyDeletingGateway && (
-                <DeleteConfirmDialog
-                  open={!!permanentlyDeletingGateway}
-                  onOpenChange={(open) =>
-                    !open && setPermanentlyDeletingGateway(null)
-                  }
-                  title="Delete MCP Gateway permanently"
-                  description={AGENT_PAGE_CONFIGS.mcp_gateway.permanentDeleteDescription(
-                    permanentlyDeletingGateway.name,
-                  )}
-                  isPending={permanentlyDeleteGateway.isPending}
-                  onConfirm={() => {
-                    permanentlyDeleteGateway.mutate(
-                      permanentlyDeletingGateway.id,
-                      {
-                        onSuccess: (ok) => {
-                          if (ok) setPermanentlyDeletingGateway(null);
-                        },
-                      },
-                    );
-                  }}
-                  confirmLabel={PERMANENT_DELETE_LABEL}
-                />
-              )}
-
-              <CloneAgentDialog
-                agent={cloningGateway}
-                onOpenChange={(open) => {
-                  if (!open) setCloningGateway(null);
-                }}
-                onCloned={(cloned) => {
-                  // Land on the clone's Configuration step so it can be renamed
-                  // straight away.
-                  router.push(
-                    agentEditHref("mcp_gateway", cloned.id, "configuration"),
-                  );
-                }}
-              />
-
-              <AgentVersionHistoryDialog
-                agentId={history?.id ?? null}
-                canModify={!!history?.canModify}
-                onOpenChange={(open) => {
-                  if (!open) setHistory(null);
-                }}
+                    {agents.map((agent) => (
+                      <TableCard
+                        key={agent.id}
+                        icon={
+                          <AgentIcon
+                            icon={agent.icon}
+                            size={20}
+                            fallbackType="mcp_gateway"
+                          />
+                        }
+                        title={
+                          <Link href={agentDetailHref("mcp_gateway", agent.id)}>
+                            {agent.name}
+                          </Link>
+                        }
+                        description={agent.description}
+                        actions={renderGatewayActions(agent)}
+                        selected={!!rowSelection[agent.id]}
+                        onSelectedChange={(selected) => {
+                          const next = { ...rowSelection };
+                          if (selected) next[agent.id] = true;
+                          else delete next[agent.id];
+                          setRowSelection(next);
+                        }}
+                        selectionLabel={`Select ${agent.name}`}
+                        footer={
+                          <span>
+                            Last used{" "}
+                            {formatRelativeTimeFromNow(
+                              agent.lastUsedAt ?? null,
+                            )}
+                          </span>
+                        }
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <ResourceVisibilityBadge
+                            scope={agent.scope}
+                            teams={agent.teams}
+                            users={agent.users}
+                            authorId={agent.authorId}
+                            authorName={agent.authorName}
+                            currentUserId={currentUserId}
+                            showSelfAsMe
+                          />
+                          <Badge variant="outline">
+                            {agent.accessAllTools
+                              ? "All tools"
+                              : `${agent.tools.filter((tool) => !tool.delegateToAgentId).length} tools`}
+                          </Badge>
+                          <Badge variant="outline">
+                            {agent.accessAllSubagents
+                              ? "All subagents"
+                              : `${agent.tools.filter((tool) => tool.delegateToAgentId).length} subagents`}
+                          </Badge>
+                        </div>
+                      </TableCard>
+                    ))}
+                  </TableCardList>
+                }
+                table={
+                  <DataTable
+                    columns={columns}
+                    data={agents}
+                    isLoading={showLoading}
+                    getRowId={(row) => row.id}
+                    rowSelection={rowSelection}
+                    onRowSelectionChange={setRowSelection}
+                    hideSelectedCount
+                    sorting={sorting}
+                    onSortingChange={handleSortingChange}
+                    manualSorting={true}
+                    manualPagination={true}
+                    pagination={{
+                      pageIndex,
+                      pageSize,
+                      total: pagination?.total ?? 0,
+                    }}
+                    onPaginationChange={handlePaginationChange}
+                    // Trashed rows have no page to open — Restore and permanent
+                    // delete stay row actions.
+                    onRowClick={
+                      isDeletedView
+                        ? undefined
+                        : (row, event) =>
+                            openRowOnPlainClick(event, () =>
+                              router.push(
+                                agentDetailHref("mcp_gateway", row.id),
+                              ),
+                            )
+                    }
+                    hasActiveFilters={Boolean(
+                      nameFilter ||
+                        scopeFilter.hasActiveScopeFilters ||
+                        labelsFromUrl ||
+                        isDeletedView,
+                    )}
+                    onClearFilters={() =>
+                      updateQueryParams({
+                        name: null,
+                        scope: null,
+                        teamIds: null,
+                        authorIds: null,
+                        excludeAuthorIds: null,
+                        labels: null,
+                        status: null,
+                        page: "1",
+                      })
+                    }
+                    emptyMessage={
+                      isDeletedView
+                        ? "No deleted MCP gateways found"
+                        : "No MCP gateways found"
+                    }
+                    filteredEmptyMessage={
+                      isDeletedView
+                        ? "No deleted MCP gateways found."
+                        : "No MCP gateways match your filters. Try adjusting your search."
+                    }
+                  />
+                }
               />
             </div>
+
+            {bulkVisibilityOpen && (
+              <BulkVisibilityDialog
+                items={selectedGateways.map((profile) => ({
+                  ...profile,
+                  teams: profile.teams ?? [],
+                  users: profile.users ?? [],
+                }))}
+                noun="gateway"
+                plural="gateways"
+                open={bulkVisibilityOpen}
+                onOpenChange={setBulkVisibilityOpen}
+                isPending={bulkVisibility.isPending}
+                onApply={async (change) => {
+                  const outcome = await bulkVisibility.mutateAsync({
+                    profiles: selectedGateways,
+                    scope: change.scope,
+                    teamIds: change.teamIds,
+                    userIds: change.userIds,
+                  });
+                  reportBulkOutcome({
+                    outcome,
+                    verb: "Updated",
+                    failureVerb: "update",
+                    noun: "gateway",
+                    plural: "gateways",
+                  });
+                  if (outcome.succeeded.length === 0) return false;
+                  if (outcome.failed.length === 0) clearSelection();
+                  return true;
+                }}
+              />
+            )}
+
+            {bulkDeleteOpen && (
+              <DeleteConfirmDialog
+                open={bulkDeleteOpen}
+                onOpenChange={setBulkDeleteOpen}
+                title="Delete gateways"
+                description={`Delete ${selectedGateways.length} ${
+                  selectedGateways.length === 1 ? "gateway" : "gateways"
+                }? This cannot be undone.`}
+                isPending={bulkDelete.isPending}
+                onConfirm={() => {
+                  bulkDelete.mutate(selectedGateways, {
+                    onSuccess: (outcome) => {
+                      reportBulkOutcome({
+                        outcome,
+                        verb: "Deleted",
+                        failureVerb: "delete",
+                        noun: "gateway",
+                        plural: "gateways",
+                      });
+                      setBulkDeleteOpen(false);
+                      // Rows that failed stay ticked so the selection can be
+                      // retried rather than rebuilt.
+                      if (outcome.failed.length === 0) clearSelection();
+                    },
+                  });
+                }}
+                confirmLabel="Delete gateways"
+                pendingLabel="Deleting..."
+              />
+            )}
+
+            {deletingGatewayId && (
+              <DeleteGatewayDialog
+                agentId={deletingGatewayId}
+                open={!!deletingGatewayId}
+                onOpenChange={(open) => !open && setDeletingGatewayId(null)}
+              />
+            )}
+
+            {permanentlyDeletingGateway && (
+              <DeleteConfirmDialog
+                open={!!permanentlyDeletingGateway}
+                onOpenChange={(open) =>
+                  !open && setPermanentlyDeletingGateway(null)
+                }
+                title="Delete MCP Gateway permanently"
+                description={AGENT_PAGE_CONFIGS.mcp_gateway.permanentDeleteDescription(
+                  permanentlyDeletingGateway.name,
+                )}
+                isPending={permanentlyDeleteGateway.isPending}
+                onConfirm={() => {
+                  permanentlyDeleteGateway.mutate(
+                    permanentlyDeletingGateway.id,
+                    {
+                      onSuccess: (ok) => {
+                        if (ok) setPermanentlyDeletingGateway(null);
+                      },
+                    },
+                  );
+                }}
+                confirmLabel={PERMANENT_DELETE_LABEL}
+              />
+            )}
+
+            <CloneAgentDialog
+              agent={cloningGateway}
+              onOpenChange={(open) => {
+                if (!open) setCloningGateway(null);
+              }}
+              onCloned={(cloned) => {
+                // Land on the clone's Configuration step so it can be renamed
+                // straight away.
+                router.push(
+                  agentEditHref("mcp_gateway", cloned.id, "configuration"),
+                );
+              }}
+            />
+
+            <AgentVersionHistoryDialog
+              agentId={history?.id ?? null}
+              canModify={!!history?.canModify}
+              onOpenChange={(open) => {
+                if (!open) setHistory(null);
+              }}
+            />
           </div>
-        </TableCardView>
-      </PageLayout>
-    </LoadingWrapper>
+        </div>
+      </TableCardView>
+    </PageLayout>
   );
 }
 

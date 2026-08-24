@@ -23,7 +23,6 @@ import {
   filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
-import { LoadingState, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RepositoryOwnerIcon } from "@/components/repository-owner-icon";
@@ -111,8 +110,12 @@ function PluginsGate() {
   const tabs = useSkillsPluginsNavTabs();
   const enabled = useFeature("plugins");
 
+  // The feature flag arrives with the rest of the config; until it does this
+  // page cannot know whether it is a plugins page or a "disabled" notice. It
+  // waits without drawing anything rather than stacking a second loader in
+  // front of the one the list would show a moment later.
   if (enabled === undefined) {
-    return <LoadingState label="Loading plugins…" variant="viewport" />;
+    return null;
   }
 
   if (!enabled) {
@@ -146,13 +149,7 @@ function PluginsList() {
   const sourceRepo = searchParams.get("sourceRepo") ?? "";
   const scopeFilter = useScopeFilterParams();
 
-  const {
-    data: plugins,
-    isPending,
-    isFetching,
-    isLoadingError,
-    refetch,
-  } = usePlugins();
+  const { data: plugins, isFetching, isLoadingError, refetch } = usePlugins();
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
 
@@ -590,12 +587,7 @@ function PluginsList() {
     !isFetching && (plugins?.length ?? 0) === 0 && !hasActiveFilters;
 
   return (
-    <LoadingWrapper
-      isPending={(isPending || isFetching) && (plugins?.length ?? 0) === 0}
-      loadingFallback={
-        <LoadingState label="Loading plugins…" variant="viewport" />
-      }
-    >
+    <>
       <PageLayout
         title="Plugins"
         description={PLUGINS_DESCRIPTION}
@@ -971,7 +963,7 @@ function PluginsList() {
           }}
         />
       )}
-    </LoadingWrapper>
+    </>
   );
 }
 

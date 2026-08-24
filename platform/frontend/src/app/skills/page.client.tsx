@@ -35,7 +35,6 @@ import {
   filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
-import { LoadingState, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import {
   PERMANENT_DELETE_LABEL,
@@ -184,7 +183,6 @@ function SkillsList() {
 
   const {
     data: skills,
-    isPending,
     isFetching,
     isLoadingError: isSkillsLoadError,
     refetch: refetchSkills,
@@ -682,12 +680,7 @@ function SkillsList() {
   }
 
   return (
-    <LoadingWrapper
-      isPending={isPending && !skills}
-      loadingFallback={
-        <LoadingState label="Loading skills…" variant="viewport" />
-      }
-    >
+    <>
       <PageLayout
         title="Skills"
         description={SKILLS_DESCRIPTION}
@@ -1068,7 +1061,7 @@ function SkillsList() {
           onOpenChange={(open) => !open && setUsageSkill(null)}
         />
       )}
-    </LoadingWrapper>
+    </>
   );
 }
 

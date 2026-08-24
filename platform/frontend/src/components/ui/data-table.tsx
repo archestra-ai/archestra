@@ -18,7 +18,6 @@ import {
 import { Inbox, Search } from "lucide-react";
 import React, { useState } from "react";
 
-import { LoadingState } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -270,10 +269,6 @@ export function DataTable<TData, TValue>({
     1,
   );
 
-  if (isLoading && data.length === 0) {
-    return <LoadingState label="Loading results…" variant="page" />;
-  }
-
   return (
     <div className="w-full space-y-4">
       <div className="overflow-x-auto rounded-md border">
@@ -390,28 +385,40 @@ export function DataTable<TData, TValue>({
                 </React.Fragment>
               ))
             ) : (
-              <TableRow>
+              <TableRow className="hover:bg-transparent">
                 <TableCell colSpan={columns.length} className="py-0">
-                  <div className="flex flex-col items-center justify-center py-12 text-center">
-                    <div className="mb-3 text-muted-foreground">
-                      {hasActiveFilters ? (
-                        <Search className="h-10 w-10" />
-                      ) : (
-                        (emptyIcon ?? <Inbox className="h-10 w-10" />)
-                      )}
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      {hasActiveFilters ? filteredEmptyMessage : emptyMessage}
-                    </p>
-                    {hasActiveFilters && onClearFilters && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="mt-4"
-                        onClick={onClearFilters}
-                      >
-                        Clear filters
-                      </Button>
+                  {/* An empty body while a fetch is still out is not an empty
+                      result, so it says nothing: announcing "No Data" and then
+                      replacing it with rows a moment later is the flash this
+                      area used to produce. The row keeps its height either
+                      way, so the rows arrive without shifting the pagination
+                      controls underneath. */}
+                  <div className="flex min-h-[164px] flex-col items-center justify-center py-12 text-center">
+                    {!isLoading && (
+                      <>
+                        <div className="mb-3 text-muted-foreground">
+                          {hasActiveFilters ? (
+                            <Search className="h-10 w-10" />
+                          ) : (
+                            (emptyIcon ?? <Inbox className="h-10 w-10" />)
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {hasActiveFilters
+                            ? filteredEmptyMessage
+                            : emptyMessage}
+                        </p>
+                        {hasActiveFilters && onClearFilters && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="mt-4"
+                            onClick={onClearFilters}
+                          >
+                            Clear filters
+                          </Button>
+                        )}
+                      </>
                     )}
                   </div>
                 </TableCell>

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -645,10 +647,12 @@ describe("KnowledgeSettingsPage", () => {
       ];
       renderPage();
 
+      expect(screen.getByText("Embedding index locked")).toBeInTheDocument();
       expect(
-        screen.getByText(
-          /To change the embedding model, drop the existing index/,
-        ),
+        screen.getByText(/Drop the index to change models/),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Drop index" }),
       ).toBeInTheDocument();
     });
 
@@ -669,11 +673,7 @@ describe("KnowledgeSettingsPage", () => {
       ];
       renderPage();
 
-      expect(
-        screen.getByText(
-          /To change the embedding model, drop the existing index/,
-        ),
-      ).toBeInTheDocument();
+      expect(screen.getByText("Embedding index locked")).toBeInTheDocument();
     });
 
     it("does not show lock message when key or model is missing", () => {
@@ -686,9 +686,7 @@ describe("KnowledgeSettingsPage", () => {
       renderPage();
 
       expect(
-        screen.queryByText(
-          /To change the embedding model, drop the existing index/,
-        ),
+        screen.queryByText("Embedding index locked"),
       ).not.toBeInTheDocument();
     });
 

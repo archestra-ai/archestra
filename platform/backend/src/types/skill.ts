@@ -187,10 +187,27 @@ export const SkillWithFilesSchema = SkillResponseSchema.extend({
 });
 
 /**
+ * What kind of actor an activation is attributed to. The activation log stores
+ * a bare id (see `skill_usage_events.userId`), which is not enough to label a
+ * row: a missing display name means something different for each kind, and
+ * rendering them all as one "unknown" bucket is what this discriminator exists
+ * to prevent.
+ */
+export const SkillUsageActorKindSchema = z.enum([
+  /** A person: the id addresses the `users` table. */
+  "user",
+  /** A synthetic `service-account:<id>` caller. */
+  "service_account",
+  /** Events recorded with no attributable actor at all (`userId: null`). */
+  "unattributed",
+]);
+
+/**
  * Per-user activation analytics for one skill over a recent window, built from
- * `skill_usage_events`. `userId: null` groups events with no attributable user;
- * `name: null` marks ids whose `users` row is gone (deleted user) or never
- * existed (synthetic service-account ids).
+ * `skill_usage_events`. The two axes are independent: `kind` says what an id
+ * addresses, `name === null` says nothing owns it any more — so a deleted user
+ * and a deleted service account stay tellable apart, and neither is confused
+ * with an activation that carried no actor at all.
  */
 export const SkillUsageStatisticsSchema = z.object({
   /** Window start (inclusive, ISO timestamp); events before it are excluded. */
@@ -198,7 +215,9 @@ export const SkillUsageStatisticsSchema = z.object({
   users: z.array(
     z.object({
       userId: z.string().nullable(),
+      /** Display name, or null when nothing owns the id any more. */
       name: z.string().nullable(),
+      kind: SkillUsageActorKindSchema,
       total: z.number(),
     }),
   ),
@@ -248,6 +267,7 @@ export type SkillManifestSource = Pick<
   | "frontmatterBlob"
   | "digest"
 >;
+export type SkillUsageActorKind = z.infer<typeof SkillUsageActorKindSchema>;
 export type SkillUsageStatistics = z.infer<typeof SkillUsageStatisticsSchema>;
 export type InsertSkill = z.infer<typeof InsertSkillSchema>;
 export type UpdateSkill = z.infer<typeof UpdateSkillSchema>;

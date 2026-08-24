@@ -24,6 +24,9 @@ type PermissionCheckResult = {
   missingPermissions?: Permissions;
 };
 
+/** Prefix of the synthetic user id minted for service-account principals. */
+export const SERVICE_ACCOUNT_USER_ID_PREFIX = "service-account:";
+
 /**
  * Whether a user id is the synthetic id minted for service-account principals
  * (`service-account:<id>`, see fastify-plugin/middleware.ts). Such ids have no
@@ -312,8 +315,6 @@ function getMissingPermissions(
   }
   return missing;
 }
-
-const SERVICE_ACCOUNT_USER_ID_PREFIX = "service-account:";
 
 async function getServiceAccountFromSyntheticUserId(params: {
   userId: string;

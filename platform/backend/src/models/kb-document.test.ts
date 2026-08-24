@@ -716,3 +716,129 @@ describe("KbDocumentModel", () => {
     });
   });
 });
+
+describe("KbDocumentModel.findMetadataFacetValues", () => {
+  test("returns the values actually present, flattening arrays and skipping absent keys", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+    const docs = [
+      { spaceKey: "DEV", labels: ["release-2.0", "runbook"] },
+      { spaceKey: "DEV", labels: ["release-1.0"] },
+      { spaceKey: "MKT", labels: [] as string[] },
+      { spaceKey: null },
+    ];
+    for (const metadata of docs) {
+      const doc = await KbDocumentModel.create(
+        createDocumentData(connector.id, org.id, { metadata }),
+      );
+      await KbChunkModel.insertMany([
+        {
+          documentId: doc.id,
+          content: "body",
+          chunkIndex: 0,
+          acl: ["org:*"],
+        },
+      ]);
+    }
+
+    const facets = await KbDocumentModel.findMetadataFacetValues({
+      connectorIds: [connector.id],
+      keys: ["spaceKey", "labels", "neverUsed"],
+      userAcl: ["org:*"],
+    });
+
+    // DEV first: ordered by document count, so the model sees the common value.
+    expect(facets.get("spaceKey")).toEqual(["DEV", "MKT"]);
+    expect(facets.get("labels")).toEqual([
+      "release-1.0",
+      "release-2.0",
+      "runbook",
+    ]);
+    // A JSON null contributes nothing, and neither does a key nobody uses.
+    expect(facets.has("neverUsed")).toBe(false);
+  });
+
+  test("never discloses a value that only appears on unreadable documents", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+    const readable = await KbDocumentModel.create(
+      createDocumentData(connector.id, org.id, {
+        metadata: { project: "public-project" },
+      }),
+    );
+    const secret = await KbDocumentModel.create(
+      createDocumentData(connector.id, org.id, {
+        metadata: { project: "codename-secret" },
+      }),
+    );
+    await KbChunkModel.insertMany([
+      {
+        documentId: readable.id,
+        content: "body",
+        chunkIndex: 0,
+        acl: ["team:alpha"],
+      },
+      {
+        documentId: secret.id,
+        content: "body",
+        chunkIndex: 0,
+        acl: ["team:beta"],
+      },
+    ]);
+
+    const facets = await KbDocumentModel.findMetadataFacetValues({
+      connectorIds: [connector.id],
+      keys: ["project"],
+      userAcl: ["team:alpha"],
+    });
+
+    expect(facets.get("project")).toEqual(["public-project"]);
+  });
+
+  test("caps the values returned per key", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+    for (let i = 0; i < 8; i++) {
+      const doc = await KbDocumentModel.create(
+        createDocumentData(connector.id, org.id, {
+          metadata: { ticket: `TICKET-${i}` },
+        }),
+      );
+      await KbChunkModel.insertMany([
+        {
+          documentId: doc.id,
+          content: "body",
+          chunkIndex: 0,
+          acl: ["org:*"],
+        },
+      ]);
+    }
+
+    const facets = await KbDocumentModel.findMetadataFacetValues({
+      connectorIds: [connector.id],
+      keys: ["ticket"],
+      userAcl: ["org:*"],
+      limitPerKey: 3,
+    });
+
+    expect(facets.get("ticket")).toHaveLength(3);
+  });
+});

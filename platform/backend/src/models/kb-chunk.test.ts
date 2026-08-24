@@ -833,3 +833,302 @@ describe("KbChunkModel", () => {
     test.skip("updateEmbeddings requires pgvector extension which is not available in PGlite test DB", async () => {});
   });
 });
+
+describe("KbChunkModel document metadata filtering", () => {
+  const QUERY = "deployment rollback";
+
+  /**
+   * Seed a corpus mirroring the shapes connectors actually write: a scalar key
+   * (`spaceKey`, as Confluence writes it) and an array key (`labels`, which
+   * Confluence and GitHub both write). Every chunk shares one query term, so
+   * the metadata filter is the only thing that can separate them.
+   */
+  async function seedCorpus(connectorId: string, organizationId: string) {
+    const current = await KbDocumentModel.create(
+      createDocumentData(connectorId, organizationId, {
+        title: "Current release runbook",
+        metadata: { spaceKey: "DEV", labels: ["release-2.0", "runbook"] },
+      }),
+    );
+    const legacy = await KbDocumentModel.create(
+      createDocumentData(connectorId, organizationId, {
+        title: "Legacy runbook",
+        metadata: { spaceKey: "DEV", labels: ["release-1.0", "runbook"] },
+      }),
+    );
+    const otherSpace = await KbDocumentModel.create(
+      createDocumentData(connectorId, organizationId, {
+        title: "Marketing runbook",
+        metadata: { spaceKey: "MKT", labels: ["release-2.0"] },
+      }),
+    );
+
+    await KbChunkModel.insertMany(
+      [current, legacy, otherSpace].map((doc) => ({
+        documentId: doc.id,
+        content: "deployment rollback procedure",
+        chunkIndex: 0,
+        acl: ["org:*" as const],
+      })),
+    );
+
+    return { current, legacy, otherSpace };
+  }
+
+  test("without a filter, every document in the connector is searched", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    await seedCorpus(connector.id, org.id);
+
+    const results = await KbChunkModel.fullTextSearch({
+      connectorIds: [connector.id],
+      queryText: QUERY,
+      userAcl: ["org:*"],
+    });
+
+    expect(results).toHaveLength(3);
+  });
+
+  test("a scalar metadata value narrows the search", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    const { current, legacy } = await seedCorpus(connector.id, org.id);
+
+    const results = await KbChunkModel.fullTextSearch({
+      connectorIds: [connector.id],
+      queryText: QUERY,
+      userAcl: ["org:*"],
+      metadataFilter: { spaceKey: "DEV" },
+    });
+
+    expect(new Set(results.map((r) => r.documentId))).toEqual(
+      new Set([current.id, legacy.id]),
+    );
+  });
+
+  test("an array metadata value matches membership, not equality", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    const { current, otherSpace } = await seedCorpus(connector.id, org.id);
+
+    const results = await KbChunkModel.fullTextSearch({
+      connectorIds: [connector.id],
+      queryText: QUERY,
+      userAcl: ["org:*"],
+      metadataFilter: { labels: "release-2.0" },
+    });
+
+    expect(new Set(results.map((r) => r.documentId))).toEqual(
+      new Set([current.id, otherSpace.id]),
+    );
+  });
+
+  test("several keys are ANDed together", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    const { current } = await seedCorpus(connector.id, org.id);
+
+    const results = await KbChunkModel.fullTextSearch({
+      connectorIds: [connector.id],
+      queryText: QUERY,
+      userAcl: ["org:*"],
+      metadataFilter: { spaceKey: "DEV", labels: "release-2.0" },
+    });
+
+    expect(results).toHaveLength(1);
+    expect(results[0].documentId).toBe(current.id);
+  });
+
+  test("several values for one key are ORed together", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    const { current, legacy, otherSpace } = await seedCorpus(
+      connector.id,
+      org.id,
+    );
+
+    // Every document carries one of the two releases, so the OR matches all
+    // three — including the one in another space, which is what distinguishes
+    // this from the ANDed case below.
+    const results = await KbChunkModel.fullTextSearch({
+      connectorIds: [connector.id],
+      queryText: QUERY,
+      userAcl: ["org:*"],
+      metadataFilter: { labels: ["release-1.0", "release-2.0"] },
+    });
+
+    expect(new Set(results.map((r) => r.documentId))).toEqual(
+      new Set([current.id, legacy.id, otherSpace.id]),
+    );
+  });
+
+  test("a key no document carries returns nothing rather than everything", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    await seedCorpus(connector.id, org.id);
+
+    const results = await KbChunkModel.fullTextSearch({
+      connectorIds: [connector.id],
+      queryText: QUERY,
+      userAcl: ["org:*"],
+      metadataFilter: { noSuchKey: "whatever" },
+    });
+
+    expect(results).toEqual([]);
+  });
+
+  test("an empty filter object is a no-op, not a match-nothing", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    await seedCorpus(connector.id, org.id);
+
+    const results = await KbChunkModel.fullTextSearch({
+      connectorIds: [connector.id],
+      queryText: QUERY,
+      userAcl: ["org:*"],
+      metadataFilter: {},
+    });
+
+    expect(results).toHaveLength(3);
+  });
+
+  test("matches numeric and boolean metadata written by connectors", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+    // Shapes real connectors write: a JSON number and a JSON boolean, neither
+    // of which a string-only containment test would match.
+    const shallow = await KbDocumentModel.create(
+      createDocumentData(connector.id, org.id, {
+        metadata: { depth: 0, archived: false },
+      }),
+    );
+    const deep = await KbDocumentModel.create(
+      createDocumentData(connector.id, org.id, {
+        metadata: { depth: 1, archived: true },
+      }),
+    );
+    await KbChunkModel.insertMany(
+      [shallow, deep].map((doc) => ({
+        documentId: doc.id,
+        content: "deployment rollback procedure",
+        chunkIndex: 0,
+        acl: ["org:*" as const],
+      })),
+    );
+
+    const byDepth = await KbChunkModel.fullTextSearch({
+      connectorIds: [connector.id],
+      queryText: QUERY,
+      userAcl: ["org:*"],
+      metadataFilter: { depth: "0" },
+    });
+    expect(byDepth).toHaveLength(1);
+    expect(byDepth[0].documentId).toBe(shallow.id);
+
+    const byFlag = await KbChunkModel.fullTextSearch({
+      connectorIds: [connector.id],
+      queryText: QUERY,
+      userAcl: ["org:*"],
+      metadataFilter: { archived: "true" },
+    });
+    expect(byFlag).toHaveLength(1);
+    expect(byFlag[0].documentId).toBe(deep.id);
+
+    // A near-miss must not be coerced into a match.
+    const nearMiss = await KbChunkModel.fullTextSearch({
+      connectorIds: [connector.id],
+      queryText: QUERY,
+      userAcl: ["org:*"],
+      metadataFilter: { depth: "0.0" },
+    });
+    expect(nearMiss).toEqual([]);
+  });
+
+  test("a filter cannot widen past the ACL filter", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    const readable = await KbDocumentModel.create(
+      createDocumentData(connector.id, org.id, {
+        title: "Readable",
+        metadata: { tier: "shared" },
+      }),
+    );
+    const unreadable = await KbDocumentModel.create(
+      createDocumentData(connector.id, org.id, {
+        title: "Unreadable",
+        metadata: { tier: "shared" },
+      }),
+    );
+    await KbChunkModel.insertMany([
+      {
+        documentId: readable.id,
+        content: "deployment rollback procedure",
+        chunkIndex: 0,
+        acl: ["team:alpha"],
+      },
+      {
+        documentId: unreadable.id,
+        content: "deployment rollback procedure",
+        chunkIndex: 0,
+        acl: ["team:beta"],
+      },
+    ]);
+
+    // The filter selects BOTH documents; the ACL still admits only one.
+    const results = await KbChunkModel.fullTextSearch({
+      connectorIds: [connector.id],
+      queryText: QUERY,
+      userAcl: ["team:alpha"],
+      metadataFilter: { tier: "shared" },
+    });
+
+    expect(results).toHaveLength(1);
+    expect(results[0].documentId).toBe(readable.id);
+  });
+});

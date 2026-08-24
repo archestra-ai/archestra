@@ -1012,6 +1012,120 @@ class KbDocumentModel {
       .limit(params.limit);
   }
 
+  /**
+   * The metadata values actually present on the documents a caller can reach,
+   * for the given keys.
+   *
+   * This exists to answer "why did my filter match nothing?" with the real
+   * vocabulary rather than an empty result. A model that guesses `release 2.0`
+   * where the corpus stores `release-2.0` writes a filter that is structurally
+   * valid and silently matches nothing, which is indistinguishable from "this
+   * knowledge base has no answer" — the single most common failure of
+   * model-authored metadata filters.
+   *
+   * Scoped exactly like a search, and for the same reason: metadata values are
+   * themselves content (project names, customer names, author emails). A
+   * document counts as reachable only if the caller can read at least one of
+   * its chunks, so this can never disclose a value that only appears on
+   * documents the caller could not retrieve.
+   *
+   * Values are normalized the way {@link buildMetadataFilterPredicate} matches
+   * them: an array key contributes each of its members, a scalar contributes
+   * itself, and JSON nulls, empty arrays, and absent keys contribute nothing.
+   */
+  static async findMetadataFacetValues(params: {
+    connectorIds: string[];
+    keys: string[];
+    userAcl: AclEntry[];
+    bypassAcl?: boolean;
+    environmentId?: string | null;
+    /** Cap per key, so a high-cardinality key cannot flood a model's context. */
+    limitPerKey?: number;
+  }): Promise<Map<string, string[]>> {
+    const {
+      connectorIds,
+      keys,
+      userAcl,
+      bypassAcl = false,
+      environmentId,
+      limitPerKey = 20,
+    } = params;
+    if (connectorIds.length === 0 || keys.length === 0) return new Map();
+    if (!bypassAcl && userAcl.length === 0) return new Map();
+
+    const connectorIdList = sql.join(
+      connectorIds.map((id) => sql`${id}`),
+      sql`, `,
+    );
+    const keyList = sql.join(
+      keys.map((key) => sql`${key}`),
+      sql`, `,
+    );
+    const aclEntries = bypassAcl
+      ? null
+      : sql.join(
+          userAcl.map((entry) => sql`${entry}`),
+          sql`, `,
+        );
+    const envFilter =
+      environmentId !== undefined
+        ? sql`AND kbc.environment_id IS NOT DISTINCT FROM ${environmentId}`
+        : sql``;
+    const visibleChunkExists = bypassAcl
+      ? sql`EXISTS (SELECT 1 FROM kb_chunks c WHERE c.document_id = d.id)`
+      : sql`EXISTS (
+            SELECT 1 FROM kb_chunks c
+            WHERE c.document_id = d.id
+              AND c.acl ?| ARRAY[${aclEntries}]
+          )`;
+
+    const rows = await db.execute(sql`
+      SELECT key, value
+      FROM (
+        SELECT
+          k.key AS key,
+          v.value AS value,
+          COUNT(DISTINCT d.id) AS document_count,
+          ROW_NUMBER() OVER (
+            PARTITION BY k.key ORDER BY COUNT(DISTINCT d.id) DESC, v.value ASC
+          ) AS rank
+        FROM kb_documents d
+        LEFT JOIN knowledge_base_connectors kbc ON kbc.id = d.connector_id
+        CROSS JOIN LATERAL (SELECT unnest(ARRAY[${keyList}]) AS key) k
+        CROSS JOIN LATERAL (
+          SELECT elem AS value
+          FROM jsonb_array_elements_text(
+            -- A set-returning function may not appear inside CASE, so the
+            -- CASE only normalizes the shape and the expansion happens here.
+            CASE jsonb_typeof(d.metadata -> k.key)
+              WHEN 'array'   THEN d.metadata -> k.key
+              WHEN 'string'  THEN jsonb_build_array(d.metadata -> k.key)
+              WHEN 'number'  THEN jsonb_build_array(d.metadata -> k.key)
+              WHEN 'boolean' THEN jsonb_build_array(d.metadata -> k.key)
+              ELSE '[]'::jsonb
+            END
+          ) AS elem
+        ) v
+        WHERE d.connector_id IN (${connectorIdList})
+          AND kbc.deleted_at IS NULL
+          ${envFilter}
+          AND v.value IS NOT NULL
+          AND ${visibleChunkExists}
+        GROUP BY k.key, v.value
+      ) ranked
+      WHERE rank <= ${limitPerKey}
+      ORDER BY key, document_count DESC, value ASC
+    `);
+
+    const byKey = new Map<string, string[]>();
+    for (const row of rows.rows as Array<{ key: string; value: string }>) {
+      const existing = byKey.get(row.key);
+      if (existing) existing.push(row.value);
+      else byKey.set(row.key, [row.value]);
+    }
+    return byKey;
+  }
+
   static async countByKnowledgeBaseIds(
     knowledgeBaseIds: string[],
   ): Promise<Map<string, number>> {

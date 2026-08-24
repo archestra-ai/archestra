@@ -1744,3 +1744,207 @@ describe("knowledge-management tool execution", () => {
     });
   });
 });
+
+describe("query_knowledge_sources documentFilter", () => {
+  async function setup(ctxFixtures: {
+    org: { id: string };
+    user: { id: string };
+    kbId: string;
+    agentId: string;
+    agentName: string;
+  }) {
+    return {
+      agent: { id: ctxFixtures.agentId, name: ctxFixtures.agentName },
+      organizationId: ctxFixtures.org.id,
+      userId: ctxFixtures.user.id,
+    } satisfies ArchestraContext;
+  }
+
+  test("passes the filter through to the query service", async ({
+    makeAgent,
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const kb = await makeKnowledgeBase(org.id);
+    await makeKnowledgeBaseConnector(kb.id, org.id);
+    const agent = await makeAgent({
+      name: "Filtering Agent",
+      organizationId: org.id,
+      knowledgeBaseIds: [kb.id],
+    });
+
+    const querySpy = vi
+      .spyOn(queryService, "query")
+      .mockResolvedValueOnce([
+        { chunkId: "c1", content: "hit", score: 0.9, metadata: {} },
+      ] as any);
+
+    const context = await setup({
+      org,
+      user,
+      kbId: kb.id,
+      agentId: agent.id,
+      agentName: agent.name,
+    });
+
+    const result = await executeArchestraTool(
+      t("query_knowledge_sources"),
+      {
+        query: "rollback steps",
+        documentFilter: { spaceKey: "DEV", labels: ["release-2.0"] },
+      },
+      context,
+    );
+
+    expect(result.isError).toBeFalsy();
+    expect(querySpy.mock.calls[0][0].metadataFilter).toEqual({
+      spaceKey: "DEV",
+      labels: ["release-2.0"],
+    });
+    // A filter that matched something must not carry a diagnostic.
+    expect(
+      (result.structuredContent as { filterDiagnostic?: string })
+        .filterDiagnostic,
+    ).toBeUndefined();
+  });
+
+  test("an unmatched filter reports the values that do exist", async ({
+    makeAgent,
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    const agent = await makeAgent({
+      name: "Filtering Agent",
+      organizationId: org.id,
+      knowledgeBaseIds: [kb.id],
+    });
+
+    const doc = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      title: "Runbook",
+      content: "body",
+      contentHash: "hash-diag",
+      metadata: { spaceKey: "DEV" },
+    });
+    await KbChunkModel.insertMany([
+      { documentId: doc.id, content: "body", chunkIndex: 0, acl: ["org:*"] },
+    ]);
+
+    vi.spyOn(queryService, "query").mockResolvedValueOnce([] as any);
+
+    const context = await setup({
+      org,
+      user,
+      kbId: kb.id,
+      agentId: agent.id,
+      agentName: agent.name,
+    });
+
+    const result = await executeArchestraTool(
+      t("query_knowledge_sources"),
+      { query: "rollback steps", documentFilter: { spaceKey: "Dev Space" } },
+      context,
+    );
+
+    const diagnostic = (
+      result.structuredContent as { filterDiagnostic?: string }
+    ).filterDiagnostic;
+    expect(diagnostic).toBeDefined();
+    // The real value is named, so the model can retry with it instead of
+    // concluding the knowledge base has no answer.
+    expect(diagnostic).toContain("DEV");
+    expect(diagnostic).toContain("spaceKey");
+  });
+
+  test("no diagnostic when an unfiltered query simply finds nothing", async ({
+    makeAgent,
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const kb = await makeKnowledgeBase(org.id);
+    await makeKnowledgeBaseConnector(kb.id, org.id);
+    const agent = await makeAgent({
+      name: "Plain Agent",
+      organizationId: org.id,
+      knowledgeBaseIds: [kb.id],
+    });
+
+    vi.spyOn(queryService, "query").mockResolvedValueOnce([] as any);
+
+    const context = await setup({
+      org,
+      user,
+      kbId: kb.id,
+      agentId: agent.id,
+      agentName: agent.name,
+    });
+
+    const result = await executeArchestraTool(
+      t("query_knowledge_sources"),
+      { query: "rollback steps" },
+      context,
+    );
+
+    expect(
+      (result.structuredContent as { filterDiagnostic?: string })
+        .filterDiagnostic,
+    ).toBeUndefined();
+  });
+
+  test("rejects a malformed filter rather than ignoring it", async ({
+    makeAgent,
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const kb = await makeKnowledgeBase(org.id);
+    await makeKnowledgeBaseConnector(kb.id, org.id);
+    const agent = await makeAgent({
+      name: "Filtering Agent",
+      organizationId: org.id,
+      knowledgeBaseIds: [kb.id],
+    });
+
+    const context = await setup({
+      org,
+      user,
+      kbId: kb.id,
+      agentId: agent.id,
+      agentName: agent.name,
+    });
+
+    const result = await executeArchestraTool(
+      t("query_knowledge_sources"),
+      { query: "rollback steps", documentFilter: { spaceKey: 42 } },
+      context,
+    );
+
+    expect(result.isError).toBe(true);
+  });
+});

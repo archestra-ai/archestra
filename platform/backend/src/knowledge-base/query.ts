@@ -8,7 +8,7 @@ import logger from "@/logging";
 import { OrganizationModel } from "@/models";
 import type { Bm25Tuning, VectorSearchResult } from "@/models/kb-chunk";
 import * as metrics from "@/observability/metrics";
-import type { AclEntry } from "@/types";
+import type { AclEntry, KbDocumentMetadataFilter } from "@/types";
 import { expandChunkContext } from "./context-expansion";
 import { callEmbedding, getEmbeddingDiscriminator } from "./embedding-clients";
 import {
@@ -82,6 +82,13 @@ export class QueryService {
      * this environment, so a stray cross-env connectorId cannot leak results.
      */
     environmentId?: string | null;
+    /**
+     * Narrows the search to documents whose connector-supplied `metadata`
+     * satisfies this predicate — the "which subset of this connector" control,
+     * kept separate from `userAcl`, which decides what the caller may read.
+     * Composed as an additional AND, so it can only ever shrink the result.
+     */
+    metadataFilter?: KbDocumentMetadataFilter;
     limit?: number;
   }): Promise<ChunkResult[]> {
     const {
@@ -90,6 +97,7 @@ export class QueryService {
       queryText,
       bypassAcl = false,
       environmentId,
+      metadataFilter,
       limit = 10,
     } = params;
     if (connectorIds.length === 0) return [];
@@ -136,6 +144,7 @@ export class QueryService {
           userAcl: params.userAcl,
           bypassAcl,
           environmentId,
+          metadataFilter,
           type: eq.type,
           hybridEnabled,
           searchLanguages,
@@ -274,6 +283,7 @@ export class QueryService {
     userAcl: AclEntry[];
     bypassAcl: boolean;
     environmentId?: string | null;
+    metadataFilter?: KbDocumentMetadataFilter;
     type: "semantic" | "keyword";
     hybridEnabled: boolean;
     searchLanguages: TextSearchLanguage[];
@@ -289,6 +299,7 @@ export class QueryService {
       userAcl,
       bypassAcl,
       environmentId,
+      metadataFilter,
       type,
       hybridEnabled,
       bm25,
@@ -367,6 +378,7 @@ export class QueryService {
           userAcl,
           bypassAcl,
           environmentId,
+          metadataFilter,
         }),
       ),
       hybridEnabled
@@ -380,6 +392,7 @@ export class QueryService {
               userAcl,
               bypassAcl,
               environmentId,
+              metadataFilter,
             }),
           )
         : Promise.resolve<VectorSearchResult[] | null>([]),
@@ -392,6 +405,7 @@ export class QueryService {
         userAcl,
         bypassAcl,
         environmentId,
+        metadataFilter,
       }),
       this.verifyResults({
         candidates: unverifiedFullTextRows,
@@ -399,6 +413,7 @@ export class QueryService {
         userAcl,
         bypassAcl,
         environmentId,
+        metadataFilter,
       }),
     ]);
 
@@ -486,6 +501,7 @@ export class QueryService {
     userAcl: AclEntry[];
     bypassAcl: boolean;
     environmentId?: string | null;
+    metadataFilter?: KbDocumentMetadataFilter;
   }): Promise<VectorSearchResult[] | null> {
     if (
       params.candidates === null ||

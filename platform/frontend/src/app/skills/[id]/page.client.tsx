@@ -3,7 +3,6 @@
 import {
   AlertTriangle,
   ChartColumn,
-  ChevronDown,
   Github,
   History,
   MoreHorizontal,
@@ -14,15 +13,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useId, useMemo, useState } from "react";
 import { AgentBadge } from "@/components/agent-badge";
+import {
+  type OverviewFact,
+  OverviewSummary,
+} from "@/components/overview-summary";
 import { PageLayout } from "@/components/page-layout";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -144,6 +142,51 @@ function SkillDetailView({
   const usageAction = skillAction(actionModel, "usage");
   const historyAction = skillAction(actionModel, "history");
   const deleteAction = skillAction(actionModel, "delete");
+
+  // The values a reader scans this page for, in one row. The rest of the
+  // record is behind the same link the header's Edit uses.
+  const overviewFacts: OverviewFact[] = [
+    {
+      label: "Source",
+      value: <SourceFact skill={skill} />,
+    },
+    { label: "Version", value: <span>v{skill.latestVersion}</span> },
+    {
+      label: "Environment",
+      value:
+        skill.environments.length === 0 ? (
+          <span>All environments</span>
+        ) : (
+          <ul className="flex flex-wrap gap-1.5">
+            {skill.environments.map((environment) => (
+              <li key={environment.id}>
+                <Badge variant="outline" className="font-normal">
+                  {environment.name}
+                </Badge>
+              </li>
+            ))}
+          </ul>
+        ),
+    },
+    ...(isShared
+      ? [
+          {
+            label: "Shared with",
+            value: (
+              <ResourceVisibilityBadge
+                scope={skill.scope}
+                teams={skill.teams}
+                users={skill.users}
+                authorId={skill.authorId}
+                authorName={undefined}
+                currentUserId={currentUserId}
+                showSelfAsMe={false}
+              />
+            ),
+          },
+        ]
+      : []),
+  ];
 
   const [historyOpen, setHistoryOpen] = useState(false);
   const [usageOpen, setUsageOpen] = useState(false);
@@ -269,62 +312,11 @@ function SkillDetailView({
       }
     >
       <div className="space-y-10">
-        <section aria-labelledby="skill-overview-heading">
-          <Collapsible>
-            <CollapsibleTrigger className="group flex w-full items-center justify-between gap-4 py-1 text-left">
-              <h2
-                id="skill-overview-heading"
-                className="text-base font-semibold tracking-tight text-foreground"
-              >
-                Overview
-              </h2>
-              <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
-            </CollapsibleTrigger>
-            <CollapsibleContent className="pt-4">
-              <section className="space-y-4 rounded-lg border bg-card p-4">
-                <h3 className="text-sm font-semibold text-foreground">
-                  Access and source
-                </h3>
-                <FactGrid>
-                  <Fact label="Environment">
-                    {skill.environments.length === 0 ? (
-                      <span>All environments</span>
-                    ) : (
-                      <ul className="flex flex-wrap gap-1.5">
-                        {skill.environments.map((environment) => (
-                          <li key={environment.id}>
-                            <Badge variant="outline" className="font-normal">
-                              {environment.name}
-                            </Badge>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </Fact>
-                  {isShared && (
-                    <Fact label="Shared with">
-                      <ResourceVisibilityBadge
-                        scope={skill.scope}
-                        teams={skill.teams}
-                        users={skill.users}
-                        authorId={skill.authorId}
-                        authorName={undefined}
-                        currentUserId={currentUserId}
-                        showSelfAsMe={false}
-                      />
-                    </Fact>
-                  )}
-                  <Fact label="Source">
-                    <SourceFact skill={skill} />
-                  </Fact>
-                  <Fact label="Version">
-                    <span>v{skill.latestVersion}</span>
-                  </Fact>
-                </FactGrid>
-              </section>
-            </CollapsibleContent>
-          </Collapsible>
-        </section>
+        <OverviewSummary
+          headingId="skill-overview-heading"
+          facts={overviewFacts}
+          configHref={canEdit ? skillActionHref(editAction) : undefined}
+        />
 
         <SkillCard title="Instructions and files" spacious>
           <SkillContentEditor
@@ -441,25 +433,6 @@ function SkillCard({
       <h2 className={typeRole({ role: "section-title" })}>{title}</h2>
       {children}
     </section>
-  );
-}
-
-function FactGrid({ children }: { children: ReactNode }) {
-  return (
-    <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
-      {children}
-    </div>
-  );
-}
-
-function Fact({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="min-w-0 space-y-1">
-      <div className={typeRole({ role: "label" })}>{label}</div>
-      <div className={cn(typeRole({ role: "body" }), "break-words")}>
-        {children}
-      </div>
-    </div>
   );
 }
 

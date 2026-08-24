@@ -26,7 +26,7 @@ import {
 } from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
 import { InviteByLinkCard } from "@/components/invite-by-link-card";
-import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
+import { LoadingState, LoadingWrapper } from "@/components/loading";
 import { RoleOptionLabel } from "@/components/role-type-icon";
 import { SearchInput } from "@/components/search-input";
 import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
@@ -117,10 +117,7 @@ function UsersPageContent() {
   }, [activeOrg, setActionButton]);
 
   return (
-    <LoadingWrapper
-      isPending={isOrgPending}
-      loadingFallback={<LoadingSpinner />}
-    >
+    <LoadingWrapper isPending={isOrgPending} loadingFallback={<LoadingState />}>
       {activeOrg ? (
         <div
           className="space-y-6"
@@ -578,10 +575,7 @@ function MembersTab({
         <RoleFilterDropdown />
       </FilterBar>
 
-      <LoadingWrapper
-        isPending={isPending}
-        loadingFallback={<LoadingSpinner />}
-      >
+      <LoadingWrapper isPending={isPending} loadingFallback={<LoadingState />}>
         <BulkActionsBar
           count={selectedMembers.length}
           noun="user"
@@ -850,7 +844,11 @@ function InvitationsTab({
   const pageSize = Number(limitFromUrl) || DEFAULT_TABLE_LIMIT;
   const offset = pageIndex * pageSize;
 
-  const { data: invitationsResponse, isPending } = useInvitationsPaginated({
+  const {
+    data: invitationsResponse,
+    isPending,
+    isFetching,
+  } = useInvitationsPaginated({
     limit: pageSize,
     offset,
   });
@@ -949,10 +947,7 @@ function InvitationsTab({
         </div>
       </div>
 
-      <LoadingWrapper
-        isPending={isPending}
-        loadingFallback={<LoadingSpinner />}
-      >
+      <LoadingWrapper isPending={isPending} loadingFallback={<LoadingState />}>
         <DataTable
           columns={columns}
           data={invitations}
@@ -963,7 +958,7 @@ function InvitationsTab({
             total: pagination?.total || 0,
           }}
           onPaginationChange={handlePaginationChange}
-          isLoading={isPending}
+          isLoading={isFetching}
           emptyMessage="No invitations"
         />
       </LoadingWrapper>

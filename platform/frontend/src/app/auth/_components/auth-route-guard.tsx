@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { LoadingSpinner } from "@/components/loading";
+import { LoadingState } from "@/components/loading";
 import { useSession } from "@/lib/auth/auth.query";
 import { useTwoFactorChallengePending } from "@/lib/auth/two-factor.query";
 
@@ -40,7 +40,7 @@ function GuardShell({
   }
   return (
     <div className="flex min-h-40 items-center justify-center">
-      <LoadingSpinner />
+      <LoadingState />
     </div>
   );
 }

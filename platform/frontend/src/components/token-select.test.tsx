@@ -24,7 +24,7 @@ vi.mock("@/lib/utils", () => ({
 }));
 
 vi.mock("@/components/loading", () => ({
-  LoadingSpinner: () => <div>Loading...</div>,
+  LoadingState: () => <div>Loading...</div>,
 }));
 
 vi.mock("@/components/divider", () => ({

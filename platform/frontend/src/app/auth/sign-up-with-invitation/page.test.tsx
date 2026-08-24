@@ -36,7 +36,7 @@ vi.mock("@/components/community-links", () => ({
 }));
 
 vi.mock("@/components/loading", () => ({
-  LoadingSpinner: () => <div data-testid="loading-spinner">Loading</div>,
+  LoadingState: () => <div data-testid="loading-spinner">Loading</div>,
 }));
 
 vi.mock("@/app/_parts/error-boundary", () => ({

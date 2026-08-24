@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { LoadingSpinner } from "@/components/loading";
+import { LoadingState } from "@/components/loading";
 import { useSettingsTabs } from "./settings-tabs";
 
 // Landing page: settings has no content of its own, so forward to the first
@@ -19,5 +19,5 @@ export default function SettingsIndexPage() {
     }
   }, [firstTab, router]);
 
-  return <LoadingSpinner className="my-8" />;
+  return <LoadingState variant="page" />;
 }

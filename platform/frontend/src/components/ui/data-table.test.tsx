@@ -64,9 +64,9 @@ describe("DataTable page index clamping", () => {
     });
   });
 
-  it("does not clamp while loading", () => {
+  it("uses the shared loading state without rendering the table or pagination", () => {
     const onPaginationChange = vi.fn();
-    render(
+    const { container } = render(
       <DataTable
         columns={columns}
         data={[]}
@@ -78,6 +78,11 @@ describe("DataTable page index clamping", () => {
     );
 
     expect(onPaginationChange).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("status", { name: "Loading results…" }),
+    ).toBeVisible();
+    expect(container.querySelector("table")).toBeNull();
+    expect(screen.queryByText("Page 4 of 0")).toBeNull();
   });
 });
 

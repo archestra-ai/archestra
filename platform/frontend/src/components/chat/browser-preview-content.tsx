@@ -39,7 +39,7 @@ import {
   useHasPlaywrightMcpTools,
 } from "@/lib/chat/chat.query";
 import { cn } from "@/lib/utils";
-import { LoadingSpinner } from "../loading";
+import { LoadingState } from "../loading";
 
 interface BrowserPreviewContentProps {
   conversationId: string | undefined;
@@ -458,10 +458,7 @@ export function BrowserPreviewContent({
       >
         {isConnecting && (
           <div className="flex items-center justify-center h-full">
-            <div className="text-center space-y-2 mt-20">
-              <LoadingSpinner />
-              <p className="text-sm text-muted-foreground">Connecting...</p>
-            </div>
+            <LoadingState label="Connecting…" />
           </div>
         )}
         {!isConnecting && screenshot && (

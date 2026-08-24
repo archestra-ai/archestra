@@ -45,7 +45,7 @@ export function SessionsCard() {
   // good list on screen rather than replacing a working card with an error.
   const {
     data: sessions,
-    isPending,
+    isFetching,
     isLoadingError,
     error,
     refetch,
@@ -242,7 +242,7 @@ export function SessionsCard() {
             onRowSelectionChange={setRowSelection}
             onPageRowIdsChange={onPageRowIdsChange}
             hideSelectedCount
-            isLoading={isPending}
+            isLoading={isFetching}
             emptyMessage="No active sessions."
             hidePaginationWhenSinglePage
             fixedWidthColumnIds={["signed-in", "expires", "actions"]}

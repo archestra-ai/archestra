@@ -23,7 +23,7 @@ import {
   filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
-import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
+import { LoadingState, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RepositoryOwnerIcon } from "@/components/repository-owner-icon";
@@ -110,7 +110,7 @@ function PluginsGate() {
   const enabled = useFeature("plugins");
 
   if (enabled === undefined) {
-    return <LoadingSpinner className="mt-24" label="Loading plugins" />;
+    return <LoadingState label="Loading plugins…" variant="viewport" />;
   }
 
   if (!enabled) {
@@ -584,12 +584,14 @@ function PluginsList() {
   }
 
   const showEmptyState =
-    !isPending && (plugins?.length ?? 0) === 0 && !hasActiveFilters;
+    !isFetching && (plugins?.length ?? 0) === 0 && !hasActiveFilters;
 
   return (
     <LoadingWrapper
-      isPending={isPending && !plugins}
-      loadingFallback={<LoadingSpinner />}
+      isPending={(isPending || isFetching) && (plugins?.length ?? 0) === 0}
+      loadingFallback={
+        <LoadingState label="Loading plugins…" variant="viewport" />
+      }
     >
       <PageLayout
         title="Plugins"

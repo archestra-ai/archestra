@@ -7,7 +7,7 @@ describe("OAuthCallbackStatus", () => {
 
     expect(screen.getByText("Finishing OAuth Connection")).toBeInTheDocument();
     expect(
-      screen.getByText("Completing OAuth authentication"),
+      screen.getByRole("status", { name: "Completing OAuth authentication" }),
     ).toBeInTheDocument();
     expect(
       screen.getByText("Securing credentials and connecting the MCP server"),

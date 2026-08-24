@@ -17,7 +17,7 @@ import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { FormDialog } from "@/components/form-dialog";
-import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
+import { LoadingState, LoadingWrapper } from "@/components/loading";
 import { QueryLoadError } from "@/components/query-load-error";
 import {
   SettingsSaveBar,
@@ -83,6 +83,7 @@ export default function ServiceAccountDetailPage({
   const {
     data: serviceAccount,
     isPending,
+    isFetching,
     isLoadingError,
     refetch,
   } = useServiceAccount(serviceAccountId);
@@ -298,7 +299,10 @@ export default function ServiceAccountDetailPage({
   }
 
   return (
-    <LoadingWrapper isPending={isPending} loadingFallback={<LoadingSpinner />}>
+    <LoadingWrapper
+      isPending={(isPending || isFetching) && !serviceAccount}
+      loadingFallback={<LoadingState variant="page" />}
+    >
       {isLoadingError ? (
         <QueryLoadError
           title="Couldn't load this service account"

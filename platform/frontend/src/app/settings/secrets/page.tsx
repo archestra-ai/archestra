@@ -3,6 +3,7 @@
 import { RefreshCw, Server } from "lucide-react";
 import { useCallback, useEffect } from "react";
 import { useSetSettingsAction } from "@/app/settings/layout";
+import { LoadingState } from "@/components/loading";
 import {
   SettingsBlock,
   SettingsSectionStack,
@@ -51,11 +52,7 @@ export default function SecretsSettingsPage() {
   ]);
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-lg text-muted-foreground">Loading...</p>
-      </div>
-    );
+    return <LoadingState label="Loading secrets settings…" variant="page" />;
   }
 
   // Don't render anything if not using Vault storage

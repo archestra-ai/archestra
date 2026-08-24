@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { LoadingSpinner } from "@/components/loading";
+import { LoadingState } from "@/components/loading";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   SettingsBlock,
@@ -51,7 +51,7 @@ export default function SkillsSettingsPage() {
   const handleCancel = () => setCatalogEnabled(serverCatalogEnabled);
 
   if (isPending) {
-    return <LoadingSpinner className="my-8" />;
+    return <LoadingState variant="page" />;
   }
 
   return (

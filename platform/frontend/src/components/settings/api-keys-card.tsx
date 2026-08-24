@@ -13,7 +13,7 @@ import { ExpirationDateTimeField } from "@/components/expiration-date-time-field
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { FilterBar, filterSearchClass } from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
-import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
+import { LoadingState, LoadingWrapper } from "@/components/loading";
 import { QueryLoadError } from "@/components/query-load-error";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { SearchInput } from "@/components/search-input";
@@ -76,6 +76,7 @@ function ApiKeysCardContent() {
   const {
     data: apiKeys = [],
     isPending,
+    isFetching,
     isLoadingError: isApiKeysLoadError,
     refetch: refetchApiKeys,
   } = useApiKeys();
@@ -315,8 +316,8 @@ function ApiKeysCardContent() {
           </p>
         </div>
         <LoadingWrapper
-          isPending={isPending}
-          loadingFallback={<LoadingSpinner />}
+          isPending={(isPending || isFetching) && apiKeys.length === 0}
+          loadingFallback={<LoadingState variant="page" />}
         >
           <div>
             <FilterBar

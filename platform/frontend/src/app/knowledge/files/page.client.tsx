@@ -136,7 +136,12 @@ export default function KnowledgeFilesPage() {
   const [previewFile, setPreviewFile] = useState<PreviewableDocument>();
 
   const { data: directories = [] } = useKnowledgeDirectories();
-  const { data, isLoading, isLoadingError, refetch } = useKnowledgeFiles({
+  const {
+    data,
+    isFetching: isLoading,
+    isLoadingError,
+    refetch,
+  } = useKnowledgeFiles({
     limit: pageSize,
     offset,
     // At the top level only unfiled documents are listed inline; a directory's

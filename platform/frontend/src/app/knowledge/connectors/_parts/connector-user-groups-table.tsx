@@ -57,7 +57,7 @@ export function ConnectorUserGroupsTable({
 }) {
   const {
     data: userGroups,
-    isPending,
+    isFetching,
     isError,
   } = useConnectorUserGroups({ connectorId, enabled: true });
   const [search, setSearch] = useState("");
@@ -267,7 +267,7 @@ export function ConnectorUserGroupsTable({
       <DataTable
         columns={columns}
         data={visibleGroups}
-        isLoading={isPending}
+        isLoading={isFetching}
         emptyMessage={
           isError
             ? `Failed to load ${noun.emptyNoun}. Please try again.`

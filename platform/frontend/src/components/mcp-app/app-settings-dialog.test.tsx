@@ -112,7 +112,7 @@ describe("AppSettingsDialog", () => {
     renderDialog();
 
     expect(
-      await screen.findByRole("status", { name: "Loading app settings" }),
+      await screen.findByRole("status", { name: "Loading app settings…" }),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
 

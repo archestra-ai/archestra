@@ -496,7 +496,10 @@ function McpToolCallsTable({
 
   return (
     <div className="space-y-4">
-      <FilterBar onClearFilters={hasFilters ? clearFilters : undefined}>
+      <FilterBar
+        className="mb-4"
+        onClearFilters={hasFilters ? clearFilters : undefined}
+      >
         {searchInputComponent}
         {/* Two people's personal gateways can both be called "My Gateway", so
             the picker carries each one's scope and owner email rather than a

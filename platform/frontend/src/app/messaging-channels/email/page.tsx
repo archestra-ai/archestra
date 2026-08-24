@@ -263,7 +263,6 @@ export default function EmailPage() {
             </div>
 
             <FilterBar
-              className="mb-0"
               onClearFilters={
                 hasActiveFilters
                   ? () => {

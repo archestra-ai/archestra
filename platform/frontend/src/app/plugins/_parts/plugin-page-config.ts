@@ -10,6 +10,15 @@ export const CLIENT_LABELS: Record<string, string> = {
 export const pluginDetailHref = (id: string) => `/plugins/${id}`;
 export const pluginEditHref = (id: string) => `/plugins/${id}/edit`;
 
+/**
+ * Attribution shown on the vendor's own plugin. Deliberately not
+ * `useAppName()`: the badge names who authored and publishes the plugin
+ * (archestra-ai/OpenAPPA upstream), not the brand of the deployment rendering
+ * it — a white-labeled instance still installs a plugin written by Archestra.
+ */
+// white-label-ok: names the plugin's upstream author, not this deployment's brand
+export const ARCHESTRA_PLUGIN_AUTHOR_LABEL = "Archestra";
+
 export function isArchestraPlugin(plugin: {
   sourceMarketplaceRepo?: string | null;
   sourceMarketplacePath?: string | null;

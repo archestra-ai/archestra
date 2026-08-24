@@ -486,7 +486,6 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
             <div>
               <div className="mb-6 flex flex-col gap-2">
                 <FilterBar
-                  className="mb-0"
                   actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
                 >
                   <SearchInput

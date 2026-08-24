@@ -410,7 +410,6 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
     <>
       <div className="space-y-6">
         <FilterBar
-          className="mb-0"
           onClearFilters={
             nameFilter
               ? () => updateQueryParams({ name: null, page: "1" })

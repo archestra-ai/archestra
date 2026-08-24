@@ -98,7 +98,7 @@ describe("PluginsPage", () => {
     );
   });
 
-  it("groups related facts into a compact, white-labelled table", () => {
+  it("groups related facts into a compact table", () => {
     render(<PluginsPage />);
 
     for (const name of [
@@ -116,8 +116,17 @@ describe("PluginsPage", () => {
         screen.queryByRole("columnheader", { name: removed }),
       ).not.toBeInTheDocument();
     }
-    expect(screen.getByText("Northstar")).toBeVisible();
     expect(screen.getByText("13 files")).toBeVisible();
+  });
+
+  it("attributes the vendor's own plugin to its author, not the deployment", () => {
+    render(<PluginsPage />);
+
+    // The deployment is branded "Northstar" (mocked above), but OpenAPPA is
+    // published by Archestra either way — a rebrand must not rewrite who wrote
+    // somebody else's plugin.
+    expect(screen.getByText("Archestra")).toBeVisible();
+    expect(screen.queryByText("Northstar")).not.toBeInTheDocument();
   });
 
   it("keeps secondary filters behind More filters until applied", async () => {

@@ -238,7 +238,6 @@ function ProjectsList() {
         )}
         <div className="space-y-6">
           <FilterBar
-            className="mb-0"
             actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
           >
             {/* Hidden in the trash: the backend serves that slice whole, ignoring

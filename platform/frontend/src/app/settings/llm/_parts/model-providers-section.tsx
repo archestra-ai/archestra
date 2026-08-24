@@ -108,7 +108,6 @@ export function ModelProvidersSection() {
             return (
               <div className="flex flex-col gap-4">
                 <FilterBar
-                  className="mb-0"
                   onClearFilters={search ? () => setSearch("") : undefined}
                 >
                   <SearchInput

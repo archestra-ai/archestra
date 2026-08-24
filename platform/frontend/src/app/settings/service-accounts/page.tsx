@@ -260,6 +260,7 @@ export default function ServiceAccountsSettingsPage() {
         >
           <div>
             <FilterBar
+              className="mb-4"
               onClearFilters={
                 search
                   ? () => updateQueryParams({ search: null, page: "1" })

@@ -321,6 +321,7 @@ function ApiKeysCardContent() {
         >
           <div>
             <FilterBar
+              className="mb-4"
               onClearFilters={
                 search
                   ? () => updateQueryParams({ search: null, page: "1" })

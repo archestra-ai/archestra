@@ -18,12 +18,16 @@ function TabLabel({
   iconSrc,
   icon: Icon,
   label,
-  active,
+  connected,
 }: {
   iconSrc?: string;
   icon?: React.ComponentType<{ className?: string }>;
   label: string;
-  active?: boolean;
+  /**
+   * Whether the channel is set up. Purely a status indicator: it picks the
+   * badge, never whether this tab reads as the open one.
+   */
+  connected?: boolean;
 }) {
   return (
     <span className="flex items-center gap-1.5">
@@ -38,16 +42,16 @@ function TabLabel({
           after Chrome page-translate re-parents it into a <font> wrapper
           (facebook/react#11538). */}
       <span>{label}</span>
-      {active !== undefined && (
+      {connected !== undefined && (
         <span
           className={cn(
             "text-[11px] px-1.5 py-0.5 rounded-full font-normal",
-            active
+            connected
               ? "bg-green-500/10 text-green-600 dark:text-green-400"
               : "bg-muted text-muted-foreground",
           )}
         >
-          {active ? "Active" : "Configure"}
+          {connected ? "Active" : "Configure"}
         </span>
       )}
     </span>
@@ -88,11 +92,11 @@ export default function AgentTriggersLayout({
           <TabLabel
             iconSrc={CHANNEL_ICON_SRC["ms-teams"]}
             label={MESSAGING_CHANNEL_LABELS["ms-teams"]}
-            active={msTeamsActive}
+            connected={msTeamsActive}
           />
         ),
         href: "/messaging-channels/ms-teams",
-        active: msTeamsActive,
+        connected: msTeamsActive,
       },
       {
         id: "slack" as const,
@@ -100,11 +104,11 @@ export default function AgentTriggersLayout({
           <TabLabel
             iconSrc={CHANNEL_ICON_SRC.slack}
             label={MESSAGING_CHANNEL_LABELS.slack}
-            active={slackActive}
+            connected={slackActive}
           />
         ),
         href: "/messaging-channels/slack",
-        active: slackActive,
+        connected: slackActive,
       },
       // Telegram is hidden unless the deployment enables the feature flag
       ...(telegramAvailable
@@ -115,11 +119,11 @@ export default function AgentTriggersLayout({
                 <TabLabel
                   iconSrc={CHANNEL_ICON_SRC.telegram}
                   label={MESSAGING_CHANNEL_LABELS.telegram}
-                  active={telegramActive}
+                  connected={telegramActive}
                 />
               ),
               href: "/messaging-channels/telegram",
-              active: telegramActive,
+              connected: telegramActive,
             },
           ]
         : []),
@@ -129,28 +133,36 @@ export default function AgentTriggersLayout({
           <TabLabel
             icon={Mail}
             label={MESSAGING_CHANNEL_LABELS.email}
-            active={emailActive}
+            connected={emailActive}
           />
         ),
         href: "/messaging-channels/email",
-        active: emailActive,
+        connected: emailActive,
       },
     ];
 
-    // Sort channel tabs by active first, then pin A2A as the final option.
+    // Sort connected channels first, then pin A2A as the final option.
+    //
+    // `connected` is the channel's setup status — it drives this order and the
+    // "Active"/"Configure" badge, and nothing else. It is deliberately not
+    // `PageLayout`'s `selected`: that one says which page the reader is on,
+    // and handing it a status made every connected channel render as the open
+    // tab (and claim `aria-current="page"`) at the same time.
     return [
-      ...channelTabs.sort((a, b) => (b.active ? 1 : 0) - (a.active ? 1 : 0)),
+      ...channelTabs.sort(
+        (a, b) => (b.connected ? 1 : 0) - (a.connected ? 1 : 0),
+      ),
       {
         id: "a2a" as const,
         label: (
           <TabLabel
             icon={Bot}
             label={MESSAGING_CHANNEL_LABELS.a2a}
-            active={a2aActive}
+            connected={a2aActive}
           />
         ),
         href: "/messaging-channels/a2a",
-        active: a2aActive,
+        connected: a2aActive,
       },
       // Channels the admins turned off leave the page entirely — their routes
       // render a "turned off" notice, so a bookmark cannot walk back in.

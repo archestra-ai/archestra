@@ -20,7 +20,8 @@ import {
   applyChannelGate,
   findWorkspacesWithUnmentionedTraffic,
   invalidateChannelAnswerAll,
-  muteChannelThread,
+  isChannelAnswerAllEnabled,
+  muteChannelThreadAndNotify,
   recordUnmentionedChannelTraffic,
 } from "@/agents/chatops/channel-activation";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
@@ -2170,15 +2171,28 @@ async function resolveTeamsWorkspaceId(
   context: TurnContext,
   message: IncomingChatMessage,
 ): Promise<string | null> {
-  const raw = message.workspaceId;
+  const resolved = await resolveTeamsAadGroupId(
+    context,
+    message.workspaceId ?? null,
+  );
+  if (resolved) message.workspaceId = resolved;
+  return resolved;
+}
+
+/**
+ * The lookup behind resolveTeamsWorkspaceId, taking the raw id directly so
+ * activities that never become an IncomingChatMessage — a reaction, say — can
+ * resolve the same binding key.
+ */
+async function resolveTeamsAadGroupId(
+  context: TurnContext,
+  raw: string | null,
+): Promise<string | null> {
   if (!raw || isUuid(raw)) return raw ?? null;
 
   const cacheKey: AllowedCacheKey = `${CacheKey.TeamsTeamAadGroupId}-${raw}`;
   const cached = await cacheManager.get<string>(cacheKey);
-  if (cached) {
-    message.workspaceId = cached;
-    return cached;
-  }
+  if (cached) return cached;
 
   let resolved = raw;
   try {
@@ -2200,22 +2214,39 @@ async function resolveTeamsWorkspaceId(
       ? TEAMS_AAD_GROUP_ID_RETRY_TTL_MS
       : TEAMS_AAD_GROUP_ID_TTL_MS,
   );
-  message.workspaceId = resolved;
   return resolved;
 }
 
 /**
- * Mute a Teams channel thread, confirming ONLY on a real active→muted
- * transition. Redelivered reaction activities / repeat mutes find the key
- * already gone and stay silent, so no duplicate "muted" notices.
+ * Mute a Teams channel thread, confirming only when the mute changed something
+ * — a cleared activation, or a first mute in an answer-all channel (see
+ * muteChannelThreadAndNotify). Redelivered reaction activities and repeat mutes
+ * find the state already set and stay silent, so no duplicate "muted" notices.
  */
 async function muteTeamsThreadAndNotify(
   context: TurnContext,
   activation: { provider: "ms-teams"; channelId: string; threadId: string },
 ): Promise<void> {
-  if (await muteChannelThread(activation)) {
-    await context.sendActivity(buildThreadMutedNotice());
-  }
+  await muteChannelThreadAndNotify({
+    ...activation,
+    resolveAnswerAll: async () =>
+      await isChannelAnswerAllEnabled({
+        provider: activation.provider,
+        channelId: activation.channelId,
+        // Bindings are keyed on the team's aadGroupId, so a reaction has to
+        // canonicalize the raw team id exactly as the message path does or the
+        // setting reads as off and an answer-all mute goes unconfirmed.
+        workspaceId: await resolveTeamsAadGroupId(
+          context,
+          context.activity.channelData?.team?.aadGroupId ??
+            context.activity.channelData?.team?.id ??
+            null,
+        ),
+      }),
+    postMutedNotice: async () => {
+      await context.sendActivity(buildThreadMutedNotice());
+    },
+  });
 }
 
 /**

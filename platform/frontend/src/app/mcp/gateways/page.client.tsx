@@ -19,6 +19,10 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import {
+  AgentAccessBadges,
+  AgentLastUsedFooter,
+} from "@/components/agent-card-meta";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentNameCell } from "@/components/agent-name-cell";
 import {
@@ -790,12 +794,7 @@ function McpGateways({
                         }}
                         selectionLabel={`Select ${agent.name}`}
                         footer={
-                          <span>
-                            Last used{" "}
-                            {formatRelativeTimeFromNow(
-                              agent.lastUsedAt ?? null,
-                            )}
-                          </span>
+                          <AgentLastUsedFooter lastUsedAt={agent.lastUsedAt} />
                         }
                       >
                         <div className="flex flex-wrap items-center gap-2">
@@ -808,16 +807,7 @@ function McpGateways({
                             currentUserId={currentUserId}
                             showSelfAsMe
                           />
-                          <Badge variant="outline">
-                            {agent.accessAllTools
-                              ? "All tools"
-                              : `${agent.tools.filter((tool) => !tool.delegateToAgentId).length} tools`}
-                          </Badge>
-                          <Badge variant="outline">
-                            {agent.accessAllSubagents
-                              ? "All subagents"
-                              : `${agent.tools.filter((tool) => tool.delegateToAgentId).length} subagents`}
-                          </Badge>
+                          <AgentAccessBadges agent={agent} />
                         </div>
                       </TableCard>
                     ))}

@@ -3,7 +3,7 @@ title: Slack
 category: Agents
 order: 7
 description: Connect Archestra agents to Slack channels
-lastUpdated: 2026-07-22
+lastUpdated: 2026-08-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -54,7 +54,7 @@ The bot responds with a list of options to choose which agent will handle messag
 
 In channels the bot stays silent until it is @mentioned. Once mentioned in a thread, it keeps replying to every message in that thread without further mentions. Starting a new thread needs a fresh mention. Direct messages always get a reply, no mention required.
 
-To stop the bot replying in a thread, send `mute` (you can address it by name with no @mention, e.g. `Archestra mute`), or react to one of its replies with the mute (🔇) or shushing-face (🤫) emoji. It goes quiet until the thread is @mentioned again. Muting also cancels any reply the bot is already working on, so a late answer never lands after you ask for quiet. As a reminder, the bot adds a short hint about this to its first reply in each thread.
+To stop the bot replying in a thread, send `mute` (you can address it by name with no @mention, e.g. `Archestra mute`), or react to any message in the thread with the mute (🔇) or shushing-face (🤫) emoji — the bot's reply or someone else's, whichever is in front of you. It goes quiet until the thread is @mentioned again. Muting also cancels any reply the bot is already working on, so a late answer never lands after you ask for quiet. As a reminder, the bot adds a short hint about this to its first reply in each thread.
 
 ### Answering Every Message
 

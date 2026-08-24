@@ -39,6 +39,9 @@ describe("query persistence", () => {
   let stop: () => void;
 
   beforeEach(() => {
+    // Also resets the module's notion of the active scope, so one test's
+    // scope cannot leak into the next.
+    clearPersistedQueryCache();
     window.sessionStorage.clear();
     client = makeClient();
     stop = startPersistingQueryCache(client);

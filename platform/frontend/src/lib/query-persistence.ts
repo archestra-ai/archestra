@@ -68,17 +68,22 @@ export function syncPersistedQueryCacheScope(
   scope: string,
 ): void {
   if (!isStorageAvailable()) return;
+  if (activeScope === scope) return;
+  // Only parse what is in storage when the scope has actually moved: this is
+  // the cross-load check (module state starts empty on every page load), and
+  // the snapshot can be a megabyte.
   const storedScope = readSnapshot()?.scope;
-  if (storedScope === scope) return;
-  if (storedScope !== undefined) {
+  if (storedScope !== undefined && storedScope !== scope) {
     clearPersistedQueryCache();
     client.clear();
   }
-  writeSnapshot(client, scope);
+  activeScope = scope;
+  writeSnapshot(client);
 }
 
 /** Drop the snapshot. Called on sign-out and on a scope change. */
 export function clearPersistedQueryCache(): void {
+  activeScope = null;
   if (!isStorageAvailable()) return;
   try {
     window.sessionStorage.removeItem(STORAGE_KEY);
@@ -128,6 +133,16 @@ const REDACTED_FIELDS = new Set([
   "token",
 ]);
 
+/**
+ * The scope writes are currently filed under, or null while the session is
+ * still unresolved. Module state rather than a storage read: the cache emits
+ * an event for every query transition, and re-parsing the stored snapshot on
+ * each debounced write to recover a string we already know is pure waste.
+ * It starts empty on every page load, which is what makes the cross-load
+ * comparison in syncPersistedQueryCacheScope meaningful.
+ */
+let activeScope: string | null = null;
+
 type Snapshot = {
   version: number;
   scope: string;
@@ -166,11 +181,10 @@ function readSnapshot(): Snapshot | null {
   return parsed;
 }
 
-function writeSnapshot(client: QueryClient, scope?: string): void {
-  const resolvedScope = scope ?? readSnapshot()?.scope;
+function writeSnapshot(client: QueryClient): void {
   // Until the session resolves we do not know whose data this is, so there is
   // nothing safe to file it under.
-  if (resolvedScope === undefined) return;
+  if (activeScope === null) return;
 
   const state = dehydrate(client, {
     shouldDehydrateQuery: (query) =>
@@ -180,7 +194,7 @@ function writeSnapshot(client: QueryClient, scope?: string): void {
 
   const snapshot: Snapshot = {
     version: SNAPSHOT_VERSION,
-    scope: resolvedScope,
+    scope: activeScope,
     savedAt: Date.now(),
     state: { ...state, queries: withinBudget(state.queries) },
   };

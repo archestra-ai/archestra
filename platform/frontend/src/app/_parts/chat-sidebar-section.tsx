@@ -20,6 +20,7 @@ import {
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ChatListSkeleton } from "@/app/_parts/chat-list-skeleton";
+import { ConversationProjectActions } from "@/app/_parts/conversation-project-actions";
 import { CreateProjectFromChatDialog } from "@/app/_parts/create-project-from-chat-dialog";
 import { isScheduledRunConversation } from "@/app/_parts/scheduled-run-sidebar.utils";
 import { AgentIcon } from "@/components/agent-icon";
@@ -270,6 +271,21 @@ export function ChatSidebarSection({
     pinConversationMutation.mutate({ id, pinned: !isPinned });
   };
 
+  const handleChangeProject = async (
+    conversationId: string,
+    projectId: string | null,
+  ) => {
+    try {
+      await updateConversationMutation.mutateAsync({
+        id: conversationId,
+        projectId,
+      });
+      setOpenMenuId(null);
+    } catch {
+      // Error is handled by the mutation's onError callback
+    }
+  };
+
   const handleSelectProject = (id: string) => {
     if (isMobile) {
       setOpenMobile(false);
@@ -345,6 +361,10 @@ export function ChatSidebarSection({
         hasCreatePermission: canCreateProject === true,
         conversation: conv,
       });
+    const showProjectActions =
+      canUpdateConversation === true &&
+      canReadProjects === true &&
+      isActionAvailableForConversation(conv, "changeProject");
     // AI title generation is rejected for locked chats (the server would
     // have to read encrypted messages), so hide both regenerate affordances.
     const canRegenerateTitle = isActionAvailableForConversation(
@@ -565,6 +585,16 @@ export function ChatSidebarSection({
                           <Sparkles className="h-4 w-4 mr-2" />
                           Regenerate title
                         </DropdownMenuItem>
+                      )}
+                      {showProjectActions && (
+                        <ConversationProjectActions
+                          projectId={conv.projectId}
+                          projects={projectsData ?? []}
+                          isPending={updateConversationMutation.isPending}
+                          onProjectChange={(projectId) =>
+                            handleChangeProject(conv.id, projectId)
+                          }
+                        />
                       )}
                     </>
                   )}

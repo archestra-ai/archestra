@@ -8,7 +8,7 @@ import {
   type InteractionSource,
 } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Database, Layers, MessageSquare, User } from "lucide-react";
+import { Database, Layers, MessageSquare } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo } from "react";
@@ -28,12 +28,7 @@ import { SourceBadge } from "@/components/source-badge";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import { DateTimeRangePicker } from "@/components/ui/date-time-range-picker";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { UnattributedUserBadge } from "@/components/unattributed-user-badge";
 import {
   ClientFilterSelect,
@@ -48,7 +43,7 @@ import {
   useInteractionSessions,
   useUniqueUserIds,
 } from "@/lib/interactions/interaction.query";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils";
 import { ErrorBoundary } from "../../_parts/error-boundary";
 
 function formatDuration(start: Date | string, end: Date | string): string {
@@ -111,7 +106,6 @@ function getSessionDisplayData(session: SessionData) {
     conversationTitle,
     isArchestraChat,
     clientSource,
-    lastUserMessage,
     displayText,
   };
 }
@@ -272,8 +266,8 @@ function SessionsTable() {
       {
         id: "session",
         header: "Session",
-        size: 300,
-        minSize: 220,
+        size: 285,
+        minSize: 230,
         cell: ({ row }) => {
           const session = row.original;
           const {
@@ -281,18 +275,26 @@ function SessionsTable() {
             displayText,
             isArchestraChat,
             clientSource,
-            lastUserMessage,
           } = getSessionDisplayData(session);
 
+          const primaryText = isArchestraChat
+            ? conversationTitle
+            : displayText ||
+              (session.source?.startsWith("knowledge:")
+                ? (INTERACTION_SOURCE_DISPLAY[
+                    session.source as keyof typeof INTERACTION_SOURCE_DISPLAY
+                  ]?.label ?? session.source)
+                : "No message");
+
           return (
-            <div className="flex max-w-full min-w-0 items-center gap-2 overflow-hidden text-xs">
-              {isArchestraChat ? (
-                <>
-                  <span className="min-w-0 flex-1 truncate">
-                    {(conversationTitle ?? "").length > 60
-                      ? `${(conversationTitle ?? "").slice(0, 60)}...`
-                      : conversationTitle}
-                  </span>
+            <div className="flex min-w-0 flex-col gap-1.5 py-0.5">
+              <div
+                className={`truncate text-sm font-medium ${primaryText === "No message" ? "text-muted-foreground" : ""}`}
+              >
+                {primaryText}
+              </div>
+              <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+                {isArchestraChat ? (
                   <Link
                     href={`/chat/${session.sessionId}`}
                     onClick={(e) => e.stopPropagation()}
@@ -300,112 +302,122 @@ function SessionsTable() {
                   >
                     <Badge
                       variant="outline"
-                      className="text-xs hover:bg-accent cursor-pointer"
+                      className="cursor-pointer px-1.5 py-0 text-[10px] hover:bg-accent"
                     >
-                      <MessageSquare className="h-3 w-3 mr-1" />
+                      <MessageSquare className="size-3" />
                       Chat
                     </Badge>
                   </Link>
-                </>
-              ) : clientSource ? (
-                <>
-                  {displayText ? (
-                    <span className="min-w-0 flex-1 truncate">
-                      {displayText.length > 80
-                        ? `${displayText.slice(0, 80)}...`
-                        : displayText}
-                    </span>
-                  ) : (
-                    <span className="min-w-0 flex-1 truncate text-muted-foreground">
-                      No message
-                    </span>
-                  )}
+                ) : null}
+                {clientSource ? (
                   <ClientSourceBadge
                     client={clientSource}
-                    className="shrink-0"
+                    className="shrink-0 px-1.5 py-0 text-[10px]"
                   />
-                </>
-              ) : lastUserMessage ? (
-                <span className="min-w-0 max-w-full truncate">
-                  {lastUserMessage.length > 80
-                    ? `${lastUserMessage.slice(0, 80)}...`
-                    : lastUserMessage}
-                </span>
-              ) : session.source?.startsWith("knowledge:") ? (
-                <span className="min-w-0 max-w-full truncate text-muted-foreground">
-                  {INTERACTION_SOURCE_DISPLAY[
-                    session.source as keyof typeof INTERACTION_SOURCE_DISPLAY
-                  ]?.label ?? session.source}
-                </span>
-              ) : (
-                <span className="min-w-0 max-w-full truncate text-muted-foreground">
-                  No message
-                </span>
-              )}
+                ) : null}
+                {isArchestraChat ? null : (
+                  <SessionSourceBadge session={session} compact />
+                )}
+              </div>
             </div>
           );
         },
       },
       {
-        id: "requests",
-        header: "Requests",
-        size: 96,
-        minSize: 88,
-        cell: ({ row }) => (
-          <span className="font-mono text-xs">
-            {row.original.requestCount.toLocaleString()}
-          </span>
-        ),
-      },
-      {
-        id: "cache",
-        header: "Cache read",
-        size: 120,
-        minSize: 96,
+        id: "agent",
+        header: "Agent",
+        size: 190,
+        minSize: 155,
         cell: ({ row }) => {
-          const read = row.original.totalCacheReadTokens;
-          const write = row.original.totalCacheWriteTokens;
-          if (read === 0 && write === 0) {
-            return <span className="text-muted-foreground text-xs">—</span>;
-          }
-          const totalInput = row.original.totalInputTokens + read + write;
-          const hitRate =
-            totalInput > 0 ? Math.round((read / totalInput) * 100) : 0;
+          const session = row.original;
+          const agent = agents?.find((a) => a.id === session.profileId);
+          const isKnowledge = session.source?.startsWith("knowledge:");
+          const agentName =
+            agent?.name ??
+            session.profileName ??
+            (isKnowledge
+              ? "Knowledge Base"
+              : session.profileId === null
+                ? "Deleted LLM Proxy"
+                : "Unknown");
           return (
-            <span className="font-mono text-xs">
-              {hitRate}% · {read.toLocaleString()}
-            </span>
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                {isKnowledge ? (
+                  <Database className="size-3.5" />
+                ) : (
+                  <Layers className="size-3.5" />
+                )}
+              </span>
+              <div className="min-w-0">
+                <div className="truncate text-sm font-medium">{agentName}</div>
+                {session.userNames.length > 0 ? (
+                  <div className="truncate text-xs text-muted-foreground">
+                    {session.userNames.join(", ")}
+                  </div>
+                ) : (
+                  <UnattributedUserBadge reason={session.unattributedReason} />
+                )}
+              </div>
+            </div>
           );
         },
       },
       {
         id: "models",
-        header: "Models",
-        cell: ({ row }) => (
-          <TooltipProvider>
-            <div className="flex flex-wrap gap-1 min-w-0 max-w-full overflow-hidden">
-              {row.original.models.map((model) => (
-                <Tooltip key={model}>
-                  <TooltipTrigger asChild>
-                    <Badge
-                      variant="secondary"
-                      className="text-xs max-w-full cursor-default inline-block truncate"
-                    >
-                      {model}
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p className="font-mono text-xs">{model}</p>
-                  </TooltipContent>
-                </Tooltip>
-              ))}
+        header: "Model",
+        size: 155,
+        minSize: 120,
+        cell: ({ row }) => {
+          const [model, ...additionalModels] = row.original.models;
+          return model ? (
+            <div className="min-w-0">
+              <div className="truncate font-mono text-xs" title={model}>
+                {model}
+              </div>
+              {additionalModels.length > 0 ? (
+                <div className="text-xs text-muted-foreground">
+                  +{additionalModels.length} more
+                </div>
+              ) : null}
             </div>
-          </TooltipProvider>
-        ),
+          ) : (
+            <span className="text-xs text-muted-foreground">—</span>
+          );
+        },
+      },
+      {
+        id: "usage",
+        header: "Usage",
+        size: 125,
+        minSize: 110,
+        cell: ({ row }) => {
+          const session = row.original;
+          const read = session.totalCacheReadTokens;
+          const totalInput =
+            session.totalInputTokens +
+            session.totalCacheReadTokens +
+            session.totalCacheWriteTokens;
+          const hitRate =
+            totalInput > 0 ? Math.round((read / totalInput) * 100) : 0;
+          return (
+            <div>
+              <div className="text-sm tabular-nums">
+                {session.requestCount.toLocaleString()}{" "}
+                {session.requestCount === 1 ? "request" : "requests"}
+              </div>
+              <div className="text-xs text-muted-foreground tabular-nums">
+                {read > 0 ? `${hitRate}% cache read` : "No cache read"}
+              </div>
+            </div>
+          );
+        },
       },
       {
         id: "cost",
-        header: "Cost",
+        header: "Spend",
+        size: 115,
+        minSize: 100,
         cell: ({ row }) =>
           row.original.totalCost ? (
             <TooltipProvider>
@@ -420,82 +432,38 @@ function SessionsTable() {
                 format="percent"
                 tooltip="hover"
                 variant="session"
+                subscriptionBadge="compact"
               />
             </TooltipProvider>
           ) : null,
       },
       {
-        id: "source",
-        header: "Source",
-        size: 220,
-        minSize: 170,
-        cell: ({ row }) => (
-          <div className="max-w-full min-w-0 overflow-hidden">
-            <SessionSourceBadge session={row.original} />
-          </div>
-        ),
-      },
-      {
         id: "time",
-        header: "Time",
-        size: 160,
-        minSize: 145,
-        cell: ({ row }) => (
-          <div className="flex min-w-0 flex-col gap-0.5 font-mono text-xs">
-            {row.original.lastRequestTime && (
-              <span>
-                {formatDate({ date: String(row.original.lastRequestTime) })}
-              </span>
-            )}
-            {row.original.requestCount > 1 &&
-              row.original.firstRequestTime &&
-              row.original.lastRequestTime && (
-                <span className="text-muted-foreground">
-                  {formatDuration(
-                    row.original.firstRequestTime,
-                    row.original.lastRequestTime,
-                  )}
-                </span>
-              )}
-          </div>
-        ),
-      },
-      {
-        id: "details",
-        header: "Details",
-        size: 280,
-        minSize: 220,
+        header: "Last request",
+        size: 165,
+        minSize: 150,
         cell: ({ row }) => {
-          const agent = agents?.find((a) => a.id === row.original.profileId);
+          const { firstRequestTime, lastRequestTime, requestCount } =
+            row.original;
+          if (!lastRequestTime) {
+            return <span className="text-xs text-muted-foreground">—</span>;
+          }
+          const duration =
+            requestCount > 1 && firstRequestTime
+              ? formatDuration(firstRequestTime, lastRequestTime)
+              : null;
           return (
-            <div className="flex max-w-full min-w-0 flex-wrap gap-1 overflow-hidden">
-              <Badge variant="secondary" className="min-w-0 max-w-full text-xs">
-                {row.original.source?.startsWith("knowledge:") ? (
-                  <Database className="h-3 w-3 mr-1 shrink-0" />
-                ) : (
-                  <Layers className="h-3 w-3 mr-1 shrink-0" />
-                )}
-                <span className="min-w-0 truncate">
-                  {agent?.name ??
-                    row.original.profileName ??
-                    (row.original.source?.startsWith("knowledge:")
-                      ? "Knowledge Base"
-                      : row.original.profileId === null
-                        ? "Deleted LLM Proxy"
-                        : "Unknown")}
-                </span>
-              </Badge>
-              {row.original.userNames.map((userName) => (
-                <Badge
-                  key={userName}
-                  variant="outline"
-                  className="min-w-0 max-w-full text-xs"
-                >
-                  <User className="h-3 w-3 mr-1 shrink-0" />
-                  <span className="min-w-0 truncate">{userName}</span>
-                </Badge>
-              ))}
-              <UnattributedUserBadge reason={row.original.unattributedReason} />
+            <div className="min-w-0">
+              <div className="text-sm">
+                {formatRelativeTimeFromNow(lastRequestTime)}
+              </div>
+              <div className="truncate font-mono text-[11px] text-muted-foreground">
+                {formatDate({
+                  date: String(lastRequestTime),
+                  dateFormat: "MMM d, yyyy · HH:mm",
+                })}
+                {duration ? ` · ${duration}` : ""}
+              </div>
             </div>
           );
         },
@@ -644,7 +612,13 @@ function SessionsTable() {
   );
 }
 
-function SessionSourceBadge({ session }: { session: SessionData }) {
+function SessionSourceBadge({
+  session,
+  compact = false,
+}: {
+  session: SessionData;
+  compact?: boolean;
+}) {
   const sources = Array.from(
     new Set(
       session.sources?.filter((source): source is InteractionSource =>
@@ -657,7 +631,11 @@ function SessionSourceBadge({ session }: { session: SessionData }) {
     return (
       <SourceBadge
         source={session.source ?? sources[0]}
-        className="max-w-[11rem] min-w-0 overflow-hidden"
+        className={
+          compact
+            ? "max-w-[11rem] min-w-0 overflow-hidden px-1.5 py-0 text-[10px]"
+            : "max-w-[11rem] min-w-0 overflow-hidden"
+        }
         labelClassName="min-w-0"
       />
     );
@@ -666,7 +644,11 @@ function SessionSourceBadge({ session }: { session: SessionData }) {
   return (
     <Badge
       variant="outline"
-      className="max-w-[11rem] min-w-0 overflow-hidden text-xs"
+      className={
+        compact
+          ? "max-w-[11rem] min-w-0 overflow-hidden px-1.5 py-0 text-[10px]"
+          : "max-w-[11rem] min-w-0 overflow-hidden text-xs"
+      }
     >
       <span className="flex min-w-0 items-center gap-1.5">
         <Layers className="h-3 w-3 shrink-0" />

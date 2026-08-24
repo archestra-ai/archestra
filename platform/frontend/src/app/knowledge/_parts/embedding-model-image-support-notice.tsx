@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+
 "use client";
 
 import {
@@ -93,23 +95,25 @@ export function EmbeddingModelImageSupportNotice({
     >
       <div className="flex min-w-0 flex-1 items-start gap-2">
         <Info className="mt-0.5 size-4 shrink-0" />
-        <p className="leading-relaxed">
-          <span className="font-medium text-foreground">
-            <code>{modelKey}</code>
-          </span>{" "}
-          handles text only. Choose a multimodal embedding model to sync
-          supported image files.{" "}
-          <a
-            href={getDocsUrl(DocsPage.PlatformKnowledge, "image-embedding")}
-            target="_blank"
-            rel="noreferrer"
-            className="text-foreground underline decoration-dotted underline-offset-4 hover:decoration-solid"
-          >
-            Learn more
-          </a>
-        </p>
+        <div className="min-w-0 space-y-1">
+          <p className="font-medium text-foreground">
+            <code className="break-all">{modelKey}</code>
+          </p>
+          <p className="leading-relaxed">
+            Handles text only. Choose a multimodal embedding model to sync
+            supported image files.{" "}
+            <a
+              href={getDocsUrl(DocsPage.PlatformKnowledge, "image-embedding")}
+              target="_blank"
+              rel="noreferrer"
+              className="text-foreground underline decoration-dotted underline-offset-4 hover:decoration-solid"
+            >
+              Learn more
+            </a>
+          </p>
+        </div>
       </div>
-      <div className="flex shrink-0 items-center gap-1 self-end sm:self-auto">
+      <div className="flex shrink-0 items-center justify-end gap-1 self-end sm:self-auto">
         {showSettingsLink && (
           <Button variant="outline" size="sm" asChild>
             <Link href="/settings/knowledge#embedding-configuration">

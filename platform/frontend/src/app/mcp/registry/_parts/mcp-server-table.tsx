@@ -174,7 +174,7 @@ export function McpServerTable({
       id: "name",
       accessorKey: "name",
       header: "MCP Server",
-      size: 320,
+      size: 360,
       cell: ({ row }) => {
         const item = row.original;
         return (
@@ -187,7 +187,7 @@ export function McpServerTable({
     },
     {
       id: "tools",
-      size: 64,
+      size: 90,
       header: () => <div className="text-right">Tools</div>,
       cell: ({ row }) => (
         <div className="text-right text-sm text-muted-foreground">
@@ -197,7 +197,9 @@ export function McpServerTable({
     },
     {
       id: "author",
-      size: 120,
+      // Visibility badges cap their label at 180px. Include the cell padding
+      // so the full badge fits without donating extra space to this column.
+      size: 212,
       header: "Accessible to",
       cell: ({ row }) => (
         <ResourceVisibilityBadge
@@ -214,7 +216,7 @@ export function McpServerTable({
       id: "status",
       // The table is a scanning surface: the status label is enough here.
       // Diagnosis and remediation live on the server page and attention facet.
-      size: 260,
+      size: 190,
       header: "Status",
       cell: ({ row }) => {
         const item = row.original;
@@ -321,7 +323,7 @@ export function McpServerTable({
           id: "name",
           accessorKey: "name",
           header: "MCP Server",
-          size: 280,
+          size: 360,
           cell: ({ row }) => {
             const item = row.original;
             return (
@@ -452,7 +454,12 @@ export function McpServerTable({
         }
         emptyMessage="No MCP servers found."
         hidePaginationWhenSinglePage
-        fixedWidthColumnIds={attention ? ["select", "actions"] : undefined}
+        fixedWidthColumnIds={
+          attention
+            ? ["select", "name", "actions"]
+            : ["name", "tools", "author", "actions"]
+        }
+        flexibleColumnIds={[attention ? "issue" : "status"]}
       />
     </>
   );

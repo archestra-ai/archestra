@@ -77,8 +77,8 @@ const conversationsTable = softDeletablePgTable(
       >(),
     artifact: text("artifact"),
     /**
-     * Project this chat was started in (forever — no moves in v1). SET NULL on
-     * project delete: the chat survives as an ordinary conversation.
+     * Project this chat belongs to. SET NULL on project delete: the chat
+     * survives as an ordinary conversation.
      */
     projectId: uuid("project_id").references(() => projectsTable.id, {
       onDelete: "set null",

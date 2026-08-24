@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+
 import { DocsPage, getDocsUrl } from "@archestra/shared";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -55,9 +57,9 @@ describe("ConnectorEmbeddingModelNotice", () => {
 
     expect(await screen.findByRole("note")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    expect(screen.getByRole("note")).toHaveTextContent(
-      "openai/text-embedding-model handles text only",
-    );
+    const note = screen.getByRole("note");
+    expect(note).toHaveTextContent("openai/text-embedding-model");
+    expect(note).toHaveTextContent("Handles text only");
     expect(
       screen.getByText(/choose a multimodal embedding model/i),
     ).toBeInTheDocument();

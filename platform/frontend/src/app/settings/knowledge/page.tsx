@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+
 "use client";
 
 import {
@@ -1256,7 +1258,7 @@ function KnowledgeSettingsContent() {
                           : null
                       }
                       showSettingsLink={false}
-                      className="sm:ml-auto sm:w-80"
+                      className="sm:ml-auto sm:w-80 sm:flex-col sm:items-stretch sm:gap-2.5"
                     />
                   )}
                 {selectedEmbeddingProvider === "gemini" &&
@@ -1284,15 +1286,29 @@ function KnowledgeSettingsContent() {
             )}
           </WithPermissions>
           {showEmbeddingFooter && (
-            <div className="mt-5 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <div
+              className={cn(
+                "mt-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between",
+                isEmbeddingModelLocked
+                  ? "rounded-lg border border-border/60 bg-muted/30 px-4 py-3"
+                  : "border-t pt-4",
+              )}
+            >
               {isEmbeddingModelLocked ? (
-                <p className="flex items-start gap-2 text-sm text-muted-foreground">
-                  <Lock className="mt-0.5 h-4 w-4 shrink-0" />
-                  <span>
-                    To change the embedding model, drop the existing index — all
-                    documents will need to be re-embedded.
-                  </span>
-                </p>
+                <div className="flex min-w-0 items-start gap-3 sm:max-w-md">
+                  <div className="rounded-md border bg-background p-2 text-muted-foreground shadow-xs">
+                    <Lock className="size-4" />
+                  </div>
+                  <div className="min-w-0 space-y-0.5">
+                    <p className="text-sm font-medium">
+                      Embedding index locked
+                    </p>
+                    <p className="text-sm leading-relaxed text-muted-foreground">
+                      Drop the index to change models. All documents will need
+                      to be re-embedded afterward.
+                    </p>
+                  </div>
+                </div>
               ) : (
                 <span />
               )}
@@ -1301,7 +1317,7 @@ function KnowledgeSettingsContent() {
                 noPermissionHandle="tooltip"
               >
                 {({ hasPermission }) => (
-                  <div className="flex flex-wrap justify-end gap-2">
+                  <div className="flex shrink-0 items-center justify-end gap-2 self-end sm:self-auto">
                     {embeddingConfigured && (
                       <Button
                         type="button"
@@ -1325,7 +1341,7 @@ function KnowledgeSettingsContent() {
                         onClick={() => setShowDropDialog(true)}
                       >
                         <Trash2 className="mr-1 h-3.5 w-3.5" />
-                        Drop
+                        Drop index
                       </Button>
                     )}
                   </div>

@@ -42,7 +42,7 @@ test.describe("Audit log UI", {
     ).toBeVisible({ timeout: 15_000 });
 
     // Column headers are stable and part of the visual contract.
-    for (const column of ["When", "Actor", "Action", "Resource", "Where"]) {
+    for (const column of ["Activity", "Actor", "Resource", "Time"]) {
       await expect(
         adminPage.getByRole("columnheader", { name: column }),
       ).toBeVisible();
@@ -63,7 +63,9 @@ test.describe("Audit log UI", {
       /* empty state is acceptable; the next assertion handles it */
     });
 
-    const resourceCells = adminPage.locator("tbody tr td:nth-child(4)");
+    const resourceCells = adminPage.locator(
+      'tbody tr td[data-column-id="resource"]',
+    );
     const count = await resourceCells.count();
     if (count === 0) return; // empty state, nothing to assert
 

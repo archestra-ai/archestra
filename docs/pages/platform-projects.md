@@ -3,7 +3,7 @@ title: Projects
 category: Projects
 order: 1
 description: A shared workspace to organize your work
-lastUpdated: 2026-08-17
+lastUpdated: 2026-08-23
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -15,6 +15,8 @@ A project is a shared workspace for your chats, files, instructions, and schedul
 ## Creating a Project
 
 Start a project from the Projects page, or turn an existing chat into one with **Create project** in the chat's menu — the chat and its files move right in.
+
+Use **Change project** to move a chat into an existing project. Use **Remove from project** to make it a regular chat again.
 
 ![Chat sidebar menu with the Create project action](/docs/automated_screenshots/platform-projects_create-from-chat.webp)
 

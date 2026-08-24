@@ -114,6 +114,7 @@ import {
 } from "./_parts/skill-actions-model";
 import { skillEditHref } from "./_parts/skill-page-config";
 import { SkillUsageDialog } from "./_parts/skill-usage-dialog";
+import { SkillUsageSummary } from "./_parts/skill-usage-summary";
 import { SkillVersionHistoryDialog } from "./_parts/skill-version-history-dialog";
 
 type SkillItem = archestraApiTypes.GetSkillsResponses["200"]["data"][number];
@@ -377,6 +378,7 @@ function SkillsList() {
       (kind === "all" && noVisibleFilterResults));
   const showMcpSection =
     showMcpSkills && (visibleExternalSkills.length > 0 || kind === "mcp");
+  const showStandaloneHeading = isDeletedView || mcpSkillsEnabled;
 
   const clearFilters = useCallback(() => {
     const params = new URLSearchParams(searchParams.toString());
@@ -627,7 +629,7 @@ function SkillsList() {
     {
       id: "usageCount",
       accessorKey: "usageCount",
-      size: 120,
+      size: 100,
       header: ({ column }) => (
         // Right padding keeps the right-aligned value from sitting flush
         // against the Actions buttons in the next cell.
@@ -644,37 +646,13 @@ function SkillsList() {
       ),
       cell: ({ row }) => (
         <div className="flex justify-end pr-6">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                className="w-full rounded px-1.5 py-0.5 text-right text-sm hover:bg-muted"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setUsageSkill(row.original);
-                }}
-              >
-                <div>
-                  {row.original.usageCount}
-                  {row.original.usageUserCount > 0 && (
-                    <span className="text-muted-foreground">
-                      {" "}
-                      by {row.original.usageUserCount}{" "}
-                      {row.original.usageUserCount === 1 ? "user" : "users"}
-                    </span>
-                  )}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {formatRelativeTimeFromNow(row.original.lastUsedAt, {
-                    neverLabel: "Never used",
-                  })}
-                </div>
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>
-              Who used this skill over the last month
-            </TooltipContent>
-          </Tooltip>
+          <SkillUsageSummary
+            usageCount={row.original.usageCount}
+            usageUserCount={row.original.usageUserCount}
+            lastUsedAt={row.original.lastUsedAt}
+            label={`View usage for ${row.original.name}`}
+            onClick={() => setUsageSkill(row.original)}
+          />
         </div>
       ),
     },
@@ -825,14 +803,21 @@ function SkillsList() {
                 {showStandaloneSection && (
                   <section
                     className="space-y-3"
-                    aria-labelledby="standalone-skills-title"
+                    aria-label={showStandaloneHeading ? undefined : "Skills"}
+                    aria-labelledby={
+                      showStandaloneHeading
+                        ? "standalone-skills-title"
+                        : undefined
+                    }
                   >
-                    <h2
-                      id="standalone-skills-title"
-                      className="text-sm font-medium uppercase tracking-wide text-muted-foreground"
-                    >
-                      {isDeletedView ? "Deleted skills" : "Standalone skills"}
-                    </h2>
+                    {showStandaloneHeading && (
+                      <h2
+                        id="standalone-skills-title"
+                        className="text-sm font-medium uppercase tracking-wide text-muted-foreground"
+                      >
+                        {isDeletedView ? "Deleted skills" : "Standalone skills"}
+                      </h2>
+                    )}
 
                     <BulkActionsBar
                       count={selectedSkills.length}
@@ -985,6 +970,7 @@ function SkillsList() {
                           rowSelection={rowSelection}
                           onRowSelectionChange={setRowSelection}
                           isLoading={isFetching}
+                          tableClassName="[&_td]:py-1.5"
                           fixedWidthColumnIds={[
                             "visibility",
                             "files",

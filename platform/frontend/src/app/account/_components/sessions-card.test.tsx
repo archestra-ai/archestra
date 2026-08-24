@@ -70,16 +70,14 @@ describe("SessionsCard", () => {
     } as Awaited<ReturnType<typeof authClient.revokeSession>>);
   });
 
-  it("shows the table's loading state while sessions are still being fetched", () => {
+  it("waits quietly while sessions are still being fetched", () => {
     vi.mocked(authClient.listSessions).mockReturnValue(
       new Promise(() => {}) as ReturnType<typeof authClient.listSessions>,
     );
 
     renderCard();
 
-    expect(
-      screen.getByRole("status", { name: "Loading results…" }),
-    ).toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Revoke/ })).toBeNull();
   });
 

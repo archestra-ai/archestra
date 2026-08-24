@@ -2,6 +2,7 @@ import { archestraApiSdk, type Permissions } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
 import { hasPermissions } from "@/lib/auth/auth.utils";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
 import { throwOnApiError } from "@/lib/utils";
 
 export const authQueryKeys = {
@@ -33,6 +34,10 @@ export function useSession() {
     gcTime: 30 * 60 * 1000,
     // Keep focus refetching on so backgrounded tabs discover revoked or changed sessions promptly.
     refetchOnWindowFocus: true,
+    // Restored on refresh so the shell renders straight away instead of
+    // sitting behind a session check. The persisted copy is stripped of the
+    // session token, and the request below still runs and replaces it.
+    meta: PERSISTED_QUERY_META,
   });
 }
 
@@ -133,6 +138,9 @@ export function useAllPermissions() {
     enabled: !isSessionPending && isAuthenticated,
     staleTime: 5 * 60 * 1000,
     gcTime: 30 * 60 * 1000,
+    // Decides which nav items and pages exist, so restoring it is what lets
+    // the sidebar come back with its real contents rather than empty.
+    meta: PERSISTED_QUERY_META,
   });
 }
 

@@ -28,7 +28,7 @@ vi.mock("@/lib/agent.query", () => ({
 // Everything the header opens is covered by its own tests; the page only has
 // to mount them.
 vi.mock("./agent-overview", () => ({
-  AgentOverview: () => <div>overview</div>,
+  useAgentOverviewFacts: () => [{ label: "Model", value: "overview" }],
 }));
 vi.mock("./agent-connect-content", () => ({
   AgentConnectContent: () => <div>connect content</div>,
@@ -158,9 +158,6 @@ describe("AgentDetailPage", () => {
     expect(screen.queryByRole("button", { name: /permanently/i })).toBeNull();
     expect(screen.queryByText(/is in the trash/i)).toBeNull();
     // Connect stays on the same page, and Edit stays in the header.
-    expect(
-      screen.getByRole("heading", { name: "Connect" }),
-    ).toBeInTheDocument();
     expect(screen.getByText("connect content")).toBeInTheDocument();
     expect(
       screen.getByTestId(E2eTestId.AgentDetailEditButton),
@@ -168,33 +165,32 @@ describe("AgentDetailPage", () => {
     expect(screen.queryByRole("link", { name: "Connect" })).toBeNull();
   });
 
-  it("collapses the overview by default and reveals it before the connection instructions", async () => {
-    const user = userEvent.setup();
+  it("shows the overview without a click, above the connection instructions, and links to the full configuration", () => {
     render(<AgentDetailPage kind="agent" id="a1" />);
 
-    const overviewToggle = screen.getByRole("button", { name: "Overview" });
-    expect(overviewToggle).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByText("overview")).toBeNull();
-
-    await user.click(overviewToggle);
+    expect(screen.getByRole("heading", { name: "Overview" })).toBeVisible();
     const overview = screen.getByText("overview");
     const connect = screen.getByText("connect content");
-    expect(overviewToggle).toHaveAttribute("aria-expanded", "true");
     expect(
       overview.compareDocumentPosition(connect) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+    // Same destination as the header's Edit, so Overview is a way in rather
+    // than a second, shorter copy of the form.
+    expect(screen.getByRole("link", { name: /Configuration/ })).toHaveAttribute(
+      "href",
+      "/agents/a1/edit",
+    );
   });
 
   it("moves the LLM Proxy environment into the header and omits Overview", () => {
     mockAgent({ ...baseAgent, agentType: "llm_proxy", environmentId: "env-1" });
     render(<AgentDetailPage kind="llm_proxy" id="a1" />);
 
-    expect(screen.queryByRole("button", { name: "Overview" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Overview" })).toBeNull();
     expect(screen.queryByText("overview")).toBeNull();
     expect(screen.getByText("Production")).toBeVisible();
     expect(screen.queryByRole("link", { name: "Connect" })).toBeNull();
-    expect(screen.getByRole("heading", { name: "Connect" })).toBeVisible();
     expect(screen.getByText("connect content")).toBeVisible();
   });
 
@@ -206,13 +202,9 @@ describe("AgentDetailPage", () => {
     });
     render(<AgentDetailPage kind="mcp_gateway" id="a1" />);
 
-    expect(screen.getByRole("button", { name: "Overview" })).toHaveAttribute(
-      "aria-expanded",
-      "false",
-    );
+    expect(screen.getByRole("heading", { name: "Overview" })).toBeVisible();
     expect(screen.getByText("Production")).toBeVisible();
     expect(screen.queryByRole("link", { name: "Connect" })).toBeNull();
-    expect(screen.getByRole("heading", { name: "Connect" })).toBeVisible();
   });
 
   it("omits the connection section for a built-in agent", () => {
@@ -220,12 +212,7 @@ describe("AgentDetailPage", () => {
     mockAgent({ ...baseAgent, builtIn: true });
     render(<AgentDetailPage kind="agent" id="a1" />);
 
-    expect(screen.queryByRole("heading", { name: "Connect" })).toBeNull();
     expect(screen.queryByText("connect content")).toBeNull();
-    expect(screen.getByRole("button", { name: "Overview" })).toHaveAttribute(
-      "aria-expanded",
-      "false",
-    );
-    expect(screen.queryByText("overview")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Overview" })).toBeVisible();
   });
 });

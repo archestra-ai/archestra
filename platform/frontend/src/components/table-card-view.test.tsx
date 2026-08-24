@@ -80,17 +80,43 @@ describe("TableCardView", () => {
     expect(onSelectedChange).toHaveBeenCalledWith(true);
   });
 
-  it("shows the shared loader instead of an empty result while cards are loading", () => {
+  it("says nothing about an empty result while cards are still loading", () => {
     render(
       <TableCardList itemCount={0} isLoading emptyMessage="No agents found">
         {null}
       </TableCardList>,
     );
 
-    expect(
-      screen.getByRole("status", { name: "Loading results…" }),
-    ).toBeVisible();
     expect(screen.queryByText("No agents found")).not.toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("offers to clear filters from the empty state when filters are applied", () => {
+    const onClearFilters = vi.fn();
+    render(
+      <TableCardList
+        itemCount={0}
+        hasActiveFilters
+        filteredEmptyMessage="No agents match your filters"
+        onClearFilters={onClearFilters}
+      >
+        <div />
+      </TableCardList>,
+    );
+
+    expect(screen.getByText("No agents match your filters")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: /clear filters/i }));
+    expect(onClearFilters).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports an empty result once the fetch has settled", () => {
+    render(
+      <TableCardList itemCount={0} emptyMessage="No agents found">
+        {null}
+      </TableCardList>,
+    );
+
+    expect(screen.getByText("No agents found")).toBeVisible();
   });
 });
 

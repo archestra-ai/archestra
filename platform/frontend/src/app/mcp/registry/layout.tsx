@@ -140,7 +140,9 @@ function McpRegistryListLayout({
             />
           ),
           href: mcpRegistryFacetHref("you"),
-          selected: selectedFacet === "you",
+          // Dismissed alerts are a filter on this tab, not a tab of their own,
+          // so the tab stays selected while that filter is on.
+          selected: selectedFacet === "you" || selectedFacet === "muted",
           testId: "mcp-registry-action-required-tab",
         },
         ...(!userIsMcpServerAdmin && facetCounts.others > 0
@@ -154,20 +156,6 @@ function McpRegistryListLayout({
                 ),
                 href: mcpRegistryFacetHref("others"),
                 selected: selectedFacet === "others",
-              },
-            ]
-          : []),
-        ...(facetCounts.muted > 0
-          ? [
-              {
-                label: (
-                  <RegistryTabLabel
-                    label="Dismissed"
-                    count={facetCounts.muted}
-                  />
-                ),
-                href: mcpRegistryFacetHref("muted"),
-                selected: selectedFacet === "muted",
               },
             ]
           : []),

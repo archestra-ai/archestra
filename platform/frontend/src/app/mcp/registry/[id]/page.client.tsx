@@ -3,11 +3,8 @@
 import { E2eTestId, isPlaywrightCatalogItem } from "@archestra/shared";
 import {
   ArrowLeft,
-  ChevronDown,
   Copy,
-  KeyRound,
   MessageSquare,
-  Moon,
   MoreHorizontal,
   PackageX,
   Pencil,
@@ -19,19 +16,15 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { EntityPill } from "@/components/entity-pill";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import {
+  type OverviewFact,
+  OverviewSummary,
+} from "@/components/overview-summary";
 import { PageLayout } from "@/components/page-layout";
-import type { SettingTone } from "@/components/setting-icon";
-import { SettingGroup, SettingRow } from "@/components/setting-row";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -48,7 +41,6 @@ import {
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
 import { typeRole } from "@/lib/design/type-scale";
 import { useEnvironments } from "@/lib/environment.query";
@@ -365,6 +357,9 @@ function CatalogItemDetails({
 
   const [logsServerId, setLogsServerId] = useState<string | null>(serverParam);
 
+  // The server's key configuration, as one always-visible row.
+  const overviewFacts = useMcpServerOverviewFacts(item);
+
   const tabHref = (tab: DetailTab) =>
     buildDetailTabHref({
       tab,
@@ -379,14 +374,31 @@ function CatalogItemDetails({
     autoModeAgents,
   }).total;
 
-  const tabs: { label: React.ReactNode; href: string; testId?: string }[] = [
+  const tabs: {
+    label: React.ReactNode;
+    href: string;
+    testId?: string;
+    selected?: boolean;
+  }[] = [
+    // The main page, named. Without it the tab strip is a one-way door:
+    // opening Usage or Inspector left the reader with nothing pointing back
+    // at the server's own details, only the back link out to the list.
+    // `selected` rather than URL matching, because the main page is the
+    // absence of `?tab=` and so is a prefix of every other tab's URL.
+    {
+      label: "Overview",
+      href: tabHref("overview"),
+      selected: effectiveTab === "overview",
+    },
     {
       label: <TabLabel title="Usage" count={agentUsageCount} />,
       href: tabHref("usage"),
+      selected: effectiveTab === "usage",
     },
     ...diagnosticTabs.map((panel) => ({
       label: panel.title,
       href: tabHref(panel.id),
+      selected: effectiveTab === panel.id,
     })),
   ];
   const isLogsTab =
@@ -563,22 +575,13 @@ function CatalogItemDetails({
         {effectiveTab === "overview" && (
           <div className="space-y-10">
             {item.serverType !== "builtin" && (
-              <section aria-labelledby="mcp-overview-heading">
-                <Collapsible>
-                  <CollapsibleTrigger className="group flex w-full items-center justify-between gap-4 py-1 text-left">
-                    <h2
-                      id="mcp-overview-heading"
-                      className="text-base font-semibold tracking-tight text-foreground"
-                    >
-                      Overview
-                    </h2>
-                    <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="pt-4">
-                    <ConfigurationSections item={item} />
-                  </CollapsibleContent>
-                </Collapsible>
-              </section>
+              <OverviewSummary
+                headingId="mcp-overview-heading"
+                facts={overviewFacts}
+                configHref={
+                  canModify ? mcpServerActionHref(editAction) : undefined
+                }
+              />
             )}
 
             <CardIssues
@@ -682,192 +685,88 @@ function CatalogItemDetails({
 }
 
 /**
- * The configuration the setup wizard's first step holds, read-only and in the
- * order the wizard asks for it: how the server is reached and run, how it
- * authenticates, and what it is given at run time. Derived through the
- * wizard's own `transformCatalogItemToFormValues`, so the page cannot drift
- * from the form that wrote the values.
+ * The server's key configuration, as one row: how it is reached and run, and
+ * how it authenticates. Derived through the wizard's own
+ * `transformCatalogItemToFormValues`, so the page cannot drift from the form
+ * that wrote the values.
  *
- * One card each. All three open the same wizard step, because that is where
- * all three were written — the mapping cards owe the wizard is that every
- * card leads to exactly one step, not that every step has exactly one card.
+ * The full record — OAuth endpoints, managed credentials, headers, run-time
+ * arguments — is behind the same link the header's Edit uses, rather than
+ * mirrored here a second time read-only.
  */
-function ConfigurationSections({ item }: { item: CatalogItem }) {
+function useMcpServerOverviewFacts(item: CatalogItem): OverviewFact[] {
   const values = useMemo(() => transformCatalogItemToFormValues(item), [item]);
-  const { data: identityProviders = [] } = useIdentityProviders();
-  const isLocal = item.serverType === "local";
-  // Only the derivations come from the form shape (auth method, headers):
-  // its `localConfig` is textarea-shaped — `arguments` is one newline-joined
+  const _hibernation = useIdleHibernationFact(item);
+  // Only the derivation comes from the form shape (the auth method): its
+  // `localConfig` is textarea-shaped — `arguments` is one newline-joined
   // string there — so everything factual reads the API's own object.
   const local = item.localConfig;
-  const authLabel =
-    AUTH_METHOD_LABEL[values.authMethod] ?? AUTH_METHOD_LABEL.none;
-  const oauth = values.oauthConfig;
-  const managed = values.enterpriseManagedConfig;
-  const identityProviderName = managed?.identityProviderId
-    ? (identityProviders.find(
-        (provider) => provider.id === managed.identityProviderId,
-      )?.issuer ?? "Not visible to you")
-    : null;
-  const headers = values.additionalHeaders ?? [];
-  const showsAuthentication =
-    values.authMethod !== "none" || !!managed || headers.length > 0;
-  return (
-    <div className="space-y-4">
-      {/* The built-in server is not reached over a connection anybody
-          configures, so it has no Connection card rather than an empty one. */}
-      {item.serverType !== "builtin" && (
-        <DetailCard title={isLocal ? "Runtime" : "Connection"}>
-          <FieldGrid>
-            {item.serverType === "remote" && item.serverUrl && (
-              <OverviewField
-                label="Server URL"
-                className="sm:col-span-2 lg:col-span-3"
-              >
-                <CodeLine>{item.serverUrl}</CodeLine>
-              </OverviewField>
-            )}
-            {isLocal && (
-              <>
-                <OverviewField label="Deployment">
-                  {values.multitenant
-                    ? "Multi-tenant — one shared deployment"
-                    : "Single-tenant — one deployment per installation"}
-                </OverviewField>
-                <OverviewField label="Transport">
-                  {local?.transportType === "stdio" ? (
-                    <span>stdio</span>
-                  ) : (
-                    <span>
-                      Streamable HTTP
-                      {local?.httpPort || local?.httpPath ? (
-                        <span className="text-muted-foreground">
-                          {" "}
-                          · {local?.httpPort ?? 8080}
-                          {local?.httpPath ?? "/mcp"}
-                        </span>
-                      ) : null}
-                    </span>
-                  )}
-                </OverviewField>
-                {local?.dockerImage && (
-                  <OverviewField
-                    label="Image"
-                    className="sm:col-span-2 lg:col-span-3"
-                  >
-                    <CodeLine>{local.dockerImage}</CodeLine>
-                  </OverviewField>
-                )}
-                {local?.serviceAccount && (
-                  <OverviewField label="Service account">
-                    <CodeLine>{local.serviceAccount}</CodeLine>
-                  </OverviewField>
-                )}
-                {(local?.imagePullSecrets ?? []).length > 0 && (
-                  <OverviewField label="Image pull secrets">
-                    {(local?.imagePullSecrets ?? []).length}
-                  </OverviewField>
-                )}
-              </>
-            )}
-          </FieldGrid>
-          <IdleHibernationRow item={item} />
-        </DetailCard>
-      )}
+  const facts: OverviewFact[] = [];
 
-      {showsAuthentication && (
-        <DetailCard title="Authentication">
-          <SettingGroup>
-            <SettingRow
-              icon={<KeyRound className="size-4" />}
-              title="Method"
-              tone={values.authMethod === "none" ? "off" : "on"}
-              state={authLabel}
-            />
-          </SettingGroup>
-          {(values.authMethod === "oauth" ||
-            values.authMethod === "oauth_client_credentials") &&
-            oauth && (
-              <FieldGrid>
-                {oauth.tokenEndpoint && (
-                  <OverviewField
-                    label="Token endpoint"
-                    className="sm:col-span-2 lg:col-span-3"
-                  >
-                    <CodeLine>{oauth.tokenEndpoint}</CodeLine>
-                  </OverviewField>
-                )}
-                {oauth.client_id && (
-                  <OverviewField label="Client ID">
-                    <CodeLine>{oauth.client_id}</CodeLine>
-                  </OverviewField>
-                )}
-                <OverviewField label="Client secret">
-                  {item.clientSecretId || oauth.client_secret
-                    ? "Configured"
-                    : "Not set"}
-                </OverviewField>
-                {oauth.scopes && (
-                  <OverviewField label="Scopes">
-                    <CodeLine>{String(oauth.scopes)}</CodeLine>
-                  </OverviewField>
-                )}
-              </FieldGrid>
-            )}
-          {managed && (
-            <FieldGrid>
-              <OverviewField label="Identity provider">
-                {identityProviderName ?? "Not set"}
-              </OverviewField>
-              {managed.requestedCredentialType && (
-                <OverviewField label="Requested credential">
-                  {managed.requestedCredentialType}
-                </OverviewField>
-              )}
-              {managed.tokenInjectionMode && (
-                <OverviewField label="Injection">
-                  {managed.tokenInjectionMode}
-                </OverviewField>
-              )}
-            </FieldGrid>
-          )}
-          {headers.length > 0 && (
-            <div className="space-y-1.5">
-              <SubHeading label="Headers" />
-              <ul className="flex flex-wrap gap-1.5">
-                {headers.map((header) => (
-                  <li key={header.headerName}>
-                    <EntityPill
-                      name={header.headerName}
-                      note={[
-                        header.promptOnInstallation
-                          ? "asked at install"
-                          : "fixed",
-                        header.required ? "required" : null,
-                        header.sensitive ? "sensitive" : null,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    />
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </DetailCard>
-      )}
-    </div>
-  );
+  if (item.serverType === "remote" && item.serverUrl) {
+    facts.push({
+      label: "Server URL",
+      value: <CodeLine>{item.serverUrl}</CodeLine>,
+    });
+  }
+
+  if (item.serverType === "local") {
+    facts.push({
+      label: "Transport",
+      value:
+        local?.transportType === "stdio" ? (
+          <span>stdio</span>
+        ) : (
+          <span>
+            Streamable HTTP
+            {local?.httpPort || local?.httpPath ? (
+              <span className="text-muted-foreground">
+                {" "}
+                · {local?.httpPort ?? 8080}
+                {local?.httpPath ?? "/mcp"}
+              </span>
+            ) : null}
+          </span>
+        ),
+    });
+    facts.push({
+      label: "Deployment",
+      value: (
+        <span>
+          {values.multitenant
+            ? "Multi-tenant — one shared deployment"
+            : "Single-tenant — one per installation"}
+        </span>
+      ),
+    });
+    if (local?.dockerImage) {
+      facts.push({
+        label: "Image",
+        value: <CodeLine>{local.dockerImage}</CodeLine>,
+      });
+    }
+  }
+
+  facts.push({
+    label: "Authentication",
+    value: (
+      <span>
+        {AUTH_METHOD_LABEL[values.authMethod] ?? AUTH_METHOD_LABEL.none}
+      </span>
+    ),
+  });
+
+  return facts;
 }
 
 /**
  * The per-server idle-hibernation override, read-only — mirroring the edit
- * page's own section, including when it does not exist: only a self-hosted
+ * page's own section, and absent when there is none: only a self-hosted
  * server in an organization that hibernates idle servers has one. The value
  * lives on the install rows, and a reinstall can move one of them alone, so
  * divergence reads as "Mixed" rather than whichever row happens to be first.
  */
-function IdleHibernationRow({ item }: { item: CatalogItem }) {
+function useIdleHibernationFact(item: CatalogItem): OverviewFact[] {
   const { data: organization } = useOrganization();
   const enterpriseCoreActive = useEnterpriseFeature("core");
   const hibernationBeta = useFeature("mcpIdleHibernationBetaEnabled");
@@ -879,7 +778,7 @@ function IdleHibernationRow({ item }: { item: CatalogItem }) {
     !enterpriseCoreActive ||
     !organization?.mcpIdleHibernationEnabled
   ) {
-    return null;
+    return [];
   }
 
   const modes = [
@@ -890,38 +789,27 @@ function IdleHibernationRow({ item }: { item: CatalogItem }) {
     ),
   ];
   const mode = modes.length === 1 ? modes[0] : undefined;
-  const copy = mode ? HIBERNATION_COPY[mode] : undefined;
+  const label = mode ? HIBERNATION_COPY[mode] : undefined;
 
-  return (
-    <SettingGroup>
-      <SettingRow
-        icon={<Moon className="size-4" />}
-        title="Idle hibernation"
-        tone={copy?.tone ?? "info"}
-        state={copy?.label ?? (modes.length === 0 ? "Not installed" : "Mixed")}
-      />
-    </SettingGroup>
-  );
+  return [
+    {
+      label: "Idle hibernation",
+      value: (
+        <span>{label ?? (modes.length === 0 ? "Not installed" : "Mixed")}</span>
+      ),
+    },
+  ];
 }
 
 /** What each hibernation choice means for a server that goes idle. */
-const HIBERNATION_COPY: Record<string, { label: string; tone: SettingTone }> = {
-  inherit: {
-    label: "Organization setting",
-    tone: "info",
-  },
-  enabled: {
-    label: "Always allowed",
-    tone: "on",
-  },
-  disabled: {
-    label: "Never",
-    tone: "off",
-  },
+const HIBERNATION_COPY: Record<string, string> = {
+  inherit: "Organization setting",
+  enabled: "Always allowed",
+  disabled: "Never",
 };
 
 /** One compact subject card. Editing starts from the page header. */
-function DetailCard({
+function _DetailCard({
   title,
   children,
 }: {
@@ -936,7 +824,7 @@ function DetailCard({
   );
 }
 
-function FieldGrid({ children }: { children: ReactNode }) {
+function _FieldGrid({ children }: { children: ReactNode }) {
   return (
     <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
       {children}
@@ -1019,7 +907,7 @@ function CardIssues({
   );
 }
 
-function SubHeading({ label }: { label: string }) {
+function _SubHeading({ label }: { label: string }) {
   return <p className={typeRole({ role: "label" })}>{label}</p>;
 }
 
@@ -1041,7 +929,7 @@ const AUTH_METHOD_LABEL: Record<string, string> = {
   idp_jwt: "Identity provider JWT",
 };
 
-function OverviewField({
+function _OverviewField({
   label,
   children,
   className,

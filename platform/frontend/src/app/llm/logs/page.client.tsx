@@ -8,7 +8,7 @@ import {
   type InteractionSource,
 } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Database, Layers, MessageSquare } from "lucide-react";
+import { Database, Layers, MessageSquare, MessagesSquare } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo } from "react";
@@ -597,8 +597,9 @@ function SessionsTable() {
         onPaginationChange={handlePaginationChange}
         isLoading={isFetching}
         hasActiveFilters={hasFilters}
+        emptyIcon={MessagesSquare}
         emptyMessage="No LLM proxy logs found. Logs will appear here when agents start making requests."
-        filteredEmptyMessage="No LLM logs match your filters. Try adjusting your search."
+        filteredEmptyMessage="No LLM logs match your filters"
         onClearFilters={clearFilters}
         onRowClick={(session) => {
           const { isSingleInteraction } = getSessionDisplayData(session);

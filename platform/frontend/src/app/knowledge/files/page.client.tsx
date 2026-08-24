@@ -624,7 +624,7 @@ export default function KnowledgeFilesPage() {
             columns={columns}
             data={rows}
             isLoading={isLoading}
-            emptyIcon={<Files className="h-10 w-10" />}
+            emptyIcon={Files}
             emptyMessage={
               openDirectory
                 ? "This directory is empty. Upload a document into it to get started."

@@ -178,10 +178,7 @@ const localItem = {
   },
 };
 
-function renderPage(
-  overrides: Record<string, unknown> = {},
-  options: { openOverview?: boolean } = {},
-) {
+function renderPage(overrides: Record<string, unknown> = {}) {
   useInternalMcpCatalog.mockReturnValue({
     data: [{ ...localItem, ...overrides }],
     isPending: false,
@@ -193,10 +190,6 @@ function renderPage(
       <McpCatalogItemPage id="cat-1" />
     </QueryClientProvider>,
   );
-  if (options.openOverview !== false) {
-    const overview = screen.queryByRole("button", { name: "Overview" });
-    if (overview) fireEvent.click(overview);
-  }
   return result;
 }
 
@@ -255,22 +248,31 @@ describe("McpCatalogItemDetailPage overview", () => {
     });
   }
 
-  it("collapses Overview by default and keeps installations visible", () => {
-    renderPage({}, { openOverview: false });
+  it("states the Overview facts without a click and keeps installations visible", () => {
+    renderPage();
 
-    expect(screen.getByRole("button", { name: "Overview" })).toHaveAttribute(
-      "aria-expanded",
-      "false",
-    );
-    expect(screen.queryByRole("heading", { name: "Runtime" })).toBeNull();
+    const overview = section("Overview");
+    expect(overview.getByText("Transport")).toBeVisible();
     expect(
       screen.getByRole("heading", { name: "Installations" }),
     ).toBeVisible();
-    expect(screen.queryByRole("link", { name: "Overview" })).toBeNull();
     expect(screen.getByRole("link", { name: "Installations" })).toHaveAttribute(
       "href",
       "/mcp/registry/cat-1?tab=credentials",
     );
+  });
+
+  it("names the main page in the tab strip, so a secondary tab has a way back", () => {
+    renderPage();
+
+    // Selection is the caller's to state: the main page is the absence of
+    // `?tab=`, so its href is a prefix of every other tab's URL.
+    // PageLayout renders each tab in a desktop row and a mobile row.
+    const [overviewTab] = screen.getAllByRole("link", { name: "Overview" });
+    expect(overviewTab).toHaveAttribute("href", "/mcp/registry/cat-1");
+    expect(overviewTab).toHaveAttribute("aria-current", "page");
+    const [usageTab] = screen.getAllByRole("link", { name: /Usage/ });
+    expect(usageTab).not.toHaveAttribute("aria-current");
   });
 
   it("keeps editor-only command and installation prompts out of Overview", () => {
@@ -287,10 +289,10 @@ describe("McpCatalogItemDetailPage overview", () => {
   it("shows the deployment facts the wizard asks for", () => {
     renderPage();
 
-    const runtime = section("Runtime");
-    expect(runtime.getByText(/Single-tenant/)).toBeInTheDocument();
-    expect(runtime.getByText("stdio")).toBeInTheDocument();
-    expect(runtime.queryByText("Generated")).toBeNull();
+    const overview = section("Overview");
+    expect(overview.getByText(/Single-tenant/)).toBeInTheDocument();
+    expect(overview.getByText("stdio")).toBeInTheDocument();
+    expect(overview.queryByText("Generated")).toBeNull();
   });
 
   it("says how callers authenticate, and never shows a secret's value", () => {
@@ -307,11 +309,15 @@ describe("McpCatalogItemDetailPage overview", () => {
       },
     });
 
-    const auth = section("Authentication");
-    expect(auth.getByText("OAuth 2.1")).toBeInTheDocument();
-    expect(auth.getByText("abc123")).toBeInTheDocument();
-    expect(auth.getByText("Configured")).toBeInTheDocument();
-    expect(auth.queryByText("shhh")).toBeNull();
+    const overview = section("Overview");
+    expect(overview.getByText("OAuth 2.1")).toBeInTheDocument();
+    expect(
+      overview.getByText("https://tools.example.com/mcp"),
+    ).toBeInTheDocument();
+    // The client id, the secret's state and the endpoints are the wizard's;
+    // the row says only how callers authenticate, and never a secret's value.
+    expect(screen.queryByText("abc123")).toBeNull();
+    expect(screen.queryByText("shhh")).toBeNull();
   });
 
   it("leaves record metadata and exact tool inventory to their dedicated surfaces", () => {
@@ -329,7 +335,7 @@ describe("McpCatalogItemDetailPage overview", () => {
     expect(screen.queryByText("Support")).toBeNull();
   });
 
-  it("keeps one Edit in the header and none on the overview cards", () => {
+  it("keeps one Edit in the header, and points Overview at the same place", () => {
     renderPage();
 
     expect(screen.getByRole("link", { name: "Edit" })).toHaveAttribute(
@@ -337,10 +343,10 @@ describe("McpCatalogItemDetailPage overview", () => {
       "/mcp/registry/cat-1/edit?step=configuration",
     );
     expect(
-      section("Runtime").queryByRole("link", { name: /^Edit\b/ }),
-    ).toBeNull();
+      section("Overview").getByRole("link", { name: /Configuration/ }),
+    ).toHaveAttribute("href", "/mcp/registry/cat-1/edit?step=configuration");
     expect(
-      screen.queryByRole("heading", { name: "Authentication" }),
+      section("Overview").queryByRole("link", { name: /^Edit\b/ }),
     ).toBeNull();
   });
 

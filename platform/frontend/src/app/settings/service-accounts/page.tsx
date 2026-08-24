@@ -67,6 +67,7 @@ export default function ServiceAccountsSettingsPage() {
   const {
     data: serviceAccounts = [],
     isPending,
+    isFetching,
     isLoadingError: isServiceAccountsLoadError,
     refetch: refetchServiceAccounts,
   } = useServiceAccounts();
@@ -254,8 +255,8 @@ export default function ServiceAccountsSettingsPage() {
         </Alert>
       ) : (
         <LoadingWrapper
-          isPending={isPending}
-          loadingFallback={<LoadingState />}
+          isPending={(isPending || isFetching) && serviceAccounts.length === 0}
+          loadingFallback={<LoadingState variant="page" />}
         >
           <div>
             <FilterBar

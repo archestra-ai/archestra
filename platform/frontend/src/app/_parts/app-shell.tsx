@@ -127,7 +127,7 @@ export function AppShell({ children }: AppShellProps) {
   if (redirectingToTwoFactorSetup) {
     return (
       <main className="h-app-viewport w-full flex items-center justify-center bg-background">
-        <LoadingState variant="page" />
+        <LoadingState variant="viewport" />
       </main>
     );
   }
@@ -171,9 +171,10 @@ export function AppShell({ children }: AppShellProps) {
         // differently than the sidebar layout, so the footer would visibly jump.
         <main className="h-app-viewport w-full flex flex-col bg-background min-w-0 relative">
           <MaintenanceModeOverlay />
-          <div className="flex-1 min-w-0 flex flex-col">
-            <div className="flex-1 flex flex-col">{children}</div>
+          <div className="hidden" aria-hidden="true">
+            {children}
           </div>
+          <LoadingState label="Loading your workspace…" variant="viewport" />
           <Toaster />
         </main>
       ) : (

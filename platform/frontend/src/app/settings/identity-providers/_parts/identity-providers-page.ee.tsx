@@ -334,7 +334,7 @@ export function IdentityProvidersSettingsContent() {
   // Gating is handled by the parent (DisabledEnterpriseSection in
   // identity-providers/page.tsx). When disabled the wrapper renders this UI
   // dimmed and non-interactive, so we no longer short-circuit here.
-  if (isLoading) return <LoadingState />;
+  if (isLoading) return <LoadingState variant="page" />;
 
   return (
     <div>

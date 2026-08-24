@@ -83,7 +83,7 @@ import {
 export default function ModelsPage() {
   const {
     data: models = [],
-    isPending,
+    isFetching,
     isLoadingError: isModelsLoadError,
     refetch,
   } = useModelsWithApiKeys({ toastOnError: false });
@@ -664,7 +664,7 @@ export default function ModelsPage() {
             row.ignored ? "opacity-60 [&_td]:text-muted-foreground" : undefined
           }
           hideSelectedCount
-          isLoading={isPending}
+          isLoading={isFetching}
           hasActiveFilters={Boolean(
             search ||
               apiKeyFilter !== "all" ||

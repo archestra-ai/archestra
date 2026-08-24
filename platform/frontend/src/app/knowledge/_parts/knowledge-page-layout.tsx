@@ -34,7 +34,7 @@ export function KnowledgePageLayout({
   return (
     <LoadingWrapper
       isPending={isPending}
-      loadingFallback={<LoadingState variant="page" />}
+      loadingFallback={<LoadingState variant="viewport" />}
     >
       <PageLayout
         title={

@@ -1,16 +1,21 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import {
   type ComponentProps,
   type ReactNode,
   useEffect,
-  useId,
   useState,
 } from "react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "./ui/skeleton";
 
-type LoadingStateVariant = "page" | "content" | "compact" | "inline";
+type LoadingStateVariant =
+  | "viewport"
+  | "page"
+  | "content"
+  | "compact"
+  | "inline";
 
 const LOADING_MASCOTS = [
   {
@@ -28,7 +33,8 @@ const LOADING_MASCOTS = [
 ] as const;
 
 const MASCOT_SIZE_BY_VARIANT: Record<LoadingStateVariant, number> = {
-  page: 88,
+  viewport: 75,
+  page: 75,
   content: 75,
   compact: 41,
   inline: 17,
@@ -70,8 +76,9 @@ export function LoadingState({
   /** Compact controls can hide the visible label while retaining its accessible name. */
   showLabel?: boolean;
 }) {
-  const loadingId = useId();
-  const startingMascot = hashLoadingId(loadingId) % LOADING_MASCOTS.length;
+  const pathname = usePathname();
+  const startingMascot =
+    hashLoadingKey(pathname ?? "/") % LOADING_MASCOTS.length;
   const [mascotOffset, setMascotOffset] = useState(0);
   const mascot =
     LOADING_MASCOTS[(startingMascot + mascotOffset) % LOADING_MASCOTS.length];
@@ -97,7 +104,9 @@ export function LoadingState({
       aria-label={label}
       className={cn(
         "flex flex-col items-center justify-center text-center",
-        variant === "page" && "min-h-[calc(100dvh-12rem)] py-16",
+        variant === "viewport" && "min-h-app-viewport",
+        variant === "page" &&
+          "min-h-[calc(var(--visual-viewport-height,100dvh)-12rem)] animate-in fade-in-0 duration-200 [animation-delay:150ms] [animation-fill-mode:backwards] motion-reduce:animate-none",
         variant === "content" && "min-h-48 py-10",
         variant === "compact" && "min-h-24 py-4",
         variant === "inline" && "inline-flex min-h-0 p-0 align-middle",
@@ -150,7 +159,7 @@ export function LoadingWrapper({
   return <>{children}</>;
 }
 
-function hashLoadingId(value: string): number {
+function hashLoadingKey(value: string): number {
   let hash = 0;
   for (let index = 0; index < value.length; index += 1) {
     hash = (hash * 31 + value.charCodeAt(index)) >>> 0;

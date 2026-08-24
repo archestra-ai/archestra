@@ -251,7 +251,11 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
     "all" | "changes" | "no-changes"
   >("all");
 
-  const { data: runsData, isPending: isRunsPending } = useConnectorRuns({
+  const {
+    data: runsData,
+    isPending: isRunsPending,
+    isFetching: isRunsFetching,
+  } = useConnectorRuns({
     connectorId,
     limit: pageSize,
     offset: pageIndex * pageSize,
@@ -448,7 +452,7 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
   );
 
   if (isPending) {
-    return <LoadingState label="Loading connector…" variant="page" />;
+    return <LoadingState label="Loading connector…" variant="viewport" />;
   }
 
   if (isLoadingError) {
@@ -807,7 +811,9 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
               </Select>
             </FilterBar>
             <LoadingWrapper
-              isPending={isRunsPending}
+              isPending={
+                (isRunsPending || isRunsFetching) && runRows.length === 0
+              }
               loadingFallback={<LoadingState />}
             >
               {runRows.length === 0 ? (

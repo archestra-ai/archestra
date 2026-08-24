@@ -110,7 +110,7 @@ function PluginsGate() {
   const enabled = useFeature("plugins");
 
   if (enabled === undefined) {
-    return <LoadingState label="Loading plugins…" variant="page" />;
+    return <LoadingState label="Loading plugins…" variant="viewport" />;
   }
 
   if (!enabled) {
@@ -584,12 +584,14 @@ function PluginsList() {
   }
 
   const showEmptyState =
-    !isPending && (plugins?.length ?? 0) === 0 && !hasActiveFilters;
+    !isFetching && (plugins?.length ?? 0) === 0 && !hasActiveFilters;
 
   return (
     <LoadingWrapper
-      isPending={isPending && !plugins}
-      loadingFallback={<LoadingState label="Loading plugins…" variant="page" />}
+      isPending={(isPending || isFetching) && (plugins?.length ?? 0) === 0}
+      loadingFallback={
+        <LoadingState label="Loading plugins…" variant="viewport" />
+      }
     >
       <PageLayout
         title="Plugins"

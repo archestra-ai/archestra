@@ -188,6 +188,7 @@ export default function LimitsPage() {
   const {
     data: limits = [],
     isPending,
+    isFetching,
     isLoadingError: isLimitsLoadError,
     refetch: refetchLimits,
   } = useLimits();
@@ -785,7 +786,10 @@ export default function LimitsPage() {
         />
       </div>
 
-      <LoadingWrapper isPending={isPending} loadingFallback={<LoadingState />}>
+      <LoadingWrapper
+        isPending={(isPending || isFetching) && limits.length === 0}
+        loadingFallback={<LoadingState variant="page" />}
+      >
         <DataTable
           columns={columns}
           data={filteredLimits}

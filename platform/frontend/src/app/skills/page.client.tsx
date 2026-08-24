@@ -205,7 +205,7 @@ function SkillsList() {
   const showStandaloneSkills = kind !== "mcp";
   const showMcpSkills =
     mcpSkillsEnabled && !isDeletedView && kind !== "standalone";
-  const { data: externalSkills = [], isPending: isExternalSkillsPending } =
+  const { data: externalSkills = [], isFetching: isExternalSkillsFetching } =
     useExternalMcpSkills({
       enabled: showMcpSkills,
     });
@@ -364,8 +364,8 @@ function SkillsList() {
     (showStandaloneSkills && totalSkills > 0) ||
     (showMcpSkills && visibleExternalSkills.length > 0);
   const showEmptyState =
-    !isPending &&
-    !(showMcpSkills && isExternalSkillsPending) &&
+    !isFetching &&
+    !(showMcpSkills && isExternalSkillsFetching) &&
     !hasVisibleSkills &&
     !hasActiveFilters;
   const noVisibleFilterResults =
@@ -682,7 +682,9 @@ function SkillsList() {
   return (
     <LoadingWrapper
       isPending={isPending && !skills}
-      loadingFallback={<LoadingState label="Loading skills…" variant="page" />}
+      loadingFallback={
+        <LoadingState label="Loading skills…" variant="viewport" />
+      }
     >
       <PageLayout
         title="Skills"
@@ -863,6 +865,7 @@ function SkillsList() {
                       cards={
                         <TableCardList
                           itemCount={items.length}
+                          isLoading={isFetching}
                           emptyMessage="No standalone skills yet."
                           hasActiveFilters={hasActiveFilters}
                           filteredEmptyMessage="No standalone skills match the current filters."
@@ -987,6 +990,7 @@ function SkillsList() {
                   <ExternalMcpSkillsSection
                     skills={visibleExternalSkills}
                     showWhenEmpty={kind === "mcp"}
+                    isLoading={isExternalSkillsFetching}
                   />
                 )}
               </div>

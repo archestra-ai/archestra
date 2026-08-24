@@ -67,7 +67,7 @@ export default function AppsPage() {
   const parsedLabels = parseLabelsParam(labelsFromUrl);
   const { data: labelKeys } = useAppLabelKeys();
 
-  const { data, isPending, isLoadingError, refetch } = useApps(
+  const { data, isPending, isFetching, isLoadingError, refetch } = useApps(
     {
       limit: PAGE_SIZE,
       offset: 0,
@@ -198,7 +198,7 @@ export default function AppsPage() {
         )}
 
         <LoadingWrapper
-          isPending={isPending && !data}
+          isPending={(isPending || isFetching) && filtered.length === 0}
           loadingFallback={<LoadingState variant="page" />}
         >
           {isLoadingError ? (

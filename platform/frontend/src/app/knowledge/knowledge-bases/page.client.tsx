@@ -677,7 +677,7 @@ function KnowledgeBaseCardGrid({
   onPaginationChange: (next: { pageIndex: number; pageSize: number }) => void;
 }) {
   if (isLoading) {
-    return <LoadingState label="Loading knowledge bases…" />;
+    return <LoadingState label="Loading knowledge bases…" variant="page" />;
   }
 
   if (knowledgeBases.length === 0) {

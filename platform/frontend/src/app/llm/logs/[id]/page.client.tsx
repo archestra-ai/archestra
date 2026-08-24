@@ -69,7 +69,7 @@ function LogDetail({
   const { data: agents } = useProfiles();
 
   if (isPending) {
-    return <LoadingState label="Loading interaction…" variant="page" />;
+    return <LoadingState label="Loading interaction…" variant="viewport" />;
   }
 
   if (isLoadingError) {

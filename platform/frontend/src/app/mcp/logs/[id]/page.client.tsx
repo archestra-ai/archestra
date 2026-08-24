@@ -75,7 +75,7 @@ function McpToolCallDetail({
   const { data: agents } = useProfiles();
 
   if (isPending) {
-    return <LoadingState label="Loading tool call…" variant="page" />;
+    return <LoadingState label="Loading tool call…" variant="viewport" />;
   }
 
   if (isLoadingError) {

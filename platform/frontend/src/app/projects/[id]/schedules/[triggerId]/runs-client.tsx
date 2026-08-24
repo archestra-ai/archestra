@@ -32,7 +32,7 @@ export function ProjectScheduleRunsClient() {
   };
 
   if (triggerLoading) {
-    return <LoadingState label="Loading schedule runs…" variant="page" />;
+    return <LoadingState label="Loading schedule runs…" variant="viewport" />;
   }
 
   return (

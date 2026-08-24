@@ -176,12 +176,12 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
 
   // Show loading while checking auth/permissions
   if (inProgress) {
-    return <LoadingState label="Loading your workspace…" variant="page" />;
+    return <LoadingState label="Loading your workspace…" variant="viewport" />;
   } else if (isSpecialAuth) {
     // Special auth pages are always rendered (handles both 2FA verification and setup)
     return <>{children}</>;
   } else if (isAuthPage && isLoggedIn) {
-    return <LoadingState label="Redirecting…" variant="page" />;
+    return <LoadingState label="Redirecting…" variant="viewport" />;
   } else if (isRecordingRender) {
     // The offline video renderer drives a browser that holds no session, so
     // this page cannot sit behind the gate. It is safe outside it because it
@@ -190,7 +190,7 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
     // visitor gets an empty page rather than anyone's recording.
     return <>{children}</>;
   } else if (!isAuthPage && !isLoggedIn) {
-    return <LoadingState label="Redirecting to sign-in…" variant="page" />;
+    return <LoadingState label="Redirecting to sign-in…" variant="viewport" />;
   }
 
   return <>{children}</>;

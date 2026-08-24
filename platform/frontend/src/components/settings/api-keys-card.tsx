@@ -76,6 +76,7 @@ function ApiKeysCardContent() {
   const {
     data: apiKeys = [],
     isPending,
+    isFetching,
     isLoadingError: isApiKeysLoadError,
     refetch: refetchApiKeys,
   } = useApiKeys();
@@ -315,8 +316,8 @@ function ApiKeysCardContent() {
           </p>
         </div>
         <LoadingWrapper
-          isPending={isPending}
-          loadingFallback={<LoadingState />}
+          isPending={(isPending || isFetching) && apiKeys.length === 0}
+          loadingFallback={<LoadingState variant="page" />}
         >
           <div>
             <FilterBar

@@ -77,9 +77,16 @@ export default function GithubSettingsPage() {
   const { data: canDelete } = useHasPermissions({
     githubAppConfig: ["delete"],
   });
-  const { data: configs = [], isPending: isLoadingApps } =
-    useGithubAppConfigs();
-  const { data: pats = [], isPending: isLoadingPats } = useGithubPats();
+  const {
+    data: configs = [],
+    isPending: isLoadingApps,
+    isFetching: isFetchingApps,
+  } = useGithubAppConfigs();
+  const {
+    data: pats = [],
+    isPending: isLoadingPats,
+    isFetching: isFetchingPats,
+  } = useGithubPats();
 
   // the App edit dialog is deep-linkable via `?edit=<id>`; PAT dialogs and
   // the create dialog are plain local state.
@@ -270,8 +277,14 @@ export default function GithubSettingsPage() {
         </Alert>
       ) : (
         <LoadingWrapper
-          isPending={isLoadingApps || isLoadingPats}
-          loadingFallback={<LoadingState />}
+          isPending={
+            (isLoadingApps ||
+              isLoadingPats ||
+              isFetchingApps ||
+              isFetchingPats) &&
+            rows.length === 0
+          }
+          loadingFallback={<LoadingState variant="page" />}
         >
           <DataTable
             columns={columns}

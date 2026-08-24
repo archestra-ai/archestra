@@ -223,7 +223,7 @@ export function AssignedToolsTable({
     includeKnowledgeSourcesTool: true,
   };
 
-  const { data: toolsData, isLoading } = useToolsWithAssignments({
+  const { data: toolsData, isFetching: isLoading } = useToolsWithAssignments({
     initialData: useInitialData ? initialData?.toolsWithAssignments : undefined,
     pagination: {
       limit: pageSize,

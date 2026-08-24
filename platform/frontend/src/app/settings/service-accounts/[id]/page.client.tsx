@@ -83,6 +83,7 @@ export default function ServiceAccountDetailPage({
   const {
     data: serviceAccount,
     isPending,
+    isFetching,
     isLoadingError,
     refetch,
   } = useServiceAccount(serviceAccountId);
@@ -298,7 +299,10 @@ export default function ServiceAccountDetailPage({
   }
 
   return (
-    <LoadingWrapper isPending={isPending} loadingFallback={<LoadingState />}>
+    <LoadingWrapper
+      isPending={(isPending || isFetching) && !serviceAccount}
+      loadingFallback={<LoadingState variant="page" />}
+    >
       {isLoadingError ? (
         <QueryLoadError
           title="Couldn't load this service account"

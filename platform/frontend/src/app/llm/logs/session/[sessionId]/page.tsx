@@ -11,7 +11,9 @@ export default function Page({
   return (
     <ErrorBoundary>
       <Suspense
-        fallback={<LoadingState label="Loading session logs…" variant="page" />}
+        fallback={
+          <LoadingState label="Loading session logs…" variant="viewport" />
+        }
       >
         <SessionDetailPage paramsPromise={params} />
       </Suspense>

@@ -19,14 +19,27 @@ describe("LoadingState", () => {
     expect(images[0]).toHaveAttribute("src", expect.stringMatching(/\.gif$/));
   });
 
-  it("centers page loading states across the available viewport", () => {
-    render(<LoadingState variant="page" />);
+  it("uses one mascot size while centering viewport and page loading states", () => {
+    const { rerender } = render(<LoadingState variant="viewport" />);
 
-    expect(screen.getByRole("status")).toHaveClass(
-      "min-h-[calc(100dvh-12rem)]",
+    const status = screen.getByRole("status");
+    expect(status).toHaveClass("min-h-app-viewport");
+    expect(status.querySelector("span")).toHaveStyle({
+      height: "75px",
+      width: "75px",
+    });
+
+    rerender(<LoadingState variant="page" />);
+
+    expect(status).toHaveClass(
+      "min-h-[calc(var(--visual-viewport-height,100dvh)-12rem)]",
       "items-center",
       "justify-center",
     );
+    expect(status.querySelector("span")).toHaveStyle({
+      height: "75px",
+      width: "75px",
+    });
   });
 
   it("keeps inline loading states compact and accessible", () => {

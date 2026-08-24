@@ -90,6 +90,7 @@ function ProjectsList() {
   const {
     data,
     isPending,
+    isFetching,
     isLoadingError: isProjectsLoadError,
     refetch: refetchProjects,
   } = useProjects({
@@ -262,8 +263,8 @@ function ProjectsList() {
               deletePermission={{ project: ["admin"] }}
             />
           </FilterBar>
-          {isPending ? (
-            <LoadingState label="Loading projects…" />
+          {(isPending || isFetching) && projects.length === 0 ? (
+            <LoadingState label="Loading projects…" variant="page" />
           ) : isDeletedView ? (
             projects.length === 0 ? (
               <div className="flex flex-col items-center gap-2 py-16 text-center text-sm text-muted-foreground">

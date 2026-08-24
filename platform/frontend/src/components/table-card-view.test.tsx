@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   TableCard,
+  TableCardList,
   TableCardView,
   TableCardViewContent,
   TableCardViewToggle,
@@ -77,6 +78,19 @@ describe("TableCardView", () => {
     fireEvent.click(screen.getByLabelText("Select Knowledge source"));
 
     expect(onSelectedChange).toHaveBeenCalledWith(true);
+  });
+
+  it("shows the shared loader instead of an empty result while cards are loading", () => {
+    render(
+      <TableCardList itemCount={0} isLoading emptyMessage="No agents found">
+        {null}
+      </TableCardList>,
+    );
+
+    expect(
+      screen.getByRole("status", { name: "Loading results…" }),
+    ).toBeVisible();
+    expect(screen.queryByText("No agents found")).not.toBeInTheDocument();
   });
 });
 

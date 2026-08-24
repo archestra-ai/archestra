@@ -844,7 +844,11 @@ function InvitationsTab({
   const pageSize = Number(limitFromUrl) || DEFAULT_TABLE_LIMIT;
   const offset = pageIndex * pageSize;
 
-  const { data: invitationsResponse, isPending } = useInvitationsPaginated({
+  const {
+    data: invitationsResponse,
+    isPending,
+    isFetching,
+  } = useInvitationsPaginated({
     limit: pageSize,
     offset,
   });
@@ -954,7 +958,7 @@ function InvitationsTab({
             total: pagination?.total || 0,
           }}
           onPaginationChange={handlePaginationChange}
-          isLoading={isPending}
+          isLoading={isFetching}
           emptyMessage="No invitations"
         />
       </LoadingWrapper>

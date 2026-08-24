@@ -255,6 +255,7 @@ function McpGateways({
   const {
     data: agentsResponse,
     isPending,
+    isFetching,
     isLoadingError: isGatewaysLoadError,
     refetch: refetchGateways,
   } = useProfilesPaginated({
@@ -351,7 +352,7 @@ function McpGateways({
 
   const agents = agentsResponse?.data || [];
   const pagination = agentsResponse?.pagination;
-  const showLoading = isPending && !initialData?.agents;
+  const showLoading = (isPending || isFetching) && agents.length === 0;
 
   // Derived from what is on screen rather than read straight out of
   // `rowSelection`: the table is server-paginated, so ids left behind by
@@ -627,7 +628,7 @@ function McpGateways({
     <LoadingWrapper
       isPending={showLoading}
       loadingFallback={
-        <LoadingState label="Loading MCP gateways…" variant="page" />
+        <LoadingState label="Loading MCP gateways…" variant="viewport" />
       }
     >
       <PageLayout

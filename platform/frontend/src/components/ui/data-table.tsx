@@ -271,7 +271,7 @@ export function DataTable<TData, TValue>({
   );
 
   if (isLoading && data.length === 0) {
-    return <LoadingState label="Loading results…" />;
+    return <LoadingState label="Loading results…" variant="page" />;
   }
 
   return (

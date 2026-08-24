@@ -194,6 +194,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const {
     data: agentsResponse,
     isPending,
+    isFetching,
     isLoadingError: isAgentsLoadError,
     refetch: refetchAgents,
   } = useProfilesPaginated({
@@ -312,7 +313,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const agents = agentsResponse?.data || [];
 
   const pagination = agentsResponse?.pagination;
-  const showLoading = isPending && !initialData?.agents;
+  const showLoading = (isPending || isFetching) && agents.length === 0;
   const isDeletedView = statusFromUrl === "deleted";
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
@@ -565,7 +566,9 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   return (
     <LoadingWrapper
       isPending={showLoading}
-      loadingFallback={<LoadingState label="Loading agents…" variant="page" />}
+      loadingFallback={
+        <LoadingState label="Loading agents…" variant="viewport" />
+      }
     >
       <PageLayout
         title="Agents"

@@ -189,7 +189,11 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
     "limit" | "offset"
   >;
 
-  const { data: agentsResponse, isPending } = useProfilesPaginated({
+  const {
+    data: agentsResponse,
+    isPending,
+    isFetching,
+  } = useProfilesPaginated({
     limit: pageSize,
     offset,
     initialData: initialData?.agents ?? undefined,
@@ -278,7 +282,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
 
   const agents = agentsResponse?.data || [];
   const pagination = agentsResponse?.pagination;
-  const showLoading = isPending && !initialData?.agents;
+  const showLoading = (isPending || isFetching) && agents.length === 0;
 
   // Derived from what is on screen rather than read straight out of
   // `rowSelection`: the table is server-paginated, so ids left behind by
@@ -443,7 +447,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
     <LoadingWrapper
       isPending={showLoading}
       loadingFallback={
-        <LoadingState label="Loading LLM proxies…" variant="page" />
+        <LoadingState label="Loading LLM proxies…" variant="viewport" />
       }
     >
       <PageLayout

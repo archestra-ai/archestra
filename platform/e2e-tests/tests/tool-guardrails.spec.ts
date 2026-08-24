@@ -32,12 +32,12 @@ test("labels an app's launch tool with its app, not as observed traffic", async 
       page,
       `/mcp/tool-guardrails?origin=app&search=${encodeURIComponent(name)}`,
     );
-    const appRow = page.locator("table tbody tr").filter({ hasText: name });
+    const appRow = page.getByRole("row").filter({ hasText: name });
     await expect(appRow).toHaveCount(1);
     await expect(appRow).not.toContainText("Observed tools");
 
     // Its details dialog agrees: origin App, never "Intercepted".
-    await appRow.getByRole("button", { name: /edit policies/i }).click();
+    await appRow.click();
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
     await expect(dialog.getByText("App", { exact: true })).toBeVisible();

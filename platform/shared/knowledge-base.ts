@@ -124,10 +124,11 @@ export const MAX_CONTEXT_EXPANSION_RADIUS = 4;
  * still reads the wider passage.
  *
  * 0 disables the second pass, leaving one chunk per parent — the single-pass
- * behaviour, and the default.
+ * behaviour, and the default. The ceiling is {@link MAX_CHUNK_SIZE_TOKENS}: a
+ * child is bounded by the same embedding-model input limit a chunk is, and a
+ * child larger than its parent subdivides nothing.
  */
 export const MIN_CHILD_CHUNK_SIZE_TOKENS = 32;
-export const MAX_CHILD_CHUNK_SIZE_TOKENS = MAX_CHUNK_SIZE_TOKENS;
 export const DEFAULT_CHILD_CHUNK_SIZE_TOKENS = 0;
 
 /**

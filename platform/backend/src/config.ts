@@ -23,7 +23,6 @@ import {
   DEFAULT_VAULT_TOKEN,
   isValidK8sCpuQuantity,
   isValidK8sMemoryQuantity,
-  MAX_CHILD_CHUNK_SIZE_TOKENS,
   MAX_CHUNK_SIZE_TOKENS,
   MAX_CONTEXT_EXPANSION_RADIUS,
   MCP_ORCHESTRATOR_DEFAULTS,
@@ -3203,7 +3202,7 @@ const config = {
       process.env.ARCHESTRA_KNOWLEDGE_BASE_CHILD_CHUNK_SIZE_TOKENS,
       DEFAULT_CHILD_CHUNK_SIZE_TOKENS,
       MIN_CHILD_CHUNK_SIZE_TOKENS,
-      MAX_CHILD_CHUNK_SIZE_TOKENS,
+      MAX_CHUNK_SIZE_TOKENS,
     ),
     /**
      * How many neighbouring chunks either side of a search hit are stitched

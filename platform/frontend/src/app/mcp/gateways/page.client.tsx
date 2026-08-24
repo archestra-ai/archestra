@@ -6,7 +6,14 @@ import type {
   RowSelectionState,
   SortingState,
 } from "@tanstack/react-table";
-import { ChevronDown, ChevronUp, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Pencil,
+  Plus,
+  Trash2,
+  Waypoints,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -736,7 +743,8 @@ function McpGateways({
                         scopeFilter.hasActiveScopeFilters ||
                         labelsFromUrl,
                     )}
-                    filteredEmptyMessage="No MCP gateways match your filters. Try adjusting your search."
+                    emptyIcon={Waypoints}
+                    filteredEmptyMessage="No MCP gateways match your filters"
                     onClearFilters={() =>
                       updateQueryParams({
                         name: null,
@@ -864,15 +872,16 @@ function McpGateways({
                         page: "1",
                       })
                     }
+                    emptyIcon={Waypoints}
                     emptyMessage={
                       isDeletedView
-                        ? "No deleted MCP gateways found"
+                        ? "No deleted MCP gateways found."
                         : "No MCP gateways found"
                     }
                     filteredEmptyMessage={
                       isDeletedView
                         ? "No deleted MCP gateways found."
-                        : "No MCP gateways match your filters. Try adjusting your search."
+                        : "No MCP gateways match your filters"
                     }
                   />
                 }

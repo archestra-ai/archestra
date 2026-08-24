@@ -6,10 +6,11 @@ import {
   MCP_CATALOG_REAUTH_QUERY_PARAM,
   MCP_CATALOG_SERVER_QUERY_PARAM,
 } from "@archestra/shared";
-import { CheckCircle2, Search } from "lucide-react";
+import { CheckCircle2, Route } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { EmptyState } from "@/components/empty-state";
 import {
   FilterBar,
   filterControlClass,
@@ -1224,21 +1225,12 @@ export function InternalMCPCatalog({
                 </Empty>
               </div>
             ) : (
-              <div
-                className="flex flex-col items-center justify-center py-12 text-center"
-                data-testid="mcp-registry-attention-list"
-              >
-                <Search className="mb-4 h-10 w-10 text-muted-foreground" />
-                <p className="text-muted-foreground">
-                  No MCP servers match your filters. Try adjusting your search.
-                </p>
-                <Button
-                  variant="outline"
-                  className="mt-4"
-                  onClick={clearFiltersKeepingFacet}
-                >
-                  Clear filters
-                </Button>
+              <div data-testid="mcp-registry-attention-list">
+                <EmptyState
+                  icon={Route}
+                  title="No MCP servers match your filters"
+                  onClearFilters={clearFiltersKeepingFacet}
+                />
               </div>
             )
           ) : (
@@ -1403,28 +1395,17 @@ export function InternalMCPCatalog({
               </div>
             ) : (
               personalItems.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  {hasActiveFilters ? (
-                    <>
-                      <Search className="mb-4 h-10 w-10 text-muted-foreground" />
-                      <p className="text-muted-foreground">
-                        No MCP servers match your filters. Try adjusting your
-                        search.
-                      </p>
-                      <Button
-                        variant="outline"
-                        className="mt-4"
-                        onClick={handleClearFilters}
-                      >
-                        Clear filters
-                      </Button>
-                    </>
-                  ) : (
-                    <p className="text-muted-foreground">
-                      No MCP servers found.
-                    </p>
-                  )}
-                </div>
+                <EmptyState
+                  icon={Route}
+                  title={
+                    hasActiveFilters
+                      ? "No MCP servers match your filters"
+                      : "No MCP servers found"
+                  }
+                  onClearFilters={
+                    hasActiveFilters ? handleClearFilters : undefined
+                  }
+                />
               )
             )}
           </div>

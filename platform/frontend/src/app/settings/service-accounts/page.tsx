@@ -313,7 +313,7 @@ export default function ServiceAccountsSettingsPage() {
                   }}
                   emptyMessage="No service accounts yet"
                   hasActiveFilters={search.trim().length > 0}
-                  filteredEmptyMessage="No service accounts match your search. Try adjusting your search."
+                  filteredEmptyMessage="No service accounts match your search"
                   onClearFilters={() =>
                     updateQueryParams({ search: null, page: "1" })
                   }

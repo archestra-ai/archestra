@@ -671,13 +671,14 @@ export default function ModelsPage() {
               modelTypeFilter !== "all" ||
               (canFilterFreeModels && freeOnly),
           )}
-          filteredEmptyMessage="No models match your filters. Try adjusting your search."
+          filteredEmptyMessage="No models match your filters"
           onClearFilters={() => {
             setSearch("");
             setApiKeyFilter("all");
             setModelTypeFilter("all");
             setFreeOnly(false);
           }}
+          emptyIcon={Boxes}
           emptyMessage={
             apiKeys.length === 0
               ? "No models available. Add an API key to see available models."

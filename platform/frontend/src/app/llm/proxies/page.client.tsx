@@ -6,7 +6,14 @@ import type {
   RowSelectionState,
   SortingState,
 } from "@tanstack/react-table";
-import { ChevronDown, ChevronUp, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Network,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -555,7 +562,8 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
                         scopeFilter.hasActiveScopeFilters ||
                         labelsFromUrl,
                     )}
-                    filteredEmptyMessage="No LLM proxies match your filters. Try adjusting your search."
+                    emptyIcon={Network}
+                    filteredEmptyMessage="No LLM proxies match your filters"
                     onClearFilters={() =>
                       updateQueryParams({
                         name: null,
@@ -666,15 +674,16 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
                         page: "1",
                       })
                     }
+                    emptyIcon={Network}
                     emptyMessage={
                       isDeletedView
-                        ? "No deleted LLM proxies found"
+                        ? "No deleted LLM proxies found."
                         : "No LLM proxies found"
                     }
                     filteredEmptyMessage={
                       isDeletedView
                         ? "No deleted LLM proxies found."
-                        : "No LLM proxies match your filters. Try adjusting your search."
+                        : "No LLM proxies match your filters"
                     }
                   />
                 }

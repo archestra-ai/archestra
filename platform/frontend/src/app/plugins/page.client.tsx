@@ -18,6 +18,7 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { OsLogos } from "@/app/connection/os-logos";
 import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { EmptyState } from "@/components/empty-state";
 import {
   FilterBar,
   filterControlClass,
@@ -791,6 +792,7 @@ function PluginsList() {
                   <TableCardList
                     itemCount={filteredPlugins.length}
                     isLoading={isFetching}
+                    emptyIcon={Braces}
                     emptyMessage="No plugins yet."
                     hasActiveFilters={hasActiveFilters}
                     filteredEmptyMessage="No plugins match the current filters."
@@ -865,6 +867,7 @@ function PluginsList() {
                     columns={tableColumns}
                     data={filteredPlugins}
                     getRowId={(row) => row.id}
+                    emptyIcon={Braces}
                     emptyMessage="No plugins yet."
                     hasActiveFilters={hasActiveFilters}
                     filteredEmptyMessage="No plugins match the current filters."
@@ -969,30 +972,20 @@ function PluginsList() {
 
 function PluginsEmptyState() {
   return (
-    <div className="flex min-h-[60vh] items-center justify-center">
-      <div className="max-w-md text-center">
-        <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl border bg-background shadow-sm">
-          <Braces className="h-7 w-7 text-primary" />
-        </div>
-        <h2 className="mb-2 text-xl font-semibold">No plugins yet</h2>
-        <p className="mb-6 text-sm text-muted-foreground">
-          A plugin packages a client&apos;s native hooks file and its companion
-          scripts. The platform stores the payload verbatim and delivers it to
-          connected coding agents.
-        </p>
-        <div className="flex items-center justify-center">
-          <PermissionButton
-            permissions={{ plugin: ["create", "admin"] }}
-            asChild
-          >
-            <Link href="/plugins/new">
-              <Plus className="mr-2 h-4 w-4" />
-              Add your first plugin
-            </Link>
-          </PermissionButton>
-        </div>
-      </div>
-    </div>
+    <EmptyState
+      className="min-h-[60vh]"
+      icon={Braces}
+      title="No plugins yet."
+      description="A plugin packages a client's native hooks file and its companion scripts. The platform stores the payload verbatim and delivers it to connected coding agents."
+      action={
+        <PermissionButton permissions={{ plugin: ["create", "admin"] }} asChild>
+          <Link href="/plugins/new">
+            <Plus className="mr-2 h-4 w-4" />
+            Add your first plugin
+          </Link>
+        </PermissionButton>
+      }
+    />
   );
 }
 

@@ -94,6 +94,33 @@ describe("DataTable page index clamping", () => {
     expect(screen.getByText("No results")).toBeVisible();
   });
 
+  it("distinguishes an empty list from one filtered down to nothing", () => {
+    const onClearFilters = vi.fn();
+    const { rerender } = render(
+      <DataTable columns={columns} data={[]} emptyMessage="No results" />,
+    );
+
+    // Nothing is narrowing the list, so there is nothing to reset.
+    expect(
+      screen.queryByRole("button", { name: /clear filters/i }),
+    ).not.toBeInTheDocument();
+
+    rerender(
+      <DataTable
+        columns={columns}
+        data={[]}
+        emptyMessage="No results"
+        hasActiveFilters
+        filteredEmptyMessage="No results match your filters"
+        onClearFilters={onClearFilters}
+      />,
+    );
+
+    expect(screen.getByText("No results match your filters")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: /clear filters/i }));
+    expect(onClearFilters).toHaveBeenCalledTimes(1);
+  });
+
   it("does not disturb rows already on screen while refetching", () => {
     render(<DataTable columns={columns} data={makeRows(2)} isLoading />);
 

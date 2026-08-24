@@ -1,6 +1,6 @@
 "use client";
 
-import { Inbox, LayoutGrid, List, Search } from "lucide-react";
+import { LayoutGrid, List, type LucideIcon, Search } from "lucide-react";
 import {
   createContext,
   type ReactNode,
@@ -9,6 +9,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { TablePagination } from "@/components/ui/table-pagination";
@@ -157,9 +158,11 @@ export function TableCardList({
   itemCount,
   isLoading = false,
   emptyMessage = "No results",
+  emptyDescription,
   emptyIcon,
   hasActiveFilters = false,
-  filteredEmptyMessage = "No results match your filters. Try adjusting your search.",
+  filteredEmptyMessage = "No results match your filters",
+  filteredEmptyDescription = "Try adjusting your search or filters.",
   onClearFilters,
   pagination,
   onPaginationChange,
@@ -169,9 +172,12 @@ export function TableCardList({
   itemCount: number;
   isLoading?: boolean;
   emptyMessage?: string;
-  emptyIcon?: ReactNode;
+  emptyDescription?: string;
+  /** The page's own icon — pass the one its sidebar entry uses. */
+  emptyIcon?: LucideIcon;
   hasActiveFilters?: boolean;
   filteredEmptyMessage?: string;
+  filteredEmptyDescription?: string;
   onClearFilters?: () => void;
   pagination?: { pageIndex: number; pageSize: number; total: number };
   onPaginationChange?: (pagination: {
@@ -189,28 +195,14 @@ export function TableCardList({
       return <div className="min-h-[164px] py-12" />;
     }
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-center">
-        <div className="mb-3 text-muted-foreground">
-          {hasActiveFilters ? (
-            <Search className="h-10 w-10" />
-          ) : (
-            (emptyIcon ?? <Inbox className="h-10 w-10" />)
-          )}
-        </div>
-        <p className="text-sm text-muted-foreground">
-          {hasActiveFilters ? filteredEmptyMessage : emptyMessage}
-        </p>
-        {hasActiveFilters && onClearFilters ? (
-          <Button
-            variant="outline"
-            size="sm"
-            className="mt-4"
-            onClick={onClearFilters}
-          >
-            <span>Clear filters</span>
-          </Button>
-        ) : null}
-      </div>
+      <EmptyState
+        icon={emptyIcon ?? (hasActiveFilters ? Search : undefined)}
+        title={hasActiveFilters ? filteredEmptyMessage : emptyMessage}
+        description={
+          hasActiveFilters ? filteredEmptyDescription : emptyDescription
+        }
+        onClearFilters={hasActiveFilters ? onClearFilters : undefined}
+      />
     );
   }
 

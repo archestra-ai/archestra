@@ -7,6 +7,7 @@ import type {
   SortingState,
 } from "@tanstack/react-table";
 import {
+  Bot,
   ChevronDown,
   ChevronUp,
   Pencil,
@@ -668,9 +669,10 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                   <TableCardList
                     itemCount={agents.length}
                     isLoading={showLoading}
+                    emptyIcon={Bot}
                     emptyMessage="No agents found"
                     hasActiveFilters={hasActiveFilters}
-                    filteredEmptyMessage="No agents match your filters. Try adjusting your search."
+                    filteredEmptyMessage="No agents match your filters"
                     onClearFilters={clearFilters}
                     pagination={{
                       pageIndex,
@@ -746,12 +748,13 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                               router.push(agentDetailHref("agent", row.id)),
                             )
                     }
+                    emptyIcon={Bot}
                     emptyMessage="No agents found"
                     hasActiveFilters={hasActiveFilters}
                     filteredEmptyMessage={
                       isDeletedView
                         ? "No deleted agents found."
-                        : "No agents match your filters. Try adjusting your search."
+                        : "No agents match your filters"
                     }
                     onClearFilters={clearFilters}
                   />

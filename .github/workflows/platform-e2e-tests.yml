@@ -95,7 +95,15 @@ jobs:
       matrix:
         include:
           - name: Platform
-            runner: ubuntu-latest
+            # CI_RUNNER_XL knob (see the lint job in on-pull-requests.yml).
+            # The platform image build is compile-bound (pnpm install + turbo
+            # build + Rust NAPI inside docker build): measured 12-13 min on
+            # 4-vcpu ubuntu-latest vs ~30s on a 16-vcpu runner with a warm
+            # local layer cache. A bigger runner cannot bring the warm-cache
+            # number back, but it claws back the compile-heavy layers that
+            # the registry cache-from misses on every source change. This is
+            # merge-queue critical path: the lite legs serialize behind it.
+            runner: ${{ vars.CI_RUNNER_XL || 'ubuntu-latest' }}
             context: ./platform
             dockerfile: ""
             artifact-name: platform-docker-image
@@ -383,11 +391,12 @@ jobs:
   # servers, and the Vault K8s-auth boot. Everything else runs in the lite
   # job below against the container harness.
   #
-  # One environment, no sharding: the whole job runs ~4-5 min, so every extra
-  # shard would pay the full environment setup again to split a couple of
-  # minutes of tests. A standard runner suffices because the job is
-  # wait-bound, not compute-bound: setup blocks on image pulls and pod
-  # readiness probes, and the tests are API-bound Playwright specs.
+  # One environment, no sharding: every extra shard would pay the full
+  # environment setup again to split a couple of minutes of tests. The job
+  # is NOT purely wait-bound in practice: Setup Archestra Platform (Kind
+  # cluster + helm install + image load) measured 2.4 min on an 8-vcpu
+  # runner vs 13.7 min on 4-vcpu ubuntu-latest, so runner size dominates
+  # its wall-clock — hence the CI_RUNNER_L knob below.
   # The required check is "Merge E2E Test Reports", not this job.
   platform-e2e-k8s-tests:
     name: Platform E2E Tests (K8s)
@@ -401,7 +410,11 @@ jobs:
     # instead of being skipped — the merge is still blocked either way by the
     # required "Build ... Image" checks.
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' || github.event.label.name == 'run-e2e-hibernation' }}
-    runs-on: ubuntu-latest
+    # CI_RUNNER_L knob (see the lint job in on-pull-requests.yml): an
+    # 8-vcpu-class label, falling back to the free standard runner when the
+    # repo variable is unset. See the setup-time measurements in the job
+    # comment above.
+    runs-on: ${{ vars.CI_RUNNER_L || 'ubuntu-latest' }}
     # Three budgets, matched to which legs run. The ordinary K8s leg fits inside
     # 60 minutes. Merge queue adds a 90-minute hibernation leg after the 25-minute
     # image-poll ceiling and 20-minute K8s leg, so it needs 150. Nightly,
@@ -622,7 +635,12 @@ jobs:
     name: Platform E2E Tests (Lite ${{ matrix.name }})
     needs: [platform-e2e-build]
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' || github.event.label.name == 'run-e2e-hibernation' }}
-    runs-on: ubuntu-latest
+    # CI_RUNNER_L knob (see the lint job in on-pull-requests.yml). Each leg
+    # boots the full lite stack and then runs Playwright next to it; the
+    # matrix comment below caps chromium at 2 workers precisely because a
+    # standard runner starves — on an 8-vcpu-class runner the pre-migration
+    # single lite job ran 6.9 min where today's legs run 8-9 min each.
+    runs-on: ${{ vars.CI_RUNNER_L || 'ubuntu-latest' }}
     timeout-minutes: 30
     strategy:
       # A failing leg must not cancel its siblings; we want the full failure

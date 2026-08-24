@@ -28,10 +28,10 @@ const LOADING_MASCOTS = [
 ] as const;
 
 const MASCOT_SIZE_BY_VARIANT: Record<LoadingStateVariant, number> = {
-  page: 104,
-  content: 88,
-  compact: 48,
-  inline: 20,
+  page: 88,
+  content: 75,
+  compact: 41,
+  inline: 17,
 };
 
 export function LoadingSkeletons({
@@ -87,7 +87,7 @@ export function LoadingState({
 
     const interval = window.setInterval(() => {
       setMascotOffset((offset) => offset + 1);
-    }, 5400);
+    }, 6480);
 
     return () => window.clearInterval(interval);
   }, []);

@@ -117,9 +117,10 @@ describe("external MCP Skill routes", () => {
         {
           userId: ctx.user.id,
           name: ctx.user.name,
+          kind: "user",
           total: 1,
         },
-        { userId: null, name: null, total: 1 },
+        { userId: null, name: null, kind: "unattributed", total: 1 },
       ]),
     );
     expect(

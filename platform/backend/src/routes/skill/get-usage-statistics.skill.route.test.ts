@@ -40,6 +40,7 @@ describe("GET /api/skills/:id/usage-statistics", () => {
     expect(stats.users[0]).toEqual({
       userId: alice.id,
       name: "Alice",
+      kind: "user",
       total: 2,
     });
     expect(stats.users).toHaveLength(2);

@@ -114,8 +114,7 @@ import {
   skillAction,
   skillActionHref,
 } from "./_parts/skill-actions-model";
-import { skillEditHref } from "./_parts/skill-page-config";
-import { SkillUsageDialog } from "./_parts/skill-usage-dialog";
+import { skillEditHref, skillUsageHref } from "./_parts/skill-page-config";
 import { SkillUsageSummary } from "./_parts/skill-usage-summary";
 import { SkillVersionHistoryDialog } from "./_parts/skill-version-history-dialog";
 
@@ -295,7 +294,6 @@ function SkillsList() {
   const [permanentlyDeletingSkill, setPermanentlyDeletingSkill] =
     useState<SkillItem | null>(null);
   const [historySkillId, setHistorySkillId] = useState<string | null>(null);
-  const [usageSkill, setUsageSkill] = useState<SkillItem | null>(null);
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   // Resolved once for the whole table, then applied per row: the scope check
@@ -471,7 +469,7 @@ function SkillsList() {
             icon: <ChartColumn className="h-4 w-4" />,
             label: usageAction.label,
             permissions: usageAction.permissions,
-            onClick: () => setUsageSkill(skill),
+            onClick: () => router.push(skillUsageHref(skill.id)),
           },
           {
             icon: <History className="h-4 w-4" />,
@@ -653,7 +651,7 @@ function SkillsList() {
             usageUserCount={row.original.usageUserCount}
             lastUsedAt={row.original.lastUsedAt}
             label={`View usage for ${row.original.name}`}
-            onClick={() => setUsageSkill(row.original)}
+            onClick={() => router.push(skillUsageHref(row.original.id))}
           />
         </div>
       ),
@@ -1054,15 +1052,6 @@ function SkillsList() {
           skillId={historySkillId}
           open={!!historySkillId}
           onOpenChange={(open) => !open && setHistorySkillId(null)}
-        />
-      )}
-
-      {usageSkill && (
-        <SkillUsageDialog
-          skillRef={{ kind: "standalone", skillId: usageSkill.id }}
-          skillName={usageSkill.name}
-          open={!!usageSkill}
-          onOpenChange={(open) => !open && setUsageSkill(null)}
         />
       )}
     </>

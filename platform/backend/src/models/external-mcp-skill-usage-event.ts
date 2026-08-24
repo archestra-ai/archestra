@@ -12,7 +12,7 @@ import db, { schema } from "@/database";
 import logger from "@/logging";
 import type { SkillUsageStatistics } from "@/types";
 import { trackBackgroundWork } from "@/utils/background-work";
-import UserModel from "./user";
+import { describeUsageActors } from "./skill-usage-actors";
 
 type UsageRef = { mcpServerId: string; uri: string };
 type UsageSummary = {
@@ -102,7 +102,7 @@ class ExternalMcpSkillUsageEventModel {
 
   /** Per-user daily activations for one installation-qualified Skill. */
   static async getUsageStatistics(
-    params: UsageRef & { since: Date },
+    params: UsageRef & { since: Date; organizationId: string },
   ): Promise<SkillUsageStatistics> {
     const day = sql<string>`to_char(date_trunc('day', ${schema.externalMcpSkillUsageEventsTable.createdAt} at time zone 'UTC'), 'YYYY-MM-DD')`;
     const rows = await db
@@ -129,17 +129,10 @@ class ExternalMcpSkillUsageEventModel {
     for (const row of rows) {
       totals.set(row.userId, (totals.get(row.userId) ?? 0) + row.count);
     }
-    const userIds = [...totals.keys()].filter(
-      (id): id is string => id !== null,
-    );
-    const names = await UserModel.getNamesByIds(userIds);
-    const users = [...totals.entries()]
-      .map(([userId, total]) => ({
-        userId,
-        name: userId === null ? null : (names.get(userId) ?? null),
-        total,
-      }))
-      .sort((a, b) => b.total - a.total);
+    const users = await describeUsageActors({
+      totals,
+      organizationId: params.organizationId,
+    });
 
     return {
       since: params.since.toISOString(),

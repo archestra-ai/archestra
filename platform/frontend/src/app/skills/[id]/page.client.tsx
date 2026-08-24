@@ -2,7 +2,6 @@
 
 import {
   AlertTriangle,
-  ChartColumn,
   Github,
   History,
   MoreHorizontal,
@@ -10,7 +9,7 @@ import {
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useId, useMemo, useState } from "react";
 import { AgentBadge } from "@/components/agent-badge";
 import {
@@ -65,7 +64,7 @@ import {
   SkillNotFound,
   SkillPageLoading,
 } from "../_parts/skill-page-shell";
-import { SkillUsageDialog } from "../_parts/skill-usage-dialog";
+import { SkillUsagePanel } from "../_parts/skill-usage-panel";
 import { SkillVersionHistoryDialog } from "../_parts/skill-version-history-dialog";
 
 /**
@@ -139,7 +138,6 @@ function SkillDetailView({
   const manifest = useMemo(() => composeManifest(skill), [skill]);
   const actionModel = getSkillActionModel(skill.id);
   const editAction = skillAction(actionModel, "edit");
-  const usageAction = skillAction(actionModel, "usage");
   const historyAction = skillAction(actionModel, "history");
   const deleteAction = skillAction(actionModel, "delete");
 
@@ -189,7 +187,18 @@ function SkillDetailView({
   ];
 
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [usageOpen, setUsageOpen] = useState(false);
+
+  // Which tab is showing lives in the URL, not in state: the skills list links
+  // straight at a skill's usage, and a tab someone is looking at should be a
+  // link they can send. Overview is the bare page and carries no `tab`, the
+  // same shape the MCP server detail page uses.
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const isUsageTab = searchParams.get("tab") === "usage";
+  const tabs = [
+    { label: "Overview", href: pathname, active: !isUsageTab },
+    { label: "Usage", href: `${pathname}?tab=usage`, active: isUsageTab },
+  ];
   const [deleteRequested, setDeleteRequested] = useState(false);
 
   return (
@@ -219,6 +228,7 @@ function SkillDetailView({
         <SkillBackLink href="/skills" label={backToListLabel("skill")} />
       }
       maxWidth="wizard"
+      tabs={tabs}
       actionButton={
         // One primary (Edit), one secondary (Chat), everything else in the
         // kebab with the destructive item under a divider. This header used to
@@ -259,10 +269,6 @@ function SkillDetailView({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setUsageOpen(true)}>
-                <ChartColumn className="h-4 w-4" />
-                {usageAction.label}
-              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setHistoryOpen(true)}>
                 <History className="h-4 w-4" />
                 {historyAction.label}
@@ -311,39 +317,35 @@ function SkillDetailView({
         </div>
       }
     >
-      <div className="space-y-10">
-        <OverviewSummary
-          headingId="skill-overview-heading"
-          facts={overviewFacts}
-          configHref={canEdit ? skillActionHref(editAction) : undefined}
-        />
-
-        <SkillCard title="Instructions and files" spacious>
-          <SkillContentEditor
-            manifest={manifest}
-            files={skill.files}
-            onManifestChange={noop}
-            onFilesChange={noop}
-            readOnly
-            readOnlyMarker={false}
-            className={SKILL_DETAIL_EDITOR_CLASS}
+      {isUsageTab ? (
+        <SkillUsagePanel skillRef={{ kind: "standalone", skillId: skill.id }} />
+      ) : (
+        <div className="space-y-10">
+          <OverviewSummary
+            headingId="skill-overview-heading"
+            facts={overviewFacts}
+            configHref={canEdit ? skillActionHref(editAction) : undefined}
           />
-        </SkillCard>
-      </div>
+
+          <SkillCard title="Instructions and files" spacious>
+            <SkillContentEditor
+              manifest={manifest}
+              files={skill.files}
+              onManifestChange={noop}
+              onFilesChange={noop}
+              readOnly
+              readOnlyMarker={false}
+              className={SKILL_DETAIL_EDITOR_CLASS}
+            />
+          </SkillCard>
+        </div>
+      )}
 
       {historyOpen && (
         <SkillVersionHistoryDialog
           skillId={skill.id}
           open={historyOpen}
           onOpenChange={setHistoryOpen}
-        />
-      )}
-      {usageOpen && (
-        <SkillUsageDialog
-          skillRef={{ kind: "standalone", skillId: skill.id }}
-          skillName={skill.name}
-          open={usageOpen}
-          onOpenChange={setUsageOpen}
         />
       )}
       {deleteRequested && (

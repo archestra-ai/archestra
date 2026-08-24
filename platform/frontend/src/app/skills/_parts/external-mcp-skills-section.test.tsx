@@ -126,9 +126,7 @@ describe("ExternalMcpSkillsSection", () => {
     expect(
       screen.getByText('Usage of "release-checklist"'),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText("No uses in the last 30 days."),
-    ).toBeInTheDocument();
+    expect(screen.getByText("No activations yet")).toBeInTheDocument();
   });
 
   it("applies the shared page search and scope filters", () => {

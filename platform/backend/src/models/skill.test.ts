@@ -2,14 +2,17 @@ import {
   isSpecCompliantSkillCompatibility,
   isSpecCompliantSkillDescription,
   isSpecCompliantSkillName,
+  MEMBER_ROLE_NAME,
 } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import {
+  ServiceAccountModel,
   SkillFileModel,
   SkillModel,
   SkillUsageEventModel,
   SkillVersionModel,
+  UserModel,
 } from "@/models";
 import { computeFileDigest } from "@/skills/skill-manifest-serializer";
 import {
@@ -484,30 +487,25 @@ describe("SkillModel.recordUsage", () => {
     SkillModel.recordUsage({ skillId: skill.id, userId: alice.id });
     SkillModel.recordUsage({ skillId: skill.id, userId: alice.id });
     SkillModel.recordUsage({ skillId: skill.id, userId: bob.id });
-    // an id with no users row (e.g. a service-account token) keeps name null
-    SkillModel.recordUsage({ skillId: skill.id, userId: "service-account:x" });
     await drainBackgroundWork();
 
     const stats = await SkillUsageEventModel.getUsageStatistics({
       skillId: skill.id,
       since: new Date(Date.now() - 24 * 60 * 60 * 1000),
+      organizationId: org.id,
     });
 
-    // most-used first; the two single-use entries tie in unspecified order
-    expect(stats.users).toHaveLength(3);
+    expect(stats.users).toHaveLength(2);
     expect(stats.users[0]).toEqual({
       userId: alice.id,
       name: "Alice",
+      kind: "user",
       total: 2,
     });
     expect(stats.users).toContainEqual({
       userId: bob.id,
       name: "Bob",
-      total: 1,
-    });
-    expect(stats.users).toContainEqual({
-      userId: "service-account:x",
-      name: null,
+      kind: "user",
       total: 1,
     });
     const today = new Date().toISOString().slice(0, 10);
@@ -521,9 +519,90 @@ describe("SkillModel.recordUsage", () => {
     const empty = await SkillUsageEventModel.getUsageStatistics({
       skillId: skill.id,
       since: new Date(Date.now() + 60_000),
+      organizationId: org.id,
     });
     expect(empty.users).toEqual([]);
     expect(empty.daily).toEqual([]);
+  });
+
+  test("getUsageStatistics resolves service accounts and keeps deleted ids tellable apart", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const other = await makeOrganization();
+    const ghost = await makeUser({ name: "Ghost" });
+    const serviceAccount = await ServiceAccountModel.create({
+      organizationId: org.id,
+      name: "Nightly sync",
+      role: MEMBER_ROLE_NAME,
+    });
+    const foreign = await ServiceAccountModel.create({
+      organizationId: other.id,
+      name: "Someone else's runner",
+      role: MEMBER_ROLE_NAME,
+    });
+    const skill = await SkillModel.createWithFiles({
+      skill: skillInput({ organizationId: org.id, name: "kinds" }),
+      files: [],
+    });
+    if (!skill) throw new Error("seed failed");
+
+    SkillModel.recordUsage({
+      skillId: skill.id,
+      userId: `service-account:${serviceAccount.id}`,
+    });
+    // another organization's account must not leak its name in here
+    SkillModel.recordUsage({
+      skillId: skill.id,
+      userId: `service-account:${foreign.id}`,
+    });
+    // a synthetic id whose suffix is not a uuid must not blow up the lookup
+    SkillModel.recordUsage({ skillId: skill.id, userId: "service-account:x" });
+    SkillModel.recordUsage({ skillId: skill.id, userId: ghost.id });
+    SkillModel.recordUsage({ skillId: skill.id, userId: null });
+    await drainBackgroundWork();
+    await UserModel.delete(ghost.id);
+
+    const stats = await SkillUsageEventModel.getUsageStatistics({
+      skillId: skill.id,
+      since: new Date(Date.now() - 24 * 60 * 60 * 1000),
+      organizationId: org.id,
+    });
+
+    const byId = new Map(stats.users.map((row) => [row.userId, row]));
+    expect(byId.get(`service-account:${serviceAccount.id}`)).toEqual({
+      userId: `service-account:${serviceAccount.id}`,
+      name: "Nightly sync",
+      kind: "service_account",
+      total: 1,
+    });
+    // an unresolvable id still reports what it addressed, so the caller can say
+    // "deleted service account" rather than a bare "unknown"
+    expect(byId.get(`service-account:${foreign.id}`)).toEqual({
+      userId: `service-account:${foreign.id}`,
+      name: null,
+      kind: "service_account",
+      total: 1,
+    });
+    expect(byId.get("service-account:x")).toEqual({
+      userId: "service-account:x",
+      name: null,
+      kind: "service_account",
+      total: 1,
+    });
+    expect(byId.get(ghost.id)).toEqual({
+      userId: ghost.id,
+      name: null,
+      kind: "user",
+      total: 1,
+    });
+    expect(byId.get(null)).toEqual({
+      userId: null,
+      name: null,
+      kind: "unattributed",
+      total: 1,
+    });
   });
 
   test("default list order is most-used first", async ({

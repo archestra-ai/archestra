@@ -2,7 +2,7 @@
 title: Secure Agent with OpenWebUI
 category: Examples
 order: 5
-lastUpdated: 2026-07-03
+lastUpdated: 2026-08-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -64,8 +64,6 @@ Once OpenWebUI is running:
    If you're not sure where is Archestra BASE_URL you can navigate to Archestra settings, in our example it on [http://localhost:3000](http://localhost:3000)
 
    If you're running OpenWebUI in its own Docker container locally, separately from the platform, the `BASE_URL` will have Docker's special hostname, `host.docker.internal` instead of `localhost`. E.g. `http://host.docker.internal:9000/v1/openai`
-
-   **Optional:** To use a specific profile, include the profile ID in the URL: `http://localhost:9000/v1/openai/{profile-id}`. You can create and manage profiles at [http://localhost:3000/profiles](http://localhost:3000/profiles)
 
    ![openwebui](/docs/platform/openwebui-image1.webp)
 

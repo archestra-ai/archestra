@@ -3,7 +3,7 @@ title: Model Router User OAuth
 category: Examples
 order: 1
 description: Build a custom OAuth app that calls the OpenAI-compatible Model Router as the signed-in user
-lastUpdated: 2026-07-27
+lastUpdated: 2026-08-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -21,9 +21,9 @@ The full example is available at [github.com/archestra-ai/examples/tree/main/mod
 1. Dynamically registers a public OAuth client
 2. Redirects the user to Archestra with `scope=llm:proxy`
 3. Uses PKCE for the authorization-code exchange
-4. Sends the OAuth access token to `/v1/model-router/{proxyId}/chat/completions`
+4. Sends the OAuth access token to `/v1/model-router/chat/completions`
 
-This example does not use the confidential clients managed from an LLM Proxy's **Connect** dialog. The example app registers a public client dynamically. Provider keys resolve from the signed-in user's accessible Model Provider keys.
+This example does not use the confidential clients managed on the LLM Proxy page. The example app registers a public client dynamically. Provider keys resolve from the signed-in user's accessible Model Provider keys.
 
 ## Run the Example
 
@@ -33,7 +33,7 @@ cd examples/model-router-user-oauth
 cp .env.example .env
 ```
 
-Set `LLM_PROXY_ID` in `.env`, then run:
+Then run:
 
 ```bash
 npm install
@@ -80,7 +80,7 @@ code_verifier=<PKCE verifier>
 After token exchange, the app calls the OpenAI-compatible Model Router:
 
 ```bash
-curl -X POST "http://localhost:9000/v1/model-router/{proxyId}/chat/completions" \
+curl -X POST "http://localhost:9000/v1/model-router/chat/completions" \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{

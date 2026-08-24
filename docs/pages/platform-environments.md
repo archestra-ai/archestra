@@ -3,7 +3,7 @@ title: "Environments"
 category: Administration
 description: "Isolate tools, knowledge, skills, subagents, runtimes, and cost limits across deployment environments"
 order: 3
-lastUpdated: 2026-08-18
+lastUpdated: 2026-08-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -14,7 +14,7 @@ This document is the canonical reference for deployment Environments. Include:
 - Who can view vs. manage environments (environment:read / create / update / delete), Settings > Environments
 - Restricted environments and the per-resource deploy-to-restricted permissions
 - Environment isolation: how an environment scopes which tools, knowledge,
-  skills, and delegation targets an agent / MCP gateway / LLM proxy can use
+  skills, and delegation targets an agent / MCP gateway can use
   (strict matching; Default is a peer, not a wildcard; skills can be
   restricted to several environments or none = everywhere; MCP Apps accept
   Default tools as a shared baseline; built-in servers and built-in skills
@@ -22,7 +22,7 @@ This document is the canonical reference for deployment Environments. Include:
 - Network egress policies (namespace + egress policy applied to MCP server pods AND
   agent code sandboxes), provider support matrix, and domain presets
 - How environments scope per-environment cost limits
-- Link out to: agents, mcp gateway, llm proxy, knowledge connectors, costs & limits
+- Link out to: agents, mcp gateway, knowledge connectors, costs & limits
 -->
 
 An environment is an organization-level deployment target — for example `sandbox`, `staging`, or `production`. Environments partition an organization's resources so that what an agent or gateway can reach is scoped to where it runs: a "dev" gateway cannot use "prod" tools or knowledge, and spend can be capped per environment. Each environment carries a name, an optional Kubernetes namespace, and an optional network egress policy.
@@ -35,7 +35,7 @@ Every organization has an implicit **Default** environment. Any resource whose e
 
 ## Where new resources land
 
-New resources go to Default unless you say otherwise. In **Settings → Environments**, the cog beside "Add environment" opens "Where new resources land", which sets a landing environment per kind of resource: MCP servers, MCP Apps, agents, MCP gateways, LLM proxies, and knowledge connectors are each configured on their own. A new MCP server can start in `explore` while a new MCP App starts in `launch`. The cog appears once you have at least one environment besides Default.
+New resources go to Default unless you say otherwise. In **Settings → Environments**, the cog beside "Add environment" opens "Where new resources land", which sets a landing environment per kind of resource: MCP servers, MCP Apps, agents, MCP gateways, and knowledge connectors are each configured on their own. A new MCP server can start in `explore` while a new MCP App starts in `launch`. The cog appears once you have at least one environment besides Default.
 
 The setting only applies when nobody picks an environment. Choosing one on the create form's **Configuration** step always wins, including choosing Default. Changing the setting never moves resources that already exist.
 
@@ -47,7 +47,7 @@ Acme wants engineers to try MCP servers without touching production traffic. An 
 
 ## Restricted environments
 
-An environment can be marked **restricted**. Assigning a resource to a restricted environment requires the `deploy-to-restricted` permission on that resource — `mcpRegistry:deploy-to-restricted` for MCP servers, or `llmProxy:deploy-to-restricted` for LLM proxies, for example. Each resource is gated on its own permission, so an organization can allow agents, apps, and proxies in a restricted environment while still limiting who deploys MCP servers there. Unrestricted environments and Default stay open to anyone who can create the resource. The Default environment can be restricted the same way via organization settings.
+An environment can be marked **restricted**. Assigning a resource to a restricted environment requires the `deploy-to-restricted` permission on that resource — `mcpRegistry:deploy-to-restricted` for MCP servers, for example. Each resource is gated on its own permission, so an organization can allow agents and apps in a restricted environment while still limiting who deploys MCP servers there. Unrestricted environments and Default stay open to anyone who can create the resource. The Default environment can be restricted the same way via organization settings.
 
 ## Trusted image registries
 
@@ -63,7 +63,7 @@ Acme wants engineers to install MCP servers only from its own image registry. An
 
 ## Tool, knowledge, skill, and subagent isolation
 
-An agent, MCP gateway, or LLM proxy assigned to **Production** can only see and use:
+An agent or MCP gateway assigned to **Production** can only see and use:
 
 - MCP tools whose server (catalog item) is in Production
 - MCP servers in the [private registry](/docs/platform-private-registry) that are in Production, including their deployments
@@ -77,7 +77,7 @@ An agent creates in its own environment. When an agent adds an MCP server to the
 
 An agent also configures only its own environment. It can assign and remove tools on agents and gateways in that environment, and nowhere else.
 
-This applies to both explicitly assigned resources and the implicit **Auto** access modes — in both cases cross-environment resources are filtered out before they are listed or executed. In the agent's explicit assignment pickers, resources from another environment are shown disabled. Skill filtering covers `list_skills`, `load_skill`, chat slash commands, and the skills offered on the [connect page](/docs/platform-llm-proxy#environment); a [skill that runs in a subagent](/docs/platform-agent-skills#running-a-skill-in-a-subagent) additionally requires its designated agent in the same environment.
+This applies to both explicitly assigned resources and the implicit **Auto** access modes — in both cases cross-environment resources are filtered out before they are listed or executed. In the agent's explicit assignment pickers, resources from another environment are shown disabled. Skill filtering covers `list_skills`, `load_skill`, and chat slash commands; a [skill that runs in a subagent](/docs/platform-agent-skills#running-a-skill-in-a-subagent) additionally requires its designated agent in the same environment.
 
 ## Network egress policies
 
@@ -196,7 +196,6 @@ Cost limits and per-user default limits can be scoped to an environment. A limit
 
 - [Agents](/docs/platform-agents) — sandbox runtime, network egress, and visible tools/knowledge
 - [MCP Gateway](/docs/platform-mcp-gateway) — which tools and knowledge the gateway exposes
-- [LLM Proxy](/docs/platform-llm-proxy) — cost-limit attribution for inference
 - [Agent Skills](/docs/platform-agent-skills#environments) — which skills an agent can list, load, or run
 - [Knowledge Connectors](/docs/platform-knowledge) — which environments can use the connector's knowledge
 - [Private Registry](/docs/platform-private-registry) — assigning MCP catalog entries to environments

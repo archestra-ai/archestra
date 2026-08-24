@@ -2,7 +2,7 @@
 title: Costs & Limits
 category: LLM Proxy
 order: 4
-lastUpdated: 2026-08-22
+lastUpdated: 2026-08-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -111,7 +111,7 @@ Usage limits are guardrails for LLM spend. Archestra supports token-cost limits 
 | Organization | You need a shared platform-wide budget. |
 | Team | Different groups need separate spend caps. |
 | User | Individual users need their own budgets. |
-| Agent or LLM proxy | A specific profile needs a budget. |
+| Agent or LLM proxy | A specific agent, or all LLM Proxy traffic, needs a budget. |
 | Virtual API key | Spend should be capped per API key. |
 | Environment | A deployment environment (for example, production) needs its own combined budget across all users. |
 

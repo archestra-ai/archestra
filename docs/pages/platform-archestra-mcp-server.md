@@ -319,95 +319,6 @@ Availability: Served only when the code runtime is enabled (the same prerequisit
 | `success` | `boolean` | Yes |  |
 | `id` | `string` | Yes |  |
 
-### LLM Proxies
-
-| Tool | Description | Required RBAC Permission |
-|------|-------------|--------------------------|
-| `create_llm_proxy` | Create a new LLM proxy with the specified name and optional labels. | `llmProxy:create` |
-| `get_llm_proxy` | Get a specific LLM proxy by ID or name. | `llmProxy:read` |
-| `edit_llm_proxy` | Edit an existing LLM proxy. | `llmProxy:update` |
-
-#### create_llm_proxy
-
-Required RBAC permission: `llmProxy:create`
-
-##### Input
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `name` | `string` | Yes | Name for the new resource. |
-| `scope` | `"personal" \| "team" \| "org"` | No | Visibility scope. Defaults to personal for agents and org for LLM proxies/MCP gateways unless teams are provided. |
-| `labels` | `object[]` | No | Optional key-value labels for organization and categorization. |
-| `labels[].key` | `string` | Yes |  |
-| `labels[].value` | `string` | Yes |  |
-| `teams` | `string[]` | No | Team IDs to attach when creating a team-scoped resource. |
-| `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/loading tools (list_skills, load_skill), sandbox runtime tools (run_command, download_file, upload_file) — when the code runtime is enabled and assigned — and persistent-files tools (search_files, read_file, save_file, edit_file, delete_file) — when the Projects feature is enabled and assigned — stay directly available in both modes. App tools (scaffold_app, edit_app, read_app, render_app, list_apps, and the rest of the app surface) are reached through search_tools/run_tool in 'search_and_run_only' mode. |
-| `accessAllTools` | `boolean` | No | Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access (MCP catalog tools and knowledge sources) without assigning it to the agent. Enabling this forces toolExposureMode to 'search_and_run_only', since dynamic access only works through the search/run dispatch surface. Defaults to false. Also gated by the organization's security settings. |
-| `accessAllSubagents` | `boolean` | No | Allow dynamic subagent delegation: the agent may delegate to any internal agent the calling user can access, beyond explicitly-configured delegation targets (minus subagent exclusions). Defaults to false. |
-
-
-#### get_llm_proxy
-
-Required RBAC permission: `llmProxy:read`
-
-##### Input
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `id` | `string` | No | The ID of the LLM proxy to fetch. Prefer the ID when you already have it. |
-| `name` | `string` | No | The exact name of the LLM proxy to fetch when you do not already have the ID. |
-
-##### Output
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `id` | `string` | Yes | The resource ID. |
-| `name` | `string` | Yes | The resource name. |
-| `description` | `string \| null` | Yes | The resource description, if any. |
-| `icon` | `string \| null` | Yes | The emoji icon, if configured. |
-| `scope` | `"personal" \| "team" \| "org"` | Yes | The visibility scope. |
-| `toolExposureMode` | `"full" \| "search_and_run_only"` | Yes | How tools are loaded for MCP clients and models. |
-| `accessAllTools` | `boolean` | Yes | Whether search_tools/run_tool may dynamically access every tool the calling user can access. |
-| `accessAllSubagents` | `boolean` | Yes | Whether the agent may delegate to every internal agent the calling user can access. |
-| `agentType` | `"agent" \| "llm_proxy" \| "mcp_gateway" \| "profile"` | Yes | The resource type. |
-| `systemPrompt` | `string \| null` | No |  |
-| `teams` | `object[]` | Yes | The teams attached to it. |
-| `teams[].id` | `string` | Yes | The team ID. |
-| `teams[].name` | `string` | Yes | The team name. |
-| `labels` | `object[]` | Yes | Assigned labels. |
-| `labels[].key` | `string` | Yes | The label key. |
-| `labels[].value` | `string` | Yes | The label value. |
-| `tools` | `object[]` | Yes | Assigned tools. |
-| `tools[].id` | `string` | Yes | The assigned tool ID. |
-| `tools[].name` | `string` | Yes | The tool name. |
-| `tools[].description` | `string \| null` | Yes | The tool description, if any. |
-| `tools[].catalogId` | `string \| null` | Yes | The MCP catalog ID the tool comes from, if any. |
-| `knowledgeBaseIds` | `string[]` | Yes | Assigned knowledge base IDs. |
-| `connectorIds` | `string[]` | Yes | Assigned knowledge connector IDs. |
-| `suggestedPrompts` | `object[]` | Yes | Configured suggested prompts. |
-| `suggestedPrompts[].summaryTitle` | `string` | Yes | The short title shown in the chat UI. |
-| `suggestedPrompts[].prompt` | `string` | Yes | The suggested prompt text. |
-
-#### edit_llm_proxy
-
-Required RBAC permission: `llmProxy:update`
-
-##### Input
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `id` | `string` | Yes | The ID of the LLM proxy to edit. Use get_llm_proxy to look it up by name first if needed. |
-| `description` | `string \| null` | No | New description for the LLM proxy. |
-| `icon` | `string \| null` | No | New emoji icon for the LLM proxy. |
-| `labels` | `object[]` | No | Replace the LLM proxy's labels with this set. |
-| `labels[].key` | `string` | Yes |  |
-| `labels[].value` | `string` | Yes |  |
-| `name` | `string` | No | New name for the LLM proxy. |
-| `scope` | `"personal" \| "team" \| "org"` | No | Updated visibility scope for the LLM proxy. |
-| `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. |
-| `teams` | `string[]` | No | Replace the teams attached to a team-scoped LLM proxy. |
-
-
 ### MCP Gateways
 
 | Tool | Description | Required RBAC Permission |
@@ -1084,7 +995,7 @@ Required RBAC permission: `team:read`
 | `update_limit` | Update mutable fields on an existing limit. | `llmLimit:update` |
 | `delete_limit` | Delete an existing limit by ID. | `llmLimit:delete` |
 | `get_agent_token_usage` | Get the total token usage (input and output) for a specific agent. | `llmLimit:read` |
-| `get_llm_proxy_token_usage` | Get the total token usage (input and output) for a specific LLM proxy. | `llmLimit:read` |
+| `get_llm_proxy_token_usage` | Get the total token usage (input and output) for the LLM Proxy. | `llmLimit:read` |
 
 #### create_limit
 
@@ -1211,11 +1122,7 @@ Required RBAC permission: `llmLimit:read`
 
 Required RBAC permission: `llmLimit:read`
 
-##### Input
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `id` | `string` | No | Optional LLM proxy ID. Defaults to the current agent. |
+This tool takes no arguments.
 
 ##### Output
 

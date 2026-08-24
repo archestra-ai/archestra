@@ -3,7 +3,7 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, invocation paths, knowledge sources, and prompt templating
-lastUpdated: 2026-08-23
+lastUpdated: 2026-08-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -180,11 +180,11 @@ What the agent produced stays. Its chats and its LLM usage records survive the d
 
 Deleting an agent for good also clears it from anywhere it was set as a default — the organization default, the **/connection** defaults, and each member's personal default. Those fall back to unset, so pick a replacement afterwards.
 
-Purging a busy LLM proxy has millions of usage records to detach and can take a few minutes. Past five it stops and leaves the agent in the trash, unharmed. Try again during a quieter period.
+Purging a heavily used agent has millions of usage records to detach and can take a few minutes. Past five it stops and leaves the agent in the trash, unharmed. Try again during a quieter period.
 
 ## Version History
 
-Archestra snapshots an agent's configuration every time it changes — prompt, tools, hooks, knowledge, or settings. A save that changes nothing does not create a version. MCP gateways and LLM proxies keep the same history.
+Archestra snapshots an agent's configuration every time it changes — prompt, tools, hooks, knowledge, or settings. A save that changes nothing does not create a version. MCP gateways keep the same history.
 
 Open **Version history** from the agent's row menu to browse the snapshots. Pick one to read its configuration. **All settings** shows the whole configuration; **Changes** shows only what moved since the version before.
 

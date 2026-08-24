@@ -52,31 +52,50 @@ test.describe("Audit log UI", {
   test("audit table shows resource type and name — never the resource id — in the Resource column", async ({
     adminPage,
     goToAdminPage,
+    makeRandomString,
+    createTeam,
+    deleteTeam,
   }) => {
-    await goToAdminPage(AUDIT_LOGS_PATH);
-    await adminPage.waitForLoadState("domcontentloaded");
+    const teamName = makeRandomString(10, "audit-resource-name");
+    const createResponse = await createTeam(adminPage.request, teamName);
+    const team = (await createResponse.json()) as { id: string };
 
-    // Wait for at least one row OR the empty-state to render so we know the
-    // query settled.
-    const firstRow = adminPage.locator("tbody tr").first();
-    await firstRow.waitFor({ state: "visible", timeout: 15_000 }).catch(() => {
-      /* empty state is acceptable; the next assertion handles it */
-    });
+    try {
+      // The audit hook records after the response is sent. Wait for this
+      // exact resource so parallel specs cannot affect the UI assertion.
+      await expect
+        .poll(
+          async () => {
+            const response = await adminPage.request.get(
+              `${UI_BASE_URL}/api/audit-logs?resourceType=team&limit=50`,
+            );
+            if (!response.ok()) return undefined;
+            const body = (await response.json()) as {
+              data: Array<{
+                resourceId: string | null;
+                resourceName: string | null;
+              }>;
+            };
+            return body.data.find((event) => event.resourceId === team.id)
+              ?.resourceName;
+          },
+          { timeout: 15_000 },
+        )
+        .toBe(teamName);
 
-    const resourceCells = adminPage.locator(
-      'tbody tr td[data-column-id="resource"]',
-    );
-    const count = await resourceCells.count();
-    if (count === 0) return; // empty state, nothing to assert
-
-    // Regression guard for post-Phase-11 cleanup: resource_id must not appear
-    // in the table — it now lives in the detail dialog instead.
-    for (let i = 0; i < count; i++) {
-      const text = (await resourceCells.nth(i).innerText()).trim();
-      // UUID-shaped text should not appear in the cell.
-      expect(text).not.toMatch(
-        /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i,
+      await goToAdminPage(
+        `${AUDIT_LOGS_PATH}?resourceId=${encodeURIComponent(team.id)}`,
       );
+
+      const resourceCell = adminPage.locator(
+        'tbody tr td[data-column-id="resource"]',
+      );
+      await expect(resourceCell).toHaveCount(1, { timeout: 15_000 });
+      await expect(resourceCell).toContainText(teamName);
+      await expect(resourceCell).toContainText("Team");
+      await expect(resourceCell).not.toContainText(team.id);
+    } finally {
+      await deleteTeam(adminPage.request, team.id);
     }
   });
 

@@ -310,6 +310,158 @@ describe("IdentityProviderModel", () => {
       expect(created.domain).toBe("");
     });
 
+    test("registers a discovery-less provider without fetching or sending a blank discovery endpoint", async ({
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+
+      const registerSSOProvider = vi.fn(async ({ body }) => {
+        await db.insert(schema.identityProvidersTable).values({
+          id: crypto.randomUUID(),
+          providerId: body.providerId,
+          issuer: body.issuer,
+          domain: body.domain,
+          organizationId: org.id,
+          userId: user.id,
+          oidcConfig: JSON.stringify(
+            body.oidcConfig,
+          ) as unknown as typeof schema.identityProvidersTable.$inferInsert.oidcConfig,
+        });
+      });
+
+      const originalFetch = globalThis.fetch;
+      const fetchMock = vi.fn();
+      globalThis.fetch = fetchMock;
+
+      try {
+        const created = await IdentityProviderModel.create(
+          {
+            providerId: "discovery-less-idp",
+            issuer: "https://idp.example.com",
+            domain: "example.com",
+            userId: user.id,
+            oidcConfig: {
+              issuer: "https://idp.example.com",
+              skipDiscovery: true,
+              pkce: false,
+              clientId: "client-id",
+              clientSecret: "secret",
+              discoveryEndpoint: "",
+              authorizationEndpoint: "https://idp.example.com/oauth/authorize",
+              tokenEndpoint: "https://idp.example.com/oauth/access_token",
+              userInfoEndpoint: "https://api.idp.example.com/user",
+              scopes: ["read:user"],
+            },
+          },
+          org.id,
+          new Headers(),
+          {
+            api: {
+              registerSSOProvider,
+            },
+          } as unknown as Parameters<typeof IdentityProviderModel.create>[3],
+        );
+
+        expect(fetchMock).not.toHaveBeenCalled();
+
+        /**
+         * Better Auth validates every endpoint on the registration body with
+         * `z.url()`, so an empty string is rejected rather than read as "not
+         * configured". The key must be absent, not blank.
+         */
+        const registeredOidcConfig =
+          registerSSOProvider.mock.calls[0]?.[0]?.body?.oidcConfig;
+        expect(registeredOidcConfig).not.toHaveProperty("discoveryEndpoint");
+        expect(registeredOidcConfig).toEqual(
+          expect.objectContaining({
+            skipDiscovery: true,
+            authorizationEndpoint: "https://idp.example.com/oauth/authorize",
+            tokenEndpoint: "https://idp.example.com/oauth/access_token",
+            userInfoEndpoint: "https://api.idp.example.com/user",
+          }),
+        );
+
+        // The stored config keeps the blank string the API schema requires.
+        expect(created.oidcConfig?.discoveryEndpoint).toBe("");
+        expect(created.oidcConfig?.skipDiscovery).toBe(true);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    test("persists the issuer-derived discovery endpoint when none was configured", async ({
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+
+      const registerSSOProvider = vi.fn(async ({ body }) => {
+        await db.insert(schema.identityProvidersTable).values({
+          id: crypto.randomUUID(),
+          providerId: body.providerId,
+          issuer: body.issuer,
+          domain: body.domain,
+          organizationId: org.id,
+          userId: user.id,
+          oidcConfig: JSON.stringify(
+            body.oidcConfig,
+          ) as unknown as typeof schema.identityProvidersTable.$inferInsert.oidcConfig,
+        });
+      });
+
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          issuer: "https://idp.example.com/oauth2/example",
+          authorization_endpoint:
+            "https://idp.example.com/oauth2/example/v1/authorize",
+          token_endpoint: "https://idp.example.com/oauth2/example/v1/token",
+          jwks_uri: "https://idp.example.com/oauth2/example/v1/keys",
+        }),
+      });
+
+      try {
+        const created = await IdentityProviderModel.create(
+          {
+            providerId: "derived-discovery-idp",
+            issuer: "https://idp.example.com/oauth2/example",
+            domain: "example.com",
+            userId: user.id,
+            oidcConfig: {
+              issuer: "https://idp.example.com/oauth2/example",
+              pkce: true,
+              clientId: "client-id",
+              clientSecret: "secret",
+              discoveryEndpoint: "",
+            },
+          },
+          org.id,
+          new Headers(),
+          {
+            api: {
+              registerSSOProvider,
+            },
+          } as unknown as Parameters<typeof IdentityProviderModel.create>[3],
+        );
+
+        const expectedDiscoveryEndpoint =
+          "https://idp.example.com/oauth2/example/.well-known/openid-configuration";
+        expect(globalThis.fetch).toHaveBeenCalledWith(
+          expectedDiscoveryEndpoint,
+          expect.anything(),
+        );
+        expect(created.oidcConfig?.discoveryEndpoint).toBe(
+          expectedDiscoveryEndpoint,
+        );
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
     test("rejects registration when discovery fetch returns a non-2xx response", async ({
       makeOrganization,
       makeUser,

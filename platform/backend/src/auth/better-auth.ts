@@ -140,8 +140,8 @@ export const auth = betterAuth({
       logger.info(payload, formattedMessage);
     },
   },
-  // Prevent JWT plugin's /token endpoint from conflicting with OAuth provider's /oauth2/token
   disabledPaths: [
+    // Prevent JWT plugin's /token endpoint from conflicting with OAuth provider's /oauth2/token
     "/token",
     // The dynamic-access-control plugin mounts role CRUD over HTTP whenever
     // it is enabled. Those endpoints are a second, unsupervised door onto the

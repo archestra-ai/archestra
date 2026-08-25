@@ -280,7 +280,7 @@ function AuthenticationOverview() {
       <div className="mt-1 divide-y">
         <AuthMethodRow
           title="Virtual keys"
-          description="Use one key in your app; the matching provider key is used for each request."
+          description="One key that authenticates your app; the proxy maps it to your provider keys on each request."
           action={
             canCreateKey ? (
               <Button
@@ -298,7 +298,7 @@ function AuthenticationOverview() {
 
         <AuthMethodRow
           title="Passthrough"
-          description="Send your provider key directly. A passthrough key links requests to a user but does not grant access."
+          description="You send your own provider key or subscription token; the proxy forwards it unchanged. A passthrough key grants no access: it only attributes those requests to a user."
           action={
             canCreateKey ? (
               <Button

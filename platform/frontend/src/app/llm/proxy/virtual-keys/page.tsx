@@ -132,12 +132,25 @@ function VirtualKeysTable() {
               <ChevronDown className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={() => setCreateKeyType("standard")}>
-              Standard key — maps to provider keys
+          <DropdownMenuContent align="end" className="max-w-72">
+            <DropdownMenuItem
+              className="flex-col items-start gap-0.5"
+              onSelect={() => setCreateKeyType("standard")}
+            >
+              <span className="font-medium">Standard key</span>
+              <span className="text-xs text-muted-foreground">
+                Authenticates your app through your provider keys
+              </span>
             </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setCreateKeyType("passthrough")}>
-              Passthrough key — links requests to a user
+            <DropdownMenuItem
+              className="flex-col items-start gap-0.5"
+              onSelect={() => setCreateKeyType("passthrough")}
+            >
+              <span className="font-medium">Passthrough key</span>
+              <span className="text-xs text-muted-foreground">
+                Grants no access; attributes bring-your-own-key requests to a
+                user
+              </span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

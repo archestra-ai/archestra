@@ -24,7 +24,7 @@ const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
   "/llm/proxy/virtual-keys": {
     title: "Virtual Keys",
     description:
-      "Keys your apps authenticate to the LLM Proxy with. A standard key maps to provider keys; a passthrough key only links requests to a user.",
+      "Two kinds of keys. Standard keys authenticate your apps through your provider keys; passthrough keys grant no access and only attribute bring-your-own-key requests to a user.",
   },
   "/llm/proxy/oauth-clients": {
     title: "OAuth Clients",

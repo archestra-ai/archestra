@@ -22,7 +22,7 @@ import { formatDate } from "@/lib/utils";
 import { EvalRunStatusBadge } from "../../_parts/eval-run-status-badge";
 
 const POLL_INTERVAL_MS = 3000;
-const RESULTS_PAGE_SIZE = 100;
+const RESULTS_PAGE_SIZE = 50;
 
 export default function EvalRunPage() {
   return (
@@ -40,13 +40,19 @@ function EvalRunDetail() {
   const run = runQuery.data;
   const isActive = run?.status === "pending" || run?.status === "running";
 
+  const [resultsPage, setResultsPage] = useState(0);
   const resultsQuery = useEvalRunResults({
     runId,
     limit: RESULTS_PAGE_SIZE,
-    offset: 0,
+    offset: resultsPage * RESULTS_PAGE_SIZE,
     refetchInterval: isActive ? POLL_INTERVAL_MS : false,
   });
   const results = resultsQuery.data?.data ?? [];
+  const resultsTotal = resultsQuery.data?.pagination.total ?? 0;
+  const resultsPageCount = Math.max(
+    1,
+    Math.ceil(resultsTotal / RESULTS_PAGE_SIZE),
+  );
 
   const cancelRun = useCancelEvalRun();
   const { data: canExecute } = useHasPermissions({ eval: ["execute"] });
@@ -165,6 +171,32 @@ function EvalRunDetail() {
               {results.map((result) => (
                 <ResultCard key={result.id} result={result} />
               ))}
+              {resultsPageCount > 1 && (
+                <div className="flex items-center justify-between pt-2">
+                  <span className="text-muted-foreground text-sm">
+                    Page {resultsPage + 1} of {resultsPageCount} ·{" "}
+                    {resultsTotal} cases
+                  </span>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={resultsPage === 0}
+                      onClick={() => setResultsPage((current) => current - 1)}
+                    >
+                      <span>Previous</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={resultsPage >= resultsPageCount - 1}
+                      onClick={() => setResultsPage((current) => current + 1)}
+                    >
+                      <span>Next</span>
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </section>

@@ -364,6 +364,7 @@ describe("eval routes", () => {
     expect(runs).toHaveLength(1);
     expect(runs[0].status).toBe("failed");
     expect(runs[0].error).toContain("enqueue");
+    expect(runs[0].canceledCases).toBe(1);
     const results = await EvalRunResultModel.listAllByRun(runs[0].id);
     expect(results[0].status).toBe("canceled");
   });

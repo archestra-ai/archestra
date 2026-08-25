@@ -20,6 +20,14 @@ import type { EvalRun, EvalRunResult } from "@/types/eval";
 const CANCEL_POLL_INTERVAL_MS = 5_000;
 
 /**
+ * Extra slack on top of the case timeout before a `running` row found during
+ * resume is declared a crash artifact. A fresher row may belong to a live
+ * overlapping attempt (deploy drain-timeout requeues the task while the old
+ * worker keeps executing until force-exit) whose terminal write must win.
+ */
+const INTERRUPTED_SLACK_MS = 60_000;
+
+/**
  * Execute one eval run: iterate its snapshotted case results in position
  * order, run each case against the agent headlessly, grade it, and finalize
  * the run. One task = one whole run.
@@ -100,19 +108,29 @@ export async function handleEvalRunExecution(
       });
   }, CANCEL_POLL_INTERVAL_MS);
 
+  let sawFreshRunningRow = false;
   try {
     const results = await EvalRunResultModel.listAllByRun(run.id);
     for (const result of results) {
       if (canceled) break;
 
       if (result.status === "running") {
-        // Crash artifact from a previous attempt of this task: never
+        // A stale row is a crash artifact from a previous attempt: never
         // re-execute (the agent may have performed side effects) — close it.
+        // A fresh one may still be executing on an overlapping live attempt;
+        // leave it alone and defer finalization (see below).
         if (result.startedAt) {
-          await EvalRunResultModel.markInterrupted({
-            id: result.id,
-            observedStartedAt: result.startedAt,
-          });
+          const ageMs = Date.now() - result.startedAt.getTime();
+          const staleAfterMs =
+            config.evals.caseTimeoutSeconds * 1000 + INTERRUPTED_SLACK_MS;
+          if (ageMs > staleAfterMs) {
+            await EvalRunResultModel.markInterrupted({
+              id: result.id,
+              observedStartedAt: result.startedAt,
+            });
+          } else {
+            sawFreshRunningRow = true;
+          }
         }
         continue;
       }
@@ -144,8 +162,18 @@ export async function handleEvalRunExecution(
     return;
   }
 
+  if (sawFreshRunningRow) {
+    // Another attempt may still be executing a case; its terminal write must
+    // not be clobbered and the run's tallies aren't final. Fail this task
+    // attempt so the queue retries finalization after a delay, by which time
+    // the row is terminal or stale.
+    throw new Error(
+      "A case is still executing on an overlapping attempt; deferring run finalization",
+    );
+  }
+
   const counts = await EvalRunResultModel.countByStatus(run.id);
-  await EvalRunModel.finalize({
+  const finalized = await EvalRunModel.finalize({
     id: run.id,
     status: "completed",
     counts: {
@@ -155,7 +183,16 @@ export async function handleEvalRunExecution(
       canceledCases: counts.canceled,
     },
   });
-  logger.info({ runId: run.id, ...counts }, "[Evals] Run completed");
+  if (finalized) {
+    metrics.evals.reportEvalRunFinished("completed");
+    logger.info({ runId: run.id, ...counts }, "[Evals] Run completed");
+  } else {
+    // A cancel raced in after the loop's status check.
+    await EvalRunResultModel.cancelPendingByRun(run.id);
+    await syncCounts(run.id);
+    metrics.evals.reportEvalRunFinished("canceled");
+    logger.info({ runId: run.id }, "[Evals] Run canceled during finalization");
+  }
 }
 
 // === internal ===
@@ -307,6 +344,9 @@ async function executeCase(params: {
       status: canceledMidCase ? "canceled" : "error",
       error: canceledMidCase ? "Canceled while executing" : message,
       sessionId,
+      // Judge calls may have run before the failure; keep their session so
+      // cost aggregation and the drill-down link still cover them.
+      judgeSessionId,
       durationMs: Date.now() - startedAtMs,
     });
   } finally {

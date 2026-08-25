@@ -76,4 +76,10 @@ test("create an eval suite, manage cases, and reach the run dialog", async ({
   await goToPage(page, "/evals");
   const suiteRow = page.getByRole("row", { name: new RegExp(suiteName) });
   await expect(suiteRow).toBeVisible();
+  await suiteRow.getByRole("button", { name: /Delete/i }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: /^Delete$/i })
+    .click();
+  await expect(suiteRow).not.toBeVisible();
 });

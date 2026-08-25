@@ -52,6 +52,8 @@ type AssertionDraft = {
   values: string;
   mode: "all" | "any";
   caseSensitive: boolean;
+  /** exact_match whitespace trimming; round-tripped, not exposed in the UI */
+  trim: boolean;
   /** llm_judge optional reference answer / regex flags */
   extra: string;
 };
@@ -62,6 +64,7 @@ const EMPTY_DRAFT: AssertionDraft = {
   values: "",
   mode: "all",
   caseSensitive: false,
+  trim: true,
   extra: "",
 };
 
@@ -73,6 +76,7 @@ function draftFromAssertion(assertion: EvalAssertion): AssertionDraft {
         type: assertion.type,
         text: assertion.expected,
         caseSensitive: assertion.caseSensitive ?? false,
+        trim: assertion.trim ?? true,
       };
     case "contains":
       return {
@@ -128,7 +132,7 @@ function buildAssertion(draft: AssertionDraft): EvalAssertion | null {
             type: draft.type,
             expected: draft.text,
             caseSensitive: draft.caseSensitive,
-            trim: true,
+            trim: draft.trim,
           }
         : null;
     case "contains": {

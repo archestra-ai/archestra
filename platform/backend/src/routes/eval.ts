@@ -390,6 +390,13 @@ const evalRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Failed to enqueue the run for execution",
         );
         await EvalRunResultModel.cancelPendingByRun(run.id);
+        const counts = await EvalRunResultModel.countByStatus(run.id);
+        await EvalRunModel.updateCounts(run.id, {
+          passedCases: counts.passed,
+          failedCases: counts.failed,
+          erroredCases: counts.error,
+          canceledCases: counts.canceled,
+        });
         throw new ApiError(500, "Failed to enqueue the eval run");
       }
 

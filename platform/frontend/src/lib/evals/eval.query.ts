@@ -252,12 +252,22 @@ export function useEvalRuns(params: {
     : never;
   limit?: number;
   offset?: number;
-  refetchInterval?: number | false;
+  /** Poll at this interval only while the page contains an unfinished run. */
+  pollWhileActiveMs?: number;
 }) {
-  const { refetchInterval, ...query } = params;
+  const { pollWhileActiveMs, ...query } = params;
   return useQuery({
     queryKey: evalKeys.runs(query),
-    refetchInterval,
+    refetchInterval: pollWhileActiveMs
+      ? (q) => {
+          const runs = q.state.data?.data ?? [];
+          return runs.some(
+            (run) => run.status === "pending" || run.status === "running",
+          )
+            ? pollWhileActiveMs
+            : false;
+        }
+      : undefined,
     queryFn: async () => {
       const { data, error } = await getEvalRuns({ query });
       throwOnApiError(error, { toastOnError: false });

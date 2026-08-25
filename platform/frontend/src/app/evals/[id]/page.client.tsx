@@ -278,7 +278,7 @@ function SuiteRunHistory({ suiteId }: { suiteId: string }) {
     suiteId,
     limit: pagination.pageSize,
     offset: pagination.pageIndex * pagination.pageSize,
-    refetchInterval: RUNS_POLL_INTERVAL_MS,
+    pollWhileActiveMs: RUNS_POLL_INTERVAL_MS,
   });
   const runs = runsQuery.data?.data ?? [];
   const total = runsQuery.data?.pagination.total ?? 0;
@@ -325,9 +325,7 @@ function SuiteRunHistory({ suiteId }: { suiteId: string }) {
           run.canceledCases;
         return (
           <span className="tabular-nums">
-            {run.status === "pending"
-              ? "—"
-              : `${run.passedCases}/${finished > 0 ? run.totalCases : run.totalCases}`}
+            {finished === 0 ? "—" : `${run.passedCases}/${run.totalCases}`}
           </span>
         );
       },

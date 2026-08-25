@@ -1451,6 +1451,11 @@ A2A task streams work across replicas. A client can subscribe on one replica whi
   - Optional: Uses default locations if not specified
   - Example: `/path/to/kubeconfig`
 
+### Evals
+
+- **`ARCHESTRA_EVALS_RUN_WORKER_MAX_CONCURRENT`** - Concurrency cap for the eval run task lane, per worker replica. One task is one whole eval run, so this bounds how many runs execute in parallel on each replica. Default: `1`.
+- **`ARCHESTRA_EVALS_CASE_TIMEOUT_SECONDS`** - Per-case agent execution timeout in seconds. A case exceeding it is recorded as an error and the run continues. Default: `300`.
+
 ### Observability & Metrics
 
 - **`ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT`** - OTEL Exporter endpoint for sending traces.

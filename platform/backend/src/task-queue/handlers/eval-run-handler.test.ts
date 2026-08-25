@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 
 vi.mock("@/auth");
@@ -13,6 +14,7 @@ vi.mock("@/evals/judge", () => ({
 }));
 
 import { hasAnyAgentTypeAdminPermission } from "@/auth";
+import db, { schema } from "@/database";
 import {
   EvalCaseModel,
   EvalRunModel,
@@ -348,8 +350,14 @@ describe("handleEvalRunExecution", () => {
     // First case already completed by the crashed attempt.
     await EvalRunResultModel.claimPending(results[0].id);
     await EvalRunResultModel.complete({ id: results[0].id, status: "passed" });
-    // Second case was mid-flight when the previous worker died.
+    // Second case was mid-flight when the previous worker died — long enough
+    // ago that it is past the case timeout plus slack (a fresh row would be
+    // treated as a live overlapping attempt instead).
     await EvalRunResultModel.claimPending(results[1].id);
+    await db
+      .update(schema.evalRunResultsTable)
+      .set({ startedAt: new Date(Date.now() - 600_000) })
+      .where(eq(schema.evalRunResultsTable.id, results[1].id));
 
     await handleEvalRunExecution({ runId: run.id });
 
@@ -365,6 +373,44 @@ describe("handleEvalRunExecution", () => {
     expect(finished?.status).toBe("completed");
     expect(finished?.passedCases).toBe(2);
     expect(finished?.erroredCases).toBe(1);
+  });
+
+  test("a fresh running row defers finalization instead of clobbering it", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalAgent,
+  }) => {
+    const org = await makeOrganization();
+    const actor = await makeUser();
+    await makeMember(actor.id, org.id);
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    const { run } = await seedRun({
+      organizationId: org.id,
+      agentId: agent.id,
+      userId: actor.id,
+      cases: [
+        { name: "in-flight", input: "a", assertions: CONTAINS_42 },
+        { name: "todo", input: "b", assertions: CONTAINS_42 },
+      ],
+    });
+    const results = await EvalRunResultModel.listAllByRun(run.id);
+    // Case 1 is mid-flight on a live overlapping attempt (fresh startedAt).
+    await EvalRunResultModel.claimPending(results[0].id);
+
+    await expect(handleEvalRunExecution({ runId: run.id })).rejects.toThrow(
+      "deferring run finalization",
+    );
+
+    const after = await EvalRunResultModel.listAllByRun(run.id);
+    // The fresh row was neither re-executed nor closed out...
+    expect(after[0].status).toBe("running");
+    // ...the other case still executed...
+    expect(after[1].status).toBe("passed");
+    // ...and the run stays running for the retry to finalize.
+    expect((await EvalRunModel.findById(run.id, org.id))?.status).toBe(
+      "running",
+    );
   });
 
   test("stale validation fails the run cleanly", async ({

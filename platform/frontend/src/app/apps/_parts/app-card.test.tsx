@@ -108,6 +108,7 @@ const ownedApp: Extract<AppListItem, { source: "owned" }> = {
   authorId: "user-1",
   authorName: "Ada Lovelace",
   viewerRole: "owner",
+  icon: null,
   latestVersion: 1,
   enabled: true,
   locked: false,

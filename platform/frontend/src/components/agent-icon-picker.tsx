@@ -2,6 +2,7 @@
 
 import { EmojiPicker } from "@ferrucc-io/emoji-picker";
 import {
+  AppWindow,
   Bot,
   Folder,
   ImageIcon,
@@ -35,7 +36,9 @@ interface AgentIconPickerProps {
   className?: string;
   /** Show a "Logos" tab with pre-built service brand logos */
   showLogos?: boolean;
-  fallbackType?: AgentIconVariant | "server" | "project";
+  fallbackType?: AgentIconVariant | "server" | "project" | "app";
+  /** Id for the trigger, so a visible `<Label htmlFor>` can point at it. */
+  id?: string;
 }
 
 export function AgentIconPicker({
@@ -44,6 +47,7 @@ export function AgentIconPicker({
   className,
   showLogos = false,
   fallbackType = "agent",
+  id,
 }: AgentIconPickerProps) {
   const [open, setOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -113,13 +117,16 @@ export function AgentIconPicker({
           ? Server
           : fallbackType === "project"
             ? Folder
-            : Bot;
+            : fallbackType === "app"
+              ? AppWindow
+              : Bot;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
           type="button"
+          id={id}
           aria-label={value ? "Change icon" : "Choose icon"}
           className={cn(
             "relative group flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border-2 border-dashed hover:border-primary/50 hover:bg-accent transition-colors cursor-pointer",
@@ -131,7 +138,7 @@ export function AgentIconPicker({
             isImage ? (
               <Image
                 src={value}
-                alt="Agent icon"
+                alt=""
                 width={32}
                 height={32}
                 className="rounded-md object-contain"

@@ -1,5 +1,5 @@
 import { type archestraApiTypes, parseFullToolName } from "@archestra/shared";
-import { PanelRight } from "lucide-react";
+import { AppWindow, PanelRight } from "lucide-react";
 import type React from "react";
 import {
   Component,
@@ -31,6 +31,7 @@ import {
   type McpCallToolResult,
 } from "@/components/mcp-app/mcp-app-view";
 import { useAppRuntimeControls } from "@/components/mcp-app/use-app-runtime-controls";
+import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useApp } from "@/lib/app.query";
@@ -215,10 +216,17 @@ export function McpAppEntryPill({
     closePanel,
     portalTarget,
   } = useApps();
-  // Owned apps can be renamed from settings; read the live app so the label
-  // stays in sync after an edit (the appName prop is captured at render time).
+  // Owned apps can be renamed and re-iconed from settings; read the live app so
+  // both stay in sync after an edit (the props are captured at render time).
   const { data: ownedApp } = useApp(appId ?? null);
   const headerName = ownedApp?.name || appName || mcpToolLabel(toolName);
+  // An explicit icon from the caller wins; otherwise the owned app's own icon
+  // identifies it, and the pill falls back to the generic app glyph.
+  const pillIcon =
+    icon ??
+    (ownedApp?.icon ? (
+      <McpCatalogIcon icon={ownedApp.icon} size={16} fallback={AppWindow} />
+    ) : undefined);
 
   const standalone = !toolCallId;
   const canonicalId = toolCallId ? canonicalToolCallId(toolCallId) : undefined;
@@ -243,7 +251,7 @@ export function McpAppEntryPill({
   return (
     <McpAppPill
       label={headerName}
-      icon={icon}
+      icon={pillIcon}
       state={state}
       pressed={pressed}
       hasError={hasRuntimeError}

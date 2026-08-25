@@ -123,10 +123,25 @@ vi.mock("@/components/agent-icon", () => ({
   ),
 }));
 
-// External pinned apps render the backing MCP server's registry icon.
+// Pinned apps render their icon through this component: an owned app's own
+// icon, an external one's backing MCP server registry icon. `fallback` is what
+// each row shows when no icon is set, so the mock surfaces it.
 vi.mock("@/components/mcp-catalog-icon", () => ({
-  McpCatalogIcon: ({ icon }: { icon?: string | null }) => (
-    <span data-testid="app-catalog-icon">{icon}</span>
+  McpCatalogIcon: ({
+    icon,
+    fallback,
+  }: {
+    icon?: string | null;
+    fallback?: { displayName?: string; name?: string };
+  }) => (
+    <span
+      data-testid="app-catalog-icon"
+      data-fallback={
+        fallback ? (fallback.displayName ?? fallback.name) : "none"
+      }
+    >
+      {icon}
+    </span>
   ),
 }));
 
@@ -516,12 +531,13 @@ describe("ChatSidebarSection", () => {
     expect(screen.queryByTestId("project-emoji")).not.toBeInTheDocument();
   });
 
-  it("shows pinned apps (owned and external) in the Pinned section", () => {
+  it("shows pinned apps (owned and external) in the Pinned section, each with its own icon", () => {
     mockApps = [
       {
         source: "owned",
         id: "app-1",
         name: "Sprint Board",
+        icon: "🚀",
         pinnedAt: "2026-01-05T00:00:00Z",
       },
       {
@@ -546,13 +562,22 @@ describe("ChatSidebarSection", () => {
     expect(screen.getByText("Sprint Board")).toBeInTheDocument();
     expect(screen.getByText("Archestra PM / show_board")).toBeInTheDocument();
     expect(screen.queryByText("Unpinned App")).not.toBeInTheDocument();
-    // The external app shows its MCP server's registry icon; the owned app
-    // keeps the generic AppWindow glyph (exactly one catalog icon rendered).
-    expect(screen.getByTestId("app-catalog-icon")).toHaveTextContent("📋");
+    // Each pinned row shows its own icon — the owned app's, and the external
+    // app's backing MCP server one.
+    expect(
+      screen.getAllByTestId("app-catalog-icon").map((el) => el.textContent),
+    ).toEqual(["🚀", "📋"]);
   });
 
-  it("renders the catalog icon fallback for an external app without an icon", () => {
+  it("routes an app without an icon through the fallback for its kind", () => {
     mockApps = [
+      {
+        source: "owned",
+        id: "app-1",
+        name: "Sprint Board",
+        icon: null,
+        pinnedAt: "2026-01-05T00:00:00Z",
+      },
       {
         source: "external",
         mcpServerId: "server-1",
@@ -565,9 +590,15 @@ describe("ChatSidebarSection", () => {
 
     render(<ChatSidebarSection fadeIn={fadeIn} />);
 
-    // McpCatalogIcon owns the fallback (generic Server glyph); the sidebar
-    // still routes the null icon through it rather than a hardcoded glyph.
-    expect(screen.getByTestId("app-catalog-icon")).toBeEmptyDOMElement();
+    // McpCatalogIcon owns the fallback glyph; the sidebar routes a null icon
+    // through it rather than hardcoding one — asking for the app window on an
+    // owned app and leaving the external one on the default server glyph.
+    const icons = screen.getAllByTestId("app-catalog-icon");
+    expect(icons.map((el) => el.textContent)).toEqual(["", ""]);
+    expect(icons.map((el) => el.getAttribute("data-fallback"))).toEqual([
+      "AppWindow",
+      "none",
+    ]);
   });
 
   it("shows a chat's project emoji and name when its project has an emoji", () => {

@@ -8,6 +8,7 @@ import { Globe, User, UserRound, Users } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { AppToolsEditor } from "@/app/apps/_parts/app-tools-editor";
+import { AgentIconPicker } from "@/components/agent-icon-picker";
 import {
   type ProfileLabel,
   ProfileLabels,
@@ -44,7 +45,13 @@ import { useAssignableTeams } from "@/lib/teams/team.query";
 
 type App = archestraApiTypes.GetAppResponses["200"];
 
-type FormValues = { name: string; slug: string; description: string };
+type FormValues = {
+  name: string;
+  slug: string;
+  description: string;
+  /** Emoji character or base64 image data URL; null = the generic app glyph. */
+  icon: string | null;
+};
 
 // Mirrors the backend's AppSlugSchema so a malformed URL is caught before the
 // round-trip. Uniqueness is only knowable server-side and comes back as a 409.
@@ -98,6 +105,7 @@ export function AppSettingsForm({
       name: app.name,
       slug: app.slug ?? "",
       description: app.description ?? "",
+      icon: app.icon ?? null,
     },
   });
 
@@ -313,6 +321,7 @@ export function AppSettingsForm({
     if (canUpdate) {
       body.name = values.name.trim();
       body.description = values.description.trim() || null;
+      body.icon = values.icon;
       body.environmentId = environmentId;
       // Flush a label typed into the picker but not yet committed, so a save
       // doesn't silently drop it.
@@ -382,26 +391,43 @@ export function AppSettingsForm({
       <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-4">
         {canUpdate && (
           <>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="app-settings-name">Name</Label>
-              <Input
-                id="app-settings-name"
-                aria-invalid={!!form.formState.errors.name}
-                {...form.register("name", {
-                  required: "Name is required.",
-                  maxLength: {
-                    value: 100,
-                    message: "Name must be 100 characters or fewer.",
-                  },
-                  validate: (value) =>
-                    value.trim().length > 0 || "Name is required.",
-                })}
-              />
-              {form.formState.errors.name?.message ? (
-                <p className="text-xs text-destructive">
-                  {form.formState.errors.name.message}
-                </p>
-              ) : null}
+            {/* Icon and name are one identity row, as in the MCP server form:
+                the picker is what the app looks like, the field what it is
+                called. */}
+            <div className="flex items-start gap-3">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="app-settings-icon">Icon</Label>
+                <AgentIconPicker
+                  id="app-settings-icon"
+                  value={form.watch("icon")}
+                  fallbackType="app"
+                  onChange={(icon) =>
+                    form.setValue("icon", icon, { shouldDirty: true })
+                  }
+                  className="h-9 w-9"
+                />
+              </div>
+              <div className="flex flex-1 flex-col gap-1.5">
+                <Label htmlFor="app-settings-name">Name</Label>
+                <Input
+                  id="app-settings-name"
+                  aria-invalid={!!form.formState.errors.name}
+                  {...form.register("name", {
+                    required: "Name is required.",
+                    maxLength: {
+                      value: 100,
+                      message: "Name must be 100 characters or fewer.",
+                    },
+                    validate: (value) =>
+                      value.trim().length > 0 || "Name is required.",
+                  })}
+                />
+                {form.formState.errors.name?.message ? (
+                  <p className="text-xs text-destructive">
+                    {form.formState.errors.name.message}
+                  </p>
+                ) : null}
+              </div>
             </div>
 
             <div className="flex flex-col gap-1.5">

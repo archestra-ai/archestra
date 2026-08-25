@@ -44,6 +44,7 @@ const app = {
   templateId: null,
   mcpServerId: "server-1",
   spec: null,
+  icon: null,
   latestVersion: 1,
   enabled: true,
   locked: false,

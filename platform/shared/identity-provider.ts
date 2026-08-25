@@ -254,7 +254,9 @@ export type IdentityProviderSecretPath =
 export const RedactedIdentityProviderOidcConfigSchema =
   IdentityProviderOidcConfigSchema.extend({
     clientSecret: z.string().optional(),
-  });
+  }).describe(
+    "https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22",
+  );
 
 /**
  * SAML config as it leaves the API, with the credentials it owns directly made
@@ -267,7 +269,9 @@ export const RedactedIdentityProviderSamlConfigSchema =
   IdentityProviderSamlConfigSchema.extend({
     privateKey: z.string().optional(),
     decryptionPvk: z.string().optional(),
-  });
+  }).describe(
+    "https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L40",
+  );
 
 /**
  * Strips every credential in `IDENTITY_PROVIDER_SECRET_PATHS` out of a provider

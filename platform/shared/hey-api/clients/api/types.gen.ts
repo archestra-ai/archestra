@@ -94931,6 +94931,9 @@ export type GetIdentityProvidersResponses = {
     200: Array<{
         id: string;
         issuer: string;
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
+         */
         oidcConfig?: {
             issuer: string;
             skipDiscovery?: boolean;
@@ -95258,6 +95261,9 @@ export type CreateIdentityProviderResponses = {
     200: {
         id: string;
         issuer: string;
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
+         */
         oidcConfig?: {
             issuer: string;
             skipDiscovery?: boolean;
@@ -95896,6 +95902,9 @@ export type GetIdentityProviderResponses = {
     200: {
         id: string;
         issuer: string;
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
+         */
         oidcConfig?: {
             issuer: string;
             skipDiscovery?: boolean;
@@ -96024,6 +96033,9 @@ export type GetIdentityProviderResponse = GetIdentityProviderResponses[keyof Get
 export type UpdateIdentityProviderData = {
     body: {
         issuer?: string;
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
+         */
         oidcConfig?: {
             issuer: string;
             skipDiscovery?: boolean;
@@ -96221,6 +96233,9 @@ export type UpdateIdentityProviderResponses = {
     200: {
         id: string;
         issuer: string;
+        /**
+         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
+         */
         oidcConfig?: {
             issuer: string;
             skipDiscovery?: boolean;

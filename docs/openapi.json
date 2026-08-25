@@ -366047,7 +366047,8 @@
                           "clientId",
                           "discoveryEndpoint"
                         ],
-                        "additionalProperties": false
+                        "additionalProperties": false,
+                        "description": "https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22"
                       },
                       "samlConfig": {
                         "type": "object",
@@ -367103,7 +367104,8 @@
                         "clientId",
                         "discoveryEndpoint"
                       ],
-                      "additionalProperties": false
+                      "additionalProperties": false,
+                      "description": "https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22"
                     },
                     "samlConfig": {
                       "type": "object",
@@ -368902,7 +368904,8 @@
                         "clientId",
                         "discoveryEndpoint"
                       ],
-                      "additionalProperties": false
+                      "additionalProperties": false,
+                      "description": "https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22"
                     },
                     "samlConfig": {
                       "type": "object",
@@ -369566,7 +369569,8 @@
                       "pkce",
                       "clientId",
                       "discoveryEndpoint"
-                    ]
+                    ],
+                    "description": "https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22"
                   },
                   "samlConfig": {
                     "type": "object",
@@ -369956,7 +369960,8 @@
                         "clientId",
                         "discoveryEndpoint"
                       ],
-                      "additionalProperties": false
+                      "additionalProperties": false,
+                      "description": "https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22"
                     },
                     "samlConfig": {
                       "type": "object",

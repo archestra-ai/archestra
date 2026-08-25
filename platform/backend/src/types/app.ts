@@ -52,14 +52,14 @@ export const APP_DATA_KEY_MAX_LENGTH = 256;
  * encoding tops out around 700 KB, so this leaves headroom without letting an
  * unbounded blob through the API.
  */
-export const APP_ICON_MAX_LENGTH = 1024 * 1024;
+const APP_ICON_MAX_LENGTH = 1024 * 1024;
 /**
  * An app's display icon: an emoji character or a base64 image data URL, exactly
  * as the MCP registry stores one (the value lives on the app's backing catalog,
  * so both surfaces read and write the same column). Null clears it and the
  * generic app glyph comes back.
  */
-export const AppIconSchema = z.string().max(APP_ICON_MAX_LENGTH).nullable();
+const AppIconSchema = z.string().max(APP_ICON_MAX_LENGTH).nullable();
 
 // Slug segments the app run page can never serve, because a static Next.js
 // segment under /a/ shadows the dynamic [appId] one. Only `catalog` today

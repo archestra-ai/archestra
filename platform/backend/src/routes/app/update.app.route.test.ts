@@ -1,4 +1,7 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import { and, eq } from "drizzle-orm";
+import db, { schema } from "@/database";
+import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { InternalMcpCatalogModel, McpServerModel } from "@/models";
 import AppModel from "@/models/app";
 import EnvironmentModel from "@/models/environment";
@@ -35,6 +38,7 @@ describe("PATCH /api/apps/:appId", () => {
       ).organizationId = organizationId;
       (request as typeof request & { user: User }).user = user;
     });
+    registerAuditLogHook(app);
 
     const { default: appRoutes } = await import("./app.routes");
     await app.register(appRoutes);
@@ -94,6 +98,38 @@ describe("PATCH /api/apps/:appId", () => {
     expect(cleared.statusCode).toBe(200);
     expect(cleared.json().icon).toBeNull();
     expect(mustExist(await AppModel.findById(created.id)).icon).toBeNull();
+  });
+
+  test("an icon-only edit is audited with a real before/after diff", async ({
+    makeApp,
+  }) => {
+    // The icon is not an `apps` column, so it reaches the audit snapshot only
+    // because that snapshot reads the catalog-joined query. Without it, setting
+    // an icon would record an audit entry showing nothing changed.
+    const created = await makeApp({ organizationId, scope: "org" });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/apps/${created.id}`,
+      payload: { icon: "🚀" },
+    });
+    expect(response.statusCode).toBe(200);
+
+    const rows = await db
+      .select({
+        before: schema.auditLogsTable.before,
+        after: schema.auditLogsTable.after,
+      })
+      .from(schema.auditLogsTable)
+      .where(
+        and(
+          eq(schema.auditLogsTable.action, "app.updated"),
+          eq(schema.auditLogsTable.organizationId, organizationId),
+        ),
+      );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].before).toMatchObject({ icon: null });
+    expect(rows[0].after).toMatchObject({ icon: "🚀" });
   });
 
   test("an edit that leaves the icon out keeps it", async ({ makeApp }) => {

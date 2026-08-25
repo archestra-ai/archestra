@@ -87,6 +87,7 @@ describe("provider-specific embeddings routes", () => {
     const agent = await makeAgent({
       name: "Mistral Embedding Agent",
       agentType: "llm_proxy",
+      isDefault: true,
     });
 
     const response = await app.inject({
@@ -135,6 +136,7 @@ describe("provider-specific embeddings routes", () => {
     const agent = await makeAgent({
       name: "Gemini Embedding Agent",
       agentType: "llm_proxy",
+      isDefault: true,
     });
 
     vi.spyOn(geminiEmbeddingsAdapterFactory, "createClient").mockImplementation(

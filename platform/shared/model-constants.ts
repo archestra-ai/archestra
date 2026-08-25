@@ -171,7 +171,13 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   groq: "Groq",
   xai: "xAI",
   openrouter: "OpenRouter",
-  vllm: "vLLM",
+  // Named for the generic path rather than the one engine: the `vllm` adapter
+  // only speaks the OpenAI `/v1/chat/completions` shape, so every server
+  // implementing it — llama.cpp, LM Studio, SGLang, TGI, LocalAI — runs
+  // through this entry. Under the old "vLLM" label none of those operators had
+  // a reason to open it. vLLM stays reachable through `providerSearchAliases`
+  // and the picker's own subtext.
+  vllm: "OpenAI-compatible",
   ollama: "Ollama (OpenAI-compatible)",
   "ollama-native": "Ollama (Native)",
   zhipuai: "Zhipu AI",
@@ -185,6 +191,46 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   archestra: "Archestra",
   voyage: "Voyage AI",
 };
+
+/**
+ * Extra terms a provider picker's search matches, beyond the entry's own
+ * label. Nothing here renders — aliases only widen search.
+ *
+ * The `vllm` entry is the platform's generic OpenAI-compatible path: it holds
+ * a base URL and talks `/v1/chat/completions`, so every self-hosted inference
+ * server speaking that shape runs through it. Without aliases each of those is
+ * reachable only by someone who already knows to look under "vLLM", which is
+ * the discovery problem — an operator searches for the server they actually
+ * run.
+ *
+ * Deliberately independent of the white-label display override: relabelling
+ * the entry does not stop it serving llama.cpp, so the aliases survive a
+ * rename.
+ */
+const providerSearchAliases: Partial<
+  Record<SupportedProvider, readonly string[]>
+> = {
+  vllm: [
+    "vLLM",
+    "OpenAI compatible",
+    "llama.cpp",
+    "llamacpp",
+    "LM Studio",
+    "SGLang",
+    "TGI",
+    "text-generation-inference",
+    "LocalAI",
+    "self-hosted",
+  ],
+};
+
+/**
+ * The alias terms for a provider as one searchable string, ready to append to
+ * a picker item's `searchText`. Empty for providers that need no aliases.
+ */
+export function providerSearchTerms(provider: SupportedProvider): string {
+  return (providerSearchAliases[provider] ?? []).join(" ");
+}
 
 /**
  * Providers that serve embeddings only — they publish no chat/completion API at

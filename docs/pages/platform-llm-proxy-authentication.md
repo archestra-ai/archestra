@@ -3,7 +3,7 @@ title: Authentication
 category: LLM Proxy
 order: 3
 description: Authentication methods for the LLM Proxy
-lastUpdated: 2026-08-24
+lastUpdated: 2026-08-25
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -35,7 +35,7 @@ This is the simplest approach but means the real provider key is sent with every
 
 ## Virtual API Keys
 
-Virtual API keys are platform-managed bearer tokens that map to one or more provider API keys stored in Archestra. The real provider keys never leave Archestra — clients only see the virtual token. You can delete a virtual key without rotating the underlying provider key, and set an optional expiration date on it. Each underlying provider key can have a custom base URL, for a proxy or self-hosted endpoint.
+Virtual API keys are platform-managed bearer tokens that map to one or more provider API keys stored in Archestra. The real provider keys never leave Archestra — clients only see the virtual token. You can delete a virtual key without rotating the underlying provider key, and set an optional expiration date on it. Each underlying provider key can have a custom base URL, for a proxy or self-hosted endpoint. The Virtual Keys page labels these **Standard** keys. A standard key grants access; a [passthrough key](#passthrough-virtual-keys) only says who is calling.
 
 ### Creating Virtual Keys
 

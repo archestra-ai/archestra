@@ -13,6 +13,7 @@ const agent = (overrides: Partial<ApiAgent> = {}): ApiAgent => ({
   name: "Agent",
   agentType: "agent",
   scope: "org",
+  ownerId: null,
   ownerEmail: null,
   ...overrides,
 });

@@ -42,7 +42,10 @@
  * and text whose astral characters are intact — is left exactly as it was.
  */
 const LONE_SURROGATE =
-  /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+  /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+/** The same pattern, global, for replacement. Kept separate from the test-only
+ * copy so neither call has to manage the other's `lastIndex`. */
+const LONE_SURROGATE_ALL = new RegExp(LONE_SURROGATE, "g");
 
 /** U+FFFD REPLACEMENT CHARACTER, the standard stand-in for undecodable input. */
 const REPLACEMENT = "�";
@@ -55,7 +58,16 @@ type LoneSurrogateRepair = {
 };
 
 /**
- * Walk a request body and replace every unpaired surrogate in it.
+ * Repair one string. For callers already walking a structure for their own
+ * reasons, so the traversal is not paid for twice.
+ */
+export function repairLoneSurrogateText(text: string): string {
+  if (!LONE_SURROGATE.test(text)) return text;
+  return text.replace(LONE_SURROGATE_ALL, REPLACEMENT);
+}
+
+/**
+ * Walk a value and replace every unpaired surrogate in it.
  *
  * Structure-sharing: a subtree containing nothing to repair is returned by
  * reference, so a clean request — the overwhelming majority — is not copied at
@@ -65,27 +77,14 @@ type LoneSurrogateRepair = {
  * arrays, Date, streams) are passed through untouched: they are not places a
  * JSON string lives, and cloning them would be both wasteful and lossy.
  */
-/**
- * Repair one string. For callers already walking a structure for their own
- * reasons, so the traversal is not paid for twice.
- */
-export function repairLoneSurrogateText(text: string): string {
-  LONE_SURROGATE.lastIndex = 0;
-  if (!LONE_SURROGATE.test(text)) return text;
-  LONE_SURROGATE.lastIndex = 0;
-  return text.replace(LONE_SURROGATE, REPLACEMENT);
-}
-
 export function repairLoneSurrogates(value: unknown): LoneSurrogateRepair {
   let repaired = 0;
 
   const walk = (node: unknown): unknown => {
     if (typeof node === "string") {
       // Fast path: no lone surrogate, so hand back the identical string.
-      LONE_SURROGATE.lastIndex = 0;
       if (!LONE_SURROGATE.test(node)) return node;
-      LONE_SURROGATE.lastIndex = 0;
-      return node.replace(LONE_SURROGATE, () => {
+      return node.replace(LONE_SURROGATE_ALL, () => {
         repaired++;
         return REPLACEMENT;
       });

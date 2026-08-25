@@ -31,7 +31,7 @@ const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
   "/settings/github": {
     title: "GitHub",
     description:
-      "Manage organization GitHub credentials for connectors and skill sync.",
+      "Manage organization GitHub credentials for connectors, skill and plugin imports, recurring skill sync, and scheduled plugin checks.",
   },
   "/settings/environments": {
     title: "Environments",

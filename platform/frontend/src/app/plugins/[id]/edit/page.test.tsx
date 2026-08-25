@@ -2,9 +2,17 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// Radix Select uses APIs that jsdom does not implement.
+Element.prototype.scrollIntoView = vi.fn();
+Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+Element.prototype.setPointerCapture = vi.fn();
+Element.prototype.releasePointerCapture = vi.fn();
+
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
+vi.mock("@/lib/github-app-config.query");
+vi.mock("@/lib/github-pat.query");
 vi.mock("@/lib/organization.query");
 vi.mock("@/lib/plugins/plugin.query");
 vi.mock("@/lib/teams/team.query");
@@ -12,6 +20,8 @@ vi.mock("@/lib/teams/team.query");
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
+import { useGithubAppConfigs } from "@/lib/github-app-config.query";
+import { useCreateGithubPat } from "@/lib/github-pat.query";
 import {
   useAppearanceSettings,
   useOrganizationMembers,
@@ -24,12 +34,20 @@ import {
 import { useAssignableTeams } from "@/lib/teams/team.query";
 import { PluginEditPage } from "./page.client";
 
+const EXPIRED_PAT_ID = "11111111-1111-4111-8111-111111111111";
+const REPLACEMENT_PAT_ID = "22222222-2222-4222-8222-222222222222";
+
 const IMPORTED_PLUGIN = {
   id: "plugin-1",
   displayName: "Imported plugin",
   description: "Owned by its source repository",
   pluginSlug: "imported-plugin",
   sourceKind: "github",
+  sourceRepo: "archestra-ai/OpenAPPA",
+  githubSyncRef: "main",
+  githubSyncInterval: "1d",
+  githubPatId: EXPIRED_PAT_ID,
+  githubAppConfigId: null,
   enabled: true,
   supportedPlatforms: ["posix"],
   scope: "org",
@@ -62,9 +80,11 @@ const MANUAL_PLUGIN = {
 } as unknown as PluginDetail;
 
 const updateMock = vi.fn();
+const createPatMock = vi.fn();
 
 beforeEach(() => {
   updateMock.mockReset();
+  createPatMock.mockReset();
   vi.mocked(useFeature).mockReturnValue(true);
   vi.mocked(usePathname).mockReturnValue(`/plugins/${IMPORTED_PLUGIN.id}/edit`);
   vi.mocked(useSearchParams).mockReturnValue(
@@ -82,6 +102,17 @@ beforeEach(() => {
   vi.mocked(useUpdatePlugin).mockReturnValue({
     mutateAsync: updateMock,
   } as unknown as ReturnType<typeof useUpdatePlugin>);
+  vi.mocked(useCreateGithubPat).mockReturnValue({
+    mutateAsync: createPatMock,
+  } as unknown as ReturnType<typeof useCreateGithubPat>);
+  vi.mocked(useGithubAppConfigs).mockReturnValue({
+    data: [
+      {
+        id: "33333333-3333-4333-8333-333333333333",
+        name: "Archestra GitHub App",
+      },
+    ],
+  } as unknown as ReturnType<typeof useGithubAppConfigs>);
   vi.mocked(useHasPermissions).mockReturnValue({
     data: true,
   } as unknown as ReturnType<typeof useHasPermissions>);
@@ -100,17 +131,127 @@ beforeEach(() => {
 });
 
 describe("PluginEditPage", () => {
-  it("only edits access for an imported plugin", () => {
+  it("leaves empty authentication unchanged while editing GitHub source settings", async () => {
+    const user = userEvent.setup();
+    updateMock.mockResolvedValue(IMPORTED_PLUGIN);
     render(<PluginEditPage id={IMPORTED_PLUGIN.id} />);
 
     expect(
-      screen.getByText("Choose who can discover and install the plugin."),
+      screen.getByText(
+        "Edit the tracked GitHub source, authentication, update schedule, and discoverability.",
+      ),
+    ).toBeVisible();
+    expect(screen.getByLabelText("Repository URL")).toHaveValue(
+      "archestra-ai/OpenAPPA",
+    );
+    expect(screen.getByLabelText("Keep in sync")).toHaveTextContent(
+      "Once a day",
+    );
+    expect(screen.getByLabelText("Ref")).toHaveValue("main");
+    expect(screen.getByLabelText("Authentication Method")).toHaveTextContent(
+      "Personal Access Token",
+    );
+    expect(screen.getByLabelText("Personal Access Token")).toHaveValue("");
+    expect(screen.getByLabelText("Personal Access Token")).toHaveAttribute(
+      "placeholder",
+      "Leave empty to keep existing token",
+    );
+    expect(
+      screen.getByText(/Leave empty to keep existing credentials unchanged/),
     ).toBeVisible();
     expect(screen.queryByLabelText("Display name")).not.toBeInTheDocument();
     expect(screen.queryByText("Content")).not.toBeInTheDocument();
     expect(
       screen.queryByText(/Payload bytes are owned by the GitHub source/),
     ).not.toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText("Repository URL"));
+    await user.type(
+      screen.getByLabelText("Repository URL"),
+      "github.com/acme/plugin",
+    );
+    await user.clear(screen.getByLabelText("Ref"));
+    await user.type(screen.getByLabelText("Ref"), "release");
+    await user.click(screen.getByLabelText("Keep in sync"));
+    await user.click(screen.getByRole("option", { name: "Every hour" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(updateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        githubSource: {
+          repoUrl: "github.com/acme/plugin",
+          ref: "release",
+          syncInterval: "1h",
+        },
+        scope: "org",
+      }),
+    );
+  });
+
+  it("replaces an expired token with a newly saved credential", async () => {
+    const user = userEvent.setup();
+    createPatMock.mockResolvedValue({
+      id: REPLACEMENT_PAT_ID,
+      name: "Replacement token",
+    });
+    updateMock.mockResolvedValue({
+      ...IMPORTED_PLUGIN,
+      githubPatId: REPLACEMENT_PAT_ID,
+    });
+    render(<PluginEditPage id={IMPORTED_PLUGIN.id} />);
+
+    await user.type(
+      screen.getByLabelText("Personal Access Token"),
+      "ghp_fresh",
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(createPatMock).toHaveBeenCalledWith({
+      name: "Imported plugin token",
+      token: "ghp_fresh",
+    });
+    expect(updateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        githubSource: expect.objectContaining({
+          authentication: {
+            githubAppConfigId: null,
+            githubPatId: REPLACEMENT_PAT_ID,
+          },
+        }),
+      }),
+    );
+  });
+
+  it("switches from the configured token to a GitHub App", async () => {
+    const user = userEvent.setup();
+    updateMock.mockResolvedValue({
+      ...IMPORTED_PLUGIN,
+      githubPatId: null,
+      githubAppConfigId: "33333333-3333-4333-8333-333333333333",
+    });
+    render(<PluginEditPage id={IMPORTED_PLUGIN.id} />);
+
+    await user.click(screen.getByLabelText("Authentication Method"));
+    await user.click(screen.getByRole("option", { name: "GitHub App" }));
+    expect(
+      screen.queryByLabelText("Personal Access Token"),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByLabelText("GitHub App Configuration"));
+    await user.click(
+      screen.getByRole("option", { name: "Archestra GitHub App" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(updateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        githubSource: expect.objectContaining({
+          authentication: {
+            githubAppConfigId: "33333333-3333-4333-8333-333333333333",
+            githubPatId: null,
+          },
+        }),
+      }),
+    );
   });
 
   it("uses the shared footer outside the card and preserves file metadata", async () => {

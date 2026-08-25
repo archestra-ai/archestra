@@ -3,7 +3,7 @@ title: Plugins
 category: Agents
 order: 4
 description: Client-native extensions delivered to Claude Code, Codex, Copilot CLI, and Cursor
-lastUpdated: 2026-08-24
+lastUpdated: 2026-08-26
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -52,6 +52,8 @@ GitHub-owned files stay read-only in Archestra. Edit them in their repository.
 GitHub checks can run manually, every 15 minutes, every hour, or once a day. A changed commit becomes an update candidate.
 
 An update never replaces approved files automatically. Open **Updates**, review the candidate, then approve and apply it.
+
+Open a GitHub plugin's edit page to change its repository, tracked ref, check schedule, or visibility. Leave the token field empty to keep its current credential. If a token expires, enter a replacement token or select a GitHub App.
 
 OpenAPPA is imported once for each organization when Plugins are enabled. It behaves like any other GitHub plugin after import. You can update or delete it.
 

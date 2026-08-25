@@ -28,6 +28,12 @@ export class PluginImportError extends Error {
   }
 }
 
+/** Normalize any accepted GitHub repository URL to the stored owner/repo form. */
+export function normalizeGithubPluginRepoUrl(repoUrl: string): string {
+  const { owner, repo } = parseSource({ repoUrl });
+  return `${owner}/${repo}`;
+}
+
 /**
  * Resolve one GitHub tree to immutable, by-value plugin bytes. This service
  * never executes or interprets hook configuration and always strips transport

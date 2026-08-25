@@ -5,6 +5,8 @@ import {
 import {
   CalendarClock,
   Database,
+  FlaskConical,
+  Gavel,
   Globe,
   LayoutGrid,
   Mail,
@@ -132,6 +134,8 @@ function getSourceIcon({
         className="shrink-0 rounded-sm"
       />
     ),
+    "eval:run": <FlaskConical className="h-3 w-3 shrink-0" />,
+    "eval:judge": <Gavel className="h-3 w-3 shrink-0" />,
     email: <Mail className="h-3 w-3 shrink-0" />,
     "schedule-trigger": <CalendarClock className="h-3 w-3 shrink-0" />,
     "knowledge:embedding": <Database className="h-3 w-3 shrink-0" />,

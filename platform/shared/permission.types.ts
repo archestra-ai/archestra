@@ -64,6 +64,7 @@ export const resources = [
   "agentSettings",
   "agentTrigger",
   "scheduledTask",
+  "eval",
   /**
    * Better-auth access control resource - needed for organization role management
    * See: https://github.com/better-auth/better-auth/issues/2336#issuecomment-2820620809
@@ -137,6 +138,7 @@ export const resourceLabels: Record<Resource, string> = {
   agentSettings: "Agent Settings",
   agentTrigger: "Agent Triggers",
   scheduledTask: "Scheduled Tasks",
+  eval: "Evals",
   simpleView: "Simple View",
   chatAgentPicker: "Chat Agent Picker",
   chatProviderSettings: "Chat Provider Settings",
@@ -162,6 +164,7 @@ export const resourceDescriptions: Record<Resource, string> = {
   file: "Files produced and used in chats and projects",
   agentTrigger: "Agent triggers (Slack, MS Teams, incoming emails)",
   scheduledTask: "Scheduled agent tasks that run on a schedule",
+  eval: "Eval suites for grading agent behavior against test cases",
   llmProviderApiKey: "LLM provider API keys and their visibility",
   llmVirtualKey: "LLM virtual keys and their visibility",
   llmOauthClient: "OAuth clients authorized to call the LLM Proxy",
@@ -226,6 +229,7 @@ export const resourceCategories: Record<string, Resource[]> = {
     "sandbox",
     "agentTrigger",
     "scheduledTask",
+    "eval",
     "agentSettings",
   ],
   MCP: [

@@ -24,6 +24,7 @@ export async function initializeObservabilityMetrics(params?: {
   metrics.rag.initializeRagMetrics();
   metrics.sandbox.initializeSandboxMetrics();
   metrics.scheduleTrigger.initializeScheduleTriggerMetrics();
+  metrics.evals.initializeEvalMetrics();
   metrics.taskQueue.initializeTaskQueueMetrics();
   metrics.audit.initializeAuditMetrics();
   metrics.chat.initializeChatMetrics();

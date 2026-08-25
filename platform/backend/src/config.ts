@@ -2660,6 +2660,25 @@ const config = {
       DEFAULT_CHAT_ATTACHMENT_INLINE_BYTES,
     ),
   },
+  evals: {
+    /**
+     * Concurrency cap for the eval task-queue lane, per worker replica. One
+     * task is one whole eval run (its cases execute sequentially), so this
+     * bounds how many runs execute in parallel on each replica.
+     */
+    runWorkerMaxConcurrent: parsePositiveInt(
+      process.env.ARCHESTRA_EVALS_RUN_WORKER_MAX_CONCURRENT,
+      1,
+    ),
+    /**
+     * Per-case execution timeout. A case whose agent execution exceeds this is
+     * aborted and recorded as an error; the run continues with the next case.
+     */
+    caseTimeoutSeconds: parsePositiveInt(
+      process.env.ARCHESTRA_EVALS_CASE_TIMEOUT_SECONDS,
+      300,
+    ),
+  },
   enterpriseFeatures: {
     core: process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
     knowledgeBase:

@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-08-24
+lastUpdated: 2026-08-25
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -51,7 +51,8 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | Code Sandbox | `execute` |
 | Agent Triggers | `read`, `create`, `update`, `delete` |
 | Scheduled Tasks | `read`, `create`, `update`, `delete` |
-| LLM Proxy | `read`, `update` |
+| Evals | `read`, `create`, `update`, `delete`, `execute` |
+| LLM Proxies | `read`, `create`, `update`, `delete`, `team-admin`, `deploy-to-restricted` |
 | LLM Provider API Keys | `read`, `create`, `update`, `delete` |
 | LLM Virtual Keys | `read`, `create`, `update`, `delete` |
 | LLM OAuth Clients | `read`, `create`, `update`, `delete`, `team-admin` |
@@ -98,7 +99,8 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | Apps | `read`, `create`, `update`, `delete` |
 | Code Sandbox | `execute` |
 | Scheduled Tasks | `read`, `create`, `update`, `delete` |
-| LLM Proxy | `read` |
+| Evals | `read` |
+| LLM Proxies | `read`, `create`, `update`, `delete` |
 | LLM Provider API Keys | `read` |
 | LLM Virtual Keys | `read`, `create` |
 | LLM OAuth Clients | `read` |
@@ -184,6 +186,11 @@ The following table lists all available permissions that can be assigned to cust
 | `environment:create` | Create deployment environments |
 | `environment:update` | Modify deployment environments, including the org default environment |
 | `environment:delete` | Delete deployment environments |
+| `eval:read` | View eval suites, cases, runs and their results |
+| `eval:create` | Create eval suites |
+| `eval:update` | Modify eval suites and their cases |
+| `eval:delete` | Delete eval suites |
+| `eval:execute` | Run eval suites against agents and cancel runs |
 | `file:manage` | List, read, write, and delete files in chats and projects |
 | `githubAppConfig:read` | View GitHub App configurations |
 | `githubAppConfig:create` | Create GitHub App configurations |
@@ -226,8 +233,13 @@ The following table lists all available permissions that can be assigned to cust
 | `llmProviderApiKey:update` | Modify LLM provider API key configuration and visibility |
 | `llmProviderApiKey:delete` | Remove LLM provider API keys |
 | `llmProviderApiKey:admin` | Manage all LLM provider API keys, including org-wide keys |
-| `llmProxy:read` | View the LLM Proxy and its connection details |
-| `llmProxy:update` | Modify LLM Proxy configuration |
+| `llmProxy:read` | View and list LLM proxies |
+| `llmProxy:create` | Create new LLM proxies |
+| `llmProxy:update` | Modify LLM proxy configuration |
+| `llmProxy:delete` | Delete LLM proxies |
+| `llmProxy:team-admin` | Manage team assignments for LLM proxies |
+| `llmProxy:admin` | Full administrative control over all LLM proxies, bypassing team restrictions |
+| `llmProxy:deploy-to-restricted` | Assign LLM proxies to restricted deployment environments |
 | `llmSettings:read` | View LLM settings (compression, cleanup interval) |
 | `llmSettings:update` | Modify LLM settings |
 | `llmVirtualKey:read` | View LLM virtual keys |

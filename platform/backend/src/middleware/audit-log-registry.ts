@@ -8,6 +8,9 @@ import chatOpsConfigModel from "@/models/chatops-config";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
 import EnvironmentResourceDefaultModel from "@/models/environment-resource-default";
+import EvalCaseModel from "@/models/eval-case";
+import EvalRunModel from "@/models/eval-run";
+import EvalSuiteModel from "@/models/eval-suite";
 import GithubAppConfigModel from "@/models/github-app-config";
 import GithubPatModel from "@/models/github-pat";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
@@ -665,6 +668,50 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/schedule-triggers/:id": {
     resourceType: "scheduleTrigger",
     fetchById: (id, orgId) => ScheduleTriggerModel.findByIdForAudit(id, orgId),
+  },
+
+  // Evals. Case CRUD is audited on the parent suite (the suite audit snapshot
+  // carries the case list, so before/after diffs show the change); the
+  // handlers override `auditResourceId`/`auditAfter` where the path param is
+  // not the suite (see routes/eval.ts).
+  "/api/eval-suites": {
+    resourceType: "evalSuite",
+    fetchById: (id, orgId) => EvalSuiteModel.findByIdForAudit(id, orgId),
+  },
+  "/api/eval-suites/:id": {
+    resourceType: "evalSuite",
+    fetchById: (id, orgId) => EvalSuiteModel.findByIdForAudit(id, orgId),
+  },
+  // Case creation mutates the suite named by :id; registered explicitly so
+  // the POST is not dropped as a walk-up.
+  "/api/eval-suites/:id/cases": {
+    resourceType: "evalSuite",
+    action: "evalSuite.updated",
+    fetchById: (id, orgId) => EvalSuiteModel.findByIdForAudit(id, orgId),
+  },
+  // The path param is a CASE id; the before-snapshot resolves it to the
+  // owning suite. After a delete the case row is gone, so the handler sets
+  // `auditAfter` (and points `auditResourceId` at the suite).
+  "/api/eval-cases/:id": {
+    resourceType: "evalSuite",
+    action: "evalSuite.updated",
+    fetchById: async (id, orgId) => {
+      const evalCase = await EvalCaseModel.findById(id, orgId);
+      return evalCase
+        ? EvalSuiteModel.findByIdForAudit(evalCase.suiteId, orgId)
+        : null;
+    },
+  },
+  // Run creation under the suite path; the resource is the new run, so the
+  // handler supplies `auditResourceId`/`auditAfter` from the created row.
+  "/api/eval-suites/:id/runs": {
+    resourceType: "evalRun",
+    action: "evalRun.created",
+  },
+  "/api/eval-runs/:id/cancel": {
+    resourceType: "evalRun",
+    action: "evalRun.canceled",
+    fetchById: (id, orgId) => EvalRunModel.findByIdForAudit(id, orgId),
   },
 
   // Organization (settings, onboarding, knowledge admin actions, members)

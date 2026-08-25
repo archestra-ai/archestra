@@ -57,6 +57,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   sandbox: ["execute"],
   agentTrigger: ["read", "create", "update", "delete"],
   scheduledTask: ["read", "create", "update", "delete", "admin"],
+  eval: ["read", "create", "update", "delete", "execute"],
 
   // LLM
   llmProxy: ["read", "update"],
@@ -191,6 +192,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   sandbox: ["execute"],
   agentTrigger: ["read", "create", "update", "delete"],
   scheduledTask: ["read", "create", "update", "delete"],
+  eval: ["read", "create", "update", "delete", "execute"],
 
   // LLM
   llmProxy: ["read", "update"],
@@ -282,6 +284,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   sandbox: ["execute"],
   agentTrigger: [],
   scheduledTask: ["read", "create", "update", "delete"],
+  eval: ["read"],
 
   // LLM
   llmProxy: ["read"],
@@ -468,6 +471,11 @@ export const permissionDescriptions: Record<string, string> = {
   "agentTrigger:create": "Set up new agent triggers",
   "agentTrigger:update": "Modify agent trigger configurations",
   "agentTrigger:delete": "Remove agent triggers",
+  "eval:read": "View eval suites, cases, runs and their results",
+  "eval:create": "Create eval suites",
+  "eval:update": "Modify eval suites and their cases",
+  "eval:delete": "Delete eval suites",
+  "eval:execute": "Run eval suites against agents and cancel runs",
   "scheduledTask:read": "View scheduled tasks and their run history",
   "scheduledTask:create": "Create new scheduled tasks and trigger runs",
   "scheduledTask:update": "Modify scheduled task configuration",
@@ -1699,6 +1707,50 @@ export const requiredEndpointPermissionsMap: Partial<
     scheduledTask: ["create"],
   },
 
+  // Evals Routes
+  [RouteId.GetEvalSuites]: {
+    eval: ["read"],
+  },
+  [RouteId.CreateEvalSuite]: {
+    eval: ["create"],
+  },
+  [RouteId.GetEvalSuite]: {
+    eval: ["read"],
+  },
+  [RouteId.UpdateEvalSuite]: {
+    eval: ["update"],
+  },
+  [RouteId.DeleteEvalSuite]: {
+    eval: ["delete"],
+  },
+  [RouteId.GetEvalSuiteCases]: {
+    eval: ["read"],
+  },
+  [RouteId.CreateEvalSuiteCase]: {
+    eval: ["update"],
+  },
+  [RouteId.UpdateEvalCase]: {
+    eval: ["update"],
+  },
+  [RouteId.DeleteEvalCase]: {
+    eval: ["update"],
+  },
+  [RouteId.CreateEvalRun]: {
+    eval: ["execute"],
+  },
+  [RouteId.GetEvalRuns]: {
+    eval: ["read"],
+  },
+  [RouteId.GetEvalRun]: {
+    eval: ["read"],
+  },
+  [RouteId.GetEvalRunResults]: {
+    eval: ["read"],
+  },
+  [RouteId.CancelEvalRun]: {
+    eval: ["execute"],
+  },
+
   // Knowledge Base Routes
   [RouteId.GetKnowledgeBases]: { knowledgeSource: ["read"] },
   [RouteId.CreateKnowledgeBase]: { knowledgeSource: ["create"] },
@@ -2060,6 +2112,11 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/plugins/import": { plugin: ["create", "admin"] },
   "/plugins/[id]": { plugin: ["read", "admin"] },
   "/scheduled-tasks": { scheduledTask: ["read"] },
+
+  // Evals
+  "/evals": { eval: ["read"] },
+  "/evals/[id]": { eval: ["read"] },
+  "/evals/runs/[id]": { eval: ["read"] },
 
   // Apps
   "/apps": { app: ["read"] },

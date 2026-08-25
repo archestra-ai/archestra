@@ -35,7 +35,8 @@ export async function createAppBacking(params: {
   /** The app's display icon; the catalog row is where an app's icon lives. */
   icon?: string | null;
 }): Promise<void> {
-  const { app, scope, environmentId, userId, organizationId, teamIds } = params;
+  const { app, scope, environmentId, icon, userId, organizationId, teamIds } =
+    params;
   let catalog: { id: string } | undefined;
   let server: { id: string } | undefined;
   try {
@@ -46,7 +47,7 @@ export async function createAppBacking(params: {
         serverType: "app",
         scope,
         environmentId,
-        icon: params.icon ?? null,
+        icon: icon ?? null,
         requiresAuth: false,
         ...(scope === "team" && teamIds.length > 0 ? { teams: teamIds } : {}),
       },

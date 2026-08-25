@@ -388,7 +388,7 @@ curl -X POST "${a2aEndpoint}" \\
           <MessageCircle className="h-4 w-4 text-muted-foreground" />
           <Label className="text-sm font-medium">Chat Deep Link</Label>
         </div>
-        <p className="text-xs text-muted-foreground">
+        <p className={CHANNEL_PROSE_CLASS}>
           Use this URL to open chat with the agent and send a message
           automatically.
         </p>
@@ -426,7 +426,7 @@ curl -X POST "${a2aEndpoint}" \\
             <MessagesSquare className="h-4 w-4 text-muted-foreground" />
             <Label className="text-sm font-medium">Chat Apps</Label>
           </div>
-          <p className="text-xs text-muted-foreground">
+          <p className={CHANNEL_PROSE_CLASS}>
             Talk to this agent from chat apps like Slack — set it up under{" "}
             <Link
               href="/messaging-channels"
@@ -439,70 +439,71 @@ curl -X POST "${a2aEndpoint}" \\
         </div>
       )}
 
-      {/* Email Invocation - always show, with configuration guidance when not enabled */}
-      <div className="space-y-4">
+      {/*
+        Email Invocation - always show, with configuration guidance when not
+        enabled. Laid out like the channels above it: icon + label, then one
+        muted `text-xs` line of prose, then whatever that channel hands the
+        reader to copy. Its guidance used to sit in a `bg-muted/50` panel at
+        `text-sm`, which made the channel that most often has nothing to copy
+        the loudest of the three.
+      */}
+      <div className="space-y-2">
         <div className="flex items-center gap-2">
           <Mail className="h-4 w-4 text-muted-foreground" />
           <Label className="text-sm font-medium">Email Invocation</Label>
         </div>
 
         {!globalEmailEnabled ? (
-          <div className="bg-muted/50 rounded-md p-3">
-            <EmailNotConfiguredMessage />
-          </div>
+          <EmailNotConfiguredMessage className={CHANNEL_PROSE_CLASS} />
         ) : agentEmailEnabled ? (
           <>
+            <p className={CHANNEL_PROSE_CLASS}>
+              Send an email to invoke this agent. The email body will be used as
+              the first message.
+            </p>
             {/* Security mode description */}
-            <div className="bg-muted/50 rounded-md p-3 text-sm text-muted-foreground">
-              {agent.incomingEmailSecurityMode === "private" && (
-                <p>
-                  <strong>Private mode:</strong> Only emails from registered
-                  users with access to this agent will be processed.
-                </p>
-              )}
-              {agent.incomingEmailSecurityMode === "internal" && (
-                <p>
-                  <strong>Internal mode:</strong> Only emails from{" "}
-                  <span className="font-mono text-xs">
-                    @{agent.incomingEmailAllowedDomain || "your-domain.com"}
-                  </span>{" "}
-                  will be processed.
-                </p>
-              )}
-              {agent.incomingEmailSecurityMode === "public" && (
-                <p>
-                  <strong>Public mode:</strong> Any email will be processed. Use
-                  with caution.
-                </p>
-              )}
-            </div>
+            {agent.incomingEmailSecurityMode === "private" && (
+              <p className={CHANNEL_PROSE_CLASS}>
+                <strong className="font-medium">Private mode:</strong> Only
+                emails from registered users with access to this agent will be
+                processed.
+              </p>
+            )}
+            {agent.incomingEmailSecurityMode === "internal" && (
+              <p className={CHANNEL_PROSE_CLASS}>
+                <strong className="font-medium">Internal mode:</strong> Only
+                emails from{" "}
+                <span className="font-mono">
+                  @{agent.incomingEmailAllowedDomain || "your-domain.com"}
+                </span>{" "}
+                will be processed.
+              </p>
+            )}
+            {agent.incomingEmailSecurityMode === "public" && (
+              <p className={CHANNEL_PROSE_CLASS}>
+                <strong className="font-medium">Public mode:</strong> Any email
+                will be processed. Use with caution.
+              </p>
+            )}
 
             {/* Email address */}
             {agentEmailAddress && (
-              <div className="space-y-2">
-                <Label className="text-sm text-muted-foreground">
-                  Send an email to invoke this agent. The email body will be
-                  used as the first message.
-                </Label>
-                <CopyableCode
-                  value={agentEmailAddress}
-                  toastMessage="Email address copied"
-                  variant="primary"
-                >
-                  <div className="flex items-center gap-2">
-                    <Mail className="h-3 w-3 text-muted-foreground shrink-0" />
-                    <CodeText className="text-xs text-primary break-all">
-                      {agentEmailAddress}
-                    </CodeText>
-                  </div>
-                </CopyableCode>
-              </div>
+              <CopyableCode
+                value={agentEmailAddress}
+                toastMessage="Email address copied"
+                variant="primary"
+              >
+                <div className="flex items-center gap-2">
+                  <Mail className="h-3 w-3 text-muted-foreground shrink-0" />
+                  <CodeText className="text-xs text-primary break-all">
+                    {agentEmailAddress}
+                  </CodeText>
+                </div>
+              </CopyableCode>
             )}
           </>
         ) : (
-          <div className="bg-muted/50 rounded-md p-3 text-sm text-muted-foreground">
-            <AgentEmailDisabledMessage />
-          </div>
+          <AgentEmailDisabledMessage className={CHANNEL_PROSE_CLASS} />
         )}
       </div>
     </div>
@@ -1064,6 +1065,13 @@ curl -X POST "${a2aEndpoint}" \\
 // ===
 // Internal helpers
 // ===
+
+/**
+ * The one line of prose each channel under "Other ways to reach this agent"
+ * gets between its label and its copyable value. Shared so the three channels
+ * cannot drift apart again.
+ */
+const CHANNEL_PROSE_CLASS = "text-xs text-muted-foreground";
 
 /**
  * Connection base URLs carry a /v1 suffix (see getExternalProxyUrls); the A2A

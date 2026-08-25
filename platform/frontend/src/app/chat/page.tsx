@@ -3729,18 +3729,32 @@ export function ChatPageContent({
                                       ) as Record<string, unknown> | undefined
                                     )?.llmApiKeyId as string | null
                                   }
+                                  // Locks the whole composer, so it carries
+                                  // only the state that truly means "do not
+                                  // use this": the install dialog is up. The
+                                  // browser-tooling *check* must not lock it —
+                                  // its loading state holds for exactly as
+                                  // long as the tools and delegations fetches
+                                  // the first paint no longer waits on, which
+                                  // on a reload would hand the spinner's wait
+                                  // to a disabled textarea.
                                   submitDisabled={
-                                    isPlaywrightSetupVisible ||
-                                    isAgentSubscriptionMetadataPending
+                                    !!canUpdateAgent &&
+                                    isPlaywrightSetupRequired
                                   }
                                   // Still resolving which agent this chat
-                                  // starts on. The draft is welcome — start
+                                  // starts on, or what tooling and credentials
+                                  // it brings. The draft is welcome — start
                                   // typing straight away — it just has
                                   // nowhere to go yet, and the submit handler
                                   // refuses in this window anyway, so show
                                   // that rather than letting a click land on
                                   // nothing.
-                                  sendDisabled={!initialAgentId}
+                                  sendDisabled={
+                                    !initialAgentId ||
+                                    isPlaywrightSetupVisible ||
+                                    isAgentSubscriptionMetadataPending
+                                  }
                                   subscriptionConnectRequired={
                                     initialPerUserConnect.needsConnect
                                   }

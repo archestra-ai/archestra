@@ -20,12 +20,14 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useConversation } from "@/lib/chat/chat.query";
 import {
   getAttachmentFallbackLabel,
   isCsvAttachment,
   isPlainTextAttachment,
 } from "@/lib/chat/chat-attachment-display";
 import { attachmentIdFromUrl } from "@/lib/chat/conversation-files";
+import { isActionAvailableForConversation } from "@/lib/chat/locked-chat";
 import { cn } from "@/lib/utils";
 
 export interface FileAttachment {
@@ -74,6 +76,14 @@ export function EditableUserMessage({
   onSave,
 }: EditableUserMessageProps) {
   const [isRegenerateConfirming, setIsRegenerateConfirming] = useState(false);
+  // A locked chat's attachment cannot be copied into a knowledge base — that
+  // would write a plaintext copy others can read — so the chip does not offer
+  // an action the backend refuses.
+  const { data: conversation } = useConversation(conversationId);
+  const canSaveToKnowledge = isActionAvailableForConversation(
+    conversation,
+    "saveToKnowledge",
+  );
   const editor = useMessageEditor({
     text,
     isEditing,
@@ -198,7 +208,9 @@ export function EditableUserMessage({
                       })}
                   </span>
                 </AttachmentLink>
-                <SaveAttachmentButton attachment={attachment} />
+                {canSaveToKnowledge ? (
+                  <SaveAttachmentButton attachment={attachment} />
+                ) : null}
               </div>
             ))}
           </div>

@@ -2618,7 +2618,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           safeMime === "application/pdf"
             ? "frame-ancestors 'self'"
             : "default-src 'none'; sandbox",
-        "Cache-Control": "private, max-age=3600",
+        // A locked chat's bytes are opened only for this response, so they must
+        // not be written to the browser's on-disk HTTP cache: that copy is
+        // plaintext, outlives the tab, and is not reachable by the key —
+        // precisely the at-rest copy the chat exists to avoid. Everything else
+        // keeps the shared cache window.
+        "Cache-Control": meta.lockedChat ? "no-store" : "private, max-age=3600",
         "Content-Length": String(attachment.fileSize),
       });
       reply.raw.end(attachment.fileData);

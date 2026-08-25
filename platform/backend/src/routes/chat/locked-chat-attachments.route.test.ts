@@ -179,6 +179,10 @@ describe("locked chat attachments", () => {
     expect(withKey.headers["content-disposition"]).toContain(
       encodeURIComponent(FILE_NAME),
     );
+    // The opened bytes must not land in the browser's on-disk cache, where
+    // they would sit in plaintext after the tab is gone, reachable without
+    // the key that produced them.
+    expect(withKey.headers["cache-control"]).toBe("no-store");
 
     // No key: the endpoint must not answer with ciphertext, and must say what
     // is missing rather than 404 as though the file were gone.

@@ -52,6 +52,7 @@ export function SelectableFileList<T extends FileListItem>({
   onRequestSaveToKnowledge,
   canSaveToKnowledge,
   renderItemActions,
+  conversationId,
 }: {
   sections: { title?: string; description?: string; items: T[] }[];
   leading?: ReactNode;
@@ -59,6 +60,13 @@ export function SelectableFileList<T extends FileListItem>({
   /** The open file's id, highlighted in the list while it previews beside it. */
   selectedId?: string | null;
   onOpen: (id: string) => void;
+  /**
+   * The conversation these files belong to, when there is one. Downloads need
+   * it: a locked chat's attachment serves its bytes only to a request bearing
+   * that conversation's key. Omitted on surfaces with no conversation (the
+   * project page), where every file is served plainly.
+   */
+  conversationId?: string;
   /** `onComplete` receives the ids that failed, so the caller can reconcile. */
   onRequestDelete: (
     items: T[],
@@ -140,6 +148,7 @@ export function SelectableFileList<T extends FileListItem>({
             ? () => onRequestSaveToKnowledge([item as T])
             : undefined
         }
+        onDownload={() => downloadFiles([item], conversationId)}
       />
     );
   };
@@ -217,7 +226,7 @@ export function SelectableFileList<T extends FileListItem>({
               size="sm"
               className="h-7 gap-1 px-2 text-xs"
               disabled={selectedItems.length === 0}
-              onClick={() => downloadFiles(selectedItems)}
+              onClick={() => void downloadFiles(selectedItems, conversationId)}
             >
               <Download className="h-4 w-4" />
               Download
@@ -273,12 +282,14 @@ function FileRowMenu({
   onSelect,
   onDelete,
   onSaveToKnowledge,
+  onDownload,
 }: {
   item: FileListItem;
   onSelect: () => void;
   onDelete: () => void;
   /** Omitted for rows that are already persisted outside this conversation. */
   onSaveToKnowledge?: () => void;
+  onDownload: () => Promise<number>;
 }) {
   return (
     <DropdownMenu>
@@ -294,11 +305,16 @@ function FileRowMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         {item.contentUrl && (
-          <DropdownMenuItem asChild>
-            <a href={item.contentUrl} download={item.name}>
-              <Download className="h-4 w-4" />
-              Download
-            </a>
+          // Not a bare <a href>: in a locked chat the bytes only come back to a
+          // request carrying the conversation key, which an anchor cannot send.
+          <DropdownMenuItem
+            onSelect={(e) => {
+              e.preventDefault();
+              void onDownload();
+            }}
+          >
+            <Download className="h-4 w-4" />
+            Download
           </DropdownMenuItem>
         )}
         {onSaveToKnowledge && (

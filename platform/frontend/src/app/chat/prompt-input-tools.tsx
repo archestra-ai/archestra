@@ -575,6 +575,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
               size="sm"
               aria-pressed={lockedChat}
               aria-label="Locked chat"
+              data-testid={E2eTestId.LockedChatToggle}
               className={cn(
                 "h-8 px-2",
                 lockedChat &&

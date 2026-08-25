@@ -129,6 +129,7 @@ export const E2eTestId = {
   ChatFileUploadButton: "chat-file-upload-button",
   ChatDisabledFileUploadButton: "chat-disabled-file-upload-button",
   LockedChatNotice: "locked-chat-notice",
+  LockedChatToggle: "locked-chat-toggle",
   ChatContextUsageTrigger: "chat-context-usage-trigger",
   ChatContextUsagePanel: "chat-context-usage-panel",
   ChatContextUsageTooltip: "chat-context-usage-tooltip",

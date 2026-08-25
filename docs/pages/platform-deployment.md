@@ -1090,10 +1090,10 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Default: `https://openrouter.ai/api/v1`
   - Use this to point to your own proxy, an OpenRouter-compatible API, or other custom endpoints
 
-- **`ARCHESTRA_VLLM_BASE_URL`** - Base URL for your vLLM server.
-  - Required to enable vLLM provider support
+- **`ARCHESTRA_VLLM_BASE_URL`** - Base URL for your OpenAI-compatible server (vLLM, llama.cpp, LM Studio, SGLang, TGI, LocalAI).
+  - Required to enable the OpenAI-compatible provider
   - Example: `http://localhost:8000/v1` (standard vLLM)
-  - See: [vLLM setup guide](/docs/platform-supported-llm-providers#vllm)
+  - See: [OpenAI-compatible setup guide](/docs/platform-supported-llm-providers#openai-compatible-servers)
 
 - **`ARCHESTRA_OLLAMA_BASE_URL`** - Base URL for your Ollama server.
   - Default: `http://localhost:11434/v1` (Ollama is enabled by default)

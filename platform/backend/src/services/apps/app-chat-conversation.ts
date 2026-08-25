@@ -13,6 +13,8 @@ import {
   MessageModel,
   OrganizationModel,
 } from "@/models";
+import type { resolveLockedChatCreationIfRequested } from "@/routes/chat/locked-chat";
+import { LOCKED_CHAT_STATIC_TITLE } from "@/routes/chat/locked-chat";
 import { callerIsAppAdmin } from "@/services/apps/app-authorization";
 import {
   buildAppRenderResult,
@@ -27,6 +29,15 @@ import { toolRequiresInputs } from "@/utils/tool-inputs";
 
 const RENDER_APP_TOOL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_RENDER_APP_SHORT_NAME}` as const;
+
+/**
+ * What the route resolved from the request's locked-chat key header: the
+ * conversation id the fingerprint is bound to, the row fields to write, and
+ * the key to seal seeded messages with. Null for an ordinary app chat.
+ */
+type LockedChatSeed = NonNullable<
+  ReturnType<typeof resolveLockedChatCreationIfRequested>
+>;
 
 /**
  * Create a chat conversation with the app already mounted: it seeds a synthetic
@@ -58,8 +69,15 @@ export async function createSeededAppConversation(params: {
    * to an existing app never set it, and so still meet the T-980 refusal below.
    */
   creationBuildChat?: boolean;
+  /**
+   * Present when the caller asked for a LOCKED app chat: the open-in-chat POST
+   * carried the browser's conversation key, so this conversation is created
+   * locked and everything seeded into it is sealed under that key. See
+   * `resolveLockedChatCreationIfRequested`.
+   */
+  lockedChat?: LockedChatSeed | null;
 }): Promise<{ conversationId: string }> {
-  const { appId, userId, organizationId, agentId } = params;
+  const { appId, userId, organizationId, agentId, lockedChat } = params;
 
   const app = await AppModel.findByIdForCaller({
     id: appId,
@@ -92,6 +110,7 @@ export async function createSeededAppConversation(params: {
     userId,
     organizationId,
     agentId,
+    lockedChat,
     title: app.name,
     part: {
       type: "dynamic-tool",
@@ -139,8 +158,11 @@ export async function createSeededExternalAppConversation(params: {
   resourceUri: string;
   userId: string;
   organizationId: string;
+  /** See the same field on {@link createSeededAppConversation}. */
+  lockedChat?: LockedChatSeed | null;
 }): Promise<ExternalAppOpenResult> {
-  const { mcpServerId, resourceUri, userId, organizationId } = params;
+  const { mcpServerId, resourceUri, userId, organizationId, lockedChat } =
+    params;
 
   const uiResource = await McpServerModel.findInstalledUiResourceForCaller({
     userId,
@@ -161,6 +183,7 @@ export async function createSeededExternalAppConversation(params: {
       userId,
       organizationId,
       title: label,
+      lockedChat,
     });
     return {
       conversationId,
@@ -176,6 +199,7 @@ export async function createSeededExternalAppConversation(params: {
     userId,
     organizationId,
     title: label,
+    lockedChat,
     part: {
       type: "dynamic-tool",
       // The tool's stored name, verbatim. `serverName`/`toolName` are a display
@@ -283,8 +307,9 @@ async function createAppChatConversation(params: {
   title: string;
   /** Pre-resolved chat agent; resolved here when the caller has none. */
   agentId?: string;
+  lockedChat?: LockedChatSeed | null;
 }): Promise<{ conversationId: string }> {
-  const { userId, organizationId, title } = params;
+  const { userId, organizationId, title, lockedChat } = params;
 
   const agentId =
     params.agentId ??
@@ -307,17 +332,30 @@ async function createAppChatConversation(params: {
     userId,
     organizationId,
     agentId,
-    title,
+    // A locked chat is titled like every other locked chat. The app's name
+    // would otherwise sit in a plaintext column and say which app the chat is
+    // running — the sort of thing the lock exists to keep out of the database.
+    // It is the final title too, so it is not marked a placeholder.
+    ...(lockedChat
+      ? {
+          id: lockedChat.conversationId,
+          ...lockedChat.fields,
+          title: LOCKED_CHAT_STATIC_TITLE,
+          titleIsPlaceholder: false,
+        }
+      : {
+          title,
+          // The app's name above is a stand-in so the header and sidebar have
+          // something to show before the first exchange; title generation
+          // replaces it once there is a real conversation to title.
+          titleIsPlaceholder: true,
+        }),
     modelId: llmSelection.modelId,
     chatApiKeyId: llmSelection.chatApiKeyId,
     // App-opened chats are drafts: the conversations list hides them until the
     // user writes a message (see ConversationModel.findAll), so clicking
     // through apps doesn't pile unused chats into the sidebar.
     origin: "app_open",
-    // The app's name above is a stand-in so the header and sidebar have
-    // something to show before the first exchange; title generation replaces it
-    // once there is a real conversation to title.
-    titleIsPlaceholder: true,
   });
 
   return { conversationId: conversation.id };
@@ -338,14 +376,17 @@ async function seedConversationWithRender(params: {
   greeting?: string;
   /** Pre-resolved chat agent; resolved downstream when the caller has none. */
   agentId?: string;
+  lockedChat?: LockedChatSeed | null;
 }): Promise<{ conversationId: string }> {
-  const { userId, organizationId, title, part, greeting, agentId } = params;
+  const { userId, organizationId, title, part, greeting, agentId, lockedChat } =
+    params;
 
   const { conversationId } = await createAppChatConversation({
     userId,
     organizationId,
     title,
     agentId,
+    lockedChat,
   });
 
   const content: UIMessage = {
@@ -354,23 +395,31 @@ async function seedConversationWithRender(params: {
     parts: [part],
   };
 
-  await MessageModel.create({
-    conversationId,
-    role: "assistant",
-    content,
-  });
+  // Seeded server-side, but stored exactly like a model-written message —
+  // sealed under the conversation key when the chat is locked.
+  await MessageModel.create(
+    {
+      conversationId,
+      role: "assistant",
+      content,
+    },
+    lockedChat?.key ?? null,
+  );
 
   // Separate message so the render above stays a byte-for-byte model-driven render.
   if (greeting) {
-    await MessageModel.create({
-      conversationId,
-      role: "assistant",
-      content: {
-        id: generateId(),
+    await MessageModel.create(
+      {
+        conversationId,
         role: "assistant",
-        parts: [{ type: "text", text: greeting }],
-      } satisfies UIMessage,
-    });
+        content: {
+          id: generateId(),
+          role: "assistant",
+          parts: [{ type: "text", text: greeting }],
+        } satisfies UIMessage,
+      },
+      lockedChat?.key ?? null,
+    );
   }
 
   return { conversationId };

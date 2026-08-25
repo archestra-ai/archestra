@@ -13,9 +13,11 @@ type McpCatalogApiData =
   archestraApiTypes.CreateInternalMcpCatalogItemData["body"];
 
 /**
- * The starting point for an OAuth section the user has not filled in yet:
- * every field blank, so `transformFormToApiData` sends exactly what is on
- * screen. Shared by the new-entry form and by external-catalog import, which
+ * The starting point for an OAuth section the user has not filled in yet.
+ * Credentials, endpoints and the Scopes field start blank, so
+ * `transformFormToApiData` sends exactly what is on screen rather than
+ * inventing values; the remaining fields carry the defaults a new entry wants
+ * anyway. Shared by the new-entry form and by external-catalog import, which
  * must not drift apart.
  */
 export function emptyOauthFormConfig(): NonNullable<

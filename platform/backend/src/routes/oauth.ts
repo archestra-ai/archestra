@@ -170,6 +170,15 @@ export async function resolveOAuthScopesForAuthorization(params: {
     OFFLINE_ACCESS_OAUTH_SCOPE,
   ];
   const withAdditionalScopes = (scopes: string[]): string[] => {
+    // Nothing configured and nothing discovered means "let the authorization
+    // server apply this client's default scope set", which the caller expresses
+    // by omitting `scope` entirely. Appending a lone behavioral scope like
+    // `offline_access` would turn that into "grant exactly offline_access" — a
+    // request with no API scopes at all, which strict servers answer with
+    // `invalid_scope`. These scopes are additions to a scope set, not a set.
+    if (scopes.length === 0) {
+      return [];
+    }
     const merged = [...scopes];
     for (const scope of additionalScopes) {
       if (!merged.includes(scope)) {
@@ -964,16 +973,26 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
               { registrationEndpoint },
               "Attempting dynamic client registration",
             );
-            let registeredWithoutScope = false;
+            let registeredWithoutScope = scopesToUse.length === 0;
             try {
               registrationResult = await registerOAuthClient(
                 registrationEndpoint,
-                {
-                  ...registrationMetadata,
-                  scope: scopesToUse.join(" "),
-                },
+                // RFC 7591 makes `scope` optional. With no scopes to request,
+                // omit the key rather than registering with `scope: ""`.
+                registeredWithoutScope
+                  ? registrationMetadata
+                  : {
+                      ...registrationMetadata,
+                      scope: scopesToUse.join(" "),
+                    },
               );
             } catch (error) {
+              if (registeredWithoutScope) {
+                // The first attempt already omitted `scope`, so every fallback
+                // below is the same request again. Let the outer handler
+                // report the failure instead of replaying it.
+                throw error;
+              }
               // Servers that restrict which scopes dynamically registered
               // clients may request reject the whole registration when the
               // requested list has gone stale (e.g. an auth server that

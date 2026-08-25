@@ -998,16 +998,23 @@ export function McpCatalogForm({
             {catalogButton}
 
             <div className="space-y-4">
-              <div className="flex items-stretch gap-3">
-                <AgentIconPicker
-                  value={form.watch("icon") ?? null}
-                  fallbackType="server"
-                  onChange={(icon) =>
-                    form.setValue("icon", icon, { shouldDirty: true })
-                  }
-                  showLogos
-                  className="h-auto w-16 self-stretch rounded-md"
-                />
+              <div className="flex items-start gap-3">
+                {/* Labelled like every other field: unlabelled, the picker read
+                    as decoration and people concluded a server's icon could not
+                    be changed at all. */}
+                <div className="grid gap-2">
+                  <Label htmlFor="mcp-catalog-icon">Icon</Label>
+                  <AgentIconPicker
+                    id="mcp-catalog-icon"
+                    value={form.watch("icon") ?? null}
+                    fallbackType="server"
+                    onChange={(icon) =>
+                      form.setValue("icon", icon, { shouldDirty: true })
+                    }
+                    showLogos
+                    className="h-9 w-16 rounded-md"
+                  />
+                </div>
                 <FormField
                   control={form.control}
                   name="name"

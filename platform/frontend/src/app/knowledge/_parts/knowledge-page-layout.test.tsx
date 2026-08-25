@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 let mockIsKnowledgeBaseConfigured = false;
@@ -156,6 +157,36 @@ describe("KnowledgePageLayout", () => {
       ).toBeInTheDocument();
       expect(
         screen.queryByText(/within the free tier for teams under 30 users/),
+      ).not.toBeInTheDocument();
+    });
+
+    /**
+     * The licence gates team-scoped connector visibility and auto-sync
+     * permissions — not Knowledge as a whole. Creating knowledge bases,
+     * indexing and retrieval keep working above the threshold, so the notice
+     * must not tell an operator the feature has been switched off.
+     */
+    it("names the gated capabilities rather than declaring Knowledge disabled", async () => {
+      vi.mocked(useSmallTeamTier).mockReturnValue({
+        communicate: true,
+        smallTeam: false,
+        envFlag: false,
+        userCount: 42,
+        threshold: 30,
+      } as ReturnType<typeof useSmallTeamTier>);
+      renderLayout();
+
+      await userEvent.hover(
+        screen.getByRole("button", { name: /licensing for this feature/i }),
+      );
+
+      expect(
+        await screen.findByText(
+          /Enterprise features \(RBAC, SSO, Knowledge Base with access control\) are disabled until a license is activated\./,
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText(/Knowledge is an enterprise feature/),
       ).not.toBeInTheDocument();
     });
   });

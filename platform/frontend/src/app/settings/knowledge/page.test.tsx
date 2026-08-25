@@ -322,6 +322,34 @@ beforeEach(() => {
 });
 
 describe("KnowledgeSettingsPage", () => {
+  describe("small team tier notice", () => {
+    /**
+     * The licence gates team-scoped connector visibility and auto-sync
+     * permissions — not Knowledge as a whole. Creating knowledge bases,
+     * indexing and retrieval keep working above the threshold, so the notice
+     * must not tell an operator the feature has been switched off.
+     */
+    it("names the gated capabilities rather than declaring Knowledge disabled", () => {
+      vi.mocked(useSmallTeamTier).mockReturnValue({
+        communicate: true,
+        smallTeam: false,
+        envFlag: false,
+        userCount: 42,
+        threshold: 30,
+      } as ReturnType<typeof useSmallTeamTier>);
+      renderPage();
+
+      expect(
+        screen.getByText(
+          /Enterprise features \(RBAC, SSO, Knowledge Base with access control\) are disabled until a license is activated\./,
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText(/Knowledge is an enterprise feature/),
+      ).not.toBeInTheDocument();
+    });
+  });
+
   describe("embedding model placeholder", () => {
     it("shows placeholder text when no embedding key is configured (not the database default)", () => {
       mockOrganization = {

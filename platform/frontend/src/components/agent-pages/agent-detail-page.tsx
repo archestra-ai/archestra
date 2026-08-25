@@ -436,7 +436,13 @@ function AgentDetails({
         </div>
       }
     >
-      <div className="space-y-10">
+      {/*
+        One gap for the whole page. Once Connect lost its heading the body
+        became a single run of cards, so the wider band that used to separate
+        two titled sections now fell between the Overview card and Endpoint —
+        40px there against 16px between every card below it.
+      */}
+      <div className="space-y-4">
         {kind !== "llm_proxy" && (
           <OverviewSummary
             headingId="agent-overview-heading"

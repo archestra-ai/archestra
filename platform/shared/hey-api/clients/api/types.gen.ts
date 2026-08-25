@@ -13276,6 +13276,10 @@ export type GetAllAgentsData = {
          * Filter by lifecycle status. Deleted rows require delete permission.
          */
         status?: 'active' | 'deleted';
+        /**
+         * Attach each agent's assigned tools. Defaults to true. Pass false from callers that only need the roster itself — the tool refs carry every tool's name and description, which on an organization of any size is the great majority of this response's bytes. Agents come back with an empty `tools` array when it is off, meaning 'not requested' rather than 'none assigned'.
+         */
+        includeTools?: boolean;
     };
     url: '/api/agents/all';
 };

@@ -313,6 +313,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .describe(
               "Filter by lifecycle status. Deleted rows require delete permission.",
             ),
+          includeTools: z
+            .preprocess((val) => val !== "false" && val !== false, z.boolean())
+            .optional()
+            .describe(
+              "Attach each agent's assigned tools. Defaults to true. Pass false from callers that only need the roster itself — the tool refs carry every tool's name and description, which on an organization of any size is the great majority of this response's bytes. Agents come back with an empty `tools` array when it is off, meaning 'not requested' rather than 'none assigned'.",
+            ),
         }),
         response: constructResponseSchema(z.array(SelectAgentSchema)),
       },
@@ -327,6 +333,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           scope,
           excludeOtherPersonalAgents,
           status,
+          includeTools,
         },
         user,
         organizationId,
@@ -369,6 +376,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ? excludeOtherPersonalAgents
             : undefined,
           status,
+          includeTools,
         }),
       );
     },

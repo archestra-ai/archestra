@@ -243,6 +243,9 @@ vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/chat/chat.query", () => ({
   useProfileToolsWithIds: () => ({ data: [] }),
   useCancelChatMcpTask: () => ({ mutateAsync: vi.fn() }),
+  // Read once for the whole transcript, to decide whether an attachment chip
+  // offers "Save to knowledge". An ordinary (unlocked) chat here.
+  useConversation: () => ({ data: { lockedChat: false } }),
 }));
 
 vi.mock("@/lib/chat/chat-message.query", () => ({

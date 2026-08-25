@@ -1204,7 +1204,33 @@ export async function handleLLMProxy<
     });
 
     // Build final request
-    const finalRequest = requestAdapter.toProviderRequest();
+    const builtRequest = requestAdapter.toProviderRequest();
+
+    // Repair unpaired UTF-16 surrogates before the body leaves for the
+    // provider. Half a surrogate pair has no UTF-8 encoding, so a provider
+    // rejects the entire request ("the request body is not valid JSON" on
+    // Bedrock). Because the offending half usually sits in a *stored* turn that
+    // every later turn replays, leaving it in place wedges the conversation for
+    // good — the user's only escape is abandoning the history. We fix our own
+    // producers at the source, but the transcript also carries text we never
+    // shaped (third-party MCP tool output truncated mid-character, pasted
+    // content), so this backstop is what keeps one bad character from costing a
+    // conversation. Clean bodies pass through by reference and are not copied.
+    const { value: repairedRequest, repaired: repairedSurrogates } =
+      utils.repairLoneSurrogates(builtRequest);
+    if (repairedSurrogates > 0) {
+      // Count only, never the text: this rides on user conversation content.
+      logger.warn(
+        {
+          provider: providerName,
+          agentId: resolvedAgent.id,
+          organizationId: resolvedAgent.organizationId,
+          repairedSurrogates,
+        },
+        `[${providerName}Proxy] Replaced unpaired surrogates in the outbound request body; the provider would have rejected it as malformed JSON`,
+      );
+    }
+    const finalRequest = repairedRequest as TRequest;
 
     // Which called tool names count as available to evaluatePolicies, in the
     // canonical form tool-call names are compared in. Read from the request

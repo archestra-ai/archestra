@@ -85,12 +85,10 @@ export function transformFormToApiData(
           .split(",")
           .map((uri) => uri.trim())
           .filter((uri) => uri.length > 0);
-    const explicitScopes = values.oauthConfig.scopes?.trim() ?? "";
-    const parsedScopes = explicitScopes
+    const scopesList = (values.oauthConfig.scopes ?? "")
       .split(",")
       .map((scope) => scope.trim())
       .filter((scope) => scope.length > 0);
-    const scopesList = parsedScopes;
     const additionalScopesList = (values.oauthConfig.additional_scopes ?? "")
       .split(",")
       .map((scope) => scope.trim())
@@ -134,16 +132,14 @@ export function transformFormToApiData(
       //   2. If `scopes` is empty, backend tries .well-known discovery
       //      (oauth-protected-resource, then oauth-authorization-server).
       //   3. If discovery yields nothing, backend falls back to `default_scopes`.
-      // When the user configures explicit scopes, mirror them into default_scopes so
-      // the fallback matches intent. When the field is blank, keep the generic
-      // ["read","write"] fallback — some proxy MCP servers (e.g. Atlassian) accept
-      // those literal values and translate them to real provider scopes.
-      default_scopes:
-        scopesList.length > 0
-          ? scopesList
-          : isClientCredentials
-            ? []
-            : ["read", "write"],
+      // The Scopes field is the sole source of both, so a blank field stays
+      // blank the whole way down and the authorization request omits `scope`
+      // altogether — `scope` is optional, and a server that advertises nothing
+      // applies its own default set. Never synthesize scope values here: a
+      // server that wants literal values such as "read, write" (some proxy MCP
+      // servers translate those into real provider scopes) gets them by having
+      // them typed into the field, where they are visible and editable.
+      default_scopes: scopesList,
       supports_resource_metadata: values.oauthConfig.supports_resource_metadata,
       additional_scopes: isClientCredentials ? undefined : additionalScopesList,
     };
@@ -776,7 +772,7 @@ export function transformExternalCatalogToFormValues(
         typeof window !== "undefined"
           ? `${window.location.origin}/oauth-callback`
           : "",
-      scopes: "read, write",
+      scopes: "",
       additional_scopes: "offline_access",
       supports_resource_metadata: true,
       grantType: "authorization_code",

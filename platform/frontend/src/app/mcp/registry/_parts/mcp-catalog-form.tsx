@@ -287,7 +287,7 @@ export function McpCatalogForm({
               typeof window !== "undefined"
                 ? `${window.location.origin}/oauth-callback`
                 : "",
-            scopes: "read, write",
+            scopes: "",
             additional_scopes: "offline_access",
             supports_resource_metadata: true,
             grantType: "authorization_code",
@@ -2177,7 +2177,12 @@ export function McpCatalogForm({
                                         />
                                       </FormControl>
                                       <FormDescription>
-                                        Comma-separated list of OAuth scopes.
+                                        Comma-separated list of OAuth scopes,
+                                        sent as-is instead of the ones the
+                                        server advertises. Leave blank to
+                                        request the scopes the server publishes
+                                        in its metadata, or none at all if it
+                                        publishes none.
                                       </FormDescription>
                                       <FormMessage />
                                     </FormItem>

@@ -141,7 +141,20 @@ export const auth = betterAuth({
     },
   },
   // Prevent JWT plugin's /token endpoint from conflicting with OAuth provider's /oauth2/token
-  disabledPaths: ["/token"],
+  disabledPaths: [
+    "/token",
+    // The dynamic-access-control plugin mounts role CRUD over HTTP whenever
+    // it is enabled. Those endpoints are a second, unsupervised door onto the
+    // same table as `/api/roles`, and they skip everything that surface adds:
+    // the enterprise licence gate, the permissions-cache invalidation, the
+    // `member:impersonate` system-role resync, and the audit trail. Close the
+    // door — `disabledPaths` is enforced in better-auth's HTTP router only,
+    // so `betterAuth.api.createOrgRole()` and friends keep working for the
+    // `/api/roles` handlers that call them server-side.
+    "/organization/create-role",
+    "/organization/update-role",
+    "/organization/delete-role",
+  ],
   ...(config.authRateLimitDisabled ? { rateLimit: { enabled: false } } : {}),
   plugins: [
     organization({

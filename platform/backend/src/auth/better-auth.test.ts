@@ -2788,6 +2788,43 @@ describe("handleAfterHook", () => {
   });
 });
 
+describe("dynamic access control endpoints", () => {
+  // The organization plugin's `dynamicAccessControl` mounts role CRUD over
+  // HTTP. Those endpoints write the same table as `/api/roles` while skipping
+  // the enterprise licence gate, the permissions-cache invalidation, the
+  // `member:impersonate` system-role resync, and the audit trail — so they are
+  // closed in `disabledPaths` and `/api/roles` is the only way in. Reads stay
+  // mounted; they grant nothing.
+  test.each([
+    "/organization/create-role",
+    "/organization/update-role",
+    "/organization/delete-role",
+  ])("POST %s is not served over HTTP", async (path) => {
+    const res = await auth.handler(
+      new Request(`http://localhost:3000/api/auth${path}`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: "http://localhost:3000",
+        },
+        body: JSON.stringify({
+          role: "smuggled_admin",
+          permission: { ac: ["create"] },
+          additionalFields: { name: "Smuggled Admin" },
+        }),
+      }),
+    );
+
+    expect(res.status).toBe(404);
+    expect(
+      await db
+        .select()
+        .from(schema.organizationRolesTable)
+        .where(eq(schema.organizationRolesTable.role, "smuggled_admin")),
+    ).toHaveLength(0);
+  });
+});
+
 describe("sign-out response body", () => {
   // Regression guard. better-auth serializes whatever an after-hook returns as
   // the HTTP response body. handleAfterHook used to `return ctx` on the

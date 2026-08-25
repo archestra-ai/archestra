@@ -93,6 +93,7 @@ import {
   UNSAFE_CONTEXT_BOUNDARY_REASON,
   type UnsafeContextBoundary,
 } from "@/types";
+import { repairLoneSurrogates } from "@/utils/lone-surrogates";
 import { isLoopbackRequest } from "@/utils/network";
 import { isUuid } from "@/utils/uuid";
 import {
@@ -1217,7 +1218,7 @@ export async function handleLLMProxy<
     // content), so this backstop is what keeps one bad character from costing a
     // conversation. Clean bodies pass through by reference and are not copied.
     const { value: repairedRequest, repaired: repairedSurrogates } =
-      utils.repairLoneSurrogates(builtRequest);
+      repairLoneSurrogates(builtRequest);
     if (repairedSurrogates > 0) {
       // Count only, never the text: this rides on user conversation content.
       logger.warn(

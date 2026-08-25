@@ -1,6 +1,6 @@
 /**
- * Last-resort repair of unpaired UTF-16 surrogates in an outbound provider
- * request.
+ * Repair of unpaired UTF-16 surrogates in text that has to survive leaving the
+ * process — an outbound provider request, or a row on its way into Postgres.
  *
  * A surrogate pair encodes one astral character (emoji, rarer CJK, many
  * symbols) as two UTF-16 code units. Split the pair — by slicing, truncating or
@@ -19,14 +19,16 @@
  * rejected identically, and the only escape is abandoning the history and
  * starting a new chat.
  *
+ * Postgres is the second victim: `jsonb`/`text` are UTF-8, so a lone surrogate
+ * makes an insert fail with "invalid input syntax for type json" and the row is
+ * lost outright.
+ *
  * Producers are fixed at the source where we own them (see
- * `buildAppliedEditExcerpts`), but the transcript also carries text we never
- * shaped: third-party MCP tool output truncated mid-character by the server
- * that produced it, pasted content, upstream completions cut at a token
- * boundary. Repairing here — the last point before the request goes upstream,
- * shared by every provider — keeps one bad character from costing a
- * conversation, and lets an already-poisoned history recover on its next turn
- * instead of staying stuck forever.
+ * `buildAppliedEditExcerpts`), but the text we handle also comes from places we
+ * never shaped: third-party MCP tool output truncated mid-character by the
+ * server that produced it, pasted content, upstream completions cut at a token
+ * boundary. Repairing at these boundaries keeps one bad character from costing
+ * a conversation or a stored message.
  *
  * Substitution, not removal: U+FFFD is what every standard decoder yields for
  * an unpaired surrogate, it keeps offsets stable for anything counting
@@ -45,7 +47,7 @@ const LONE_SURROGATE =
 /** U+FFFD REPLACEMENT CHARACTER, the standard stand-in for undecodable input. */
 const REPLACEMENT = "�";
 
-export type LoneSurrogateRepair = {
+type LoneSurrogateRepair = {
   /** The input, or a repaired copy when `repaired` is greater than zero. */
   value: unknown;
   /** How many lone surrogates were replaced. Zero means `value` is the input. */
@@ -63,6 +65,17 @@ export type LoneSurrogateRepair = {
  * arrays, Date, streams) are passed through untouched: they are not places a
  * JSON string lives, and cloning them would be both wasteful and lossy.
  */
+/**
+ * Repair one string. For callers already walking a structure for their own
+ * reasons, so the traversal is not paid for twice.
+ */
+export function repairLoneSurrogateText(text: string): string {
+  LONE_SURROGATE.lastIndex = 0;
+  if (!LONE_SURROGATE.test(text)) return text;
+  LONE_SURROGATE.lastIndex = 0;
+  return text.replace(LONE_SURROGATE, REPLACEMENT);
+}
+
 export function repairLoneSurrogates(value: unknown): LoneSurrogateRepair {
   let repaired = 0;
 

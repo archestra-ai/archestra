@@ -56,6 +56,7 @@ import {
   normalizeInteractionResponse,
 } from "@/types";
 import { trackBackgroundWork } from "@/utils/background-work";
+import { repairLoneSurrogateText } from "@/utils/lone-surrogates";
 import { isUuid, uuidv7 } from "@/utils/uuid";
 import AgentModel from "./agent";
 import AgentTeamModel from "./agent-team";
@@ -304,22 +305,27 @@ function buildExternalAgentDisplayName(
 }
 
 /**
- * Strips null bytes (\u0000) from JSON-serializable data.
- * PostgreSQL JSONB rejects null byte unicode escape sequences, which can appear
- * in LLM responses (e.g., Gemini's thoughtSignature fields).
+ * Strips characters PostgreSQL JSONB cannot store from JSON-serializable data.
+ *
+ * Two kinds, both of which appear in real LLM traffic and both of which fail the
+ * insert outright — losing the whole interaction row rather than one field:
+ *  - Null bytes (\u0000), which JSONB rejects as an escape sequence (e.g. in
+ *    Gemini's thoughtSignature fields).
+ *  - Unpaired UTF-16 surrogates, half an astral character left by a completion
+ *    or tool result cut mid-character. JSONB is UTF-8, which cannot encode one.
  */
-function stripNullBytes<T>(value: T): T {
+function stripUnstorableChars<T>(value: T): T {
   if (value === null || value === undefined) return value;
   if (typeof value === "string") {
-    return value.replaceAll("\u0000", "") as T;
+    return repairLoneSurrogateText(value.replaceAll("\u0000", "")) as T;
   }
   if (Array.isArray(value)) {
-    return value.map(stripNullBytes) as T;
+    return value.map(stripUnstorableChars) as T;
   }
   if (typeof value === "object") {
     const result: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value)) {
-      result[k] = stripNullBytes(v);
+      result[k] = stripUnstorableChars(v);
     }
     return result as T;
   }
@@ -391,9 +397,9 @@ class InteractionModel {
     const sanitized = {
       ...data,
       environmentId,
-      request: stripNullBytes(data.request),
-      processedRequest: stripNullBytes(data.processedRequest),
-      response: stripNullBytes(data.response),
+      request: stripUnstorableChars(data.request),
+      processedRequest: stripUnstorableChars(data.processedRequest),
+      response: stripUnstorableChars(data.response),
     };
 
     // Delta-encode Claude Code / Claude Desktop requests so we don't re-store the

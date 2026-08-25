@@ -217,6 +217,82 @@ describe("MessageModel", () => {
     });
   });
 
+  describe("unpaired surrogates", () => {
+    // A completion cut mid-character (or a tool result truncated by whatever
+    // produced it) leaves half an astral character behind. Postgres jsonb is
+    // UTF-8, which has no encoding for a lone surrogate, so the insert fails
+    // with "invalid input syntax for type json" and the turn is lost entirely.
+    // Storing it with the broken half replaced beats not storing it at all.
+    const HIGH = "\uD83D";
+
+    test("stores a message whose text was cut mid-character", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const agent = await makeAgent({ name: "Test Agent", teams: [] });
+      const conversation = await ConversationModel.create({
+        userId: user.id,
+        organizationId: org.id,
+        agentId: agent.id,
+        title: "Test Conversation",
+      });
+
+      const message = await MessageModel.create({
+        conversationId: conversation.id,
+        role: "assistant",
+        content: {
+          id: "temp-id",
+          role: "assistant",
+          parts: [{ type: "text", text: `tabBtn('inc', '${HIGH}` }],
+        },
+      });
+
+      // The turn survives the round trip instead of vanishing...
+      const found = await MessageModel.findById(message.id);
+      expect(found).toBeDefined();
+      const text = JSON.stringify(found?.content);
+      // ...with the stranded half replaced rather than carried forward.
+      expect(text).not.toMatch(
+        /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/,
+      );
+      expect(text).toContain("tabBtn");
+    });
+
+    test("leaves an intact emoji untouched", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const agent = await makeAgent({ name: "Test Agent", teams: [] });
+      const conversation = await ConversationModel.create({
+        userId: user.id,
+        organizationId: org.id,
+        agentId: agent.id,
+        title: "Test Conversation",
+      });
+
+      const message = await MessageModel.create({
+        conversationId: conversation.id,
+        role: "assistant",
+        content: {
+          id: "temp-id",
+          role: "assistant",
+          parts: [{ type: "text", text: "shipped \u{1F4CE} done" }],
+        },
+      });
+
+      const found = await MessageModel.findById(message.id);
+      expect(JSON.stringify(found?.content)).toContain(
+        "shipped \u{1F4CE} done",
+      );
+    });
+  });
+
   describe("findById", () => {
     test("returns message by ID", async ({
       makeUser,

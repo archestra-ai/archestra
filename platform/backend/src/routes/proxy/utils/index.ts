@@ -10,7 +10,6 @@ export * as costOptimization from "./cost-optimization";
 export { collectDeclaredToolNames } from "./declared-tool-names";
 export * as gatewayToolNames from "./gateway-tool-names";
 export * as headers from "./headers";
-export { repairLoneSurrogates } from "./lone-surrogates";
 export { checkModelTeamAccess } from "./model-team-access";
 export * as tools from "./tools";
 export * as toonConversion from "./toon-conversion";

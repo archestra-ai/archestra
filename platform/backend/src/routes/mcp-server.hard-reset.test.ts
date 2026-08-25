@@ -147,6 +147,12 @@ class FakeCluster {
             },
             status: {
               phase: pod.phase,
+              conditions: [
+                {
+                  type: "Ready",
+                  status: pod.phase === "Running" ? "True" : "False",
+                },
+              ],
               containerStatuses: pod.waitingReason
                 ? [
                     {

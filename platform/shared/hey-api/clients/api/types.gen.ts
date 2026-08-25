@@ -94931,9 +94931,6 @@ export type GetIdentityProvidersResponses = {
     200: Array<{
         id: string;
         issuer: string;
-        /**
-         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
-         */
         oidcConfig?: {
             issuer: string;
             skipDiscovery?: boolean;
@@ -94941,7 +94938,7 @@ export type GetIdentityProvidersResponses = {
             enableRpInitiatedLogout?: boolean;
             hd?: string;
             clientId: string;
-            clientSecret: string;
+            clientSecret?: string;
             authorizationEndpoint?: string;
             discoveryEndpoint: string;
             userInfoEndpoint?: string;
@@ -95053,6 +95050,7 @@ export type GetIdentityProvidersResponses = {
         domain: string;
         domainVerified: boolean | null;
         ssoLoginEnabled: boolean;
+        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
     }>;
 };
 
@@ -95260,9 +95258,6 @@ export type CreateIdentityProviderResponses = {
     200: {
         id: string;
         issuer: string;
-        /**
-         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
-         */
         oidcConfig?: {
             issuer: string;
             skipDiscovery?: boolean;
@@ -95270,7 +95265,7 @@ export type CreateIdentityProviderResponses = {
             enableRpInitiatedLogout?: boolean;
             hd?: string;
             clientId: string;
-            clientSecret: string;
+            clientSecret?: string;
             authorizationEndpoint?: string;
             discoveryEndpoint: string;
             userInfoEndpoint?: string;
@@ -95382,6 +95377,7 @@ export type CreateIdentityProviderResponses = {
         domain: string;
         domainVerified: boolean | null;
         ssoLoginEnabled: boolean;
+        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
     };
 };
 
@@ -95900,9 +95896,6 @@ export type GetIdentityProviderResponses = {
     200: {
         id: string;
         issuer: string;
-        /**
-         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
-         */
         oidcConfig?: {
             issuer: string;
             skipDiscovery?: boolean;
@@ -95910,7 +95903,7 @@ export type GetIdentityProviderResponses = {
             enableRpInitiatedLogout?: boolean;
             hd?: string;
             clientId: string;
-            clientSecret: string;
+            clientSecret?: string;
             authorizationEndpoint?: string;
             discoveryEndpoint: string;
             userInfoEndpoint?: string;
@@ -96022,6 +96015,7 @@ export type GetIdentityProviderResponses = {
         domain: string;
         domainVerified: boolean | null;
         ssoLoginEnabled: boolean;
+        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
     };
 };
 
@@ -96030,9 +96024,6 @@ export type GetIdentityProviderResponse = GetIdentityProviderResponses[keyof Get
 export type UpdateIdentityProviderData = {
     body: {
         issuer?: string;
-        /**
-         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
-         */
         oidcConfig?: {
             issuer: string;
             skipDiscovery?: boolean;
@@ -96040,7 +96031,7 @@ export type UpdateIdentityProviderData = {
             enableRpInitiatedLogout?: boolean;
             hd?: string;
             clientId: string;
-            clientSecret: string;
+            clientSecret?: string;
             authorizationEndpoint?: string;
             discoveryEndpoint: string;
             userInfoEndpoint?: string;
@@ -96230,9 +96221,6 @@ export type UpdateIdentityProviderResponses = {
     200: {
         id: string;
         issuer: string;
-        /**
-         * https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22
-         */
         oidcConfig?: {
             issuer: string;
             skipDiscovery?: boolean;
@@ -96240,7 +96228,7 @@ export type UpdateIdentityProviderResponses = {
             enableRpInitiatedLogout?: boolean;
             hd?: string;
             clientId: string;
-            clientSecret: string;
+            clientSecret?: string;
             authorizationEndpoint?: string;
             discoveryEndpoint: string;
             userInfoEndpoint?: string;
@@ -96352,6 +96340,7 @@ export type UpdateIdentityProviderResponses = {
         domain: string;
         domainVerified: boolean | null;
         ssoLoginEnabled: boolean;
+        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
     };
 };
 

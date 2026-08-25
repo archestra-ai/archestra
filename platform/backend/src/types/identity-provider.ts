@@ -1,8 +1,11 @@
 import {
+  IDENTITY_PROVIDER_SECRET_PATHS,
   IdentityProviderOidcConfigSchema,
   IdentityProviderSamlConfigSchema,
   IdpRoleMappingConfigSchema,
   IdpTeamSyncConfigSchema,
+  RedactedIdentityProviderOidcConfigSchema,
+  RedactedIdentityProviderSamlConfigSchema,
 } from "@archestra/shared";
 import {
   createInsertSchema,
@@ -23,6 +26,26 @@ export const SelectIdentityProviderSchema = createSelectSchema(
   schema.identityProvidersTable,
   extendedFields,
 );
+
+/**
+ * Identity provider as returned by the admin CRUD endpoints.
+ *
+ * Same shape as `SelectIdentityProviderSchema` minus every credential in
+ * `IDENTITY_PROVIDER_SECRET_PATHS`, plus `configuredSecretPaths` so the edit
+ * form can tell "stored, left blank" apart from "never set". Secrets stay
+ * readable through the model for the SSO login and token-exchange paths; they
+ * simply stop crossing the HTTP boundary.
+ */
+export const RedactedIdentityProviderSchema = createSelectSchema(
+  schema.identityProvidersTable,
+  {
+    ...extendedFields,
+    oidcConfig: RedactedIdentityProviderOidcConfigSchema.optional(),
+    samlConfig: RedactedIdentityProviderSamlConfigSchema.optional(),
+  },
+).extend({
+  configuredSecretPaths: z.array(z.enum(IDENTITY_PROVIDER_SECRET_PATHS)),
+});
 
 /**
  * Minimal identity provider info for public/unauthenticated endpoints (e.g., login page).
@@ -57,9 +80,19 @@ export const InsertIdentityProviderSchema = createInsertSchema(
   extendedFields,
 ).omit({ id: true, organizationId: true });
 
+/**
+ * Update payload. `oidcConfig.clientSecret` is optional here (unlike on create)
+ * because reads redact it: an admin editing an unrelated field submits the
+ * config back without a secret, and the model restores the stored one. Sending
+ * a non-empty value still rotates the credential.
+ */
 export const UpdateIdentityProviderSchema = createUpdateSchema(
   schema.identityProvidersTable,
-  extendedFields,
+  {
+    ...extendedFields,
+    oidcConfig: RedactedIdentityProviderOidcConfigSchema.optional(),
+    samlConfig: RedactedIdentityProviderSamlConfigSchema.optional(),
+  },
 ).omit({
   id: true,
   organizationId: true,

@@ -466,8 +466,12 @@ function VirtualKeyValueCell({
     return fetched;
   };
   return (
-    <div className="flex items-center gap-1 font-mono text-xs">
-      <code className={visible && value ? "break-all" : "whitespace-nowrap"}>
+    // min-w-0 + overflow-hidden: the DataTable's fixed layout does not clip
+    // cell content, so an unconstrained flex row paints over the next column.
+    <div className="flex min-w-0 items-center gap-1 overflow-hidden font-mono text-xs">
+      <code
+        className={visible && value ? "min-w-0 break-all" : "min-w-0 truncate"}
+      >
         {visible && value ? value : `${tokenStart}…`}
       </code>
       {canReveal && (
@@ -476,6 +480,7 @@ function VirtualKeyValueCell({
             type="button"
             variant="ghost"
             size="icon-sm"
+            className="shrink-0"
             aria-label={visible ? "Hide key" : "Reveal key"}
             disabled={fetchValue.isPending}
             onClick={async () => {
@@ -493,6 +498,7 @@ function VirtualKeyValueCell({
             type="button"
             variant="ghost"
             size="icon-sm"
+            className="shrink-0"
             aria-label="Copy key"
             disabled={fetchValue.isPending}
             onClick={async () => {

@@ -18,15 +18,26 @@ import { ResourceVisibilityScopeSchema } from "./visibility";
  *
  * Personal agents are auto-seeded one per member and every member's copy
  * carries the same name ("My Assistant", "My Gateway"), so a bare name list
- * reads as duplicates. `scope` and `ownerEmail` are carried alongside so the
- * UI can attribute each one to its owner. `ownerEmail` is null when the author
- * has been deleted (the FK nulls out) or for agents with no author.
+ * reads as duplicates. `scope`, `ownerId` and `ownerEmail` are carried
+ * alongside so the UI can attribute each one to its owner.
+ *
+ * Both owner fields are null together when the agent has no author — the FK is
+ * `ON DELETE SET NULL`, so deleting a member's account leaves their personal
+ * agents authorless for good. A surface that names an owner has to say so
+ * rather than fall back to the scope, which is how the Usage tab came to print
+ * the word "Personal" where an owner belongs.
+ *
+ * `ownerId` is what identifies the viewer's own agents: matching on the email
+ * would compare a display string, and it is absent on exactly the rows that
+ * most need telling apart.
  */
 export const McpServerAgentUsageSchema = z.object({
   id: z.string(),
   name: z.string(),
   agentType: AgentTypeSchema,
   scope: ResourceVisibilityScopeSchema,
+  /** The author's user id — `agents.author_id`. */
+  ownerId: z.string().nullable(),
   ownerEmail: z.string().nullable(),
 });
 

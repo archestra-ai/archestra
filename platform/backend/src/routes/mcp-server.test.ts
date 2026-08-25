@@ -4260,13 +4260,15 @@ describe("mcp server core route coverage", () => {
       const servers = response.json();
       const returned = servers.find((s: { id: string }) => s.id === server.id);
       // The owner rides along so the UI can tell same-named personal agents
-      // ("My Assistant", "My Gateway") apart.
+      // ("My Assistant", "My Gateway") apart, and so the Usage tab can mark the
+      // viewer's own agents by id rather than by matching a display string.
       expect(returned.assignedAgents).toEqual([
         {
           id: agent.id,
           name: "Server Consumer",
           agentType: agent.agentType,
           scope: "personal",
+          ownerId: user.id,
           ownerEmail: user.email,
         },
       ]);

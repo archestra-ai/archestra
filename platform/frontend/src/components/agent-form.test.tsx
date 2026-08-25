@@ -740,12 +740,23 @@ describe("AgentForm delegation state", () => {
 
     const toggle = await screen.findByTestId(E2eTestId.ConsultAdvisorSwitch);
     expect(toggle).not.toBeChecked();
+    expect(
+      screen.getByText("Answers without consulting the Advisor."),
+    ).toBeInTheDocument();
+    const openAdvisor = screen.getByRole("link", { name: /open advisor/i });
+    expect(openAdvisor).toHaveAttribute("href", `/agents/${advisorAgent.id}`);
+    expect(openAdvisor).toHaveAttribute("target", "_blank");
 
     await user.click(toggle);
 
     await waitFor(() => {
       expect(screen.getByTestId(E2eTestId.ConsultAdvisorSwitch)).toBeChecked();
     });
+    expect(
+      screen.getByText(
+        "Gets a second opinion from the Advisor before answering.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("renders no environment selector for the advisor", async () => {

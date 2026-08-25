@@ -3,12 +3,12 @@ title: Built-in Subagents
 category: Agents
 order: 11
 description: The system subagents Archestra seeds into every organization, and what each one does
-lastUpdated: 2026-08-20
+lastUpdated: 2026-08-26
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Archestra seeds a set of built-in subagents into every organization. Each one handles a specific internal job — proposing tool policies, quarantining untrusted output, summarizing long chats, and so on. Most run automatically; you rarely invoke them directly. The Advisor is the exception: you turn it on per agent.
+Archestra seeds a set of built-in subagents into every organization. Each one handles a specific internal job — proposing tool policies, quarantining untrusted output, summarizing long chats, and so on. Most run automatically; you rarely invoke them directly. The Advisor is the exception: an administrator configures it once for the organization, and it can then be enabled on individual agents.
 
 An admin can open a built-in subagent in its settings and change its **system prompt** and **model** (requires `agent:admin`), and reset either back to the shipped default. Built-in subagents cannot be deleted or exported.
 
@@ -16,17 +16,28 @@ When a subagent has no model set, it runs on the model of the work it serves. A 
 
 ## Advisor
 
-The Advisor is in beta.
+> **Beta:** The Advisor is still under active development.
 
-The Advisor is a stronger model an agent consults at the decisions that shape a task: which approach to take, an error that keeps coming back, whether the work is really done. Everything else stays on the agent's own model.
+The Advisor is a shared reviewer that gives agents a second opinion. It is useful when an agent is choosing between approaches that would be expensive to reverse, is stuck, or wants its result reviewed before submitting it.
 
-Turn it on per agent with the **Advisor Subagent** switch, under **Subagents**. It works the same in Auto and Custom mode. **Advisor settings** on that row opens **Settings → LLM**, where the Advisor's model is picked — a stronger model than the callers use is the point.
+### Set up the Advisor
 
-Enabling the Advisor also instructs the agent to consult it before delivering a final answer, sharing the raw evidence behind the answer — samples of skipped input, for example — so the advice reviews the work, not a summary of it. When the Advisor's recommendation differs from the agent's own answer, the agent follows the Advisor.
+1. Open an agent and find **Advisor Subagent** under **Subagents**.
+2. Select **Open Advisor**. The organization's shared Advisor opens in a new tab.
+3. Choose the Advisor's model and save it. For a useful second opinion, choose a stronger model than the agents that consult it.
+4. Return to the original agent and turn on **Advisor Subagent**.
 
-The Advisor cannot see the conversation, the files, or the tools. It reads only the message the calling model writes, then returns advice. It changes nothing.
+The switch works the same in Auto and Custom subagent mode. Without an explicitly configured model, the Advisor follows the normal built-in-subagent fallback described above.
 
-There is one Advisor per organization, reachable from every environment. Consultations count against the consulting agent's environment [cost limits](/docs/platform-costs-and-limits). Each consultation is a separate interaction, billed at the Advisor's model rates. The agent consults at decision points rather than on every turn, so a cheap agent model paired with a strong Advisor usually costs less than running the strong model throughout.
+### What happens during a consultation
+
+An enabled agent is instructed to consult the Advisor before every final answer, verdict, or deliverable. It can also consult earlier when it needs help with an important decision.
+
+The agent sends one message containing its proposed answer, relevant constraints, and the evidence the Advisor needs to review. The Advisor cannot inspect the conversation, files, or tools, cannot ask a follow-up question, and cannot take action. It returns a recommendation and its reasoning to the calling agent. The calling agent follows a different recommendation unless the Advisor lacked relevant evidence or its advice conflicts with the task's instructions.
+
+### Scope and cost
+
+Each organization has one Advisor, available to agents in every environment. A consultation is a separate model interaction billed at the Advisor's model rates, and its spend counts against the consulting agent's environment [cost limits](/docs/platform-costs-and-limits).
 
 ## Policy Configuration Subagent
 

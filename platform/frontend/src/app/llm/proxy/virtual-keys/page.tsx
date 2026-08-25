@@ -7,6 +7,7 @@ import {
   Copy,
   Eye,
   EyeOff,
+  KeyRound,
   Pencil,
   Plus,
   Trash2,
@@ -30,6 +31,13 @@ import { formatProviderKeySummary } from "@/components/provider-key-mappings-fie
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
+import {
+  TableCard,
+  TableCardList,
+  TableCardView,
+  TableCardViewContent,
+  TableCardViewToggle,
+} from "@/components/table-card-view";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
@@ -311,148 +319,255 @@ function VirtualKeysTable() {
   }
 
   return (
-    <div>
-      <div className="mb-6">
-        <FilterBar>
-          <SearchInput
-            objectNamePlural="keys"
-            searchFields={["name"]}
-            paramName="search"
-            className={filterSearchClass}
-          />
-          <FilterSelect
-            value={keyTypeFilter ?? "all"}
-            onValueChange={(value) =>
-              updateQueryParams({
-                keyType: value === "all" ? null : value,
-                page: "1",
-              })
-            }
-            placeholder="Filter by type"
-            items={[
-              { value: "all", label: "All types" },
-              { value: "standard", label: "Standard" },
-              { value: "passthrough", label: "Passthrough" },
-            ]}
-          />
-          <FilterSelect
-            value={scopeFilter ?? "all"}
-            onValueChange={(value) =>
-              updateQueryParams({
-                scope: value === "all" ? null : value,
-                page: "1",
-              })
-            }
-            placeholder="Filter by visibility"
-            items={[
-              { value: "all", label: "All visibilities" },
-              { value: "org", label: "Organization" },
-              { value: "team", label: "Teams" },
-              { value: "personal", label: "Personal" },
-            ]}
-          />
-        </FilterBar>
-      </div>
+    <TableCardView storageKey="archestra-llm-virtual-keys-view">
+      <div>
+        <div className="mb-6">
+          <FilterBar actions={<TableCardViewToggle />}>
+            <SearchInput
+              objectNamePlural="keys"
+              searchFields={["name"]}
+              paramName="search"
+              className={filterSearchClass}
+            />
+            <FilterSelect
+              value={keyTypeFilter ?? "all"}
+              onValueChange={(value) =>
+                updateQueryParams({
+                  keyType: value === "all" ? null : value,
+                  page: "1",
+                })
+              }
+              placeholder="Filter by type"
+              items={[
+                { value: "all", label: "All types" },
+                { value: "standard", label: "Standard" },
+                { value: "passthrough", label: "Passthrough" },
+              ]}
+            />
+            <FilterSelect
+              value={scopeFilter ?? "all"}
+              onValueChange={(value) =>
+                updateQueryParams({
+                  scope: value === "all" ? null : value,
+                  page: "1",
+                })
+              }
+              placeholder="Filter by visibility"
+              items={[
+                { value: "all", label: "All visibilities" },
+                { value: "org", label: "Organization" },
+                { value: "team", label: "Teams" },
+                { value: "personal", label: "Personal" },
+              ]}
+            />
+          </FilterBar>
+        </div>
 
-      <BulkActionsBar
-        count={selectedKeys.length}
-        noun="key"
-        onClear={clearSelection}
-        busy={bulkDelete.isPending}
-        className="mb-3"
-      >
-        <PermissionButton
-          permissions={{ llmVirtualKey: ["delete"] }}
-          variant="destructive"
-          size="sm"
-          onClick={() => setBulkDeleteOpen(true)}
+        <BulkActionsBar
+          count={selectedKeys.length}
+          noun="key"
+          onClear={clearSelection}
+          busy={bulkDelete.isPending}
+          className="mb-3"
         >
-          <Trash2 className="h-4 w-4" />
-          <span>Delete</span>
-        </PermissionButton>
-      </BulkActionsBar>
+          <PermissionButton
+            permissions={{ llmVirtualKey: ["delete"] }}
+            variant="destructive"
+            size="sm"
+            onClick={() => setBulkDeleteOpen(true)}
+          >
+            <Trash2 className="h-4 w-4" />
+            <span>Delete</span>
+          </PermissionButton>
+        </BulkActionsBar>
 
-      <DataTable
-        columns={columns}
-        data={keys}
-        getRowId={(row) => row.id}
-        rowSelection={rowSelection}
-        onRowSelectionChange={setRowSelection}
-        hideSelectedCount
-        manualPagination
-        pagination={{
-          pageIndex,
-          pageSize,
-          total: pagination?.total ?? 0,
-        }}
-        onPaginationChange={setPagination}
-        isLoading={query.isFetching}
-        hasActiveFilters={hasActiveFilters}
-        onClearFilters={clearFilters}
-        emptyMessage="No virtual keys yet. Create one and choose its provider key mappings."
-        filteredEmptyMessage="No virtual keys match your filters. Try adjusting your search."
-      />
-
-      <CreateVirtualKeyDialogWithData
-        open={createKeyType !== null}
-        onOpenChange={(open) => {
-          if (!open) setCreateKeyType(null);
-        }}
-        keyType={createKeyType ?? "standard"}
-      />
-      <EditVirtualKeyDialog
-        virtualKey={editingKey}
-        onOpenChange={(open) => {
-          if (!open) setEditingKey(null);
-        }}
-      />
-      <DeleteConfirmDialog
-        open={!!deletingKey}
-        onOpenChange={(open) => {
-          if (!open) setDeletingKey(null);
-        }}
-        title="Delete Virtual Key"
-        description={`Are you sure you want to delete "${deletingKey?.name}"? This action cannot be undone.`}
-        confirmLabel="Delete"
-        isPending={deleteMutation.isPending}
-        onConfirm={() => {
-          if (!deletingKey) return;
-          deleteMutation.mutate(
-            { id: deletingKey.id },
-            { onSuccess: () => setDeletingKey(null) },
-          );
-        }}
-      />
-      {bulkDeleteOpen && (
-        <DeleteConfirmDialog
-          open={bulkDeleteOpen}
-          onOpenChange={setBulkDeleteOpen}
-          title="Delete virtual keys"
-          description={`Delete ${selectedKeys.length} ${
-            selectedKeys.length === 1 ? "key" : "keys"
-          }? Applications using them stop authenticating. This cannot be undone.`}
-          isPending={bulkDelete.isPending}
-          onConfirm={() => {
-            bulkDelete.mutate(selectedKeys, {
-              onSuccess: (outcome) => {
-                reportBulkOutcome({
-                  outcome,
-                  verb: "Deleted",
-                  failureVerb: "delete",
-                  noun: "key",
-                });
-                setBulkDeleteOpen(false);
-                // Rows that failed stay ticked so the selection can be
-                // retried rather than rebuilt.
-                if (outcome.failed.length === 0) clearSelection();
-              },
-            });
-          }}
-          confirmLabel="Delete keys"
-          pendingLabel="Deleting..."
+        <TableCardViewContent
+          cards={
+            <TableCardList
+              itemCount={keys.length}
+              isLoading={query.isFetching}
+              hasActiveFilters={hasActiveFilters}
+              onClearFilters={clearFilters}
+              emptyIcon={KeyRound}
+              emptyMessage="No virtual keys yet. Create one and choose its provider key mappings."
+              filteredEmptyMessage="No virtual keys match your filters"
+              pagination={{
+                pageIndex,
+                pageSize,
+                total: pagination?.total ?? 0,
+              }}
+              onPaginationChange={setPagination}
+            >
+              {keys.map((key) => (
+                <TableCard
+                  key={key.id}
+                  icon={<KeyRound className="h-5 w-5" />}
+                  title={key.name}
+                  selected={!!rowSelection[key.id]}
+                  onSelectedChange={(selected) => {
+                    setRowSelection((current) => {
+                      const next = { ...current };
+                      if (selected) next[key.id] = true;
+                      else delete next[key.id];
+                      return next;
+                    });
+                  }}
+                  selectionLabel={`Select ${key.name}`}
+                  actions={
+                    <TableRowActions
+                      itemName={key.name}
+                      actions={[
+                        {
+                          icon: <Pencil className="h-4 w-4" />,
+                          label: "Edit",
+                          permissions: { llmVirtualKey: ["update"] },
+                          onClick: () => setEditingKey(key),
+                        },
+                        {
+                          icon: <Trash2 className="h-4 w-4" />,
+                          label: "Delete",
+                          permissions: { llmVirtualKey: ["delete"] },
+                          variant: "destructive",
+                          onClick: () => setDeletingKey(key),
+                        },
+                      ]}
+                    />
+                  }
+                  footer={
+                    <div className="flex flex-wrap gap-x-3 gap-y-1">
+                      <span>
+                        Expiry:{" "}
+                        {formatRelativeTime(key.expiresAt, {
+                          pastLabel: "Expired",
+                        })}
+                      </span>
+                      <span>
+                        Last used: {formatRelativeTimeFromNow(key.lastUsedAt)}
+                      </span>
+                    </div>
+                  }
+                >
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="outline">
+                        {key.keyType === "passthrough" ? (
+                          <span>Passthrough</span>
+                        ) : (
+                          <span>Standard</span>
+                        )}
+                      </Badge>
+                      <ResourceVisibilityBadge
+                        scope={key.scope}
+                        teams={key.teams}
+                        authorId={key.authorId}
+                        authorName={key.authorName}
+                        currentUserId={currentUserId}
+                        showSelfAsMe
+                      />
+                    </div>
+                    <VirtualKeyValueCell
+                      id={key.id}
+                      tokenStart={key.tokenStart}
+                      canReveal={key.authorId === currentUserId}
+                    />
+                    {key.keyType !== "passthrough" && (
+                      <p className="truncate text-xs text-muted-foreground">
+                        {formatProviderKeySummary(
+                          key.providerApiKeys,
+                          providerCatalog.label,
+                        )}
+                      </p>
+                    )}
+                  </div>
+                </TableCard>
+              ))}
+            </TableCardList>
+          }
+          table={
+            <DataTable
+              columns={columns}
+              data={keys}
+              getRowId={(row) => row.id}
+              rowSelection={rowSelection}
+              onRowSelectionChange={setRowSelection}
+              hideSelectedCount
+              manualPagination
+              pagination={{
+                pageIndex,
+                pageSize,
+                total: pagination?.total ?? 0,
+              }}
+              onPaginationChange={setPagination}
+              isLoading={query.isFetching}
+              hasActiveFilters={hasActiveFilters}
+              onClearFilters={clearFilters}
+              emptyMessage="No virtual keys yet. Create one and choose its provider key mappings."
+              filteredEmptyMessage="No virtual keys match your filters. Try adjusting your search."
+            />
+          }
         />
-      )}
-    </div>
+
+        <CreateVirtualKeyDialogWithData
+          open={createKeyType !== null}
+          onOpenChange={(open) => {
+            if (!open) setCreateKeyType(null);
+          }}
+          keyType={createKeyType ?? "standard"}
+        />
+        <EditVirtualKeyDialog
+          virtualKey={editingKey}
+          onOpenChange={(open) => {
+            if (!open) setEditingKey(null);
+          }}
+        />
+        <DeleteConfirmDialog
+          open={!!deletingKey}
+          onOpenChange={(open) => {
+            if (!open) setDeletingKey(null);
+          }}
+          title="Delete Virtual Key"
+          description={`Are you sure you want to delete "${deletingKey?.name}"? This action cannot be undone.`}
+          confirmLabel="Delete"
+          isPending={deleteMutation.isPending}
+          onConfirm={() => {
+            if (!deletingKey) return;
+            deleteMutation.mutate(
+              { id: deletingKey.id },
+              { onSuccess: () => setDeletingKey(null) },
+            );
+          }}
+        />
+        {bulkDeleteOpen && (
+          <DeleteConfirmDialog
+            open={bulkDeleteOpen}
+            onOpenChange={setBulkDeleteOpen}
+            title="Delete virtual keys"
+            description={`Delete ${selectedKeys.length} ${
+              selectedKeys.length === 1 ? "key" : "keys"
+            }? Applications using them stop authenticating. This cannot be undone.`}
+            isPending={bulkDelete.isPending}
+            onConfirm={() => {
+              bulkDelete.mutate(selectedKeys, {
+                onSuccess: (outcome) => {
+                  reportBulkOutcome({
+                    outcome,
+                    verb: "Deleted",
+                    failureVerb: "delete",
+                    noun: "key",
+                  });
+                  setBulkDeleteOpen(false);
+                  // Rows that failed stay ticked so the selection can be
+                  // retried rather than rebuilt.
+                  if (outcome.failed.length === 0) clearSelection();
+                },
+              });
+            }}
+            confirmLabel="Delete keys"
+            pendingLabel="Deleting..."
+          />
+        )}
+      </div>
+    </TableCardView>
   );
 }
 

@@ -14,10 +14,20 @@ const SALES_EMAIL = "sales@archestra.ai";
 
 interface SmallTeamTierBannerProps {
   /**
-   * Name of the enterprise feature this page covers (e.g. "SSO",
-   * "Knowledge Base"). Omit on pages that show the banner without being an
-   * enterprise feature themselves (e.g. Settings → Users, Settings →
-   * Organization); in that case the banner lists the features generically.
+   * Name of the enterprise feature this page covers (e.g. "SSO", "Idle
+   * hibernation").
+   *
+   * Passing a name asserts that the WHOLE named feature stops working
+   * without a license, because the copy says exactly that. Only pass one
+   * where that is true — where the licence gates a page's whole subject,
+   * the way SSO does. Omit it on every other page, including the ones whose
+   * subject is only PARTLY gated (Knowledge: creating knowledge bases,
+   * indexing and retrieval keep working above the threshold; only
+   * team-scoped connector visibility and auto-sync permissions are gated),
+   * and the ones that are not an enterprise feature at all (Settings →
+   * Users, Settings → Organization). The generic copy those get names the
+   * gated capabilities rather than the feature, so it stays true of a
+   * partly-gated page.
    */
   featureName?: string;
   /**

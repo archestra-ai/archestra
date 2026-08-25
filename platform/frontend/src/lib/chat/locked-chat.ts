@@ -102,17 +102,19 @@ export function lockedChatRequestHeaders(
 
 /**
  * Actions the backend rejects for locked chats. Single source for the UI
- * affordances that must be hidden: sandbox `!` commands, share, fork, AI title
- * generation, compaction, and copying an attachment into a knowledge base.
+ * affordances that must be hidden: sandbox `!` commands, share, fork,
+ * create-project-from-chat, move-to-project, AI title generation, compaction,
+ * and copying an attachment into a knowledge base.
  *
- * Attachments and projects are deliberately NOT here — both now work in a
- * locked chat (uploads are sealed under the conversation key; a project holds
- * the chat without sharing its context with it).
+ * Attachments are deliberately NOT here — uploads work in a locked chat, sealed
+ * under the conversation key.
  */
 export type LockedChatBlockedAction =
   | "sandboxCommands"
   | "share"
   | "fork"
+  | "createProject"
+  | "changeProject"
   | "generateTitle"
   | "compaction"
   | "saveToKnowledge";

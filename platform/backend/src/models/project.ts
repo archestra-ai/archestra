@@ -84,7 +84,6 @@ class ProjectModel {
         .select({
           id: schema.conversationsTable.id,
           projectId: schema.conversationsTable.projectId,
-          lockedChat: schema.conversationsTable.lockedChat,
         })
         .from(schema.conversationsTable)
         .where(
@@ -143,27 +142,18 @@ class ProjectModel {
       // runs but inserts just after stays a no-project row (still reachable in
       // the chat's own Files panel); the conversation lock does not serialize
       // file inserts. Narrow and non-destructive.
-      //
-      // Skipped for a locked chat, which joins a project without joining its
-      // shared file space (see `resolveProjectFileScope`). Re-pointing would
-      // move these rows into a scope the chat itself no longer reads from, and
-      // publish them to every member the project is later shared with. They
-      // stay conversation-scoped, which is where the chat keeps finding them.
-      // Decided inside the `FOR UPDATE` above, so it cannot race a lock toggle.
-      const moved = conversation.lockedChat
-        ? []
-        : await tx
-            .update(schema.filesTable)
-            .set({ projectId: project.id })
-            .where(
-              and(
-                eq(schema.filesTable.organizationId, params.organizationId),
-                eq(schema.filesTable.conversationId, params.conversationId),
-                eq(schema.filesTable.userId, params.userId),
-                isNull(schema.filesTable.projectId),
-              ),
-            )
-            .returning({ id: schema.filesTable.id });
+      const moved = await tx
+        .update(schema.filesTable)
+        .set({ projectId: project.id })
+        .where(
+          and(
+            eq(schema.filesTable.organizationId, params.organizationId),
+            eq(schema.filesTable.conversationId, params.conversationId),
+            eq(schema.filesTable.userId, params.userId),
+            isNull(schema.filesTable.projectId),
+          ),
+        )
+        .returning({ id: schema.filesTable.id });
 
       return { project, filesMoved: moved.length };
     });

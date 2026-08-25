@@ -20,6 +20,7 @@ import logger from "@/logging";
 import {
   AgentModel,
   ConversationAttachmentModel,
+  ConversationModel,
   EnvironmentModel,
   FileNameExistsError,
   OrganizationModel,
@@ -2520,6 +2521,21 @@ async function loadUploadSource(params: {
             "chat_attachment uploads require a conversation context; use a base64 or text source instead.",
         };
       }
+      // A locked chat's attachments are sealed under a key the server does not
+      // hold outside the request that presented it, and this path has no such
+      // request. Copying one into the sandbox would put ciphertext under a
+      // `v1:`-prefixed filename on the sandbox filesystem — useless to the
+      // model, and a plaintext copy in the sandbox's replay log if it ever
+      // could be opened. Refused, matching the rest of the sandbox boundary.
+      const lockedChatInfo =
+        await ConversationModel.getLockedChatKeyInfo(conversationId);
+      if (lockedChatInfo?.lockedChat) {
+        return {
+          error:
+            "Files attached to a locked chat can't be copied into the sandbox — they are encrypted with a key only the user's browser holds.",
+        };
+      }
+
       // A filename or other non-UUID can't be an attachment id. Reject it here:
       // the id column is uuid-typed, so querying it with a non-UUID throws an
       // unhandled Postgres error that aborts the whole turn instead of

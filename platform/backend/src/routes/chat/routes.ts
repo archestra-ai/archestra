@@ -787,17 +787,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // clamped: the editor caps saves at the same limit, but the file is
         // also writable by the agent tools (bounded only by the much larger
         // artifact byte limit), and this content goes into every turn's prompt.
-        //
-        // A locked chat in a project deliberately does NOT take them. The
-        // instructions are shared, and any member of the project can edit
-        // them — injecting them here would hand an editable, other-people's
-        // string into the system prompt of a conversation the platform cannot
-        // read, which is a steering channel into a sealed chat rather than a
-        // convenience. Together with the project file scope opting out (see
-        // `resolveProjectFileScope`), a locked chat is held BY a project
-        // without joining its shared context in either direction.
         const projectInstructionsPromise: Promise<string | undefined> =
-          conversation.projectId && !conversation.lockedChat
+          conversation.projectId
             ? projectService
                 .getInstructions({
                   id: conversation.projectId,
@@ -2795,6 +2786,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         user,
         organizationId,
       } = request;
+      // Locked chats stay out of projects: a project lists its chats to
+      // everyone it is shared with, so a locked one would sit in a shared
+      // space advertising a conversation none of them can open.
+      if (lockedChat && projectId) {
+        throw new ApiError(400, "Locked chats cannot be created in a project");
+      }
+
       // A chat born in a project belongs to it; the caller must be able to
       // read the project. "No access" reads as 404, like the project routes.
       if (projectId) {
@@ -2921,6 +2919,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }))
         ) {
           throw new ApiError(404, "Project not found");
+        }
+
+        const currentConversation = await ConversationModel.findById({
+          id,
+          userId: user.id,
+          organizationId,
+        });
+        if (currentConversation?.lockedChat) {
+          throw new ApiError(400, "Locked chats cannot be moved to a project");
         }
       }
 

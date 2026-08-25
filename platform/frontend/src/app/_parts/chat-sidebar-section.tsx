@@ -355,14 +355,16 @@ export function ChatSidebarSection({
       generateTitleMutation.variables?.id === conv.id;
     const isMenuOpen = openMenuId === conv.id;
     const isPinned = !!conv.pinnedAt;
-    // Projects hold locked chats like any other, so neither project
-    // affordance is gated on the lock.
-    const showCreateProject = canCreateProjectFromChat({
-      hasCreatePermission: canCreateProject === true,
-      conversation: conv,
-    });
+    const showCreateProject =
+      isActionAvailableForConversation(conv, "createProject") &&
+      canCreateProjectFromChat({
+        hasCreatePermission: canCreateProject === true,
+        conversation: conv,
+      });
     const showProjectActions =
-      canUpdateConversation === true && canReadProjects === true;
+      canUpdateConversation === true &&
+      canReadProjects === true &&
+      isActionAvailableForConversation(conv, "changeProject");
     // AI title generation is rejected for locked chats (the server would
     // have to read encrypted messages), so hide both regenerate affordances.
     const canRegenerateTitle = isActionAvailableForConversation(

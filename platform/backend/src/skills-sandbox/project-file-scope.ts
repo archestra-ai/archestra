@@ -20,13 +20,6 @@ export interface ProjectFileScope {
  * creation: a member who has since lost access (project unshared, or removed
  * from the sharing team) must not keep reaching the project's files through a
  * chat they still own. Fails CLOSED.
- *
- * A LOCKED chat in a project resolves to null — the project holds it, but the
- * chat does not join the project's shared file space. Project files are stored
- * in plaintext and readable by every member of the project, so a write from a
- * locked chat would publish, in the clear, content derived from a conversation
- * whose whole promise is that the platform cannot read it. Its file tools stay
- * scoped to the conversation, exactly as they are in a chat with no project.
  */
 export async function resolveProjectFileScope(params: {
   conversationId: string | undefined;
@@ -37,10 +30,7 @@ export async function resolveProjectFileScope(params: {
   if (!conversationId) return null;
 
   const [conversation] = await db
-    .select({
-      projectId: schema.conversationsTable.projectId,
-      lockedChat: schema.conversationsTable.lockedChat,
-    })
+    .select({ projectId: schema.conversationsTable.projectId })
     .from(schema.conversationsTable)
     .where(
       and(
@@ -48,7 +38,7 @@ export async function resolveProjectFileScope(params: {
         eq(schema.conversationsTable.id, conversationId),
       ),
     );
-  if (!conversation?.projectId || conversation.lockedChat) return null;
+  if (!conversation?.projectId) return null;
 
   const [project] = await db
     .select()

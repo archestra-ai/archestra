@@ -69,7 +69,7 @@ What changes while a locked chat is active:
 - The Logs pages show those records with their content locked. Recovering it takes the escrow private key — see [Break-Glass Recovery](#break-glass-recovery).
 - The title is fixed to "Locked chat" — no LLM title generation. A manual rename is stored in plaintext.
 - Files you attach are encrypted under the same key — see [Attachments](#attachments).
-- Sandbox commands, sharing, forking, and context compaction are unavailable.
+- Sandbox commands, sharing, forking, projects, and context compaction are unavailable.
 
 ### Attachments
 
@@ -79,12 +79,6 @@ Two things work differently from an ordinary chat:
 
 - The file is not copied into the agent's code sandbox, so `run_command` cannot open it. The model still reads the file directly when its type allows.
 - The file cannot be added to a knowledge base. Doing so would write a plaintext copy into a repository other people can read.
-
-### Projects
-
-A locked chat can live in a project. The project holds it, and members of the project see it in the project's chat list under its "Locked chat" title — they cannot read it without the key.
-
-The chat does not join the project's shared context. It does not receive the project's instructions, and its files stay with the chat instead of going to the project. Project instructions are editable by every member, so a locked chat that read them would take direction from people who cannot see the conversation. Project files are stored in plaintext, so a file written there would leave the encrypted chat readable by the whole project.
 
 ### App Chats
 

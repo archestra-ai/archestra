@@ -11,7 +11,8 @@
  *   GET decrypts with the key, returns the locked shape without it, and 409s
  *   on a wrong key
  * - the sidebar list carries no message content for locked-chat rows
- * - share/fork/compact/projects/title-generation are rejected or no-op
+ * - share/fork/compact/title-generation are rejected or no-op, while a project
+ *   holds a locked chat without sharing its file scope with it
  * - the at-rest backfill sweep never rewrites locked-chat envelopes
  */
 import {
@@ -30,8 +31,10 @@ import {
 } from "@/content-encryption/index.ee";
 import db from "@/database";
 import MessageModel from "@/models/message";
+import ProjectModel from "@/models/project";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
+import { resolveProjectFileScope } from "@/skills-sandbox/project-file-scope";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 import { isContentEnvelope } from "@/utils/crypto";
@@ -141,19 +144,38 @@ describe("locked chat routes", () => {
       expect(short.json().error.message).toContain("32 bytes");
     });
 
-    test("rejects locked chats in a project", async () => {
+    test("creates a locked chat inside a project, without joining its file scope", async () => {
+      const project = await ProjectModel.create({
+        organizationId,
+        userId: currentUser.id,
+        name: `quarterly-${randomBytes(4).toString("hex")}`,
+      });
+
       const response = await app.inject({
         method: "POST",
         url: "/api/chat/conversations",
         headers: dekHeader(),
-        payload: {
-          agentId,
-          lockedChat: true,
-          projectId: "33333333-3333-4333-8333-333333333333",
-        },
+        payload: { agentId, lockedChat: true, projectId: project.id },
       });
-      expect(response.statusCode).toBe(400);
-      expect(response.json().error.message).toContain("project");
+      expect(response.statusCode).toBe(200);
+      const conversation = response.json<{
+        id: string;
+        projectId: string | null;
+        lockedChat: boolean;
+      }>();
+      expect(conversation.projectId).toBe(project.id);
+      expect(conversation.lockedChat).toBe(true);
+
+      // The project holds the chat, but the chat does not join the project's
+      // shared file space: a write from here would publish, in plaintext,
+      // content derived from a conversation the platform cannot read.
+      await expect(
+        resolveProjectFileScope({
+          conversationId: conversation.id,
+          userId: currentUser.id,
+          organizationId,
+        }),
+      ).resolves.toBeNull();
     });
 
     test("refuses creation when no escrow key is configured", async () => {

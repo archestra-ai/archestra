@@ -66,15 +66,21 @@ BEGIN
     SELECT 1 FROM "_llm_proxy_election" e WHERE e."organization_id" = o."id"
   );
 
+  -- Register the rows just created: one non-personal row per organization
+  -- (the freshly inserted one is the newest). Without DISTINCT ON and the
+  -- personal exclusion, an organization whose pre-existing proxies were all
+  -- personal would elect every one of them and the unique index would fail.
   INSERT INTO "_llm_proxy_election" ("organization_id", "id")
-  SELECT a."organization_id", a."id"
+  SELECT DISTINCT ON (a."organization_id") a."organization_id", a."id"
   FROM "agents" a
   WHERE a."agent_type" = 'llm_proxy'
     AND a."deleted_at" IS NULL
+    AND NOT a."is_personal_proxy"
     AND NOT EXISTS (
       SELECT 1 FROM "_llm_proxy_election" e
       WHERE e."organization_id" = a."organization_id"
-    );
+    )
+  ORDER BY a."organization_id", a."created_at" DESC;
 
   -- Demote every non-elected llm_proxy row so the upcoming partial unique
   -- index (one default llm_proxy per organization) cannot fail.

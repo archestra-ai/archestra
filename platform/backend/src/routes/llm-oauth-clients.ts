@@ -354,9 +354,13 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         unexpectedMessage: "Could not delete this LLM OAuth client",
         load: async (ids) =>
           new Map(
-            (await LlmOauthClientModel.findByIds({ ids, organizationId })).map(
-              (client) => [client.id, client],
-            ),
+            (
+              await LlmOauthClientModel.findByIds({
+                ids,
+                organizationId,
+                viewer: { userId: user.id, isAdmin: checker.isAdmin },
+              })
+            ).map((client) => [client.id, client]),
           ),
         describe: (client) => client.name,
         authorize: (client) => {

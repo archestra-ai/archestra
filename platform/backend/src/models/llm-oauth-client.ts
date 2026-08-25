@@ -82,7 +82,17 @@ class LlmOauthClientModel {
    * outside the organization are simply absent, indistinguishable from ids
    * that never existed.
    */
-  static async findByIds(params: { ids: string[]; organizationId: string }) {
+  static async findByIds(params: {
+    ids: string[];
+    organizationId: string;
+    /**
+     * Fences the result to clients the user may see (org-scoped, own
+     * personal, teams they belong to) — required for caller-supplied id
+     * lists, where an unfenced load would let an opaque id confirm and name
+     * a hidden credential. Omit only for internal callers (audit snapshots).
+     */
+    viewer?: { userId: string; isAdmin: boolean };
+  }) {
     if (params.ids.length === 0) return [];
 
     const rows = await db
@@ -93,6 +103,11 @@ class LlmOauthClientModel {
           inArray(schema.oauthClientsTable.id, params.ids),
           sql`${schema.oauthClientsTable.metadata}->>'type' = ${LLM_OAUTH_CLIENT_METADATA_TYPE}`,
           sql`${schema.oauthClientsTable.metadata}->>'organizationId' = ${params.organizationId}`,
+          params.viewer && !params.viewer.isAdmin
+            ? OauthClientTeamModel.accessibleScopeCondition(
+                params.viewer.userId,
+              )
+            : undefined,
         ),
       );
 

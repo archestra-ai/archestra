@@ -309,7 +309,10 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { organizationId, user, body } = request;
-      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
+      const [userTeamIds, isVirtualKeyAdmin] = await Promise.all([
+        TeamModel.getUserTeamIds(user.id),
+        userHasPermission(user.id, organizationId, "llmVirtualKey", "admin"),
+      ]);
 
       const snapshot = async (ids: string[]) => {
         const keys = await VirtualApiKeyModel.findForBulk({
@@ -330,9 +333,17 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         unexpectedMessage: "Could not delete this virtual API key",
         load: async (ids) =>
           new Map(
-            (await VirtualApiKeyModel.findForBulk({ organizationId, ids })).map(
-              (key) => [key.id, key],
-            ),
+            (
+              await VirtualApiKeyModel.findForBulk({
+                organizationId,
+                ids,
+                viewer: {
+                  userId: user.id,
+                  userTeamIds,
+                  isAdmin: isVirtualKeyAdmin,
+                },
+              })
+            ).map((key) => [key.id, key]),
           ),
         describe: (key) => key.name,
         authorize: async (key) => {

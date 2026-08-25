@@ -467,12 +467,20 @@ class VirtualApiKeyModel {
 
   /**
    * Load the named keys within one organization for a bulk operation, with
-   * the team ids each key is shared to. Ids outside the organization are
-   * simply absent, indistinguishable from ids that never existed.
+   * the team ids each key is shared to. Ids outside the organization — or,
+   * with a viewer, outside what that viewer may see — are simply absent,
+   * indistinguishable from ids that never existed.
    */
   static async findForBulk(params: {
     organizationId: string;
     ids: string[];
+    /**
+     * Fences the result to keys the user may see (org-scoped, own personal,
+     * teams they belong to) — required for caller-supplied id lists, where an
+     * unfenced load would let an opaque id confirm and name a hidden
+     * credential. Omit only for internal callers (audit snapshots).
+     */
+    viewer?: { userId: string; userTeamIds: string[]; isAdmin: boolean };
   }): Promise<
     Array<{
       id: string;
@@ -501,8 +509,21 @@ class VirtualApiKeyModel {
         ),
       );
 
+    let visibleRows = rows;
+    if (params.viewer && !params.viewer.isAdmin) {
+      const accessible = new Set(
+        await VirtualApiKeyModel.getAccessibleIds({
+          organizationId: params.organizationId,
+          userId: params.viewer.userId,
+          userTeamIds: params.viewer.userTeamIds,
+          isAdmin: false,
+        }),
+      );
+      visibleRows = rows.filter((row) => accessible.has(row.id));
+    }
+
     const teamRows =
-      rows.length > 0
+      visibleRows.length > 0
         ? await db
             .select({
               virtualApiKeyId: schema.virtualApiKeyTeamsTable.virtualApiKeyId,
@@ -512,7 +533,7 @@ class VirtualApiKeyModel {
             .where(
               inArray(
                 schema.virtualApiKeyTeamsTable.virtualApiKeyId,
-                rows.map((row) => row.id),
+                visibleRows.map((row) => row.id),
               ),
             )
         : [];
@@ -523,7 +544,7 @@ class VirtualApiKeyModel {
       teamIdsByKey.set(teamRow.virtualApiKeyId, teamIds);
     }
 
-    return rows.map((row) => ({
+    return visibleRows.map((row) => ({
       ...row,
       teamIds: teamIdsByKey.get(row.id) ?? [],
     }));

@@ -338,6 +338,13 @@ const contentNavGroups: NavGroup[] = [
         url: "/llm/proxy",
         icon: Network,
         customIsActive: (pathname: string) => pathname.startsWith("/llm/proxy"),
+        // A role may grant only the Virtual Keys or OAuth Clients tab; any of
+        // the three pages keeps the entry visible.
+        permissionUrls: [
+          "/llm/proxy",
+          "/llm/proxy/virtual-keys",
+          "/llm/proxy/oauth-clients",
+        ],
       },
       {
         title: "Model Providers",

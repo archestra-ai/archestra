@@ -60,19 +60,12 @@ describe("PATCH /api/organization/connection-settings", () => {
       agentType: "mcp_gateway",
       name: "Admin Default Gateway",
     });
-    const proxy = await makeAgent({
-      organizationId,
-      authorId: adminUser.id,
-      agentType: "llm_proxy",
-      name: "Admin Default Proxy",
-    });
 
     const response = await app.inject({
       method: "PATCH",
       url: "/api/organization/connection-settings",
       payload: {
         connectionDefaultMcpGatewayId: gateway.id,
-        connectionDefaultLlmProxyId: proxy.id,
         connectionShownClientIds: ["claude-code"],
       },
     });
@@ -80,7 +73,6 @@ describe("PATCH /api/organization/connection-settings", () => {
     expect(response.statusCode).toBe(200);
     const body = response.json();
     expect(body.connectionDefaultMcpGatewayId).toBe(gateway.id);
-    expect(body.connectionDefaultLlmProxyId).toBe(proxy.id);
     expect(body.connectionShownClientIds).toEqual(["claude-code"]);
   });
 
@@ -142,50 +134,29 @@ describe("PATCH /api/organization/connection-settings", () => {
     expect(response.statusCode).toBe(400);
   });
 
-  test("rejects a proxy that belongs to another organization", async ({
-    makeAgent,
-    makeOrganization,
-    makeUser,
-  }) => {
-    const otherOrg = await makeOrganization();
-    const otherUser = await makeUser();
-    const foreignProxy = await makeAgent({
-      organizationId: otherOrg.id,
-      authorId: otherUser.id,
-      agentType: "llm_proxy",
-      name: "Foreign Proxy",
-    });
-
-    const response = await app.inject({
-      method: "PATCH",
-      url: "/api/organization/connection-settings",
-      payload: {
-        connectionDefaultLlmProxyId: foreignProxy.id,
-      },
-    });
-
-    expect(response.statusCode).toBe(404);
-  });
-
-  test("rejects a wrong-type agent for the proxy slot", async ({
+  test("ignores a stale connection-default LLM proxy key from older clients", async ({
     makeAgent,
   }) => {
-    const gateway = await makeAgent({
+    // The LLM Proxy needs no selection; the request key is simply stripped so
+    // a stale tab's payload keeps working, and the stored column stays as-is.
+    const proxy = await makeAgent({
       organizationId,
       authorId: adminUser.id,
-      agentType: "mcp_gateway",
-      name: "Not a proxy",
+      agentType: "llm_proxy",
+      name: "Stale Client Proxy",
     });
 
     const response = await app.inject({
       method: "PATCH",
       url: "/api/organization/connection-settings",
       payload: {
-        connectionDefaultLlmProxyId: gateway.id,
+        connectionDefaultLlmProxyId: proxy.id,
+        connectionShownClientIds: ["claude-code"],
       },
     });
 
-    expect(response.statusCode).toBe(400);
+    expect(response.statusCode).toBe(200);
+    expect(response.json().connectionDefaultLlmProxyId).toBeNull();
   });
 
   test("persists and clears the default client id", async () => {

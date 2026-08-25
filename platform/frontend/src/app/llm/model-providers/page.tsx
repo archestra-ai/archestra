@@ -343,7 +343,7 @@ export default function ApiKeysPage() {
     if (!selectedApiKey) return;
     const hasBlockingAssociations =
       (blockingVirtualKeys?.pagination.total ?? 0) > 0 ||
-      blockingOauthClients.length > 0;
+      (blockingOauthClientsData?.pagination.total ?? 0) > 0;
     if (hasBlockingAssociations) return;
     try {
       await deleteMutation.mutateAsync(selectedApiKey.id);
@@ -355,7 +355,7 @@ export default function ApiKeysPage() {
   }, [
     selectedApiKey,
     blockingVirtualKeys,
-    blockingOauthClients,
+    blockingOauthClientsData,
     deleteMutation,
   ]);
 
@@ -868,6 +868,9 @@ export default function ApiKeysPage() {
               virtualKeys={blockingVirtualKeys?.data ?? []}
               totalVirtualKeys={blockingVirtualKeys?.pagination.total ?? 0}
               oauthClients={blockingOauthClients}
+              totalOauthClients={
+                blockingOauthClientsData?.pagination.total ?? 0
+              }
               isLoading={isLoadingVirtualKeys || isLoadingOauthClients}
             />
           }
@@ -877,7 +880,7 @@ export default function ApiKeysPage() {
             isLoadingVirtualKeys ||
             isLoadingOauthClients ||
             (blockingVirtualKeys?.pagination.total ?? 0) > 0 ||
-            blockingOauthClients.length > 0
+            (blockingOauthClientsData?.pagination.total ?? 0) > 0
           }
           confirmLabel="Delete API Key"
           pendingLabel="Deleting..."
@@ -892,20 +895,21 @@ function DeleteApiKeyDescription({
   virtualKeys,
   totalVirtualKeys,
   oauthClients,
+  totalOauthClients,
   isLoading,
 }: {
   apiKey: LlmProviderApiKeyResponse | null;
   virtualKeys: archestraApiTypes.GetAllVirtualApiKeysResponses["200"]["data"];
   totalVirtualKeys: number;
   oauthClients: archestraApiTypes.GetLlmOauthClientsResponses["200"]["data"];
+  totalOauthClients: number;
   isLoading: boolean;
 }) {
   if (!apiKey) {
     return null;
   }
 
-  const hasBlockingAssociations =
-    totalVirtualKeys > 0 || oauthClients.length > 0;
+  const hasBlockingAssociations = totalVirtualKeys > 0 || totalOauthClients > 0;
 
   if (!hasBlockingAssociations) {
     return (
@@ -989,10 +993,10 @@ function DeleteApiKeyDescription({
               </li>
             ))}
           </ul>
-          {oauthClients.length > 5 && (
+          {totalOauthClients > 5 && (
             <p className="text-muted-foreground">
-              <span>{oauthClients.length - 5} more OAuth client</span>
-              {oauthClients.length - 5 === 1 ? null : <span>s</span>}
+              <span>{totalOauthClients - 5} more OAuth client</span>
+              {totalOauthClients - 5 === 1 ? null : <span>s</span>}
               <span> matched.</span>
             </p>
           )}

@@ -83,12 +83,12 @@ describe("DELETE /api/llm-virtual-keys/bulk", () => {
   });
 
   /**
-   * Each id is authorized exactly as the single delete authorizes its own:
-   * another user's personal key is visible in the same organization but not
-   * manageable, and an unknown id is reported as not found — in both cases
-   * the rest of the batch still applies.
+   * Each id is fenced exactly as the list fences reads: another user's
+   * personal key is invisible to the caller, so it reports as not found (no
+   * name disclosed), and an unknown id reports the same — in both cases the
+   * rest of the batch still applies.
    */
-  test("reports unauthorized and unknown keys without abandoning the rest", async ({
+  test("reports invisible and unknown keys without abandoning the rest", async ({
     makeUser,
   }) => {
     const outsider = await makeUser();
@@ -104,8 +104,8 @@ describe("DELETE /api/llm-virtual-keys/bulk", () => {
       failed: [
         {
           id: theirs.id,
-          name: "Theirs",
-          error: "You can only manage your own personal virtual keys",
+          name: null,
+          error: "Virtual API key not found",
         },
         {
           id: unknownId,

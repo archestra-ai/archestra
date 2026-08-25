@@ -77,12 +77,12 @@ describe("DELETE /api/llm-oauth-clients/bulk", () => {
   });
 
   /**
-   * Each id is authorized exactly as the single delete authorizes its own:
-   * another user's personal client is visible in the same organization but
-   * not manageable, and an unknown id is reported as not found — in both
-   * cases the rest of the batch still applies.
+   * Each id is fenced exactly as the list fences reads: another user's
+   * personal client is invisible to the caller, so it reports as not found
+   * (no name disclosed), and an unknown id reports the same — in both cases
+   * the rest of the batch still applies.
    */
-  test("reports unauthorized and unknown clients without abandoning the rest", async ({
+  test("reports invisible and unknown clients without abandoning the rest", async ({
     makeUser,
   }) => {
     const outsider = await makeUser();
@@ -98,8 +98,8 @@ describe("DELETE /api/llm-oauth-clients/bulk", () => {
       failed: [
         {
           id: theirs.id,
-          name: "Theirs",
-          error: "You can only manage your own personal OAuth clients",
+          name: null,
+          error: "LLM OAuth client not found",
         },
         {
           id: unknownId,

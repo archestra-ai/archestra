@@ -105,6 +105,7 @@ import {
   type McpCatalogFormValues,
 } from "./mcp-catalog-form.types";
 import {
+  emptyOauthFormConfig,
   transformCatalogItemToFormValues,
   transformFormToApiData,
 } from "./mcp-catalog-form.utils";
@@ -279,24 +280,7 @@ export function McpCatalogForm({
           authHeaderName: "",
           additionalHeaders: [],
           enterpriseManagedConfig: null,
-          oauthConfig: {
-            client_id: "",
-            client_secret: "",
-            audience: "",
-            redirect_uris:
-              typeof window !== "undefined"
-                ? `${window.location.origin}/oauth-callback`
-                : "",
-            scopes: "read, write",
-            additional_scopes: "offline_access",
-            supports_resource_metadata: true,
-            grantType: "authorization_code",
-            authServerUrl: "",
-            authorizationEndpoint: "",
-            wellKnownUrl: "",
-            resourceMetadataUrl: "",
-            tokenEndpoint: "",
-          },
+          oauthConfig: emptyOauthFormConfig(),
           localConfig: {
             command: "",
             arguments: "",
@@ -2177,7 +2161,12 @@ export function McpCatalogForm({
                                         />
                                       </FormControl>
                                       <FormDescription>
-                                        Comma-separated list of OAuth scopes.
+                                        Comma-separated list of OAuth scopes,
+                                        sent as-is instead of the ones the
+                                        server advertises. Leave blank to
+                                        request the scopes the server publishes
+                                        in its metadata, or none at all if it
+                                        publishes none.
                                       </FormDescription>
                                       <FormMessage />
                                     </FormItem>
@@ -2198,11 +2187,13 @@ export function McpCatalogForm({
                                         />
                                       </FormControl>
                                       <FormDescription>
-                                        Always appended on top of the requested
-                                        scopes. offline_access is added by
-                                        default so the provider returns a
-                                        refresh token; clear it for providers
-                                        that reject it (e.g. Google).
+                                        Appended on top of the requested scopes,
+                                        when there are any. offline_access is
+                                        added by default so the provider returns
+                                        a refresh token; clear it for providers
+                                        that reject it (e.g. Google). A request
+                                        that asks for no scopes stays empty
+                                        rather than asking for these alone.
                                       </FormDescription>
                                       <FormMessage />
                                     </FormItem>

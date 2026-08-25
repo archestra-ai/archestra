@@ -3,7 +3,7 @@ title: "Authentication"
 category: MCP
 order: 4
 description: "How authentication works for MCP clients and upstream MCP servers"
-lastUpdated: 2026-08-23
+lastUpdated: 2026-08-25
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -285,6 +285,8 @@ If the MCP server URL is different from the OAuth issuer or metadata host, confi
 
 Set **Protected Resource** only when the OAuth provider requires a resource identifier, such as an Entra or OAuth API identifier like `api://<client-id>` or `https://api.example.com`. Archestra sends this as the OAuth `resource` parameter during authorization, token exchange, and refresh. Leave it blank for providers that do not accept resource indicators.
 
+Leave **Scopes** blank to request whatever the authorization server publishes in its metadata. Archestra discovers those scopes when you connect and sends them. When the server publishes none, the authorization request carries no `scope` parameter. The server then applies its own default set. Fill the field in only for a server that expects specific values it does not advertise — some proxy MCP servers accept a literal `read` and `write` and translate them. Whatever you type is sent as-is, and discovery is skipped.
+
 Direct authorization and token endpoints are useful for legacy or self-hosted OAuth providers that expose fixed OAuth URLs but do not publish `/.well-known` metadata.
 
 #### OAuth Client Credentials
@@ -305,7 +307,7 @@ For upstream servers that use OAuth, Archestra handles the token lifecycle autom
 
 #### Troubleshooting refresh failures
 
-`no_refresh_token` means the provider issued no refresh token, so the connection breaks once its access token expires. The server's **Additional scopes** field (pre-filled with `offline_access`) is appended to every authorization request to ask for one — keep it for Microsoft Entra and other standard OIDC providers, and clear it for providers that reject the scope (e.g. Google, which uses `access_type=offline`). Reconnect after changing it; if it persists, confirm the provider grants offline access to the app, which some tenants gate behind admin consent.
+`no_refresh_token` means the provider issued no refresh token, so the connection breaks once its access token expires. The server's **Additional scopes** field (pre-filled with `offline_access`) is appended to the scopes an authorization request already asks for — keep it for Microsoft Entra and other standard OIDC providers, and clear it for providers that reject the scope (e.g. Google, which uses `access_type=offline`). A request that asks for no scopes at all stays empty, so this field never becomes the only scope requested. Reconnect after changing it; if it persists, confirm the provider grants offline access to the app, which some tenants gate behind admin consent.
 
 ### Enterprise Identity Credential Resolution
 

@@ -1,3 +1,4 @@
+import { runInNewContext } from "node:vm";
 import type { EvalAssertion, EvalAssertionResult } from "@/types/eval";
 
 /**
@@ -121,7 +122,7 @@ export function evaluateDeterministicAssertion(params: {
       // no longer compiles (engine drift) surfaces as a thrown error and the
       // case is marked errored, not silently passed.
       const regex = new RegExp(assertion.pattern, assertion.flags);
-      const passed = regex.test(outputText);
+      const passed = safeRegexTest(regex, outputText);
       return {
         type: assertion.type,
         passed,
@@ -167,4 +168,23 @@ export function evaluateDeterministicAssertion(params: {
       );
     }
   }
+}
+
+/**
+ * `regex.test` runs synchronously on the shared event loop, and write-time
+ * validation only proves the pattern compiles — a catastrophically
+ * backtracking one (e.g. `(a+)+$`) against a long agent output would wedge
+ * the whole multi-tenant process, and no abort timer could fire because the
+ * blocked loop cannot run its own callbacks. Executing inside a vm script
+ * with a timeout lets V8 terminate a runaway evaluation; the throw marks the
+ * case errored and the run continues.
+ */
+const REGEX_EVAL_TIMEOUT_MS = 2_000;
+
+function safeRegexTest(regex: RegExp, text: string): boolean {
+  return runInNewContext(
+    "regex.test(text)",
+    { regex, text },
+    { timeout: REGEX_EVAL_TIMEOUT_MS },
+  );
 }

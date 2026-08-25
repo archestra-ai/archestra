@@ -118,6 +118,13 @@ describe("regex", () => {
       run({ type: "regex", pattern: "([unclosed" }, "anything"),
     ).toThrow();
   });
+
+  test("catastrophic backtracking is terminated instead of wedging the process", () => {
+    const hostile = `${"a".repeat(50)}b`;
+    expect(() => run({ type: "regex", pattern: "(a+)+$" }, hostile)).toThrow(
+      /timed out/i,
+    );
+  });
 });
 
 describe("tool assertions", () => {

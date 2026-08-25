@@ -1,4 +1,4 @@
-import { and, asc, count, eq, sql } from "drizzle-orm";
+import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { ApiError } from "@/types";
@@ -102,16 +102,10 @@ class EvalCaseModel {
     organizationId: string;
     updates: UpdateEvalCase;
   }): Promise<EvalCase | null> {
-    const existing = await EvalCaseModel.findById(
-      params.id,
-      params.organizationId,
-    );
-    if (!existing) return null;
-
     const [evalCase] = await db
       .update(schema.evalCasesTable)
       .set(params.updates)
-      .where(eq(schema.evalCasesTable.id, params.id))
+      .where(caseInLiveOrgSuite(params.id, params.organizationId))
       .returning();
     return evalCase ?? null;
   }
@@ -120,17 +114,37 @@ class EvalCaseModel {
     id: string;
     organizationId: string;
   }): Promise<boolean> {
-    const existing = await EvalCaseModel.findById(
-      params.id,
-      params.organizationId,
-    );
-    if (!existing) return false;
-
-    await db
+    const rows = await db
       .delete(schema.evalCasesTable)
-      .where(eq(schema.evalCasesTable.id, params.id));
-    return true;
+      .where(caseInLiveOrgSuite(params.id, params.organizationId))
+      .returning({ id: schema.evalCasesTable.id });
+    return rows.length > 0;
   }
 }
 
 export default EvalCaseModel;
+
+// === internal ===
+
+/**
+ * Scope predicate folded into the mutation itself (no check-then-act): the
+ * case must belong to a live suite of the caller's organization at the moment
+ * the write executes.
+ */
+function caseInLiveOrgSuite(caseId: string, organizationId: string) {
+  return and(
+    eq(schema.evalCasesTable.id, caseId),
+    inArray(
+      schema.evalCasesTable.suiteId,
+      db
+        .select({ id: schema.evalSuitesTable.id })
+        .from(schema.evalSuitesTable)
+        .where(
+          and(
+            eq(schema.evalSuitesTable.organizationId, organizationId),
+            notDeleted(schema.evalSuitesTable),
+          ),
+        ),
+    ),
+  );
+}

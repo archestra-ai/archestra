@@ -1,4 +1,4 @@
-import { and, asc, count, eq, lt, sql } from "drizzle-orm";
+import { and, asc, count, eq, lte, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   EvalAssertionResult,
@@ -114,10 +114,7 @@ class EvalRunResultModel {
         and(
           eq(schema.evalRunResultsTable.id, params.id),
           eq(schema.evalRunResultsTable.status, "running"),
-          lt(
-            schema.evalRunResultsTable.startedAt,
-            new Date(params.observedStartedAt.getTime() + 1),
-          ),
+          lte(schema.evalRunResultsTable.startedAt, params.observedStartedAt),
         ),
       )
       .returning();

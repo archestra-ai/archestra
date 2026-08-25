@@ -31,9 +31,9 @@ import { useUpdateUrlParams } from "./use-update-url-params";
 
 interface ConnectionFlowProps {
   defaultMcpGatewayId?: string;
-  defaultLlmProxyId?: string;
+  /** The organization's single LLM Proxy — undefined while loading. */
+  llmProxyId?: string;
   adminDefaultMcpGatewayId?: string | null;
-  adminDefaultLlmProxyId?: string | null;
   adminDefaultClientId?: string | null;
   /** When null/undefined: show all. Otherwise: only these IDs (plus "generic" always). */
   shownClientIds?: readonly string[] | null;
@@ -45,9 +45,8 @@ interface ConnectionFlowProps {
 
 export function ConnectionFlow({
   defaultMcpGatewayId,
-  defaultLlmProxyId,
+  llmProxyId,
   adminDefaultMcpGatewayId,
-  adminDefaultLlmProxyId,
   adminDefaultClientId,
   shownClientIds,
   shownProviders,
@@ -55,25 +54,13 @@ export function ConnectionFlow({
 }: ConnectionFlowProps) {
   const searchParams = useSearchParams();
   const urlGatewayId = searchParams.get("gatewayId");
-  const urlProxyId = searchParams.get("proxyId");
   const urlClientId = searchParams.get("clientId");
-  // "table" = row Connect action; "create" = post-creation handoff dialog.
-  // Both pin one slot's ID in the URL and want identical pre-selection.
-  const fromTable = ["table", "create"].includes(
-    searchParams.get("from") ?? "",
-  );
 
   const updateUrlParams = useUpdateUrlParams();
 
   const { data: mcpGateways } = useProfiles({
     filters: {
       agentTypes: ["profile", "mcp_gateway"],
-      excludeOtherPersonalAgents: true,
-    },
-  });
-  const { data: llmProxies } = useProfiles({
-    filters: {
-      agentTypes: ["profile", "llm_proxy"],
       excludeOtherPersonalAgents: true,
     },
   });
@@ -108,7 +95,6 @@ export function ConnectionFlow({
   };
 
   const [selectedMcpId, setSelectedMcpId] = useState<string | null>(null);
-  const [selectedProxyId, setSelectedProxyId] = useState<string | null>(null);
 
   // Connection base URL — chosen once for the whole page, threaded into each
   // instruction panel below. Admins can hide individual env URLs from end
@@ -142,34 +128,17 @@ export function ConnectionFlow({
     setSelectedMcpId(id);
     updateUrlParams({ gatewayId: id });
   };
-  const handleProxySelect = (id: string) => {
-    setSelectedProxyId(id);
-    updateUrlParams({ proxyId: id });
-  };
 
-  // When arriving from the opposite slot's table (only that slot's ID is
-  // pinned in the URL), skip this slot's admin default so it doesn't override
-  // the user's intent — fall through to the system default instead.
   const effectiveMcpId = resolveEffectiveId({
     selected: selectedMcpId,
     fromUrl: urlGatewayId,
     adminDefault: adminDefaultMcpGatewayId,
     systemDefault: defaultMcpGatewayId,
     firstAvailable: mcpGateways?.[0]?.id,
-    skipAdminDefault: fromTable && !!urlProxyId && !urlGatewayId,
-  });
-
-  const effectiveProxyId = resolveEffectiveId({
-    selected: selectedProxyId,
-    fromUrl: urlProxyId,
-    adminDefault: adminDefaultLlmProxyId,
-    systemDefault: defaultLlmProxyId,
-    firstAvailable: llmProxies?.[0]?.id,
-    skipAdminDefault: fromTable && !!urlGatewayId && !urlProxyId,
+    skipAdminDefault: false,
   });
 
   const selectedMcp = mcpGateways?.find((g) => g.id === effectiveMcpId);
-  const selectedProxy = llmProxies?.find((p) => p.id === effectiveProxyId);
 
   const urlProviderId = searchParams.get("providerId");
   const urlProvider: SupportedProvider | null =
@@ -241,31 +210,14 @@ export function ConnectionFlow({
       manualSteps.push({
         key: "proxy",
         title: "Route through the LLM Proxy to make it secure",
-        actions:
-          manualClient.proxy.kind !== "unsupported" &&
-          (llmProxies?.length ?? 0) > 1 ? (
-            <AgentSelector
-              mode="single"
-              flat
-              className="w-64"
-              agents={llmProxies ?? []}
-              value={effectiveProxyId ?? ""}
-              onValueChange={handleProxySelect}
-              placeholder="Select proxy"
-              searchPlaceholder="Search proxies…"
-            />
-          ) : undefined,
-        content: effectiveProxyId ? (
+        content: llmProxyId ? (
           <ProxyClientInstructions
             client={manualClient}
-            profileId={effectiveProxyId}
-            profileName={selectedProxy?.name ?? ""}
+            profileId={llmProxyId}
             shownProviders={shownProviders}
             baseUrl={baseUrl}
           />
-        ) : (
-          <NoAgentsPanel kind="LLM proxies" href="/llm/proxies" />
-        ),
+        ) : null,
       });
     }
     if (skillsVisible) {
@@ -295,9 +247,7 @@ export function ConnectionFlow({
           mcpGateways={canReadMcpGateway ? (mcpGateways ?? []) : null}
           mcpGatewayId={effectiveMcpId}
           onMcpGatewaySelect={handleMcpSelect}
-          llmProxies={canReadLlmProxy ? (llmProxies ?? []) : null}
-          llmProxyId={effectiveProxyId}
-          onLlmProxySelect={handleProxySelect}
+          llmProxyId={canReadLlmProxy ? (llmProxyId ?? null) : null}
           shownProviders={shownProviders}
           urlProvider={urlProvider}
           onProviderSelect={(p) => updateUrlParams({ providerId: p })}
@@ -315,9 +265,7 @@ export function ConnectionFlow({
           mcpGatewayId={effectiveMcpId}
           onMcpGatewaySelect={handleMcpSelect}
           gatewaySlug={selectedMcp?.slug ?? effectiveMcpId}
-          llmProxies={canReadLlmProxy ? (llmProxies ?? []) : null}
-          llmProxyId={effectiveProxyId}
-          onLlmProxySelect={handleProxySelect}
+          llmProxyId={canReadLlmProxy ? (llmProxyId ?? null) : null}
           baseUrl={baseUrl}
           candidateBaseUrls={candidateBaseUrls}
           baseUrlMetadata={connectionBaseUrls}

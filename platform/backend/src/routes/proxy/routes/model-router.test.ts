@@ -16,6 +16,7 @@ import {
 import { vi } from "vitest";
 import db, { schema } from "@/database";
 import {
+  AgentModel,
   InteractionModel,
   LlmOauthClientModel,
   LlmProviderApiKeyModel,
@@ -929,7 +930,7 @@ describe("model router proxy routes", () => {
       undefined,
       undefined,
       undefined,
-      { profileId: agent.id },
+      { profileId: (await AgentModel.getOrgLlmProxy(agent.organizationId)).id },
     );
     expect(interactions.data).toHaveLength(1);
     expect(interactions.data[0].source).toBe("model_router");
@@ -998,7 +999,7 @@ describe("model router proxy routes", () => {
       undefined,
       undefined,
       undefined,
-      { profileId: agent.id },
+      { profileId: (await AgentModel.getOrgLlmProxy(agent.organizationId)).id },
     );
     expect(interactions.data[0]).toMatchObject({
       type: "openai:embeddings",
@@ -1072,7 +1073,9 @@ describe("model router proxy routes", () => {
         undefined,
         undefined,
         undefined,
-        { profileId: agent.id },
+        {
+          profileId: (await AgentModel.getOrgLlmProxy(agent.organizationId)).id,
+        },
       );
       expect(interactions.data[0]).toMatchObject({
         type: "openai:embeddings",
@@ -1143,7 +1146,7 @@ describe("model router proxy routes", () => {
       undefined,
       undefined,
       undefined,
-      { profileId: agent.id },
+      { profileId: (await AgentModel.getOrgLlmProxy(agent.organizationId)).id },
     );
     expect(interactions.data[0]).toMatchObject({
       type: "gemini:embeddings",
@@ -1278,7 +1281,6 @@ describe("model router proxy routes", () => {
       organizationId: organization.id,
       authorId: crypto.randomUUID(),
       name: "Backend Service",
-      allowedLlmProxyIds: [agent.id],
       providerApiKeys: [
         {
           provider,
@@ -1321,7 +1323,7 @@ describe("model router proxy routes", () => {
       undefined,
       undefined,
       undefined,
-      { profileId: agent.id },
+      { profileId: (await AgentModel.getOrgLlmProxy(agent.organizationId)).id },
     );
     expect(interactions.data[0]).toMatchObject({
       authMethod: "oauth_client_credentials",
@@ -1365,7 +1367,6 @@ describe("model router proxy routes", () => {
       organizationId: organization.id,
       authorId: crypto.randomUUID(),
       name: "Out-of-band Subscription Client",
-      allowedLlmProxyIds: [agent.id],
       providerApiKeys: [{ provider, providerApiKeyId: chatApiKey.id }],
     });
     const tokenResponse = await app.inject({
@@ -1477,7 +1478,6 @@ describe("model router proxy routes", () => {
       organizationId: organization.id,
       authorId: crypto.randomUUID(),
       name: "Disabled Backend Service",
-      allowedLlmProxyIds: [agent.id],
       providerApiKeys: [{ provider, providerApiKeyId: chatApiKey.id }],
     });
     await db
@@ -1537,7 +1537,6 @@ describe("model router proxy routes", () => {
       organizationId: organization.id,
       authorId: user.id,
       name: "Revoked Token Backend Service",
-      allowedLlmProxyIds: [agent.id],
       providerApiKeys: [{ provider, providerApiKeyId: chatApiKey.id }],
     });
     const refreshId = crypto.randomUUID();
@@ -1683,7 +1682,7 @@ describe("model router proxy routes", () => {
       undefined,
       undefined,
       undefined,
-      { profileId: agent.id },
+      { profileId: (await AgentModel.getOrgLlmProxy(agent.organizationId)).id },
     );
     expect(interactions.data[0]).toMatchObject({
       authMethod: "oauth_user",
@@ -2237,6 +2236,7 @@ describe("model router proxy routes", () => {
     });
 
     expect(response.statusCode).toBe(200);
+    const llmProxy = await AgentModel.getOrgLlmProxy(agent.organizationId);
     expect(anthropicAdapterFactory.createClient).toHaveBeenCalledOnce();
     expect(anthropicAdapterFactory.createClient).toHaveBeenCalledWith(
       "test-anthropic-key",
@@ -2245,10 +2245,10 @@ describe("model router proxy routes", () => {
       // observability actually consume rather than the full fixture object.
       expect.objectContaining({
         agent: expect.objectContaining({
-          id: agent.id,
-          name: agent.name,
+          id: llmProxy.id,
+          name: llmProxy.name,
           organizationId: agent.organizationId,
-          agentType: agent.agentType,
+          agentType: "llm_proxy",
         }),
       }),
     );

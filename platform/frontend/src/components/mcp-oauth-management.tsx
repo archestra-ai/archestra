@@ -193,7 +193,6 @@ export function McpOauthManagement({
         fixedClientType="mcp"
         defaultAllowedGatewayIds={[resourceId]}
         gateways={resources}
-        llmProxies={[]}
         providerApiKeys={[]}
         onSubmit={async (values) => {
           if (values.kind !== "mcp") return;

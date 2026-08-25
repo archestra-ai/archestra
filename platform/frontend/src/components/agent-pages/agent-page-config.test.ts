@@ -26,14 +26,6 @@ describe("getAgentSetupSteps", () => {
     }
   });
 
-  it("skips the tools step for an LLM proxy, which has no tools", () => {
-    expect(
-      getAgentSetupSteps({ agentType: "llm_proxy", builtIn: false }).map(
-        (s) => s.id,
-      ),
-    ).toEqual(["configuration", "advanced"]);
-  });
-
   it("leaves a built-in agent with configuration only — it has no advanced step", () => {
     expect(
       getAgentSetupSteps({ agentType: "agent", builtIn: true }).map(
@@ -56,38 +48,36 @@ describe("resolveAgentSetupStep", () => {
   });
 
   it("does not resolve a step the record does not have", () => {
-    const proxySteps = getAgentSetupSteps({
-      agentType: "llm_proxy",
-      builtIn: false,
+    const builtInSteps = getAgentSetupSteps({
+      agentType: "agent",
+      builtIn: true,
     });
-    expect(resolveAgentSetupStep(proxySteps, "tools")).toBe("configuration");
+    expect(resolveAgentSetupStep(builtInSteps, "tools")).toBe("configuration");
   });
 });
 
 describe("route families", () => {
   it("sends each stored type to its own family, legacy profiles to gateways", () => {
     expect(agentPageKindForType("agent")).toBe("agent");
-    expect(agentPageKindForType("llm_proxy")).toBe("llm_proxy");
     expect(agentPageKindForType("mcp_gateway")).toBe("mcp_gateway");
     expect(agentPageKindForType("profile")).toBe("mcp_gateway");
   });
 
-  it("lets a legacy profile render under both the gateway and proxy pages", () => {
+  it("lets a legacy profile render under the gateway pages only", () => {
     expect(isAgentTypeAllowedOnPage("mcp_gateway", "profile")).toBe(true);
-    expect(isAgentTypeAllowedOnPage("llm_proxy", "profile")).toBe(true);
     expect(isAgentTypeAllowedOnPage("agent", "profile")).toBe(false);
   });
 
-  it("refuses a proxy under the gateway pages and vice versa", () => {
-    expect(isAgentTypeAllowedOnPage("mcp_gateway", "llm_proxy")).toBe(false);
-    expect(isAgentTypeAllowedOnPage("llm_proxy", "mcp_gateway")).toBe(false);
+  it("refuses a type under another family's pages", () => {
+    expect(isAgentTypeAllowedOnPage("mcp_gateway", "agent")).toBe(false);
+    expect(isAgentTypeAllowedOnPage("agent", "mcp_gateway")).toBe(false);
     expect(isAgentTypeAllowedOnPage("agent", "agent")).toBe(true);
   });
 
   it("builds the detail and edit hrefs off the family's list route", () => {
-    expect(agentDetailHref("llm_proxy", "p1")).toBe("/llm/proxies/p1");
-    expect(agentDetailHref("llm_proxy", "p1", "connect")).toBe(
-      "/llm/proxies/p1#connect",
+    expect(agentDetailHref("mcp_gateway", "g1")).toBe("/mcp/gateways/g1");
+    expect(agentDetailHref("mcp_gateway", "g1", "connect")).toBe(
+      "/mcp/gateways/g1#connect",
     );
     expect(agentEditHref("mcp_gateway", "g1")).toBe("/mcp/gateways/g1/edit");
     expect(agentEditHref("agent", "a 1", "tools")).toBe(
@@ -148,16 +138,16 @@ describe("resolveLegacyAgentDialogRedirect", () => {
     ).toBe("/mcp/gateways/g1?labels=team%3Aops");
     expect(
       resolveLegacyAgentDialogRedirect(
-        "llm_proxy",
+        "mcp_gateway",
         new URLSearchParams("create=true&scope=personal"),
       ),
-    ).toBe("/llm/proxies/new?scope=personal");
+    ).toBe("/mcp/gateways/new?scope=personal");
   });
 
   it("leaves table filters alone", () => {
     expect(
       resolveLegacyAgentDialogRedirect(
-        "llm_proxy",
+        "mcp_gateway",
         new URLSearchParams("name=foo&scope=personal&create=false"),
       ),
     ).toBeNull();

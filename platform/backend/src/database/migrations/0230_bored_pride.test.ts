@@ -78,7 +78,6 @@ describe("0230 migration: proxy auth provider key mappings", () => {
         type: "llm_oauth_client",
         organizationId: organization.id,
         chatApiKeyId: providerKey.id,
-        allowedLlmProxyIds: [],
         modelRouterProviderApiKeys: [],
       },
     });
@@ -107,7 +106,6 @@ describe("0230 migration: proxy auth provider key mappings", () => {
     expect(oauthClient.metadata).toMatchObject({
       type: "llm_oauth_client",
       organizationId: organization.id,
-      allowedLlmProxyIds: [],
       providerApiKeys: [
         {
           provider: "openai",

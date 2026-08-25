@@ -349,7 +349,11 @@ async function resolveGeminiVirtualQueryKey(request: FastifyRequest) {
   if (!hasArchestraTokenPrefix(keyValue)) return;
 
   try {
-    const resolved = await validateVirtualApiKey(keyValue, "gemini");
+    const resolved = await validateVirtualApiKey({
+      tokenValue: keyValue,
+      expectedProvider: "gemini",
+      expectedOrganizationId: null,
+    });
     if (!resolved.apiKey) return;
 
     request.raw.url = url.replace(`key=${keyValue}`, `key=${resolved.apiKey}`);

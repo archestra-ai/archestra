@@ -93,6 +93,8 @@ const CreateConnectionSetupBodySchema = z.object({
   platform: ConnectionSetupPlatformSchema.default("macos"),
   baseUrl: z.string().url().max(2048),
   mcpGatewayId: z.string().uuid().optional(),
+  // Accepted for client compatibility but ignored — the org's single LLM
+  // Proxy is resolved server-side; `provider` alone opts the proxy in.
   llmProxyId: z.string().uuid().optional(),
   provider: SupportedProvidersSchema.optional(),
   /** Passthrough by default; "virtual-key" auto-provisions a personal key. */
@@ -285,7 +287,6 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         clientId,
         platform,
         mcpGatewayId,
-        llmProxyId,
         provider,
         proxyAuth,
         attributePassthrough,
@@ -295,9 +296,6 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       } = body;
       const baseUrl = body.baseUrl.replace(/\/+$/, "");
 
-      if ((llmProxyId && !provider) || (provider && !llmProxyId)) {
-        throw new ApiError(400, "llmProxyId and provider must be set together");
-      }
       if (
         provider &&
         !CLIENT_SUPPORTED_PROVIDERS[clientId].includes(provider)
@@ -330,23 +328,22 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       if (mcpGatewayId) {
-        await requireAgentAccess({
+        await requireGatewayAccess({
           agentId: mcpGatewayId,
           organizationId,
           userId: user.id,
-          kind: "mcpGateway",
         });
       }
 
       let virtualApiKeyId: string | null = null;
       let creditWarning: ConnectionCreditWarning | undefined;
-      if (llmProxyId && provider) {
-        await requireAgentAccess({
-          agentId: llmProxyId,
-          organizationId,
-          userId: user.id,
-          kind: "llmProxy",
-        });
+      // The caller no longer picks a proxy: `provider` alone opts the LLM
+      // Proxy in, and the org's single proxy is resolved server-side.
+      let llmProxyId: string | null = null;
+      if (provider) {
+        llmProxyId = (
+          await requireLlmProxyAccess({ organizationId, userId: user.id })
+        ).id;
         if (proxyAuth === "virtual-key") {
           // Minting a virtual key requires the same permission as the
           // dedicated create endpoint (RouteId.CreateVirtualApiKey).
@@ -508,7 +505,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         platform,
         baseUrl,
         mcpGatewayId: mcpGatewayId ?? null,
-        llmProxyId: llmProxyId ?? null,
+        llmProxyId,
         provider: provider ?? null,
         proxyAuth,
         model: model ?? null,
@@ -618,8 +615,9 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ body, organizationId, user }, reply) => {
-      const { llmProxyId } = body;
+    async ({ organizationId, user }, reply) => {
+      // body.llmProxyId is accepted for client compatibility but ignored —
+      // there is a single org-wide LLM Proxy now.
 
       // Same gate as the virtual-key route: minting a key requires the
       // dedicated create permission.
@@ -636,14 +634,9 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      // We're generating a connection for this proxy, so the caller must be able
-      // to reach it.
-      await requireAgentAccess({
-        agentId: llmProxyId,
-        organizationId,
-        userId: user.id,
-        kind: "llmProxy",
-      });
+      // We're generating a connection for the LLM Proxy, so the caller must be
+      // able to reach it.
+      await requireLlmProxyAccess({ organizationId, userId: user.id });
 
       const virtualApiKeyId = await ensureConnectionPassthroughKey({
         organizationId,
@@ -777,7 +770,6 @@ export default connectionSetupRoutes;
 // ===================================================================
 
 const GATEWAY_AGENT_TYPES = new Set<string>(GATEWAY_CAPABLE_AGENT_TYPES);
-const PROXY_AGENT_TYPES = new Set(["llm_proxy", "profile"]);
 
 /**
  * 410 (not 403/404) for every fetch-time re-validation failure: the claim is
@@ -821,11 +813,10 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
 
   let mcp: SetupScriptContext["mcp"] = null;
   if (setup.mcpGatewayId) {
-    const gateway = await findAccessibleAgent({
+    const gateway = await findAccessibleGateway({
       agentId: setup.mcpGatewayId,
       organizationId: setup.organizationId,
       userId: setup.userId,
-      kind: "mcpGateway",
     });
     if (!gateway) throw GONE();
     mcp = {
@@ -837,11 +828,11 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
 
   let proxy: SetupScriptContext["proxy"] = null;
   if (setup.llmProxyId && setup.provider) {
-    const proxyAgent = await findAccessibleAgent({
-      agentId: setup.llmProxyId,
+    // Re-validate that the creator can still route through the org's single
+    // LLM Proxy (permission-only — there is no per-agent proxy access).
+    const proxyAgent = await findAccessibleLlmProxy({
       organizationId: setup.organizationId,
       userId: setup.userId,
-      kind: "llmProxy",
     });
     if (!proxyAgent) throw GONE();
 
@@ -873,7 +864,7 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       authMode: setup.proxyAuth,
       provider: setup.provider,
       providerLabel: providerDisplayNames[setup.provider] ?? setup.provider,
-      url: `${setup.baseUrl}/${setup.provider}/${proxyAgent.id}`,
+      url: `${setup.baseUrl}/${setup.provider}`,
       proxyName: toProxyName(proxyAgent.name),
       virtualKey: virtualKeyValue,
       virtualKeyName,
@@ -1020,50 +1011,74 @@ async function userCanDeliverPlugins(params: {
 }
 
 /**
- * Resolve an agent the user can access (live team membership / scope checks
+ * Resolve a gateway the user can access (live team membership / scope checks
  * via AgentModel.findById), constrained to the expected org and agent type.
  */
-async function findAccessibleAgent(params: {
+async function findAccessibleGateway(params: {
   agentId: string;
   organizationId: string;
   userId: string;
-  kind: "mcpGateway" | "llmProxy";
 }) {
-  const { agentId, organizationId, userId, kind } = params;
+  const { agentId, organizationId, userId } = params;
 
   const [canRead, isAdmin] = await Promise.all([
-    userHasPermission(userId, organizationId, kind, "read"),
-    userHasPermission(userId, organizationId, kind, "admin"),
+    userHasPermission(userId, organizationId, "mcpGateway", "read"),
+    userHasPermission(userId, organizationId, "mcpGateway", "admin"),
   ]);
   if (!canRead && !isAdmin) return null;
 
   const agent = await AgentModel.findById(agentId, userId, isAdmin);
   if (!agent || agent.organizationId !== organizationId) return null;
-
-  const allowedTypes =
-    kind === "mcpGateway" ? GATEWAY_AGENT_TYPES : PROXY_AGENT_TYPES;
-  if (!allowedTypes.has(agent.agentType)) return null;
+  if (!GATEWAY_AGENT_TYPES.has(agent.agentType)) return null;
 
   return agent;
 }
 
-/** POST-time variant of findAccessibleAgent: failures are user-facing errors. */
-async function requireAgentAccess(params: {
+/** POST-time variant of findAccessibleGateway: failures are user-facing errors. */
+async function requireGatewayAccess(params: {
   agentId: string;
   organizationId: string;
   userId: string;
-  kind: "mcpGateway" | "llmProxy";
 }): Promise<void> {
-  const agent = await findAccessibleAgent(params);
+  const agent = await findAccessibleGateway(params);
   if (!agent) {
     // 404 (not 403) so resource existence is not leaked across teams/orgs
+    throw new ApiError(404, "MCP gateway not found");
+  }
+}
+
+/**
+ * The org's single LLM Proxy, if the user may route through it. Permission-only
+ * (llmProxy read or admin) — there is no per-agent proxy access resolution.
+ */
+async function findAccessibleLlmProxy(params: {
+  organizationId: string;
+  userId: string;
+}) {
+  const { organizationId, userId } = params;
+  const canRead = await userHasPermission(
+    userId,
+    organizationId,
+    "llmProxy",
+    "read",
+  );
+  if (!canRead) return null;
+  return AgentModel.getOrgLlmProxy(organizationId);
+}
+
+/** POST-time variant of findAccessibleLlmProxy: missing access is user-facing. */
+async function requireLlmProxyAccess(params: {
+  organizationId: string;
+  userId: string;
+}) {
+  const proxy = await findAccessibleLlmProxy(params);
+  if (!proxy) {
     throw new ApiError(
-      404,
-      params.kind === "mcpGateway"
-        ? "MCP gateway not found"
-        : "LLM proxy not found",
+      403,
+      "You need llmProxy:read permission to route through the LLM Proxy.",
     );
   }
+  return proxy;
 }
 
 async function requireSkillAdmin(params: {

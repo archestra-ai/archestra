@@ -36,12 +36,12 @@ vi.mock("@/lib/interactions/interaction.query", async (importOriginal) => ({
   useUniqueUserIds: vi.fn(),
 }));
 
-// Two users can each name their own proxy "My Proxy", so the filter has to
+// Two users can each name their own agent "My Agent", so the filter has to
 // carry enough context to tell them apart.
 const personalProxy = {
   id: "p1",
   name: "My Proxy",
-  agentType: "llm_proxy",
+  agentType: "agent",
   scope: "personal",
   authorEmail: "owner@example.com",
 };
@@ -49,7 +49,7 @@ const personalProxy = {
 const orgProxy = {
   id: "p2",
   name: "Shared Proxy",
-  agentType: "llm_proxy",
+  agentType: "agent",
   scope: "org",
 };
 
@@ -107,7 +107,7 @@ function makeSessionSummary(
 // role="combobox" takes no accessible name from its contents, so the trigger is
 // addressed by the label it renders.
 async function openProxyFilter(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByText("All Agents & LLM Proxies"));
+  await user.click(screen.getByText("All Agents"));
 }
 
 describe("LlmProxyLogsPage proxy filter", () => {

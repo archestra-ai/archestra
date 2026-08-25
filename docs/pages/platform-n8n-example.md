@@ -2,7 +2,7 @@
 title: Secure Agent with N8N
 category: Examples
 order: 4
-lastUpdated: 2026-07-03
+lastUpdated: 2026-08-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -122,9 +122,6 @@ http://archestra:9000/v1/openai
 ```
 
 instead of <https://api.openai.com/v1> (`archestra` is the Docker Compose service name for Archestra Platform)
-
-**Optional:** To use a specific profile, include the profile ID in the URL: `http://archestra:9000/v1/openai/{profile-id}`.
-You can create and manage profiles in the Archestra Platform UI at [http://localhost:3000/profiles](http://localhost:3000/profiles).
 
 4. Open the agent in the N8N again and put "hi" to the chat. It will make Archestra discover tools.
 

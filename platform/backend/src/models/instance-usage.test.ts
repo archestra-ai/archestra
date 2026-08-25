@@ -19,7 +19,11 @@ test("counts entities across the instance", async ({
     organizationId: organization.id,
     agentType: "mcp_gateway",
   });
-  await makeAgent({ organizationId: organization.id, agentType: "llm_proxy" });
+  await makeAgent({
+    organizationId: organization.id,
+    agentType: "llm_proxy",
+    isDefault: true,
+  });
   await makeAgent({
     organizationId: organization.id,
     agentType: "agent",

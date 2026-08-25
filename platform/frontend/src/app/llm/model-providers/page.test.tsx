@@ -52,7 +52,10 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
 
 vi.mock("@/lib/llm-oauth-clients.query", () => ({
   useLlmOauthClients: () => ({
-    data: [],
+    data: {
+      data: [],
+      pagination: { total: 0 },
+    },
     isPending: false,
   }),
 }));

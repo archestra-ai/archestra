@@ -851,27 +851,6 @@ async function ensureExistingUsersHavePersonalMcpGateways(): Promise<void> {
 }
 
 /**
- * Ensures every member has a personal LLM proxy. Runs on startup to backfill
- * members created before this feature. Single LEFT JOIN + bulk INSERT.
- */
-async function ensureExistingUsersHavePersonalLlmProxies(): Promise<void> {
-  try {
-    const created = await AgentModel.bulkBackfillPersonalLlmProxies();
-    if (created > 0) {
-      logger.info(
-        { count: created },
-        "Created personal LLM proxies for existing members",
-      );
-    }
-  } catch (error) {
-    logger.error(
-      { err: error },
-      "Failed to backfill personal LLM proxies for existing members",
-    );
-  }
-}
-
-/**
  * Turn on the Agent Skill tools for every organization that hasn't already
  * opted in. Skills are a default capability: newly created agents inherit the
  * model-facing skill tools and the slash-command toggle unlocks without an
@@ -1009,8 +988,8 @@ export async function seedRequiredStartingData(): Promise<void> {
   await verifyJwksSigningKey();
   await migrateSecretsToEncrypted();
   await seedDefaultUserAndOrg();
-  // Create default agents before seeding internal agents
-  await AgentModel.getLLMProxyOrCreateDefault();
+  // Every organization gets its LLM Proxy row before internal agents seed
+  await AgentModel.ensureLlmProxiesForAllOrganizations();
   await syncBuiltInAgents();
   await syncBuiltInSkills();
   // Release defaults are best-effort and must not hold backend readiness on
@@ -1029,7 +1008,6 @@ export async function seedRequiredStartingData(): Promise<void> {
   await ensureExistingUsersHavePersonalChatAgents();
   // Ensure all existing members have a personal MCP gateway
   await ensureExistingUsersHavePersonalMcpGateways();
-  await ensureExistingUsersHavePersonalLlmProxies();
   await seedDefaultAppsForPristineOrgs();
   // Clean up orphaned MCP HTTP sessions (older than 24h)
   await McpHttpSessionModel.deleteExpired();

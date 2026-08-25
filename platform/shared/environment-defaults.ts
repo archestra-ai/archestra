@@ -15,7 +15,6 @@ export const ENVIRONMENT_DEFAULTABLE_RESOURCES = [
   "app",
   "agent",
   "mcpGateway",
-  "llmProxy",
   "knowledgeSource",
 ] as const satisfies readonly Resource[];
 
@@ -31,6 +30,5 @@ export const ENVIRONMENT_DEFAULTABLE_RESOURCE_LABELS = {
   app: "MCP Apps",
   agent: "Agents",
   mcpGateway: "MCP gateways",
-  llmProxy: "LLM proxies",
   knowledgeSource: "Knowledge connectors",
 } as const satisfies Record<EnvironmentDefaultableResource, string>;

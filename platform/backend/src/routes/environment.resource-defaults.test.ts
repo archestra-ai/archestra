@@ -87,7 +87,6 @@ describe("environment resource defaults", () => {
       app: null,
       agent: null,
       mcpGateway: null,
-      llmProxy: null,
       knowledgeSource: null,
     });
   });

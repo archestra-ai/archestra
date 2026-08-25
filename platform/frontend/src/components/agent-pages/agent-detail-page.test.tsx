@@ -135,15 +135,15 @@ describe("AgentDetailPage", () => {
   });
 
   it("asks about the record's own resource, not the route family it is shown under", () => {
-    // A legacy profile under the proxy pages is authorized as an `agent`, so
-    // every permission the page checks for it has to name that resource.
+    // A legacy profile under the gateway pages is authorized as an `agent`,
+    // so every permission the page checks for it has to name that resource.
     access = { ...access, resource: "agent" };
     mockAgent({ ...baseAgent, agentType: "profile" });
-    render(<AgentDetailPage kind="llm_proxy" id="a1" />);
+    render(<AgentDetailPage kind="mcp_gateway" id="a1" />);
 
     expect(useHasPermissions).toHaveBeenCalledWith({ agent: ["read"] });
     expect(useHasPermissions).not.toHaveBeenCalledWith({
-      llmProxy: ["read"],
+      mcpGateway: ["read"],
     });
   });
 
@@ -181,17 +181,6 @@ describe("AgentDetailPage", () => {
       "href",
       "/agents/a1/edit",
     );
-  });
-
-  it("moves the LLM Proxy environment into the header and omits Overview", () => {
-    mockAgent({ ...baseAgent, agentType: "llm_proxy", environmentId: "env-1" });
-    render(<AgentDetailPage kind="llm_proxy" id="a1" />);
-
-    expect(screen.queryByRole("heading", { name: "Overview" })).toBeNull();
-    expect(screen.queryByText("overview")).toBeNull();
-    expect(screen.getByText("Production")).toBeVisible();
-    expect(screen.queryByRole("link", { name: "Connect" })).toBeNull();
-    expect(screen.getByText("connect content")).toBeVisible();
   });
 
   it("keeps the MCP Gateway Overview but moves its environment into the header", () => {

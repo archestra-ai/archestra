@@ -685,10 +685,10 @@ describe("clone agent route", () => {
     expect(cloned.teams.map((t) => t.id)).toEqual([team.id]);
   });
 
-  test("clones all three built-in agent types", async ({
+  test("clones profile and mcp_gateway agent types", async ({
     makeInternalAgent,
   }) => {
-    const agentTypes = ["profile", "mcp_gateway", "llm_proxy"] as const;
+    const agentTypes = ["profile", "mcp_gateway"] as const;
 
     for (const agentType of agentTypes) {
       const sourceAgent = await makeInternalAgent({

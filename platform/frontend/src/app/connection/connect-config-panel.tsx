@@ -52,7 +52,7 @@ import {
   platformLabels,
   toPlatformOption,
 } from "./platform.utils";
-import { ConnectionPlatformSelect } from "./platform-select";
+import { ConnectionPlatformToggle } from "./platform-select";
 import { type ConnectSkill, useAllSkills } from "./skills-marketplace-step";
 
 /** Clients whose setup is delivered as a downloadable Archestra config profile. */
@@ -67,10 +67,8 @@ interface ConnectConfigPanelProps {
   onMcpGatewaySelect: (id: string) => void;
   /** Slug of the selected gateway (for the MCP server URL); falls back to its id. */
   gatewaySlug: string | null;
-  /** null when the user can't read LLM proxies. */
-  llmProxies: AgentSelectorAgent[] | null;
+  /** The org's single LLM Proxy id; null when the user can't read it (or it hasn't loaded). */
   llmProxyId: string | null;
-  onLlmProxySelect: (id: string) => void;
   baseUrl: string;
   candidateBaseUrls: readonly string[];
   baseUrlMetadata: readonly ConnectionBaseUrl[] | null | undefined;
@@ -90,9 +88,7 @@ export function ConnectConfigPanel({
   mcpGatewayId,
   onMcpGatewaySelect,
   gatewaySlug,
-  llmProxies,
   llmProxyId,
-  onLlmProxySelect,
   baseUrl,
   candidateBaseUrls,
   baseUrlMetadata,
@@ -132,24 +128,22 @@ export function ConnectConfigPanel({
   const { unavailable: downloadBlocked } = useConfigProfileAvailability();
 
   const gateway = mcpGateways?.find((g) => g.id === mcpGatewayId) ?? null;
-  const proxy = (llmProxies ?? []).find((p) => p.id === llmProxyId) ?? null;
 
   const showEndpoint = candidateBaseUrls.length > 1;
   const canPickGateway =
     !!gateway && mcpGateways !== null && mcpGateways.length > 1;
-  const canPickProxy = !!proxy && (llmProxies?.length ?? 0) > 1;
 
-  // The profile's whole point is the inference endpoint, so a proxy is
+  // The profile's whole point is the inference endpoint, so the LLM Proxy is
   // required; the MCP gateway is optional (it only adds the managed server).
-  if (!proxy) {
+  if (!llmProxyId) {
     return (
       <WizardStep n={2} title="Review the setup" last>
         <div className="rounded-lg border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground">
-          Select an{" "}
-          <Link href="/llm/proxies" className="underline hover:text-foreground">
-            LLM proxy
+          Access to the{" "}
+          <Link href="/llm/proxy" className="underline hover:text-foreground">
+            LLM Proxy
           </Link>{" "}
-          to generate a configuration profile.
+          is required to generate a configuration profile.
         </div>
       </WizardStep>
     );
@@ -185,31 +179,12 @@ export function ConnectConfigPanel({
               for tools
             </SummaryRow>
           )}
-          <SummaryRow
-            editable={canPickProxy}
-            isEditing={editing === "proxy"}
-            onToggle={() => toggleEdit("proxy")}
-            editor={
-              <EditorField label="Proxy">
-                <AgentSelector
-                  mode="single"
-                  flat
-                  className="w-full"
-                  agents={llmProxies ?? []}
-                  value={proxy.id}
-                  onValueChange={onLlmProxySelect}
-                  placeholder="Select proxy"
-                  searchPlaceholder="Search proxies…"
-                />
-              </EditorField>
-            }
-          >
+          <SummaryRow>
             Route{" "}
             <span className="font-medium text-foreground">
               {providerCatalog.label("anthropic")}
             </span>{" "}
-            through{" "}
-            <ResourceLink href="/llm/proxies">{proxy.name}</ResourceLink>
+            through <ResourceLink href="/llm/proxy">the LLM Proxy</ResourceLink>
           </SummaryRow>
           {skillsEligible && (
             <SummaryRow
@@ -274,7 +249,7 @@ export function ConnectConfigPanel({
             onToggle={() => toggleEdit("platform")}
             editor={
               <EditorField label="Platform">
-                <ConnectionPlatformSelect
+                <ConnectionPlatformToggle
                   value={platform}
                   onValueChange={setPlatform}
                 />
@@ -306,7 +281,7 @@ export function ConnectConfigPanel({
           </Alert>
           <ConfigDownloadStep
             baseUrl={baseUrl}
-            llmProxyId={proxy.id}
+            llmProxyId={llmProxyId}
             gateway={
               gateway
                 ? { slug: gatewaySlug ?? gateway.id, name: gateway.name }
@@ -481,6 +456,7 @@ function ConfigDownloadStep({
   skillIds,
 }: {
   baseUrl: string;
+  /** Needed for the passthrough-key provisioning payload, not URLs. */
   llmProxyId: string;
   gateway: { slug: string; name: string } | null;
   /** Already gated on skill-admin eligibility by the parent. */
@@ -562,34 +538,24 @@ function ConfigDownloadStep({
     }
     const profile = buildClaudeDesktopConfigProfile({
       baseUrl,
-      llmProxyId,
       passthroughKey: state.passthroughKey,
       virtualKey: state.virtualKey,
       gateway,
       skillMarketplace,
     });
     downloadClaudeDesktopConfig(profile, generateConfigFilename());
-  }, [
-    state,
-    includeSkills,
-    skillIds,
-    createShareLink,
-    baseUrl,
-    llmProxyId,
-    gateway,
-  ]);
+  }, [state, includeSkills, skillIds, createShareLink, baseUrl, gateway]);
 
   if (canCreateVirtualKey === false) {
     return (
       <p className="text-sm text-muted-foreground">
         You don't have permission to create virtual keys. Ask an admin to
-        generate a configuration profile, or open a proxy&apos;s Connect dialog
-        from the{" "}
+        generate a configuration profile, or open the Connect dialog on the{" "}
         <Link
-          href="/llm/proxies"
+          href="/llm/proxy"
           className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
         >
-          LLM Proxies
+          LLM Proxy
         </Link>{" "}
         page.
       </p>
@@ -662,7 +628,6 @@ function ConfigDownloadStep({
   // below the button covers the skills part.
   const previewProfile = buildClaudeDesktopConfigProfile({
     baseUrl,
-    llmProxyId,
     passthroughKey: state.passthroughKey,
     virtualKey: state.virtualKey,
     gateway,
@@ -825,7 +790,7 @@ function EditorField({
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid items-center gap-2 sm:grid-cols-[88px_1fr]">
+    <div className="grid gap-1.5">
       <div className="text-xs font-medium text-muted-foreground">{label}</div>
       <div className="min-w-0">{children}</div>
     </div>

@@ -3,7 +3,7 @@ title: Connect Your Agents
 category: Archestra Platform
 order: 8
 description: How the one-command setup script connects your AI tools, and how to audit or undo it
-lastUpdated: 2026-08-22
+lastUpdated: 2026-08-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -84,7 +84,7 @@ Set the disable variable to turn the guard off without uninstalling. To remove e
 
 ## Supported Clients
 
-Four clients get the one-command script: Claude Code, Codex, Cursor, and Copilot CLI. Claude Desktop, n8n, and Any Client get copy-paste instructions you apply in the app yourself. Each section lists what changes and how to undo it. To also cut off access on the server, delete the virtual key from the LLM Proxy's **Connect** dialog and revoke any skills share link on the Skills page.
+Four clients get the one-command script: Claude Code, Codex, Cursor, and Copilot CLI. Claude Desktop, n8n, and Any Client get copy-paste instructions you apply in the app yourself. Each section lists what changes and how to undo it. To also cut off access on the server, delete the virtual key on the **LLM Proxy** page and revoke any skills share link on the Skills page.
 
 ### Claude Code
 
@@ -164,7 +164,7 @@ Selecting **Any Client** gives copy-paste instructions instead of a one-command 
 
 Go to **Settings → Connection** to set what the page offers everyone. **Available clients** is the list of clients it shows setup instructions for — remove a chip to drop that client. "Any client" is always shown.
 
-The same page holds the defaults it pre-selects — an MCP gateway, an LLM proxy, a client, and the provider key a setup command's virtual key maps to — and the base URLs it hands out.
+The same page holds the defaults it pre-selects — an MCP gateway, a client, and the provider key a setup command's virtual key maps to — and the base URLs it hands out.
 
 Which model providers the page offers is not set here. That is one deployment-wide list, under **Settings → LLM → Model providers**.
 

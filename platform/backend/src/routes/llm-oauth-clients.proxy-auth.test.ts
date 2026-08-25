@@ -100,7 +100,6 @@ describe("LLM OAuth authorization_code proxy authorization", () => {
       organizationId: org.id,
       authorId: author.id,
       name: "team-scoped service",
-      allowedLlmProxyIds: [proxy.id],
       providerApiKeys: [
         { provider: "openai", providerApiKeyId: providerKey.id },
       ],
@@ -164,12 +163,11 @@ describe("LLM OAuth authorization_code proxy authorization", () => {
   });
 
   /**
-   * Additive client grant: an authorization_code client's allowedLlmProxyIds
-   * grants its users access to a proxy they could NOT reach through their own
-   * RBAC — admin-controlled and additive (it never removes access). The user's
-   * own provider key still resolves at call time.
+   * A user-bound token grants exactly the user's own access: membership in the
+   * proxy's organization plus the user's own agent access (RBAC) on the target
+   * proxy. The client never widens what its users can reach.
    */
-  test("grants proxy access via the client's allowedLlmProxyIds even when the user has no RBAC access", async ({
+  test("does not grant access beyond the user's own RBAC", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -198,7 +196,53 @@ describe("LLM OAuth authorization_code proxy authorization", () => {
       name: "Chat Interface",
       grantType: "authorization_code",
       redirectUris: ["https://chat.example.com/oauth/callback"],
-      allowedLlmProxyIds: [proxy.id],
+    });
+
+    const token = await mintUserToken({
+      clientId: oauthClient.clientId,
+      userId: user.id,
+    });
+
+    await expect(
+      validateLlmOAuthAccessToken({
+        tokenValue: token,
+        expectedProvider: "openai",
+        agent: proxy,
+      }),
+    ).rejects.toMatchObject({ statusCode: 403 });
+  });
+
+  test("validates a user-bound token for a proxy the user's own RBAC can reach", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeTeam,
+    makeTeamMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "member" });
+    // A team-scoped proxy whose team the user IS a member of.
+    const team = await makeTeam(org.id, user.id, { name: "Chat Users" });
+    await makeTeamMember(team.id, user.id);
+    const proxy = await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+      scope: "team",
+      teams: [team.id],
+    });
+    const secret = await makeSecret({ secret: { apiKey: "sk-user-openai" } });
+    await makeLlmProviderApiKey(org.id, secret.id, { provider: "openai" });
+
+    const { oauthClient } = await LlmOauthClientModel.create({
+      organizationId: org.id,
+      authorId: user.id,
+      name: "Chat Interface",
+      grantType: "authorization_code",
+      redirectUris: ["https://chat.example.com/oauth/callback"],
     });
 
     const token = await mintUserToken({
@@ -216,51 +260,5 @@ describe("LLM OAuth authorization_code proxy authorization", () => {
     expect(result?.authMethod).toBe("oauth_user");
     expect(result?.userId).toBe(user.id);
     expect(result?.apiKey).toBe("sk-user-openai");
-  });
-
-  test("does not grant access for a proxy outside the client's allowedLlmProxyIds", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-    makeAgent,
-    makeTeam,
-  }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, org.id, { role: "member" });
-    const owningTeam = await makeTeam(org.id, user.id, { name: "Owners" });
-    const grantedProxy = await makeAgent({
-      organizationId: org.id,
-      agentType: "llm_proxy",
-      scope: "team",
-      teams: [owningTeam.id],
-    });
-    const otherProxy = await makeAgent({
-      organizationId: org.id,
-      agentType: "llm_proxy",
-      scope: "team",
-      teams: [owningTeam.id],
-    });
-    const { oauthClient } = await LlmOauthClientModel.create({
-      organizationId: org.id,
-      authorId: user.id,
-      name: "Chat Interface",
-      grantType: "authorization_code",
-      redirectUris: ["https://chat.example.com/oauth/callback"],
-      allowedLlmProxyIds: [grantedProxy.id],
-    });
-
-    const token = await mintUserToken({
-      clientId: oauthClient.clientId,
-      userId: user.id,
-    });
-
-    await expect(
-      validateLlmOAuthAccessToken({
-        tokenValue: token,
-        expectedProvider: "openai",
-        agent: otherProxy,
-      }),
-    ).rejects.toThrow();
   });
 });

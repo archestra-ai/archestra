@@ -114,19 +114,6 @@ describe("AgentCreatePage", () => {
     expect(push).toHaveBeenCalledWith("/agents/new-1#connect");
   });
 
-  it("walks an LLM proxy through configuration and advanced, and lands on its Connect section", async () => {
-    const user = userEvent.setup();
-    render(<AgentCreatePage kind="llm_proxy" />);
-    expect(
-      screen.getByTestId(E2eTestId.AgentSetupNextButton),
-    ).toHaveTextContent("Advanced");
-    expect(
-      screen.queryByTestId(`${E2eTestId.AgentSetupStep}-tools`),
-    ).toBeNull();
-    await user.click(screen.getByRole("button", { name: "fire created" }));
-    expect(push).toHaveBeenCalledWith("/llm/proxies/new-1#connect");
-  });
-
   it("stays put with a success state when the creator may not read what it made", async () => {
     const user = userEvent.setup();
     mockPermissions({ canRead: false });

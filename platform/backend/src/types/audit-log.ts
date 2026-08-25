@@ -111,8 +111,10 @@ export const AuditEventNameSchema = z.enum([
   "llmOauthClient.updated",
   "llmOauthClient.deleted",
   "llmOauthClient.rotated",
+  "llmOauthClient.bulk_deleted",
   "llmProviderApiKey.created",
   "llmProviderApiKey.deleted",
+  "llmProxy.updated",
   "mcpOauthClient.created",
   "mcpOauthClient.updated",
   "mcpOauthClient.deleted",
@@ -193,6 +195,7 @@ export const AuditEventNameSchema = z.enum([
   "userToken.rotated",
   "virtualApiKey.created",
   "virtualApiKey.deleted",
+  "virtualApiKey.bulk_deleted",
   // Auth surface
   "auth.impersonation_started",
   "auth.impersonation_stopped",

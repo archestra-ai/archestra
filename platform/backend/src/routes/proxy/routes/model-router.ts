@@ -15,8 +15,6 @@ import { z } from "zod";
 import { getProviderConfiguredBaseUrl } from "@/config";
 import logger from "@/logging";
 import {
-  AgentModel,
-  AgentTeamModel,
   LlmOauthClientModel,
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
@@ -31,7 +29,7 @@ import {
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
-import type { Agent, LLMProvider } from "@/types";
+import type { GatewayAgent, LLMProvider } from "@/types";
 import {
   ApiError,
   constructResponseSchema,
@@ -73,6 +71,7 @@ import {
 } from "../adapters/openai-responses-translator";
 import { MODEL_ROUTER_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import {
+  resolveAgent,
   validateVirtualApiKeyToken,
   virtualKeyRateLimiter,
 } from "../llm-proxy-auth";
@@ -136,7 +135,6 @@ type ModelRouterOAuthClientAuth = {
     SupportedProvider,
     ModelRouterMappedProviderKey
   >;
-  allowedLlmProxyIds: Set<string>;
   oauthClient: {
     id: string;
     name: string;
@@ -835,11 +833,8 @@ async function listModels(params: { auth: ModelRouterAuth }) {
   };
 }
 
-async function getModelRouterAgent(agentId: string) {
-  const agent = await AgentModel.findById(agentId, undefined, true);
-  if (!agent) {
-    throw new ApiError(404, `Agent with ID ${agentId} not found`);
-  }
+async function getModelRouterAgent(agentId: string | undefined) {
+  const agent = await resolveAgent(agentId);
   if (agent.agentType !== "llm_proxy") {
     throw new ApiError(400, "Model router requires an LLM Proxy ID.");
   }
@@ -847,35 +842,25 @@ async function getModelRouterAgent(agentId: string) {
 }
 
 async function getDefaultModelRouterAgent() {
-  return AgentModel.getDefaultProfile();
+  return getModelRouterAgent(undefined);
 }
 
 async function ensureModelRouterAgentAccess(params: {
-  agent: Agent | null;
+  agent: GatewayAgent;
   auth: ModelRouterAuth;
 }) {
-  if (!params.agent) {
-    return;
-  }
   if (params.agent.organizationId !== params.auth.organizationId) {
     throw new ApiError(
       403,
       "Model Router virtual key cannot access this LLM Proxy.",
     );
   }
-  if (
-    params.auth.authMethod === "oauth_client_credentials" &&
-    !params.auth.allowedLlmProxyIds.has(params.agent.id)
-  ) {
-    throw new ApiError(403, "LLM OAuth client cannot access this LLM Proxy.");
-  }
   if (params.auth.authMethod === "oauth_user") {
-    const hasAccess = await AgentTeamModel.userHasAgentAccess(
+    const member = await MemberModel.getByUserId(
       params.auth.userId,
-      params.agent.id,
-      false,
+      params.agent.organizationId,
     );
-    if (!hasAccess) {
+    if (!member) {
       throw new ApiError(403, "OAuth user cannot access this LLM Proxy.");
     }
   }
@@ -1078,7 +1063,6 @@ async function getModelRouterOAuthClientAuth(
   return {
     authMethod: "oauth_client_credentials",
     organizationId: oauthClient.organizationId,
-    allowedLlmProxyIds: new Set(oauthClient.allowedLlmProxyIds),
     oauthClient: {
       id: oauthClient.id,
       name: oauthClient.name,

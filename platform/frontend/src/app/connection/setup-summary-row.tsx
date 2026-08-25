@@ -51,7 +51,9 @@ export function SetupSummaryRow({
       </div>
       {detail && <div className="ml-6 mt-1.5">{detail}</div>}
       {isEditing && editor && (
-        <div className="ml-6 mt-2 max-w-md rounded-lg border bg-muted/20 p-3">
+        // A rail, not a box: the editor reads as an inline expansion of its
+        // row rather than a form card dropped into the list.
+        <div className="ml-6 mt-2 max-w-lg border-l-2 border-border/70 py-1 pl-4">
           {editor}
         </div>
       )}

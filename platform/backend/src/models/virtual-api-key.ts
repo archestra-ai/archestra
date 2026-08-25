@@ -466,6 +466,91 @@ class VirtualApiKeyModel {
   }
 
   /**
+   * Load the named keys within one organization for a bulk operation, with
+   * the team ids each key is shared to. Ids outside the organization — or,
+   * with a viewer, outside what that viewer may see — are simply absent,
+   * indistinguishable from ids that never existed.
+   */
+  static async findForBulk(params: {
+    organizationId: string;
+    ids: string[];
+    /**
+     * Fences the result to keys the user may see (org-scoped, own personal,
+     * teams they belong to) — required for caller-supplied id lists, where an
+     * unfenced load would let an opaque id confirm and name a hidden
+     * credential. Omit only for internal callers (audit snapshots).
+     */
+    viewer?: { userId: string; userTeamIds: string[]; isAdmin: boolean };
+  }): Promise<
+    Array<{
+      id: string;
+      name: string;
+      keyType: VirtualApiKeyType;
+      scope: ResourceVisibilityScope;
+      authorId: string | null;
+      teamIds: string[];
+    }>
+  > {
+    if (params.ids.length === 0) return [];
+
+    const rows = await db
+      .select({
+        id: schema.virtualApiKeysTable.id,
+        name: schema.virtualApiKeysTable.name,
+        keyType: schema.virtualApiKeysTable.keyType,
+        scope: schema.virtualApiKeysTable.scope,
+        authorId: schema.virtualApiKeysTable.authorId,
+      })
+      .from(schema.virtualApiKeysTable)
+      .where(
+        and(
+          eq(schema.virtualApiKeysTable.organizationId, params.organizationId),
+          inArray(schema.virtualApiKeysTable.id, params.ids),
+        ),
+      );
+
+    let visibleRows = rows;
+    if (params.viewer && !params.viewer.isAdmin) {
+      const accessible = new Set(
+        await VirtualApiKeyModel.getAccessibleIds({
+          organizationId: params.organizationId,
+          userId: params.viewer.userId,
+          userTeamIds: params.viewer.userTeamIds,
+          isAdmin: false,
+        }),
+      );
+      visibleRows = rows.filter((row) => accessible.has(row.id));
+    }
+
+    const teamRows =
+      visibleRows.length > 0
+        ? await db
+            .select({
+              virtualApiKeyId: schema.virtualApiKeyTeamsTable.virtualApiKeyId,
+              teamId: schema.virtualApiKeyTeamsTable.teamId,
+            })
+            .from(schema.virtualApiKeyTeamsTable)
+            .where(
+              inArray(
+                schema.virtualApiKeyTeamsTable.virtualApiKeyId,
+                visibleRows.map((row) => row.id),
+              ),
+            )
+        : [];
+    const teamIdsByKey = new Map<string, string[]>();
+    for (const teamRow of teamRows) {
+      const teamIds = teamIdsByKey.get(teamRow.virtualApiKeyId) ?? [];
+      teamIds.push(teamRow.teamId);
+      teamIdsByKey.set(teamRow.virtualApiKeyId, teamIds);
+    }
+
+    return visibleRows.map((row) => ({
+      ...row,
+      teamIds: teamIdsByKey.get(row.id) ?? [],
+    }));
+  }
+
+  /**
    * Delete a virtual key and its associated secret.
    */
   static async delete(id: string): Promise<boolean> {
@@ -536,6 +621,7 @@ class VirtualApiKeyModel {
     search?: string;
     providerApiKeyId?: string;
     keyType?: VirtualApiKeyType;
+    scope?: ResourceVisibilityScope;
   }): Promise<PaginatedResult<VirtualApiKeyWithParentInfo>> {
     const {
       organizationId,
@@ -546,6 +632,7 @@ class VirtualApiKeyModel {
       search,
       providerApiKeyId,
       keyType,
+      scope,
     } = params;
 
     const accessibleIds = await VirtualApiKeyModel.getAccessibleIds({
@@ -581,6 +668,10 @@ class VirtualApiKeyModel {
 
     if (keyType) {
       whereConditions.push(eq(schema.virtualApiKeysTable.keyType, keyType));
+    }
+
+    if (scope) {
+      whereConditions.push(eq(schema.virtualApiKeysTable.scope, scope));
     }
 
     const whereClause = and(...whereConditions);

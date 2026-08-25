@@ -76,6 +76,7 @@ import {
   useUpdateLimit,
 } from "@/lib/limits.query";
 import { useModelsWithApiKeys } from "@/lib/llm-models.query";
+import { useLlmProxy } from "@/lib/llm-proxy.query";
 import {
   useOrganization,
   useOrganizationMembers,
@@ -146,7 +147,7 @@ const ENTITY_TYPE_ITEMS: Array<{
   {
     value: "llm_proxy",
     label: "LLM Proxy",
-    description: "Caps spend for a single LLM proxy.",
+    description: "Caps spend routed through the LLM Proxy.",
     icon: <Network className="h-4 w-4 shrink-0 text-muted-foreground" />,
   },
   {
@@ -204,9 +205,8 @@ export default function LimitsPage() {
   const { data: agents = [] } = useProfiles({
     filters: { agentTypes: ["agent"] },
   });
-  const { data: llmProxies = [], isPending: llmProxiesPending } = useProfiles({
-    filters: { agentTypes: ["llm_proxy"] },
-  });
+  const { data: llmProxy, isPending: llmProxyPending } = useLlmProxy();
+  const llmProxyId = llmProxy?.id ?? null;
   const { data: environmentsData } = useEnvironments();
   const environments = environmentsData?.environments ?? [];
   const { data: modelsWithApiKeys = [] } = useModelsWithApiKeys();
@@ -280,13 +280,8 @@ export default function LimitsPage() {
         models.length === 0 && limit.limitType === "token_cost";
 
       let entityType: LimitFormEntityType = limit.entityType;
-      if (limit.entityType === "agent") {
-        const isLlmProxy = llmProxies.some(
-          (candidate) => candidate.id === limit.entityId,
-        );
-        if (isLlmProxy) {
-          entityType = "llm_proxy";
-        }
+      if (limit.entityType === "agent" && limit.entityId === llmProxyId) {
+        entityType = "llm_proxy";
       }
 
       return {
@@ -299,7 +294,7 @@ export default function LimitsPage() {
         isAllModels,
       };
     },
-    [llmProxies],
+    [llmProxyId],
   );
 
   // Seed the edit form exactly once per opened limit — row clicks and deep
@@ -315,15 +310,15 @@ export default function LimitsPage() {
     if (seededEditIdRef.current === editingLimit.id) {
       return;
     }
-    // Classifying an agent-typed limit as agent vs llm_proxy needs llmProxies.
-    // Seeding (and locking the ref) before they load would misclassify an
-    // llm_proxy limit as "agent" and never reseed once they arrive.
-    if (editingLimit.entityType === "agent" && llmProxiesPending) {
+    // Classifying an agent-typed limit as agent vs LLM Proxy needs the proxy
+    // id. Seeding (and locking the ref) before it loads would misclassify an
+    // LLM Proxy limit as "agent" and never reseed once it arrives.
+    if (editingLimit.entityType === "agent" && llmProxyPending) {
       return;
     }
     seededEditIdRef.current = editingLimit.id;
     setFormState(buildEditFormState(editingLimit));
-  }, [editingLimit, buildEditFormState, llmProxiesPending]);
+  }, [editingLimit, buildEditFormState, llmProxyPending]);
 
   const getEntityLabel = useCallback(
     (limit: LimitData) => {
@@ -347,16 +342,13 @@ export default function LimitsPage() {
         return key?.name ?? "Unknown key";
       }
       if (limit.entityType === "agent") {
+        if (limit.entityId === llmProxyId) {
+          return "LLM Proxy";
+        }
         const agent = agents.find(
           (candidate) => candidate.id === limit.entityId,
         );
-        if (agent) {
-          return agent.name ?? "Unknown agent";
-        }
-        const proxy = llmProxies.find(
-          (candidate) => candidate.id === limit.entityId,
-        );
-        return proxy?.name ?? "Unknown LLM proxy";
+        return agent?.name ?? "Unknown agent";
       }
       if (limit.entityType === "environment") {
         const environment = environments.find(
@@ -366,7 +358,7 @@ export default function LimitsPage() {
       }
       return "Unknown";
     },
-    [teams, members, virtualKeys, agents, llmProxies, environments],
+    [teams, members, virtualKeys, agents, llmProxyId, environments],
   );
 
   const getEntityIcon = useCallback(
@@ -387,17 +379,14 @@ export default function LimitsPage() {
       if (limit.entityType === "environment") {
         return <Boxes className={iconClassName} />;
       }
-      if (
-        limit.entityType === "agent" &&
-        llmProxies.some((candidate) => candidate.id === limit.entityId)
-      ) {
+      if (limit.entityType === "agent" && limit.entityId === llmProxyId) {
         return <Network className={iconClassName} />;
       }
       return (
         <AgentIcon icon={null} fallbackType="agent" className={iconClassName} />
       );
     },
-    [llmProxies],
+    [llmProxyId],
   );
 
   const getUsageStatus = useCallback(
@@ -436,10 +425,10 @@ export default function LimitsPage() {
         appliedToFilter === "all" ||
         (appliedToFilter === "agent" &&
           limit.entityType === "agent" &&
-          agents.some((candidate) => candidate.id === limit.entityId)) ||
+          limit.entityId !== llmProxyId) ||
         (appliedToFilter === "llm_proxy" &&
           limit.entityType === "agent" &&
-          llmProxies.some((candidate) => candidate.id === limit.entityId)) ||
+          limit.entityId === llmProxyId) ||
         (appliedToFilter !== "agent" &&
           appliedToFilter !== "llm_proxy" &&
           limit.entityType === appliedToFilter);
@@ -460,8 +449,7 @@ export default function LimitsPage() {
     modelFilter,
     statusFilter,
     getUsageStatus,
-    agents,
-    llmProxies,
+    llmProxyId,
   ]);
 
   const columns = useMemo<ColumnDef<LimitData>[]>(
@@ -663,7 +651,9 @@ export default function LimitsPage() {
       entityId:
         formState.entityType === "organization"
           ? (organization?.id ?? "")
-          : formState.entityId,
+          : formState.entityType === "llm_proxy"
+            ? (llmProxyId ?? "")
+            : formState.entityId,
       limitType: "token_cost" as const,
       limitValue: Number(formState.limitValue),
       cleanupInterval: formState.cleanupInterval,
@@ -696,7 +686,10 @@ export default function LimitsPage() {
   const canSubmit =
     Number(formState.limitValue) > 0 &&
     (formState.isAllModels || formState.models.length > 0) &&
-    (formState.entityType === "organization" || formState.entityId.length > 0);
+    (formState.entityType === "organization" ||
+      (formState.entityType === "llm_proxy"
+        ? !!llmProxyId
+        : formState.entityId.length > 0));
 
   // Gate the page on the limits list itself. The entity selectors (teams,
   // members, virtual keys, agents, environments, models) degrade locally if
@@ -957,25 +950,6 @@ export default function LimitsPage() {
                       value: agent.id,
                       label: agent.name,
                       description: agent.description ?? undefined,
-                    }))}
-                    className="w-full sm:flex-1"
-                  />
-                )}
-
-                {formState.entityType === "llm_proxy" && (
-                  <SearchableSelect
-                    value={formState.entityId}
-                    onValueChange={(value) =>
-                      setFormState((current) => ({
-                        ...current,
-                        entityId: value,
-                      }))
-                    }
-                    placeholder="Select LLM proxy"
-                    items={llmProxies.map((proxy) => ({
-                      value: proxy.id,
-                      label: proxy.name,
-                      description: proxy.description ?? undefined,
                     }))}
                     className="w-full sm:flex-1"
                   />

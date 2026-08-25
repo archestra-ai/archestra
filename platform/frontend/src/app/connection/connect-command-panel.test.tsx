@@ -111,9 +111,7 @@ function renderPanelProps(
     mcpGateways: [{ id: "g1", name: "My Gateway", agentType: "mcp_gateway" }],
     mcpGatewayId: "g1",
     onMcpGatewaySelect: vi.fn(),
-    llmProxies: [{ id: "p1", name: "My Proxy", agentType: "llm_proxy" }],
     llmProxyId: "p1",
-    onLlmProxySelect: vi.fn(),
     urlProvider: null,
     onProviderSelect: vi.fn(),
     baseUrl: "http://localhost:9000/v1",
@@ -222,7 +220,7 @@ describe("ConnectCommandPanel", () => {
 
     // the summary reflects the defaults without any clicks
     expect(screen.getByText(/My Gateway/)).toBeInTheDocument();
-    expect(screen.getByText(/My Proxy/)).toBeInTheDocument();
+    expect(screen.getByText(/LLM Proxy/)).toBeInTheDocument();
     expect(
       screen.getByText(
         (_, el) =>
@@ -242,7 +240,6 @@ describe("ConnectCommandPanel", () => {
     renderPanel({
       mcpGateways: [],
       mcpGatewayId: null,
-      llmProxies: [],
       llmProxyId: null,
     });
 
@@ -298,7 +295,6 @@ describe("ConnectCommandPanel", () => {
     renderPanel({
       mcpGateways: [],
       mcpGatewayId: null,
-      llmProxies: [],
       llmProxyId: null,
     });
 
@@ -370,7 +366,6 @@ describe("ConnectCommandPanel", () => {
     const noOtherResources = {
       mcpGateways: [],
       mcpGatewayId: null,
-      llmProxies: [],
       llmProxyId: null,
     };
     const { rerender } = renderPanel(noOtherResources);
@@ -465,7 +460,6 @@ describe("ConnectCommandPanel", () => {
       renderPanel({
         mcpGateways: [],
         mcpGatewayId: null,
-        llmProxies: [],
         llmProxyId: null,
       });
       await waitFor(() =>
@@ -487,9 +481,8 @@ describe("ConnectCommandPanel", () => {
       );
 
       await user.click(screen.getByTestId("connect-change-platform"));
-      const platformSelect = screen.getByTestId("connect-platform-select");
-      platformSelect.focus();
-      await user.keyboard("{Enter}{ArrowUp}{Enter}");
+      expect(screen.getByTestId("connect-platform-select")).toBeInTheDocument();
+      await user.click(screen.getByRole("tab", { name: /macOS \/ Linux/ }));
 
       await waitFor(() =>
         expect(createSetupMock).toHaveBeenLastCalledWith(
@@ -665,7 +658,6 @@ describe("ConnectCommandPanel", () => {
       renderPanel({
         mcpGateways: [],
         mcpGatewayId: null,
-        llmProxies: [],
         llmProxyId: null,
       });
       await waitFor(() =>

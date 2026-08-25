@@ -2,7 +2,7 @@
 title: Secure Agent with Pydantic AI
 category: Examples
 order: 6
-lastUpdated: 2026-07-03
+lastUpdated: 2026-08-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -117,19 +117,6 @@ agent = Agent(
 ```
 
 That's it! Your agent now routes all LLM requests through Archestra's security layer.
-
-### Optional: Use a specific profile
-
-If you want to use a specific profile instead of the default one, you can include the profile ID in the URL:
-
-```python
-provider=OpenAIProvider(
-    base_url="http://localhost:9000/v1/openai/{profile-id}",  # Use your profile ID
-    api_key=os.getenv("OPENAI_API_KEY"),
-)
-```
-
-You can create and manage profiles in the Archestra Platform UI at [http://localhost:3000/profiles](http://localhost:3000/profiles).
 
 ## Step 7. Observe agent execution in Archestra
 

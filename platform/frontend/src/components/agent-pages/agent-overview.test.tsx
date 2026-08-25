@@ -217,12 +217,6 @@ describe("useAgentOverviewFacts", () => {
     expect(labels()).toEqual(["Tools"]);
   });
 
-  it("has nothing to add for an LLM proxy", () => {
-    const { container } = renderOverview("llm_proxy");
-
-    expect(container).toBeEmptyDOMElement();
-  });
-
   it("drops the record-level configuration a built-in agent does not own", () => {
     renderOverview("agent", { builtIn: true });
 

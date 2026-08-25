@@ -58,7 +58,7 @@ describe("DELETE /api/agents/:id/permanent", () => {
     makeScheduleTrigger,
     makeUser,
   }) => {
-    const agent = await makeAgent({ organizationId, agentType: "llm_proxy" });
+    const agent = await makeAgent({ organizationId, agentType: "mcp_gateway" });
     const interaction = await makeInteraction(agent.id);
     const trigger = await makeScheduleTrigger({
       organizationId,
@@ -263,8 +263,8 @@ describe("DELETE /api/agents/:id/permanent", () => {
   }) => {
     const agent = await makeAgent({
       organizationId,
-      name: "Audited Proxy",
-      agentType: "llm_proxy",
+      name: "Audited Gateway",
+      agentType: "mcp_gateway",
     });
     await AgentModel.delete(agent.id);
     expect((await purge(agent.id)).statusCode).toBe(200);
@@ -275,7 +275,7 @@ describe("DELETE /api/agents/:id/permanent", () => {
       action: "agent.purged",
       resourceType: "agent",
       resourceId: agent.id,
-      resourceName: "Audited Proxy",
+      resourceName: "Audited Gateway",
     });
     // Identity and nothing more. Without its own registry entry this route
     // would walk up to `/api/agents/:id` and be logged as `agent.deleted` with
@@ -283,10 +283,20 @@ describe("DELETE /api/agents/:id/permanent", () => {
     // configuration the caller asked to destroy.
     expect(rows[0].before).toEqual({
       id: agent.id,
-      name: "Audited Proxy",
-      agentType: "llm_proxy",
+      name: "Audited Gateway",
+      agentType: "mcp_gateway",
     });
     expect(rows[0].after).toBeNull();
+  });
+
+  test("refuses to purge a trashed llm_proxy row", async ({ makeAgent }) => {
+    const proxy = await makeAgent({ organizationId, agentType: "llm_proxy" });
+    await AgentModel.delete(proxy.id);
+
+    const response = await purge(proxy.id);
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("LLM Proxy page");
+    expect(await agentRows(proxy.id)).toHaveLength(1);
   });
 
   const selectAuditRows = (resourceId: string) =>

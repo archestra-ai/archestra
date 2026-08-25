@@ -9,7 +9,7 @@ import type { User } from "@/types";
  * Binding an agent to a *restricted* environment routes its code sandbox to
  * that environment's isolated runtime, so the agent create/update routes must
  * gate it on the resource-specific deploy-to-restricted permission for the
- * agent's type — agent, mcpGateway, or llmProxy — exactly like the
+ * agent's type — agent or mcpGateway — exactly like the
  * MCP-catalog assignment path — see
  * internal-mcp-catalog.restricted-environment.test.ts.
  *
@@ -202,38 +202,6 @@ describe("Agent routes - restricted environment assignment guard", () => {
       method: "POST",
       url: "/api/agents",
       payload: { ...payload, name: `gw-${crypto.randomUUID().slice(0, 8)}` },
-    });
-    expect(granted.statusCode).toBe(200);
-    expect(granted.json().environmentId).toBe(restricted.id);
-  });
-
-  test("creating an LLM proxy in a RESTRICTED env is gated by llmProxy (403 → 200)", async () => {
-    deployGrants = new Set(["agent", "mcpGateway"]);
-    const restricted = await makeRestrictedEnvironment();
-
-    const payload = {
-      name: `proxy-${crypto.randomUUID().slice(0, 8)}`,
-      agentType: "llm_proxy",
-      scope: "personal",
-      teams: [],
-      labels: [],
-      knowledgeBaseIds: [],
-      connectorIds: [],
-      environmentId: restricted.id,
-    };
-
-    const denied = await app.inject({
-      method: "POST",
-      url: "/api/agents",
-      payload,
-    });
-    expect(denied.statusCode).toBe(403);
-
-    deployGrants = new Set(["llmProxy"]);
-    const granted = await app.inject({
-      method: "POST",
-      url: "/api/agents",
-      payload: { ...payload, name: `proxy-${crypto.randomUUID().slice(0, 8)}` },
     });
     expect(granted.statusCode).toBe(200);
     expect(granted.json().environmentId).toBe(restricted.id);

@@ -12,7 +12,6 @@ import {
 import { FormDialog } from "@/components/form-dialog";
 import {
   GatewayGrantField,
-  ProxyGrantField,
   parseRedirectUris,
   RedirectUrisField,
 } from "@/components/oauth-client-form-fields";
@@ -46,9 +45,7 @@ export function CreateOAuthClientDialog({
   defaultClientType = "mcp",
   fixedClientType,
   defaultAllowedGatewayIds,
-  defaultAllowedProxyIds,
   gateways,
-  llmProxies,
   providerApiKeys,
   onSubmit,
   isSubmitting,
@@ -60,10 +57,7 @@ export function CreateOAuthClientDialog({
   fixedClientType?: OAuthClientType;
   /** Pre-selected allowed gateways/agents (deep link from a connect dialog). */
   defaultAllowedGatewayIds?: string[];
-  /** Pre-selected allowed LLM proxies (deep link from a proxy connect dialog). */
-  defaultAllowedProxyIds?: string[];
   gateways: AgentSelectorAgent[];
-  llmProxies: AgentSelectorAgent[];
   providerApiKeys: archestraApiTypes.GetLlmProviderApiKeysResponses["200"];
   onSubmit: (values: CreateOAuthClientSubmit) => Promise<void>;
   isSubmitting: boolean;
@@ -73,7 +67,6 @@ export function CreateOAuthClientDialog({
   const [name, setName] = useState("");
   const [grantType, setGrantType] = useState<GrantType>("client_credentials");
   const [selectedGatewayIds, setSelectedGatewayIds] = useState<string[]>([]);
-  const [selectedProxyIds, setSelectedProxyIds] = useState<string[]>([]);
   const [providerApiKeyIds, setProviderApiKeyIds] = useState<ProviderApiKeyMap>(
     {},
   );
@@ -87,19 +80,12 @@ export function CreateOAuthClientDialog({
       setName("");
       setGrantType("client_credentials");
       setSelectedGatewayIds(defaultAllowedGatewayIds ?? []);
-      setSelectedProxyIds(defaultAllowedProxyIds ?? []);
       setProviderApiKeyIds({});
       setRedirectUrisText("");
       setScope("personal");
       setTeamIds([]);
     }
-  }, [
-    open,
-    fixedClientType,
-    defaultClientType,
-    defaultAllowedGatewayIds,
-    defaultAllowedProxyIds,
-  ]);
+  }, [open, fixedClientType, defaultClientType, defaultAllowedGatewayIds]);
 
   const isMcp = clientType === "mcp";
   const mappedProviderApiKeys = providerApiKeyMapToArray(providerApiKeyIds);
@@ -112,14 +98,14 @@ export function CreateOAuthClientDialog({
       ? redirectUris.length > 0
       : isMcp
         ? selectedGatewayIds.length > 0
-        : selectedProxyIds.length > 0 && mappedProviderApiKeys.length > 0);
+        : mappedProviderApiKeys.length > 0);
 
   return (
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
       title="Create OAuth Client"
-      description="Register an application that authenticates to your agents, MCP gateways, or LLM proxies with OAuth."
+      description="Register an application that authenticates to your agents, MCP gateways, or the LLM Proxy with OAuth."
     >
       <DialogForm
         onSubmit={async (event) => {
@@ -144,7 +130,6 @@ export function CreateOAuthClientDialog({
               kind: "llm",
               body: {
                 ...shared,
-                allowedLlmProxyIds: selectedProxyIds,
                 ...(isAuthorizationCode
                   ? { redirectUris }
                   : { providerApiKeys: mappedProviderApiKeys }),
@@ -215,39 +200,16 @@ export function CreateOAuthClientDialog({
               </div>
             )
           ) : isAuthorizationCode ? (
-            <>
-              <RedirectUrisField
-                value={redirectUrisText}
-                onChange={setRedirectUrisText}
-              />
-              <ProxyGrantField
-                llmProxies={llmProxies}
-                value={selectedProxyIds}
-                onValueChange={setSelectedProxyIds}
-              />
-            </>
+            <RedirectUrisField
+              value={redirectUrisText}
+              onChange={setRedirectUrisText}
+            />
           ) : (
-            <>
-              <div className="space-y-2">
-                <Label>Allowed LLM proxies</Label>
-                <AgentSelector
-                  mode="multiple"
-                  flat
-                  agents={llmProxies}
-                  value={selectedProxyIds}
-                  onValueChange={setSelectedProxyIds}
-                  placeholder="Select LLM proxies"
-                  searchPlaceholder="Search LLM proxies"
-                  emptyMessage="No LLM proxies found"
-                />
-              </div>
-
-              <ProviderKeyAccessFields
-                providerApiKeyIds={providerApiKeyIds}
-                onProviderApiKeyIdsChange={setProviderApiKeyIds}
-                providerApiKeys={providerApiKeys}
-              />
-            </>
+            <ProviderKeyAccessFields
+              providerApiKeyIds={providerApiKeyIds}
+              onProviderApiKeyIdsChange={setProviderApiKeyIds}
+              providerApiKeys={providerApiKeys}
+            />
           )}
 
           <OauthClientVisibilityField
@@ -297,9 +259,9 @@ const CLIENT_TYPE_OPTIONS: RadioCardOption[] = [
   },
   {
     value: "llm",
-    label: "LLM proxies",
+    label: "LLM Proxy",
     description:
-      "For applications that send LLM requests through your LLM proxies.",
+      "For applications that send LLM requests through the LLM Proxy.",
   },
 ];
 

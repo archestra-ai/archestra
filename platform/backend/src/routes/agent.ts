@@ -102,17 +102,15 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           .object({
             name: z.string().optional().describe("Filter by agent name"),
             agentType: z
-              .enum(["profile", "mcp_gateway", "llm_proxy", "agent"])
+              .enum(["profile", "mcp_gateway", "agent"])
               .optional()
               .describe(
-                "Filter by agent type. 'profile' = external API gateway profiles, 'mcp_gateway' = MCP gateway, 'llm_proxy' = LLM proxy, 'agent' = internal agents with prompts.",
+                "Filter by agent type. 'profile' = external API gateway profiles, 'mcp_gateway' = MCP gateway, 'agent' = internal agents with prompts.",
               ),
             agentTypes: z
               .preprocess(
                 (val) => (typeof val === "string" ? val.split(",") : val),
-                z.array(
-                  z.enum(["profile", "mcp_gateway", "llm_proxy", "agent"]),
-                ),
+                z.array(z.enum(["profile", "mcp_gateway", "agent"])),
               )
               .optional()
               .describe(
@@ -269,15 +267,15 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Agents"],
         querystring: z.object({
           agentType: z
-            .enum(["profile", "mcp_gateway", "llm_proxy", "agent"])
+            .enum(["profile", "mcp_gateway", "agent"])
             .optional()
             .describe(
-              "Filter by agent type. 'profile' = external API gateway profiles, 'mcp_gateway' = MCP gateway, 'llm_proxy' = LLM proxy, 'agent' = internal agents with prompts.",
+              "Filter by agent type. 'profile' = external API gateway profiles, 'mcp_gateway' = MCP gateway, 'agent' = internal agents with prompts.",
             ),
           agentTypes: z
             .preprocess(
               (val) => (typeof val === "string" ? val.split(",") : val),
-              z.array(z.enum(["profile", "mcp_gateway", "llm_proxy", "agent"])),
+              z.array(z.enum(["profile", "mcp_gateway", "agent"])),
             )
             .optional()
             .describe(
@@ -428,26 +426,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  fastify.get(
-    "/api/llm-proxy/default",
-    {
-      schema: {
-        operationId: RouteId.GetDefaultLlmProxy,
-        description: "Get default LLM Proxy",
-        tags: ["LLM Proxy"],
-        response: constructResponseSchema(SelectAgentSchema),
-      },
-    },
-    async (request, reply) => {
-      return reply.send(
-        await AgentModel.ensurePersonalLlmProxy({
-          userId: request.user.id,
-          organizationId: request.organizationId,
-        }),
-      );
-    },
-  );
-
   fastify.post(
     "/api/agents/import",
     {
@@ -503,6 +481,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ body, user, organizationId }, reply) => {
       // Check create permission for the specific agent type
       const agentType = body.agentType ?? "mcp_gateway";
+      if (agentType === "llm_proxy") {
+        throw new ApiError(400, LLM_PROXY_MANAGED_MESSAGE);
+      }
 
       // Single DB query for all permission checks on this agent type
       const checker = await getAgentTypePermissionChecker({
@@ -542,12 +523,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Validate knowledgeBaseIds if provided
       if (body.knowledgeBaseIds && body.knowledgeBaseIds.length > 0) {
-        if (agentType === "llm_proxy") {
-          throw new ApiError(
-            400,
-            "Knowledge bases cannot be assigned to LLM Proxy agents",
-          );
-        }
         const knowledgeSourceAccess =
           await knowledgeSourceAccessControlService.buildAccessControlContext({
             userId: user.id,
@@ -564,12 +539,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Validate connectorIds if provided
       if (body.connectorIds && body.connectorIds.length > 0) {
-        if (agentType === "llm_proxy") {
-          throw new ApiError(
-            400,
-            "Connectors cannot be assigned to LLM Proxy agents",
-          );
-        }
         const knowledgeSourceAccess =
           await knowledgeSourceAccessControlService.buildAccessControlContext({
             userId: user.id,
@@ -781,6 +750,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
+      if (existingAgent.agentType === "llm_proxy") {
+        throw new ApiError(400, LLM_PROXY_MANAGED_MESSAGE);
+      }
+
       const checker = await getAgentTypePermissionChecker({
         userId: user.id,
         organizationId,
@@ -862,6 +835,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(403, "Built-in agents cannot be cloned");
       }
 
+      if (sourceAgent.agentType === "llm_proxy") {
+        throw new ApiError(400, LLM_PROXY_MANAGED_MESSAGE);
+      }
+
       // Single DB query for all permission checks on this agent type
       const checker = await getAgentTypePermissionChecker({
         userId: user.id,
@@ -933,12 +910,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Validate knowledgeBaseIds if provided
       if ((sourceAgent.knowledgeBaseIds?.length ?? 0) > 0) {
-        if (sourceAgent.agentType === "llm_proxy") {
-          throw new ApiError(
-            400,
-            "Knowledge bases cannot be assigned to LLM Proxy agents",
-          );
-        }
         const knowledgeSourceAccess =
           await knowledgeSourceAccessControlService.buildAccessControlContext({
             userId: user.id,
@@ -955,12 +926,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Validate connectorIds if provided
       if ((sourceAgent.connectorIds?.length ?? 0) > 0) {
-        if (sourceAgent.agentType === "llm_proxy") {
-          throw new ApiError(
-            400,
-            "Connectors cannot be assigned to LLM Proxy agents",
-          );
-        }
         const knowledgeSourceAccess =
           await knowledgeSourceAccessControlService.buildAccessControlContext({
             userId: user.id,
@@ -1409,10 +1374,19 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, body, user, organizationId }, reply) => {
-      // Fetch agent to determine its type for permission check
+      // Fetch agent to determine its type for permission check. The
+      // organization fence comes first so a foreign row — the LLM Proxy
+      // included — reads as plain 404 rather than classifying itself.
       const existingAgent = await AgentModel.findById(id, user.id, true);
-      if (!existingAgent) {
+      if (!existingAgent || existingAgent.organizationId !== organizationId) {
         throw new ApiError(404, "Agent not found");
+      }
+
+      if (
+        existingAgent.agentType === "llm_proxy" ||
+        body.agentType === "llm_proxy"
+      ) {
+        throw new ApiError(400, LLM_PROXY_MANAGED_MESSAGE);
       }
 
       // Single DB query for all permission checks on this agent type
@@ -1505,12 +1479,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Validate knowledgeBaseIds if provided
       if (body.knowledgeBaseIds && body.knowledgeBaseIds.length > 0) {
-        if (existingAgent.agentType === "llm_proxy") {
-          throw new ApiError(
-            400,
-            "Knowledge bases cannot be assigned to LLM Proxy agents",
-          );
-        }
         const knowledgeSourceAccess =
           await knowledgeSourceAccessControlService.buildAccessControlContext({
             userId: user.id,
@@ -1527,12 +1495,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Validate connectorIds if provided
       if (body.connectorIds && body.connectorIds.length > 0) {
-        if (existingAgent.agentType === "llm_proxy") {
-          throw new ApiError(
-            400,
-            "Connectors cannot be assigned to LLM Proxy agents",
-          );
-        }
         const knowledgeSourceAccess =
           await knowledgeSourceAccessControlService.buildAccessControlContext({
             userId: user.id,
@@ -1767,6 +1729,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ),
         describe: (agent) => agent.name,
         authorize: (agent) => {
+          if (agent.agentType === "llm_proxy") {
+            throw new ApiError(400, LLM_PROXY_MANAGED_MESSAGE);
+          }
           // A type the caller cannot update is answered as "not found", as the
           // single-agent update does, so a batch never confirms an agent
           // exists that the caller was not allowed to see.
@@ -1895,6 +1860,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ),
         describe: (agent) => agent.name,
         authorize: (agent) => {
+          if (agent.agentType === "llm_proxy") {
+            throw new ApiError(400, LLM_PROXY_MANAGED_MESSAGE);
+          }
           try {
             checker.require(agent.agentType, "delete");
           } catch {
@@ -1953,10 +1921,16 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
-      // Fetch agent to determine its type for permission check
+      // Fetch agent to determine its type for permission check. The
+      // organization fence comes first so a foreign row — the LLM Proxy
+      // included — reads as plain 404 rather than classifying itself.
       const agent = await AgentModel.findById(id, user.id, true);
-      if (!agent) {
+      if (!agent || agent.organizationId !== organizationId) {
         throw new ApiError(404, "Agent not found");
+      }
+
+      if (agent.agentType === "llm_proxy") {
+        throw new ApiError(400, LLM_PROXY_MANAGED_MESSAGE);
       }
 
       // Check delete permission for this agent's type (return 404 to avoid leaking existence)
@@ -2036,6 +2010,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
+      if (agent.agentType === "llm_proxy") {
+        throw new ApiError(400, LLM_PROXY_MANAGED_MESSAGE);
+      }
+
       const checker = await getAgentTypePermissionChecker({
         userId: user.id,
         organizationId,
@@ -2093,9 +2071,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "simply stop pointing at it. 404 if there is no soft-deleted agent " +
           "with that id in the org, which is also the answer when the agent " +
           "is still live or the caller is not a global admin. Restore wins a " +
-          "race. Purging a high-traffic LLM proxy detaches millions of usage " +
-          "rows in one transaction and can take minutes; past five it is " +
-          "abandoned and the agent stays in the trash, unharmed.",
+          "race.",
         tags: ["Agents"],
         params: z.object({
           id: UuidIdSchema,
@@ -2107,9 +2083,17 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Checked before the agent is looked up at all: a non-admin gets the same
       // 404 whatever the id, so the endpoint never confirms an agent exists.
       // The purge itself re-checks id, org, and soft-deleted state under a row
-      // lock, so there is no separate existence read to do here.
+      // lock; the read below only classifies the target's type.
       if (!(await isGlobalAdmin(user.id, organizationId))) {
         throw new ApiError(404, "Agent not found");
+      }
+
+      const deletedAgent = await AgentModel.findDeletedByIdForOrganization(
+        id,
+        organizationId,
+      );
+      if (deletedAgent?.agentType === "llm_proxy") {
+        throw new ApiError(400, LLM_PROXY_MANAGED_MESSAGE);
       }
 
       const purged = await AgentModel.purge(id, organizationId);
@@ -2341,6 +2325,10 @@ async function requireReadableAgent(params: {
     throw new ApiError(404, "Agent not found");
   }
 
+  if (agent.agentType === "llm_proxy") {
+    throw new ApiError(400, LLM_PROXY_MANAGED_MESSAGE);
+  }
+
   const checker = await getAgentTypePermissionChecker({
     userId: params.userId,
     organizationId: params.organizationId,
@@ -2439,7 +2427,7 @@ function getPermittedAgentTypesForList(params: {
 /**
  * Binding an agent to a restricted environment routes its code sandbox to that
  * environment's isolated runtime, so it is gated by the resource-specific
- * deploy-to-restricted permission for the agent's type — agent, llmProxy, or
+ * deploy-to-restricted permission for the agent's type — agent or
  * mcpGateway. Throws 403/404 if the caller may not assign the environment.
  */
 async function assertEnvironmentAssignable(params: {
@@ -2466,7 +2454,7 @@ async function assertEnvironmentAssignable(params: {
  * The environment a new agent binds to. An explicit value in the body wins
  * (including a deliberate null, which means the default environment); omitting
  * the field defers to the org's configured landing environment for the agent's
- * type — agents, MCP gateways, and LLM proxies are configured separately.
+ * type — agents and MCP gateways are configured separately.
  */
 async function resolveNewAgentEnvironmentId(params: {
   userId: string;
@@ -2477,6 +2465,11 @@ async function resolveNewAgentEnvironmentId(params: {
   const { userId, organizationId, agentType, requested } = params;
   if (requested !== undefined) return requested;
   const resource = getResourceForAgentType(agentType);
+  // Fail closed: the create route rejects llm_proxy before this runs, and the
+  // LLM Proxy has no landing-environment default of its own.
+  if (resource === "llmProxy") {
+    throw new ApiError(400, LLM_PROXY_MANAGED_MESSAGE);
+  }
   return resolveDefaultEnvironmentForNewResource({
     organizationId,
     resource,
@@ -2605,7 +2598,14 @@ async function requireAgentSkillWriteAccess(params: {
  * type; the caller has none.
  */
 const AGENT_READ_FORBIDDEN_MESSAGE =
-  "You don't have permission to view agents. This requires read access to at least one agent type (agents, MCP gateways, or LLM proxies).";
+  "You don't have permission to view agents. This requires read access to at least one agent type (agents or MCP gateways).";
+
+/**
+ * 400 copy for generic agent CRUD aimed at an `llm_proxy` row. The LLM Proxy
+ * has its own management surface, so these routes never touch it.
+ */
+const LLM_PROXY_MANAGED_MESSAGE =
+  "The LLM Proxy is managed on the LLM Proxy page.";
 
 /** Whether two id lists hold the same set of ids, order aside. */
 function sameIdSet(a: string[], b: string[]): boolean {

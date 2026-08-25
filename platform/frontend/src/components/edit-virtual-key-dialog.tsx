@@ -150,11 +150,15 @@ export function EditVirtualKeyDialog({
     <FormDialog
       open
       onOpenChange={onOpenChange}
-      title="Edit Virtual API Key"
+      title={
+        isPassthrough
+          ? "Edit Passthrough Virtual Key"
+          : "Edit Standard Virtual Key"
+      }
       description={
         isPassthrough
-          ? "Update the passthrough key name and expiration."
-          : "Update the virtual key name, visibility, and expiration."
+          ? "Update the passthrough virtual key name and expiration."
+          : "Update the standard virtual key name, visibility, and expiration."
       }
       size="medium"
       isDirty={isDirty}

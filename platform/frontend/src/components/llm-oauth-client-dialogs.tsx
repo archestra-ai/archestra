@@ -5,13 +5,8 @@ import type {
   ResourceVisibilityScope,
 } from "@archestra/shared";
 import { useEffect, useState } from "react";
-import {
-  AgentSelector,
-  type AgentSelectorAgent,
-} from "@/components/agent-selector";
 import { FormDialog } from "@/components/form-dialog";
 import {
-  ProxyGrantField,
   parseRedirectUris,
   RedirectUrisField,
 } from "@/components/oauth-client-form-fields";
@@ -31,20 +26,18 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-export type LlmOauthClient =
-  archestraApiTypes.GetLlmOauthClientsResponses["200"][number];
+type LlmOauthClient =
+  archestraApiTypes.GetLlmOauthClientsResponses["200"]["data"][number];
 
 export function EditOAuthClientDialog({
   oauthClient,
   onOpenChange,
-  llmProxies,
   providerApiKeys,
   onSubmit,
   isSubmitting,
 }: {
   oauthClient: LlmOauthClient | null;
   onOpenChange: (open: boolean) => void;
-  llmProxies: AgentSelectorAgent[];
   providerApiKeys: archestraApiTypes.GetLlmProviderApiKeysResponses["200"];
   onSubmit: (
     id: string,
@@ -53,7 +46,6 @@ export function EditOAuthClientDialog({
   isSubmitting: boolean;
 }) {
   const [name, setName] = useState("");
-  const [selectedProxyIds, setSelectedProxyIds] = useState<string[]>([]);
   const [providerApiKeyIds, setProviderApiKeyIds] = useState<ProviderApiKeyMap>(
     {},
   );
@@ -64,7 +56,6 @@ export function EditOAuthClientDialog({
   useEffect(() => {
     if (!oauthClient) return;
     setName(oauthClient.name);
-    setSelectedProxyIds(oauthClient.allowedLlmProxyIds);
     setProviderApiKeyIds(providerApiKeyArrayToMap(oauthClient.providerApiKeys));
     setRedirectUrisText(oauthClient.redirectUris.join("\n"));
     setScope(oauthClient.scope);
@@ -81,7 +72,7 @@ export function EditOAuthClientDialog({
     (scope !== "team" || teamIds.length > 0) &&
     (isAuthorizationCode
       ? redirectUris.length > 0
-      : selectedProxyIds.length > 0 && mappedProviderApiKeys.length > 0);
+      : mappedProviderApiKeys.length > 0);
 
   return (
     <FormDialog
@@ -90,8 +81,8 @@ export function EditOAuthClientDialog({
       title="Edit OAuth Client"
       description={
         isAuthorizationCode
-          ? "Update the redirect URIs and proxy grant for this OAuth client."
-          : "Update the LLM proxies and provider keys this OAuth client can use."
+          ? "Update the redirect URIs for this OAuth client."
+          : "Update the provider keys this OAuth client can use."
       }
     >
       <DialogForm
@@ -101,7 +92,6 @@ export function EditOAuthClientDialog({
           await onSubmit(oauthClient.id, {
             name: name.trim(),
             grantType: oauthClient.grantType,
-            allowedLlmProxyIds: selectedProxyIds,
             ...(isAuthorizationCode
               ? { redirectUris }
               : { providerApiKeys: mappedProviderApiKeys }),
@@ -131,39 +121,16 @@ export function EditOAuthClientDialog({
           />
 
           {isAuthorizationCode ? (
-            <>
-              <RedirectUrisField
-                value={redirectUrisText}
-                onChange={setRedirectUrisText}
-              />
-              <ProxyGrantField
-                llmProxies={llmProxies}
-                value={selectedProxyIds}
-                onValueChange={setSelectedProxyIds}
-              />
-            </>
+            <RedirectUrisField
+              value={redirectUrisText}
+              onChange={setRedirectUrisText}
+            />
           ) : (
-            <>
-              <div className="space-y-2">
-                <Label>Allowed LLM proxies</Label>
-                <AgentSelector
-                  mode="multiple"
-                  flat
-                  agents={llmProxies}
-                  value={selectedProxyIds}
-                  onValueChange={setSelectedProxyIds}
-                  placeholder="Select LLM proxies"
-                  searchPlaceholder="Search LLM proxies"
-                  emptyMessage="No LLM proxies found"
-                />
-              </div>
-
-              <ProviderKeyAccessFields
-                providerApiKeyIds={providerApiKeyIds}
-                onProviderApiKeyIdsChange={setProviderApiKeyIds}
-                providerApiKeys={providerApiKeys}
-              />
-            </>
+            <ProviderKeyAccessFields
+              providerApiKeyIds={providerApiKeyIds}
+              onProviderApiKeyIdsChange={setProviderApiKeyIds}
+              providerApiKeys={providerApiKeys}
+            />
           )}
         </DialogBody>
         <DialogStickyFooter>

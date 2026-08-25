@@ -35,7 +35,6 @@ function renderDialog(
       open
       onOpenChange={vi.fn()}
       gateways={GATEWAYS}
-      llmProxies={[]}
       providerApiKeys={[]}
       onSubmit={onSubmit}
       isSubmitting={false}
@@ -104,7 +103,7 @@ describe("deep-link defaults", () => {
     expect(
       screen.queryByRole("radio", { name: /Agents & MCP gateways/ }),
     ).not.toBeInTheDocument();
-    expect(screen.getByText("Allowed LLM proxies")).toBeInTheDocument();
+    expect(screen.getByText("Provider Keys")).toBeInTheDocument();
   });
 
   it("submits the pre-selected agent without touching the selector", async () => {

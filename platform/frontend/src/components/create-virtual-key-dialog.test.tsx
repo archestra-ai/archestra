@@ -67,7 +67,7 @@ describe("CreateVirtualKeyDialog", () => {
     renderDialog("passthrough");
 
     expect(
-      screen.getByRole("heading", { name: "Create Passthrough Key" }),
+      screen.getByRole("heading", { name: "Create Passthrough Virtual Key" }),
     ).toBeInTheDocument();
     expect(
       screen.getByPlaceholderText("My passthrough key"),
@@ -95,7 +95,7 @@ describe("CreateVirtualKeyDialog", () => {
     renderDialog("standard");
 
     expect(
-      screen.getByRole("heading", { name: "Create Virtual API Key" }),
+      screen.getByRole("heading", { name: "Create Standard Virtual Key" }),
     ).toBeInTheDocument();
     expect(screen.getByPlaceholderText("My virtual key")).toBeInTheDocument();
     expect(screen.getByLabelText("Name")).toHaveValue(

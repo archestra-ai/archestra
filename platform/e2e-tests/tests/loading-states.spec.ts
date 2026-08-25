@@ -16,6 +16,7 @@ const BOOT_LOADER_LABELS = [
   "Loading your workspace…",
   "Checking access…",
   "Loading LLM proxies…",
+  "Loading LLM proxy…",
   "Loading agents…",
   "Loading results…",
 ];
@@ -62,15 +63,15 @@ test.describe("loading states", () => {
     page,
     goToPage,
   }) => {
-    await goToPage(page, "/llm/proxies");
+    await goToPage(page, "/llm/proxy");
     await expect(
-      page.getByRole("heading", { name: "LLM Proxies" }),
+      page.getByRole("heading", { name: "LLM Proxy", exact: true }),
     ).toBeVisible();
 
     await recordIndicators(page);
     await page.reload();
     await expect(
-      page.getByRole("heading", { name: "LLM Proxies" }),
+      page.getByRole("heading", { name: "LLM Proxy", exact: true }),
     ).toBeVisible();
 
     const seen = await readIndicatorsSeen(page);
@@ -84,23 +85,23 @@ test.describe("loading states", () => {
     page,
     goToPage,
   }) => {
-    await goToPage(page, "/llm/proxies");
-    const search = page.getByPlaceholder(/Search proxies by name/i);
+    await goToPage(page, "/llm/proxy/virtual-keys");
+    const search = page.getByPlaceholder(/Search keys by name/i);
     await expect(search).toBeVisible();
 
     // A filter that cannot match sends the list through a fetch that returns
     // nothing. The empty state belongs at the end of that, not while it runs:
     // announcing it early and replacing it with rows is the flash this pins.
-    await search.fill("no-such-proxy-should-ever-exist");
+    await search.fill("no-such-key-should-ever-exist");
     await expect(
-      page.getByText(/No LLM proxies match your filters/i),
+      page.getByText(/No virtual keys match your filters/i),
     ).toBeVisible();
 
-    // Clearing the filter brings rows back in place, with no empty state on
-    // the way.
+    // Clearing the filter restores the unfiltered list, with no filtered
+    // empty state on the way.
     await search.fill("");
     await expect(
-      page.getByText(/No LLM proxies match your filters/i),
+      page.getByText(/No virtual keys match your filters/i),
     ).toBeHidden();
   });
 });

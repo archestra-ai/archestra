@@ -58,11 +58,9 @@ describe("POST /api/connection-setups", () => {
     expect(response.json().error.message).toContain("at least one");
   });
 
-  test("rejects provider without proxy and proxy without provider", async ({
-    makeAgent,
-  }) => {
-    const proxy = await makeAgent({ organizationId, agentType: "llm_proxy" });
-
+  test("provider alone opts the LLM Proxy in; llmProxyId alone selects nothing", async () => {
+    // `provider` opts the proxy in — the org's single LLM Proxy is resolved
+    // server-side, so no llmProxyId is needed in the payload.
     const providerOnly = await app.inject({
       method: "POST",
       url: "/api/connection-setups",
@@ -72,18 +70,75 @@ describe("POST /api/connection-setups", () => {
         provider: "anthropic",
       },
     });
-    expect(providerOnly.statusCode).toBe(400);
+    expect(providerOnly.statusCode).toBe(200);
+    const rawToken = providerOnly
+      .json()
+      .command.match(/script\/([^']+)'/)?.[1] as string;
+    const setup = await ConnectionSetupModel.findByToken(rawToken);
+    const { AgentModel } = await import("@/models");
+    const singleton = await AgentModel.getOrgLlmProxy(organizationId);
+    expect(setup?.llmProxyId).toBe(singleton.id);
 
+    // llmProxyId is ignored: alone it selects nothing, so the request 400s.
     const proxyOnly = await app.inject({
       method: "POST",
       url: "/api/connection-setups",
       payload: {
         clientId: "claude-code",
         baseUrl: "http://localhost:9000/v1",
-        llmProxyId: proxy.id,
+        llmProxyId: singleton.id,
       },
     });
     expect(proxyOnly.statusCode).toBe(400);
+    expect(proxyOnly.json().error.message).toContain("at least one");
+  });
+
+  test("a caller-supplied llmProxyId is ignored in favor of the org's single proxy", async ({
+    makeAgent,
+  }) => {
+    const impostor = await makeAgent({
+      organizationId,
+      agentType: "llm_proxy",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "claude-code",
+        baseUrl: "http://localhost:9000/v1",
+        llmProxyId: impostor.id,
+        provider: "anthropic",
+        attributePassthrough: false,
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    const rawToken = response
+      .json()
+      .command.match(/script\/([^']+)'/)?.[1] as string;
+    const setup = await ConnectionSetupModel.findByToken(rawToken);
+    const { AgentModel } = await import("@/models");
+    const singleton = await AgentModel.getOrgLlmProxy(organizationId);
+    expect(setup?.llmProxyId).toBe(singleton.id);
+    expect(setup?.llmProxyId).not.toBe(impostor.id);
+  });
+
+  test("403s a proxy setup without llmProxy read access", async () => {
+    mockUserHasPermission.mockImplementation(
+      async (_userId, _orgId, resource) => resource !== "llmProxy",
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "claude-code",
+        baseUrl: "http://localhost:9000/v1",
+        provider: "anthropic",
+      },
+    });
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.message).toContain("llmProxy:read");
   });
 
   test("rejects a provider the client cannot speak to", async ({

@@ -286,12 +286,10 @@ const agentEditSpec: ArchestraToolAuditSpec = {
 };
 
 const TOOL_AUDIT_SPECS: Record<string, ArchestraToolAuditSpec> = {
-  // Agents / LLM proxies / MCP gateways (all rows in the agents table).
+  // Agents / MCP gateways (all rows in the agents table).
   create_agent: agentCreateSpec,
-  create_llm_proxy: agentCreateSpec,
   create_mcp_gateway: agentCreateSpec,
   edit_agent: agentEditSpec,
-  edit_llm_proxy: agentEditSpec,
   edit_mcp_gateway: agentEditSpec,
 
   // Teams (incl. membership and external-group mutations — team.updated with

@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-08-21
+lastUpdated: 2026-08-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -59,12 +59,12 @@ A Copilot key is tied to one GitHub account, so it is routable only through your
 
 ### Model Router Connection Details
 
-- **Base URL**: `http://localhost:9000/v1/model-router/{llm-proxy-id}`
+- **Base URL**: `http://localhost:9000/v1/model-router`
 - **Authentication**: Pass either a mapped virtual API key or an LLM OAuth client access token in the `Authorization` header as `Bearer <key>`. Use virtual keys for generic LLM clients and OAuth client access tokens for backend services that can perform OAuth client credentials. See [Authentication](/docs/platform-llm-proxy-authentication).
 
 ### List Models
 
-Call `GET /v1/model-router/{llm-proxy-id}/models` to list OpenAI-compatible model objects. Model IDs are returned as `<provider>:<model-id>` and only include providers mapped to the virtual key or LLM OAuth client used for the request. The list includes chat models and embedding models. Models [restricted to teams](/docs/platform-access-control#team-restricted-models) are omitted unless the request is attributed to a user in one of those teams. See [Authentication](/docs/platform-llm-proxy-authentication) for configuration details.
+Call `GET /v1/model-router/models` to list OpenAI-compatible model objects. Model IDs are returned as `<provider>:<model-id>` and only include providers mapped to the virtual key or LLM OAuth client used for the request. The list includes chat models and embedding models. Models [restricted to teams](/docs/platform-access-control#team-restricted-models) are omitted unless the request is attributed to a user in one of those teams. See [Authentication](/docs/platform-llm-proxy-authentication) for configuration details.
 
 ### Model Resolution
 
@@ -86,7 +86,7 @@ Model Router translation forwards inline non-text content where the provider's n
 
 ### OpenAI Connection Details
 
-- **Base URL**: `http://localhost:9000/v1/openai/{profile-id}`
+- **Base URL**: `http://localhost:9000/v1/openai`
 - **Authentication**: Pass your OpenAI API key in the `Authorization` header as `Bearer <your-api-key>`
 
 ### Important Notes
@@ -110,9 +110,9 @@ These keys are per-user and personal-only: each person connects their own ChatGP
 
 ### Anthropic Connection Details
 
-- **Base URL**: `http://localhost:9000/v1/anthropic/{profile-id}`
+- **Base URL**: `http://localhost:9000/v1/anthropic`
 - **Authentication**: Pass your Anthropic API key in the `x-api-key` header
-- **Messages path**: `POST /v1/anthropic/{profile-id}/v1/messages`
+- **Messages path**: `POST /v1/anthropic/v1/messages`
 
 ### Anthropic on Microsoft Foundry
 
@@ -144,7 +144,7 @@ Archestra supports both the [Google AI Studio](https://ai.google.dev/) (Gemini D
 
 ### Gemini Connection Details
 
-- **Base URL**: `http://localhost:9000/v1/gemini/{profile-id}/v1beta`
+- **Base URL**: `http://localhost:9000/v1/gemini/v1beta`
 - **Authentication**:
   - **Google AI Studio (default)**: Pass your Gemini API key in the `x-goog-api-key` header
   - **Vertex AI**: No API key required from clients - uses server-side [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/application-default-credentials)
@@ -228,7 +228,7 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 
 ### Cerebras Connection Details
 
-- **Base URL**: `http://localhost:9000/v1/cerebras/{profile-id}`
+- **Base URL**: `http://localhost:9000/v1/cerebras`
 - **Authentication**: Pass your Cerebras API key in the `Authorization` header as `Bearer <your-api-key>`
 
 ## Cohere
@@ -243,7 +243,7 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 
 ### Cohere Connection Details
 
-- **Base URL**: `http://localhost:9000/v1/cohere/{profile-id}`
+- **Base URL**: `http://localhost:9000/v1/cohere`
 - **Authentication**: Pass your Cohere API key in the `Authorization` header as `Bearer <your-api-key>`
 
 ### Environment Variables
@@ -267,7 +267,7 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 
 ### Groq Connection Details
 
-- **Base URL**: `http://localhost:9000/v1/groq/{profile-id}`
+- **Base URL**: `http://localhost:9000/v1/groq`
 - **Authentication**: Pass your Groq API key in the `Authorization` header as `Bearer <your-api-key>`
 
 ### Environment Variables
@@ -303,7 +303,7 @@ You can generate an API key from the [Groq Console](https://console.groq.com/key
 
 ### OpenRouter Connection Details
 
-- **Base URL**: `http://localhost:9000/v1/openrouter/{profile-id}`
+- **Base URL**: `http://localhost:9000/v1/openrouter`
 - **Authentication**: Pass your OpenRouter API key in the `Authorization` header as `Bearer <your-api-key>`
 
 ### Environment Variables
@@ -349,7 +349,7 @@ Models that generate audio or images also report a zero per-token price, because
 
 ### Mistral Connection Details
 
-- **Base URL**: `http://localhost:9000/v1/mistral/{profile-id}`
+- **Base URL**: `http://localhost:9000/v1/mistral`
 - **Authentication**: Pass your Mistral API key in the `Authorization` header as `Bearer <your-api-key>`
 
 ### Getting an API Key
@@ -369,7 +369,7 @@ One API key works for both. The model you pick selects the API.
 
 ### Perplexity Connection Details
 
-- **Base URL**: `http://localhost:9000/v1/perplexity/{profile-id}`
+- **Base URL**: `http://localhost:9000/v1/perplexity`
 - **Authentication**: Pass your Perplexity API key in the `Authorization` header as `Bearer <your-api-key>`
 
 ### Environment Variables
@@ -400,7 +400,7 @@ You can get an API key from the [Perplexity Settings](https://www.perplexity.ai/
 
 ### vLLM Connection Details
 
-- **Base URL**: `http://localhost:9000/v1/vllm/{profile-id}`
+- **Base URL**: `http://localhost:9000/v1/vllm`
 - **Authentication**: API key is **optional**. Pass in `Authorization` header as `Bearer <your-api-key>` if your vLLM deployment requires auth.
 
 ### Setup
@@ -451,8 +451,8 @@ Both transports talk to the same Ollama server. You can add either or both.
 
 ### Ollama Connection Details
 
-- **Base URL (Native)**: `http://localhost:9000/v1/ollama-native/{profile-id}`
-- **Base URL (OpenAI-compatible)**: `http://localhost:9000/v1/ollama/{profile-id}`
+- **Base URL (Native)**: `http://localhost:9000/v1/ollama-native`
+- **Base URL (OpenAI-compatible)**: `http://localhost:9000/v1/ollama`
 - **Authentication**: API key is **optional**. Pass it in the `Authorization` header as `Bearer <your-api-key>` if your Ollama deployment requires auth (e.g., Ollama Cloud).
 
 ### Setup
@@ -510,7 +510,7 @@ The marker is advice, not a quality verdict. Models are treated as suitable unle
 
 ### Zhipu AI Connection Details
 
-- **Base URL**: `http://localhost:9000/v1/zhipuai/{profile-id}`
+- **Base URL**: `http://localhost:9000/v1/zhipuai`
 - **Authentication**: Pass your Zhipu AI API key in the `Authorization` header as `Bearer <your-api-key>`
 
 ### Environment Variables
@@ -545,7 +545,7 @@ The marker is advice, not a quality verdict. Models are treated as suitable unle
 
 ### xAI Connection Details
 
-- **Base URL**: `http://localhost:9000/v1/xai/{profile-id}`
+- **Base URL**: `http://localhost:9000/v1/xai`
 - **Authentication**: Pass your xAI API key in `Authorization` header as `Bearer <your-api-key>`
 
 ### Environment Variables
@@ -595,7 +595,7 @@ Subscription sign-in is unavailable when Bring Your Own Secrets uses a read-only
 
 ### MiniMax Connection Details
 
-- **Base URL**: `http://localhost:9000/v1/minimax/{profile-id}`
+- **Base URL**: `http://localhost:9000/v1/minimax`
 - **Authentication**: Pass your MiniMax API key in the `Authorization` header as `Bearer <your-api-key>`
 
 ### Environment Variables
@@ -631,7 +631,7 @@ Subscription sign-in is unavailable when Bring Your Own Secrets uses a read-only
 
 ### Kimi Connection Details
 
-- **Base URL**: `http://localhost:9000/v1/kimi/{profile-id}`
+- **Base URL**: `http://localhost:9000/v1/kimi`
 - **Authentication**: Pass your Kimi API key in the `Authorization` header as `Bearer <your-api-key>`
 
 ### Environment Variables
@@ -673,7 +673,7 @@ The Models API tells you which one to use. Each entry lists its API in `supporte
 
 ### GitHub Copilot Connection Details
 
-- **Base URL**: `http://localhost:9000/v1/github-copilot/{profile-id}`
+- **Base URL**: `http://localhost:9000/v1/github-copilot`
 - **Authentication**: Pass your **GitHub OAuth token** (the credential below) in the `Authorization` header as `Bearer <token>`
 
 Copilot models are also reachable through the model router as `github-copilot:<model-id>`. See [GitHub Copilot Through the Model Router](#github-copilot-through-the-model-router).
@@ -717,7 +717,7 @@ Archestra exposes both through its standard OpenAI-compatible `/chat/completions
 
 ### Microsoft 365 Copilot Connection Details
 
-- **Base URL**: `http://localhost:9000/v1/microsoft-365-copilot/{profile-id}`
+- **Base URL**: `http://localhost:9000/v1/microsoft-365-copilot`
 - **Authentication**: Pass the stored **Entra refresh token** (the credential below) in the `Authorization` header as `Bearer <token>`
 
 ### Prerequisites: Entra App Registration
@@ -769,14 +769,14 @@ Use another Archestra instance as an upstream provider. One Archestra routes its
 
 ### Archestra Connection Details
 
-- **Base URL**: the upstream Archestra's model router, for example `https://your-archestra/v1/model-router/<llm-proxy-id>`.
+- **Base URL**: the upstream Archestra's model router, for example `https://your-archestra/v1/model-router`.
 - **Authentication**: pass a virtual API key (`arch_...`) minted from that LLM Proxy in the `Authorization` header as `Bearer <key>`.
 
 ### Setup
 
-1. On the upstream Archestra, go to **LLM Proxies** and create an LLM Proxy, then create a virtual API key for it.
+1. On the upstream Archestra, create a virtual API key on the **LLM Proxy** page.
 2. On this Archestra, go to **Model Providers** and add a new key with provider **Archestra**.
-3. Set the **Base URL** to the upstream proxy's model router (for example `https://your-archestra/v1/model-router/<llm-proxy-id>`).
+3. Set the **Base URL** to the upstream proxy's model router (for example `https://your-archestra/v1/model-router`).
 4. Paste the virtual API key from the upstream LLM Proxy.
 
 Archestra fetches the model list from the upstream's `{base-url}/models` endpoint, so the picker shows exactly the models that proxy exposes. Model IDs are provider-qualified, for example `openai:gpt-5.4`.
@@ -799,12 +799,12 @@ Archestra fetches the model list from the upstream's `{base-url}/models` endpoin
 
 - **Converse API** (`/converse`) ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html))
 - **Converse Stream API** (`/converse-stream`) ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ConverseStream.html))
-- **InvokeModel API** (`/model/{model-id}/invoke` and `/model/{model-id}/invoke-with-response-stream`) for Anthropic models ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_InvokeModel.html)). This is the API the Anthropic SDK's Bedrock client uses — point Claude Code at Archestra with `CLAUDE_CODE_USE_BEDROCK=1` and `ANTHROPIC_BEDROCK_BASE_URL=http://localhost:9000/v1/bedrock/{profile-id}`.
+- **InvokeModel API** (`/model/{model-id}/invoke` and `/model/{model-id}/invoke-with-response-stream`) for Anthropic models ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_InvokeModel.html)). This is the API the Anthropic SDK's Bedrock client uses — point Claude Code at Archestra with `CLAUDE_CODE_USE_BEDROCK=1` and `ANTHROPIC_BEDROCK_BASE_URL=http://localhost:9000/v1/bedrock`.
 - **OpenAI-compatible API (Mantle)** - ⚠️ Not yet supported ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/userguide/bedrock-mantle.html))
 
 ### Bedrock Connection Details
 
-- **Base URL**: `http://localhost:9000/v1/bedrock/{profile-id}`
+- **Base URL**: `http://localhost:9000/v1/bedrock`
 - **Authentication**: Bearer API key or AWS IAM (see below)
 
 ### Region
@@ -993,7 +993,7 @@ Known region prefixes: `us`, `eu`, `ap`, `global`.
 
 ### Azure AI Foundry Connection Details
 
-- **Base URL**: `http://localhost:9000/v1/azure/{profile-id}`
+- **Base URL**: `http://localhost:9000/v1/azure`
 - **API key authentication**: Pass your Azure API key in the `Authorization` header as `Bearer <your-api-key>`
 - **Keyless authentication**: Set `ARCHESTRA_AZURE_OPENAI_ENTRA_ID_ENABLED=true` and assign the workload identity, managed identity, service principal, or local Azure CLI user an Azure role that can invoke the deployed model.
 

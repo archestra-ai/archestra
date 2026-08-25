@@ -84,11 +84,16 @@ vi.mock("@/lib/agent.query", () => ({
     if (agentType === "agent") {
       return { data: [{ id: "agent-1", name: "Test Agent" }] };
     }
-    if (agentType === "llm_proxy") {
-      return { data: [{ id: "proxy-1", name: "Test LLM Proxy" }] };
-    }
     return { data: [] };
   },
+}));
+
+// The LLM Proxy singleton the llm_proxy limit target resolves against.
+vi.mock("@/lib/llm-proxy.query", () => ({
+  useLlmProxy: () => ({
+    data: { id: "proxy-1", identityProviderId: null },
+    isPending: false,
+  }),
 }));
 
 vi.mock("@/lib/hooks/use-data-table-query-params", () => ({
@@ -592,7 +597,7 @@ describe("LimitsPage", () => {
     expect(row).toHaveTextContent("Test Agent");
   });
 
-  it("shows LLM proxy name in table for llm_proxy-type limits", () => {
+  it("labels the LLM Proxy row for a limit targeting the proxy", () => {
     mockUseLimits.mockReturnValue({
       data: [
         {
@@ -615,10 +620,10 @@ describe("LimitsPage", () => {
 
     render(<LimitsPage />);
     const row = screen.getByTestId("data-table-row-limit-proxy");
-    expect(row).toHaveTextContent("Test LLM Proxy");
+    expect(row).toHaveTextContent("LLM Proxy");
   });
 
-  it("shows 'Unknown LLM proxy' when proxy is not found", () => {
+  it("shows 'Unknown agent' for an agent row that no longer resolves", () => {
     mockUseLimits.mockReturnValue({
       data: [
         {
@@ -641,7 +646,7 @@ describe("LimitsPage", () => {
 
     render(<LimitsPage />);
     const row = screen.getByTestId("data-table-row-limit-proxy");
-    expect(row).toHaveTextContent("Unknown LLM proxy");
+    expect(row).toHaveTextContent("Unknown agent");
   });
 
   it("opens the edit dialog seeded from an ?edit= deep link", async () => {

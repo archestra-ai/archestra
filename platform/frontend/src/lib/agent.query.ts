@@ -25,7 +25,6 @@ const {
   getAgents,
   getAllAgents,
   getDefaultMcpGateway,
-  getDefaultLlmProxy,
   getAgent,
   importAgent,
   permanentlyDeleteAgent,
@@ -286,20 +285,6 @@ export function useDefaultMcpGateway(params?: {
   });
 }
 
-export function useDefaultLlmProxy(params?: {
-  initialData?: archestraApiTypes.GetDefaultLlmProxyResponses["200"];
-}) {
-  return useQuery({
-    queryKey: ["llm-proxy", "default"],
-    queryFn: async () => {
-      const { data, error } = await getDefaultLlmProxy();
-      throwOnApiError(error, { toastOnError: false });
-      return data ?? null;
-    },
-    initialData: params?.initialData,
-  });
-}
-
 export function useProfile(id: string | undefined) {
   return useQuery({
     queryKey: ["agents", id],
@@ -402,8 +387,8 @@ export function useDeleteProfile() {
 }
 
 /**
- * Deletes a selection of profiles — agents, LLM proxies and MCP gateways are
- * all profiles, so all three tables share this.
+ * Deletes a selection of profiles — agents and MCP gateways are both
+ * profiles, so their tables share this.
  *
  * There is no bulk delete route, so this fans out over the single-item one.
  * It deliberately does NOT go through `useDeleteProfile`: that reports each

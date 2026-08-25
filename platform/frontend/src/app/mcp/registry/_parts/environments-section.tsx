@@ -810,9 +810,9 @@ function EnvironmentEditorDialog({
               </code>{" "}
               for MCP servers,{" "}
               <code className="rounded bg-muted px-1 py-0.5 font-mono">
-                llmProxy
+                agent
               </code>{" "}
-              for LLM proxies).
+              for agents).
             </p>
           </div>
           <Switch

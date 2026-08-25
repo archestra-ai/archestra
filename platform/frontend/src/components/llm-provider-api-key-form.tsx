@@ -327,7 +327,7 @@ const PROVIDER_CONFIG: Record<
     description: (name) =>
       // The upstream instance is named by whatever this deployment calls the
       // provider, so a renamed one reads consistently here too.
-      `Route through another ${name} instance. On that instance, create an LLM Proxy and a virtual API key. Set the Base URL to the proxy's model router (e.g. https://your-archestra/v1/model-router/<llm-proxy-id>) and paste the virtual API key below.`,
+      `Route through another ${name} instance. On that instance, create a virtual API key for its LLM Proxy. Set the Base URL to that instance's model router (e.g. https://your-archestra/v1/model-router) and paste the virtual API key below.`,
   },
   kimi: {
     name: "Moonshot (Kimi)",

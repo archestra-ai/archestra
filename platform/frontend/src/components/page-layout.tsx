@@ -23,9 +23,15 @@ function isTabActive(
   // Sort tabs by href length (longest first)
   const sortedTabs = [...allTabs].sort((a, b) => b.href.length - a.href.length);
 
-  // Find the first tab that matches
+  // Find the first tab that matches. A query string on the current URL must
+  // not defeat the match: `/base/child?filter=x` belongs to the `/base/child`
+  // tab, not to `/base` via the prefix rule.
   for (const tab of sortedTabs) {
-    if (currentUrl === tab.href || currentUrl.startsWith(`${tab.href}/`)) {
+    if (
+      currentUrl === tab.href ||
+      currentUrl.startsWith(`${tab.href}/`) ||
+      currentUrl.startsWith(`${tab.href}?`)
+    ) {
       return tab.href === tabHref;
     }
   }

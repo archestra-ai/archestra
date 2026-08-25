@@ -80,7 +80,7 @@ export function makeUserPermissions(
     team: [...ALL],
     member: [...ALL],
     apiKey: [...ALL],
-    llmProxy: [...ALL, "deploy-to-restricted"],
+    llmProxy: ["read", "update"],
     llmProviderApiKey: [...ALL],
     llmVirtualKey: [...ALL],
     llmOauthClient: [...ALL],

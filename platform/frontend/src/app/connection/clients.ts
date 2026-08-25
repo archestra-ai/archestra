@@ -638,7 +638,9 @@ export COPILOT_MODEL="<model-name>"`,
       ],
       build: ({ provider, providerLabel, url, tokenPlaceholder, appName }) => {
         if (provider === "bedrock") {
-          const openaiUrl = url.replace("/bedrock/", "/bedrock/openai/");
+          // `url` is the id-less Bedrock route (…/v1/bedrock); the OpenAI-compatible
+          // variant nests under it.
+          const openaiUrl = `${url}/openai`;
           return {
             kind: "steps",
             note: "n8n doesn't currently support Bedrock API keys, so the native AWS Bedrock node can't be used here. Route through the OpenAI-compatible endpoint instead.",

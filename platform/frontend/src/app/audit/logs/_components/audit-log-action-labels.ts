@@ -114,9 +114,12 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "llmOauthClient.updated": "LLM OAuth client updated",
   "llmOauthClient.deleted": "LLM OAuth client deleted",
   "llmOauthClient.rotated": "LLM OAuth client secret rotated",
+  "llmOauthClient.bulk_deleted": "LLM OAuth clients bulk deleted",
   // LLM provider key
   "llmProviderApiKey.created": "LLM provider key created",
   "llmProviderApiKey.deleted": "LLM provider key deleted",
+  // LLM Proxy
+  "llmProxy.updated": "LLM Proxy updated",
   // MCP OAuth client
   "mcpOauthClient.created": "MCP OAuth client created",
   "mcpOauthClient.updated": "MCP OAuth client updated",
@@ -205,6 +208,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   // Virtual API key
   "virtualApiKey.created": "Virtual API key created",
   "virtualApiKey.deleted": "Virtual API key deleted",
+  "virtualApiKey.bulk_deleted": "Virtual API keys bulk deleted",
   // Auth surface
   "auth.impersonation_started": "Impersonation started",
   "auth.impersonation_stopped": "Impersonation stopped",
@@ -341,6 +345,7 @@ export const KNOWN_RESOURCE_TYPES: readonly string[] = [
   "llmModel",
   "llmOauthClient",
   "llmProviderApiKey",
+  "llmProxy",
   "mcpOauthClient",
   "mcpServer",
   "mcpServerInstallationRequest",
@@ -376,6 +381,7 @@ const RESOURCE_LABEL_OVERRIDES: Record<string, string> = {
   llmModel: "LLM model",
   llmOauthClient: "LLM OAuth client",
   llmProviderApiKey: "LLM provider key",
+  llmProxy: "LLM Proxy",
   member: "Member",
   mcpServer: "MCP server",
   mcpServerInstallationRequest: "MCP install request",

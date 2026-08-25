@@ -1619,7 +1619,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ query: { q, limit } }, reply) => {
+    async ({ query: { q, limit }, organizationId }, reply) => {
+      await assertOnlineSkillCatalogEnabled(organizationId);
       const results = skillCatalog.search({ query: q, limit });
       return reply.send({
         results: results.map((entry) => ({
@@ -1655,6 +1656,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body, organizationId, user }, reply) => {
+      await assertOnlineSkillCatalogEnabled(organizationId);
       const githubToken = await resolveGithubImportToken({
         githubToken: body.githubToken,
         githubAppConfigId: body.githubAppConfigId,
@@ -1733,6 +1735,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body, organizationId, user }, reply) => {
+      await assertOnlineSkillCatalogEnabled(organizationId);
       const githubToken = await resolveGithubImportToken({
         githubToken: body.githubToken,
         githubAppConfigId: body.githubAppConfigId,
@@ -1814,6 +1817,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { body, organizationId, user } = request;
+      await assertOnlineSkillCatalogEnabled(organizationId);
       // Imported skills carry an explicit scope, authorized like manual create;
       // when omitted they default to `personal` so a bulk import is never
       // silently published org-wide.
@@ -1908,6 +1912,42 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 // ===== Internal helpers =====
+
+/**
+ * Gate every server path that reaches the public online skill catalog on the
+ * organization's `onlineSkillCatalogEnabled` setting.
+ *
+ * The setting used to be advisory: only the add-skill wizard read it, so
+ * turning it off hid the source picker while the catalog search and the GitHub
+ * discover/preview/import endpoints stayed reachable by anything that speaks
+ * HTTP. Enforcing it here makes the admin's choice binding for direct API
+ * calls and scripts too, not only for the UI.
+ *
+ * Deliberately NOT gated:
+ * - Authoring a skill from content the caller supplies (`POST /api/skills`,
+ *   and the `create_skill`/`update_skill`/`edit_skill` chat tools). Those never
+ *   touch the online catalog, and the setting's own copy promises that
+ *   disabling it leaves the blank-template editor available.
+ * - Pulls for skills that were already imported (`PATCH
+ *   /api/skills/:id/github-sync` and the scheduled sync). They re-fetch the
+ *   repo and path already recorded on the skill and cannot introduce a new
+ *   source, so disabling the catalog stops new online skills arriving instead
+ *   of silently freezing the ones an org already runs.
+ */
+async function assertOnlineSkillCatalogEnabled(
+  organizationId: string,
+): Promise<void> {
+  const enabled =
+    await OrganizationModel.getOnlineSkillCatalogEnabled(organizationId);
+  if (!enabled) {
+    throw new ApiError(
+      403,
+      "The online skill catalog is disabled for this organization. Skills " +
+        "can still be written by hand, but they cannot be discovered or " +
+        "imported from GitHub.",
+    );
+  }
+}
 
 /**
  * Assigning a skill to restricted environments is gated by

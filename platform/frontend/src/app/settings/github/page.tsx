@@ -257,8 +257,9 @@ export default function GithubSettingsPage() {
         <Info className="mt-0.5 size-4 shrink-0" />
         <p>
           GitHub credentials — App configurations and personal access tokens —
-          used by Knowledge Base (RAG) connectors, skill imports, and recurring
-          skill sync. For an agentic integration, use the{" "}
+          used by Knowledge Base (RAG) connectors, skill and plugin imports,
+          recurring skill sync, and scheduled plugin checks. For an agentic
+          integration, use the{" "}
           <Link
             href="/mcp/registry"
             className="font-medium text-foreground underline-offset-4 hover:underline"
@@ -401,7 +402,7 @@ function GithubAppDialog({
                 <FormItem>
                   <FormLabel>Name</FormLabel>
                   <FormControl>
-                    <Input placeholder="Platform skills app" {...field} />
+                    <Input placeholder="Repository access app" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -570,7 +571,7 @@ function GithubPatDialog({
                 <FormItem>
                   <FormLabel>Name</FormLabel>
                   <FormControl>
-                    <Input placeholder="Skills repo token" {...field} />
+                    <Input placeholder="Repository access token" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -594,8 +595,8 @@ function GithubPatDialog({
                     />
                   </FormControl>
                   <FormDescription>
-                    A fine-grained token with read access to the repositories
-                    you import skills from.
+                    A fine-grained token with read access to repositories used
+                    for skill and plugin imports.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -657,14 +658,15 @@ function DeleteCredentialDialog({
           <>
             This permanently deletes{" "}
             <span className="font-medium">{row?.name}</span> and its stored
-            private key. Connectors and synced skills still using it must be
-            reconfigured first.
+            private key. Connectors, synced skills, and GitHub-linked plugins
+            still using it must be reconfigured first.
           </>
         ) : (
           <>
             This permanently deletes{" "}
-            <span className="font-medium">{row?.name}</span>. Synced skills
-            still authenticating with it must be disconnected first.
+            <span className="font-medium">{row?.name}</span>. Synced skills and
+            GitHub-linked plugins still authenticating with it must be
+            reconfigured first.
           </>
         )
       }

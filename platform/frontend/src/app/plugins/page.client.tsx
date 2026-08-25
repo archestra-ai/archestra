@@ -706,10 +706,6 @@ function PluginsList() {
                                             key={repo}
                                             repo={repo}
                                           />,
-                                          repo.toLowerCase() ===
-                                          "archestra-ai/openappa"
-                                            ? "plugin-featured-repository-option"
-                                            : undefined,
                                         ] as const,
                                     ),
                                 ]}
@@ -879,9 +875,6 @@ function PluginsList() {
                       canViewPluginDetails
                         ? (row) => router.push(pluginDetailHref(row.id))
                         : undefined
-                    }
-                    getRowClassName={(row) =>
-                      isArchestraPlugin(row) ? "plugin-featured-row" : undefined
                     }
                     rowSelection={bulkSelection.rowSelection}
                     onRowSelectionChange={bulkSelection.setRowSelection}

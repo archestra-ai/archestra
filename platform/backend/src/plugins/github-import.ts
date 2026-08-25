@@ -28,6 +28,12 @@ export class PluginImportError extends Error {
   }
 }
 
+/** Normalize any accepted GitHub repository URL to the stored owner/repo form. */
+export function normalizeGithubPluginRepoUrl(repoUrl: string): string {
+  const { owner, repo } = parseSource({ repoUrl });
+  return `${owner}/${repo}`;
+}
+
 /**
  * Resolve one GitHub tree to immutable, by-value plugin bytes. This service
  * never executes or interprets hook configuration and always strips transport
@@ -55,7 +61,10 @@ export async function importPluginFromGithub(params: {
     params.trackingRef !== undefined
       ? params.trackingRef
       : (source.ref ?? params.ref ?? null);
-  const ref = requestedRef ?? "HEAD";
+  // A pinned commit always wins over the tracking branch at resolution time:
+  // the branch may have moved since the review the caller approved, and
+  // resolving the branch would race the approval check that follows.
+  const ref = params.ref ?? requestedRef ?? "HEAD";
 
   const commitSha = await resolveCommit({
     octokit,
@@ -92,28 +101,19 @@ export async function importPluginFromGithub(params: {
   const { candidates, skippedFiles } = collected;
 
   candidates.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
+  const downloaded = await downloadCandidates({
+    candidates,
+    source,
+    commitSha,
+    githubToken: params.githubToken,
+    deadlineAt: params.deadlineAt,
+    signal: deadlineSignal,
+  });
   const files: PluginFileInput[] = [];
   let downloadedBytes = 0;
-  for (const candidate of candidates) {
-    assertWithinDeadline(params.deadlineAt);
-    const remainingBytes = Math.min(
-      PLUGIN_MAX_FILE_BYTES,
-      PLUGIN_MAX_TOTAL_BYTES - downloadedBytes,
-    );
-    if (remainingBytes <= 0) {
-      skippedFiles.push(candidate.relativePath);
-      continue;
-    }
-    const bytes = await fetchRawFile({
-      owner: source.owner,
-      repo: source.repo,
-      commitSha,
-      path: candidate.repoPath,
-      githubToken: params.githubToken,
-      maxBytes: remainingBytes,
-      deadlineAt: params.deadlineAt,
-      signal: deadlineSignal,
-    });
+  for (let index = 0; index < candidates.length; index += 1) {
+    const candidate = candidates[index];
+    const bytes = downloaded[index];
     if (
       bytes === null ||
       bytes.length > PLUGIN_MAX_FILE_BYTES ||
@@ -155,6 +155,8 @@ export async function importPluginFromGithub(params: {
 }
 
 // === Internal helpers ===
+
+const FILE_DOWNLOAD_CONCURRENCY = 6;
 
 async function resolveCommit(params: {
   octokit: Octokit;
@@ -265,15 +267,64 @@ async function fetchRawFile(params: {
     );
   } catch (error) {
     throw new PluginImportError(
-      `Could not fetch ${params.path}: ${errorMessage(error)}`,
+      `Could not fetch ${params.path} from GitHub (${errorMessage(error)}); retry the import`,
     );
   }
   if (!response.ok) {
     throw new PluginImportError(
-      `Could not fetch ${params.path}: GitHub returned ${response.status}`,
+      `Could not fetch ${params.path} from GitHub (HTTP ${response.status}); retry the import`,
     );
   }
   return readResponseBodyWithLimit(response, params.maxBytes);
+}
+
+/**
+ * Downloads every candidate with bounded concurrency. Serial fetches let one
+ * slow network eat the batch deadline a file at a time; a small worker pool
+ * keeps the per-file timeout the failure unit instead. The pool stops once
+ * enough bytes are in flight to fill the aggregate budget — the assembly pass
+ * then applies the per-file and total limits in sorted path order, exactly as
+ * a serial loop would.
+ */
+async function downloadCandidates(params: {
+  candidates: ReturnType<typeof collectPluginTreeFiles>["candidates"];
+  source: { owner: string; repo: string };
+  commitSha: string;
+  githubToken?: string;
+  deadlineAt?: number;
+  signal?: AbortSignal;
+}): Promise<Array<Buffer | null>> {
+  const { candidates } = params;
+  const downloaded: Array<Buffer | null> = new Array(candidates.length).fill(
+    null,
+  );
+  let nextCandidate = 0;
+  let budgetedBytes = 0;
+  const workerCount = Math.min(FILE_DOWNLOAD_CONCURRENCY, candidates.length);
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (nextCandidate < candidates.length) {
+        if (budgetedBytes >= PLUGIN_MAX_TOTAL_BYTES) return;
+        assertWithinDeadline(params.deadlineAt);
+        const index = nextCandidate;
+        nextCandidate += 1;
+        const candidate = candidates[index];
+        const bytes = await fetchRawFile({
+          owner: params.source.owner,
+          repo: params.source.repo,
+          commitSha: params.commitSha,
+          path: candidate.repoPath,
+          githubToken: params.githubToken,
+          maxBytes: PLUGIN_MAX_FILE_BYTES,
+          deadlineAt: params.deadlineAt,
+          signal: params.signal,
+        });
+        downloaded[index] = bytes;
+        budgetedBytes += bytes?.length ?? 0;
+      }
+    }),
+  );
+  return downloaded;
 }
 
 function decodeContent(bytes: Buffer): {

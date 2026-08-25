@@ -18,6 +18,7 @@ import {
   type InsertMessage,
   type Message,
 } from "@/types";
+import { repairLoneSurrogates } from "@/utils/lone-surrogates";
 import { isUuid, uuidv7 } from "@/utils/uuid";
 
 type DbExecutor =
@@ -96,7 +97,10 @@ class MessageModel {
         .values({
           id: uuidv7(),
           ...data,
-          content: encryptContent(data.content, conversationKey),
+          content: encryptContent(
+            sanitizeContent(data.content),
+            conversationKey,
+          ),
         })
         .returning();
       decryptRow(message, conversationKey);
@@ -121,7 +125,7 @@ class MessageModel {
       messages.map((m) => ({
         id: uuidv7(),
         ...m,
-        content: encryptContent(m.content, conversationKey),
+        content: encryptContent(sanitizeContent(m.content), conversationKey),
       })),
     );
 
@@ -511,6 +515,20 @@ class MessageModel {
       ),
     );
   }
+}
+
+/**
+ * Strip unpaired UTF-16 surrogates out of message content before it is written.
+ *
+ * Postgres `jsonb` is UTF-8 and a lone surrogate has no encoding in it, so an
+ * insert carrying one fails with "invalid input syntax for type json" — and the
+ * message is lost rather than saved imperfectly. A truncated completion or a
+ * tool result cut mid-character is enough to trigger it, so the choice is
+ * between storing the turn with the broken half replaced by U+FFFD and not
+ * storing the turn at all.
+ */
+function sanitizeContent(content: Message["content"]): Message["content"] {
+  return repairLoneSurrogates(content).value as Message["content"];
 }
 
 export default MessageModel;

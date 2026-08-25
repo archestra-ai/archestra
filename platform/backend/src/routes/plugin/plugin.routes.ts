@@ -16,6 +16,7 @@ import {
 } from "@/models";
 import {
   importPluginFromGithub,
+  normalizeGithubPluginRepoUrl,
   PluginImportError,
 } from "@/plugins/github-import";
 import {
@@ -701,7 +702,8 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.UpdatePlugin,
-        description: "Update plugin metadata or replace its files",
+        description:
+          "Update plugin metadata, visibility, GitHub source settings, or files",
         tags: ["Plugins"],
         params: PluginParamsSchema,
         body: UpdatePluginSchema,
@@ -721,6 +723,33 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "GitHub-sourced plugin files are read-only; preview and approve a source update instead",
         );
       }
+      if (body.githubSource && existing.sourceKind !== "github") {
+        throw new ApiError(
+          409,
+          "Only GitHub-sourced plugins have GitHub source settings",
+        );
+      }
+      const githubSource = body.githubSource;
+      if (githubSource?.authentication) {
+        await resolveGithubToken({
+          githubAppConfigId:
+            githubSource.authentication.githubAppConfigId ?? undefined,
+          githubPatId: githubSource.authentication.githubPatId ?? undefined,
+          organizationId,
+          userId: user.id,
+        });
+      }
+      const input = githubSource
+        ? {
+            ...body,
+            githubSource: {
+              ...githubSource,
+              repoUrl: await runGithubImport(async () =>
+                normalizeGithubPluginRepoUrl(githubSource.repoUrl),
+              ),
+            },
+          }
+        : body;
       await validatePluginVisibility({
         organizationId,
         scope: body.scope ?? existing.scope,
@@ -731,7 +760,7 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
         id: params.id,
         organizationId,
         userId: user.id,
-        input: body,
+        input,
       });
       if (!plugin) throw new ApiError(404, "Plugin not found");
       return reply.send(plugin);
@@ -927,7 +956,10 @@ async function importExistingGithubPlugin(params: {
     importPluginFromGithub({
       repoUrl: plugin.sourceRepo as string,
       ref:
-        params.approvedCommitSha ?? plugin.pendingSourceSha ?? plugin.sourceRef,
+        params.approvedCommitSha ??
+        plugin.pendingSourceSha ??
+        syncState.githubSyncRef ??
+        plugin.sourceRef,
       subdir: plugin.sourceSubdir ?? "",
       exclude: plugin.sourceExclude,
       githubToken,

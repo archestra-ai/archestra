@@ -317,6 +317,50 @@ describe("InteractionModel", () => {
       expect(request?.messages?.[0]?.content).toBe("Hello  world  test");
     });
 
+    test("repairs unpaired surrogates so the row is stored, not lost", async () => {
+      // JSONB is UTF-8 and half a surrogate pair has no encoding in it, so an
+      // insert carrying one fails and the whole interaction row is lost — the
+      // very record an operator would use to debug the failure. A completion cut
+      // mid-character is enough to produce one.
+      const interaction = await InteractionModel.create({
+        profileId,
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "edit the dashboard" }],
+        },
+        response: {
+          id: "test-surrogate",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: "tabBtn('inc', '\uD83D",
+                refusal: null,
+              },
+              finish_reason: "stop",
+              logprobs: null,
+            },
+          ],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const found = await InteractionModel.findById(interaction.id);
+      expect(found).not.toBeNull();
+      const response = found?.response as {
+        choices?: Array<{ message?: { content?: string } }>;
+      };
+      const content = response?.choices?.[0]?.message?.content ?? "";
+      expect(content).toContain("tabBtn");
+      expect(content).not.toMatch(
+        /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/,
+      );
+    });
+
     test("throws FK violation when profileId does not exist", async () => {
       await expect(
         InteractionModel.create({

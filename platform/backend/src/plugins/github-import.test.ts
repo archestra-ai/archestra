@@ -147,7 +147,10 @@ describe("importPluginFromGithub", () => {
       "hooks/hooks.json": "{}\n",
     };
     const treeSizes: Record<string, number> = { "hooks/hooks.json": 0 };
-    for (let index = 0; index < 8; index += 1) {
+    // More candidates than the worker pool can claim before the aggregate
+    // budget fills: unattempted entries must become skipped files, not holes
+    // that crash the assembly pass.
+    for (let index = 0; index < 20; index += 1) {
       const path = `zz-assets/${index}.txt`;
       files[path] = "x".repeat(700 * 1024);
       treeSizes[path] = 0;
@@ -174,6 +177,53 @@ describe("importPluginFromGithub", () => {
     );
     expect(totalBytes).toBeLessThanOrEqual(PLUGIN_MAX_TOTAL_BYTES);
     expect(imported.skippedFiles.length).toBeGreaterThan(0);
+  });
+
+  test("imports the approved commit even when the tracking branch moved", async () => {
+    const reviewedSha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const movedSha = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    const fetchMock = stubGithub([
+      {
+        owner: "plugin-moved",
+        repo: "plugin",
+        commitSha: reviewedSha,
+        files: { "hooks/hooks.json": "{}\n" },
+      },
+    ]);
+    const githubStub = fetchMock.getMockImplementation() as
+      | ((input: string | URL | Request) => Promise<Response>)
+      | undefined;
+    fetchMock.mockImplementation(async (input) => {
+      const url = new URL(
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url,
+      );
+      // The branch advanced after the review: resolving "main" now yields a
+      // commit whose raw files the stub does not serve.
+      if (
+        url.hostname === "api.github.com" &&
+        url.pathname.endsWith("/commits/main")
+      ) {
+        return Response.json({ sha: movedSha });
+      }
+      if (!githubStub) throw new Error("GitHub stub is not configured");
+      return githubStub(input);
+    });
+
+    const imported = await importPluginFromGithub({
+      repoUrl: "plugin-moved/plugin",
+      ref: reviewedSha,
+      trackingRef: "main",
+    });
+
+    expect(imported.commitSha).toBe(reviewedSha);
+    expect(imported.requestedRef).toBe("main");
+    expect(imported.files.map((file) => file.path)).toEqual([
+      "hooks/hooks.json",
+    ]);
   });
 
   test("imports through public Git when the anonymous REST quota is exhausted", async () => {

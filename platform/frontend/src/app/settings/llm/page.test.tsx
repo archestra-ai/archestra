@@ -127,6 +127,16 @@ describe("LlmSettingsPage", () => {
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
 
+  it("does not duplicate Advisor setup in LLM settings", async () => {
+    renderPage();
+
+    await screen.findByText("Apply compression to tool results");
+    expect(screen.queryByText("Advisor")).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: /configure advisor/i }),
+    ).toBeNull();
+  });
+
   // The org-wide default user limit is no longer edited from the LLM settings
   // save bar (the old "Unset" button). It now lives in the unified
   // "Default user limits" list (a NULL-environment row with its own delete

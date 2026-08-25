@@ -438,6 +438,49 @@ class PluginModel {
             sourceMarketplacePluginName: params.source.marketplacePluginName,
           }
         : { sourceSha: params.sourceSha, sourceRef: params.sourceRef };
+      const githubSource = params.input.githubSource;
+      const githubRepoChanged = githubSource
+        ? githubSource.repoUrl.toLowerCase() !==
+          existing.sourceRepo?.toLowerCase()
+        : false;
+      const githubRefChanged = githubSource
+        ? githubSource.ref !== existing.githubSyncRef
+        : false;
+      const githubTrackingChanged = githubRepoChanged || githubRefChanged;
+      const githubAuthentication = githubSource?.authentication;
+      const githubAuthenticationChanged = githubAuthentication
+        ? githubAuthentication.githubAppConfigId !==
+            existing.githubAppConfigId ||
+          githubAuthentication.githubPatId !== existing.githubPatId
+        : false;
+      const clearGithubCandidate =
+        githubTrackingChanged || githubSource?.syncInterval === null;
+      const githubSourceUpdate = githubSource
+        ? {
+            sourceRepo: githubSource.repoUrl,
+            sourceRef: githubSource.ref,
+            githubSyncRef: githubSource.ref,
+            githubSyncInterval: githubSource.syncInterval,
+            ...(githubAuthentication
+              ? {
+                  githubAppConfigId: githubAuthentication.githubAppConfigId,
+                  githubPatId: githubAuthentication.githubPatId,
+                }
+              : {}),
+            ...(githubTrackingChanged || githubAuthenticationChanged
+              ? { lastSyncedAt: null }
+              : {}),
+            ...(githubAuthenticationChanged ? { lastSyncError: null } : {}),
+            ...(clearGithubCandidate
+              ? {
+                  pendingSourceSha: null,
+                  pendingContentHash: null,
+                  pendingDetectedAt: null,
+                  lastSyncError: null,
+                }
+              : {}),
+          }
+        : {};
       const [plugin] = await tx
         .update(schema.pluginsTable)
         .set({
@@ -448,6 +491,7 @@ class PluginModel {
           scope,
           syncGeneration: sql`${schema.pluginsTable.syncGeneration} + 1`,
           ...sourceUpdate,
+          ...githubSourceUpdate,
           ...(params.sourceSha || params.source
             ? {
                 pendingSourceSha: null,

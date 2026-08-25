@@ -754,6 +754,23 @@ jobs:
         if: runner.os == 'macOS'
         run: pnpm --filter @frontend exec playwright install chromium
 
+      - name: Free the MSW frontend port
+        # The mac mini is a persistent runner: a merge-queue run cancelled
+        # mid-suite (queue eviction) orphans Playwright's `next dev` webServer,
+        # and every later merge-queue run on this machine then dies instantly
+        # with "http://127.0.0.1:3010 is already used" (reuseExistingServer is
+        # deliberately off in CI). Kill any stale listener before starting.
+        # 3010 mirrors the CI default in frontend/playwright.config.ts; the
+        # runner executes one job at a time, so a listener here is always an
+        # orphan, never a concurrent run's server.
+        if: runner.os == 'macOS'
+        run: |
+          pids=$(lsof -nP -iTCP:3010 -sTCP:LISTEN -t || true)
+          if [ -n "$pids" ]; then
+            echo "Killing stale listeners on :3010: $pids"
+            kill -9 $pids || true
+          fi
+
       - name: Run integration tests
         run: pnpm test:integration
 

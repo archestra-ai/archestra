@@ -3,7 +3,7 @@ title: "Content Encryption at Rest"
 category: Administration
 description: "Server-side content encryption at rest and browser-keyed locked chats"
 order: 4
-lastUpdated: 2026-08-16
+lastUpdated: 2026-08-25
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -68,7 +68,27 @@ What changes while a locked chat is active:
 - LLM request logs, MCP tool call logs, and chat errors are encrypted under the same key. Usage, cost, and model metadata stay in plaintext, so statistics, cost limits, and metering are unaffected.
 - The Logs pages show those records with their content locked. Recovering it takes the escrow private key — see [Break-Glass Recovery](#break-glass-recovery).
 - The title is fixed to "Locked chat" — no LLM title generation. A manual rename is stored in plaintext.
-- Attachments, sandbox commands, sharing, forking, projects, and context compaction are unavailable.
+- Files you attach are encrypted under the same key — see [Attachments](#attachments).
+- Sandbox commands, sharing, forking, and context compaction are unavailable.
+
+### Attachments
+
+You can attach files to a locked chat. The bytes, the filename, and any text Archestra extracts for search are all encrypted under the chat's key, like the messages. The file type, its size, and the upload date stay in plaintext.
+
+Two things work differently from an ordinary chat:
+
+- The file is not copied into the agent's code sandbox, so `run_command` cannot open it. The model still reads the file directly when its type allows.
+- The file cannot be added to a knowledge base. Doing so would write a plaintext copy into a repository other people can read.
+
+### Projects
+
+A locked chat can live in a project. The project holds it, and members of the project see it in the project's chat list under its "Locked chat" title — they cannot read it without the key.
+
+The chat does not join the project's shared context. It does not receive the project's instructions, and its files stay with the chat instead of going to the project. Project instructions are editable by every member, so a locked chat that read them would take direction from people who cannot see the conversation. Project files are stored in plaintext, so a file written there would leave the encrypted chat readable by the whole project.
+
+### App Chats
+
+Opening an app from the Apps page starts a chat. Use "Open as locked chat" in the app's menu to start that one locked. The app renders the same way; the conversation around it is encrypted.
 
 ### Key Escrow
 
@@ -106,10 +126,14 @@ Every envelope uses an AAD of `<column>|incognito:<conversation id>`, which bind
 | `mcp_tool_calls` | `tool_call` | `mcp_tool_calls.tool_call` |
 | `mcp_tool_calls` | `tool_result` | `mcp_tool_calls.tool_result` |
 | `conversation_chat_errors` | `error` | `conversation_chat_errors.error` |
+| `conversation_attachments` | `original_name` | `conversation_attachments.original_name` |
+| `conversation_attachments` | `text_preview` | `conversation_attachments.text_preview` |
 
 Rows in `interactions` and `mcp_tool_calls` carry the chat they belong to in `locked_chat_conversation_id`. Select on it to find everything one chat produced — `mcp_tool_calls` has no other reference to the conversation.
 
 Each envelope decrypts to `{"v": <original value>}`.
+
+Attachment bytes are the one exception to the envelope format. `conversation_attachments.file_data` is a `bytea` holding the raw ciphertext behind a 29-byte header — one version byte, the 12-byte IV, then the 16-byte GCM tag — with an AAD of `conversation_attachments.file_data|incognito:<conversation id>`. It decrypts to the file itself, with no `{"v": …}` wrapper. Rows written this way carry `locked_chat = true`; on those rows `content_hash` is an HMAC under the chat key rather than a digest of the file, so it cannot be used to recognise a file whose bytes you already hold.
 
 A record whose content reads `{"__redacted": "locked_chat"}` was never stored and cannot be recovered. Records written before the feature was renamed read `{"__redacted": "incognito"}` and mean the same thing. Archestra writes that only when it could not encrypt correctly — no key on the request, a key that did not match the chat, or a chat with no escrow record.
 

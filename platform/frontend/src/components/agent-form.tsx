@@ -993,11 +993,6 @@ export function AgentForm({
   const { data: canReadIdentityProviders } = useHasPermissions({
     identityProvider: ["read"],
   });
-  // The Advisor's own model is one org-wide setting; the row links it for
-  // readers who may open it.
-  const { data: canReadLlmSettings } = useHasPermissions({
-    llmSettings: ["read"],
-  });
   const advisorDocsUrl = getDocsUrl(
     DocsPage.PlatformBuiltInSubagents,
     "advisor",
@@ -3557,8 +3552,9 @@ export function AgentForm({
                               </Badge>
                             </div>
                             <p className="text-xs text-muted-foreground">
-                              This {agentTypeDisplayName[agentType] || "agent"}{" "}
-                              consults a stronger model when making decisions.{" "}
+                              {advisorEnabled
+                                ? "Gets a second opinion from the Advisor before answering."
+                                : "Answers without consulting the Advisor."}{" "}
                               <ExternalDocsLink
                                 href={advisorDocsUrl}
                                 className="underline"
@@ -3568,38 +3564,38 @@ export function AgentForm({
                               </ExternalDocsLink>
                             </p>
                           </div>
-                          {canReadLlmSettings && (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  className="shrink-0"
-                                  asChild
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="shrink-0"
+                                asChild
+                              >
+                                {/* New tab: this form holds unsaved edits
+                                  that navigating away would discard. */}
+                                <Link
+                                  href={agentDetailHref(
+                                    "agent",
+                                    advisorAgentId,
+                                  )}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
                                 >
-                                  {/* New tab: this form holds unsaved edits
-                                    that navigating away would discard. */}
-                                  <Link
-                                    href="/settings/llm#advisor"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                  >
-                                    <Settings2 className="size-4" />
-                                    <span>Advisor settings</span>
-                                    <span className="sr-only">
-                                      (opens in new tab)
-                                    </span>
-                                  </Link>
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent className="max-w-xs">
-                                Choose the model the Advisor answers with, in
-                                LLM settings. One Advisor is shared across the
-                                organization.
-                              </TooltipContent>
-                            </Tooltip>
-                          )}
+                                  <Settings2 className="size-4" />
+                                  <span>Open Advisor</span>
+                                  <span className="sr-only">
+                                    (opens in new tab)
+                                  </span>
+                                </Link>
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-64">
+                              Open the organization&apos;s shared Advisor to see
+                              or change the model it uses.
+                            </TooltipContent>
+                          </Tooltip>
                           <Switch
                             id="consult-advisor"
                             checked={advisorEnabled}

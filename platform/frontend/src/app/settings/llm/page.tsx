@@ -1,12 +1,7 @@
 "use client";
 
-import {
-  ADVISOR_AGENT_NAME,
-  archestraApiSdk,
-  type archestraApiTypes,
-} from "@archestra/shared";
+import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { DefaultUserLimitsSection } from "@/app/settings/llm/_parts/default-user-limits-section";
@@ -19,8 +14,6 @@ import {
   SettingsSaveBar,
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { CardTitle } from "@/components/ui/card";
 import { MultiSelect } from "@/components/ui/multi-select";
 import {
@@ -272,41 +265,6 @@ export default function LlmSettingsPage() {
           </div>
         )}
       </SettingsBlock>
-      <SettingsBlock
-        // Linked from every agent's Advisor Subagent row, on the detail page
-        // and in the setup wizard.
-        id="advisor"
-        title={
-          <span className="flex items-center gap-2">
-            Advisor
-            <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
-              Beta
-            </Badge>
-          </span>
-        }
-        description={
-          <>
-            Pair a cheaper model with a stronger advisor model consulted at key
-            moments in a task. The advisor is called at decision points rather
-            than on every turn, so this usually costs less than running the
-            stronger model throughout, though each call is billed at the advisor
-            model&apos;s rates. Pick the advisor&apos;s model on the Advisor
-            agent, then turn on the &quot;Advisor Subagent&quot; switch on the
-            agents and MCP Gateways that should reach it.
-          </>
-        }
-        control={
-          <Button asChild variant="outline">
-            <Link
-              // The agents list hides built-ins under its default scope, so
-              // the name filter alone lands on an empty table.
-              href={`/agents?name=${encodeURIComponent(ADVISOR_AGENT_NAME)}&scope=built_in`}
-            >
-              Configure advisor
-            </Link>
-          </Button>
-        }
-      />
       <SettingsSaveBar
         hasChanges={hasChanges}
         isSaving={updateLlmSettingsMutation.isPending}

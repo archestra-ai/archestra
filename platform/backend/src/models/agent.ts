@@ -3474,14 +3474,6 @@ class AgentModel {
   }
 
   /**
-   * Deletes every personal MCP gateway authored by the given user across all
-   * organizations. Called from the better-auth user.delete hook so the personal
-   * gateway is removed alongside its owner — the agents.author_id FK is
-   * ON DELETE SET NULL (to preserve authorship of non-personal agents), so
-   * without this the personal gateway row would orphan with author_id = NULL
-   * and become permanently undeletable through the API guard.
-   */
-  /**
    * Record the author's email on every agent they authored, immediately before
    * their `user` row goes.
    *
@@ -3519,6 +3511,14 @@ class AgentModel {
       .where(eq(schema.agentsTable.authorId, userId));
   }
 
+  /**
+   * Deletes every personal MCP gateway authored by the given user across all
+   * organizations. Called from the better-auth user.delete hook so the personal
+   * gateway is removed alongside its owner — the agents.author_id FK is
+   * ON DELETE SET NULL (to preserve authorship of non-personal agents), so
+   * without this the personal gateway row would orphan with author_id = NULL
+   * and become permanently undeletable through the API guard.
+   */
   static async deletePersonalMcpGatewaysForUser(
     userId: string,
     tx?: Transaction,

@@ -754,22 +754,27 @@ jobs:
         if: runner.os == 'macOS'
         run: pnpm --filter @frontend exec playwright install chromium
 
-      - name: Free the MSW frontend port
-        # The mac mini is a persistent runner: a merge-queue run cancelled
-        # mid-suite (queue eviction) orphans Playwright's `next dev` webServer,
-        # and every later merge-queue run on this machine then dies instantly
-        # with "http://127.0.0.1:3010 is already used" (reuseExistingServer is
-        # deliberately off in CI). Kill any stale listener before starting.
-        # 3010 mirrors the CI default in frontend/playwright.config.ts; the
-        # runner executes one job at a time, so a listener here is always an
-        # orphan, never a concurrent run's server.
+      - name: Give the MSW webServer its own port
+        # Three runner slots share this machine (mac-mini-1, -1-2, -1-3), so
+        # two merge-queue MSW jobs can run concurrently and collide on a fixed
+        # :3010 — and a run cancelled mid-suite (queue eviction) additionally
+        # orphans its `next dev` webServer there, poisoning every later run
+        # (reuseExistingServer is deliberately off in CI). Pick a free port per
+        # job instead; playwright.config.ts honors
+        # ARCHESTRA_FRONTEND_INT_TESTS_PORT. Orphans then cannot fail anyone,
+        # but still leak memory, so also reap webServers too old to belong to
+        # any live job (a suite runs minutes, not hours).
         if: runner.os == 'macOS'
         run: |
-          pids=$(lsof -nP -iTCP:3010 -sTCP:LISTEN -t || true)
-          if [ -n "$pids" ]; then
-            echo "Killing stale listeners on :3010: $pids"
-            kill -9 $pids || true
-          fi
+          port=$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1]);s.close()')
+          echo "ARCHESTRA_FRONTEND_INT_TESTS_PORT=$port" >> "$GITHUB_ENV"
+          echo "MSW webServer port for this job: $port"
+          for pid in $(pgrep -f "next dev -H 127.0.0.1" || true); do
+            age=$(ps -o etime= -p "$pid" | tr -d ' ') || continue
+            case "$age" in
+              *-*|*:*:*) echo "Reaping orphaned webServer $pid (age $age)"; kill -9 "$pid" || true ;;
+            esac
+          done
 
       - name: Run integration tests
         run: pnpm test:integration

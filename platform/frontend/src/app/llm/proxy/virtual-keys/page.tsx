@@ -137,7 +137,7 @@ function VirtualKeysTable() {
               className="flex-col items-start gap-0.5"
               onSelect={() => setCreateKeyType("standard")}
             >
-              <span className="font-medium">Standard key</span>
+              <span className="font-medium">Standard virtual key</span>
               <span className="text-xs text-muted-foreground">
                 Authenticates your app through your provider keys
               </span>
@@ -146,7 +146,7 @@ function VirtualKeysTable() {
               className="flex-col items-start gap-0.5"
               onSelect={() => setCreateKeyType("passthrough")}
             >
-              <span className="font-medium">Passthrough key</span>
+              <span className="font-medium">Passthrough virtual key</span>
               <span className="text-xs text-muted-foreground">
                 Grants no access; attributes bring-your-own-key requests to a
                 user

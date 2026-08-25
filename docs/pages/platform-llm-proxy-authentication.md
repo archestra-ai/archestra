@@ -35,18 +35,18 @@ This is the simplest approach but means the real provider key is sent with every
 
 ## Standard Virtual Keys
 
-Standard virtual keys are platform-managed bearer tokens that map to one or more provider API keys stored in Archestra. The real provider keys never leave Archestra — clients only see the virtual token. You can delete a standard key without rotating the underlying provider key, and set an optional expiration date on it. Each underlying provider key can have a custom base URL, for a proxy or self-hosted endpoint.
+Standard virtual keys are platform-managed bearer tokens that map to one or more provider API keys stored in Archestra. The real provider keys never leave Archestra — clients only see the virtual token. You can delete a standard virtual key without rotating the underlying provider key, and set an optional expiration date on it. Each underlying provider key can have a custom base URL, for a proxy or self-hosted endpoint.
 
-### Creating Standard Keys
+### Creating Standard Virtual Keys
 
 1. Go to **LLM Proxy** and open the **Virtual Keys** tab
-2. Create a standard key
+2. Create a standard virtual key
 3. Map at least one provider API key
 4. Copy the generated token (shown only once)
 
-### Using Standard Keys
+### Using Standard Virtual Keys
 
-Use the standard key in place of the provider key:
+Use the standard virtual key in place of the provider key:
 
 ```bash
 curl -X POST "https://archestra.example.com/v1/openai/chat/completions" \
@@ -55,19 +55,19 @@ curl -X POST "https://archestra.example.com/v1/openai/chat/completions" \
   -d '{"model": "gpt-4o", "messages": [{"role": "user", "content": "Hello"}]}'
 ```
 
-The proxy resolves the standard key to the mapped provider key and base URL, then forwards the request.
+The proxy resolves the standard virtual key to the mapped provider key and base URL, then forwards the request.
 
 ### Provider Matching
 
-Each standard key can map one key per provider. Provider-specific proxy routes use the mapped key for that route provider. For example, an OpenAI route requires an OpenAI mapping.
+Each standard virtual key can map one key per provider. Provider-specific proxy routes use the mapped key for that route provider. For example, an OpenAI route requires an OpenAI mapping.
 
-### Standard Keys on the Model Router
+### Standard Virtual Keys on the Model Router
 
-Model Router routes require a standard key with at least one provider key mapping. Direct provider API keys are rejected on `/v1/model-router/*`.
+Model Router routes require a standard virtual key with at least one provider key mapping. Direct provider API keys are rejected on `/v1/model-router/*`.
 
 The `/models` endpoint returns models only for mapped providers, and `/responses` or `/chat/completions` can only route to those providers.
 
-Use the same standard key against the Model Router base URL:
+Use the same standard virtual key against the Model Router base URL:
 
 ```bash
 curl -X POST "https://archestra.example.com/v1/model-router/responses" \
@@ -78,26 +78,26 @@ curl -X POST "https://archestra.example.com/v1/model-router/responses" \
 
 ## Passthrough Virtual Keys
 
-Passthrough virtual keys authenticate an Archestra user to LLM Proxy. They cover the case where a client passes a provider or subscription token straight through — for example, Claude Code forwarding a Claude Max subscription token. The proxy forwards that token upstream, while the passthrough key tells Archestra which user made the call.
+Passthrough virtual keys authenticate an Archestra user to LLM Proxy. They cover the case where a client passes a provider or subscription token straight through — for example, Claude Code forwarding a Claude Max subscription token. The proxy forwards that token upstream, while the passthrough virtual key tells Archestra which user made the call.
 
-Unlike the unauthenticated `X-Archestra-User-Id` header, a passthrough key is a secret bound to a user, so the attribution is authenticated. This lets you attribute and access-control requests per user even when the provider credential is opaque.
+Unlike the unauthenticated `X-Archestra-User-Id` header, a passthrough virtual key is a secret bound to a user, so the attribution is authenticated. This lets you attribute and access-control requests per user even when the provider credential is opaque.
 
 ### Properties
 
-- **Personal only**: a passthrough key belongs to one user. Admins can create one on behalf of another member; non-admins only for themselves.
+- **Personal only**: a passthrough virtual key belongs to one user. Admins can create one on behalf of another member; non-admins only for themselves.
 - **No provider keys**: it never maps a provider API key and cannot be used as a provider credential in the `Authorization` header.
 - **Expirable**: set an optional expiration like any virtual key.
 
 ### Creating Passthrough Virtual Keys
 
 1. Go to **LLM Proxy** and open the **Virtual Keys** tab
-2. Create a passthrough key
+2. Create a passthrough virtual key
 3. As an admin, optionally pick the owner
 4. Copy the generated token (shown only once)
 
 ### Using
 
-Send the passthrough key in the `X-Archestra-Virtual-Key` header, alongside whatever credential authenticates the upstream provider call:
+Send the passthrough virtual key in the `X-Archestra-Virtual-Key` header, alongside whatever credential authenticates the upstream provider call:
 
 ```bash
 curl -X POST "https://archestra.example.com/v1/anthropic/v1/messages" \
@@ -107,11 +107,11 @@ curl -X POST "https://archestra.example.com/v1/anthropic/v1/messages" \
   -d '{"model": "claude-haiku-4-5-20251001", "max_tokens": 64, "messages": [{"role": "user", "content": "Hello"}]}'
 ```
 
-A valid passthrough key authenticates the user at the proxy, but it does not by itself satisfy the upstream provider — that still needs its own credential.
+A valid passthrough virtual key authenticates the user at the proxy, but it does not by itself satisfy the upstream provider — that still needs its own credential.
 
 ### Configuring Claude Code and Claude Desktop
 
-The in-app Connection page wires this header up per platform (macOS, Linux, Windows). For Claude Code passthrough — a Claude subscription on the Anthropic provider, or your own AWS credentials on the Bedrock provider — the one-command setup provisions a passthrough key and merges it into `~/.claude/settings.json`:
+The in-app Connection page wires this header up per platform (macOS, Linux, Windows). For Claude Code passthrough — a Claude subscription on the Anthropic provider, or your own AWS credentials on the Bedrock provider — the one-command setup provisions a passthrough virtual key and merges it into `~/.claude/settings.json`:
 
 ```json
 {
@@ -124,9 +124,9 @@ The in-app Connection page wires this header up per platform (macOS, Linux, Wind
 
 `ANTHROPIC_CUSTOM_HEADERS` takes `Name: Value` pairs (newline-separated for several) and applies to the Bedrock transport too, so the same headers attribute requests routed through a Bedrock proxy. Leave `ANTHROPIC_AUTH_TOKEN` and `ANTHROPIC_API_KEY` unset so the Claude subscription still authenticates the upstream call — the header only authenticates an Archestra user on the LLM Proxy.
 
-The setup always adds `X-Archestra-Agent-Id` too — a non-secret client identifier (`anthropic_claude_code` for Claude Code, `anthropic_claude_desktop` for Claude Desktop) that attributes each proxied request to the client app in the LLM logs. It rides alongside the passthrough key but is independent of it, so it is present even when no passthrough key is provisioned.
+The setup always adds `X-Archestra-Agent-Id` too — a non-secret client identifier (`anthropic_claude_code` for Claude Code, `anthropic_claude_desktop` for Claude Desktop) that attributes each proxied request to the client app in the LLM logs. It rides alongside the passthrough virtual key but is independent of it, so it is present even when no passthrough virtual key is provisioned.
 
-Claude Desktop can be configured by hand: open **Developer > Configure Third-Party Inference**, fill in the API key and base URL, then add two custom headers — `X-Archestra-Agent-Id` set to `anthropic_claude_desktop`, and `X-Archestra-Virtual-Key` set to the passthrough key.
+Claude Desktop can be configured by hand: open **Developer > Configure Third-Party Inference**, fill in the API key and base URL, then add two custom headers — `X-Archestra-Agent-Id` set to `anthropic_claude_desktop`, and `X-Archestra-Virtual-Key` set to the passthrough virtual key.
 
 The connection page also generates an importable configuration profile file for Claude Desktop. Download it, then in **Configure Third-Party Inference** open the **Default** dropdown (top right) and choose **Import configuration…** to load it. Click **Apply Changes** and restart Claude Desktop to pick up the new configuration.
 

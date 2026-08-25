@@ -373,7 +373,7 @@ export function ConnectCommandPanel({
     appName,
   });
 
-  // Passthrough setups also get a personal passthrough key wired into the
+  // Passthrough setups also get a personal passthrough virtual key wired into the
   // command (best-effort: only when the user can mint one) so requests are
   // attributed to the user. Applies to Claude Code (Anthropic subscription or
   // the user's own Bedrock credentials) and Codex (the user's own OpenAI key).
@@ -615,8 +615,8 @@ export function ConnectCommandPanel({
               passthroughAttributes ? (
                 <span>
                   Only the base URL changes: requests keep using your own API
-                  key or subscription, and a personal passthrough key in the
-                  command attributes them to you.
+                  key or subscription, and a personal passthrough virtual key in
+                  the command attributes them to you.
                 </span>
               ) : (
                 <span>

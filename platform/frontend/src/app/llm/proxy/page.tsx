@@ -279,7 +279,7 @@ function AuthenticationOverview() {
       <h3 className="text-sm font-semibold">Authentication</h3>
       <div className="mt-1 divide-y">
         <AuthMethodRow
-          title="Virtual keys"
+          title="Standard virtual keys"
           description="One key that authenticates your app; the proxy maps it to your provider keys on each request."
           action={
             canCreateKey ? (
@@ -288,17 +288,19 @@ function AuthenticationOverview() {
                 size="sm"
                 onClick={() => setCreateKeyType("standard")}
               >
-                Create virtual key
+                Create standard virtual key
               </Button>
             ) : null
           }
-          manageHref={canReadKeys ? "/llm/proxy/virtual-keys" : null}
-          manageLabel="Manage virtual keys"
+          manageHref={
+            canReadKeys ? "/llm/proxy/virtual-keys?keyType=standard" : null
+          }
+          manageLabel="Manage standard virtual keys"
         />
 
         <AuthMethodRow
           title="Passthrough"
-          description="You send your own provider key or subscription token; the proxy forwards it unchanged. A passthrough key grants no access: it only attributes those requests to a user."
+          description="You send your own provider key or subscription token; the proxy forwards it unchanged. A passthrough virtual key grants no access: it only attributes those requests to a user."
           action={
             canCreateKey ? (
               <Button
@@ -306,14 +308,14 @@ function AuthenticationOverview() {
                 size="sm"
                 onClick={() => setCreateKeyType("passthrough")}
               >
-                Create passthrough key
+                Create passthrough virtual key
               </Button>
             ) : null
           }
           manageHref={
             canReadKeys ? "/llm/proxy/virtual-keys?keyType=passthrough" : null
           }
-          manageLabel="Manage passthrough keys"
+          manageLabel="Manage passthrough virtual keys"
         >
           <TerminalBlock
             rows={[

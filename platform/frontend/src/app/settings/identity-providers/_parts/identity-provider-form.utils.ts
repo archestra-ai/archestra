@@ -86,20 +86,11 @@ export function normalizeOidcIssuerFields(
   }
 
   const issuer = data.issuer.trim();
-  const previousIssuer = oidcConfig.issuer?.trim() ?? "";
-  const discoveryEndpoint = oidcConfig.discoveryEndpoint?.trim() ?? "";
-  const defaultPreviousDiscoveryEndpoint = previousIssuer
-    ? getDefaultDiscoveryEndpoint(previousIssuer)
-    : "";
 
   return {
     ...oidcConfig,
     issuer,
-    discoveryEndpoint:
-      !discoveryEndpoint ||
-      discoveryEndpoint === defaultPreviousDiscoveryEndpoint
-        ? getDefaultDiscoveryEndpoint(issuer)
-        : discoveryEndpoint,
+    discoveryEndpoint: resolveDiscoveryEndpoint({ oidcConfig, issuer }),
   };
 }
 
@@ -139,6 +130,39 @@ function tryParseIssuerUrl(issuer: string): URL | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Keeps the discovery endpoint in step with the issuer the admin typed.
+ *
+ * A blank field, or one still holding the previous issuer's default, is
+ * re-derived from the new issuer so renaming the issuer doesn't leave a stale
+ * URL behind; anything the admin typed themselves is left alone.
+ *
+ * The exception is a provider registered with `skipDiscovery`: it has no
+ * discovery document to point at, so a blank field means "there isn't one" and
+ * must stay blank. Deriving `${issuer}/.well-known/openid-configuration` there
+ * produces a URL the IdP does not serve — GitHub answers 404 — and registration
+ * fails before any of the manually configured endpoints are reached.
+ */
+function resolveDiscoveryEndpoint(params: {
+  oidcConfig: NonNullable<IdentityProviderFormValues["oidcConfig"]>;
+  issuer: string;
+}): string {
+  const discoveryEndpoint = params.oidcConfig.discoveryEndpoint?.trim() ?? "";
+  if (!discoveryEndpoint && params.oidcConfig.skipDiscovery) {
+    return "";
+  }
+
+  const previousIssuer = params.oidcConfig.issuer?.trim() ?? "";
+  const defaultPreviousDiscoveryEndpoint = previousIssuer
+    ? getDefaultDiscoveryEndpoint(previousIssuer)
+    : "";
+
+  return !discoveryEndpoint ||
+    discoveryEndpoint === defaultPreviousDiscoveryEndpoint
+    ? getDefaultDiscoveryEndpoint(params.issuer)
+    : discoveryEndpoint;
 }
 
 function getDefaultDiscoveryEndpoint(issuer: string): string {

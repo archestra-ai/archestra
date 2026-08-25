@@ -324,7 +324,7 @@ export function OidcConfigForm({
             name="oidcConfig.discoveryEndpoint"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Discovery Endpoint</FormLabel>
+                <FormLabel>Discovery Endpoint (Optional)</FormLabel>
                 <FormControl>
                   <Input
                     placeholder="https://auth.company.com/.well-known/openid-configuration"
@@ -333,7 +333,9 @@ export function OidcConfigForm({
                 </FormControl>
                 <FormDescription>
                   The OIDC discovery endpoint URL
-                  (/.well-known/openid-configuration).
+                  (/.well-known/openid-configuration). Defaults to the issuer's
+                  well-known URL. Leave blank for providers that publish no
+                  discovery document, and set the endpoints below instead.
                 </FormDescription>
                 <FormMessage />
               </FormItem>

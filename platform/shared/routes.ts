@@ -784,6 +784,9 @@ export const RouteId = {
   UpdateHook: "updateHook",
   DeleteHook: "deleteHook",
 
+  // Skill Marketplace Routes
+  GetSkillMarketplace: "getSkillMarketplace",
+
   // Skill Share Link Routes
   GetSkillShareLinks: "getSkillShareLinks",
   CreateSkillShareLink: "createSkillShareLink",

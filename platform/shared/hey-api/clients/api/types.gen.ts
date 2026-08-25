@@ -75648,6 +75648,7 @@ export type GetOrganizationResponses = {
         compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
+        skillMarketplaceAnonymousAccess: boolean;
         defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
@@ -75965,6 +75966,7 @@ export type UpdateAppearanceSettingsResponses = {
         compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
+        skillMarketplaceAnonymousAccess: boolean;
         defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
@@ -76165,6 +76167,7 @@ export type UpdateSecuritySettingsResponses = {
         compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
+        skillMarketplaceAnonymousAccess: boolean;
         defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
@@ -76360,6 +76363,7 @@ export type UpdateLlmSettingsResponses = {
         compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
+        skillMarketplaceAnonymousAccess: boolean;
         defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
@@ -76555,6 +76559,7 @@ export type UpdateMcpSettingsResponses = {
         compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
+        skillMarketplaceAnonymousAccess: boolean;
         defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
@@ -76657,6 +76662,7 @@ export type UpdateMcpSettingsResponse = UpdateMcpSettingsResponses[keyof UpdateM
 export type UpdateSkillsSettingsData = {
     body: {
         onlineSkillCatalogEnabled?: boolean;
+        skillMarketplaceAnonymousAccess?: boolean;
     };
     path?: never;
     query?: never;
@@ -76749,6 +76755,7 @@ export type UpdateSkillsSettingsResponses = {
         compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
+        skillMarketplaceAnonymousAccess: boolean;
         defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
@@ -76945,6 +76952,7 @@ export type UpdateAgentSettingsResponses = {
         compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
+        skillMarketplaceAnonymousAccess: boolean;
         defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
@@ -77151,6 +77159,7 @@ export type UpdateConnectionSettingsResponses = {
         compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
+        skillMarketplaceAnonymousAccess: boolean;
         defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
@@ -77360,6 +77369,7 @@ export type UpdateIntegrationSettingsResponses = {
         compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
+        skillMarketplaceAnonymousAccess: boolean;
         defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
@@ -77565,6 +77575,7 @@ export type UpdateDefaultEnvironmentResponses = {
         compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
+        skillMarketplaceAnonymousAccess: boolean;
         defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
@@ -77762,6 +77773,7 @@ export type UpdateAuthSettingsResponses = {
         compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
+        skillMarketplaceAnonymousAccess: boolean;
         defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
@@ -77964,6 +77976,7 @@ export type UpdateKnowledgeSettingsResponses = {
         compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
+        skillMarketplaceAnonymousAccess: boolean;
         defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
@@ -78156,6 +78169,7 @@ export type DropEmbeddingConfigResponses = {
         compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
+        skillMarketplaceAnonymousAccess: boolean;
         defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
@@ -78698,6 +78712,7 @@ export type CompleteOnboardingResponses = {
         compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
         onlineSkillCatalogEnabled: boolean;
+        skillMarketplaceAnonymousAccess: boolean;
         defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
@@ -85888,6 +85903,91 @@ export type UpdateSiteNotificationResponses = {
 };
 
 export type UpdateSiteNotificationResponse = UpdateSiteNotificationResponses[keyof UpdateSiteNotificationResponses];
+
+export type GetSkillMarketplaceData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/skill-marketplace';
+};
+
+export type GetSkillMarketplaceErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetSkillMarketplaceError = GetSkillMarketplaceErrors[keyof GetSkillMarketplaceErrors];
+
+export type GetSkillMarketplaceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        cloneUrl: string;
+        marketplaceName: string;
+        requiresAuthentication: boolean;
+    };
+};
+
+export type GetSkillMarketplaceResponse = GetSkillMarketplaceResponses[keyof GetSkillMarketplaceResponses];
 
 export type GetSkillsData = {
     body?: never;

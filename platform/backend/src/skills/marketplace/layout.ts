@@ -8,7 +8,10 @@ import type {
   PluginFileEncoding,
   PluginFileMode,
 } from "@/types/plugin";
-import type { RevisionPayloadFile } from "@/types/skill-share-link-revision";
+import type {
+  MarketplaceRepoRef,
+  RevisionPayloadFile,
+} from "@/types/skill-share-link-revision";
 import {
   buildCodexMarketplaceManifest,
   buildCodexPluginManifest,
@@ -52,7 +55,8 @@ export interface MaterializeSkillInput {
 }
 
 export interface MaterializeRequest {
-  linkId: string;
+  /** The materialized repo this layout belongs to (share link or static repo). */
+  ref: MarketplaceRepoRef;
   marketplaceName: string;
   ownerName: string;
   displayName: string;

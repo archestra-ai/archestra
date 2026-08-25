@@ -16,7 +16,6 @@ import { CreditWarningNotice } from "@/components/connection/credit-warning-noti
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { GithubCopilotSignIn } from "@/components/github-copilot-sign-in";
 import { ProviderIcon } from "@/components/provider-icon";
-import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -61,7 +60,12 @@ import {
 import { ConnectionPlatformToggle } from "./platform-select";
 import { SetupCommandLine } from "./setup-command-line";
 import { SetupSummaryRow } from "./setup-summary-row";
-import { type ConnectSkill, useAllSkills } from "./skills-marketplace-step";
+import {
+  type ConnectSkill,
+  SkillsMarketplaceStep,
+  useAllSkills,
+  useSkillsMarketplaceVisible,
+} from "./skills-marketplace-step";
 import { TerminalBlock } from "./terminal-block";
 
 type ScriptClientId = CreateConnectionSetupBody["clientId"];
@@ -90,24 +94,31 @@ export function isScriptClient(
 }
 
 /**
- * Whether skills can ride along in the setup command: caller is a skill admin,
- * and there is at least one skill to share. Also surfaces the full skill list
- * so the review step can name (and let the user deselect) exactly what the
- * command installs.
+ * Whether skills can ride along in the setup command: the caller can read
+ * skills, and there is at least one to install. Reading is the bar because the
+ * command registers the deployment's shared marketplace URL, which serves each
+ * person exactly the skills they may already read — so a member installs with
+ * the same one command an admin gets.
+ *
+ * The list is surfaced so the review step can name what will be installed. It
+ * is deliberately not a per-skill choice: the shared URL stays current and
+ * carries everything shared with you, so a checkbox per skill would claim
+ * control the install does not have. Sharing a fixed subset is what a snapshot
+ * link is for.
  */
 function useConnectSkills(llmProxyId: string | null): {
   eligible: boolean;
   skills: ConnectSkill[];
 } {
-  const { data: canAdminSkills } = useHasPermissions({ skill: ["admin"] });
+  const { data: canReadSkills } = useHasPermissions({ skill: ["read"] });
   // Skills are environment-scoped: with a proxy selected, only skills in that
   // proxy's environment are connectable.
   const { data: skills } = useAllSkills({
-    enabled: canAdminSkills === true,
+    enabled: canReadSkills === true,
     forAgentId: llmProxyId,
   });
   return {
-    eligible: canAdminSkills === true && (skills ?? []).length > 0,
+    eligible: canReadSkills === true && (skills ?? []).length > 0,
     skills: skills ?? [],
   };
 }
@@ -159,7 +170,6 @@ export function ConnectCommandPanel({
   const providerCatalog = useModelProviderCatalog();
   // The skill picker labels each row's owner, so it needs the viewer's id.
   const { data: session } = useSession();
-  const currentUserId = session?.user?.id;
   // Skill selection: `null` means "all skills" (the default, and it keeps
   // including skills created later). Once the user touches any checkbox it
   // becomes an explicit snapshot of chosen ids — so an opt-out (empty set)
@@ -215,17 +225,6 @@ export function ConnectCommandPanel({
 
   // Toggle one skill, snapshotting the current selection into an explicit set
   // on first interaction (null → all ids, then add/remove the toggled one).
-  const toggleSkill = useCallback(
-    (skillId: string, checked: boolean) =>
-      setSelectedSkillIds((cur) => {
-        const next = new Set(cur ?? allSkills.map((s) => s.id));
-        if (checked) next.add(skillId);
-        else next.delete(skillId);
-        return next;
-      }),
-    [allSkills],
-  );
-
   const [proxyAuth, setProxyAuth] = useState<ConnectProxyAuth>("provider-key");
   // Target OS for the generated command. Auto-detected from the browser after
   // mount (kept off the initial render to avoid an SSR/hydration mismatch); the
@@ -365,6 +364,11 @@ export function ConnectCommandPanel({
   // thing being authorized, so the step is gateway-gated.
   const showOAuthStep =
     client.id === "claude-code" && !!gateway && !virtualKeyUnbacked;
+  // The script installs skills itself for everyone who can read them, so the
+  // wizard never grows an extra step here. The marketplace step appears only
+  // when there is no script to carry them: nothing to connect at all (below),
+  // or a client without a generated command.
+  const skillsStepAvailable = useSkillsMarketplaceVisible(client);
   const appName = useAppName();
   // The exact name the script registers the gateway under — referenced in the
   // OAuth step so the user can find it in the `claude /mcp` list.
@@ -441,9 +445,10 @@ export function ConnectCommandPanel({
 
       let skills: CreateConnectionSetupBody["skills"];
       if (inputs.skillIds && inputs.skillIds.length > 0) {
-        // The marketplace link the client clones from must outlive the one-time
-        // setup token, so it never expires — admins revoke it from the Skills
-        // page when needed.
+        // ttlDays is null because the marketplace the client clones from must
+        // outlive the one-time setup token. It only applies on the snapshot
+        // path (a setup that also delivers plugins); the shared marketplace URL
+        // this normally renders has no expiry to set.
         skills = { skillIds: inputs.skillIds, ttlDays: null };
       }
       if (
@@ -701,17 +706,9 @@ export function ConnectCommandPanel({
       >
         <Checkbox
           id="connect-include-skills"
-          // Derived from the current skill list (not a raw id-set size), so a
-          // stale id can never pin the master box at "indeterminate" while
-          // every visible skill is checked. Checking it resets to "all"
-          // (null); unchecking sets an explicit empty selection that sticks.
-          checked={
-            selectedSkills.length === allSkills.length
-              ? true
-              : selectedSkills.length === 0
-                ? false
-                : "indeterminate"
-          }
+          // All or nothing: the shared marketplace URL has no per-skill knob,
+          // so "all" (null) and "none" (empty set) are the only honest states.
+          checked={selectedSkills.length > 0}
           onCheckedChange={(checked) =>
             setSelectedSkillIds(checked === true ? null : new Set())
           }
@@ -723,42 +720,10 @@ export function ConnectCommandPanel({
           Only skills in the LLM Proxy's environment are listed.
         </p>
       )}
-      <ul className="grid max-h-56 gap-1.5 overflow-y-auto pl-6">
-        {allSkills.map((skill) => (
-          // Visibility sits at the row's edge (outside the toggle label) so
-          // the skill names line up in one clean scannable column.
-          <li
-            key={skill.id}
-            className="flex items-center justify-between gap-3"
-          >
-            <label
-              className="flex min-w-0 items-center gap-2 text-sm"
-              htmlFor={`connect-skill-${skill.id}`}
-            >
-              <Checkbox
-                id={`connect-skill-${skill.id}`}
-                checked={
-                  selectedSkillIds === null || selectedSkillIds.has(skill.id)
-                }
-                onCheckedChange={(checked) =>
-                  toggleSkill(skill.id, checked === true)
-                }
-              />
-              <span className="truncate">{skill.name}</span>
-            </label>
-            <ResourceVisibilityBadge
-              scope={skill.scope}
-              teams={skill.teams}
-              users={skill.users}
-              authorId={skill.authorId}
-              authorName={skill.authorName}
-              currentUserId={currentUserId}
-              showSelfAsMe
-              compact
-            />
-          </li>
-        ))}
-      </ul>
+      <p className="pl-6 text-xs text-muted-foreground">
+        Everything shared with you is installed, and stays current as skills are
+        added or removed. To share a fixed subset instead, use a snapshot link.
+      </p>
     </div>
   );
 
@@ -837,10 +802,19 @@ export function ConnectCommandPanel({
               : "No setup command selected";
 
   if (!hasAnything) {
+    // Nothing to put in a setup command — but skills install from their own
+    // marketplace URL, so a caller who can read them still has something to do.
     return (
-      <WizardStep n={2} title="Review the setup" last>
-        <NothingToConnectPanel />
-      </WizardStep>
+      <>
+        <WizardStep n={2} title="Review the setup" last={!skillsStepAvailable}>
+          <NothingToConnectPanel />
+        </WizardStep>
+        {skillsStepAvailable && (
+          <WizardStep n={3} title="Install shared skills" last>
+            <SkillsMarketplaceStep client={client} />
+          </WizardStep>
+        )}
+      </>
     );
   }
 
@@ -938,14 +912,10 @@ export function ConnectCommandPanel({
                 <>
                   <span>Install </span>
                   <ResourceLink href="/skills">
-                    {selectedSkills.length === allSkills.length ? (
-                      <span>
-                        <span>{allSkills.length} shared skill</span>
-                        {allSkills.length === 1 ? null : <span>s</span>}
-                      </span>
-                    ) : (
-                      <span>{`${selectedSkills.length} of ${allSkills.length} shared skills`}</span>
-                    )}
+                    <span>
+                      <span>{allSkills.length} shared skill</span>
+                      {allSkills.length === 1 ? null : <span>s</span>}
+                    </span>
                   </ResourceLink>
                 </>
               ) : (

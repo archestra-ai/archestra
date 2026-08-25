@@ -3,6 +3,7 @@
 import { Check, Copy } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { SecretCopyButton } from "@/components/secret-copy-button";
 import { copyToClipboard } from "@/lib/clipboard";
 
 interface TerminalBlockProps {
@@ -12,7 +13,16 @@ interface TerminalBlockProps {
    * Multiple code rows in one card, each with its own copy button and an
    * optional `#`-style comment line (e.g. Bedrock's two endpoints).
    */
-  rows?: { comment?: string; code: string }[];
+  rows?: {
+    comment?: string;
+    code: string;
+    /**
+     * When set, the row's `code` is a placeholder rendering of something that
+     * embeds a secret, and copying becomes an explicit choice between the real
+     * value and the placeholder (see SecretCopyButton).
+     */
+    getSecretText?: () => Promise<string | null>;
+  }[];
   /**
    * Optional row rendered inside the card above the code — e.g. the provider
    * toggler tabs used by the setup-script and proxy-endpoint cards.
@@ -42,18 +52,28 @@ export function TerminalBlock({ code, rows, header }: TerminalBlockProps) {
             index > 0 ? "relative border-t border-[#1f2937]" : "relative"
           }
         >
-          <button
-            type="button"
-            onClick={() => onCopy(row.code, index)}
-            aria-label="Copy to clipboard"
-            className="absolute right-2 top-2 flex size-7 items-center justify-center rounded border border-[#1f2937] bg-[#0d1117] text-[#9ca3af] transition-colors hover:text-white"
-          >
-            {copiedIndex === index ? (
-              <Check className="size-3.5 text-[#4ade80]" strokeWidth={2.5} />
-            ) : (
-              <Copy className="size-3.5" strokeWidth={2} />
-            )}
-          </button>
+          {row.getSecretText ? (
+            <div className="absolute right-2 top-2">
+              <SecretCopyButton
+                variant="terminal"
+                getSecretText={row.getSecretText}
+                placeholderText={row.code}
+              />
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onCopy(row.code, index)}
+              aria-label="Copy to clipboard"
+              className="absolute right-2 top-2 flex size-7 items-center justify-center rounded border border-[#1f2937] bg-[#0d1117] text-[#9ca3af] transition-colors hover:text-white"
+            >
+              {copiedIndex === index ? (
+                <Check className="size-3.5 text-[#4ade80]" strokeWidth={2.5} />
+              ) : (
+                <Copy className="size-3.5" strokeWidth={2} />
+              )}
+            </button>
+          )}
           <pre className="m-0 max-h-[360px] overflow-auto px-5 py-4 pr-12 font-mono text-[13px] leading-[1.65] text-[#e5e7eb]">
             {row.comment && (
               <span className="select-none text-[#6d7681]">

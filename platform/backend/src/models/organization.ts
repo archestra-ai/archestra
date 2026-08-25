@@ -9,7 +9,7 @@ import {
   type SupportedProvider,
   TimeInMs,
 } from "@archestra/shared";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { CacheKey, cacheManager, LRUCacheManager } from "@/cache-manager";
 import db, { schema } from "@/database";
 import logger from "@/logging";
@@ -65,6 +65,31 @@ class OrganizationModel {
   /** De-dupes the background hydration a cold sync read kicks off. */
   private static mcpIdleHibernationHydration: Promise<boolean> | null = null;
   // SPDX-SnippetEnd
+
+  /**
+   * The organization that publishes its skills marketplace without
+   * authentication, or null when none does.
+   *
+   * A credential-less clone carries no organization to resolve, and unlike
+   * `getFirst` this cannot land on an organization that never opted in. The
+   * ordering only matters if two organizations on one deployment both publish
+   * anonymously; picking the oldest keeps that stable instead of leaving it to
+   * physical row order.
+   */
+  static async findWithAnonymousSkillMarketplace(): Promise<Organization | null> {
+    const [organization] = await db
+      .select()
+      .from(schema.organizationsTable)
+      .where(
+        eq(schema.organizationsTable.skillMarketplaceAnonymousAccess, true),
+      )
+      .orderBy(
+        asc(schema.organizationsTable.createdAt),
+        asc(schema.organizationsTable.id),
+      )
+      .limit(1);
+    return organization ?? null;
+  }
 
   /**
    * Get the first organization in the database (fallback for various operations)

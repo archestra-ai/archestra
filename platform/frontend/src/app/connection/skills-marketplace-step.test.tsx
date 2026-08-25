@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -23,13 +23,17 @@ const {
   createLinkMock,
   revokeLinkMock,
   rotateLinkMock,
+  marketplaceMock,
   getSkillsMock,
+  fetchUserTokenMock,
 } = vi.hoisted(() => ({
   listLinksMock: vi.fn(),
   createLinkMock: vi.fn(),
   revokeLinkMock: vi.fn(),
   rotateLinkMock: vi.fn(),
+  marketplaceMock: vi.fn(),
   getSkillsMock: vi.fn(),
+  fetchUserTokenMock: vi.fn(),
 }));
 
 vi.mock("@archestra/shared", async () => {
@@ -44,6 +48,7 @@ vi.mock("@archestra/shared", async () => {
 });
 
 vi.mock("@/lib/skills/skill-share.query", () => ({
+  useSkillMarketplace: () => marketplaceMock(),
   useListSkillShareLinks: () => listLinksMock(),
   useCreateSkillShareLink: () => ({
     mutateAsync: createLinkMock,
@@ -55,6 +60,13 @@ vi.mock("@/lib/skills/skill-share.query", () => ({
   }),
   useRotateSkillShareLink: () => ({
     mutateAsync: rotateLinkMock,
+    isPending: false,
+  }),
+}));
+
+vi.mock("@/lib/user-token.query", () => ({
+  useFetchUserTokenValue: () => ({
+    mutateAsync: fetchUserTokenMock,
     isPending: false,
   }),
 }));
@@ -74,6 +86,12 @@ function findClient(id: string) {
 const anyClient = findClient("generic");
 const claudeClient = findClient("claude-code");
 const copilotClient = findClient("copilot-cli");
+
+const MARKETPLACE = {
+  cloneUrl: "https://archestra.example/skills/marketplace.git",
+  marketplaceName: "org-12345678-skills",
+  requiresAuthentication: true,
+};
 
 const ACTIVE_LINK = {
   id: "link-1",
@@ -102,6 +120,23 @@ const CREATE_RESPONSE = {
   marketplaceName: "org-12345678-skills",
 };
 
+/** Grants `skill:read` but not `skill:admin` — the member's view. */
+function permissionsForMember() {
+  vi.mocked(useHasPermissions).mockImplementation(
+    (permissions) =>
+      ({
+        data: !permissions.skill?.includes("admin"),
+      }) as ReturnType<typeof useHasPermissions>,
+  );
+}
+
+/** Open the admin-only share-link disclosure. */
+async function openShareLinkSection() {
+  await userEvent.click(
+    await screen.findByTestId("skills-marketplace-share-link-toggle"),
+  );
+}
+
 describe("SkillsMarketplaceStep", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -110,6 +145,14 @@ describe("SkillsMarketplaceStep", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
     } as ReturnType<typeof useHasPermissions>);
+    marketplaceMock.mockReturnValue({
+      data: MARKETPLACE,
+      isPending: false,
+    });
+    listLinksMock.mockReturnValue({
+      data: { links: [] },
+      isPending: false,
+    });
     getSkillsMock.mockResolvedValue({
       data: {
         data: [{ id: "skill-1" }, { id: "skill-2" }],
@@ -119,98 +162,15 @@ describe("SkillsMarketplaceStep", () => {
     });
   });
 
-  it("returns null for non-admin users", () => {
+  it("returns null for users who cannot read skills", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: false,
     } as ReturnType<typeof useHasPermissions>);
-    listLinksMock.mockReturnValue({
-      data: { links: [] },
-      isPending: false,
-    });
     const { container } = render(<SkillsMarketplaceStep client={anyClient} />);
     expect(container.textContent).toBe("");
   });
 
-  it("renders the create panel when no active link exists", async () => {
-    listLinksMock.mockReturnValue({
-      data: { links: [] },
-      isPending: false,
-    });
-    renderWithClient(<SkillsMarketplaceStep client={anyClient} />);
-    await waitFor(() =>
-      expect(screen.getByTestId("skills-marketplace-create")).toBeVisible(),
-    );
-    expect(
-      screen.getByText(
-        (_, el) =>
-          el?.tagName === "P" &&
-          /Snapshot 2 skills/i.test(el.textContent ?? ""),
-      ),
-    ).toBeInTheDocument();
-  });
-
-  it("creates a link with the full org skill set and shows snippets", async () => {
-    listLinksMock.mockReturnValue({
-      data: { links: [] },
-      isPending: false,
-    });
-    createLinkMock.mockResolvedValue(CREATE_RESPONSE);
-
-    renderWithClient(<SkillsMarketplaceStep client={anyClient} />);
-
-    await waitFor(() =>
-      expect(screen.getByTestId("skills-marketplace-create")).toBeVisible(),
-    );
-    await userEvent.click(screen.getByTestId("skills-marketplace-create"));
-
-    await waitFor(() => expect(createLinkMock).toHaveBeenCalledTimes(1));
-    const body = createLinkMock.mock.calls[0][0];
-    expect(body.skillIds).toEqual(["skill-1", "skill-2"]);
-    // default TTL is 30 days → expiresAt is a future ISO timestamp
-    expect(body.expiresAt).toMatch(/^\d{4}-/);
-  });
-
-  it("shows a generic clone-path guide when 'Any client' is picked (no client-specific snippets)", async () => {
-    listLinksMock.mockReturnValue({
-      data: { links: [] },
-      isPending: false,
-    });
-    createLinkMock.mockResolvedValue(CREATE_RESPONSE);
-
-    renderWithClient(<SkillsMarketplaceStep client={anyClient} />);
-
-    await userEvent.click(
-      await screen.findByTestId("skills-marketplace-create"),
-    );
-
-    await waitFor(() =>
-      expect(
-        screen.getByTestId("skills-marketplace-snippets-generic"),
-      ).toBeInTheDocument(),
-    );
-    // none of the client-specific install panels render for "Any client"
-    expect(
-      screen.queryByTestId("skills-marketplace-snippets-claude-code"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByTestId("skills-marketplace-snippets-codex"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByTestId("skills-marketplace-snippets-cursor"),
-    ).not.toBeInTheDocument();
-    // canonical clone path uses the marketplace name so multiple shares don't clobber
-    expect(
-      screen.getByText(
-        `git clone ${CREATE_RESPONSE.cloneUrl} ~/.archestra/skills/${CREATE_RESPONSE.marketplaceName}`,
-      ),
-    ).toBeInTheDocument();
-  });
-
   it("renders nothing when the picked client doesn't support skill marketplaces", () => {
-    listLinksMock.mockReturnValue({
-      data: { links: [] },
-      isPending: false,
-    });
     const unsupportedClient = findClient("n8n");
     const { container } = render(
       <SkillsMarketplaceStep client={unsupportedClient} />,
@@ -218,127 +178,237 @@ describe("SkillsMarketplaceStep", () => {
     expect(container.textContent).toBe("");
   });
 
-  it("filters snippets to the chosen client", async () => {
-    listLinksMock.mockReturnValue({
-      data: { links: [] },
-      isPending: false,
-    });
-    createLinkMock.mockResolvedValue(CREATE_RESPONSE);
+  describe("static marketplace", () => {
+    it("leads a member with the install commands, not a credential ritual", async () => {
+      permissionsForMember();
+      renderWithClient(<SkillsMarketplaceStep client={claudeClient} />);
 
-    renderWithClient(<SkillsMarketplaceStep client={claudeClient} />);
+      const panel = await screen.findByTestId("skills-marketplace-static");
+      expect(panel).toHaveTextContent(
+        `claude plugin marketplace add ${MARKETPLACE.cloneUrl}`,
+      );
+      expect(panel).toHaveTextContent(
+        `claude plugin install ${MARKETPLACE.marketplaceName}@${MARKETPLACE.marketplaceName}`,
+      );
+      expect(panel).not.toHaveTextContent("archestra_skl_");
 
-    await userEvent.click(
-      await screen.findByTestId("skills-marketplace-create"),
-    );
-
-    await waitFor(() =>
+      // git prompts for the password on the first fetch, so the credential
+      // heredoc is a footnote for clients that cannot prompt — collapsed, and
+      // never the first thing a member is asked to do.
+      expect(panel).not.toHaveTextContent("git credential approve");
       expect(
-        screen.getByTestId("skills-marketplace-snippets-claude-code"),
-      ).toBeInTheDocument(),
-    );
-    expect(
-      screen.queryByTestId("skills-marketplace-snippets-codex"),
-    ).not.toBeInTheDocument();
-  });
+        screen.getByTestId("skills-marketplace-credential-toggle"),
+      ).toBeInTheDocument();
 
-  it("renders Copilot CLI skill marketplace commands", async () => {
-    listLinksMock.mockReturnValue({
-      data: { links: [] },
-      isPending: false,
-    });
-    createLinkMock.mockResolvedValue(CREATE_RESPONSE);
-
-    renderWithClient(<SkillsMarketplaceStep client={copilotClient} />);
-
-    await userEvent.click(
-      await screen.findByTestId("skills-marketplace-create"),
-    );
-
-    await waitFor(() =>
+      // members do not get the admin-only share-link section
       expect(
-        screen.getByTestId("skills-marketplace-snippets-copilot-cli"),
-      ).toBeInTheDocument(),
-    );
-    expect(
-      screen.getByText(
-        `copilot plugin marketplace add ${CREATE_RESPONSE.cloneUrl}`,
-      ),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        `copilot plugin marketplace browse ${CREATE_RESPONSE.marketplaceName}`,
-      ),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByTestId("skills-marketplace-snippets-claude-code"),
-    ).not.toBeInTheDocument();
-  });
-
-  it("does not auto-rotate an existing active link on unfold (rotation kills already-distributed URLs)", async () => {
-    listLinksMock.mockReturnValue({
-      data: { links: [ACTIVE_LINK] },
-      isPending: false,
+        screen.queryByTestId("skills-marketplace-share-link-toggle"),
+      ).not.toBeInTheDocument();
     });
-    rotateLinkMock.mockResolvedValue(CREATE_RESPONSE);
 
-    renderWithClient(<SkillsMarketplaceStep client={anyClient} />);
+    it("reveals the credential command once the disclosure is opened", async () => {
+      permissionsForMember();
+      renderWithClient(<SkillsMarketplaceStep client={claudeClient} />);
 
-    // panel mounts in hidden-URL state — no install snippets and no implicit rotation
-    expect(
-      await screen.findByRole("button", { name: /Refresh to reveal URL/i }),
-    ).toBeInTheDocument();
-    expect(rotateLinkMock).not.toHaveBeenCalled();
-    expect(
-      screen.queryByTestId("skills-marketplace-snippets-generic"),
-    ).not.toBeInTheDocument();
-  });
-
-  it("forwards the link's existing expiresAt when the admin clicks Refresh", async () => {
-    listLinksMock.mockReturnValue({
-      data: { links: [ACTIVE_LINK] },
-      isPending: false,
+      const panel = await screen.findByTestId("skills-marketplace-static");
+      await userEvent.click(
+        screen.getByTestId("skills-marketplace-credential-toggle"),
+      );
+      expect(panel).toHaveTextContent("git credential approve");
+      // the host comes from the clone URL, and the token is a placeholder
+      expect(panel).toHaveTextContent("host=archestra.example");
     });
-    rotateLinkMock.mockResolvedValue(CREATE_RESPONSE);
 
-    renderWithClient(<SkillsMarketplaceStep client={anyClient} />);
+    it("copies the credential command with the caller's real token", async () => {
+      permissionsForMember();
+      fetchUserTokenMock.mockResolvedValue({ value: "arch_realtoken" });
+      renderWithClient(<SkillsMarketplaceStep client={claudeClient} />);
 
-    await userEvent.click(
-      await screen.findByRole("button", { name: /Refresh to reveal URL/i }),
-    );
+      const panel = await screen.findByTestId("skills-marketplace-static");
+      await userEvent.click(
+        screen.getByTestId("skills-marketplace-credential-toggle"),
+      );
+      // exactly one block in the panel carries a secret: the credential command
+      await userEvent.click(
+        within(panel).getByRole("button", { name: /^Copy$/ }),
+      );
+      await userEvent.click(
+        await screen.findByRole("menuitem", { name: /real token/i }),
+      );
 
-    await waitFor(() => expect(rotateLinkMock).toHaveBeenCalledTimes(1));
-    const vars = rotateLinkMock.mock.calls[0][0];
-    expect(vars.previousLinkId).toBe(ACTIVE_LINK.id);
-    expect(vars.body.skillIds).toEqual(["skill-1", "skill-2"]);
-    // expiresAt is preserved so refresh doesn't silently convert a TTL link
-    // into a never-expiring one
-    expect(vars.body.expiresAt).toBe(ACTIVE_LINK.expiresAt);
+      await waitFor(() => expect(fetchUserTokenMock).toHaveBeenCalled());
+    });
 
-    await waitFor(() =>
+    it("drops the credential disclosure when the deployment allows anonymous clones", async () => {
+      permissionsForMember();
+      marketplaceMock.mockReturnValue({
+        data: { ...MARKETPLACE, requiresAuthentication: false },
+        isPending: false,
+      });
+      renderWithClient(<SkillsMarketplaceStep client={claudeClient} />);
+
+      const panel = await screen.findByTestId("skills-marketplace-static");
+      expect(panel).toHaveTextContent("no sign-in is needed");
+      expect(panel).not.toHaveTextContent("git credential approve");
       expect(
-        screen.getByTestId("skills-marketplace-snippets-generic"),
-      ).toBeInTheDocument(),
-    );
+        screen.queryByTestId("skills-marketplace-credential-toggle"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("falls back to a generic clone command for 'Any client'", async () => {
+      permissionsForMember();
+      renderWithClient(<SkillsMarketplaceStep client={anyClient} />);
+
+      const panel = await screen.findByTestId("skills-marketplace-static");
+      expect(panel).toHaveTextContent(
+        `git clone ${MARKETPLACE.cloneUrl} ~/.archestra/skills/${MARKETPLACE.marketplaceName}`,
+      );
+      expect(panel).not.toHaveTextContent("claude plugin");
+    });
+
+    it("renders Copilot CLI install commands against the static URL", async () => {
+      permissionsForMember();
+      renderWithClient(<SkillsMarketplaceStep client={copilotClient} />);
+
+      const panel = await screen.findByTestId("skills-marketplace-static");
+      expect(panel).toHaveTextContent(
+        `copilot plugin marketplace add ${MARKETPLACE.cloneUrl}`,
+      );
+      expect(panel).toHaveTextContent(
+        `copilot plugin marketplace browse ${MARKETPLACE.marketplaceName}`,
+      );
+    });
+
+    it("says so when the marketplace URL cannot be loaded", async () => {
+      permissionsForMember();
+      marketplaceMock.mockReturnValue({ data: undefined, isPending: false });
+      renderWithClient(<SkillsMarketplaceStep client={claudeClient} />);
+
+      expect(
+        await screen.findByText(/marketplace URL could not be loaded/i),
+      ).toBeInTheDocument();
+    });
+
+    it("shows the empty state when the caller can see no skills", async () => {
+      permissionsForMember();
+      getSkillsMock.mockResolvedValue({
+        data: { data: [], pagination: { total: 0 } },
+        error: null,
+      });
+      renderWithClient(<SkillsMarketplaceStep client={claudeClient} />);
+
+      expect(
+        await screen.findByText(/No skills available to you yet/i),
+      ).toBeInTheDocument();
+    });
   });
 
-  it("revokes the link after confirmation", async () => {
-    listLinksMock.mockReturnValue({
-      data: { links: [ACTIVE_LINK] },
-      isPending: false,
+  describe("share links (admins)", () => {
+    it("renders the create panel behind the disclosure", async () => {
+      renderWithClient(<SkillsMarketplaceStep client={anyClient} />);
+      await openShareLinkSection();
+
+      await waitFor(() =>
+        expect(screen.getByTestId("skills-marketplace-create")).toBeVisible(),
+      );
+      expect(
+        screen.getByText(
+          (_, el) =>
+            el?.tagName === "P" &&
+            /Snapshot 2 skills/i.test(el.textContent ?? ""),
+        ),
+      ).toBeInTheDocument();
     });
-    revokeLinkMock.mockResolvedValue({ success: true });
 
-    renderWithClient(<SkillsMarketplaceStep client={anyClient} />);
+    it("creates a link with the full org skill set and shows snippets", async () => {
+      createLinkMock.mockResolvedValue(CREATE_RESPONSE);
 
-    await userEvent.click(
-      await screen.findByRole("button", { name: /^Revoke$/i }),
-    );
-    await userEvent.click(
-      screen.getByTestId("skills-marketplace-confirm-revoke"),
-    );
+      renderWithClient(<SkillsMarketplaceStep client={anyClient} />);
+      await openShareLinkSection();
+      await userEvent.click(
+        await screen.findByTestId("skills-marketplace-create"),
+      );
 
-    await waitFor(() =>
-      expect(revokeLinkMock).toHaveBeenCalledWith(ACTIVE_LINK.id),
-    );
+      await waitFor(() => expect(createLinkMock).toHaveBeenCalledTimes(1));
+      const body = createLinkMock.mock.calls[0][0];
+      expect(body.skillIds).toEqual(["skill-1", "skill-2"]);
+      // default TTL is 30 days → expiresAt is a future ISO timestamp
+      expect(body.expiresAt).toMatch(/^\d{4}-/);
+
+      const snippets = await screen.findByTestId(
+        "skills-marketplace-snippets-generic",
+      );
+      expect(snippets).toHaveTextContent(
+        `git clone ${CREATE_RESPONSE.cloneUrl} ~/.archestra/skills/${CREATE_RESPONSE.marketplaceName}`,
+      );
+    });
+
+    it("does not auto-rotate an existing active link on unfold (rotation kills already-distributed URLs)", async () => {
+      listLinksMock.mockReturnValue({
+        data: { links: [ACTIVE_LINK] },
+        isPending: false,
+      });
+      rotateLinkMock.mockResolvedValue(CREATE_RESPONSE);
+
+      renderWithClient(<SkillsMarketplaceStep client={anyClient} />);
+      await openShareLinkSection();
+
+      expect(
+        await screen.findByRole("button", { name: /Refresh to reveal URL/i }),
+      ).toBeInTheDocument();
+      expect(rotateLinkMock).not.toHaveBeenCalled();
+      expect(
+        screen.queryByTestId("skills-marketplace-snippets-generic"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("forwards the link's existing expiresAt when the admin clicks Refresh", async () => {
+      listLinksMock.mockReturnValue({
+        data: { links: [ACTIVE_LINK] },
+        isPending: false,
+      });
+      rotateLinkMock.mockResolvedValue(CREATE_RESPONSE);
+
+      renderWithClient(<SkillsMarketplaceStep client={anyClient} />);
+      await openShareLinkSection();
+      await userEvent.click(
+        await screen.findByRole("button", { name: /Refresh to reveal URL/i }),
+      );
+
+      await waitFor(() => expect(rotateLinkMock).toHaveBeenCalledTimes(1));
+      const vars = rotateLinkMock.mock.calls[0][0];
+      expect(vars.previousLinkId).toBe(ACTIVE_LINK.id);
+      expect(vars.body.skillIds).toEqual(["skill-1", "skill-2"]);
+      // expiresAt is preserved so refresh doesn't silently convert a TTL link
+      // into a never-expiring one
+      expect(vars.body.expiresAt).toBe(ACTIVE_LINK.expiresAt);
+
+      await waitFor(() =>
+        expect(
+          screen.getByTestId("skills-marketplace-snippets-generic"),
+        ).toBeInTheDocument(),
+      );
+    });
+
+    it("revokes the link after confirmation", async () => {
+      listLinksMock.mockReturnValue({
+        data: { links: [ACTIVE_LINK] },
+        isPending: false,
+      });
+      revokeLinkMock.mockResolvedValue({ success: true });
+
+      renderWithClient(<SkillsMarketplaceStep client={anyClient} />);
+      await openShareLinkSection();
+      await userEvent.click(
+        await screen.findByRole("button", { name: /^Revoke$/i }),
+      );
+      await userEvent.click(
+        screen.getByTestId("skills-marketplace-confirm-revoke"),
+      );
+
+      await waitFor(() =>
+        expect(revokeLinkMock).toHaveBeenCalledWith(ACTIVE_LINK.id),
+      );
+    });
   });
 });

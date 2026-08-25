@@ -37,6 +37,7 @@ import {
   activeShareLinkSeed,
   makeShareLinkCreateResult,
   shareableSkillIds,
+  skillMarketplaceSeed,
 } from "./data/skill-share";
 import {
   skillUsageStatisticsEmptySeed,
@@ -359,6 +360,9 @@ export const handlers: HttpHandler[] = [
   // /connection probes the org's default gateway + the single LLM Proxy
   ...getJson("/api/mcp-gateways/default", makeAgent()),
   ...getJson("/api/llm-proxy", makeAgent()),
+
+  // The static marketplace (the primary install path in the /connection step).
+  ...getJson("/api/skill-marketplace", skillMarketplaceSeed),
 
   // Skill share links (the marketplace step on /connection). The create and
   // rotate handlers are conditional on the request payload for the same

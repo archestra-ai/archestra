@@ -83,6 +83,8 @@ export * from "./secrets-manager";
 export * from "./service-account";
 export * from "./session";
 export * from "./skill";
+export * from "./skill-marketplace-credential";
+export * from "./skill-marketplace-repo";
 export * from "./skill-sandbox";
 export * from "./skill-share-link";
 export * from "./skill-share-link-revision";

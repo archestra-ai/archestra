@@ -1,11 +1,18 @@
+import type { Page } from "@playwright/test";
 import { makeUserPermissions } from "../src/mocks/data/auth";
 import {
   activeShareLinkSeed,
   makeShareLinkCreateResult,
   shareableSkillsSeed,
+  skillMarketplaceSeed,
   staleShareLinkSeed,
 } from "../src/mocks/data/skill-share";
 import { expect, test } from "./fixtures";
+
+/** Share links are an admin-only extra, folded away under the static URL. */
+async function openShareLinks(page: Page) {
+  await page.getByTestId("skills-marketplace-share-link-toggle").click();
+}
 
 // The marketplace step only mounts for manual (non-script) clients; among the
 // marketplace-capable ids that is exactly "generic" ("Any client"), so every
@@ -23,11 +30,40 @@ test.describe("Skills marketplace share step", () => {
     });
   });
 
+  test("everyone gets the static marketplace URL, with the credential command tucked away", async ({
+    page,
+    mswControl,
+  }) => {
+    // a member: skill:read, no skill:admin
+    await mswControl.use({
+      method: "get",
+      url: "/api/user/permissions",
+      body: makeUserPermissions({ skill: ["read"] }),
+    });
+
+    await page.goto(STEP_URL);
+    const panel = page.getByTestId("skills-marketplace-static");
+    await expect(panel).toBeVisible();
+    await expect(panel).toContainText(skillMarketplaceSeed.cloneUrl);
+
+    // git prompts for the password on the first fetch, so the heredoc is a
+    // footnote for clients that cannot prompt — not the opening instruction.
+    await expect(panel).not.toContainText("git credential approve");
+    await page.getByTestId("skills-marketplace-credential-toggle").click();
+    await expect(panel).toContainText("git credential approve");
+
+    // share links stay an admin tool
+    await expect(
+      page.getByTestId("skills-marketplace-share-link-toggle"),
+    ).toBeHidden();
+  });
+
   test("admin creates a link snapshotting all org skills and sees the install guide", async ({
     page,
   }) => {
     await page.goto(STEP_URL);
     await expect(page.getByText(STEP_TITLE)).toBeVisible();
+    await openShareLinks(page);
     await expect(page.getByText("Snapshot 2 skills")).toBeVisible();
 
     // The default create handler (src/mocks/handlers.ts) returns 400 for any
@@ -42,14 +78,14 @@ test.describe("Skills marketplace share step", () => {
     );
   });
 
-  test("the step is hidden for users without skill admin", async ({
+  test("the step is hidden for users who cannot read skills", async ({
     page,
     mswControl,
   }) => {
     await mswControl.use({
       method: "get",
       url: "/api/user/permissions",
-      body: makeUserPermissions({ skill: ["read"] }),
+      body: makeUserPermissions({ skill: [] }),
     });
 
     await page.goto(STEP_URL);
@@ -80,6 +116,7 @@ test.describe("Skills marketplace share step", () => {
     });
 
     await page.goto(STEP_URL);
+    await openShareLinks(page);
     // the token-bearing URL is shown exactly once at creation; an existing
     // link must come up hidden, behind an explicit refresh
     await expect(
@@ -111,6 +148,7 @@ test.describe("Skills marketplace share step", () => {
     });
 
     await page.goto(STEP_URL);
+    await openShareLinks(page);
     // The default rotate handler returns 400 unless the request targets the
     // seeded link's id AND forwards its exact expiresAt and skill set, so the
     // new URL appearing pins the rotation payload.
@@ -134,6 +172,7 @@ test.describe("Skills marketplace share step", () => {
     });
 
     await page.goto(STEP_URL);
+    await openShareLinks(page);
     await page.getByRole("button", { name: "Revoke", exact: true }).click();
     await expect(
       page.getByText("Revoke and block all existing clones?"),
@@ -164,6 +203,7 @@ test.describe("Skills marketplace share step", () => {
     mswControl,
   }) => {
     await page.goto(STEP_URL);
+    await openShareLinks(page);
     await expect(page.getByTestId("skills-marketplace-create")).toBeVisible();
 
     // after create the invalidated list refetch returns the created link,
@@ -209,6 +249,7 @@ test.describe("Skills marketplace share step", () => {
     });
 
     await page.goto(STEP_URL);
+    await openShareLinks(page);
     await expect(
       page.getByText("The marketplace covers 1 of 2 current skills", {
         exact: false,

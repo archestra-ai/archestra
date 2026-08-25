@@ -178,6 +178,10 @@ const nextConfig: NextConfig = {
         destination: `${backendUrl}/skills/m/:path*`,
       },
       {
+        source: "/skills/marketplace.git/:path*",
+        destination: `${backendUrl}/skills/marketplace.git/:path*`,
+      },
+      {
         source: "/ws",
         destination: `${backendUrl}/ws`,
       },

@@ -7,8 +7,10 @@ import {
   computePluginDeliveryStats,
   pluginDeliveryBudgetError,
 } from "@/plugins/delivery-budget";
-import type { RevisionPayloadFile } from "@/types/skill-share-link-revision";
-import { isUniqueConstraintError } from "@/utils/db";
+import type {
+  MarketplaceRepoRef,
+  RevisionPayloadFile,
+} from "@/types/skill-share-link-revision";
 import { computeLayout, type MaterializeRequest } from "./layout";
 
 /**
@@ -21,11 +23,11 @@ import { computeLayout, type MaterializeRequest } from "./layout";
 const REVISION_APPEND_MAX_ATTEMPTS = 5;
 
 /**
- * Materializes a share link's git repository on disk, backed by an append-only
+ * Materializes a marketplace git repository on disk, backed by an append-only
  * revision history in the database. Each revision row encodes the full file
  * list at that point in time plus the deterministic commit SHA that results.
  *
- * Cache (`cacheDir/<linkId>/repo`) is a pure performance optimization: it can
+ * Cache (`cacheDir/<ownerId>/repo`) is a pure performance optimization: it can
  * be wiped at any time and rebuilt by replaying revisions in `sequence` order
  * with byte-identical SHAs. This keeps `git pull` working across server
  * restarts, container redeploys, and host migrations.
@@ -69,7 +71,7 @@ export class MarketplaceMaterializer {
   private readonly cacheDir: string;
   private readonly gitBinaryPath: string;
   private readonly identity: { name: string; email: string };
-  /** Per-link write serializer; subsequent callers chain behind the in-flight call. */
+  /** Per-repo write serializer; subsequent callers chain behind the in-flight call. */
   private readonly locks = new Map<string, Promise<MaterializeResult>>();
 
   constructor(options: MaterializerOptions) {
@@ -78,54 +80,54 @@ export class MarketplaceMaterializer {
     this.identity = options.identity ?? DEFAULT_IDENTITY;
   }
 
-  /** On-disk path for a given share link's repo, regardless of materialization state. */
-  repoPathFor(linkId: string): string {
-    return path.join(this.cacheDir, linkId, "repo");
+  /** On-disk path for a given owner's repo, regardless of materialization state. */
+  repoPathFor(ref: MarketplaceRepoRef): string {
+    return path.join(this.cacheDir, ref.id, "repo");
   }
 
   async materialize(req: MaterializeRequest): Promise<MaterializeResult> {
     const previous: Promise<unknown> =
-      this.locks.get(req.linkId) ?? Promise.resolve();
+      this.locks.get(req.ref.id) ?? Promise.resolve();
     const next = previous
       .catch(() => undefined)
       .then(() => this.doMaterialize(req));
-    this.locks.set(req.linkId, next);
+    this.locks.set(req.ref.id, next);
     try {
       return await next;
     } finally {
-      if (this.locks.get(req.linkId) === next) this.locks.delete(req.linkId);
+      if (this.locks.get(req.ref.id) === next) this.locks.delete(req.ref.id);
     }
   }
 
-  /** Drop the on-disk repo for a revoked or hard-deleted share link. */
-  async revoke(linkId: string): Promise<void> {
+  /** Drop the on-disk repo for a revoked or hard-deleted owner. */
+  async revoke(ref: MarketplaceRepoRef): Promise<void> {
     // chain behind any in-flight materialize so we don't yank pack files out
     // from under a streaming clone. swallow upstream errors — the rm runs
     // regardless of how the previous call ended.
     const previous: Promise<unknown> =
-      this.locks.get(linkId) ?? Promise.resolve();
+      this.locks.get(ref.id) ?? Promise.resolve();
     const removed: Promise<MaterializeResult> = previous
       .catch(() => undefined)
       .then(async () => {
-        const dir = path.join(this.cacheDir, linkId);
+        const dir = path.join(this.cacheDir, ref.id);
         await fs.rm(dir, { recursive: true, force: true });
         // returned value is unused; revoke() callers await for completion only
         return REVOKED_PLACEHOLDER;
       });
-    this.locks.set(linkId, removed);
+    this.locks.set(ref.id, removed);
     try {
       await removed;
     } finally {
-      if (this.locks.get(linkId) === removed) this.locks.delete(linkId);
+      if (this.locks.get(ref.id) === removed) this.locks.delete(ref.id);
     }
   }
 
   /**
-   * Remove repo directories whose link id is not in `liveLinkIds`. Intended as
+   * Remove repo directories whose owner id is not in `liveOwnerIds`. Intended as
    * a startup sweep; safe to call against an empty or missing cache dir.
    */
-  async sweepOrphans(liveLinkIds: Iterable<string>): Promise<string[]> {
-    const live = new Set(liveLinkIds);
+  async sweepOrphans(liveOwnerIds: Iterable<string>): Promise<string[]> {
+    const live = new Set(liveOwnerIds);
     let entries: string[];
     try {
       entries = await fs.readdir(this.cacheDir);
@@ -154,9 +156,9 @@ export class MarketplaceMaterializer {
       computePluginDeliveryStats(req.plugins ?? []),
     );
     if (deliveryError) throw new Error(deliveryError);
-    const repoPath = this.repoPathFor(req.linkId);
+    const repoPath = this.repoPathFor(req.ref);
 
-    let latest = await SkillShareLinkRevisionModel.getLatestByLink(req.linkId);
+    let latest = await SkillShareLinkRevisionModel.getLatest(req.ref);
 
     for (let attempt = 0; ; attempt++) {
       const currentSequence = latest?.sequence ?? 0;
@@ -164,7 +166,7 @@ export class MarketplaceMaterializer {
       const currentContentHash = computeContentHash(currentFiles);
 
       if (latest && latest.contentHash === currentContentHash) {
-        await this.syncDiskToRevisions(req.linkId);
+        await this.syncDiskToRevisions(req.ref);
         return {
           repoPath,
           commitHash: latest.commitSha,
@@ -176,7 +178,7 @@ export class MarketplaceMaterializer {
       const sequence = currentSequence + 1;
       const files = computeLayout(req, sequence);
       const contentHash = computeContentHash(files);
-      await this.syncDiskToRevisions(req.linkId);
+      await this.syncDiskToRevisions(req.ref);
 
       const createdAt = roundToSeconds(new Date());
       const message = formatMessage(sequence, contentHash);
@@ -192,7 +194,7 @@ export class MarketplaceMaterializer {
       try {
         await SkillShareLinkRevisionModel.append(
           {
-            linkId: req.linkId,
+            ref: req.ref,
             contentHash,
             commitSha,
             parentSha: latest?.commitSha ?? null,
@@ -206,10 +208,7 @@ export class MarketplaceMaterializer {
         const lastAttempt = attempt >= REVISION_APPEND_MAX_ATTEMPTS - 1;
         if (
           lastAttempt ||
-          !isUniqueConstraintError(
-            error,
-            "skill_share_link_revision_link_seq_idx",
-          )
+          !SkillShareLinkRevisionModel.isSequenceConflict(error, req.ref)
         ) {
           throw error;
         }
@@ -218,7 +217,7 @@ export class MarketplaceMaterializer {
         // rerender against its sequence. If the winner carried different
         // source bytes, this request is stale and must never append on top of
         // it (that would roll the marketplace back at a higher version).
-        latest = await SkillShareLinkRevisionModel.getLatestByLink(req.linkId);
+        latest = await SkillShareLinkRevisionModel.getLatest(req.ref);
         if (!latest) throw new MarketplaceMaterializationConflictError();
         const rerenderedHash = computeContentHash(
           computeLayout(req, latest.sequence),
@@ -230,14 +229,14 @@ export class MarketplaceMaterializer {
     }
   }
 
-  private async syncDiskToRevisions(linkId: string): Promise<void> {
-    const revisions = await SkillShareLinkRevisionModel.listByLink(linkId);
+  private async syncDiskToRevisions(ref: MarketplaceRepoRef): Promise<void> {
+    const revisions = await SkillShareLinkRevisionModel.list(ref);
     const expectedHead = revisions.at(-1)?.commitSha ?? null;
-    const repoPath = this.repoPathFor(linkId);
+    const repoPath = this.repoPathFor(ref);
 
     const diskHead = await this.readDiskHead(repoPath);
     if (diskHead === expectedHead) {
-      // already in sync — but a brand-new link still needs `.git` initialized
+      // already in sync — but a brand-new repo still needs `.git` initialized
       // so the upcoming commit has somewhere to land
       if (expectedHead === null) await this.initEmptyRepo(repoPath);
       return;
@@ -257,7 +256,7 @@ export class MarketplaceMaterializer {
       });
       if (sha !== rev.commitSha) {
         throw new Error(
-          `materialize: replay SHA mismatch for link ${linkId} sequence ${rev.sequence}: expected ${rev.commitSha}, got ${sha}`,
+          `materialize: replay SHA mismatch for ${ref.kind} ${ref.id} sequence ${rev.sequence}: expected ${rev.commitSha}, got ${sha}`,
         );
       }
       parentSha = sha;

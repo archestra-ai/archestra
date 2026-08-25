@@ -16,6 +16,8 @@ const SKILL_MANIFEST = (name: string) =>
 const PUBLIC_CLONE_URL_REGEX =
   /^https?:\/\/[^/]+\/skills\/m\/[A-Za-z0-9_-]+\/repo\.git$/;
 
+const STATIC_MARKETPLACE_PATH = "/skills/marketplace.git";
+
 test.describe("Skills marketplace step on /connection", () => {
   test.setTimeout(90_000);
 
@@ -33,7 +35,8 @@ test.describe("Skills marketplace step on /connection", () => {
       await page.waitForLoadState("domcontentloaded");
 
       // Pick "Any Client" so the generic (client-agnostic) snippets render, and
-      // the "Install shared skills" step expands so the create button mounts.
+      // the "Install shared skills" step expands so the share-link disclosure
+      // mounts.
       //
       // The client tile is server-rendered, so a click that lands before React
       // hydration attaches its onClick handler is silently lost — Playwright
@@ -46,11 +49,24 @@ test.describe("Skills marketplace step on /connection", () => {
       const anyClient = page
         .getByRole("button", { name: /Any Client/i })
         .first();
-      const createButton = page.getByTestId("skills-marketplace-create");
+      const shareLinkToggle = page.getByTestId(
+        "skills-marketplace-share-link-toggle",
+      );
       await expect(async () => {
         await anyClient.click();
-        await expect(createButton).toBeVisible({ timeout: 3_000 });
+        await expect(shareLinkToggle).toBeVisible({ timeout: 3_000 });
       }).toPass({ timeout: 20_000 });
+
+      // The static marketplace is the primary path and needs no minting: its
+      // URL is on the page as soon as the step opens.
+      await expect(page.getByTestId("skills-marketplace-static")).toContainText(
+        STATIC_MARKETPLACE_PATH,
+      );
+
+      // Share links are the admin-only snapshot alternative, folded away.
+      await shareLinkToggle.click();
+      const createButton = page.getByTestId("skills-marketplace-create");
+      await expect(createButton).toBeVisible();
 
       const createResponsePromise = page.waitForResponse(
         (response) =>
@@ -83,7 +99,55 @@ test.describe("Skills marketplace step on /connection", () => {
       await deleteSkillViaApi(page, skillId);
     }
   });
+  test("the static marketplace serves the caller's own token, and challenges without one", async ({
+    page,
+    makeRandomString,
+  }) => {
+    const skillName = makeRandomString(8, "static-skill").toLowerCase();
+    const skillId = await createSkillViaApi(page, skillName);
+
+    try {
+      const refsUrl = `${UI_BASE_URL}${STATIC_MARKETPLACE_PATH}/info/refs?service=git-upload-pack`;
+
+      // No credential: git must be told to ask for one.
+      const anonymous = await page.request.get(refsUrl, {
+        headers: { authorization: "" },
+      });
+      expect(anonymous.status()).toBe(401);
+      expect(anonymous.headers()["www-authenticate"]).toContain("Basic");
+
+      // The caller's own personal token, exactly as git sends it after the
+      // password prompt.
+      const token = await fetchPersonalToken(page);
+      const authorized = await page.request.get(refsUrl, {
+        headers: {
+          authorization: `Basic ${Buffer.from(`archestra:${token}`).toString("base64")}`,
+        },
+      });
+      expect(authorized.status()).toBe(200);
+      expect(authorized.headers()["content-type"]).toBe(
+        "application/x-git-upload-pack-advertisement",
+      );
+      expect(await authorized.text()).toContain("refs/heads/main");
+    } finally {
+      await deleteSkillViaApi(page, skillId);
+    }
+  });
 });
+
+async function fetchPersonalToken(page: Page): Promise<string> {
+  // ensures the token exists before reading its value
+  await expectApiOk(
+    await page.request.get(`${UI_BASE_URL}/api/user-tokens/me`),
+    "ensure personal token",
+  );
+  const response = await page.request.get(
+    `${UI_BASE_URL}/api/user-tokens/me/value`,
+  );
+  await expectApiOk(response, "read personal token");
+  const body = (await response.json()) as { value: string };
+  return body.value;
+}
 
 async function createSkillViaApi(
   page: Page,

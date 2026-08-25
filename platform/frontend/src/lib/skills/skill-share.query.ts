@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { handleApiError, throwOnApiError } from "@/lib/utils";
 
 const {
+  getSkillMarketplace,
   getSkillShareLinks,
   createSkillShareLink,
   revokeSkillShareLink,
@@ -16,6 +17,22 @@ export type CreateSkillShareLinkBody =
   archestraApiTypes.CreateSkillShareLinkData["body"];
 export type CreateSkillShareLinkResult =
   archestraApiTypes.CreateSkillShareLinkResponses["200"];
+
+/**
+ * The deployment's static marketplace: one clone URL every user installs with
+ * their own credential. Readable by anyone with `skill:read`, unlike share
+ * links.
+ */
+export function useSkillMarketplace() {
+  return useQuery({
+    queryKey: ["skill-marketplace"],
+    queryFn: async () => {
+      const { data, error } = await getSkillMarketplace();
+      throwOnApiError(error);
+      return data;
+    },
+  });
+}
 
 export function useListSkillShareLinks(skillId?: string | null) {
   return useQuery({

@@ -471,6 +471,7 @@ export const UpdateMcpSettingsSchema = z.object({
 
 export const UpdateSkillsSettingsSchema = z.object({
   onlineSkillCatalogEnabled: z.boolean().optional(),
+  skillMarketplaceAnonymousAccess: z.boolean().optional(),
 });
 
 export const UpdateAgentSettingsSchema = z.object({

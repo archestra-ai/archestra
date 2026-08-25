@@ -45,6 +45,7 @@ import MemberModel from "@/models/member";
 import OrganizationRoleModel from "@/models/organization-role";
 import SessionModel from "@/models/session";
 import SkillModel from "@/models/skill";
+import SkillMarketplaceCredentialModel from "@/models/skill-marketplace-credential";
 import UserModel from "@/models/user";
 import { reportAuditWriteFailure } from "@/observability/metrics/audit";
 import { purgePersonalAppsForUser } from "@/services/apps/app-mcp-backing";
@@ -2356,6 +2357,13 @@ async function cleanupAfterMembershipRemoval(params: {
       userId,
       organizationId,
     );
+    // Marketplace credentials outlive a membership otherwise: their FKs only
+    // cascade when the user or the organization is deleted, and a removed
+    // member is neither.
+    await SkillMarketplaceCredentialModel.deleteForMember({
+      userId,
+      organizationId,
+    });
     // Known micro-race, accepted: a membership created between this check and
     // the delete would be cascaded away. The window is a few milliseconds, the
     // failure mode is bounded and recoverable (re-invite the user), and

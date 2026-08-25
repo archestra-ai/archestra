@@ -29,7 +29,7 @@ class InstanceUsageModel {
         .where(notDeleted(schema.agentsTable))
         .groupBy(schema.agentsTable.agentType),
       // The LLM Proxy is a singleton per organization (its `is_default` row);
-      // legacy inert llm_proxy rows are excluded so the gauge reports logical
+      // legacy inert llm_proxy rows are excluded so the heartbeat count reports logical
       // proxies, not historical attribution anchors.
       db
         .select({ total: count() })

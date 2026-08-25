@@ -209,6 +209,7 @@ export function initializeMetrics(labelKeys: string[]): void {
     "agent_id",
     "agent_name",
     "agent_type",
+    "organization_id",
     "source",
   ];
 
@@ -326,6 +327,10 @@ function buildMetricLabels(
     agent_id: profile.id,
     agent_name: profile.name,
     agent_type: profile.agentType ?? "",
+    // Proxy traffic all carries the organization's one LLM Proxy row, whose
+    // name is identical in every organization; the organization id is what
+    // separates tenants in aggregations.
+    organization_id: profile.organizationId,
     model: model ?? "unknown",
     source,
     ...additionalLabels,
@@ -903,6 +908,7 @@ export function reportKbLlmCall(params: {
     agent_id: "",
     agent_name: "Knowledge Base",
     agent_type: "",
+    organization_id: "",
     source: params.source,
   };
   // Fill in dynamic label keys with empty values

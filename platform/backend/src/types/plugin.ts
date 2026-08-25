@@ -83,6 +83,25 @@ export const UpdatePluginSchema = z
     scope: ResourceVisibilityScopeSchema.optional(),
     teamIds: z.array(z.string().min(1)).max(100).optional(),
     userIds: z.array(z.string().min(1)).max(100).optional(),
+    githubSource: z
+      .object({
+        repoUrl: z.string().trim().min(1).max(2_048),
+        ref: z.union([z.string().trim().min(1).max(1_024), z.null()]),
+        syncInterval: z.union([PluginGithubSyncIntervalSchema, z.null()]),
+        authentication: z
+          .object({
+            githubAppConfigId: z.string().uuid().nullable(),
+            githubPatId: z.string().uuid().nullable(),
+          })
+          .refine(
+            (value) =>
+              [value.githubAppConfigId, value.githubPatId].filter(Boolean)
+                .length <= 1,
+            { message: "Choose only one GitHub authentication method" },
+          )
+          .optional(),
+      })
+      .optional(),
     files: z
       .array(PluginFileInputSchema)
       .min(1)

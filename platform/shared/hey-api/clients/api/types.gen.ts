@@ -81163,6 +81163,15 @@ export type UpdatePluginData = {
         scope?: 'personal' | 'team' | 'org';
         teamIds?: Array<string>;
         userIds?: Array<string>;
+        githubSource?: {
+            repoUrl: string;
+            ref: string | null;
+            syncInterval: '15m' | '1h' | '1d' | null;
+            authentication?: {
+                githubAppConfigId: string | null;
+                githubPatId: string | null;
+            };
+        };
         files?: Array<{
             path: string;
             content: string;

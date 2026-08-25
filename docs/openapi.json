@@ -316641,7 +316641,7 @@
         "tags": [
           "Plugins"
         ],
-        "description": "Update plugin metadata or replace its files\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:admin`: Publish executable plugins through connection marketplaces\n`plugin:update`: Modify plugin metadata and files",
+        "description": "Update plugin metadata, visibility, GitHub source settings, or files\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:admin`: Publish executable plugins through connection marketplaces\n`plugin:update`: Modify plugin metadata and files",
         "requestBody": {
           "required": true,
           "content": {
@@ -316695,6 +316695,77 @@
                       "type": "string",
                       "minLength": 1
                     }
+                  },
+                  "githubSource": {
+                    "type": "object",
+                    "properties": {
+                      "repoUrl": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048
+                      },
+                      "ref": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1024
+                          },
+                          {
+                            "type": "string",
+                            "nullable": true,
+                            "enum": [
+                              null
+                            ]
+                          }
+                        ]
+                      },
+                      "syncInterval": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "15m",
+                              "1h",
+                              "1d"
+                            ]
+                          },
+                          {
+                            "type": "string",
+                            "nullable": true,
+                            "enum": [
+                              null
+                            ]
+                          }
+                        ]
+                      },
+                      "authentication": {
+                        "type": "object",
+                        "properties": {
+                          "githubAppConfigId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "githubPatId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          }
+                        },
+                        "required": [
+                          "githubAppConfigId",
+                          "githubPatId"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "repoUrl",
+                      "ref",
+                      "syncInterval"
+                    ]
                   },
                   "files": {
                     "minItems": 1,

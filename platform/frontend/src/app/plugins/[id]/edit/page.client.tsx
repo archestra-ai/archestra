@@ -4,11 +4,25 @@ import type { ResourceVisibilityScope } from "@archestra/shared";
 import { ArrowLeft, ArrowRight, Info } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  GithubAuthConfigFields,
+  type GithubAuthMethod,
+} from "@/components/github-auth-config-fields";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
+import { SecretInput } from "@/components/ui/secret-input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   UnsavedChangesDialog,
   useBeforeUnloadWhileDirty,
@@ -18,6 +32,8 @@ import { WizardFooter } from "@/components/wizard-footer";
 import { WizardStepper } from "@/components/wizard-stepper";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
+import { useGithubAppConfigs } from "@/lib/github-app-config.query";
+import { useCreateGithubPat } from "@/lib/github-pat.query";
 import {
   type PluginDetail,
   usePlugin,
@@ -48,6 +64,13 @@ const STEP_DESCRIPTIONS: Record<PluginEditStepId, string> = {
   access: "Choose who can discover and install the plugin.",
 };
 
+const GITHUB_SYNC_OPTIONS = [
+  { value: "off", label: "Manual checks" },
+  { value: "15m", label: "Every 15 minutes" },
+  { value: "1h", label: "Every hour" },
+  { value: "1d", label: "Once a day" },
+] as const;
+
 interface PluginDraft {
   displayName: string;
   description: string;
@@ -57,6 +80,12 @@ interface PluginDraft {
   scope: ResourceVisibilityScope;
   teamIds: string[];
   userIds: string[];
+  githubRepoUrl: string;
+  githubSyncRef: string;
+  githubSyncInterval: "15m" | "1h" | "1d" | null;
+  githubAuthMethod: GithubAuthMethod;
+  githubAppConfigId: string;
+  githubToken: string;
 }
 
 /**
@@ -109,6 +138,8 @@ function PluginEditWizard({ plugin }: { plugin: PluginDetail }) {
     plugin: ["update", "admin"],
   });
   const updatePlugin = useUpdatePlugin(plugin.id);
+  const { data: githubAppConfigs = [] } = useGithubAppConfigs();
+  const createGithubPat = useCreateGithubPat();
 
   const isGithubPlugin = plugin.sourceKind === "github";
   const editSteps = isGithubPlugin
@@ -144,6 +175,12 @@ function PluginEditWizard({ plugin }: { plugin: PluginDetail }) {
       scope: plugin.scope,
       teamIds: plugin.teams.map((team) => team.id),
       userIds: plugin.users.map((member) => member.id),
+      githubRepoUrl: plugin.sourceRepo ?? "",
+      githubSyncRef: plugin.githubSyncRef ?? plugin.sourceRef ?? "",
+      githubSyncInterval: plugin.githubSyncInterval,
+      githubAuthMethod: plugin.githubAppConfigId ? "github_app" : "pat",
+      githubAppConfigId: plugin.githubAppConfigId ?? "",
+      githubToken: "",
     }),
     [plugin],
   );
@@ -169,6 +206,14 @@ function PluginEditWizard({ plugin }: { plugin: PluginDetail }) {
 
   const contentComplete =
     draft.displayName.trim().length > 0 && draft.files.length > 0;
+  const githubAuthenticationComplete =
+    draft.githubAuthMethod === "github_app"
+      ? draft.githubAppConfigId.length > 0
+      : base.githubAuthMethod !== "github_app" ||
+        draft.githubToken.trim().length > 0;
+  const sourceComplete =
+    !isGithubPlugin ||
+    (draft.githubRepoUrl.trim().length > 0 && githubAuthenticationComplete);
   // Which save is in flight: Save finishes on the plugin's page, Save &
   // Continue moves to the next step.
   const [savingWith, setSavingWith] = useState<"finish" | "continue" | null>(
@@ -177,12 +222,63 @@ function PluginEditWizard({ plugin }: { plugin: PluginDetail }) {
   const isSaving = savingWith !== null;
 
   const handleSave = async (intent: "finish" | "continue") => {
-    const submitted = draft;
+    let submitted = draft;
     setSavingWith(intent);
+    let githubPatId =
+      submitted.githubAuthMethod === "pat" ? plugin.githubPatId : null;
+    if (
+      isGithubPlugin &&
+      submitted.githubAuthMethod === "pat" &&
+      submitted.githubToken.trim()
+    ) {
+      const created = await createGithubPat
+        .mutateAsync({
+          name: `${plugin.displayName} token`,
+          token: submitted.githubToken.trim(),
+        })
+        .catch(() => null);
+      if (!created) {
+        setSavingWith(null);
+        return;
+      }
+      githubPatId = created.id;
+      submitted = {
+        ...submitted,
+        githubToken: "",
+      };
+      setDraft(submitted);
+    }
+    const githubAppConfigId =
+      submitted.githubAuthMethod === "github_app"
+        ? submitted.githubAppConfigId || null
+        : null;
+    const baseGithubPatId =
+      base.githubAuthMethod === "pat" ? plugin.githubPatId : null;
+    const baseGithubAppConfigId =
+      base.githubAuthMethod === "github_app"
+        ? base.githubAppConfigId || null
+        : null;
+    const githubAuthenticationChanged =
+      githubPatId !== baseGithubPatId ||
+      githubAppConfigId !== baseGithubAppConfigId;
     const saved = await updatePlugin
       .mutateAsync({
         ...(isGithubPlugin
-          ? {}
+          ? {
+              githubSource: {
+                repoUrl: submitted.githubRepoUrl.trim(),
+                ref: submitted.githubSyncRef.trim() || null,
+                syncInterval: submitted.githubSyncInterval,
+                ...(githubAuthenticationChanged
+                  ? {
+                      authentication: {
+                        githubAppConfigId,
+                        githubPatId,
+                      },
+                    }
+                  : {}),
+              },
+            }
           : {
               displayName: submitted.displayName.trim(),
               description: submitted.description,
@@ -223,12 +319,27 @@ function PluginEditWizard({ plugin }: { plugin: PluginDetail }) {
     },
     [guard],
   );
+  const githubAppConfigOptions =
+    plugin.githubAppConfigId &&
+    !githubAppConfigs.some((config) => config.id === plugin.githubAppConfigId)
+      ? [
+          {
+            id: plugin.githubAppConfigId,
+            name: "Current GitHub App configuration",
+          },
+          ...githubAppConfigs,
+        ]
+      : githubAppConfigs;
 
   return (
     <PageLayout
       title={`Edit ${plugin.displayName}`}
       documentTitle={`Edit ${plugin.displayName}`}
-      description={STEP_DESCRIPTIONS[step]}
+      description={
+        isGithubPlugin
+          ? "Edit the tracked GitHub source, authentication, update schedule, and discoverability."
+          : STEP_DESCRIPTIONS[step]
+      }
       backLink={
         <PluginBackLink
           href={detailHref}
@@ -296,6 +407,128 @@ function PluginEditWizard({ plugin }: { plugin: PluginDetail }) {
             )}
             {step === "access" && (
               <fieldset disabled={canUpdate === false} className="contents">
+                {isGithubPlugin && (
+                  <div className="space-y-5 border-b pb-6">
+                    <div className="space-y-2">
+                      <Label htmlFor="plugin-github-repo-url">
+                        Repository URL
+                      </Label>
+                      <Input
+                        id="plugin-github-repo-url"
+                        value={draft.githubRepoUrl}
+                        onChange={(event) =>
+                          patchDraft({ githubRepoUrl: event.target.value })
+                        }
+                        placeholder="github.com/owner/repo"
+                        autoComplete="off"
+                        data-1p-ignore
+                        data-lpignore="true"
+                      />
+                      <p className="text-sm text-muted-foreground">
+                        The GitHub repository checked for plugin updates.
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="plugin-github-sync-interval">
+                        Keep in sync
+                      </Label>
+                      <Select
+                        value={draft.githubSyncInterval ?? "off"}
+                        onValueChange={(value) =>
+                          patchDraft({
+                            githubSyncInterval:
+                              value === "off"
+                                ? null
+                                : (value as "15m" | "1h" | "1d"),
+                          })
+                        }
+                      >
+                        <SelectTrigger
+                          id="plugin-github-sync-interval"
+                          className="w-full"
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {GITHUB_SYNC_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-sm text-muted-foreground">
+                        New commits become review candidates and never replace
+                        approved plugin bytes automatically.
+                      </p>
+                    </div>
+                    <GithubAuthConfigFields
+                      authMethod={draft.githubAuthMethod}
+                      onAuthMethodChange={(githubAuthMethod) =>
+                        patchDraft({
+                          githubAuthMethod,
+                          ...(githubAuthMethod === "pat"
+                            ? { githubAppConfigId: "" }
+                            : {}),
+                        })
+                      }
+                      githubAppConfigId={draft.githubAppConfigId}
+                      onGithubAppConfigIdChange={(githubAppConfigId) =>
+                        patchDraft({ githubAppConfigId })
+                      }
+                      githubAppConfigs={githubAppConfigOptions}
+                      patFields={
+                        <div className="space-y-2">
+                          <Label htmlFor="plugin-github-token">
+                            Personal Access Token
+                          </Label>
+                          <SecretInput
+                            id="plugin-github-token"
+                            value={draft.githubToken}
+                            onChange={(event) =>
+                              patchDraft({ githubToken: event.target.value })
+                            }
+                            placeholder="Leave empty to keep existing token"
+                          />
+                          <p className="text-sm text-muted-foreground">
+                            <span>
+                              Leave empty to keep existing credentials
+                              unchanged.
+                            </span>{" "}
+                            <span>
+                              Fine-grained or classic — see{" "}
+                              <a
+                                href="https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens"
+                                target="_blank"
+                                rel="noreferrer"
+                                className="font-medium text-primary underline-offset-4 hover:underline"
+                              >
+                                managing your personal access tokens
+                              </a>
+                              .
+                            </span>
+                          </p>
+                        </div>
+                      }
+                    />
+                    <div className="space-y-2">
+                      <Label htmlFor="plugin-github-sync-ref">Ref</Label>
+                      <Input
+                        id="plugin-github-sync-ref"
+                        value={draft.githubSyncRef}
+                        onChange={(event) =>
+                          patchDraft({ githubSyncRef: event.target.value })
+                        }
+                        placeholder="Default branch"
+                        autoComplete="off"
+                      />
+                      <p className="text-sm text-muted-foreground">
+                        Leave empty to track the repository&apos;s default
+                        branch.
+                      </p>
+                    </div>
+                  </div>
+                )}
                 <PluginScopeSelector
                   scope={draft.scope}
                   onScopeChange={(scope) => patchDraft({ scope })}
@@ -344,7 +577,7 @@ function PluginEditWizard({ plugin }: { plugin: PluginDetail }) {
                 <PermissionButton
                   permissions={{ plugin: ["update", "admin"] }}
                   variant={nextStep ? "outline" : "default"}
-                  disabled={!contentComplete || isSaving}
+                  disabled={!contentComplete || !sourceComplete || isSaving}
                   onClick={() => handleSave("finish")}
                 >
                   {savingWith === "finish" ? "Saving..." : "Save"}
@@ -362,7 +595,7 @@ function PluginEditWizard({ plugin }: { plugin: PluginDetail }) {
                 (isDirty || isSaving ? (
                   <PermissionButton
                     permissions={{ plugin: ["update", "admin"] }}
-                    disabled={!contentComplete || isSaving}
+                    disabled={!contentComplete || !sourceComplete || isSaving}
                     onClick={() => handleSave("continue")}
                   >
                     <span>
@@ -375,7 +608,7 @@ function PluginEditWizard({ plugin }: { plugin: PluginDetail }) {
                 ) : (
                   <Button
                     type="button"
-                    disabled={!contentComplete}
+                    disabled={!contentComplete || !sourceComplete}
                     onClick={() => goToStep(nextStep.id)}
                   >
                     <span>{nextStep.title}</span>

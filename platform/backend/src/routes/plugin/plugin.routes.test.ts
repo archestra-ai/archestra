@@ -5,6 +5,7 @@ import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { AuditLogModel, PluginModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
+import { createGithubPat } from "@/services/github-pat";
 import {
   afterEach,
   beforeEach,
@@ -155,6 +156,249 @@ describe("plugin routes", () => {
     expect(updated.json().approvedContentHash).toBe(updated.json().contentHash);
     expect(updated.json().files).toHaveLength(1);
     expect(updated.json().files[0].content).toBe(replacement);
+  });
+
+  test("atomically updates a GitHub plugin source, ref, cadence, and visibility", async () => {
+    const plugin = await PluginModel.create({
+      organizationId: ctx.organizationId,
+      userId: ctx.user.id,
+      input: createPayload(),
+      source: {
+        repo: "old-owner/plugin",
+        ref: "main",
+        sha: "old-commit",
+        subdir: "",
+        exclude: [],
+        syncInterval: "1d",
+        syncRef: "main",
+      },
+    });
+    if (!plugin) throw new Error("failed to seed GitHub plugin");
+    const observed = await PluginModel.findByIdForSync(plugin.id);
+    if (!observed) throw new Error("failed to load GitHub sync state");
+    await PluginModel.markGithubSyncResult({
+      id: plugin.id,
+      expectedSyncGeneration: observed.syncGeneration,
+      expectedPendingSourceSha: observed.pendingSourceSha,
+      sourceSha: STUB_COMMIT_SHA,
+      files: plugin.files,
+      error: null,
+    });
+
+    const updated = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/plugins/${plugin.id}`,
+      payload: {
+        githubSource: {
+          repoUrl: "https://github.com/new-owner/plugin.git",
+          ref: "release",
+          syncInterval: "1h",
+        },
+        scope: "org",
+        teamIds: [],
+        userIds: [],
+      },
+    });
+
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json()).toMatchObject({
+      sourceRepo: "new-owner/plugin",
+      sourceRef: "release",
+      githubSyncRef: "release",
+      githubSyncInterval: "1h",
+      scope: "org",
+      sourceSha: "old-commit",
+      pendingSourceSha: null,
+      pendingContentHash: null,
+      pendingDetectedAt: null,
+      lastSyncedAt: null,
+    });
+    expect(updated.json().files).toEqual(plugin.files);
+
+    const fetchMock = stubGithub([
+      {
+        owner: "new-owner",
+        repo: "plugin",
+        files: { "hooks/hooks.json": "updated bytes\n" },
+      },
+    ]);
+    const preview = await ctx.app.inject({
+      method: "POST",
+      url: `/api/plugins/${plugin.id}/github/preview-update`,
+      payload: {},
+    });
+    expect(preview.statusCode).toBe(200);
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).includes("/repos/new-owner/plugin/commits/release"),
+      ),
+    ).toBe(true);
+  });
+
+  test("replaces an expired GitHub token without changing approved plugin bytes", async () => {
+    const expiredPat = await createGithubPat({
+      organizationId: ctx.organizationId,
+      data: { name: "Expired token", token: "ghp_expired" },
+    });
+    const replacementPat = await createGithubPat({
+      organizationId: ctx.organizationId,
+      data: { name: "Replacement token", token: "ghp_replacement" },
+    });
+    const plugin = await PluginModel.create({
+      organizationId: ctx.organizationId,
+      userId: ctx.user.id,
+      input: createPayload(),
+      source: {
+        repo: "private-owner/plugin",
+        ref: "main",
+        sha: "approved-commit",
+        subdir: "",
+        exclude: [],
+        syncInterval: "1d",
+        syncRef: "main",
+        githubPatId: expiredPat.id,
+      },
+    });
+    if (!plugin) throw new Error("failed to seed GitHub plugin");
+    const observed = await PluginModel.findByIdForSync(plugin.id);
+    if (!observed) throw new Error("failed to load GitHub sync state");
+    await PluginModel.markGithubSyncResult({
+      id: plugin.id,
+      expectedSyncGeneration: observed.syncGeneration,
+      expectedPendingSourceSha: observed.pendingSourceSha,
+      error: "Bad credentials",
+    });
+
+    const updated = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/plugins/${plugin.id}`,
+      payload: {
+        githubSource: {
+          repoUrl: "private-owner/plugin",
+          ref: "main",
+          syncInterval: "1d",
+          authentication: {
+            githubAppConfigId: null,
+            githubPatId: replacementPat.id,
+          },
+        },
+      },
+    });
+
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json()).toMatchObject({
+      sourceSha: "approved-commit",
+      githubPatId: replacementPat.id,
+      githubAppConfigId: null,
+      lastSyncedAt: null,
+      lastSyncError: null,
+    });
+    expect(updated.json().files).toEqual(plugin.files);
+
+    const preserved = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/plugins/${plugin.id}`,
+      payload: {
+        githubSource: {
+          repoUrl: "private-owner/plugin",
+          ref: "main",
+          syncInterval: "1d",
+        },
+      },
+    });
+    expect(preserved.statusCode).toBe(200);
+    expect(preserved.json()).toMatchObject({
+      githubPatId: replacementPat.id,
+      githubAppConfigId: null,
+    });
+
+    const fetchMock = stubGithub([
+      {
+        owner: "private-owner",
+        repo: "plugin",
+        files: { "hooks/hooks.json": "replacement-auth bytes\n" },
+      },
+    ]);
+    const preview = await ctx.app.inject({
+      method: "POST",
+      url: `/api/plugins/${plugin.id}/github/preview-update`,
+      payload: {},
+    });
+    expect(preview.statusCode).toBe(200);
+    expect(
+      fetchMock.mock.calls.some(([, init]) =>
+        JSON.stringify(
+          (init as { headers?: unknown } | undefined)?.headers ?? {},
+        ).includes("ghp_replacement"),
+      ),
+    ).toBe(true);
+
+    const cleared = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/plugins/${plugin.id}`,
+      payload: {
+        githubSource: {
+          repoUrl: "private-owner/plugin",
+          ref: "main",
+          syncInterval: "1d",
+          authentication: {
+            githubAppConfigId: null,
+            githubPatId: null,
+          },
+        },
+      },
+    });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json()).toMatchObject({
+      githubPatId: null,
+      githubAppConfigId: null,
+    });
+  });
+
+  test("rejects GitHub source settings for manual plugins and non-GitHub URLs", async () => {
+    const manual = await ctx.app.inject({
+      method: "POST",
+      url: "/api/plugins",
+      payload: createPayload(),
+    });
+    const manualUpdate = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/plugins/${manual.json().id}`,
+      payload: {
+        githubSource: {
+          repoUrl: "owner/plugin",
+          ref: null,
+          syncInterval: null,
+        },
+      },
+    });
+    expect(manualUpdate.statusCode).toBe(409);
+
+    const github = await PluginModel.create({
+      organizationId: ctx.organizationId,
+      userId: ctx.user.id,
+      input: createPayload(),
+      source: {
+        repo: "owner/plugin",
+        ref: "main",
+        sha: "old-commit",
+        subdir: "",
+        exclude: [],
+      },
+    });
+    if (!github) throw new Error("failed to seed GitHub plugin");
+    const invalidUrl = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/plugins/${github.id}`,
+      payload: {
+        githubSource: {
+          repoUrl: "https://gitlab.com/owner/plugin",
+          ref: "main",
+          syncInterval: "1d",
+        },
+      },
+    });
+    expect(invalidUrl.statusCode).toBe(400);
   });
 
   test("rejects unsafe, duplicate, and malformed file sets", async () => {

@@ -252,6 +252,10 @@ class UserModel {
       // caller's rollback. No best-effort swallowing here either — after a
       // failed statement the transaction is aborted, so the transaction is
       // the unit of success.
+      // First, while the user row is still readable: record who authored the
+      // agents that survive them, so the surfaces that name an owner can still
+      // do so afterwards.
+      await AgentModel.snapshotAuthorIdentityForDeletion(userId, tx);
       await McpServerModel.purgePersonalServersForUserInTransaction(userId, tx);
       await AgentModel.deletePersonalMcpGatewaysForUser(userId, tx);
       await AgentModel.deletePersonalLlmProxiesForUser(userId, tx);
@@ -263,6 +267,19 @@ class UserModel {
       const deleted = result.length > 0;
       logger.debug({ deleted }, "UserModel.delete: completed");
       return deleted;
+    }
+
+    // First, while the user row is still readable: record who authored the
+    // agents that survive them (`agents.author_id` only nulls), so the
+    // surfaces that name an owner can still do so afterwards. Best-effort like
+    // the rest — losing an attribution must not block a requested deletion.
+    try {
+      await AgentModel.snapshotAuthorIdentityForDeletion(userId);
+    } catch (error) {
+      logger.error(
+        { err: error, userId },
+        "UserModel.delete: failed to snapshot agent author identity",
+      );
     }
 
     // Personal MCP installs hold the user's own credentials (OAuth tokens,

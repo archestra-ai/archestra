@@ -623,6 +623,8 @@ const AgentForm = (props: Omit<AgentFormProps, "footer">) => (
 const baseAgent = {
   id: "00000000-0000-4000-8000-000000000001",
   organizationId: "00000000-0000-4000-8000-000000000010",
+  deletedAuthorName: null,
+  deletedAuthorEmail: null,
   name: "Existing Agent",
   builtIn: false,
   icon: null,

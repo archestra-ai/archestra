@@ -120,11 +120,21 @@ function OwnerCell({ owner }: { owner: AgentOwner }) {
       );
     case "user":
       return <span>{owner.email}</span>;
+    case "deleted":
+      // Named, but explicitly past tense: without "Deleted user" the row reads
+      // as a colleague you could go and ask about it. The name is preferred
+      // over the email because it is what a reader recognises, and the other
+      // one stays in the title so neither is lost.
+      return (
+        <span title={owner.name ? owner.email : undefined}>
+          Deleted user ({owner.name ?? owner.email})
+        </span>
+      );
     case "unknown":
       return (
         <span
           className="italic"
-          title="This personal agent has no owner on record — its author's account no longer exists."
+          title="This personal agent's author is not on record — their account was deleted before we began keeping it."
         >
           Unknown
         </span>

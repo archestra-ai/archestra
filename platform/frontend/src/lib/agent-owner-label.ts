@@ -7,10 +7,17 @@ export type AgentOwner =
   /** A personal agent belonging to somebody else. */
   | { kind: "user"; email: string }
   /**
-   * A personal agent with no author on record. `agents.author_id` is
-   * `ON DELETE SET NULL`, so deleting a member's account leaves their personal
-   * agents authorless permanently — the owner is not merely unloaded, it is
-   * gone. Callers must say that rather than substitute the scope: the word
+   * A personal agent whose author's account was deleted, named from the
+   * identity captured at deletion time. "Their account is gone" is a better
+   * answer than either a bare name (which invites someone to go looking for a
+   * colleague who has left) or a shrug.
+   */
+  | { kind: "deleted"; name: string | null; email: string }
+  /**
+   * A personal agent with no author on record and nothing retained about them:
+   * an agent orphaned before that capture existed. `agents.author_id` is
+   * `ON DELETE SET NULL`, so the owner is not merely unloaded, it is gone.
+   * Callers must say that rather than substitute the scope — the word
    * "Personal" in an owner column reads as "mine", which is how these rows came
    * to be mistaken for the viewer's own.
    */
@@ -35,6 +42,8 @@ export function describeAgentOwner(
     scope: ResourceVisibilityScope;
     ownerId: string | null;
     ownerEmail: string | null;
+    formerOwnerName?: string | null;
+    formerOwnerEmail?: string | null;
   },
   currentUserId: string | null | undefined,
 ): AgentOwner {
@@ -46,6 +55,15 @@ export function describeAgentOwner(
   }
   if (agent.ownerEmail) {
     return { kind: "user", email: agent.ownerEmail };
+  }
+  // The live author is checked first: the retained identity is only ever
+  // written as an account is deleted, so the two cannot both be current.
+  if (agent.formerOwnerEmail) {
+    return {
+      kind: "deleted",
+      name: agent.formerOwnerName ?? null,
+      email: agent.formerOwnerEmail,
+    };
   }
   return { kind: "unknown" };
 }

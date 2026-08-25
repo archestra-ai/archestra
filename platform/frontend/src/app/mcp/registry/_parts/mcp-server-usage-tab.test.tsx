@@ -26,6 +26,8 @@ const agent = (
     scope: "org" | "team" | "personal";
     ownerId: string | null;
     ownerEmail: string | null;
+    formerOwnerName: string | null;
+    formerOwnerEmail: string | null;
   }> = {},
 ) => ({
   id: "a1",
@@ -34,6 +36,8 @@ const agent = (
   scope: "org" as const,
   ownerId: null,
   ownerEmail: null,
+  formerOwnerName: null,
+  formerOwnerEmail: null,
   ...overrides,
 });
 
@@ -111,7 +115,62 @@ describe("McpServerUsageTab", () => {
     expect(within(row).queryByText("Personal")).not.toBeInTheDocument();
   });
 
-  it("says the owner is unknown rather than calling an authorless personal agent 'Personal'", () => {
+  it("names a deleted author, in the past tense, from the retained identity", () => {
+    render(
+      <McpServerUsageTab
+        serversForCatalog={[
+          server([
+            agent({
+              id: "1",
+              name: "Nightly Backlog Groomer",
+              scope: "personal",
+              ownerId: null,
+              ownerEmail: null,
+              formerOwnerName: "Kim Alvarez",
+              formerOwnerEmail: "kim@example.com",
+            }),
+          ]),
+        ]}
+        autoModeAgents={[]}
+      />,
+    );
+
+    const row = screen
+      .getByText("Nightly Backlog Groomer")
+      .closest("tr") as HTMLElement;
+
+    expect(
+      within(row).getByText("Deleted user (Kim Alvarez)"),
+    ).toBeInTheDocument();
+    expect(within(row).queryByText("Personal")).not.toBeInTheDocument();
+  });
+
+  it("falls back to the retained email when the deleted author has no name", () => {
+    render(
+      <McpServerUsageTab
+        serversForCatalog={[
+          server([
+            agent({
+              id: "1",
+              name: "Nightly Backlog Groomer",
+              scope: "personal",
+              ownerId: null,
+              ownerEmail: null,
+              formerOwnerName: null,
+              formerOwnerEmail: "kim@example.com",
+            }),
+          ]),
+        ]}
+        autoModeAgents={[]}
+      />,
+    );
+
+    expect(
+      screen.getByText("Deleted user (kim@example.com)"),
+    ).toBeInTheDocument();
+  });
+
+  it("says the owner is unknown when nothing about the author was retained", () => {
     render(
       <McpServerUsageTab
         serversForCatalog={[

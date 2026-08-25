@@ -441,6 +441,8 @@ async function makeApp(
     teamIds?: string[];
     scope?: ResourceVisibilityScope;
     environmentId?: string | null;
+    /** Display icon; like scope and environment it lives on the backing catalog. */
+    icon?: string | null;
   } = {},
 ): Promise<App> {
   let organizationId = overrides.organizationId;
@@ -453,6 +455,7 @@ async function makeApp(
     teamIds,
     scope: scopeOverride,
     environmentId,
+    icon,
     ...appOverrides
   } = overrides;
   const scope = scopeOverride ?? "org";
@@ -485,6 +488,7 @@ async function makeApp(
     app: created,
     scope,
     environmentId: environmentId ?? null,
+    icon: icon ?? null,
     userId: authorId,
     organizationId,
     teamIds: teamIds ?? [],

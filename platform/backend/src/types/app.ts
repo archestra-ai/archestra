@@ -46,6 +46,20 @@ export const APP_DATA_MAX_VALUE_BYTES = 256 * 1024;
 /** Max number of keys a single app may persist in its data store. */
 export const APP_DATA_MAX_ENTRIES = 1000;
 export const APP_DATA_KEY_MAX_LENGTH = 256;
+/**
+ * Character cap for a stored icon. An icon is either a short emoji sequence or
+ * a base64 image data URL; the picker refuses images over 512 KB, whose base64
+ * encoding tops out around 700 KB, so this leaves headroom without letting an
+ * unbounded blob through the API.
+ */
+export const APP_ICON_MAX_LENGTH = 1024 * 1024;
+/**
+ * An app's display icon: an emoji character or a base64 image data URL, exactly
+ * as the MCP registry stores one (the value lives on the app's backing catalog,
+ * so both surfaces read and write the same column). Null clears it and the
+ * generic app glyph comes back.
+ */
+export const AppIconSchema = z.string().max(APP_ICON_MAX_LENGTH).nullable();
 
 // Slug segments the app run page can never serve, because a static Next.js
 // segment under /a/ shadows the dynamic [appId] one. Only `catalog` today
@@ -125,6 +139,12 @@ const AppListItemBaseSchema = z.object({
   // edited in the MCP registry rather than here — so one filter spans both
   // halves of the mixed listing instead of silently dropping external apps.
   labels: z.array(AgentLabelWithDetailsSchema),
+  // Display icon: an emoji character or a base64 image data URL. For an owned
+  // app it is the app's own icon, for an external one its backing server's
+  // registry icon — both stored on the same catalog column, so one field spans
+  // the mixed listing and the card renders it the same way either side.
+  // Null when none is set (the card falls back to its generic glyph).
+  icon: z.string().nullable(),
 });
 
 export const OwnedAppListItemSchema = AppListItemBaseSchema.extend({
@@ -178,10 +198,6 @@ export const ExternalAppListItemSchema = AppListItemBaseSchema.extend({
   // item's pin identity: several tools of one server can share a ui://
   // resource, so the resource alone does not identify a tile.
   toolName: z.string(),
-  // The catalog's icon, exactly as the MCP registry renders it: an emoji
-  // character or a base64 image data URL. Null when the server has none (the
-  // card falls back to its generic server glyph).
-  icon: z.string().nullable(),
   // The tool declares required inputs, so opening renders nothing until the
   // agent collects them in chat (mode "prompt"). The card hides its standalone
   // "Open in new tab" link for these — a bare render would mount a broken app.
@@ -243,6 +259,7 @@ export const SelectAppSchema = createSelectSchema(schema.appsTable, {
 }).extend({
   scope: AppScopeSchema,
   environmentId: z.string().uuid().nullable(),
+  icon: z.string().nullable(),
   labels: z.array(AgentLabelWithDetailsSchema),
 });
 
@@ -321,6 +338,9 @@ export const CreateAppSchema = z.object({
   // restricted-env permission are enforced in the route via
   // assertCanAssignEnvironment.
   environmentId: z.string().uuid().nullable().optional(),
+  // Display icon (emoji or base64 image data URL). Omitted/null = the generic
+  // app glyph. Stored on the app's backing catalog, like its scope.
+  icon: AppIconSchema.optional(),
   // Key-value labels for organization/categorization. Omitted = none.
   labels: z.array(AgentLabelWithDetailsSchema).optional(),
 });
@@ -341,6 +361,13 @@ export const ScaffoldAppSchema = z.strictObject({
   uiPermissions: AppUiPermissionsSchema.optional().describe(
     "Optional iframe permissions (camera/microphone/geolocation/clipboardWrite).",
   ),
+  icon: z
+    .string()
+    .max(APP_ICON_MAX_LENGTH)
+    .optional()
+    .describe(
+      'Optional display icon for the app, as a single emoji character (e.g. "📊") chosen to suit what the app does. Omitted leaves the app with the generic app glyph.',
+    ),
   labels: z
     .array(AgentLabelWithDetailsSchema.pick({ key: true, value: true }))
     .optional()
@@ -401,6 +428,9 @@ export const UpdateAppSchema = z.object({
   // assignments are not stripped on re-bind; out-of-environment ones are refused
   // at call time instead.
   environmentId: z.string().uuid().nullable().optional(),
+  // Display icon (emoji or base64 image data URL). Omitted leaves it unchanged;
+  // null clears it back to the generic app glyph.
+  icon: AppIconSchema.optional(),
   // Replace the app's labels with this set. Omitted leaves them unchanged; an
   // empty array clears them.
   labels: z.array(AgentLabelWithDetailsSchema).optional(),

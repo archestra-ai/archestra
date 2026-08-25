@@ -31,19 +31,23 @@ import AppVersionModel, { type VersionPayload } from "./app-version";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpCatalogUserModel from "./mcp-catalog-user";
 
-/** Raw `apps` row (no `scope`/`environmentId` — those live on the backing catalog). */
+/** Raw `apps` row (no `scope`/`environmentId`/`icon` — those live on the backing catalog). */
 type AppRow = typeof schema.appsTable.$inferSelect;
 
 /** Length of the `-<hex>` a colliding generated slug is disambiguated with. */
 const COLLISION_SUFFIX_LENGTH = 7;
 
-// An app's visibility (`scope`) and `environmentId` are owned by its backing
-// catalog (FR-30). Reads JOIN apps→mcp_server→internal_mcp_catalog and surface
-// them as derived fields so the `App` type stays whole for the rest of the code.
+// An app's visibility (`scope`), `environmentId` and display `icon` are owned by
+// its backing catalog (FR-30). Reads JOIN apps→mcp_server→internal_mcp_catalog
+// and surface them as derived fields so the `App` type stays whole for the rest
+// of the code. Keeping the icon there (rather than duplicating it on the app
+// row) means the app and the registry entry that fronts it cannot disagree
+// about it, whichever surface last edited it.
 const appWithCatalogColumns = {
   ...getTableColumns(schema.appsTable),
   scope: schema.internalMcpCatalogTable.scope,
   environmentId: schema.internalMcpCatalogTable.environmentId,
+  icon: schema.internalMcpCatalogTable.icon,
 };
 
 function appWithCatalogQuery() {
@@ -578,7 +582,13 @@ class AppModel {
     patch?: Partial<
       Pick<
         App,
-        "name" | "slug" | "description" | "scope" | "spec" | "environmentId"
+        | "name"
+        | "slug"
+        | "description"
+        | "scope"
+        | "spec"
+        | "environmentId"
+        | "icon"
       >
     >;
     version?: VersionPayload;
@@ -591,7 +601,7 @@ class AppModel {
     expectedLatestVersion?: number;
   }): Promise<App | null> {
     const patch = params.patch ?? {};
-    // App-row columns only; scope/environmentId are owned by the backing catalog.
+    // App-row columns only; scope/environmentId/icon are owned by the backing catalog.
     const appRowPatch: Partial<
       Pick<AppRow, "name" | "slug" | "description" | "spec">
     > = {};
@@ -646,6 +656,7 @@ class AppModel {
         patch.scope !== undefined ||
         patch.environmentId !== undefined ||
         patch.name !== undefined ||
+        patch.icon !== undefined ||
         params.teamIds !== undefined ||
         params.userIds !== undefined;
       if (app.mcpServerId && routesToCatalog) {
@@ -666,6 +677,8 @@ class AppModel {
             catalogSet.environmentId = patch.environmentId;
           // Mirror the name so the catalog's per-scope name-uniqueness index tracks it.
           if (patch.name !== undefined) catalogSet.name = patch.name;
+          // The icon has no app-row column at all — the catalog's is the app's.
+          if (patch.icon !== undefined) catalogSet.icon = patch.icon;
           if (Object.keys(catalogSet).length > 0) {
             try {
               await tx

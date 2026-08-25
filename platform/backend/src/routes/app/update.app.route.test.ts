@@ -1,9 +1,17 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import { InternalMcpCatalogModel, McpServerModel } from "@/models";
 import AppModel from "@/models/app";
 import EnvironmentModel from "@/models/environment";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  mustExist,
+  test,
+} from "@/test";
 import type { User } from "@/types";
 
 describe("PATCH /api/apps/:appId", () => {
@@ -52,6 +60,54 @@ describe("PATCH /api/apps/:appId", () => {
       description: "new desc",
       latestVersion: created.latestVersion,
     });
+  });
+
+  test("sets and clears the icon, storing it on the app's backing catalog", async ({
+    makeApp,
+  }) => {
+    const created = await makeApp({ organizationId, scope: "org" });
+    expect(created.icon).toBeNull();
+
+    const set = await app.inject({
+      method: "PATCH",
+      url: `/api/apps/${created.id}`,
+      payload: { icon: "🚀" },
+    });
+    expect(set.statusCode).toBe(200);
+    expect(set.json().icon).toBe("🚀");
+
+    // An app has no icon column of its own: the value must land on the backing
+    // catalog, which is also what the MCP registry renders for the same entity.
+    const server = await McpServerModel.findById(
+      mustExist(created.mcpServerId),
+    );
+    const catalog = await InternalMcpCatalogModel.findById(
+      mustExist(server).catalogId,
+    );
+    expect(catalog?.icon).toBe("🚀");
+
+    const cleared = await app.inject({
+      method: "PATCH",
+      url: `/api/apps/${created.id}`,
+      payload: { icon: null },
+    });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json().icon).toBeNull();
+    expect(mustExist(await AppModel.findById(created.id)).icon).toBeNull();
+  });
+
+  test("an edit that leaves the icon out keeps it", async ({ makeApp }) => {
+    // The settings form sends name/description on every save; an omitted icon
+    // must not be read as "clear it".
+    const created = await makeApp({ organizationId, scope: "org", icon: "🚀" });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/apps/${created.id}`,
+      payload: { name: "Renamed" },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ name: "Renamed", icon: "🚀" });
   });
 
   test("supplying html forks a new version", async ({ makeApp }) => {

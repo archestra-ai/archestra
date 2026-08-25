@@ -19924,6 +19924,7 @@ export type GetAppsResponses = {
                 keyId?: string;
                 valueId?: string;
             }>;
+            icon: string | null;
             source: 'owned';
             id: string;
             slug: string | null;
@@ -19954,13 +19955,13 @@ export type GetAppsResponses = {
                 keyId?: string;
                 valueId?: string;
             }>;
+            icon: string | null;
             source: 'external';
             catalogId: string;
             mcpServerId: string;
             scope: 'personal' | 'team' | 'org';
             resourceUri: string;
             toolName: string;
-            icon: string | null;
             requiresInput: boolean;
         }>;
         pagination: {
@@ -19998,6 +19999,7 @@ export type CreateAppData = {
             };
         };
         environmentId?: string | null;
+        icon?: string | null;
         labels?: Array<{
             key: string;
             value: string;
@@ -20120,6 +20122,7 @@ export type CreateAppResponses = {
         deletedAt: string | null;
         scope: 'personal' | 'team' | 'org';
         environmentId: string | null;
+        icon: string | null;
         labels: Array<{
             key: string;
             value: string;
@@ -21211,6 +21214,7 @@ export type GetAppResponses = {
         deletedAt: string | null;
         scope: 'personal' | 'team' | 'org';
         environmentId: string | null;
+        icon: string | null;
         labels: Array<{
             key: string;
             value: string;
@@ -21255,6 +21259,7 @@ export type UpdateAppData = {
             };
         };
         environmentId?: string | null;
+        icon?: string | null;
         labels?: Array<{
             key: string;
             value: string;
@@ -21379,6 +21384,7 @@ export type UpdateAppResponses = {
         deletedAt: string | null;
         scope: 'personal' | 'team' | 'org';
         environmentId: string | null;
+        icon: string | null;
         labels: Array<{
             key: string;
             value: string;
@@ -21714,6 +21720,7 @@ export type EnableAppResponses = {
         deletedAt: string | null;
         scope: 'personal' | 'team' | 'org';
         environmentId: string | null;
+        icon: string | null;
         labels: Array<{
             key: string;
             value: string;
@@ -21853,6 +21860,7 @@ export type DisableAppResponses = {
         deletedAt: string | null;
         scope: 'personal' | 'team' | 'org';
         environmentId: string | null;
+        icon: string | null;
         labels: Array<{
             key: string;
             value: string;
@@ -21992,6 +22000,7 @@ export type LockAppResponses = {
         deletedAt: string | null;
         scope: 'personal' | 'team' | 'org';
         environmentId: string | null;
+        icon: string | null;
         labels: Array<{
             key: string;
             value: string;
@@ -22131,6 +22140,7 @@ export type UnlockAppResponses = {
         deletedAt: string | null;
         scope: 'personal' | 'team' | 'org';
         environmentId: string | null;
+        icon: string | null;
         labels: Array<{
             key: string;
             value: string;

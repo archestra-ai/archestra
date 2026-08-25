@@ -465,19 +465,22 @@ function VirtualKeysTable() {
                         showSelfAsMe
                       />
                     </div>
-                    <VirtualKeyValueCell
-                      id={key.id}
-                      tokenStart={key.tokenStart}
-                      canReveal={key.authorId === currentUserId}
-                    />
-                    {key.keyType !== "passthrough" && (
-                      <p className="truncate text-xs text-muted-foreground">
-                        {formatProviderKeySummary(
-                          key.providerApiKeys,
-                          providerCatalog.label,
-                        )}
-                      </p>
-                    )}
+                    {/* Token left, mapped providers in the row's spare width. */}
+                    <div className="flex items-center justify-between gap-3">
+                      <VirtualKeyValueCell
+                        id={key.id}
+                        tokenStart={key.tokenStart}
+                        canReveal={key.authorId === currentUserId}
+                      />
+                      {key.keyType !== "passthrough" && (
+                        <p className="min-w-0 shrink truncate text-right text-xs text-muted-foreground">
+                          {formatProviderKeySummary(
+                            key.providerApiKeys,
+                            providerCatalog.label,
+                          )}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </TableCard>
               ))}

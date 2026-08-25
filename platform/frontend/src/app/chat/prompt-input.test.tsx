@@ -850,7 +850,7 @@ describe("ArchestraPromptInput", () => {
   });
 
   describe("locked-chat composer", () => {
-    it("greys out (not hides) the attach button and shows the explainer drawer while the new-chat toggle is on", () => {
+    it("keeps the attach button usable and shows the explainer drawer while the new-chat toggle is on", () => {
       render(
         <ArchestraPromptInput
           {...defaultProps}
@@ -861,28 +861,20 @@ describe("ArchestraPromptInput", () => {
       );
 
       // The drawer carries the copy that used to live in the toggle tooltip.
+      // It says the chat is encrypted here, not that anything is unavailable.
       const notice = screen.getByTestId(E2eTestId.LockedChatNotice);
       expect(notice).toHaveTextContent(
         /Locked chat — encrypted with a key that stays in this browser/,
       );
 
-      // Attach affordance stays visible but disabled, with the reason on hover.
-      const disabledUpload = screen.getByTestId(
-        E2eTestId.ChatDisabledFileUploadButton,
-      );
-      expect(disabledUpload.querySelector("button")).toBeDisabled();
+      // Uploads work in a locked chat — the bytes are sealed under the chat's
+      // own key — so the attach button is the ordinary, usable one.
       expect(
-        screen.queryByTestId(E2eTestId.ChatFileUploadButton),
+        screen.getByTestId(E2eTestId.ChatFileUploadButton),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId(E2eTestId.ChatDisabledFileUploadButton),
       ).not.toBeInTheDocument();
-      expect(
-        screen
-          .getAllByTestId("tooltip-content")
-          .some((tooltip) =>
-            tooltip.textContent?.includes(
-              "Attachments are stored unencrypted, so locked chats can't use them",
-            ),
-          ),
-      ).toBe(true);
     });
 
     it("renders no drawer and a normal attach button when locked chat is off", () => {
@@ -903,7 +895,7 @@ describe("ArchestraPromptInput", () => {
       ).toBeInTheDocument();
     });
 
-    it("keeps the drawer and greyed-out attach button on an existing locked chat", () => {
+    it("keeps the drawer and a usable attach button on an existing locked chat", () => {
       mockConversationState.conversation = { lockedChat: true };
 
       render(
@@ -918,10 +910,10 @@ describe("ArchestraPromptInput", () => {
         screen.getByTestId(E2eTestId.LockedChatNotice),
       ).toBeInTheDocument();
       expect(
-        screen.getByTestId(E2eTestId.ChatDisabledFileUploadButton),
+        screen.getByTestId(E2eTestId.ChatFileUploadButton),
       ).toBeInTheDocument();
       expect(
-        screen.queryByTestId(E2eTestId.ChatFileUploadButton),
+        screen.queryByTestId(E2eTestId.ChatDisabledFileUploadButton),
       ).not.toBeInTheDocument();
     });
 

@@ -12,6 +12,42 @@ import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 type McpCatalogApiData =
   archestraApiTypes.CreateInternalMcpCatalogItemData["body"];
 
+/**
+ * The starting point for an OAuth section the user has not filled in yet.
+ * Credentials, endpoints and the Scopes field start blank, so
+ * `transformFormToApiData` sends exactly what is on screen rather than
+ * inventing values; the remaining fields carry the defaults a new entry wants
+ * anyway. Shared by the new-entry form and by external-catalog import, which
+ * must not drift apart.
+ */
+export function emptyOauthFormConfig(): NonNullable<
+  McpCatalogFormValues["oauthConfig"]
+> {
+  return {
+    client_id: "",
+    client_secret: "",
+    audience: "",
+    resource: "",
+    redirect_uris:
+      typeof window !== "undefined"
+        ? `${window.location.origin}/oauth-callback`
+        : "",
+    scopes: "",
+    // offline_access is a behavioral scope, not an API one: it is appended to
+    // a configured or discovered scope set so the provider returns a refresh
+    // token, and is dropped along with everything else when there is no such
+    // set to append it to.
+    additional_scopes: "offline_access",
+    supports_resource_metadata: true,
+    grantType: "authorization_code",
+    authServerUrl: "",
+    authorizationEndpoint: "",
+    wellKnownUrl: "",
+    resourceMetadataUrl: "",
+    tokenEndpoint: "",
+  };
+}
+
 // Transform function to convert form values to API format
 export function transformFormToApiData(
   values: McpCatalogFormValues,
@@ -85,12 +121,10 @@ export function transformFormToApiData(
           .split(",")
           .map((uri) => uri.trim())
           .filter((uri) => uri.length > 0);
-    const explicitScopes = values.oauthConfig.scopes?.trim() ?? "";
-    const parsedScopes = explicitScopes
+    const scopesList = (values.oauthConfig.scopes ?? "")
       .split(",")
       .map((scope) => scope.trim())
       .filter((scope) => scope.length > 0);
-    const scopesList = parsedScopes;
     const additionalScopesList = (values.oauthConfig.additional_scopes ?? "")
       .split(",")
       .map((scope) => scope.trim())
@@ -134,16 +168,14 @@ export function transformFormToApiData(
       //   2. If `scopes` is empty, backend tries .well-known discovery
       //      (oauth-protected-resource, then oauth-authorization-server).
       //   3. If discovery yields nothing, backend falls back to `default_scopes`.
-      // When the user configures explicit scopes, mirror them into default_scopes so
-      // the fallback matches intent. When the field is blank, keep the generic
-      // ["read","write"] fallback — some proxy MCP servers (e.g. Atlassian) accept
-      // those literal values and translate them to real provider scopes.
-      default_scopes:
-        scopesList.length > 0
-          ? scopesList
-          : isClientCredentials
-            ? []
-            : ["read", "write"],
+      // The Scopes field is the sole source of both, so a blank field stays
+      // blank the whole way down and the authorization request omits `scope`
+      // altogether — `scope` is optional, and a server that advertises nothing
+      // applies its own default set. Never synthesize scope values here: a
+      // server that wants literal values such as "read, write" (some proxy MCP
+      // servers translate those into real provider scopes) gets them by having
+      // them typed into the field, where they are visible and editable.
+      default_scopes: scopesList,
       supports_resource_metadata: values.oauthConfig.supports_resource_metadata,
       additional_scopes: isClientCredentials ? undefined : additionalScopesList,
     };
@@ -767,25 +799,7 @@ export function transformExternalCatalogToFormValues(
         includeBearerPrefix: config.valuePrefix === "Bearer ",
         sensitive: config.sensitive ?? false,
       })),
-    oauthConfig: oauthConfig ?? {
-      client_id: "",
-      client_secret: "",
-      audience: "",
-      resource: "",
-      redirect_uris:
-        typeof window !== "undefined"
-          ? `${window.location.origin}/oauth-callback`
-          : "",
-      scopes: "read, write",
-      additional_scopes: "offline_access",
-      supports_resource_metadata: true,
-      grantType: "authorization_code",
-      authServerUrl: "",
-      authorizationEndpoint: "",
-      wellKnownUrl: "",
-      resourceMetadataUrl: "",
-      tokenEndpoint: "",
-    },
+    oauthConfig: oauthConfig ?? emptyOauthFormConfig(),
     localConfig: localConfig ?? {
       command: "",
       arguments: "",

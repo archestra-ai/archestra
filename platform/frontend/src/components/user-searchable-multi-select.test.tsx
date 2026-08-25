@@ -426,17 +426,4 @@ describe("UserSearchableMultiSelect", () => {
     );
     expect(selectedButton).toHaveClass("bg-accent");
   });
-
-  it("applies custom className to combobox", () => {
-    render(
-      <UserSearchableMultiSelect
-        value={[]}
-        onValueChange={vi.fn()}
-        users={mockUsers}
-        className="my-custom-class"
-      />,
-    );
-
-    expect(screen.getByRole("combobox")).toHaveClass("my-custom-class");
-  });
 });

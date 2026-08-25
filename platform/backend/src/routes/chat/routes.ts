@@ -455,17 +455,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // one these surfaces deliberately fall back to redaction.
       const lockedChatAudit: LockedChatAuditContext | null =
         lockedChatKey && lockedChatKeyInfo?.hasEscrow ? lockedChatKey : null;
-      if (conversation.lockedChat) {
-        if (messagesHaveNewInlineAttachments(messages as ChatMessage[])) {
-          // Attachment bytes and previews are stored in plaintext
-          // (conversation_attachments, sandbox staging) — not offered.
-          throw new ApiError(
-            400,
-            "Attachments are not available in locked chats",
-          );
-        }
-      }
-
       // Gate uploaded attachments before any bytes are persisted: anything
       // within the attachment storage cap is accepted — a file the model can't
       // ingest, or one too big for the sandbox, still lands in the
@@ -617,6 +606,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           conversationId,
           organizationId,
           uploadedByUserId: user.id,
+          // Seals the bytes, filename and extracted text of a locked chat's
+          // uploads. `requireLockedChatKey` above already failed the turn if
+          // this chat is locked and the request carried no key, so a locked
+          // conversation never reaches here with null.
+          conversationKey: lockedChatKey,
         });
       } catch (error) {
         await activeChatRunService.markTerminal({
@@ -627,7 +621,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw error;
       }
 
-      if (turnHasNewAttachments) {
+      // A locked chat's uploads are never staged into the sandbox: staging
+      // writes the opened bytes into the sandbox replay log
+      // (`skill_sandbox_files`), which is stored in plaintext and outside the
+      // conversation key — the one copy of the file that a database dump could
+      // read. They stay in the (sealed) attachment row and travel to the model
+      // inline, which is exactly the path the locked-chat guarantee covers.
+      if (turnHasNewAttachments && !conversation.lockedChat) {
         // Upload-time staging: a file the model can't take must already be on
         // the sandbox filesystem when the pointer notice reaches the model,
         // not parked until the first sandbox op. Fire-and-forget — op-time
@@ -1243,6 +1243,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     // LockedChat: never generate/persist a compaction summary.
                     disableCompaction: conversation.lockedChat,
                     anthropicNativeEndpoint,
+                    // Opens this chat's sealed attachment rows so their bytes
+                    // can be inlined for the provider.
+                    conversationKey: lockedChatKey,
                   });
 
                 // Per-category breakdown of the assembled request, powering
@@ -2480,7 +2483,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(ConversationFilesResponseSchema),
       },
     },
-    async ({ params: { id }, user, organizationId }, reply) => {
+    async (request, reply) => {
+      const {
+        params: { id },
+        user,
+        organizationId,
+      } = request;
       const conversation = await findReadableConversationById({
         conversationId: id,
         userId: user.id,
@@ -2490,11 +2498,24 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
+      // Listing a locked chat's files works with or without the key: without
+      // it the panel still shows that files exist (and their type and date),
+      // which is the same tombstone posture the transcript takes.
+      const access = resolveLockedChatAccess({
+        request,
+        conversation: (await ConversationModel.getLockedChatKeyInfo(id)) ?? {
+          id,
+          lockedChat: conversation.lockedChat,
+          lockedChatDekFingerprint: null,
+        },
+      });
+
       return reply.send(
         await conversationFilesService.list({
           conversationId: id,
           organizationId,
           requestingUserId: user.id,
+          conversationKey: access.state === "unlocked" ? access.key : null,
         }),
       );
     },
@@ -2512,7 +2533,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: ErrorResponsesSchema,
       },
     },
-    async ({ params: { id }, user, organizationId }, reply) => {
+    async (request, reply) => {
+      const {
+        params: { id },
+        user,
+        organizationId,
+      } = request;
       // Fetch metadata first (no fileData) so unauthorized requests don't
       // trigger a large bytea read before the 403. Only load the blob once
       // org + per-conversation access has been confirmed.
@@ -2536,7 +2562,27 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(403, "No access to the owning conversation");
       }
 
-      const attachment = await ConversationAttachmentModel.findByIdWithData(id);
+      // In a locked chat the bytes and the filename are sealed under the key
+      // this browser holds, so serving them needs it on the request. A reader
+      // without it (another member reaching the chat through the project) gets
+      // a 400 naming the header rather than a body of ciphertext.
+      const attachmentKey = meta.lockedChat
+        ? requireLockedChatKey({
+            request,
+            conversation: (await ConversationModel.getLockedChatKeyInfo(
+              meta.conversationId,
+            )) ?? {
+              id: meta.conversationId,
+              lockedChat: true,
+              lockedChatDekFingerprint: null,
+            },
+          })
+        : null;
+
+      const attachment = await ConversationAttachmentModel.findByIdWithData(
+        id,
+        attachmentKey,
+      );
       if (!attachment) {
         // Soft-deleted between the metadata check and the blob fetch.
         throw new ApiError(404, "Attachment not found");
@@ -2563,7 +2609,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           safeMime === "application/pdf"
             ? "frame-ancestors 'self'"
             : "default-src 'none'; sandbox",
-        "Cache-Control": "private, max-age=3600",
+        // A locked chat's bytes are opened only for this response, so they must
+        // not be written to the browser's on-disk HTTP cache: that copy is
+        // plaintext, outlives the tab, and is not reachable by the key —
+        // precisely the at-rest copy the chat exists to avoid. Everything else
+        // keeps the shared cache window.
+        "Cache-Control": meta.lockedChat ? "no-store" : "private, max-age=3600",
         "Content-Length": String(attachment.fileSize),
       });
       reply.raw.end(attachment.fileData);
@@ -2735,8 +2786,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         user,
         organizationId,
       } = request;
-      // Locked chats never belong to a project (project sharing would leak
-      // the conversation's existence and future features could leak content).
+      // Locked chats stay out of projects: a project lists its chats to
+      // everyone it is shared with, so a locked one would sit in a shared
+      // space advertising a conversation none of them can open.
       if (lockedChat && projectId) {
         throw new ApiError(400, "Locked chats cannot be created in a project");
       }

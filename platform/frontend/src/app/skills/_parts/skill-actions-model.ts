@@ -1,6 +1,6 @@
 import type { Permissions } from "@archestra/shared";
 import { ACTION_LABEL } from "@/lib/design/resource-lexicon";
-import { skillEditHref } from "./skill-page-config";
+import { skillEditHref, skillUsageHref } from "./skill-page-config";
 
 export type SkillActionId = "chat" | "edit" | "usage" | "history" | "delete";
 
@@ -30,6 +30,7 @@ export function getSkillActionModel(skillId: string): SkillActionDefinition[] {
       id: "usage",
       label: "Usage",
       permissions: { skill: ["read"] },
+      href: skillUsageHref(skillId),
     },
     {
       id: "history",

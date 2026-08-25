@@ -48,8 +48,11 @@ import {
 } from "./auto-provision";
 import {
   applyChannelGate,
+  isChannelAnswerAllEnabled,
+  isChannelThreadActive,
+  isChannelThreadMuted,
   isMuteReaction,
-  muteChannelThread,
+  muteChannelThreadAndNotify,
 } from "./channel-activation";
 import {
   buildThreadMutedNotice,
@@ -291,10 +294,10 @@ class SlackProvider implements ChatOpsProvider {
 
     const event = body.event;
 
-    // Reaction-based mute: reacting with 🔇/🤫 on one of the bot's OWN channel
-    // replies mutes that thread. Pure side effect — never forwarded to the agent.
+    // Reaction-based mute: a 🔇/🤫 reaction on any message in a channel thread
+    // mutes that thread. Pure side effect — never forwarded to the agent.
     if (event.type === "reaction_added") {
-      await this.handleMuteReaction(event);
+      await this.handleMuteReaction(event, body.team_id ?? null);
       return null;
     }
 
@@ -1470,35 +1473,59 @@ class SlackProvider implements ChatOpsProvider {
   // ===========================================================================
 
   /**
-   * Mute a channel thread, confirming ONLY on a real active→muted transition.
-   * Redelivered events / repeat mutes find the key already gone and stay silent.
+   * Mute a channel thread, confirming only when the mute changed something —
+   * a cleared activation, or a first mute in an answer-all channel (see
+   * muteChannelThreadAndNotify). Redelivered events and repeat mutes find the
+   * state already set and stay silent, so no duplicate "muted" notices.
    */
   private async muteThreadAndNotify(
     channelId: string,
     threadTs: string,
+    workspaceId: string | null,
   ): Promise<boolean> {
-    const wasActive = await muteChannelThread({
+    return await muteChannelThreadAndNotify({
       provider: this.providerId,
       channelId,
       threadId: threadTs,
+      resolveAnswerAll: () =>
+        isChannelAnswerAllEnabled({
+          provider: this.providerId,
+          channelId,
+          workspaceId,
+        }),
+      postMutedNotice: () => this.postThreadMutedNotice(channelId, threadTs),
     });
-    if (wasActive) {
-      await this.postThreadMutedNotice(channelId, threadTs);
-    }
-    return wasActive;
   }
 
   /**
-   * Mute a thread when a 🔇/🤫 reaction lands on one of the bot's OWN channel
-   * messages. Slack reaction events carry only the reacted message's ts, not its
-   * thread_ts, so we resolve the thread root (the activation key) via the API.
+   * Mute a thread when a 🔇/🤫 reaction lands on a message in a channel.
+   *
+   * The reaction says something about the THREAD, not about the message that
+   * happens to carry it, so it is honored wherever it lands — on one of the
+   * bot's replies, on a teammate's message, or on the message that started the
+   * thread. The previous `item_user === botUserId` gate dropped it in two very
+   * ordinary situations: `item_user` is optional on `reaction_added` and Slack
+   * does not populate it for every app-authored message, and reacting on the
+   * thread root (the message at the top, and the obvious thing to react to) was
+   * never the bot's own message to begin with. Both failed silently.
+   *
+   * Reacting where the bot was never engaged costs nothing: muting is
+   * idempotent, and muteThreadAndNotify stays quiet unless the mute actually
+   * changed something.
+   *
+   * Slack reaction events carry only the reacted message's ts, not its
+   * thread_ts, so the thread root (the activation key) is resolved separately.
    */
-  private async handleMuteReaction(event: SlackReactionEvent): Promise<void> {
+  private async handleMuteReaction(
+    event: SlackReactionEvent,
+    teamId: string | null,
+  ): Promise<void> {
     if (
-      !this.botUserId ||
       event.item?.type !== "message" ||
-      event.item_user !== this.botUserId ||
-      !isMuteReaction(event.reaction ?? "")
+      !isMuteReaction(event.reaction ?? "") ||
+      // The bot has no reason to mute itself, and reacting to its own replies
+      // is how an echo would start.
+      (this.botUserId !== null && event.user === this.botUserId)
     ) {
       return;
     }
@@ -1508,7 +1535,11 @@ class SlackProvider implements ChatOpsProvider {
 
     const threadTs = await this.resolveThreadRoot(channelId, event.item.ts);
     if (!threadTs) return; // couldn't resolve — never claim a false "muted"
-    await this.muteThreadAndNotify(channelId, threadTs);
+    // Bindings (and so the answer-all setting) are keyed on the workspace id
+    // the message path stores, which is the event envelope's team_id; fall back
+    // to the authenticated workspace when an envelope omits it, or the lookup
+    // would miss and an answer-all mute would go unconfirmed again.
+    await this.muteThreadAndNotify(channelId, threadTs, teamId ?? this.teamId);
   }
 
   /**
@@ -1516,11 +1547,18 @@ class SlackProvider implements ChatOpsProvider {
    * key was written with. conversations.replies returns the thread's parent as
    * messages[0]; its ts (or thread_ts) is the root. Returns null on failure so
    * callers don't post a false confirmation.
+   *
+   * A thread we already track under this exact ts is its own root, so that case
+   * is answered from the cache: it is the likeliest target of a mute reaction
+   * (the message that started the thread), it saves an API round trip, and it
+   * keeps the mute working when that call would have failed — a transient
+   * conversations.replies error used to discard the mute outright.
    */
   private async resolveThreadRoot(
     channelId: string,
     ts: string,
   ): Promise<string | null> {
+    if (await this.isTrackedThreadRoot(channelId, ts)) return ts;
     if (!this.client) return null;
     try {
       const result = await this.client.conversations.replies({
@@ -1540,6 +1578,30 @@ class SlackProvider implements ChatOpsProvider {
         "[SlackProvider] Failed to resolve thread root for mute reaction",
       );
       return null;
+    }
+  }
+
+  /**
+   * Whether we already hold sticky-auto-reply state for this exact
+   * channel+thread key — which only ever holds for a thread ROOT, since every
+   * key is written from a message's `thread_ts || ts`. A reply's own ts can
+   * never collide with it, so a hit is proof, not a guess.
+   *
+   * Purely an optimization on top of the API lookup, so a cache failure falls
+   * through to it rather than propagating.
+   */
+  private async isTrackedThreadRoot(
+    channelId: string,
+    threadId: string,
+  ): Promise<boolean> {
+    const activation = { provider: this.providerId, channelId, threadId };
+    try {
+      return (
+        (await isChannelThreadActive(activation)) ||
+        (await isChannelThreadMuted(activation))
+      );
+    } catch {
+      return false;
     }
   }
 
@@ -2495,7 +2557,6 @@ interface SlackEventPayload {
     // reaction_added fields (channel/ts live under `item`, not at the top level)
     reaction?: string;
     item?: { type?: string; channel: string; ts: string };
-    item_user?: string;
   };
   challenge?: string;
 }

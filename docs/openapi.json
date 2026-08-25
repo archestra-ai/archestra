@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.3.42"
+    "version": "1.3.44"
   },
   "components": {
     "schemas": {
@@ -130701,6 +130701,14 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "user",
+                              "service_account",
+                              "unattributed"
+                            ]
+                          },
                           "total": {
                             "type": "number"
                           }
@@ -130708,6 +130716,7 @@
                         "required": [
                           "userId",
                           "name",
+                          "kind",
                           "total"
                         ],
                         "additionalProperties": false
@@ -337413,6 +337422,14 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "user",
+                              "service_account",
+                              "unattributed"
+                            ]
+                          },
                           "total": {
                             "type": "number"
                           }
@@ -337420,6 +337437,7 @@
                         "required": [
                           "userId",
                           "name",
+                          "kind",
                           "total"
                         ],
                         "additionalProperties": false
@@ -366340,7 +366358,7 @@
         "tags": [
           "Identity Providers"
         ],
-        "description": "Get all identity providers with full configuration (admin only)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`identityProvider:read`: View identity provider configurations (SSO)",
+        "description": "Get all identity providers with configuration (admin only, secrets redacted)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`identityProvider:read`: View identity provider configurations (SSO)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -366494,7 +366512,6 @@
                           "issuer",
                           "pkce",
                           "clientId",
-                          "clientSecret",
                           "discoveryEndpoint"
                         ],
                         "additionalProperties": false,
@@ -366735,6 +366752,27 @@
                       },
                       "ssoLoginEnabled": {
                         "type": "boolean"
+                      },
+                      "configuredSecretPaths": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "oidcConfig.clientSecret",
+                            "oidcConfig.enterpriseManagedCredentials.clientSecret",
+                            "oidcConfig.enterpriseManagedCredentials.privateKeyPem",
+                            "samlConfig.privateKey",
+                            "samlConfig.decryptionPvk",
+                            "samlConfig.spMetadata.privateKey",
+                            "samlConfig.spMetadata.privateKeyPass",
+                            "samlConfig.spMetadata.encPrivateKey",
+                            "samlConfig.spMetadata.encPrivateKeyPass",
+                            "samlConfig.idpMetadata.privateKey",
+                            "samlConfig.idpMetadata.privateKeyPass",
+                            "samlConfig.idpMetadata.encPrivateKey",
+                            "samlConfig.idpMetadata.encPrivateKeyPass"
+                          ]
+                        }
                       }
                     },
                     "required": [
@@ -366745,7 +366783,8 @@
                       "organizationId",
                       "domain",
                       "domainVerified",
-                      "ssoLoginEnabled"
+                      "ssoLoginEnabled",
+                      "configuredSecretPaths"
                     ],
                     "additionalProperties": false
                   }
@@ -366994,7 +367033,7 @@
         "tags": [
           "Identity Providers"
         ],
-        "description": "Create a new identity provider\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`identityProvider:create`: Set up new identity providers",
+        "description": "Create a new identity provider (secrets redacted)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`identityProvider:create`: Set up new identity providers",
         "requestBody": {
           "required": true,
           "content": {
@@ -367530,7 +367569,6 @@
                         "issuer",
                         "pkce",
                         "clientId",
-                        "clientSecret",
                         "discoveryEndpoint"
                       ],
                       "additionalProperties": false,
@@ -367771,6 +367809,27 @@
                     },
                     "ssoLoginEnabled": {
                       "type": "boolean"
+                    },
+                    "configuredSecretPaths": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "oidcConfig.clientSecret",
+                          "oidcConfig.enterpriseManagedCredentials.clientSecret",
+                          "oidcConfig.enterpriseManagedCredentials.privateKeyPem",
+                          "samlConfig.privateKey",
+                          "samlConfig.decryptionPvk",
+                          "samlConfig.spMetadata.privateKey",
+                          "samlConfig.spMetadata.privateKeyPass",
+                          "samlConfig.spMetadata.encPrivateKey",
+                          "samlConfig.spMetadata.encPrivateKeyPass",
+                          "samlConfig.idpMetadata.privateKey",
+                          "samlConfig.idpMetadata.privateKeyPass",
+                          "samlConfig.idpMetadata.encPrivateKey",
+                          "samlConfig.idpMetadata.encPrivateKeyPass"
+                        ]
+                      }
                     }
                   },
                   "required": [
@@ -367781,7 +367840,8 @@
                     "organizationId",
                     "domain",
                     "domainVerified",
-                    "ssoLoginEnabled"
+                    "ssoLoginEnabled",
+                    "configuredSecretPaths"
                   ],
                   "additionalProperties": false
                 }
@@ -369147,7 +369207,7 @@
         "tags": [
           "Identity Providers"
         ],
-        "description": "Get identity provider by ID\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`identityProvider:read`: View identity provider configurations (SSO)",
+        "description": "Get identity provider by ID (secrets redacted)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`identityProvider:read`: View identity provider configurations (SSO)",
         "parameters": [
           {
             "schema": {
@@ -369309,7 +369369,6 @@
                         "issuer",
                         "pkce",
                         "clientId",
-                        "clientSecret",
                         "discoveryEndpoint"
                       ],
                       "additionalProperties": false,
@@ -369550,6 +369609,27 @@
                     },
                     "ssoLoginEnabled": {
                       "type": "boolean"
+                    },
+                    "configuredSecretPaths": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "oidcConfig.clientSecret",
+                          "oidcConfig.enterpriseManagedCredentials.clientSecret",
+                          "oidcConfig.enterpriseManagedCredentials.privateKeyPem",
+                          "samlConfig.privateKey",
+                          "samlConfig.decryptionPvk",
+                          "samlConfig.spMetadata.privateKey",
+                          "samlConfig.spMetadata.privateKeyPass",
+                          "samlConfig.spMetadata.encPrivateKey",
+                          "samlConfig.spMetadata.encPrivateKeyPass",
+                          "samlConfig.idpMetadata.privateKey",
+                          "samlConfig.idpMetadata.privateKeyPass",
+                          "samlConfig.idpMetadata.encPrivateKey",
+                          "samlConfig.idpMetadata.encPrivateKeyPass"
+                        ]
+                      }
                     }
                   },
                   "required": [
@@ -369560,7 +369640,8 @@
                     "organizationId",
                     "domain",
                     "domainVerified",
-                    "ssoLoginEnabled"
+                    "ssoLoginEnabled",
+                    "configuredSecretPaths"
                   ],
                   "additionalProperties": false
                 }
@@ -369808,7 +369889,7 @@
         "tags": [
           "Identity Providers"
         ],
-        "description": "Update identity provider\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`identityProvider:update`: Modify identity provider settings",
+        "description": "Update identity provider (secrets redacted)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`identityProvider:update`: Modify identity provider settings",
         "requestBody": {
           "required": true,
           "content": {
@@ -369954,7 +370035,6 @@
                       "issuer",
                       "pkce",
                       "clientId",
-                      "clientSecret",
                       "discoveryEndpoint"
                     ],
                     "description": "https://github.com/better-auth/better-auth/blob/v1.4.0/packages/sso/src/types.ts#L22"
@@ -370345,7 +370425,6 @@
                         "issuer",
                         "pkce",
                         "clientId",
-                        "clientSecret",
                         "discoveryEndpoint"
                       ],
                       "additionalProperties": false,
@@ -370586,6 +370665,27 @@
                     },
                     "ssoLoginEnabled": {
                       "type": "boolean"
+                    },
+                    "configuredSecretPaths": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "oidcConfig.clientSecret",
+                          "oidcConfig.enterpriseManagedCredentials.clientSecret",
+                          "oidcConfig.enterpriseManagedCredentials.privateKeyPem",
+                          "samlConfig.privateKey",
+                          "samlConfig.decryptionPvk",
+                          "samlConfig.spMetadata.privateKey",
+                          "samlConfig.spMetadata.privateKeyPass",
+                          "samlConfig.spMetadata.encPrivateKey",
+                          "samlConfig.spMetadata.encPrivateKeyPass",
+                          "samlConfig.idpMetadata.privateKey",
+                          "samlConfig.idpMetadata.privateKeyPass",
+                          "samlConfig.idpMetadata.encPrivateKey",
+                          "samlConfig.idpMetadata.encPrivateKeyPass"
+                        ]
+                      }
                     }
                   },
                   "required": [
@@ -370596,7 +370696,8 @@
                     "organizationId",
                     "domain",
                     "domainVerified",
-                    "ssoLoginEnabled"
+                    "ssoLoginEnabled",
+                    "configuredSecretPaths"
                   ],
                   "additionalProperties": false
                 }

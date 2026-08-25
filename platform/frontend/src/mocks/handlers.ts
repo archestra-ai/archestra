@@ -39,10 +39,16 @@ import {
   shareableSkillIds,
 } from "./data/skill-share";
 import {
+  skillUsageStatisticsEmptySeed,
+  skillUsageStatisticsQuietSeed,
+  skillUsageStatisticsSeed,
+} from "./data/skill-usage";
+import {
   catalogSkillSeed,
   githubDiscoverSeed,
   githubPreviewSeed,
   makeImportedSkill,
+  makeSkillDetail,
   skillCatalogSearchSeed,
   skillsListSeed,
 } from "./data/skills";
@@ -274,6 +280,22 @@ export const handlers: HttpHandler[] = [
 
   // Skills (list page, the "new skill" chooser, and the GitHub import dialog)
   ...getJson("/api/skills", skillsListSeed),
+  ...paths("/api/skills/:id").map((url) =>
+    http.get(url, ({ params }) =>
+      HttpResponse.json(makeSkillDetail(String(params.id))),
+    ),
+  ),
+  // Usage analytics per skill. Which seed answers depends on the skill, so the
+  // Usage tab can be seen in all three of its states — a crowded skill worth
+  // searching, a quiet one, and one nobody has run.
+  ...paths("/api/skills/:id/usage-statistics").map((url) =>
+    http.get(url, ({ params }) =>
+      HttpResponse.json(
+        USAGE_STATISTICS_BY_SKILL[String(params.id)] ??
+          skillUsageStatisticsSeed,
+      ),
+    ),
+  ),
   ...getJson("/api/skills/source-repos", { repos: [] }),
   ...getJson("/api/skills/catalog/search", skillCatalogSearchSeed),
   ...postJson("/api/skills/github/discover", githubDiscoverSeed),
@@ -388,3 +410,12 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/connectors", []),
   ...getJson("/api/identity-providers", []),
 ];
+
+const USAGE_STATISTICS_BY_SKILL: Record<
+  string,
+  typeof skillUsageStatisticsSeed
+> = {
+  "skill-jira-task": skillUsageStatisticsSeed,
+  "skill-release-checklist": skillUsageStatisticsQuietSeed,
+  "skill-incident-postmortem": skillUsageStatisticsEmptySeed,
+};

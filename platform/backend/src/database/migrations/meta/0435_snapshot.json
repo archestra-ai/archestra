@@ -1,5 +1,5 @@
 {
-  "id": "eab464ea-ad6b-46c4-bde4-f92e1dd5bb34",
+  "id": "dfdbc2a9-23d8-4b8f-9680-ee68e99472d5",
   "prevId": "ae895c0d-cb90-4d95-ae6e-19edc508a046",
   "version": "7",
   "dialect": "postgresql",
@@ -2417,22 +2417,6 @@
           ],
           "isUnique": true,
           "where": "\"agents\".\"agent_type\" = 'llm_proxy' AND \"agents\".\"is_personal_proxy\" = true AND \"agents\".\"deleted_at\" IS NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "agents_org_default_llm_proxy_idx": {
-          "name": "agents_org_default_llm_proxy_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"agents\".\"agent_type\" = 'llm_proxy' AND \"agents\".\"is_default\" = true AND \"agents\".\"deleted_at\" IS NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -5747,6 +5731,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "locked_chat": {
+          "name": "locked_chat",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "text_preview_status": {
           "name": "text_preview_status",

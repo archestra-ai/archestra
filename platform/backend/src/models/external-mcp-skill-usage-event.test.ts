@@ -5,8 +5,10 @@ import { drainBackgroundWork } from "@/utils/background-work";
 describe("ExternalMcpSkillUsageEventModel", () => {
   test("aggregates uses by installation and URI with distinct attributed users", async ({
     makeMcpServer,
+    makeOrganization,
     makeUser,
   }) => {
+    const organization = await makeOrganization();
     const firstServer = await makeMcpServer();
     const secondServer = await makeMcpServer();
     const firstUser = await makeUser();
@@ -66,14 +68,20 @@ describe("ExternalMcpSkillUsageEventModel", () => {
       {
         mcpServerId: firstServer.id,
         uri: primaryUri,
+        organizationId: organization.id,
         since: new Date(Date.now() - 60 * 60 * 1000),
       },
     );
     expect(statistics.users).toEqual(
       expect.arrayContaining([
-        { userId: firstUser.id, name: firstUser.name, total: 2 },
-        { userId: secondUser.id, name: secondUser.name, total: 1 },
-        { userId: null, name: null, total: 1 },
+        { userId: firstUser.id, name: firstUser.name, kind: "user", total: 2 },
+        {
+          userId: secondUser.id,
+          name: secondUser.name,
+          kind: "user",
+          total: 1,
+        },
+        { userId: null, name: null, kind: "unattributed", total: 1 },
       ]),
     );
     expect(

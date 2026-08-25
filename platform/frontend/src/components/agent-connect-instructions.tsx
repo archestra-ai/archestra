@@ -36,9 +36,9 @@ type ConnectTarget = {
 };
 
 /**
- * Where the "Open the Connect page" link says it came from. Both values
- * pre-select the entity on /connection; the create flow announces itself so
- * the guide can keep doing so if the two ever diverge.
+ * Where the guided-setup link says it came from. Both values pre-select the
+ * entity on /connection; the create flow announces itself so the guide can
+ * keep doing so if the two ever diverge.
  */
 export type ConnectInstructionsOrigin = "table" | "create";
 
@@ -203,13 +203,22 @@ function AuthFacts({ rows }: { rows: Array<[string, string]> }) {
   );
 }
 
+/**
+ * The way out to the guided per-client setup at /connection.
+ *
+ * It used to read "Need setup steps for your app? Open the Connect page.",
+ * printed under a section this page headed "Connect" — so the reader was
+ * offered a Connect page while apparently already on one, and "your app"
+ * named neither the client being configured nor an Archestra app. Name the
+ * destination by what it does instead.
+ */
 function ConnectionGuideFooter({ href }: { href: string }) {
   return (
     <p className="text-xs text-muted-foreground">
-      Need setup steps for your app?{" "}
       <Link href={href} className="text-primary hover:underline">
-        Open the Connect page.
-      </Link>
+        Set up a client step by step
+      </Link>{" "}
+      — choose your client and copy its ready-made configuration.
     </p>
   );
 }

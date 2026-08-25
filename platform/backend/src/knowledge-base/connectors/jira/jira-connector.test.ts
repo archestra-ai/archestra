@@ -1116,10 +1116,6 @@ describe("JiraConnector", () => {
       }),
     };
 
-    test("supportsPermissionSync is true", () => {
-      expect(connector.supportsPermissionSync).toBe(true);
-    });
-
     test("snapshot enumeration sends well-formed JQL (WHERE clauses before ORDER BY)", async () => {
       // Regression: the per-project clause was once appended AFTER buildJql's
       // `ORDER BY updated ASC` suffix — Jira 400s every snapshot request and

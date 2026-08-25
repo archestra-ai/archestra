@@ -434,59 +434,12 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
       expect(interaction.authMethod).toBe("virtual_key");
     });
 
-    test.skip("non-streaming request increments token metrics", async () => {
-      // SKIPPED: Mock clients don't use getObservableFetch(), so token metrics
-      // are not reported in mock mode. To properly test this, we need to either:
-      // 1. Mock globalThis.fetch so getObservableFetch wraps it and reports tokens
-      // 2. Modify mock clients to accept and call an observable fetch
-      // See TODO in llm-proxy-handler.ts handleNonStreaming()
-      const response = await app.inject({
-        method: "POST",
-        url: `/v1/openai/${testAgent.id}/chat/completions`,
-        headers: {
-          "content-type": "application/json",
-          authorization: "Bearer test-key",
-          "user-agent": "test-client",
-        },
-        payload: {
-          model: "gpt-4o",
-          messages: [{ role: "user", content: "Hello!" }],
-          stream: false,
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-
-      // Wait for async processing
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      // Verify token metrics (input: 82, output: 17 from the non-streaming test stub)
-      expect(counterInc).toHaveBeenCalledWith(
-        expect.objectContaining({
-          labels: expect.objectContaining({
-            provider: "openai",
-            type: "input",
-            model: "gpt-4o",
-            agent_id: testAgent.id,
-            agent_name: testAgent.name,
-          }),
-          value: 82,
-        }),
-      );
-
-      expect(counterInc).toHaveBeenCalledWith(
-        expect.objectContaining({
-          labels: expect.objectContaining({
-            provider: "openai",
-            type: "output",
-            model: "gpt-4o",
-            agent_id: testAgent.id,
-            agent_name: testAgent.name,
-          }),
-          value: 17,
-        }),
-      );
-    });
+    // Not covered here: non-streaming token metrics. The mock LLM clients do
+    // not route through getObservableFetch(), so no token counters are
+    // reported in mock mode. Covering it needs either a stubbed
+    // globalThis.fetch that getObservableFetch can wrap, or mock clients that
+    // accept an observable fetch — see the TODO in
+    // llm-proxy-handler.ts handleNonStreaming().
 
     test("streaming failure before any usage persists an error interaction", async () => {
       // A provider 400 (e.g. context length exceeded) rejects the stream before

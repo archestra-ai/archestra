@@ -698,7 +698,7 @@ export function AuditLogTable() {
         isLoading={isFetching}
         hasActiveFilters={hasFilters}
         emptyMessage="No audit events recorded yet. Administrative actions will appear here as they happen."
-        filteredEmptyMessage="No audit events match your filters. Try adjusting your search."
+        filteredEmptyMessage="No audit events match your filters"
         onClearFilters={clearFilters}
         onRowClick={(row) => openEventDialog(row as AuditLog)}
       />

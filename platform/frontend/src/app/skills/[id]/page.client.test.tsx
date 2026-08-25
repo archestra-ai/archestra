@@ -15,8 +15,8 @@ vi.mock("@/lib/skills/skill.query", () => ({
 vi.mock("../_parts/skill-version-history-dialog", () => ({
   SkillVersionHistoryDialog: () => null,
 }));
-vi.mock("../_parts/skill-usage-dialog", () => ({
-  SkillUsageDialog: () => null,
+vi.mock("../_parts/skill-usage-panel", () => ({
+  SkillUsagePanel: () => null,
 }));
 vi.mock("../_parts/delete-skill-dialog", () => ({
   DeleteSkillDialog: () => null,
@@ -106,8 +106,7 @@ describe("SkillDetailPage", () => {
     mockSkill();
   });
 
-  it("keeps content primary and reveals access/source facts from a collapsed Overview", async () => {
-    const user = userEvent.setup();
+  it("keeps content primary and states the access/source facts without a click", () => {
     render(<SkillDetailPage id="skill-1" />);
 
     expect(
@@ -125,19 +124,16 @@ describe("SkillDetailPage", () => {
     // No save anywhere: editing goes through the wizard.
     expect(screen.queryByRole("button", { name: /save/i })).toBeNull();
 
-    const overview = screen.getByRole("button", { name: "Overview" });
-    expect(overview).toHaveAttribute("aria-expanded", "false");
-    expect(
-      screen.queryByRole("heading", { name: "Access and source" }),
-    ).toBeNull();
-
-    await user.click(overview);
-    expect(overview).toHaveAttribute("aria-expanded", "true");
-    const access = section("Access and source");
-    expect(access.getByText("All environments")).toBeInTheDocument();
+    // No click to read the facts, and no second copy of the form under them:
+    // the way to the rest of the record is one link, where Edit goes.
+    const overview = section("Overview");
+    expect(overview.getByText("All environments")).toBeInTheDocument();
     expect(screen.queryByText("Accessible to")).toBeNull();
-    expect(access.getByText("Written in Archestra")).toBeInTheDocument();
-    expect(access.getByText("v7")).toBeInTheDocument();
+    expect(overview.getByText("Written in Archestra")).toBeInTheDocument();
+    expect(overview.getByText("v7")).toBeInTheDocument();
+    expect(
+      overview.getByRole("link", { name: /Configuration/ }),
+    ).toHaveAttribute("href", "/skills/skill-1/edit");
     expect(screen.queryByRole("heading", { name: "Details" })).toBeNull();
     expect(screen.queryByText("skill-1")).toBeNull();
   });
@@ -162,10 +158,11 @@ describe("SkillDetailPage", () => {
     } as any);
     render(<SkillDetailPage id="skill-1" />);
     expect(screen.queryByRole("link", { name: /^Edit\b/ })).toBeNull();
+    // Including the Overview's own way in, which would answer 403.
+    expect(screen.queryByRole("link", { name: /Configuration/ })).toBeNull();
   });
 
-  it("says where a synced skill's content comes from and how it keeps up", async () => {
-    const user = userEvent.setup();
+  it("says where a synced skill's content comes from and how it keeps up", () => {
     mockSkill({
       sourceType: "github",
       sourceRef: "acme/skills@main",
@@ -176,7 +173,6 @@ describe("SkillDetailPage", () => {
     render(<SkillDetailPage id="skill-1" />);
 
     expect(screen.getByText("Synced from GitHub")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Overview" }));
     expect(screen.getByRole("link", { name: /acme\/skills/ })).toHaveAttribute(
       "href",
       "https://github.com/acme/skills/tree/main",

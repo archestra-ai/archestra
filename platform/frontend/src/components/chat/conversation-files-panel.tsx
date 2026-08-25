@@ -14,6 +14,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { AttachmentLink } from "@/components/chat/attachment-content";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import { FileDetailHeader } from "@/components/chat/file-detail-header";
 import { FilePreview } from "@/components/chat/file-preview";
@@ -27,6 +28,7 @@ import { SelectableFileList } from "@/components/chat/selectable-file-list";
 import { FileDropZone } from "@/components/files/file-drop-zone";
 import {
   useBulkDeleteConversationFiles,
+  useConversation,
   useConversationFiles,
   useDeleteConversationFile,
 } from "@/lib/chat/chat.query";
@@ -36,6 +38,7 @@ import {
   type ConversationFileItem,
   persistentFilesSection,
 } from "@/lib/chat/conversation-files";
+import { isActionAvailableForConversation } from "@/lib/chat/locked-chat";
 import { printMarkdownElementAsPdf } from "@/lib/chat/print-markdown";
 import { useFileDeletion } from "@/lib/chat/use-file-deletion";
 import { copyToClipboard } from "@/lib/clipboard";
@@ -60,6 +63,11 @@ export function ConversationFilesPanel({
   onClose,
 }: ConversationFilesPanelProps) {
   const { data: files } = useConversationFiles(conversationId);
+  const { data: conversation } = useConversation(conversationId);
+  const isSavingToKnowledgeAvailable = isActionAvailableForConversation(
+    conversation,
+    "saveToKnowledge",
+  );
   const { data: project } = useProject(projectId ?? undefined);
   // A project chat's files belong to the project, so dropping onto this panel
   // uploads to the project (same destination as the project page). Non-project
@@ -284,14 +292,23 @@ export function ConversationFilesPanel({
             { ...ATTACHMENTS_SECTION, items: attachments },
           ]}
           canManage={canManageFiles}
+          conversationId={conversationId}
           selectedId={selectedId}
           onOpen={openFile}
           onRequestDelete={requestDelete}
-          onRequestSaveToKnowledge={setSavingToKnowledge}
+          // Withheld entirely in a locked chat: the backend refuses to copy its
+          // attachments into a repository, since that would write a plaintext
+          // copy others can read. Offering the action would only produce an
+          // error the user cannot act on.
+          onRequestSaveToKnowledge={
+            isSavingToKnowledgeAvailable ? setSavingToKnowledge : undefined
+          }
           // Attachments only: generated outputs and project files are already
           // persisted outside this conversation, so copying them would just
           // make a second, diverging copy.
-          canSaveToKnowledge={(item) => item.source === "attachment"}
+          canSaveToKnowledge={(item) =>
+            isSavingToKnowledgeAvailable && item.source === "attachment"
+          }
           leading={
             showInstructions ? (
               <InstructionsRow
@@ -340,15 +357,15 @@ export function ConversationFilesPanel({
             selected && (
               <div className="flex shrink-0 items-center">
                 {selected.contentUrl && (
-                  <a
-                    href={selected.contentUrl}
+                  <AttachmentLink
+                    url={selected.contentUrl}
+                    conversationId={conversationId}
                     download={selected.name}
-                    title={`Download ${selected.name}`}
                     className="flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
                   >
                     <Download className="h-4 w-4" />
                     <span className="sr-only">Download {selected.name}</span>
-                  </a>
+                  </AttachmentLink>
                 )}
                 {selectedEditable && !editing && (
                   <button
@@ -416,6 +433,7 @@ export function ConversationFilesPanel({
           fileId={selected.id}
           editing={editing && selectedEditable}
           onExitEdit={() => setEditing(false)}
+          conversationId={conversationId}
         />
       )}
 

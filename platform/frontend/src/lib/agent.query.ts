@@ -9,6 +9,7 @@ import {
 import { toBulkOutcome } from "@/lib/bulk-action";
 import { incomingEmailKeys } from "@/lib/chatops/incoming-email.query";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
+import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
 import { reportApiError, throwOnApiError } from "@/lib/utils";
 
 const {
@@ -262,6 +263,11 @@ export function useProfilesPaginated(
       return data ?? null;
     },
     initialData: useInitialData ? initialData : undefined,
+    // The list pages restore their last rows on refresh and swap in the fresh
+    // page when it lands, so a reload lands on a filled table rather than an
+    // empty one. Keyed by the full filter set, so a restored page only ever
+    // shows the rows that belong to the filters in the URL.
+    meta: PERSISTED_QUERY_META,
   });
 }
 

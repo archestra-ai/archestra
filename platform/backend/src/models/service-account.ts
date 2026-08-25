@@ -11,6 +11,7 @@ import {
   eq,
   getTableColumns,
   gt,
+  inArray,
   isNull,
   or,
 } from "drizzle-orm";
@@ -79,6 +80,31 @@ class ServiceAccountModel {
       ...normalizeServiceAccount(serviceAccount, tokens.length),
       tokens: tokens.map(normalizeToken),
     };
+  }
+
+  /**
+   * Display names for a batch of service-account ids, scoped to one
+   * organization. Ids with no row (deleted account, or an id belonging to a
+   * different organization) are simply absent from the map.
+   */
+  static async getNamesByIds(
+    ids: string[],
+    organizationId: string,
+  ): Promise<Map<string, string>> {
+    if (ids.length === 0) return new Map();
+    const rows = await db
+      .select({
+        id: schema.serviceAccountsTable.id,
+        name: schema.serviceAccountsTable.name,
+      })
+      .from(schema.serviceAccountsTable)
+      .where(
+        and(
+          inArray(schema.serviceAccountsTable.id, ids),
+          eq(schema.serviceAccountsTable.organizationId, organizationId),
+        ),
+      );
+    return new Map(rows.map((row) => [row.id, row.name]));
   }
 
   static async findByIdForAudit(

@@ -1230,7 +1230,9 @@ test("reads bytes only for attachments that are actually inlined", async ({
     });
 
     expect(withDataSpy).toHaveBeenCalledTimes(1);
-    expect(withDataSpy).toHaveBeenCalledWith([readable.id]);
+    // `null` is the conversation key: this chat is not locked, so the rows come
+    // back as stored.
+    expect(withDataSpy).toHaveBeenCalledWith([readable.id], null);
 
     // Output is unchanged by the optimization: the PNG still inlines, the
     // opaque binary still becomes a sandbox notice.
@@ -1255,7 +1257,7 @@ test("reads bytes only for attachments that are actually inlined", async ({
       ingestibleMimeTypes: INGESTIBLE,
       sandboxAvailable: true,
     });
-    expect(withDataSpy).toHaveBeenCalledWith([]);
+    expect(withDataSpy).toHaveBeenCalledWith([], null);
   } finally {
     withDataSpy.mockRestore();
   }

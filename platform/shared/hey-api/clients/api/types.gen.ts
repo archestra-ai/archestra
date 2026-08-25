@@ -36201,6 +36201,7 @@ export type GetExternalMcpSkillUsageStatisticsResponses = {
         users: Array<{
             userId: string | null;
             name: string | null;
+            kind: 'user' | 'service_account' | 'unattributed';
             total: number;
         }>;
         daily: Array<{
@@ -86930,6 +86931,7 @@ export type GetSkillUsageStatisticsResponses = {
         users: Array<{
             userId: string | null;
             name: string | null;
+            kind: 'user' | 'service_account' | 'unattributed';
             total: number;
         }>;
         daily: Array<{
@@ -95138,7 +95140,7 @@ export type GetIdentityProvidersResponses = {
             enableRpInitiatedLogout?: boolean;
             hd?: string;
             clientId: string;
-            clientSecret: string;
+            clientSecret?: string;
             authorizationEndpoint?: string;
             discoveryEndpoint: string;
             userInfoEndpoint?: string;
@@ -95250,6 +95252,7 @@ export type GetIdentityProvidersResponses = {
         domain: string;
         domainVerified: boolean | null;
         ssoLoginEnabled: boolean;
+        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
     }>;
 };
 
@@ -95467,7 +95470,7 @@ export type CreateIdentityProviderResponses = {
             enableRpInitiatedLogout?: boolean;
             hd?: string;
             clientId: string;
-            clientSecret: string;
+            clientSecret?: string;
             authorizationEndpoint?: string;
             discoveryEndpoint: string;
             userInfoEndpoint?: string;
@@ -95579,6 +95582,7 @@ export type CreateIdentityProviderResponses = {
         domain: string;
         domainVerified: boolean | null;
         ssoLoginEnabled: boolean;
+        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
     };
 };
 
@@ -96107,7 +96111,7 @@ export type GetIdentityProviderResponses = {
             enableRpInitiatedLogout?: boolean;
             hd?: string;
             clientId: string;
-            clientSecret: string;
+            clientSecret?: string;
             authorizationEndpoint?: string;
             discoveryEndpoint: string;
             userInfoEndpoint?: string;
@@ -96219,6 +96223,7 @@ export type GetIdentityProviderResponses = {
         domain: string;
         domainVerified: boolean | null;
         ssoLoginEnabled: boolean;
+        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
     };
 };
 
@@ -96237,7 +96242,7 @@ export type UpdateIdentityProviderData = {
             enableRpInitiatedLogout?: boolean;
             hd?: string;
             clientId: string;
-            clientSecret: string;
+            clientSecret?: string;
             authorizationEndpoint?: string;
             discoveryEndpoint: string;
             userInfoEndpoint?: string;
@@ -96437,7 +96442,7 @@ export type UpdateIdentityProviderResponses = {
             enableRpInitiatedLogout?: boolean;
             hd?: string;
             clientId: string;
-            clientSecret: string;
+            clientSecret?: string;
             authorizationEndpoint?: string;
             discoveryEndpoint: string;
             userInfoEndpoint?: string;
@@ -96549,6 +96554,7 @@ export type UpdateIdentityProviderResponses = {
         domain: string;
         domainVerified: boolean | null;
         ssoLoginEnabled: boolean;
+        configuredSecretPaths: Array<'oidcConfig.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.clientSecret' | 'oidcConfig.enterpriseManagedCredentials.privateKeyPem' | 'samlConfig.privateKey' | 'samlConfig.decryptionPvk' | 'samlConfig.spMetadata.privateKey' | 'samlConfig.spMetadata.privateKeyPass' | 'samlConfig.spMetadata.encPrivateKey' | 'samlConfig.spMetadata.encPrivateKeyPass' | 'samlConfig.idpMetadata.privateKey' | 'samlConfig.idpMetadata.privateKeyPass' | 'samlConfig.idpMetadata.encPrivateKey' | 'samlConfig.idpMetadata.encPrivateKeyPass'>;
     };
 };
 

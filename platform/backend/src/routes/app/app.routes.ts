@@ -29,6 +29,7 @@ import {
   UserModel,
 } from "@/models";
 import type { VersionPayload } from "@/models/app-version";
+import { resolveLockedChatCreationIfRequested } from "@/routes/chat/locked-chat";
 import {
   assignToolToApp,
   type ToolAssignmentError,
@@ -630,12 +631,22 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(OpenAppInChatResponseSchema),
       },
     },
-    async ({ params: { appId }, user, organizationId }, reply) => {
+    async (request, reply) => {
+      const {
+        params: { appId },
+        user,
+        organizationId,
+      } = request;
       // The service re-checks app visibility (404s if the caller can't view it).
       const { conversationId } = await createSeededAppConversation({
         appId,
         userId: user.id,
         organizationId,
+        // Present only when the client generated a conversation key and sent
+        // it — the same header the composer's locked-chat toggle uses. Opening
+        // an app is a browser POST, so the key reaches the server on exactly
+        // the flow that creates the conversation.
+        lockedChat: resolveLockedChatCreationIfRequested(request),
       });
       return reply.send({ conversationId });
     },
@@ -654,10 +665,13 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(OpenExternalAppInChatResponseSchema),
       },
     },
-    async (
-      { params: { mcpServerId }, body: { resourceUri }, user, organizationId },
-      reply,
-    ) => {
+    async (request, reply) => {
+      const {
+        params: { mcpServerId },
+        body: { resourceUri },
+        user,
+        organizationId,
+      } = request;
       // The service re-checks install access + that the resource exists (404s
       // otherwise).
       const result = await createSeededExternalAppConversation({
@@ -665,6 +679,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         resourceUri,
         userId: user.id,
         organizationId,
+        lockedChat: resolveLockedChatCreationIfRequested(request),
       });
       return reply.send(result);
     },

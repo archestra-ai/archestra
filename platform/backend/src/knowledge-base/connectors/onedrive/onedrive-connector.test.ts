@@ -57,11 +57,6 @@ function setupMockClient(connector: OneDriveConnector) {
 }
 
 describe("OneDriveConnector", () => {
-  it("has the correct type", () => {
-    const connector = new OneDriveConnector();
-    expect(connector.type).toBe("onedrive");
-  });
-
   describe("validateConfig", () => {
     it("accepts valid config with tenantId and userIds", async () => {
       const connector = new OneDriveConnector();
@@ -1022,10 +1017,6 @@ describe("OneDriveConnector", () => {
     beforeEach(() => {
       routes = [];
       requestedUrls = [];
-    });
-
-    it("supportsPermissionSync is true", () => {
-      expect(new OneDriveConnector().supportsPermissionSync).toBe(true);
     });
 
     it("scopeKeyForDocument maps metadata.userId to the container key", () => {

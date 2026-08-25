@@ -2,7 +2,11 @@ import type {
   IdentityProviderOidcConfig,
   IdpRoleMappingConfig,
 } from "@archestra/shared";
-import { MEMBER_ROLE_NAME, TimeInMs } from "@archestra/shared";
+import {
+  MEMBER_ROLE_NAME,
+  preserveIdentityProviderSecrets,
+  TimeInMs,
+} from "@archestra/shared";
 import type { SSOOptions } from "@better-auth/sso";
 import { APIError } from "better-auth";
 import { and, eq } from "drizzle-orm";
@@ -735,10 +739,22 @@ class IdentityProviderModel {
       return null;
     }
 
-    // Serialize roleMapping and teamSyncConfig if provided as objects
-    // Note: These are stored as JSON text but typed as objects in Drizzle schema
+    /**
+     * The CRUD API redacts credentials on read, so an edit that only renames a
+     * provider comes back with blank secrets. Both config blobs are written
+     * whole, so taking that literally would wipe `clientSecret` (and the SAML
+     * private keys) and break SSO on an unrelated change. Restore any secret
+     * the caller left blank from the row we just loaded before serializing.
+     *
+     * This sits in the model rather than the route on purpose: `update` is the
+     * only writer of these columns and already holds the existing row, so
+     * guarding here means no future caller can blank a credential by accident.
+     */
     const { oidcConfig, samlConfig, roleMapping, teamSyncConfig, ...restData } =
-      data;
+      preserveIdentityProviderSecrets({
+        incoming: data,
+        existing: existingProvider,
+      });
     const oidcConfigJson = serializeConfigValue(oidcConfig);
     const samlConfigJson = serializeConfigValue(samlConfig);
     const roleMappingJson = serializeConfigValue(roleMapping);
@@ -753,11 +769,16 @@ class IdentityProviderModel {
         ...restData,
         domain: nextDomain,
         domainVerified: true,
+        // These columns are `text` typed as their parsed config, so the
+        // serialized JSON is cast to the column type rather than to the
+        // (redaction-tolerant) request type the payload was destructured from.
         ...(oidcConfigJson !== undefined && {
-          oidcConfig: oidcConfigJson as unknown as typeof oidcConfig,
+          oidcConfig:
+            oidcConfigJson as unknown as StoredIdentityProviderConfigs["oidcConfig"],
         }),
         ...(samlConfigJson !== undefined && {
-          samlConfig: samlConfigJson as unknown as typeof samlConfig,
+          samlConfig:
+            samlConfigJson as unknown as StoredIdentityProviderConfigs["samlConfig"],
         }),
         ...(roleMappingJson !== undefined && {
           roleMapping: roleMappingJson as unknown as typeof roleMapping,
@@ -1140,3 +1161,7 @@ interface OidcDiscovery {
   userinfo_endpoint?: string;
   token_endpoint_auth_methods_supported?: string[];
 }
+
+/** Column types for the two JSON-as-text config blobs on the providers table. */
+type StoredIdentityProviderConfigs =
+  typeof schema.identityProvidersTable.$inferInsert;

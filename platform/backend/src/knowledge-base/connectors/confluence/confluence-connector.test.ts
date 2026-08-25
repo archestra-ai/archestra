@@ -886,10 +886,6 @@ describe("ConfluenceConnector permission sync", () => {
     );
   }
 
-  test("supportsPermissionSync is true", () => {
-    expect(connector.supportsPermissionSync).toBe(true);
-  });
-
   test("a restricted page lands in its own nested container with the restriction audience", async () => {
     mockSearchContentByCQL.mockResolvedValue({
       results: [{ id: "p1", space: { key: "DEV" }, ancestors: [] }],

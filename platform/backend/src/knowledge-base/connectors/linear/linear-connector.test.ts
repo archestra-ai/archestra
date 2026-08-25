@@ -143,10 +143,6 @@ describe("LinearConnector", () => {
     vi.restoreAllMocks();
   });
 
-  test("exposes type linear", () => {
-    expect(new LinearConnector().type).toBe("linear");
-  });
-
   describe("validateConfig", () => {
     test("accepts config with defaults", async () => {
       const c = new LinearConnector();
@@ -1012,10 +1008,6 @@ describe("permission sync", () => {
 
   beforeEach(() => {
     mockRawRequest.mockReset();
-  });
-
-  test("supportsPermissionSync is true", () => {
-    expect(new LinearConnector().supportsPermissionSync).toBe(true);
   });
 
   test("full snapshot: team and project containers, sorted, fail-closed for a vanished project", async () => {

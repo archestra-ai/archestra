@@ -92,11 +92,6 @@ function makePageResponse(page: ReturnType<typeof makePage>) {
 const credentials = { apiToken: "secret_test-token" };
 
 describe("NotionConnector", () => {
-  it("has the correct type", () => {
-    const connector = new NotionConnector();
-    expect(connector.type).toBe("notion");
-  });
-
   describe("validateConfig", () => {
     it("accepts empty config (no databaseIds required)", async () => {
       const connector = new NotionConnector();
@@ -1113,10 +1108,6 @@ describe("NotionConnector", () => {
         "fetchWithRetry",
       );
     }
-
-    it("supportsPermissionSync is true", () => {
-      expect(new NotionConnector().supportsPermissionSync).toBe(true);
-    });
 
     it("syncPermissionSnapshot yields the workspace container then every ingested doc's assignment", async () => {
       const connector = new NotionConnector();

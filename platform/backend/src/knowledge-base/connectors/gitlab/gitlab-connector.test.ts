@@ -986,10 +986,6 @@ describe("GitlabConnector", () => {
       return out;
     }
 
-    test("supportsPermissionSync is true", () => {
-      expect(connector.supportsPermissionSync).toBe(true);
-    });
-
     // Pins the metadata-field contract with content-sync: every document kind
     // writes `metadata.project` = path_with_namespace, which is the container
     // key's id part.

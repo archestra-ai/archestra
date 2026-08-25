@@ -1,9 +1,13 @@
+import { generateKeyPairSync, randomBytes } from "node:crypto";
 import {
   ADMIN_ROLE_NAME,
   getArchestraToolFullName,
   TOOL_EDIT_APP_SHORT_NAME,
 } from "@archestra/shared";
+import { sql } from "drizzle-orm";
 import { executeArchestraTool } from "@/archestra-mcp-server";
+import config from "@/config";
+import db from "@/database";
 import {
   AgentModel,
   AppModel,
@@ -16,6 +20,10 @@ import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
+import { isContentEnvelope } from "@/utils/crypto";
+
+const { publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+const ESCROW_PEM = publicKey.export({ type: "spki", format: "pem" }) as string;
 
 describe("POST /api/apps/:appId/open-in-chat", () => {
   let app: FastifyInstanceWithZod;
@@ -108,6 +116,47 @@ describe("POST /api/apps/:appId/open-in-chat", () => {
     expect(part.text).toContain(appName);
     return part.text;
   }
+
+  test("opens the app as a locked chat when the request carries a key", async () => {
+    config.lockedChat.escrowPublicKey = ESCROW_PEM;
+    const dek = randomBytes(32);
+    const appId = await createApp("Ledger");
+    await editApp(appId);
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/apps/${appId}/open-in-chat`,
+      headers: { "x-archestra-locked-chat-key": dek.toString("base64url") },
+    });
+    expect(res.statusCode).toBe(200);
+    const { conversationId } = res.json();
+
+    const conversation = await ConversationModel.findById({
+      id: conversationId,
+      userId: user.id,
+      organizationId,
+    });
+    expect(conversation?.lockedChat).toBe(true);
+    // Not "Ledger": a plaintext title would say which app the locked chat is
+    // running. It is the final title, so nothing tries to regenerate it.
+    expect(conversation?.title).toBe("Locked chat");
+    expect(conversation?.titleIsPlaceholder).toBe(false);
+
+    // What the server seeded is sealed like anything the model would write:
+    // unreadable from the row, and byte-for-byte a render once opened.
+    const raw = await db.execute<{ content: unknown }>(
+      sql`SELECT content FROM messages WHERE conversation_id = ${conversationId}::uuid ORDER BY created_at LIMIT 1`,
+    );
+    expect(isContentEnvelope(raw.rows[0].content)).toBe(true);
+
+    const opened = await MessageModel.findByConversation(conversationId, {
+      dek,
+      conversationId,
+    });
+    expect(opened).toHaveLength(2);
+    expect(expectSeededRender(opened[0])).toBe(appId);
+    expectSeededGreeting(opened[1], "Ledger");
+  });
 
   test("seeds a render plus a greeting for an app built past the scaffold", async () => {
     const appId = await createApp("Notes");

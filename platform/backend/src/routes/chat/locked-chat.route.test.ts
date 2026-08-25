@@ -30,6 +30,7 @@ import {
 } from "@/content-encryption/index.ee";
 import db from "@/database";
 import MessageModel from "@/models/message";
+import ProjectModel from "@/models/project";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -141,16 +142,21 @@ describe("locked chat routes", () => {
       expect(short.json().error.message).toContain("32 bytes");
     });
 
-    test("rejects locked chats in a project", async () => {
+    test("rejects a locked chat in a project", async () => {
+      // A project lists its chats to everyone it is shared with, so a locked
+      // one would sit in a shared space advertising a conversation none of
+      // them can open. Refused before the project is even resolved.
+      const project = await ProjectModel.create({
+        organizationId,
+        userId: currentUser.id,
+        name: `quarterly-${randomBytes(4).toString("hex")}`,
+      });
+
       const response = await app.inject({
         method: "POST",
         url: "/api/chat/conversations",
         headers: dekHeader(),
-        payload: {
-          agentId,
-          lockedChat: true,
-          projectId: "33333333-3333-4333-8333-333333333333",
-        },
+        payload: { agentId, lockedChat: true, projectId: project.id },
       });
       expect(response.statusCode).toBe(400);
       expect(response.json().error.message).toContain("project");

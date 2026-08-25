@@ -178,7 +178,7 @@ describe("transformFormToApiData", () => {
     });
   });
 
-  it("persists empty scopes when the scopes field is blank, but keeps ['read','write'] as default_scopes fallback", () => {
+  it("persists a blank scopes field as empty scopes and an empty default_scopes fallback", () => {
     const values: McpCatalogFormValues = {
       name: "Default Scope OAuth MCP",
       description: "",
@@ -219,7 +219,7 @@ describe("transformFormToApiData", () => {
 
     expect(transformFormToApiData(values).oauthConfig).toMatchObject({
       scopes: [],
-      default_scopes: ["read", "write"],
+      default_scopes: [],
     });
   });
 
@@ -269,7 +269,7 @@ describe("transformFormToApiData", () => {
     });
   });
 
-  it("treats comma-only scopes input as blank (persists empty scopes with read/write fallback)", () => {
+  it("treats comma-only scopes input as blank", () => {
     const values: McpCatalogFormValues = {
       name: "Comma Scope OAuth MCP",
       description: "",
@@ -310,7 +310,7 @@ describe("transformFormToApiData", () => {
 
     expect(transformFormToApiData(values).oauthConfig).toMatchObject({
       scopes: [],
-      default_scopes: ["read", "write"],
+      default_scopes: [],
     });
   });
 

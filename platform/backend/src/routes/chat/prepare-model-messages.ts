@@ -14,7 +14,7 @@ import {
 import config from "@/config";
 import logger from "@/logging";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
-import type { ChatMessage } from "@/types";
+import type { ChatMessage, ConversationContentKey } from "@/types";
 import {
   buildContextCompactionStreamData,
   type ContextCompactionResult,
@@ -106,6 +106,11 @@ export async function buildModelMessages(params: {
    * Defaults to true (genuine Anthropic / other providers unaffected).
    */
   anthropicNativeEndpoint?: boolean;
+  /**
+   * The locked chat's browser-held key, so its attachment rows can be opened
+   * for the provider call. Null for an ordinary chat.
+   */
+  conversationKey?: ConversationContentKey | null;
 }): Promise<{
   modelMessages: ModelMessage[];
   /**
@@ -124,6 +129,7 @@ export async function buildModelMessages(params: {
     emit,
     disableCompaction = false,
     anthropicNativeEndpoint = true,
+    conversationKey = null,
     ...compaction
   } = params;
 
@@ -177,11 +183,18 @@ export async function buildModelMessages(params: {
 
   // One availability lookup per LLM call (the system-prompt path pays the same),
   // so attachment sandbox pointers are only emitted when the agent can run them.
-  const sandboxAvailable = await isSkillSandboxAvailableForAgent({
-    userId: compaction.userId,
-    organizationId: compaction.organizationId,
-    agentId: compaction.agentId ?? undefined,
-  });
+  //
+  // Forced off for a locked chat: its uploads are deliberately never staged
+  // into the sandbox (see the staging guard in routes.ts), so a pointer telling
+  // the model to `ls` for them would name a directory they are not in. This
+  // governs attachment pointers only — it is not a sandbox feature switch.
+  const sandboxAvailable = conversationKey
+    ? false
+    : await isSkillSandboxAvailableForAgent({
+        userId: compaction.userId,
+        organizationId: compaction.organizationId,
+        agentId: compaction.agentId ?? undefined,
+      });
 
   const { modelMessages, preparedMessages } =
     await buildModelMessagesForProvider({
@@ -191,6 +204,7 @@ export async function buildModelMessages(params: {
       ingestibleMimeTypes: getModelReadableMimeTypes(inputModalities),
       anthropicNativeEndpoint,
       sandboxAvailable,
+      conversationKey,
     });
 
   return {
@@ -218,6 +232,7 @@ async function buildModelMessagesForProvider(params: {
   ingestibleMimeTypes?: Set<string>;
   anthropicNativeEndpoint?: boolean;
   sandboxAvailable: boolean;
+  conversationKey?: ConversationContentKey | null;
 }) {
   const anthropicNativeEndpoint = params.anthropicNativeEndpoint ?? true;
   // `cache_control` is inert for non-Anthropic SDKs, so keep emitting it there;
@@ -249,6 +264,7 @@ async function buildModelMessagesForProvider(params: {
       PROVIDERS_WITHOUT_DOCUMENT_CONTENT_PARTS.has(params.provider),
     sandboxAvailable: params.sandboxAvailable,
     inlineByteLimit,
+    conversationKey: params.conversationKey ?? null,
   });
   // Reject oversized inline attachments here, before the provider call, so the
   // user gets an actionable size error instead of a generic provider rejection.

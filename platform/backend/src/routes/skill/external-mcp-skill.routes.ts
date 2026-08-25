@@ -89,6 +89,7 @@ const externalMcpSkillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await ExternalMcpSkillUsageEventModel.getUsageStatistics({
           mcpServerId: query.mcpServerId,
           uri: query.uri,
+          organizationId,
           since: new Date(Date.now() - USAGE_STATISTICS_WINDOW_MS),
         }),
       );

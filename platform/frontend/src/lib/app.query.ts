@@ -7,6 +7,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { toBulkOutcome } from "@/lib/bulk-action";
+import {
+  generateLockedChatKey,
+  LOCKED_CHAT_KEY_HEADER,
+  storeLockedChatKey,
+} from "@/lib/chat/locked-chat";
 import { handleApiError, throwOnApiError } from "@/lib/utils";
 
 const {
@@ -186,18 +191,40 @@ export function useCreateApp() {
 // Opens an existing app in chat: the backend creates a conversation with the app
 // already rendered and returns its id to navigate to. No cache to invalidate —
 // the caller navigates to `/chat/<conversationId>` on success.
+//
+// Pass `lockedChat` to open it as a locked chat. Opening an app is a browser
+// POST, so it carries the conversation key on exactly the header the composer's
+// toggle uses: the key is generated here, the server fingerprints and
+// escrow-wraps it, and it is stored under the new conversation id before the
+// caller navigates — the same order `useCreateConversation` relies on.
 export function useOpenAppInChat() {
   return useMutation({
-    mutationFn: async (appId: string) => {
-      const { data, error } = await openAppInChat({ path: { appId } });
+    mutationFn: async (params: string | OpenAppInChatParams) => {
+      const { appId, lockedChat } =
+        typeof params === "string"
+          ? { appId: params, lockedChat: false }
+          : params;
+      const lockedChatKey = lockedChat ? generateLockedChatKey() : null;
+      const { data, error } = await openAppInChat({
+        path: { appId },
+        headers: lockedChatKey
+          ? { [LOCKED_CHAT_KEY_HEADER]: lockedChatKey }
+          : undefined,
+      });
       if (error) {
         handleApiError(error);
         return null;
+      }
+      if (data?.conversationId && lockedChatKey) {
+        storeLockedChatKey(data.conversationId, lockedChatKey);
       }
       return data;
     },
   });
 }
+
+/** Open an app in chat, optionally as a locked chat. */
+export type OpenAppInChatParams = { appId: string; lockedChat?: boolean };
 
 // Opens an external (MCP-server) app in chat against a concrete install: the
 // backend creates a conversation and returns its id plus how it was set up —
@@ -210,14 +237,23 @@ export function useOpenExternalAppInChat() {
     mutationFn: async (params: {
       mcpServerId: string;
       resourceUri: string;
+      /** See {@link useOpenAppInChat} — same key flow. */
+      lockedChat?: boolean;
     }) => {
+      const lockedChatKey = params.lockedChat ? generateLockedChatKey() : null;
       const { data, error } = await openExternalAppInChat({
         path: { mcpServerId: params.mcpServerId },
         body: { resourceUri: params.resourceUri },
+        headers: lockedChatKey
+          ? { [LOCKED_CHAT_KEY_HEADER]: lockedChatKey }
+          : undefined,
       });
       if (error) {
         handleApiError(error);
         return null;
+      }
+      if (data?.conversationId && lockedChatKey) {
+        storeLockedChatKey(data.conversationId, lockedChatKey);
       }
       return data;
     },

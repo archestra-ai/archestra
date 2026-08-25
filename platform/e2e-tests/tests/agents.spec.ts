@@ -226,9 +226,11 @@ test(
       GATEWAY_NAME,
     );
 
-    // The create lands on the Connect section, whose "Open the Connect page" link
+    // The create lands on the connection instructions, whose guided-setup link
     // lands on /connection with the new gateway pre-selected.
-    await page.getByRole("link", { name: /Open the Connect page/ }).click();
+    await page
+      .getByRole("link", { name: /Set up a client step by step/ })
+      .click();
     await page.waitForURL(
       new RegExp(`/connection\\?gatewayId=${gatewayId}&from=`),
       { timeout: 15_000 },

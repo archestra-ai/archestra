@@ -401,18 +401,65 @@ class AgentModel {
   }
 
   /**
-   * Populate lastUsedAt on agents from the MCP tool-call log: the most recent
-   * request (any JSON-RPC method) routed through each agent's MCP gateway
-   * endpoint. Null when nothing was ever routed through the agent.
+   * Populate lastUsedAt on agents: the most recent moment anything ran through
+   * the agent, whichever came last of
+   *
+   * - an MCP request (any JSON-RPC method) routed through its gateway endpoint,
+   * - an LLM call made on its behalf.
+   *
+   * Null when neither ever happened. Both halves are needed because the two
+   * kinds of agent are used differently: an MCP gateway is all requests and no
+   * LLM calls, while an agent driven from chat may answer for months without
+   * ever routing a tool call. Reading only the MCP log would report such an
+   * agent as never used.
    */
   private static async populateLastUsedAt(agents: Agent[]): Promise<void> {
     const agentIds = agents.map((a) => a.id);
     if (agentIds.length === 0) return;
 
-    const lastCallMap = await McpToolCallModel.getLastCallAtForAgents(agentIds);
+    const [lastCallMap, lastInteractionMap] = await Promise.all([
+      McpToolCallModel.getLastCallAtForAgents(agentIds),
+      AgentModel.getLastInteractionAtForAgents(agentIds),
+    ]);
+
     for (const agent of agents) {
-      agent.lastUsedAt = lastCallMap.get(agent.id) ?? null;
+      const lastCallAt = lastCallMap.get(agent.id) ?? null;
+      const lastInteractionAt = lastInteractionMap.get(agent.id) ?? null;
+      agent.lastUsedAt = mostRecent(lastCallAt, lastInteractionAt);
     }
+  }
+
+  /**
+   * When each agent last had an LLM call made on its behalf, absent for agents
+   * with none. Read straight off `interactions` rather than through
+   * `InteractionModel`, which imports this module — the same reason the
+   * `lastUsedAt` sort below reads `mcpToolCallsTable` directly.
+   *
+   * The `IN` list is one page of agents, so the
+   * `(profile_id, created_at DESC)` index answers each agent's max with a
+   * backward scan instead of walking a very large table.
+   */
+  private static async getLastInteractionAtForAgents(
+    agentIds: string[],
+  ): Promise<Map<string, Date>> {
+    if (agentIds.length === 0) return new Map();
+
+    const rows = await db
+      .select({
+        profileId: schema.interactionsTable.profileId,
+        lastInteractionAt: max(schema.interactionsTable.createdAt),
+      })
+      .from(schema.interactionsTable)
+      .where(inArray(schema.interactionsTable.profileId, agentIds))
+      .groupBy(schema.interactionsTable.profileId);
+
+    const lastInteractionMap = new Map<string, Date>();
+    for (const row of rows) {
+      if (row.profileId && row.lastInteractionAt) {
+        lastInteractionMap.set(row.profileId, row.lastInteractionAt);
+      }
+    }
+    return lastInteractionMap;
   }
 
   /**
@@ -1476,6 +1523,20 @@ class AgentModel {
         .groupBy(schema.mcpToolCallsTable.agentId)
         .as("lastUsedAts");
 
+      /**
+       * The LLM-call half of "last used", correlated rather than aggregated:
+       * an unfiltered `GROUP BY profile_id` here would aggregate the whole of
+       * `interactions` — the platform's largest table — on every sorted list
+       * request. Correlating it instead costs one backward scan of
+       * `(profile_id, created_at DESC)` per candidate agent, and agents number
+       * in the hundreds.
+       */
+      const lastInteractionAt = sql`(
+        SELECT max(${schema.interactionsTable.createdAt})
+        FROM ${schema.interactionsTable}
+        WHERE ${schema.interactionsTable.profileId} = ${schema.agentsTable.id}
+      )`;
+
       query = query
         .leftJoin(
           lastUsedAtSubquery,
@@ -1483,9 +1544,13 @@ class AgentModel {
         )
         .orderBy(
           ...personalAgentPriorityOrderClauses,
-          // Never-used agents sort as oldest (asc first / desc last).
+          // Ordered by the same value the row displays: the later of the two
+          // signals. Never-used agents sort as oldest (asc first / desc last).
           direction(
-            sql`COALESCE(${lastUsedAtSubquery.lastUsedAt}, '-infinity'::timestamp)`,
+            sql`GREATEST(
+              COALESCE(${lastUsedAtSubquery.lastUsedAt}, '-infinity'::timestamp),
+              COALESCE(${lastInteractionAt}, '-infinity'::timestamp)
+            )`,
           ),
         );
     } else if (sorting?.sortBy === "team") {
@@ -3842,5 +3907,15 @@ const agentToolRefColumns = {
   rawName: schema.toolsTable.rawName,
   description: schema.toolsTable.description,
 };
+
+/**
+ * The later of two nullable timestamps, or null when both are absent. Used to
+ * fold the two halves of "last used" into the single moment a row reports.
+ */
+function mostRecent(a: Date | null, b: Date | null): Date | null {
+  if (!a) return b;
+  if (!b) return a;
+  return a > b ? a : b;
+}
 
 export default AgentModel;

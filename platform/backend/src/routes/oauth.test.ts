@@ -481,6 +481,31 @@ describe("OAuth helper functions", () => {
       globalThis.fetch = originalFetch;
     });
 
+    test("requests no scopes at all when none are configured and none are discovered", async () => {
+      const fetchMock = vi.fn().mockRejectedValue(new Error("Network error"));
+      globalThis.fetch = fetchMock;
+
+      const result = await resolveOAuthScopesForAuthorization({
+        oauthConfig: {
+          server_url: "https://example.com",
+          supports_resource_metadata: false,
+          scopes: [],
+          default_scopes: [],
+        },
+      });
+
+      // Nothing to append `offline_access` on top of: asking for it alone
+      // would request a token with no API scopes rather than letting the
+      // server apply the client's own default scope set.
+      expect(result).toEqual({
+        configuredScopes: [],
+        discoveredScopes: [],
+        scopesToUse: [],
+      });
+
+      globalThis.fetch = originalFetch;
+    });
+
     test("omits offline_access when additional_scopes is empty", async () => {
       const fetchMock = vi.fn().mockRejectedValue(new Error("Network error"));
       globalThis.fetch = fetchMock;
@@ -1681,6 +1706,31 @@ describe("OAuth dynamic client registration scope fallback", () => {
       },
     });
 
+  // A catalog item whose operator deliberately left the scopes field blank, so
+  // the request should carry whatever the server advertises — and nothing at
+  // all when it advertises nothing.
+  const makeBlankScopeCatalog = (
+    makeInternalMcpCatalog: (
+      overrides?: Record<string, unknown>,
+    ) => Promise<{ id: string; name: string }>,
+  ) =>
+    makeInternalMcpCatalog({
+      organizationId: ctx.organizationId,
+      name: "Blank Scope MCP",
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com/mcp",
+      oauthConfig: {
+        name: "Blank Scope MCP",
+        server_url: "https://mcp.example.com/mcp",
+        grant_type: "authorization_code",
+        client_id: "",
+        redirect_uris: ["http://localhost:3000/oauth-callback"],
+        scopes: [],
+        default_scopes: [],
+        supports_resource_metadata: false,
+      },
+    });
+
   /**
    * Metadata requests advertise a registration endpoint; the registration
    * POST behavior is delegated to `onRegister` so each test can shape the
@@ -1847,6 +1897,34 @@ describe("OAuth dynamic client registration scope fallback", () => {
         ([input]) => String(input) === REGISTRATION_ENDPOINT,
       ),
     ).toHaveLength(1);
+  });
+
+  test("sends no scope when the catalog configures none and the server advertises none", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeBlankScopeCatalog(makeInternalMcpCatalog);
+    const fetchMock = mockAuthServer(() => ({
+      ok: true,
+      payload: { client_id: "dyn-client" },
+    }));
+
+    const response = await initiate(catalog.id);
+
+    expect(response.statusCode, response.body).toBe(200);
+    const authorizationUrl = new URL(response.json().authorizationUrl);
+    // A blank scopes field means "let the server apply its own default scope
+    // set": neither invented scopes nor a lone `offline_access` may stand in
+    // for it, and `scope=` must not be sent empty either.
+    expect(authorizationUrl.searchParams.has("scope")).toBe(false);
+
+    const registrationCalls = fetchMock.mock.calls.filter(
+      ([input]) => String(input) === REGISTRATION_ENDPOINT,
+    );
+    // One attempt only: with no scope to drop there is no narrower retry.
+    expect(registrationCalls).toHaveLength(1);
+    expect(
+      JSON.parse(String(registrationCalls[0]?.[1]?.body)),
+    ).not.toHaveProperty("scope");
   });
 
   test("surfaces the registration failure when both attempts fail", async ({

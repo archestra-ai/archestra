@@ -3,41 +3,42 @@ import { describe, expect, it } from "vitest";
 import { LoadingState } from "./loading";
 
 describe("LoadingState", () => {
-  it("renders a theme-aware generic indicator from the shared component", () => {
+  it("exposes the label to assistive tech and respects reduced motion", () => {
     const { container } = render(<LoadingState label="Loading connectors…" />);
 
     expect(
       screen.getByRole("status", { name: "Loading connectors…" }),
     ).toBeVisible();
-    expect(container.querySelector("img")).toBeNull();
+    // `showLabel` defaults to on for every variant that draws an indicator, so
+    // the label renders on screen as well as naming the live region.
+    expect(screen.getByText("Loading connectors…")).toBeVisible();
+    // The spinner is a CSS animation, so reduced-motion users need it stopped
+    // rather than merely slowed.
     expect(container.querySelector(".animate-spin")).toHaveClass(
-      "border-t-muted-foreground",
       "motion-reduce:animate-none",
     );
   });
 
-  it("uses one indicator size while centering viewport and page loading states", () => {
-    const { rerender } = render(<LoadingState variant="viewport" />);
-
-    const status = screen.getByRole("status");
-    expect(status).toHaveClass("min-h-app-viewport");
-    expect(status.querySelector("span")).toHaveClass("size-8");
-
-    rerender(<LoadingState variant="page" />);
-
-    expect(status).toHaveClass(
-      "min-h-[calc(var(--visual-viewport-height,100dvh)-12rem)]",
-      "items-center",
-      "justify-center",
+  it("holds the area open and announces itself while drawing nothing when quiet", () => {
+    const { container } = render(
+      <LoadingState label="Loading…" variant="quiet" />,
     );
-    expect(status.querySelector("span")).toHaveClass("size-8");
+
+    const status = screen.getByRole("status", { name: "Loading…" });
+    // The point of `quiet` is reserving the space without the flash, so the
+    // height has to survive even though nothing is drawn inside it.
+    expect(status).toHaveClass("min-h-app-viewport");
+    expect(container.querySelector(".animate-spin")).toBeNull();
+    expect(status).toHaveTextContent("");
   });
 
-  it("keeps inline loading states compact and accessible", () => {
+  it("keeps inline loading states compact and visually label-free", () => {
     render(<LoadingState label="Loading token" variant="inline" />);
 
     const status = screen.getByRole("status", { name: "Loading token" });
-    expect(status).toHaveClass("inline-flex", "min-h-0");
+    // Inline callers sit next to their own copy, so the label stays
+    // accessible-only instead of rendering a second time on screen.
     expect(screen.queryByText("Loading token")).toBeNull();
+    expect(status).toHaveClass("inline-flex");
   });
 });

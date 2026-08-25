@@ -785,6 +785,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await SkillUsageEventModel.getUsageStatistics({
           skillId: skill.id,
           since,
+          organizationId,
         }),
       );
     },

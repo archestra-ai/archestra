@@ -12,6 +12,7 @@ import { useMemo } from "react";
 import { toast } from "sonner";
 import { useSession } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
 import { environmentKeys } from "./environment.query";
 import {
   getApiErrorInternalCode,
@@ -44,6 +45,7 @@ export function useAppearanceSettings(enabled = true) {
     staleTime: 5 * 60 * 1000,
     retry: false,
     throwOnError: false,
+    meta: PERSISTED_QUERY_META,
   });
 }
 
@@ -323,6 +325,9 @@ export function useOrganization(enabled = true) {
     // imperatively setQueryData() this key, so a long stale time keeps
     // re-mounts cheap.
     staleTime: 5 * 60 * 1000,
+    // Restored on refresh: the shell reads the app name and theme from here,
+    // so without it a reload repaints the branding a beat after the layout.
+    meta: PERSISTED_QUERY_META,
   });
 }
 

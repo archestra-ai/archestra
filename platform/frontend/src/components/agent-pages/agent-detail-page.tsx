@@ -2,7 +2,6 @@
 
 import { E2eTestId } from "@archestra/shared";
 import {
-  ChevronDown,
   Copy,
   Download,
   History,
@@ -23,15 +22,11 @@ import { AgentIcon } from "@/components/agent-icon";
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { OverviewSummary } from "@/components/overview-summary";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -67,7 +62,7 @@ import {
   getAgentActionModel,
 } from "./agent-actions-model";
 import { AgentConnectContent } from "./agent-connect-content";
-import { AgentOverview } from "./agent-overview";
+import { useAgentOverviewFacts } from "./agent-overview";
 import {
   AGENT_PAGE_CONFIGS,
   type AgentPageKind,
@@ -248,6 +243,9 @@ function AgentDetails({
       .getElementById(AGENT_CONNECT_SECTION_ID)
       ?.scrollIntoView({ block: "start" });
   }, [legacyConnectRequested, showConnect]);
+
+  // The record's key configuration, as one always-visible row.
+  const overviewFacts = useAgentOverviewFacts({ kind, agent });
 
   const [cloning, setCloning] = useState(false);
   const [converting, setConverting] = useState(false);
@@ -437,35 +435,28 @@ function AgentDetails({
         </div>
       }
     >
-      <div className="space-y-10">
-        <section aria-labelledby="agent-overview-heading">
-          <Collapsible>
-            <CollapsibleTrigger className="group flex w-full items-center justify-between gap-4 py-1 text-left">
-              <h2
-                id="agent-overview-heading"
-                className="text-base font-semibold tracking-tight text-foreground"
-              >
-                Overview
-              </h2>
-              <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
-            </CollapsibleTrigger>
-            <CollapsibleContent className="pt-4">
-              <AgentOverview kind={kind} agent={agent} />
-            </CollapsibleContent>
-          </Collapsible>
-        </section>
+      {/*
+        One gap for the whole page. Once Connect lost its heading the body
+        became a single run of cards, so the wider band that used to separate
+        two titled sections now fell between the Overview card and Endpoint —
+        40px there against 16px between every card below it.
+      */}
+      <div className="space-y-4">
+        <OverviewSummary
+          headingId="agent-overview-heading"
+          facts={overviewFacts}
+          configHref={canEdit ? agentActionHref(editAction) : undefined}
+        />
+
         {showConnect && (
+          // No heading of its own: the cards inside are already titled
+          // "Endpoint" and "Authentication", and a "Connect" band above them
+          // named neither, while colliding with the Connect page the footer
+          // link points at.
           <section
             id={AGENT_CONNECT_SECTION_ID}
-            aria-labelledby="agent-connect-heading"
             className="scroll-mt-24 space-y-4"
           >
-            <h2
-              id="agent-connect-heading"
-              className="text-base font-semibold tracking-tight text-foreground"
-            >
-              Connect
-            </h2>
             <AgentConnectContent kind={kind} agent={agent} origin="table" />
           </section>
         )}

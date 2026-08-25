@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   Trash2,
   UserCog,
+  Users,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -960,6 +961,7 @@ function InvitationsTab({
           }}
           onPaginationChange={handlePaginationChange}
           isLoading={isFetching}
+          emptyIcon={Users}
           emptyMessage="No invitations"
         />
       </LoadingWrapper>

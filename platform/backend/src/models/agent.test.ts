@@ -13,6 +13,7 @@ import {
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
+import type { InteractionRequest, InteractionResponse } from "@/types";
 import AgentModel from "./agent";
 import AgentExcludedToolModel from "./agent-excluded-tool";
 import AgentToolModel from "./agent-tool";
@@ -3591,6 +3592,133 @@ describe("AgentModel", () => {
       expect(await AgentExcludedToolModel.findToolIdsByAgent(clone.id)).toEqual(
         [keptId],
       );
+    });
+  });
+
+  describe("lastUsedAt", () => {
+    const at = (isoDay: string) => new Date(`2026-08-${isoDay}T00:00:00.000Z`);
+
+    const seedMcpCall = (agentId: string, createdAt: Date) =>
+      db.insert(schema.mcpToolCallsTable).values({
+        agentId,
+        mcpServerName: "test-server",
+        method: "tools/call",
+        createdAt,
+      });
+
+    const seedInteraction = (profileId: string, createdAt: Date) =>
+      db.insert(schema.interactionsTable).values({
+        profileId,
+        request: {
+          model: "claude-sonnet-5",
+          messages: [{ role: "user", content: "hello" }],
+        } as unknown as InteractionRequest,
+        response: {
+          id: "resp",
+          content: [{ type: "text", text: "hi" }],
+        } as unknown as InteractionResponse,
+        type: "anthropic:messages",
+        createdAt,
+      });
+
+    const lastUsedOf = async (name: string) => {
+      const result = await AgentModel.findAllPaginated({
+        limit: 50,
+        offset: 0,
+      });
+      return result.data.find((agent) => agent.name === name)?.lastUsedAt;
+    };
+
+    test("is null for an agent that was never used", async () => {
+      await AgentModel.create({ name: "Unused", teams: [], scope: "org" });
+
+      expect(await lastUsedOf("Unused")).toBeNull();
+    });
+
+    test("reports an MCP request routed through the agent", async () => {
+      const agent = await AgentModel.create({
+        name: "Gateway-ish",
+        teams: [],
+        scope: "org",
+      });
+      await seedMcpCall(agent.id, at("10"));
+
+      expect(await lastUsedOf("Gateway-ish")).toEqual(at("10"));
+    });
+
+    /**
+     * The reason this signal is not the MCP log alone: an agent driven from
+     * chat can answer for months without ever routing a tool call, and used to
+     * report itself as never used.
+     */
+    test("reports an LLM call made on the agent's behalf", async () => {
+      const agent = await AgentModel.create({
+        name: "Chat only",
+        teams: [],
+        scope: "org",
+      });
+      await seedInteraction(agent.id, at("11"));
+
+      expect(await lastUsedOf("Chat only")).toEqual(at("11"));
+    });
+
+    test("reports the later of the two signals, whichever it is", async () => {
+      const mcpLater = await AgentModel.create({
+        name: "MCP later",
+        teams: [],
+        scope: "org",
+      });
+      await seedInteraction(mcpLater.id, at("10"));
+      await seedMcpCall(mcpLater.id, at("20"));
+
+      const interactionLater = await AgentModel.create({
+        name: "Interaction later",
+        teams: [],
+        scope: "org",
+      });
+      await seedMcpCall(interactionLater.id, at("10"));
+      await seedInteraction(interactionLater.id, at("20"));
+
+      expect(await lastUsedOf("MCP later")).toEqual(at("20"));
+      expect(await lastUsedOf("Interaction later")).toEqual(at("20"));
+    });
+
+    test("sorts by the same value the rows report", async () => {
+      const oldest = await AgentModel.create({
+        name: "Oldest",
+        teams: [],
+        scope: "org",
+      });
+      const middle = await AgentModel.create({
+        name: "Middle",
+        teams: [],
+        scope: "org",
+      });
+      const newest = await AgentModel.create({
+        name: "Newest",
+        teams: [],
+        scope: "org",
+      });
+      await AgentModel.create({ name: "Never", teams: [], scope: "org" });
+
+      // Each agent's later signal is the one that must order it, so the two
+      // kinds are deliberately crossed over here.
+      await seedMcpCall(oldest.id, at("01"));
+      await seedInteraction(middle.id, at("02"));
+      await seedMcpCall(middle.id, at("01"));
+      await seedInteraction(newest.id, at("03"));
+
+      const result = await AgentModel.findAllPaginated(
+        { limit: 50, offset: 0 },
+        { sortBy: "lastUsedAt", sortDirection: "desc" },
+      );
+
+      expect(result.data.map((agent) => agent.name)).toEqual([
+        "Newest",
+        "Middle",
+        "Oldest",
+        "Never",
+      ]);
     });
   });
 });

@@ -3,7 +3,7 @@ title: Skills
 category: Agents
 order: 3
 description: Reusable SKILL.md instruction sets that agents load on demand
-lastUpdated: 2026-08-22
+lastUpdated: 2026-08-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -14,7 +14,7 @@ This keeps specialized knowledge out of every system prompt. Write the steps for
 
 Skills live under **Studio** in the sidebar. The page lists every skill in the organization with its visibility, source repository, file count, and use count. Filter the list by visibility — personal, team, or organization — or by source repository. Every activation — a `load_skill` call, a slash command, or a delegated run — counts one use. The list shows the most-used skills first, so you can see which skills your organization actually relies on.
 
-Click a skill's use count (or its chart action) to open usage analytics — a chart of who activated the skill over the last 30 days, and how often.
+Click a skill's use count (or its chart action) to open usage analytics. It shows the last 30 days of activations as a daily chart, broken down by who ran the skill.
 
 ![The Skills page open under the Studio tab of the sidebar, listing the organization's skills](/docs/automated_screenshots/platform-agent-skills_skills-in-studio.webp)
 

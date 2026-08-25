@@ -153,13 +153,14 @@ beforeEach(() => {
 });
 
 describe("PluginDetailPage", () => {
-  it("shows payload first with collapsed facts and a header edit link", async () => {
-    const user = userEvent.setup();
+  it("states the key facts without a click and keeps the payload primary", () => {
     renderPage(BASE_PLUGIN);
 
-    const overview = screen.getByRole("button", { name: "Overview" });
-    expect(overview).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByText("Accessible to")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Overview" })).toBeVisible();
+    expect(screen.getByText("Accessible to")).toBeVisible();
+    expect(screen.getByText("Client")).toBeVisible();
+    expect(screen.getByText("Platforms")).toBeVisible();
+    // The record's slim row, not a second copy of the form.
     expect(screen.queryByText("Plugin identity")).not.toBeInTheDocument();
     expect(screen.queryByText("Content hash")).not.toBeInTheDocument();
     const contentHeading = screen.getByRole("heading", {
@@ -182,11 +183,11 @@ describe("PluginDetailPage", () => {
     ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Install" })).toBeVisible();
     expect(screen.queryByText("GitHub source")).not.toBeInTheDocument();
-
-    await user.click(overview);
-    expect(screen.getByText("Accessible to")).toBeVisible();
-    expect(screen.getByText("Client")).toBeVisible();
-    expect(screen.getByText("Platforms")).toBeVisible();
+    // Overview leads to the same place the header's Edit does.
+    expect(screen.getByRole("link", { name: /Configuration/ })).toHaveAttribute(
+      "href",
+      `/plugins/${BASE_PLUGIN.id}/edit`,
+    );
   });
 
   it("keeps GitHub update controls in a compact header dialog", async () => {
@@ -201,7 +202,6 @@ describe("PluginDetailPage", () => {
       pendingDetectedAt: "2026-08-20T00:00:00.000Z",
     });
 
-    await user.click(screen.getByRole("button", { name: "Overview" }));
     expect(screen.getByRole("link", { name: /acme\/hooks/ })).toBeVisible();
     expect(
       screen.queryByRole("link", { name: "View source" }),

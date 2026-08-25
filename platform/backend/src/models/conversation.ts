@@ -581,6 +581,7 @@ class ConversationModel {
     title: string | null;
     origin: ConversationOrigin;
     projectId: string | null;
+    lockedChat: boolean;
   } | null> {
     const [row] = await db
       .select({
@@ -588,6 +589,7 @@ class ConversationModel {
         title: schema.conversationsTable.title,
         origin: schema.conversationsTable.origin,
         projectId: schema.conversationsTable.projectId,
+        lockedChat: schema.conversationsTable.lockedChat,
       })
       .from(schema.conversationsTable)
       .where(

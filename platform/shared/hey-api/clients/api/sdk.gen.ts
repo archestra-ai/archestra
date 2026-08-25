@@ -9582,7 +9582,7 @@ export const bulkDeleteRoles = <ThrowOnError extends boolean = false>(options: O
 export const getPublicIdentityProviders = <ThrowOnError extends boolean = false>(options?: Options<GetPublicIdentityProvidersData, ThrowOnError>) => (options?.client ?? client).get<GetPublicIdentityProvidersResponses, GetPublicIdentityProvidersErrors, ThrowOnError>({ url: '/api/identity-providers/public', ...options });
 
 /**
- * Get all identity providers with full configuration (admin only)
+ * Get all identity providers with configuration (admin only, secrets redacted)
  *
  * Authentication:
  *
@@ -9595,7 +9595,7 @@ export const getPublicIdentityProviders = <ThrowOnError extends boolean = false>
 export const getIdentityProviders = <ThrowOnError extends boolean = false>(options?: Options<GetIdentityProvidersData, ThrowOnError>) => (options?.client ?? client).get<GetIdentityProvidersResponses, GetIdentityProvidersErrors, ThrowOnError>({ url: '/api/identity-providers', ...options });
 
 /**
- * Create a new identity provider
+ * Create a new identity provider (secrets redacted)
  *
  * Authentication:
  *
@@ -9680,7 +9680,7 @@ export const getIdentityProviderLatestIdTokenClaims = <ThrowOnError extends bool
 export const deleteIdentityProvider = <ThrowOnError extends boolean = false>(options: Options<DeleteIdentityProviderData, ThrowOnError>) => (options.client ?? client).delete<DeleteIdentityProviderResponses, DeleteIdentityProviderErrors, ThrowOnError>({ url: '/api/identity-providers/{id}', ...options });
 
 /**
- * Get identity provider by ID
+ * Get identity provider by ID (secrets redacted)
  *
  * Authentication:
  *
@@ -9693,7 +9693,7 @@ export const deleteIdentityProvider = <ThrowOnError extends boolean = false>(opt
 export const getIdentityProvider = <ThrowOnError extends boolean = false>(options: Options<GetIdentityProviderData, ThrowOnError>) => (options.client ?? client).get<GetIdentityProviderResponses, GetIdentityProviderErrors, ThrowOnError>({ url: '/api/identity-providers/{id}', ...options });
 
 /**
- * Update identity provider
+ * Update identity provider (secrets redacted)
  *
  * Authentication:
  *

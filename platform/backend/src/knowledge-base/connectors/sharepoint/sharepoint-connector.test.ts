@@ -74,11 +74,6 @@ function setupMockClient(connector: SharePointConnector) {
 }
 
 describe("SharePointConnector", () => {
-  it("has the correct type", () => {
-    const connector = new SharePointConnector();
-    expect(connector.type).toBe("sharepoint");
-  });
-
   describe("validateConfig", () => {
     it("accepts valid config with siteUrl", async () => {
       const connector = new SharePointConnector();
@@ -1387,10 +1382,6 @@ describe("SharePointConnector", () => {
       requestedUrls = [];
       fetchMock = vi.fn();
       vi.stubGlobal("fetch", fetchMock);
-    });
-
-    it("supportsPermissionSync is true", () => {
-      expect(new SharePointConnector().supportsPermissionSync).toBe(true);
     });
 
     it("drive container: root audience from the root permission list; plain items assign to it", async () => {

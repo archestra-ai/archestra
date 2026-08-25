@@ -45,10 +45,6 @@ async function collectBatches(
 // ===== Tests =====
 
 describe("SalesforceConnector", () => {
-  test("exposes salesforce connector type", () => {
-    expect(new SalesforceConnector().type).toBe("salesforce");
-  });
-
   // ----- validateConfig -----
 
   describe("validateConfig", () => {
@@ -802,10 +798,6 @@ describe("SalesforceConnector", () => {
         return Promise.resolve({ done: true, records: route.records });
       });
     }
-
-    test("supportsPermissionSync is true", () => {
-      expect(new SalesforceConnector().supportsPermissionSync).toBe(true);
-    });
 
     test("public OWD (Read) → isPublic container, documents assign top-level", async () => {
       const c = new SalesforceConnector();

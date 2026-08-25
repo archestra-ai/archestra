@@ -7,6 +7,15 @@ export function skillDetailHref(id: string) {
   return `/skills/${encodeURIComponent(id)}`;
 }
 
+/**
+ * The skill page's Usage tab. Usage used to be a dialog opened from the list
+ * and from the detail header; it is a tab now, so both open the same URL and
+ * a link to one person's reading of it survives being pasted to someone else.
+ */
+export function skillUsageHref(id: string) {
+  return `${skillDetailHref(id)}?tab=usage`;
+}
+
 export type SkillEditStepId = "content" | "access";
 
 export function skillEditHref(id: string, step?: SkillEditStepId) {

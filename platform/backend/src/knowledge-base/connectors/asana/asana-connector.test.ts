@@ -1549,10 +1549,6 @@ describe("AsanaConnector", () => {
       mockGetMemberships.mockResolvedValue(page([]));
     });
 
-    test("supportsPermissionSync is enabled", () => {
-      expect(connector.supportsPermissionSync).toBe(true);
-    });
-
     test("public_to_workspace project grants the workspace-members group plus explicit members", async () => {
       stubProjects({
         "111111": {

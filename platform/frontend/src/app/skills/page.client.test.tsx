@@ -32,9 +32,6 @@ vi.mock("@/components/search-input", () => ({ SearchInput: () => null }));
 vi.mock("./_parts/skill-version-history-dialog", () => ({
   SkillVersionHistoryDialog: () => null,
 }));
-vi.mock("./_parts/skill-usage-dialog", () => ({
-  SkillUsageDialog: () => null,
-}));
 vi.mock("./_parts/delete-skill-dialog", () => ({
   DeleteSkillDialog: () => null,
 }));

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { FastifyRequest } from "fastify";
 import {
   isLockedChatEnabled,
@@ -65,6 +66,36 @@ export function resolveLockedChatCreation(params: {
       dek,
     ),
     lockedChatEscrow: wrapLockedChatDek(dek),
+  };
+}
+
+/**
+ * The locked-chat half of creating a conversation the SERVER assembles rather
+ * than the composer — an app chat, which is opened by a POST from the browser
+ * and so can carry the same key header the composer sends.
+ *
+ * Returns null when the request carries no key, which is the ordinary
+ * (unlocked) open. When it does carry one, the conversation id is minted HERE:
+ * the fingerprint and the escrow record are both bound to it, so it has to
+ * exist before the row is written, exactly as it does on the composer path.
+ *
+ * The caller must both insert the conversation under this `conversationId` and
+ * seal anything it seeds into the chat with `key`.
+ */
+export function resolveLockedChatCreationIfRequested(request: FastifyRequest): {
+  conversationId: string;
+  fields: ReturnType<typeof resolveLockedChatCreation>;
+  key: ConversationContentKey;
+} | null {
+  const dek = readDekHeader(request);
+  if (!dek) return null;
+  const conversationId = randomUUID();
+  return {
+    conversationId,
+    // Re-reads the header and re-validates that locked chats are enabled and
+    // escrow is configured — a 403/400 here means no conversation is created.
+    fields: resolveLockedChatCreation({ request, conversationId }),
+    key: { dek, conversationId },
   };
 }
 

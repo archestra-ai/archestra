@@ -13,7 +13,7 @@ import {
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { cn } from "@/lib/utils";
 
-// Helper to determine if a tab is active
+// Helper to determine if a tab's href matches the current URL
 // Sort tabs by href length descending so we match the most specific first
 function isTabActive(
   currentUrl: string,
@@ -59,8 +59,17 @@ export function PageLayout({
     label: React.ReactNode;
     href: string;
     testId?: string;
-    /** Override URL matching for tabs that represent query-owned views. */
-    active?: boolean;
+    /**
+     * Override URL matching for tabs that represent query-owned views — the
+     * MCP registry's facets live in a search param, so only the caller knows
+     * which one the URL means.
+     *
+     * This is *selection*: which tab the reader is currently on. It is not the
+     * state of the thing the tab links to. A tab whose label carries a status
+     * badge ("Active", "Configure") must leave this alone and let the URL
+     * decide, or every connected channel renders as the open page at once.
+     */
+    selected?: boolean;
   }[];
   title: React.ReactNode;
   /**
@@ -119,10 +128,17 @@ export function PageLayout({
   const mobileVisibleTabs = tabs.slice(0, mobileVisibleCount);
   const mobileOverflowTabs = tabs.slice(mobileVisibleCount);
 
-  // Check if the active tab is in the overflow
-  const activeOverflowTab = mobileOverflowTabs.find(
-    (tab) => tab.active ?? isTabActive(currentUrl, tab.href, tabs),
+  // One winner, resolved once and shared by all three rows. `find` is what
+  // makes the selected treatment — and `aria-current="page"` — exclusive: the
+  // reader is on exactly one page, so at most one tab may claim to be it, no
+  // matter what a caller passes in `selected`.
+  const selectedTab = tabs.find(
+    (tab) => tab.selected ?? isTabActive(currentUrl, tab.href, tabs),
   );
+  const selectedOverflowTab =
+    selectedTab && mobileOverflowTabs.includes(selectedTab)
+      ? selectedTab
+      : undefined;
 
   return (
     <div className="flex h-full w-full flex-col">
@@ -166,22 +182,23 @@ export function PageLayout({
               {/* Desktop: Show all tabs */}
               <div className="hidden md:flex gap-4 mb-0 overflow-x-auto whitespace-nowrap">
                 {tabs.map((tab) => {
-                  const isActive =
-                    tab.active ?? isTabActive(currentUrl, tab.href, tabs);
+                  const isSelected = tab === selectedTab;
                   return (
                     <Link
                       key={tab.href}
                       href={tab.href}
-                      aria-current={isActive ? "page" : undefined}
+                      aria-current={isSelected ? "page" : undefined}
                       // Only this copy carries the test id — see the `tabs` prop.
                       data-testid={tab.testId}
                       className={cn(
                         "relative cursor-pointer pb-3 text-sm font-medium transition-colors hover:text-foreground",
-                        isActive ? "text-foreground" : "text-muted-foreground",
+                        isSelected
+                          ? "text-foreground"
+                          : "text-muted-foreground",
                       )}
                     >
                       {tab.label}
-                      {isActive && (
+                      {isSelected && (
                         <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
                       )}
                     </Link>
@@ -192,20 +209,21 @@ export function PageLayout({
               {/* Mobile: Show first N tabs + overflow dropdown */}
               <div className="flex md:hidden gap-3 mb-0 items-center whitespace-nowrap overflow-x-auto">
                 {mobileVisibleTabs.map((tab) => {
-                  const isActive =
-                    tab.active ?? isTabActive(currentUrl, tab.href, tabs);
+                  const isSelected = tab === selectedTab;
                   return (
                     <Link
                       key={tab.href}
                       href={tab.href}
-                      aria-current={isActive ? "page" : undefined}
+                      aria-current={isSelected ? "page" : undefined}
                       className={cn(
                         "relative cursor-pointer pb-1 text-sm font-medium transition-colors hover:text-foreground",
-                        isActive ? "text-foreground" : "text-muted-foreground",
+                        isSelected
+                          ? "text-foreground"
+                          : "text-muted-foreground",
                       )}
                     >
                       {tab.label}
-                      {isActive && (
+                      {isSelected && (
                         <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
                       )}
                     </Link>
@@ -221,7 +239,7 @@ export function PageLayout({
                           variant="ghost"
                           className={cn(
                             "relative h-auto cursor-pointer rounded-none px-1 pb-3 text-sm font-medium transition-colors hover:bg-transparent hover:text-foreground flex items-center gap-1",
-                            activeOverflowTab
+                            selectedOverflowTab
                               ? "text-foreground"
                               : "text-muted-foreground",
                           )}
@@ -232,15 +250,15 @@ export function PageLayout({
                               Chrome page-translate re-parents text nodes into
                               <font> wrappers and React crashes removing a
                               re-parented text node (facebook/react#11538). */}
-                          {activeOverflowTab ? (
-                            <span key="active-tab">
-                              {activeOverflowTab.label}
+                          {selectedOverflowTab ? (
+                            <span key="selected-tab">
+                              {selectedOverflowTab.label}
                             </span>
                           ) : (
                             <span key="more">More</span>
                           )}
                           <ChevronDown className="h-3.5 w-3.5" />
-                          {activeOverflowTab && (
+                          {selectedOverflowTab && (
                             <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
                           )}
                         </Button>
@@ -250,18 +268,16 @@ export function PageLayout({
                         align="end"
                       >
                         {mobileOverflowTabs.map((tab) => {
-                          const isActive =
-                            tab.active ??
-                            isTabActive(currentUrl, tab.href, tabs);
+                          const isSelected = tab === selectedTab;
                           return (
                             <Link
                               key={tab.href}
                               href={tab.href}
-                              aria-current={isActive ? "page" : undefined}
+                              aria-current={isSelected ? "page" : undefined}
                               onClick={() => setOverflowOpen(false)}
                               className={cn(
                                 "cursor-pointer rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted",
-                                isActive
+                                isSelected
                                   ? "font-medium text-foreground bg-muted"
                                   : "text-muted-foreground",
                               )}

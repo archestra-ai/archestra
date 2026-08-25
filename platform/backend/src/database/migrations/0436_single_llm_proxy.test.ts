@@ -5,7 +5,7 @@ import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 
 const migrationSql = fs.readFileSync(
-  path.join(__dirname, "0435_single_llm_proxy.sql"),
+  path.join(__dirname, "0436_single_llm_proxy.sql"),
   "utf-8",
 );
 
@@ -69,7 +69,7 @@ async function getOrgProxyRows(organizationId: string) {
     );
 }
 
-describe("0435 single llm proxy", () => {
+describe("0436 single llm proxy", () => {
   test("elects the connection-default row, normalizes it, demotes the rest, and is idempotent", async ({
     makeOrganization,
   }) => {

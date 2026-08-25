@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import {
   emailMatchesAllowedIdentityProviderDomains,
+  IDENTITY_PROVIDER_SECRET_PATHS,
   IdentityProviderFormSchema,
   IdentityProviderOidcConfigSchema,
+  IdentityProviderSamlConfigSchema,
+  RedactedIdentityProviderOidcConfigSchema,
+  RedactedIdentityProviderSamlConfigSchema,
 } from "./identity-provider";
 
 describe("IdentityProviderOidcConfigSchema", () => {
@@ -170,5 +175,77 @@ describe("emailMatchesAllowedIdentityProviderDomains", () => {
         "example.com",
       ),
     ).toBe(false);
+  });
+});
+
+describe("IDENTITY_PROVIDER_SECRET_PATHS", () => {
+  /**
+   * Walks a config schema by dot path, unwrapping optionals, and returns
+   * whether the leaf exists.
+   *
+   * A path that no longer resolves — a typo, or a field renamed in the config
+   * schema — makes the redactor quietly skip that credential and keep shipping
+   * it to the browser. Nothing else fails in that case: the route tests only
+   * cover the fields their fixtures populate.
+   */
+  function pathExists(schema: z.ZodType, path: string[]): boolean {
+    let current: z.ZodType = schema;
+    for (const segment of path) {
+      const unwrapped = unwrapSchema(current);
+      if (!(unwrapped instanceof z.ZodObject)) return false;
+      const next: z.ZodType | undefined = unwrapped.shape[segment];
+      if (!next) return false;
+      current = next;
+    }
+    return true;
+  }
+
+  function unwrapSchema(schema: z.ZodType): z.ZodType {
+    let current = schema;
+    while (
+      current instanceof z.ZodOptional ||
+      current instanceof z.ZodNullable
+    ) {
+      current = current.unwrap() as z.ZodType;
+    }
+    return current;
+  }
+
+  it.each(
+    IDENTITY_PROVIDER_SECRET_PATHS,
+  )("%s resolves to a real config field", (path) => {
+    const [root, ...rest] = path.split(".");
+    const schema =
+      root === "oidcConfig"
+        ? IdentityProviderOidcConfigSchema
+        : IdentityProviderSamlConfigSchema;
+
+    expect(pathExists(schema, rest)).toBe(true);
+  });
+
+  it("leaves a fully redacted config parseable by the redacted schemas", () => {
+    // Guards the write path: reads strip these fields, so if one of them ever
+    // becomes required the edit form's PUT starts failing validation.
+    expect(() =>
+      RedactedIdentityProviderOidcConfigSchema.parse({
+        issuer: "https://idp.example.com",
+        pkce: true,
+        clientId: "client",
+        discoveryEndpoint:
+          "https://idp.example.com/.well-known/openid-configuration",
+        enterpriseManagedCredentials: {},
+      }),
+    ).not.toThrow();
+
+    expect(() =>
+      RedactedIdentityProviderSamlConfigSchema.parse({
+        issuer: "https://saml.example.com",
+        entryPoint: "https://saml.example.com/sso",
+        cert: "public-cert",
+        callbackUrl: "https://app.example.com/callback",
+        spMetadata: {},
+        idpMetadata: {},
+      }),
+    ).not.toThrow();
   });
 });

@@ -1,7 +1,7 @@
 import { and, count, countDistinct, eq, gte, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { SkillUsageStatistics } from "@/types";
-import UserModel from "./user";
+import { describeUsageActors } from "./skill-usage-actors";
 
 class SkillUsageEventModel {
   /**
@@ -26,13 +26,21 @@ class SkillUsageEventModel {
 
   /**
    * Per-user activation analytics for one skill since `since`: daily counts
-   * (UTC calendar days, empty days omitted) plus per-user totals with display
-   * names resolved from the `users` table. Ids without a `users` row (deleted
-   * users, synthetic service-account ids) keep `name: null`.
+   * (UTC calendar days, empty days omitted) plus per-actor totals with display
+   * names resolved from whichever table owns the id.
+   *
+   * The log stores a bare id, so resolution is two lookups: real user ids
+   * against `users`, and synthetic `service-account:<id>` ids against
+   * `service_accounts` (scoped to `organizationId`). Each row carries a `kind`
+   * saying what its id addresses, which stays meaningful when the owning row is
+   * gone: `name: null` then means deleted, and a caller can still say whether a
+   * deleted *user* or a deleted *service account* ran the skill instead of
+   * lumping them — and an unattributed activation — into one "unknown" bucket.
    */
   static async getUsageStatistics(params: {
     skillId: string;
     since: Date;
+    organizationId: string;
   }): Promise<SkillUsageStatistics> {
     const day = sql<string>`to_char(date_trunc('day', ${schema.skillUsageEventsTable.createdAt} at time zone 'UTC'), 'YYYY-MM-DD')`;
     const rows = await db
@@ -55,18 +63,10 @@ class SkillUsageEventModel {
     for (const row of rows) {
       totals.set(row.userId, (totals.get(row.userId) ?? 0) + row.count);
     }
-    const userIds = [...totals.keys()].filter(
-      (id): id is string => id !== null,
-    );
-    const names = await UserModel.getNamesByIds(userIds);
-
-    const users = [...totals.entries()]
-      .map(([userId, total]) => ({
-        userId,
-        name: userId === null ? null : (names.get(userId) ?? null),
-        total,
-      }))
-      .sort((a, b) => b.total - a.total);
+    const users = await describeUsageActors({
+      totals,
+      organizationId: params.organizationId,
+    });
 
     return {
       since: params.since.toISOString(),

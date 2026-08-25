@@ -1,6 +1,7 @@
 import {
   IdentityProviderFormSchema,
   type IdentityProviderFormValues,
+  type IdentityProviderSecretPath,
 } from "@archestra/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { render, screen } from "@testing-library/react";
@@ -37,10 +38,14 @@ function TestWrapper({
   onSubmit,
   providerId = "test",
   activeSection,
+  configuredSecretPaths,
+  clientSecret = "secret",
 }: {
   onSubmit?: (data: IdentityProviderFormValues) => void;
   providerId?: string;
   activeSection?: ComponentProps<typeof OidcConfigForm>["activeSection"];
+  configuredSecretPaths?: IdentityProviderSecretPath[];
+  clientSecret?: string;
 }) {
   const form = useForm<IdentityProviderFormValues>({
     // biome-ignore lint/suspicious/noExplicitAny: test setup
@@ -56,7 +61,7 @@ function TestWrapper({
         enableRpInitiatedLogout: true,
         hd: "",
         clientId: "test",
-        clientSecret: "secret",
+        clientSecret,
         discoveryEndpoint:
           "https://example.com/.well-known/openid-configuration",
         scopes: ["openid"],
@@ -68,7 +73,11 @@ function TestWrapper({
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit((data) => onSubmit?.(data))}>
-        <OidcConfigForm form={form} activeSection={activeSection} />
+        <OidcConfigForm
+          form={form}
+          activeSection={activeSection}
+          configuredSecretPaths={configuredSecretPaths}
+        />
         <Button type="submit">Save</Button>
       </form>
     </Form>
@@ -98,6 +107,45 @@ describe("OidcConfigForm", () => {
         }),
       }),
     );
+  });
+
+  describe("stored secrets", () => {
+    // Reads redact the secret, so an edit dialog opens with a blank Client
+    // Secret box. Without this hint that reads as "the credential was lost".
+    const storedNote =
+      /A value is already stored\. Leave blank to keep it, or enter a new value to replace\./;
+
+    it("says a saved client secret is stored when the field comes back blank", () => {
+      render(
+        <TestWrapper
+          clientSecret=""
+          configuredSecretPaths={["oidcConfig.clientSecret"]}
+        />,
+      );
+
+      expect(screen.getByLabelText("Client Secret")).toHaveValue("");
+      expect(screen.getByText(storedNote)).toBeInTheDocument();
+    });
+
+    it("says nothing about a stored secret when none is saved", () => {
+      render(<TestWrapper clientSecret="" />);
+
+      expect(screen.queryByText(storedNote)).not.toBeInTheDocument();
+    });
+
+    it("marks stored exchange credentials in the enterprise section", () => {
+      render(
+        <TestWrapper
+          activeSection="enterprise-managed-credentials"
+          configuredSecretPaths={[
+            "oidcConfig.enterpriseManagedCredentials.clientSecret",
+            "oidcConfig.enterpriseManagedCredentials.privateKeyPem",
+          ]}
+        />,
+      );
+
+      expect(screen.getAllByText(storedNote)).toHaveLength(2);
+    });
   });
 
   it("shows allowed email domains for non-Google providers", () => {

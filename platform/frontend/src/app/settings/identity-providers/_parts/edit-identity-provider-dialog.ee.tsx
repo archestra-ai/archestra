@@ -239,6 +239,7 @@ export function EditIdentityProviderDialog({
           <OidcConfigForm
             form={form}
             identityProviderId={provider.id}
+            configuredSecretPaths={provider.configuredSecretPaths}
             activeSection={
               validActiveSection as Exclude<
                 IdentityProviderDialogSection,

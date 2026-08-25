@@ -4,6 +4,7 @@ import { makeSignature } from "better-auth/crypto";
 import { vi } from "vitest";
 import { auth } from "@/auth/better-auth";
 import config from "@/config";
+import IdentityProviderModel from "@/models/identity-provider.ee";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -621,6 +622,227 @@ describe("identity provider routes", () => {
       const data = response.json();
       expect(data).toHaveProperty("id", idp.id);
       expect(data).toHaveProperty("providerId", "get-by-id-provider");
+    });
+  });
+
+  describe("credential redaction", () => {
+    const OIDC_WITH_SECRETS = {
+      clientId: "test-client",
+      clientSecret: "oidc-client-secret",
+      issuer: "https://idp.example.com",
+      pkce: false,
+      discoveryEndpoint:
+        "https://idp.example.com/.well-known/openid-configuration",
+      enterpriseManagedCredentials: {
+        clientId: "exchange-client",
+        clientSecret: "exchange-client-secret",
+        privateKeyPem: "-----BEGIN PRIVATE KEY-----exchange-pem-----",
+      },
+    };
+
+    test("GET /:id omits stored credentials and reports which are set", async ({
+      makeIdentityProvider,
+    }) => {
+      const idp = await makeIdentityProvider(organizationId, {
+        providerId: "redaction-provider",
+        oidcConfig: OIDC_WITH_SECRETS,
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/identity-providers/${idp.id}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      // Nowhere in the payload, not just absent from the field we expected.
+      expect(response.body).not.toContain("oidc-client-secret");
+      expect(response.body).not.toContain("exchange-client-secret");
+      expect(response.body).not.toContain("exchange-pem");
+
+      const data = response.json();
+      expect(data.oidcConfig).not.toHaveProperty("clientSecret");
+      expect(data.configuredSecretPaths).toEqual([
+        "oidcConfig.clientSecret",
+        "oidcConfig.enterpriseManagedCredentials.clientSecret",
+        "oidcConfig.enterpriseManagedCredentials.privateKeyPem",
+      ]);
+      // Non-secret config still round-trips, so the form stays editable.
+      expect(data.oidcConfig.clientId).toBe("test-client");
+      expect(data.oidcConfig.enterpriseManagedCredentials.clientId).toBe(
+        "exchange-client",
+      );
+    });
+
+    test("GET / omits stored credentials from the list", async ({
+      makeIdentityProvider,
+    }) => {
+      await makeIdentityProvider(organizationId, {
+        providerId: "redaction-list-provider",
+        oidcConfig: OIDC_WITH_SECRETS,
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/identity-providers",
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).not.toContain("oidc-client-secret");
+      expect(response.body).not.toContain("exchange-client-secret");
+      expect(response.body).not.toContain("exchange-pem");
+    });
+
+    test("GET /:id redacts SAML private keys but keeps the public cert", async ({
+      makeIdentityProvider,
+    }) => {
+      const idp = await makeIdentityProvider(organizationId, {
+        providerId: "redaction-saml-provider",
+        samlConfig: {
+          issuer: "https://saml.example.com",
+          entryPoint: "https://saml.example.com/sso",
+          cert: "public-idp-signing-cert",
+          callbackUrl: "https://app.example.com/callback",
+          privateKey: "saml-top-level-private-key",
+          decryptionPvk: "saml-decryption-key",
+          spMetadata: {
+            entityID: "https://app.example.com",
+            privateKey: "sp-private-key",
+            privateKeyPass: "sp-private-key-pass",
+          },
+        },
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/identity-providers/${idp.id}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).not.toContain("saml-top-level-private-key");
+      expect(response.body).not.toContain("saml-decryption-key");
+      expect(response.body).not.toContain("sp-private-key");
+      expect(response.body).not.toContain("sp-private-key-pass");
+
+      const data = response.json();
+      // The IdP signing certificate is public and admins need to read it back.
+      expect(data.samlConfig.cert).toBe("public-idp-signing-cert");
+      expect(data.samlConfig.spMetadata.entityID).toBe(
+        "https://app.example.com",
+      );
+      expect(data.configuredSecretPaths).toEqual([
+        "samlConfig.privateKey",
+        "samlConfig.decryptionPvk",
+        "samlConfig.spMetadata.privateKey",
+        "samlConfig.spMetadata.privateKeyPass",
+      ]);
+    });
+
+    test("PUT re-submitting the redacted config keeps the stored credentials", async ({
+      makeIdentityProvider,
+    }) => {
+      const idp = await makeIdentityProvider(organizationId, {
+        providerId: "redaction-put-provider",
+        oidcConfig: OIDC_WITH_SECRETS,
+      });
+
+      // Exactly what the edit dialog does: load the provider, change one
+      // unrelated field, submit the whole (secret-free) config back.
+      const loaded = (
+        await app.inject({
+          method: "GET",
+          url: `/api/identity-providers/${idp.id}`,
+        })
+      ).json();
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/identity-providers/${idp.id}`,
+        payload: {
+          providerId: loaded.providerId,
+          issuer: loaded.issuer,
+          domain: "renamed.example.com",
+          oidcConfig: loaded.oidcConfig,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().domain).toBe("renamed.example.com");
+
+      const stored = await IdentityProviderModel.findById(
+        idp.id,
+        organizationId,
+      );
+      expect(stored?.oidcConfig?.clientSecret).toBe("oidc-client-secret");
+      expect(
+        stored?.oidcConfig?.enterpriseManagedCredentials?.clientSecret,
+      ).toBe("exchange-client-secret");
+      expect(
+        stored?.oidcConfig?.enterpriseManagedCredentials?.privateKeyPem,
+      ).toBe("-----BEGIN PRIVATE KEY-----exchange-pem-----");
+    });
+
+    test("PUT with a new client secret rotates it", async ({
+      makeIdentityProvider,
+    }) => {
+      const idp = await makeIdentityProvider(organizationId, {
+        providerId: "rotation-provider",
+        oidcConfig: OIDC_WITH_SECRETS,
+      });
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/identity-providers/${idp.id}`,
+        payload: {
+          oidcConfig: {
+            ...OIDC_WITH_SECRETS,
+            clientSecret: "rotated-client-secret",
+            enterpriseManagedCredentials: {},
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      // The rotated value must not come straight back out either.
+      expect(response.body).not.toContain("rotated-client-secret");
+
+      const stored = await IdentityProviderModel.findById(
+        idp.id,
+        organizationId,
+      );
+      expect(stored?.oidcConfig?.clientSecret).toBe("rotated-client-secret");
+      // A blank nested secret under a surviving parent is still preserved.
+      expect(
+        stored?.oidcConfig?.enterpriseManagedCredentials?.clientSecret,
+      ).toBe("exchange-client-secret");
+    });
+
+    test("PUT dropping a credential block clears the secrets it held", async ({
+      makeIdentityProvider,
+    }) => {
+      const idp = await makeIdentityProvider(organizationId, {
+        providerId: "clearing-provider",
+        oidcConfig: OIDC_WITH_SECRETS,
+      });
+
+      const { enterpriseManagedCredentials: _dropped, ...withoutExchange } =
+        OIDC_WITH_SECRETS;
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/identity-providers/${idp.id}`,
+        payload: { oidcConfig: { ...withoutExchange, clientSecret: "" } },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const stored = await IdentityProviderModel.findById(
+        idp.id,
+        organizationId,
+      );
+      // Removing the whole block is how an admin clears those credentials...
+      expect(stored?.oidcConfig?.enterpriseManagedCredentials).toBeUndefined();
+      // ...while a blank top-level secret still means "keep".
+      expect(stored?.oidcConfig?.clientSecret).toBe("oidc-client-secret");
     });
   });
 

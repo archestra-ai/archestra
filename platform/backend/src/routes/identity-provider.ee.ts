@@ -1,4 +1,4 @@
-import { RouteId } from "@archestra/shared";
+import { RouteId, redactIdentityProviderSecrets } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { jwtDecode } from "jwt-decode";
 import { z } from "zod";
@@ -18,7 +18,7 @@ import {
   IdentityProviderLatestIdTokenClaimsSchema,
   InsertIdentityProviderSchema,
   PublicIdentityProviderSchema,
-  SelectIdentityProviderSchema,
+  RedactedIdentityProviderSchema,
   TeamSyncIdentityProviderOptionSchema,
   UpdateIdentityProviderSchema,
 } from "@/types";
@@ -48,7 +48,7 @@ const identityProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
-   * Admin endpoint - returns full provider config including secrets.
+   * Admin endpoint - returns provider config with every credential redacted.
    * Requires authentication and identityProvider:read permission.
    */
   fastify.get(
@@ -57,15 +57,16 @@ const identityProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetIdentityProviders,
         description:
-          "Get all identity providers with full configuration (admin only)",
+          "Get all identity providers with configuration (admin only, secrets redacted)",
         tags: ["Identity Providers"],
         response: constructResponseSchema(
-          z.array(SelectIdentityProviderSchema),
+          z.array(RedactedIdentityProviderSchema),
         ),
       },
     },
     async ({ organizationId }, reply) => {
-      return reply.send(await IdentityProviderModel.findAll(organizationId));
+      const providers = await IdentityProviderModel.findAll(organizationId);
+      return reply.send(providers.map(redactIdentityProviderSecrets));
     },
   );
 
@@ -228,12 +229,12 @@ const identityProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetIdentityProvider,
-        description: "Get identity provider by ID",
+        description: "Get identity provider by ID (secrets redacted)",
         tags: ["Identity Providers"],
         params: z.object({
           id: z.string(),
         }),
-        response: constructResponseSchema(SelectIdentityProviderSchema),
+        response: constructResponseSchema(RedactedIdentityProviderSchema),
       },
     },
     async ({ params, organizationId }, reply) => {
@@ -244,7 +245,7 @@ const identityProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!provider) {
         throw new ApiError(404, "Identity provider not found");
       }
-      return reply.send(provider);
+      return reply.send(redactIdentityProviderSecrets(provider));
     },
   );
 
@@ -253,24 +254,23 @@ const identityProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.CreateIdentityProvider,
-        description: "Create a new identity provider",
+        description: "Create a new identity provider (secrets redacted)",
         tags: ["Identity Providers"],
         body: InsertIdentityProviderSchema,
-        response: constructResponseSchema(SelectIdentityProviderSchema),
+        response: constructResponseSchema(RedactedIdentityProviderSchema),
       },
     },
     async ({ body, organizationId, user, headers }, reply) => {
-      return reply.send(
-        await IdentityProviderModel.create(
-          {
-            ...body,
-            userId: user.id,
-          },
-          organizationId,
-          headers as HeadersInit,
-          auth,
-        ),
+      const provider = await IdentityProviderModel.create(
+        {
+          ...body,
+          userId: user.id,
+        },
+        organizationId,
+        headers as HeadersInit,
+        auth,
       );
+      return reply.send(redactIdentityProviderSecrets(provider));
     },
   );
 
@@ -279,13 +279,13 @@ const identityProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.UpdateIdentityProvider,
-        description: "Update identity provider",
+        description: "Update identity provider (secrets redacted)",
         tags: ["Identity Providers"],
         params: z.object({
           id: z.string(),
         }),
         body: UpdateIdentityProviderSchema,
-        response: constructResponseSchema(SelectIdentityProviderSchema),
+        response: constructResponseSchema(RedactedIdentityProviderSchema),
       },
     },
     async ({ params: { id }, body, organizationId }, reply) => {
@@ -297,7 +297,7 @@ const identityProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!provider) {
         throw new ApiError(404, "Identity provider not found");
       }
-      return reply.send(provider);
+      return reply.send(redactIdentityProviderSecrets(provider));
     },
   );
 

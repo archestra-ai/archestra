@@ -41,6 +41,7 @@ export function AppFrame({
     displayMode,
     setDisplayMode,
     reloadNonce,
+    reload,
     resourceState,
     setResourceState,
   } = useAppRuntimeControls();
@@ -61,6 +62,7 @@ export function AppFrame({
       onSizeChange={noopSizeChange}
       onResourceStateChange={setResourceState}
       reloadNonce={reloadNonce}
+      onReload={reload}
     />
   ) : null;
 

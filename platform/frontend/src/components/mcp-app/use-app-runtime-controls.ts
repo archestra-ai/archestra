@@ -2,13 +2,13 @@ import type { McpUiDisplayMode } from "@modelcontextprotocol/ext-apps";
 import { useCallback, useState } from "react";
 import { isRenderableMcpAppHtml } from "@/components/mcp-app/mcp-app-view";
 
-type ResourceState = "unknown" | "renderable" | "empty";
+type ResourceState = "unknown" | "renderable" | "empty" | "error";
 
 /**
  * Shared runtime-frame state every MCP App surface needs: the display mode
  * (inline ↔ fullscreen), a reload nonce that remounts the sandboxed iframe, and
- * the resolved resource state (renderable vs. empty). Extracted so the page
- * frame ({@link AppFrame}) and chat's `McpAppSection` don't each re-implement
+ * the resolved resource state (renderable, empty, or failed). Extracted so the
+ * page frame ({@link AppFrame}) and chat's `McpAppSection` don't each re-implement
  * the same `useState` + handlers.
  *
  * `initialHtml` seeds `resourceState` from a pre-fetched (SSE) resource so a

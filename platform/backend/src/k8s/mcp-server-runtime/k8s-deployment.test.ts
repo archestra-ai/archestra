@@ -679,6 +679,9 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
     expect(container?.stdin).toBe(true);
     expect(container?.tty).toBe(false);
     expect(container?.ports).toBeUndefined();
+    expect(container?.startupProbe).toBeUndefined();
+    expect(container?.readinessProbe).toBeUndefined();
+    expect(container?.livenessProbe).toBeUndefined();
     expect(templateSpec?.enableServiceLinks).toBe(false);
     expect(templateSpec?.restartPolicy).toBe("Always");
   });
@@ -717,6 +720,25 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
         protocol: "TCP",
       },
     ]);
+    expect(container?.startupProbe).toEqual({
+      tcpSocket: { port: 3000 },
+      periodSeconds: 2,
+      timeoutSeconds: 1,
+      failureThreshold: 60,
+    });
+    expect(container?.readinessProbe).toEqual({
+      tcpSocket: { port: 3000 },
+      periodSeconds: 2,
+      timeoutSeconds: 1,
+      failureThreshold: 2,
+      successThreshold: 1,
+    });
+    expect(container?.livenessProbe).toEqual({
+      tcpSocket: { port: 3000 },
+      periodSeconds: 30,
+      timeoutSeconds: 1,
+      failureThreshold: 3,
+    });
   });
 
   test("generates deploymentSpec without command when no command is provided", () => {
@@ -2675,6 +2697,43 @@ spec:
       catalogItem: catalogItem,
     });
   }
+
+  test("fills missing TCP probes for custom HTTP YAML and preserves explicit probes", () => {
+    const deployment = createK8sDeploymentWithYaml(`
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: mcp-server
+          image: test:latest
+          readinessProbe:
+            tcpSocket:
+              port: 9191
+            periodSeconds: 7
+`);
+
+    const spec = deployment.generateDeploymentSpec(
+      "test:latest",
+      {
+        command: "node",
+        arguments: ["server.js"],
+        transportType: "streamable-http",
+        httpPort: 9191,
+      },
+      true,
+      9191,
+    );
+    const container = spec.spec?.template.spec?.containers[0];
+
+    expect(container?.readinessProbe).toEqual({
+      tcpSocket: { port: 9191 },
+      periodSeconds: 7,
+    });
+    expect(container?.startupProbe?.tcpSocket).toEqual({ port: 9191 });
+    expect(container?.livenessProbe?.tcpSocket).toEqual({ port: 9191 });
+  });
 
   test("applies platform nodeSelector when YAML has none", () => {
     const k8sDeployment = createK8sDeploymentWithYaml(minimalYaml);
@@ -7181,6 +7240,7 @@ describe("K8sDeployment image pull failure handling", () => {
     },
     status: {
       phase: "Running",
+      conditions: [{ type: "Ready", status: "True" }],
       containerStatuses: [
         {
           name: "mcp-server",
@@ -7300,6 +7360,29 @@ describe("K8sDeployment image pull failure handling", () => {
       ).resolves.toBeUndefined();
       expect(deployment.statusSummary.state).toBe("running");
       expect(deployment.statusSummary.error).toBeNull();
+    });
+
+    test("waits for the Kubernetes Pod Ready condition, not only Running phase", async () => {
+      const runningButUnready = {
+        ...runningPod,
+        status: {
+          ...runningPod.status,
+          conditions: [{ type: "Ready", status: "False" }],
+        },
+      } as k8s.V1Pod;
+      const listNamespacedPod = vi
+        .fn()
+        .mockResolvedValueOnce({ items: [runningButUnready] })
+        .mockResolvedValue({ items: [runningPod] });
+      const deployment = makeDeploymentWithMockedApis({
+        listNamespacedPod,
+        readNamespacedDeployment: vi.fn(),
+      });
+
+      await expect(
+        deployment.waitForDeploymentReady(3, 1),
+      ).resolves.toBeUndefined();
+      expect(listNamespacedPod).toHaveBeenCalledTimes(2);
     });
 
     test("fails fast on terminal container states", async () => {
@@ -7947,6 +8030,7 @@ describe("K8sDeployment idle hibernation", () => {
     metadata: { name: "test-server-abc123", creationTimestamp: new Date() },
     status: {
       phase: "Running",
+      conditions: [{ type: "Ready", status: "True" }],
       containerStatuses: [
         {
           name: "mcp-server",

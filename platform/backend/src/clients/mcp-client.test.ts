@@ -9472,6 +9472,169 @@ describe("readResource (assignment + all-tools dynamic access, end to end)", () 
     ).rejects.toThrow(/Resource not found/);
     expect(mockReadResource).not.toHaveBeenCalled();
   });
+
+  describe("transient retry", () => {
+    const RETRY_RESULT = {
+      contents: [
+        {
+          uri: RESOURCE_URI,
+          mimeType: "text/html",
+          text: "<html>recovered</html>",
+        },
+      ],
+    };
+
+    function retryRead() {
+      return (
+        mcpClient as unknown as {
+          doReadResourceWithRetry: (params: unknown) => Promise<unknown>;
+        }
+      ).doReadResourceWithRetry({
+        uri: RESOURCE_URI,
+        agentId: randomUUID(),
+        mcpServer: {
+          server: { id: randomUUID() },
+          catalogItem: {},
+        },
+      });
+    }
+
+    test("reconnects and retries an idempotent resource read after a transport failure", async () => {
+      const transportError = new Error("fetch failed", {
+        cause: Object.assign(new Error("connect refused"), {
+          code: "ECONNREFUSED",
+        }),
+      });
+      const doReadResource = vi
+        .spyOn(
+          mcpClient as unknown as { doReadResource: () => Promise<unknown> },
+          "doReadResource",
+        )
+        .mockRejectedValueOnce(transportError)
+        .mockResolvedValueOnce(RETRY_RESULT);
+      const invalidate = vi
+        .spyOn(mcpClient, "invalidateConnectionsForServer")
+        .mockResolvedValue(undefined);
+      const random = vi.spyOn(Math, "random").mockReturnValue(0);
+
+      try {
+        await expect(retryRead()).resolves.toEqual(RETRY_RESULT);
+        expect(doReadResource).toHaveBeenCalledTimes(2);
+        expect(invalidate).toHaveBeenCalledTimes(1);
+      } finally {
+        doReadResource.mockRestore();
+        invalidate.mockRestore();
+        random.mockRestore();
+      }
+    });
+
+    test("applies the same retry policy to server-scoped UI resource reads", async () => {
+      const directRead = vi
+        .spyOn(
+          mcpClient as unknown as {
+            withDirectServerClient: () => Promise<unknown>;
+          },
+          "withDirectServerClient",
+        )
+        .mockRejectedValueOnce(new Error("fetch failed"))
+        .mockResolvedValueOnce(RETRY_RESULT);
+      const random = vi.spyOn(Math, "random").mockReturnValue(0);
+
+      try {
+        await expect(
+          mcpClient.readResourceForServer({
+            mcpServerId: randomUUID(),
+            uri: RESOURCE_URI,
+          }),
+        ).resolves.toEqual(RETRY_RESULT);
+        expect(directRead).toHaveBeenCalledTimes(2);
+      } finally {
+        directRead.mockRestore();
+        random.mockRestore();
+      }
+    });
+
+    test("does not spend the retry deadline while waiting for a cold wake", async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+      const directRead = vi
+        .spyOn(
+          mcpClient as unknown as {
+            withDirectServerClient: () => Promise<unknown>;
+          },
+          "withDirectServerClient",
+        )
+        .mockImplementationOnce(async () => {
+          vi.setSystemTime(Date.now() + 30_000);
+          throw new Error("fetch failed");
+        })
+        .mockResolvedValueOnce(RETRY_RESULT);
+      const random = vi.spyOn(Math, "random").mockReturnValue(0);
+
+      try {
+        const read = mcpClient.readResourceForServer({
+          mcpServerId: randomUUID(),
+          uri: RESOURCE_URI,
+        });
+        await vi.runAllTimersAsync();
+        await expect(read).resolves.toEqual(RETRY_RESULT);
+        expect(directRead).toHaveBeenCalledTimes(2);
+      } finally {
+        directRead.mockRestore();
+        random.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    test("does not retry protocol errors", async () => {
+      const doReadResource = vi
+        .spyOn(
+          mcpClient as unknown as { doReadResource: () => Promise<unknown> },
+          "doReadResource",
+        )
+        .mockRejectedValue(new Error("Method not found"));
+      const invalidate = vi
+        .spyOn(mcpClient, "invalidateConnectionsForServer")
+        .mockResolvedValue(undefined);
+
+      try {
+        await expect(retryRead()).rejects.toThrow("Method not found");
+        expect(doReadResource).toHaveBeenCalledTimes(1);
+        expect(invalidate).not.toHaveBeenCalled();
+      } finally {
+        doReadResource.mockRestore();
+        invalidate.mockRestore();
+      }
+    });
+
+    test("stops after the hard attempt limit", async () => {
+      vi.useFakeTimers();
+      const doReadResource = vi
+        .spyOn(
+          mcpClient as unknown as { doReadResource: () => Promise<unknown> },
+          "doReadResource",
+        )
+        .mockRejectedValue(new Error("fetch failed"));
+      const invalidate = vi
+        .spyOn(mcpClient, "invalidateConnectionsForServer")
+        .mockResolvedValue(undefined);
+      const random = vi.spyOn(Math, "random").mockReturnValue(0);
+
+      try {
+        const read = retryRead();
+        const rejected = expect(read).rejects.toThrow("fetch failed");
+        await vi.runAllTimersAsync();
+        await rejected;
+        expect(doReadResource).toHaveBeenCalledTimes(8);
+        expect(invalidate).toHaveBeenCalledTimes(7);
+      } finally {
+        doReadResource.mockRestore();
+        invalidate.mockRestore();
+        random.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+  });
 });
 
 // Every upstream call runs under some credential the gateway resolves — the

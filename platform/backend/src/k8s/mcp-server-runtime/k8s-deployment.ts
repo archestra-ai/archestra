@@ -111,6 +111,50 @@ const AWS_APPLICATION_NETWORK_POLICY_RESOURCE = {
 const POD_READY_WAIT_MS = 5 * TimeInMs.Minute;
 
 /**
+ * Default transport-level health contract for managed HTTP MCP servers.
+ *
+ * TCP probes deliberately avoid making protocol-version, authentication, or
+ * session assumptions. The startup budget covers slow application bootstrap;
+ * once it succeeds, readiness controls Service routing and the conservative
+ * liveness cadence only restarts a server whose listening socket stays down.
+ */
+function buildHttpTcpProbes(
+  httpPort: number,
+): Pick<k8s.V1Container, "startupProbe" | "readinessProbe" | "livenessProbe"> {
+  return {
+    startupProbe: {
+      tcpSocket: { port: httpPort },
+      periodSeconds: 2,
+      timeoutSeconds: 1,
+      failureThreshold: 60,
+    },
+    readinessProbe: {
+      tcpSocket: { port: httpPort },
+      periodSeconds: 2,
+      timeoutSeconds: 1,
+      failureThreshold: 2,
+      successThreshold: 1,
+    },
+    livenessProbe: {
+      tcpSocket: { port: httpPort },
+      periodSeconds: 30,
+      timeoutSeconds: 1,
+      failureThreshold: 3,
+    },
+  };
+}
+
+/** Kubernetes' direct serving signal, including the configured readiness probe. */
+function isPodReady(pod: k8s.V1Pod): boolean {
+  return (
+    pod.status?.phase === "Running" &&
+    pod.status.conditions?.some(
+      (condition) => condition.type === "Ready" && condition.status === "True",
+    ) === true
+  );
+}
+
+/**
  * Thrown when a user's MCP server deployment fails to come up (crashing
  * container, unschedulable pod, bad image/config). A condition of the user's
  * server or environment, not a bug of ours: error tracking drops it by name,
@@ -2119,6 +2163,7 @@ export default class K8sDeployment {
                     protocol: "TCP",
                   },
                 ],
+                ...buildHttpTcpProbes(httpPort),
               }
             : {
                 stdin: true,
@@ -2500,6 +2545,13 @@ export default class K8sDeployment {
             },
           ];
         }
+        // Custom YAML may tune any probe explicitly. Fill only missing probes
+        // so every managed HTTP workload gets the transport-level defaults
+        // without overriding an operator's health contract.
+        const defaultProbes = buildHttpTcpProbes(httpPort);
+        container.startupProbe ??= defaultProbes.startupProbe;
+        container.readinessProbe ??= defaultProbes.readinessProbe;
+        container.livenessProbe ??= defaultProbes.livenessProbe;
       } else {
         // Stdio transport: enable stdin for JSON-RPC communication
         if (container.stdin === undefined) {
@@ -4306,33 +4358,23 @@ export default class K8sDeployment {
 
     for (let i = 0; i < maxAttempts; i++) {
       try {
-        const deployment = await this.k8sAppsApi.readNamespacedDeployment({
-          name: this.deploymentName,
-          namespace: this.namespace,
-        });
-
-        if (
-          deployment.status?.availableReplicas &&
-          deployment.status.availableReplicas > 0
-        ) {
-          // Also check if we can find the pod
-          const pod = await this.findPodForDeployment();
-          if (pod && pod.status?.phase === "Running") {
-            await this.assignHttpPortIfNeeded(pod);
-            // Update state to running now that deployment is confirmed ready
-            if (this.observeState("running")) {
-              this.errorMessage = null;
-            }
-            return;
-          }
-        }
-
-        // Check for failures in latest pods
         const sanitizedId = sanitizeLabelValue(this.getPodSelectorServerId());
         const pods = await this.k8sApi.listNamespacedPod({
           namespace: this.namespace,
           labelSelector: `mcp-server-id=${sanitizedId}`,
         });
+
+        // Pod Ready is the kubelet-owned result of the readiness probe. Waiting
+        // on it directly avoids treating a merely Running container as able to
+        // serve while keeping wake completion intentionally simple.
+        const readyPod = pods.items.find(isPodReady);
+        if (readyPod) {
+          await this.assignHttpPortIfNeeded(readyPod);
+          if (this.observeState("running")) {
+            this.errorMessage = null;
+          }
+          return;
+        }
 
         // Check for failure events (every 5th iteration to reduce API calls)
         // Start checking after first 10 seconds (iteration 5)

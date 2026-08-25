@@ -115,6 +115,11 @@ import { agentOwner } from "@/types";
 import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { buildMcpClientInfo } from "@/utils/mcp-client-info";
+import {
+  collectErrorCodes,
+  isConnectionErrno,
+  isTimeoutErrno,
+} from "@/utils/network-errors";
 import { previewToolResultContent } from "@/utils/tool-result-preview";
 import { K8sAttachTransport } from "./k8s-attach-transport";
 import {
@@ -216,6 +221,56 @@ function isStaleSessionError(error: unknown): boolean {
     error instanceof StaleSessionError ||
     (error instanceof StreamableHTTPError &&
       String(error.message).includes("Session not found"))
+  );
+}
+
+const RESOURCE_READ_RETRY_MAX_ATTEMPTS = 8;
+const RESOURCE_READ_RETRY_BASE_DELAY_MS = 500;
+const RESOURCE_READ_RETRY_MAX_DELAY_MS = 2_000;
+const RESOURCE_READ_RETRY_DEADLINE_MS = 10_000;
+const TRANSIENT_RESOURCE_HTTP_STATUSES = new Set([
+  408, 425, 429, 502, 503, 504,
+]);
+
+/**
+ * Resource reads are idempotent, so transport failures that occur around a
+ * cold start are safe to reconnect and retry. Protocol, authorization, and
+ * resource errors are intentionally excluded.
+ */
+function isTransientResourceReadError(error: unknown): boolean {
+  if (
+    error instanceof McpServerWakeError ||
+    isStaleSessionError(error) ||
+    collectErrorCodes(error).some(
+      (code) => isConnectionErrno(code) || isTimeoutErrno(code),
+    )
+  ) {
+    return true;
+  }
+
+  if (typeof error === "object" && error !== null) {
+    const candidate = error as {
+      code?: unknown;
+      status?: unknown;
+      statusCode?: unknown;
+    };
+    for (const status of [
+      candidate.code,
+      candidate.status,
+      candidate.statusCode,
+    ]) {
+      if (
+        typeof status === "number" &&
+        TRANSIENT_RESOURCE_HTTP_STATUSES.has(status)
+      ) {
+        return true;
+      }
+    }
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+  return /\bfetch failed\b|\bconnection (?:closed|reset|refused)\b|\bsocket hang up\b/i.test(
+    message,
   );
 }
 
@@ -3997,13 +4052,18 @@ class McpClient {
     mcpServerId: string;
     uri: string;
   }): Promise<unknown> {
-    return this.withDirectServerClient(params.mcpServerId, (client) =>
-      this.raceWithTimeout(
-        client.readResource({ uri: params.uri }),
-        30000,
-        "Read resource timeout",
-      ),
-    );
+    return this.retryTransientResourceRead({
+      uri: params.uri,
+      mcpServerId: params.mcpServerId,
+      read: () =>
+        this.withDirectServerClient(params.mcpServerId, (client) =>
+          this.raceWithTimeout(
+            client.readResource({ uri: params.uri }),
+            30000,
+            "Read resource timeout",
+          ),
+        ),
+    });
   }
 
   /** Call a tool directly on one installed server (server-scoped run path). */
@@ -4233,15 +4293,15 @@ class McpClient {
     }
 
     try {
-      const result = await this.doReadResource(
+      const result = await this.doReadResourceWithRetry({
         uri,
         agentId,
         mcpServer,
         tokenAuth,
-      );
+      });
       this.resourceCache.set(cacheKey, {
         result,
-        ttl: now + RESOURCE_CACHE_TTL_MS,
+        ttl: Date.now() + RESOURCE_CACHE_TTL_MS,
       });
       logger.info(
         { uri, agentId, serverId: mcpServer.server.id },
@@ -4257,6 +4317,89 @@ class McpClient {
         return staleCache.result;
       }
       throw error;
+    }
+  }
+
+  private async doReadResourceWithRetry(params: {
+    uri: string;
+    agentId: string;
+    mcpServer: {
+      server: NonNullable<Awaited<ReturnType<typeof McpServerModel.findById>>>;
+      catalogItem: NonNullable<
+        Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>
+      >;
+    };
+    tokenAuth?: TokenAuthContext;
+  }): Promise<ResourceContents> {
+    return this.retryTransientResourceRead({
+      uri: params.uri,
+      mcpServerId: params.mcpServer.server.id,
+      read: () =>
+        this.doReadResource(
+          params.uri,
+          params.agentId,
+          params.mcpServer,
+          params.tokenAuth,
+        ),
+      resetConnection: () =>
+        this.invalidateConnectionsForServer(params.mcpServer.server.id),
+    });
+  }
+
+  private async retryTransientResourceRead<T>(params: {
+    uri: string;
+    mcpServerId: string;
+    read: () => Promise<T>;
+    resetConnection?: () => Promise<void>;
+  }): Promise<T> {
+    let deadlineAt: number | undefined;
+
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await params.read();
+      } catch (error) {
+        const exhausted = attempt >= RESOURCE_READ_RETRY_MAX_ATTEMPTS;
+        if (exhausted || !isTransientResourceReadError(error)) {
+          throw error;
+        }
+
+        // A direct read includes the managed wake. Start the retry deadline at
+        // the first transient transport failure, not before the wake; otherwise
+        // any cold start longer than the retry window disables retries entirely.
+        deadlineAt ??= Date.now() + RESOURCE_READ_RETRY_DEADLINE_MS;
+        if (Date.now() >= deadlineAt) throw error;
+
+        // Cached clients must not reuse the transport or HTTP session that
+        // failed. Direct reads create and close a fresh client per attempt.
+        await params.resetConnection?.();
+
+        const backoffCeilingMs = Math.min(
+          RESOURCE_READ_RETRY_BASE_DELAY_MS * 2 ** (attempt - 1),
+          RESOURCE_READ_RETRY_MAX_DELAY_MS,
+        );
+        // Equal jitter keeps retries spread out while retaining enough minimum
+        // delay to cover bounded service/endpoint propagation after a wake.
+        const backoffFloorMs = Math.floor(backoffCeilingMs / 2);
+        const jitteredDelayMs =
+          backoffFloorMs +
+          Math.floor(Math.random() * (backoffCeilingMs - backoffFloorMs + 1));
+        const remainingMs = deadlineAt - Date.now();
+        if (remainingMs <= 0) throw error;
+        const delayMs = Math.min(jitteredDelayMs, remainingMs);
+
+        logger.warn(
+          {
+            err: error,
+            uri: params.uri,
+            mcpServerId: params.mcpServerId,
+            attempt,
+            nextAttempt: attempt + 1,
+            delayMs,
+          },
+          "Transient MCP resource read failed; reconnecting and retrying",
+        );
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
     }
   }
 

@@ -1318,6 +1318,43 @@ describe("agent routes", () => {
       expect(returned.tools[0]).not.toHaveProperty("meta");
     });
 
+    test("leaves the tools off when the caller asks for the roster alone", async ({
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+    }) => {
+      // Even as slim refs the tools carry a name and a description each, which
+      // on a real organization is the great majority of this response — and the
+      // new-chat screen, whose first paint waits on this list, draws none of
+      // them. Callers opt out; every other caller keeps today's response.
+      const agent = await makeAgent({
+        name: `Roster Only Agent ${crypto.randomUUID().slice(0, 8)}`,
+        organizationId,
+        scope: "org",
+        authorId: user.id,
+      });
+      const tool = await makeTool({});
+      await makeAgentTool(agent.id, tool.id);
+
+      const findAgent = async (query: string) => {
+        const response = await app.inject({
+          method: "GET",
+          url: `/api/agents/all?excludeBuiltIn=true${query}`,
+        });
+        expect(response.statusCode).toBe(200);
+        return response.json().find((a: { id: string }) => a.id === agent.id);
+      };
+
+      const withoutTools = await findAgent("&includeTools=false");
+      expect(withoutTools).toBeDefined();
+      expect(withoutTools.name).toBe(agent.name);
+      expect(withoutTools.tools).toEqual([]);
+
+      // Opting out is the only thing that drops them.
+      expect((await findAgent("")).tools).toHaveLength(1);
+      expect((await findAgent("&includeTools=true")).tools).toHaveLength(1);
+    });
+
     test("should exclude built-in agents when excludeBuiltIn=true", async ({
       makeAgent,
       seedAndAssignArchestraTools,

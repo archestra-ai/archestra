@@ -854,6 +854,15 @@ class AgentModel {
        * it from loading an organization's whole agent roster to discard it.
        */
       onlyEnforcingMissingCredentials?: boolean;
+      /**
+       * Attach each agent's assigned tools. Defaults to true. The refs carry
+       * every tool's name and description, so on an organization of any size
+       * they are the great majority of the result's size — callers that only
+       * need the roster (which agents exist, what they are called, which model
+       * they run) should turn this off and get `tools: []`, which here means
+       * "not requested" rather than "none assigned".
+       */
+      includeTools?: boolean;
     },
   ): Promise<Agent[]> {
     // Tools are attached afterwards as slim refs via one batched query:
@@ -950,7 +959,7 @@ class AgentModel {
     // Populate tools, teams, and labels for all agents with bulk queries to
     // avoid N+1
     const [toolRows, teamsMap, usersMap, labelsMap] = await Promise.all([
-      agentIds.length > 0
+      agentIds.length > 0 && options?.includeTools !== false
         ? db
             .select({
               agentId: schema.agentToolsTable.agentId,

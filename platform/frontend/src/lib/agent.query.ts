@@ -36,16 +36,28 @@ const {
   updateMemberDefaultAgent,
 } = archestraApiSdk;
 
+/**
+ * The roster, without each agent's tools. No consumer of this list reads them
+ * — the pickers that show tools fetch them per agent — while the refs carry
+ * every tool's name and description, which on an organization of any size is
+ * the great majority of the response. Dropping them is what lets the new-chat
+ * screen, whose first paint is gated on this list, stop waiting on megabytes
+ * it does not draw.
+ */
+const internalAgentsQuery = {
+  agentType: "agent",
+  excludeBuiltIn: true,
+  includeTools: false,
+} as const;
+
 export const internalAgentsQueryKey = [
   "agents",
   "all",
-  { agentType: "agent", excludeBuiltIn: true },
+  internalAgentsQuery,
 ] as const;
 
 export async function fetchInternalAgents() {
-  const { data, error } = await getAllAgents({
-    query: { agentType: "agent", excludeBuiltIn: true },
-  });
+  const { data, error } = await getAllAgents({ query: internalAgentsQuery });
   throwOnApiError(error, { toastOnError: false });
   return data ?? [];
 }
@@ -618,6 +630,13 @@ export function useInternalAgents(params?: { enabled?: boolean }) {
     // mounting this hook during one page load share a single fetch instead of
     // each observer refetching the whole roster. Agent mutations invalidate
     // ["agents"] queries, so edits still show up immediately.
+    //
+    // Restored on refresh because the new-chat screen cannot draw without it:
+    // which agent a new chat starts on is resolved from this roster, so an
+    // unrestored copy is a full-area spinner rather than a stale name. It is
+    // names and labels the picker already shows, and carries no credential (an
+    // agent references its key by id).
+    meta: PERSISTED_QUERY_META,
   });
 }
 

@@ -3053,13 +3053,6 @@
       "when": 1787606133553,
       "tag": "0435_single_llm_proxy",
       "breakpoints": true
-    },
-    {
-      "idx": 436,
-      "version": "7",
-      "when": 1787606281607,
-      "tag": "0436_lively_queen_noir",
-      "breakpoints": true
     }
   ]
 }

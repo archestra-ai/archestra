@@ -1,3 +1,0 @@
--- drizzle-migration-linter: allow-breaking
--- drizzle-migration-linter: reason=The preceding data migration (0435_single_llm_proxy) establishes the invariant this index enforces: it elects exactly one default llm_proxy row per organization and demotes every other row's is_default before this index is created, so the CREATE UNIQUE INDEX cannot fail on existing data. The agents table is small (not write-hot), so the brief lock is safe.
-CREATE UNIQUE INDEX "agents_org_default_llm_proxy_idx" ON "agents" USING btree ("organization_id") WHERE "agents"."agent_type" = 'llm_proxy' AND "agents"."is_default" = true AND "agents"."deleted_at" IS NULL;

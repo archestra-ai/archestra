@@ -8,9 +8,9 @@
 -- queries keep resolving them — while runtime resolution collapses their ids
 -- onto the elected row, so they receive no new traffic.
 --
--- Must run BEFORE the migration that creates the partial unique index
--- `agents_org_default_llm_proxy_idx` (one default llm_proxy per org): this is
--- the migration that establishes that invariant on live data.
+-- The DO block must run before the CREATE UNIQUE INDEX statement at the end
+-- of this file: it establishes the invariant the index enforces (one default
+-- llm_proxy row per organization).
 --
 -- The whole migration is one guarded DO block: `organization` is a
 -- better-auth-managed table that drizzle migrations run before on a fresh
@@ -222,3 +222,8 @@ BEGIN
   -- "_llm_proxy_election" is TEMPORARY and vanishes with the migration
   -- connection; no explicit DROP needed.
 END $$;
+
+--> statement-breakpoint
+-- drizzle-migration-linter: allow-breaking
+-- drizzle-migration-linter: reason=The preceding data-migration DO block establishes the invariant this index enforces: it elects exactly one default llm_proxy row per organization and demotes every other row's is_default before the index is created, so the CREATE UNIQUE INDEX cannot fail on existing data. The agents table is small (not write-hot), so the brief lock is safe.
+CREATE UNIQUE INDEX "agents_org_default_llm_proxy_idx" ON "agents" USING btree ("organization_id") WHERE "agents"."agent_type" = 'llm_proxy' AND "agents"."is_default" = true AND "agents"."deleted_at" IS NULL;

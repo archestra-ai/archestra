@@ -481,9 +481,8 @@ describe("ConnectCommandPanel", () => {
       );
 
       await user.click(screen.getByTestId("connect-change-platform"));
-      const platformSelect = screen.getByTestId("connect-platform-select");
-      platformSelect.focus();
-      await user.keyboard("{Enter}{ArrowUp}{Enter}");
+      expect(screen.getByTestId("connect-platform-select")).toBeInTheDocument();
+      await user.click(screen.getByRole("tab", { name: /macOS \/ Linux/ }));
 
       await waitFor(() =>
         expect(createSetupMock).toHaveBeenLastCalledWith(

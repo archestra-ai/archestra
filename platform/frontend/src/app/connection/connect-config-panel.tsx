@@ -52,7 +52,7 @@ import {
   platformLabels,
   toPlatformOption,
 } from "./platform.utils";
-import { ConnectionPlatformSelect } from "./platform-select";
+import { ConnectionPlatformToggle } from "./platform-select";
 import { type ConnectSkill, useAllSkills } from "./skills-marketplace-step";
 
 /** Clients whose setup is delivered as a downloadable Archestra config profile. */
@@ -249,7 +249,7 @@ export function ConnectConfigPanel({
             onToggle={() => toggleEdit("platform")}
             editor={
               <EditorField label="Platform">
-                <ConnectionPlatformSelect
+                <ConnectionPlatformToggle
                   value={platform}
                   onValueChange={setPlatform}
                 />
@@ -790,7 +790,7 @@ function EditorField({
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid items-center gap-2 sm:grid-cols-[88px_1fr]">
+    <div className="grid gap-1.5">
       <div className="text-xs font-medium text-muted-foreground">{label}</div>
       <div className="min-w-0">{children}</div>
     </div>

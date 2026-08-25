@@ -58,7 +58,7 @@ import {
   platformLabels,
   toPlatformOption,
 } from "./platform.utils";
-import { ConnectionPlatformSelect } from "./platform-select";
+import { ConnectionPlatformToggle } from "./platform-select";
 import { SetupCommandLine } from "./setup-command-line";
 import { SetupSummaryRow } from "./setup-summary-row";
 import { type ConnectSkill, useAllSkills } from "./skills-marketplace-step";
@@ -541,10 +541,10 @@ export function ConnectCommandPanel({
 
   const platformEditor = (
     <EditorField label="Platform">
-      <ConnectionPlatformSelect
+      <ConnectionPlatformToggle
         value={platform}
         onValueChange={setPlatform}
-        ariaLabel="Select a client"
+        ariaLabel="Select a platform"
         dataTestId="connect-platform-select"
       />
     </EditorField>
@@ -614,16 +614,14 @@ export function ConnectCommandPanel({
             {effectiveProxyAuth === "provider-key" ? (
               passthroughAttributes ? (
                 <span>
-                  Passthrough — the command only rewires the base URL, so you
-                  reuse your own API key or existing subscription (e.g. Claude
-                  or ChatGPT plan). Your personal auth key is created for you
-                  and wired into the command via ANTHROPIC_CUSTOM_HEADERS.
+                  Only the base URL changes: requests keep using your own API
+                  key or subscription, and a personal passthrough key in the
+                  command attributes them to you.
                 </span>
               ) : (
                 <span>
-                  Passthrough — the command only rewires the base URL, so you
-                  reuse your own API key or existing subscription (e.g. Claude
-                  or ChatGPT plan).
+                  Only the base URL changes: requests keep using your own API
+                  key or subscription (e.g. a Claude or ChatGPT plan).
                 </span>
               )
             ) : providerIsPerUser && provider ? (
@@ -727,9 +725,14 @@ export function ConnectCommandPanel({
       )}
       <ul className="grid max-h-56 gap-1.5 overflow-y-auto pl-6">
         {allSkills.map((skill) => (
-          <li key={skill.id}>
+          // Visibility sits at the row's edge (outside the toggle label) so
+          // the skill names line up in one clean scannable column.
+          <li
+            key={skill.id}
+            className="flex items-center justify-between gap-3"
+          >
             <label
-              className="flex items-center gap-2 text-sm"
+              className="flex min-w-0 items-center gap-2 text-sm"
               htmlFor={`connect-skill-${skill.id}`}
             >
               <Checkbox
@@ -741,17 +744,18 @@ export function ConnectCommandPanel({
                   toggleSkill(skill.id, checked === true)
                 }
               />
-              <span>{skill.name}</span>
-              <ResourceVisibilityBadge
-                scope={skill.scope}
-                teams={skill.teams}
-                users={skill.users}
-                authorId={skill.authorId}
-                authorName={skill.authorName}
-                currentUserId={currentUserId}
-                showSelfAsMe
-              />
+              <span className="truncate">{skill.name}</span>
             </label>
+            <ResourceVisibilityBadge
+              scope={skill.scope}
+              teams={skill.teams}
+              users={skill.users}
+              authorId={skill.authorId}
+              authorName={skill.authorName}
+              currentUserId={currentUserId}
+              showSelfAsMe
+              compact
+            />
           </li>
         ))}
       </ul>
@@ -1330,7 +1334,7 @@ function indefiniteArticle(word: string): string {
   return /^[aeiou]/i.test(word) ? "an" : "a";
 }
 
-/** label + control row inside an inline editor. */
+/** Label stacked above its control inside an inline editor. */
 function EditorField({
   label,
   children,
@@ -1339,7 +1343,7 @@ function EditorField({
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid items-center gap-2 sm:grid-cols-[88px_1fr]">
+    <div className="grid gap-1.5">
       <div className="text-xs font-medium text-muted-foreground">{label}</div>
       <div className="min-w-0">{children}</div>
     </div>

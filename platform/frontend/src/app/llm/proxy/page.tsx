@@ -41,7 +41,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import config from "@/lib/config/config";
@@ -256,14 +255,11 @@ function ProxyEndpointCard({
 // Authentication overview
 // =========================================================================
 
-type ProxyAuthTab = "virtual-keys" | "passthrough" | "oauth" | "idp";
-
 function AuthenticationOverview() {
   const [createKeyType, setCreateKeyType] = useState<VirtualKeyType | null>(
     null,
   );
   const [oauthCreateOpen, setOauthCreateOpen] = useState(false);
-  const [authTab, setAuthTab] = useState<ProxyAuthTab>("virtual-keys");
 
   const { data: canCreateKey } = useHasPermissions({
     llmVirtualKey: ["create"],
@@ -279,107 +275,76 @@ function AuthenticationOverview() {
   });
 
   return (
-    <section className="space-y-4 rounded-lg border bg-card p-4">
+    <section className="rounded-lg border bg-card p-4">
       <h3 className="text-sm font-semibold">Authentication</h3>
-      <Tabs
-        value={authTab}
-        onValueChange={(value) => setAuthTab(value as ProxyAuthTab)}
-      >
-        <TabsList>
-          <TabsTrigger value="virtual-keys">Virtual keys</TabsTrigger>
-          <TabsTrigger value="passthrough">Passthrough</TabsTrigger>
-          <TabsTrigger value="oauth">OAuth clients</TabsTrigger>
-          <TabsTrigger value="idp">Identity provider</TabsTrigger>
-        </TabsList>
-      </Tabs>
-
-      {authTab === "virtual-keys" && (
-        <div className="space-y-3">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <p className="max-w-3xl text-xs text-muted-foreground">
-              Use one key in your app; the matching provider key is used for
-              each request.
-            </p>
-            {canCreateKey ? (
+      <div className="mt-1 divide-y">
+        <AuthMethodRow
+          title="Virtual keys"
+          description="Use one key in your app; the matching provider key is used for each request."
+          action={
+            canCreateKey ? (
               <Button
                 variant="outline"
                 size="sm"
-                className="shrink-0"
                 onClick={() => setCreateKeyType("standard")}
               >
                 Create virtual key
               </Button>
-            ) : null}
-          </div>
-          {canReadKeys ? (
-            <ManageLink href="/llm/proxy/virtual-keys">
-              Manage virtual keys
-            </ManageLink>
-          ) : null}
-        </div>
-      )}
+            ) : null
+          }
+          manageHref={canReadKeys ? "/llm/proxy/virtual-keys" : null}
+          manageLabel="Manage virtual keys"
+        />
 
-      {authTab === "passthrough" && (
-        <div className="space-y-3">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <p className="max-w-3xl text-xs text-muted-foreground">
-              Send your provider key directly. A passthrough key links requests
-              to a user but does not grant access.
-            </p>
-            {canCreateKey ? (
+        <AuthMethodRow
+          title="Passthrough"
+          description="Send your provider key directly. A passthrough key links requests to a user but does not grant access."
+          action={
+            canCreateKey ? (
               <Button
                 variant="outline"
                 size="sm"
-                className="shrink-0"
                 onClick={() => setCreateKeyType("passthrough")}
               >
                 Create passthrough key
               </Button>
-            ) : null}
-          </div>
+            ) : null
+          }
+          manageHref={
+            canReadKeys ? "/llm/proxy/virtual-keys?keyType=passthrough" : null
+          }
+          manageLabel="Manage passthrough keys"
+        >
           <TerminalBlock
             rows={[
               {
-                comment: "optional — link the request to a user",
+                comment: "optional: link the request to a user",
                 code: "X-Archestra-Virtual-Key: arch_<passthrough-key>",
               },
             ]}
           />
-          {canReadKeys ? (
-            <ManageLink href="/llm/proxy/virtual-keys?keyType=passthrough">
-              Manage passthrough keys
-            </ManageLink>
-          ) : null}
-        </div>
-      )}
+        </AuthMethodRow>
 
-      {authTab === "oauth" && (
-        <div className="space-y-3">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <p className="max-w-3xl text-xs text-muted-foreground">
-              Register apps that call the proxy as themselves or for signed-in
-              users.
-            </p>
-            {canCreateOauth ? (
+        <AuthMethodRow
+          title="OAuth clients"
+          description="Register apps that call the proxy as themselves or for signed-in users."
+          action={
+            canCreateOauth ? (
               <Button
                 variant="outline"
                 size="sm"
-                className="shrink-0"
                 onClick={() => setOauthCreateOpen(true)}
               >
                 Create OAuth client
               </Button>
-            ) : null}
-          </div>
-          {canReadOauth ? (
-            <ManageLink href="/llm/proxy/oauth-clients">
-              Manage OAuth clients
-            </ManageLink>
-          ) : null}
-        </div>
-      )}
+            ) : null
+          }
+          manageHref={canReadOauth ? "/llm/proxy/oauth-clients" : null}
+          manageLabel="Manage OAuth clients"
+        />
 
-      {authTab === "idp" && <IdentityProviderSection />}
+        <IdentityProviderRow />
+      </div>
 
       <CreateVirtualKeyDialogWithData
         open={createKeyType !== null}
@@ -393,6 +358,45 @@ function AuthenticationOverview() {
         onOpenChange={setOauthCreateOpen}
       />
     </section>
+  );
+}
+
+/**
+ * One authentication method in the overview list: name and one-line
+ * description on the left, its actions on the right, extra detail (a header
+ * snippet, a status line) beneath the description.
+ */
+function AuthMethodRow({
+  title,
+  description,
+  action,
+  manageHref,
+  manageLabel,
+  children,
+}: {
+  title: string;
+  description: string;
+  action?: React.ReactNode;
+  manageHref?: string | null;
+  manageLabel?: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-3 py-4 first:pt-3 last:pb-1 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+      <div className="min-w-0 max-w-2xl space-y-1.5">
+        <p className="text-sm font-medium">{title}</p>
+        <p className="text-xs text-muted-foreground">{description}</p>
+        {children}
+      </div>
+      {action || (manageHref && manageLabel) ? (
+        <div className="flex shrink-0 flex-col items-start gap-1.5 sm:items-end">
+          {action}
+          {manageHref && manageLabel ? (
+            <ManageLink href={manageHref}>{manageLabel}</ManageLink>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -421,7 +425,7 @@ function ManageLink({
  * enterprise feature — `useIdentityProviders` stays disabled without it, so
  * the select is hidden and the section reads as status only.
  */
-function IdentityProviderSection() {
+function IdentityProviderRow() {
   const { data: proxy } = useLlmProxy();
   const { data: identityProviders } = useIdentityProviders();
   const { data: canUpdate } = useHasPermissions({ llmProxy: ["update"] });
@@ -432,57 +436,57 @@ function IdentityProviderSection() {
   const orgHasIdps = (identityProviders?.length ?? 0) > 0;
 
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div className="space-y-1.5">
-        <p className="max-w-3xl text-xs text-muted-foreground">
-          Use a JWT from your identity provider. Requests are linked to the user
-          in the token and use that user&apos;s access.
-        </p>
-        <p className="text-xs">
-          {idpId ? (
-            <span className="text-green-600 dark:text-green-500">
-              ● {idpName ?? "Identity provider"} — configured
-            </span>
-          ) : (
-            <>○ Not configured</>
-          )}
-        </p>
-      </div>
-      {!canUpdate ? null : orgHasIdps ? (
-        <div className="w-full max-w-xs space-y-1">
-          <Select
-            value={idpId ?? "none"}
-            disabled={updateProxy.isPending}
-            onValueChange={(value) =>
-              updateProxy.mutate({
-                identityProviderId: value === "none" ? null : value,
-              })
-            }
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="No Identity Provider selected" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">No Identity Provider</SelectItem>
-              {identityProviders?.map((provider) => (
-                <SelectItem key={provider.id} value={provider.id}>
-                  {provider.providerId} ({provider.issuer})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-muted-foreground">
-            The OIDC identity provider the proxy trusts for JWT authentication.
-          </p>
-        </div>
-      ) : (
-        <Button variant="outline" size="sm" className="shrink-0" asChild>
-          <Link href="/settings/identity-providers">
-            Set up identity providers
-          </Link>
-        </Button>
-      )}
-    </div>
+    <AuthMethodRow
+      title="Identity provider"
+      description="Use a JWT from your identity provider. Requests are linked to the user in the token and use that user's access."
+      action={
+        !canUpdate ? null : orgHasIdps ? (
+          <div className="w-full space-y-1 sm:w-72">
+            <Select
+              value={idpId ?? "none"}
+              disabled={updateProxy.isPending}
+              onValueChange={(value) =>
+                updateProxy.mutate({
+                  identityProviderId: value === "none" ? null : value,
+                })
+              }
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="No Identity Provider selected" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No Identity Provider</SelectItem>
+                {identityProviders?.map((provider) => (
+                  <SelectItem key={provider.id} value={provider.id}>
+                    {provider.providerId} ({provider.issuer})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground sm:text-right">
+              The OIDC identity provider the proxy trusts for JWT
+              authentication.
+            </p>
+          </div>
+        ) : (
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/settings/identity-providers">
+              Set up identity providers
+            </Link>
+          </Button>
+        )
+      }
+    >
+      <p className="text-xs">
+        {idpId ? (
+          <span className="text-green-600 dark:text-green-500">
+            {idpName ?? "Identity provider"} is configured
+          </span>
+        ) : (
+          <span className="text-muted-foreground">Not configured</span>
+        )}
+      </p>
+    </AuthMethodRow>
   );
 }
 

@@ -292805,6 +292805,9 @@
                     "onlineSkillCatalogEnabled": {
                       "type": "boolean"
                     },
+                    "skillMarketplaceAnonymousAccess": {
+                      "type": "boolean"
+                    },
                     "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
@@ -293306,6 +293309,7 @@
                     "compressionScope",
                     "onlineMcpCatalogEnabled",
                     "onlineSkillCatalogEnabled",
+                    "skillMarketplaceAnonymousAccess",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -293884,6 +293888,9 @@
                     "onlineSkillCatalogEnabled": {
                       "type": "boolean"
                     },
+                    "skillMarketplaceAnonymousAccess": {
+                      "type": "boolean"
+                    },
                     "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
@@ -294385,6 +294392,7 @@
                     "compressionScope",
                     "onlineMcpCatalogEnabled",
                     "onlineSkillCatalogEnabled",
+                    "skillMarketplaceAnonymousAccess",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -295218,6 +295226,9 @@
                     "onlineSkillCatalogEnabled": {
                       "type": "boolean"
                     },
+                    "skillMarketplaceAnonymousAccess": {
+                      "type": "boolean"
+                    },
                     "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
@@ -295719,6 +295730,7 @@
                     "compressionScope",
                     "onlineMcpCatalogEnabled",
                     "onlineSkillCatalogEnabled",
+                    "skillMarketplaceAnonymousAccess",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -296153,6 +296165,9 @@
                     "onlineSkillCatalogEnabled": {
                       "type": "boolean"
                     },
+                    "skillMarketplaceAnonymousAccess": {
+                      "type": "boolean"
+                    },
                     "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
@@ -296654,6 +296669,7 @@
                     "compressionScope",
                     "onlineMcpCatalogEnabled",
                     "onlineSkillCatalogEnabled",
+                    "skillMarketplaceAnonymousAccess",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -297084,6 +297100,9 @@
                     "onlineSkillCatalogEnabled": {
                       "type": "boolean"
                     },
+                    "skillMarketplaceAnonymousAccess": {
+                      "type": "boolean"
+                    },
                     "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
@@ -297585,6 +297604,7 @@
                     "compressionScope",
                     "onlineMcpCatalogEnabled",
                     "onlineSkillCatalogEnabled",
+                    "skillMarketplaceAnonymousAccess",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -297904,6 +297924,9 @@
                 "properties": {
                   "onlineSkillCatalogEnabled": {
                     "type": "boolean"
+                  },
+                  "skillMarketplaceAnonymousAccess": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -298010,6 +298033,9 @@
                       "type": "boolean"
                     },
                     "onlineSkillCatalogEnabled": {
+                      "type": "boolean"
+                    },
+                    "skillMarketplaceAnonymousAccess": {
                       "type": "boolean"
                     },
                     "defaultDiscoveredToolInvocationPolicy": {
@@ -298513,6 +298539,7 @@
                     "compressionScope",
                     "onlineMcpCatalogEnabled",
                     "onlineSkillCatalogEnabled",
+                    "skillMarketplaceAnonymousAccess",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -298955,6 +298982,9 @@
                     "onlineSkillCatalogEnabled": {
                       "type": "boolean"
                     },
+                    "skillMarketplaceAnonymousAccess": {
+                      "type": "boolean"
+                    },
                     "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
@@ -299456,6 +299486,7 @@
                     "compressionScope",
                     "onlineMcpCatalogEnabled",
                     "onlineSkillCatalogEnabled",
+                    "skillMarketplaceAnonymousAccess",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -299943,6 +299974,9 @@
                     "onlineSkillCatalogEnabled": {
                       "type": "boolean"
                     },
+                    "skillMarketplaceAnonymousAccess": {
+                      "type": "boolean"
+                    },
                     "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
@@ -300444,6 +300478,7 @@
                     "compressionScope",
                     "onlineMcpCatalogEnabled",
                     "onlineSkillCatalogEnabled",
+                    "skillMarketplaceAnonymousAccess",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -300912,6 +300947,9 @@
                     "onlineSkillCatalogEnabled": {
                       "type": "boolean"
                     },
+                    "skillMarketplaceAnonymousAccess": {
+                      "type": "boolean"
+                    },
                     "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
@@ -301413,6 +301451,7 @@
                     "compressionScope",
                     "onlineMcpCatalogEnabled",
                     "onlineSkillCatalogEnabled",
+                    "skillMarketplaceAnonymousAccess",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -301913,6 +301952,9 @@
                     "onlineSkillCatalogEnabled": {
                       "type": "boolean"
                     },
+                    "skillMarketplaceAnonymousAccess": {
+                      "type": "boolean"
+                    },
                     "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
@@ -302414,6 +302456,7 @@
                     "compressionScope",
                     "onlineMcpCatalogEnabled",
                     "onlineSkillCatalogEnabled",
+                    "skillMarketplaceAnonymousAccess",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -302857,6 +302900,9 @@
                     "onlineSkillCatalogEnabled": {
                       "type": "boolean"
                     },
+                    "skillMarketplaceAnonymousAccess": {
+                      "type": "boolean"
+                    },
                     "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
@@ -303358,6 +303404,7 @@
                     "compressionScope",
                     "onlineMcpCatalogEnabled",
                     "onlineSkillCatalogEnabled",
+                    "skillMarketplaceAnonymousAccess",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -303833,6 +303880,9 @@
                     "onlineSkillCatalogEnabled": {
                       "type": "boolean"
                     },
+                    "skillMarketplaceAnonymousAccess": {
+                      "type": "boolean"
+                    },
                     "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
@@ -304334,6 +304384,7 @@
                     "compressionScope",
                     "onlineMcpCatalogEnabled",
                     "onlineSkillCatalogEnabled",
+                    "skillMarketplaceAnonymousAccess",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -304746,6 +304797,9 @@
                     "onlineSkillCatalogEnabled": {
                       "type": "boolean"
                     },
+                    "skillMarketplaceAnonymousAccess": {
+                      "type": "boolean"
+                    },
                     "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
@@ -305247,6 +305301,7 @@
                     "compressionScope",
                     "onlineMcpCatalogEnabled",
                     "onlineSkillCatalogEnabled",
+                    "skillMarketplaceAnonymousAccess",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -306847,6 +306902,9 @@
                     "onlineSkillCatalogEnabled": {
                       "type": "boolean"
                     },
+                    "skillMarketplaceAnonymousAccess": {
+                      "type": "boolean"
+                    },
                     "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
@@ -307348,6 +307406,7 @@
                     "compressionScope",
                     "onlineMcpCatalogEnabled",
                     "onlineSkillCatalogEnabled",
+                    "skillMarketplaceAnonymousAccess",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -333660,6 +333719,278 @@
           "kind": "static",
           "permissions": [
             "siteNotification:delete"
+          ]
+        }
+      }
+    },
+    "/api/skill-marketplace": {
+      "get": {
+        "operationId": "getSkillMarketplace",
+        "tags": [
+          "Skills"
+        ],
+        "description": "The static skill marketplace: one clone URL for the whole deployment, which every user installs with their own credential.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: View and use agent skills within your scope (org, your teams, your own)",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "cloneUrl": {
+                      "type": "string"
+                    },
+                    "marketplaceName": {
+                      "type": "string"
+                    },
+                    "requiresAuthentication": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "cloneUrl",
+                    "marketplaceName",
+                    "requiresAuthentication"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "skill:read"
           ]
         }
       }

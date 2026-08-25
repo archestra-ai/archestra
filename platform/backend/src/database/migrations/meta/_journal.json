@@ -3060,6 +3060,13 @@
       "when": 1787684684019,
       "tag": "0436_single_llm_proxy",
       "breakpoints": true
+    },
+    {
+      "idx": 437,
+      "version": "7",
+      "when": 1787695331795,
+      "tag": "0437_skill_marketplace_static",
+      "breakpoints": true
     }
   ]
 }

@@ -18,6 +18,16 @@ export const MCP_GATEWAY_PREFIX = "/v1/mcp";
 export const SKILL_MARKETPLACE_PREFIX = "/skills/m";
 
 /**
+ * The deployment's single, static marketplace git endpoint. Unlike
+ * SKILL_MARKETPLACE_PREFIX it carries no token: the same URL is handed to
+ * every user and pre-configured in their clients, and each caller
+ * authenticates with their own personal credential over HTTP Basic (or clones
+ * anonymously where the organization allows it). Allowlisted in the auth
+ * middleware because the credential is checked in-route.
+ */
+export const SKILL_MARKETPLACE_STATIC_PATH = "/skills/marketplace.git";
+
+/**
  * Public unauthenticated endpoint serving rendered connection-setup scripts.
  * The one-time setup token is embedded in the URL path; routes under this
  * prefix are allowlisted in the auth middleware and excluded from request

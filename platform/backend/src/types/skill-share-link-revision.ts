@@ -28,6 +28,15 @@ export const RevisionPayloadSchema = z.object({
 });
 export type RevisionPayload = z.infer<typeof RevisionPayloadSchema>;
 
+/**
+ * Which materialized repository a revision chain belongs to: a token-addressed
+ * share link, or a static marketplace repo (one per viewer). Both are backed by
+ * the same commit-chain table and the same on-disk cache layout.
+ */
+export type MarketplaceRepoRef =
+  | { kind: "link"; id: string }
+  | { kind: "repo"; id: string };
+
 export const SelectSkillShareLinkRevisionSchema = createSelectSchema(
   schema.skillShareLinkRevisionsTable,
 );

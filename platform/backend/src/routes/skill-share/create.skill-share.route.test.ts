@@ -4,6 +4,7 @@ import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { AuditLogModel, PluginModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
+import { deriveMarketplaceName } from "@/skills/marketplace/marketplace-name";
 import {
   afterEach,
   beforeEach,
@@ -13,7 +14,7 @@ import {
   useRouteTestApp,
 } from "@/test";
 import type { ClientType, User } from "@/types";
-import skillShareRoutes, { deriveMarketplaceName } from "./skill-share.routes";
+import skillShareRoutes from "./skill-share.routes";
 import { seedSkill } from "./skill-share.test-helpers";
 
 vi.mock("@/config", async () =>

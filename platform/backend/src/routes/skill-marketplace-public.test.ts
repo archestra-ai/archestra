@@ -3,7 +3,13 @@ import { promises as fs } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { vi } from "vitest";
-import { PluginModel, SkillModel, SkillShareLinkModel } from "@/models";
+import {
+  PluginModel,
+  SkillMarketplaceRepoModel,
+  SkillModel,
+  SkillShareLinkModel,
+  UserTokenModel,
+} from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { marketplaceMaterializer } from "@/skills/marketplace";
@@ -20,17 +26,19 @@ async function seedSkill(params: {
   organizationId: string;
   name: string;
   content?: string;
+  scope?: "org" | "personal";
+  authorId?: string;
 }) {
   const skill = await SkillModel.createWithFiles({
     skill: {
       organizationId: params.organizationId,
-      authorId: null,
+      authorId: params.authorId ?? null,
       name: params.name,
       description: `${params.name} description`,
       content: params.content ?? `# ${params.name}\n\nbody`,
       metadata: {},
       sourceType: "manual",
-      scope: "org",
+      scope: params.scope ?? "org",
     },
     files: [],
   });
@@ -174,6 +182,119 @@ describe("skill marketplace public route — token validation", () => {
       url: `/skills/m/${rawToken}/repo.git/info/refs?service=git-upload-pack`,
     });
     expect(response.statusCode).toBe(404);
+  });
+});
+
+describe("static skill marketplace route", () => {
+  let app: FastifyInstanceWithZod;
+  let cacheDir: string;
+
+  const REFS_URL = "/skills/marketplace.git/info/refs?service=git-upload-pack";
+
+  beforeEach(async () => {
+    cacheDir = await fs.mkdtemp(
+      path.join(tmpdir(), "archestra-marketplace-static-"),
+    );
+    marketplaceMaterializer.reset();
+    vi.spyOn(marketplaceMaterializer, "get").mockReturnValue(
+      new MarketplaceMaterializer({ cacheDir }),
+    );
+    app = await buildApp();
+  });
+
+  afterEach(async () => {
+    await app.close();
+    await fs.rm(cacheDir, { recursive: true, force: true });
+    vi.restoreAllMocks();
+    marketplaceMaterializer.reset();
+  });
+
+  test("without credentials it challenges so git prompts for a token", async ({
+    makeOrganization,
+  }) => {
+    await makeOrganization();
+
+    const response = await app.inject({ method: "GET", url: REFS_URL });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.headers["www-authenticate"]).toMatch(/^Basic realm=/);
+  });
+
+  test("receive-pack is rejected before any credential work", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/skills/marketplace.git/git-receive-pack",
+      headers: { "content-type": "application/x-git-receive-pack-request" },
+      payload: "",
+    });
+    expect(response.statusCode).toBe(403);
+  });
+
+  test("a personal token serves the caller's marketplace", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    await seedSkill({ organizationId: org.id, name: "shared-skill" });
+    const { value: token } = await UserTokenModel.create(user.id, org.id);
+
+    const response = await app.inject({
+      method: "GET",
+      url: REFS_URL,
+      headers: { authorization: basicAuth(token) },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toBe(
+      "application/x-git-upload-pack-advertisement",
+    );
+
+    // the viewer's repo row is created lazily by that first request
+    const repo = await SkillMarketplaceRepoModel.findForViewer({
+      organizationId: org.id,
+      userId: user.id,
+    });
+    expect(repo).not.toBeNull();
+  });
+
+  test("a viewer with no visible skills gets 404 instead of an empty marketplace", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const { value: token } = await UserTokenModel.create(user.id, org.id);
+
+    const response = await app.inject({
+      method: "GET",
+      url: REFS_URL,
+      headers: { authorization: basicAuth(token) },
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  test("anonymous clones are served only where the organization publishes them", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization({
+      skillMarketplaceAnonymousAccess: true,
+    });
+    await seedSkill({ organizationId: org.id, name: "public-skill" });
+
+    const response = await app.inject({ method: "GET", url: REFS_URL });
+
+    expect(response.statusCode).toBe(200);
+    const repo = await SkillMarketplaceRepoModel.findForViewer({
+      organizationId: org.id,
+      userId: null,
+    });
+    expect(repo).not.toBeNull();
   });
 });
 
@@ -435,25 +556,106 @@ describe.skipIf(!GIT_HTTP_BACKEND_AVAILABLE)(
       );
       expect(result.code).not.toBe(0);
     }, 30_000);
+
+    test("the static URL clones what the caller may read, and updates in place", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id);
+      const other = await makeUser({ email: "other@test.com" });
+      await makeMember(other.id, org.id);
+
+      await seedSkill({ organizationId: org.id, name: "Team Wide" });
+      await seedSkill({
+        organizationId: org.id,
+        name: "Someone Elses",
+        scope: "personal",
+        authorId: other.id,
+      });
+      const { value: token } = await UserTokenModel.create(user.id, org.id);
+
+      // credentials in the URL keep the clone non-interactive; a real user
+      // types the same token at git's password prompt
+      const cloneUrl = `http://archestra:${token}@127.0.0.1:${new URL(baseUrl).port}/skills/marketplace.git`;
+      const target = path.join(cloneDir, "static");
+      const result = await runGitClone(cloneUrl, target);
+      if (result.code !== 0) {
+        throw new Error(`git clone failed (${result.code}): ${result.stderr}`);
+      }
+
+      const manifest = JSON.parse(
+        await fs.readFile(
+          path.join(target, ".claude-plugin/marketplace.json"),
+          "utf8",
+        ),
+      );
+      const pluginRoot = path.join(target, manifest.plugins[0].source);
+      const installedSkills = await fs.readdir(path.join(pluginRoot, "skills"));
+      expect(installedSkills).toEqual(["team-wide"]);
+
+      // a later skill change lands as a new commit on the same history, so
+      // `git pull` fast-forwards instead of hitting unrelated histories
+      const headBefore = await gitHead(target);
+      await seedSkill({ organizationId: org.id, name: "Added Later" });
+      const pull = await runGit(target, ["pull", "--quiet"]);
+      expect(pull.code).toBe(0);
+      expect(await gitHead(target)).not.toBe(headBefore);
+      expect(
+        (await fs.readdir(path.join(pluginRoot, "skills"))).sort(),
+      ).toEqual(["added-later", "team-wide"]);
+    }, 60_000);
   },
 );
+
+async function gitHead(cwd: string): Promise<string> {
+  const result = await runGit(cwd, ["rev-parse", "HEAD"]);
+  return result.stdout.trim();
+}
+
+function basicAuth(token: string): string {
+  return `Basic ${Buffer.from(`archestra:${token}`).toString("base64")}`;
+}
 
 async function runGitClone(
   cloneUrl: string,
   target: string,
-): Promise<{
+): Promise<GitResult> {
+  return runGit(process.cwd(), ["clone", "--quiet", cloneUrl, target]);
+}
+
+interface GitResult {
   code: number | null;
   signal: NodeJS.Signals | null;
+  stdout: string;
   stderr: string;
-}> {
+}
+
+/**
+ * Async spawn on purpose: spawnSync would block this process's event loop,
+ * which also serves the in-process Fastify server the git call talks to.
+ */
+async function runGit(cwd: string, args: string[]): Promise<GitResult> {
   return new Promise((resolve) => {
-    const child = spawn("git", ["clone", "--quiet", cloneUrl, target], {
+    const child = spawn("git", args, {
+      cwd,
       env: {
         ...process.env,
         GIT_TERMINAL_PROMPT: "0",
+        // pull needs an identity configured even for a fast-forward
+        GIT_AUTHOR_NAME: "Test",
+        GIT_AUTHOR_EMAIL: "test@example.com",
+        GIT_COMMITTER_NAME: "Test",
+        GIT_COMMITTER_EMAIL: "test@example.com",
       },
     });
+    let stdout = "";
     let stderr = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString();
+    });
     child.stderr.on("data", (chunk: Buffer) => {
       stderr += chunk.toString();
     });
@@ -462,7 +664,7 @@ async function runGitClone(
     }, 20_000);
     child.once("close", (code, signal) => {
       clearTimeout(killTimer);
-      resolve({ code, signal, stderr });
+      resolve({ code, signal, stdout, stderr });
     });
   });
 }

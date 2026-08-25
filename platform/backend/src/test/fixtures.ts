@@ -194,6 +194,7 @@ async function makeOrganization(
       | "defaultEnvironmentNamespace"
       | "defaultMemberRole"
       | "defaultNetworkPolicy"
+      | "skillMarketplaceAnonymousAccess"
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise

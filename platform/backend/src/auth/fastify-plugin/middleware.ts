@@ -31,6 +31,7 @@ import {
   PUBLIC_CONFIG_PATH,
   READY_PATH,
   SKILL_MARKETPLACE_PREFIX,
+  SKILL_MARKETPLACE_STATIC_PATH,
   WELL_KNOWN_ACME_PREFIX,
   WELL_KNOWN_OAUTH_PREFIX,
 } from "@/routes/route-paths";
@@ -180,6 +181,10 @@ export class Authnz {
       // Public skill marketplace git endpoint: token in URL, no session
       url === config.skillMarketplace.endpoint ||
       url.startsWith(`${config.skillMarketplace.endpoint}/`) ||
+      // Static skill marketplace git endpoint: the caller's own credential is
+      // validated in-route (HTTP Basic), or the org publishes it anonymously
+      url === SKILL_MARKETPLACE_STATIC_PATH ||
+      url.startsWith(`${SKILL_MARKETPLACE_STATIC_PATH}/`) ||
       // Public connection-setup script endpoint: one-time token in URL, no session
       (method === "GET" &&
         url.startsWith(`${CONNECTION_SETUP_SCRIPT_PREFIX}/`)) ||

@@ -21,6 +21,7 @@ import {
   MemberModel,
   OrganizationModel,
   PluginModel,
+  SkillMarketplaceCredentialModel,
   SkillModel,
   SkillShareLinkModel,
   TeamModel,
@@ -44,6 +45,7 @@ import {
   isReservedMarketplaceName,
   resolvePluginName,
 } from "@/skills/marketplace/manifest";
+import { deriveMarketplaceName } from "@/skills/marketplace/marketplace-name";
 import {
   ApiError,
   type ConnectionSetup,
@@ -61,8 +63,8 @@ import {
   CONNECTION_HEALTH_PATH,
   CONNECTION_SETUP_SCRIPT_PREFIX,
   SKILL_MARKETPLACE_PREFIX,
+  SKILL_MARKETPLACE_STATIC_PATH,
 } from "../route-paths";
-import { deriveMarketplaceName } from "../skill-share/skill-share.routes";
 
 /** Providers each scriptable client can be wired to (mirrors the wizard UI). */
 const CLIENT_SUPPORTED_PROVIDERS: Record<
@@ -404,7 +406,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       if (skills) {
-        await requireSkillAdmin({ userId: user.id, organizationId });
+        await requireSkillRead({ userId: user.id, organizationId });
         await assertSkillsBelongToOrg({
           skillIds: skills.skillIds,
           organizationId,
@@ -714,7 +716,36 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // clone URL exists iff its link row committed.
         script = await withDbTransaction(async (tx) => {
           let skills: SetupScriptContext["skills"] = null;
-          if (marketplaceRender) {
+          // Skills-only setups register the deployment's shared marketplace
+          // URL, authenticated with a credential minted for this user. That is
+          // what lets a member install with the same one command an admin
+          // gets, and it stays current instead of freezing a snapshot.
+          //
+          // A setup that also delivers plugins still mints a share link: the
+          // shared URL serves skills only, and splitting the two would make the
+          // script register two marketplaces.
+          if (marketplaceRender && marketplaceRender.pluginIds.length === 0) {
+            const { rawToken: marketplaceToken } =
+              await SkillMarketplaceCredentialModel.create({
+                organizationId: setup.organizationId,
+                userId: setup.userId,
+                tx,
+              });
+            const origin = proxyBaseUrlToOrigin(setup.baseUrl);
+            const staticUrl = new URL(
+              `${origin}${SKILL_MARKETPLACE_STATIC_PATH}`,
+            );
+            // The credential rides as the URL's userinfo, exactly as a share
+            // link's token does today, so `plugin marketplace add` needs no
+            // credential helper and no prompt.
+            staticUrl.username = encodeURIComponent(marketplaceToken);
+            skills = {
+              cloneUrl: staticUrl.toString(),
+              marketplaceName: marketplaceRender.marketplaceName,
+              hasSkills: true,
+              pluginNames: [],
+            };
+          } else if (marketplaceRender) {
             const { link, rawToken: linkToken } =
               await SkillShareLinkModel.create({
                 organizationId: setup.organizationId,
@@ -886,13 +917,17 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
 
   let skillIds: string[] = [];
   if (setup.includeSkills) {
-    const isSkillAdmin = await userHasPermission(
+    // Reading is enough to install: the shared marketplace URL serves each
+    // caller exactly the skills they may already read. Publishing a *snapshot*
+    // of a chosen set is still admin-only, and is re-checked below for the
+    // plugin path, which is the only one that still mints a share link.
+    const canReadSkills = await userHasPermission(
       setup.userId,
       setup.organizationId,
       "skill",
-      "admin",
+      "read",
     );
-    if (!isSkillAdmin) throw GONE();
+    if (!canReadSkills) throw GONE();
 
     skillIds = await ConnectionSetupModel.getSkillIds({
       connectionSetupId: setup.id,
@@ -1081,18 +1116,24 @@ async function requireLlmProxyAccess(params: {
   return proxy;
 }
 
-async function requireSkillAdmin(params: {
+/**
+ * Installing shared skills needs only `skill:read`: the setup script registers
+ * the deployment's shared marketplace URL, which serves each caller exactly the
+ * skills they may already read. Publishing a *snapshot* of a chosen set is
+ * still admin-only, and is enforced where a share link is actually minted.
+ */
+async function requireSkillRead(params: {
   userId: string;
   organizationId: string;
 }): Promise<void> {
-  const isSkillAdmin = await userHasPermission(
+  const canReadSkills = await userHasPermission(
     params.userId,
     params.organizationId,
     "skill",
-    "admin",
+    "read",
   );
-  if (!isSkillAdmin) {
-    throw new ApiError(403, "Skill admin permission required to share skills");
+  if (!canReadSkills) {
+    throw new ApiError(403, "Skill read permission required to install skills");
   }
 }
 

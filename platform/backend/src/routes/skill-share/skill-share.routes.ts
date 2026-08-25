@@ -1,4 +1,4 @@
-import { DEFAULT_APP_NAME, RouteId } from "@archestra/shared";
+import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { userHasPermission } from "@/auth";
@@ -6,15 +6,14 @@ import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import config from "@/config";
 import { withDbTransaction } from "@/database";
 import logger from "@/logging";
-import {
-  OrganizationModel,
-  PluginModel,
-  SkillModel,
-  SkillShareLinkModel,
-} from "@/models";
+import { PluginModel, SkillModel, SkillShareLinkModel } from "@/models";
 import { pluginDeliveryBudgetError } from "@/plugins/delivery-budget";
 import { marketplaceMaterializer } from "@/skills/marketplace";
 import { isReservedMarketplaceName } from "@/skills/marketplace/manifest";
+import {
+  deriveMarketplaceName,
+  marketplaceKind,
+} from "@/skills/marketplace/marketplace-name";
 import {
   ApiError,
   type ClientType,
@@ -316,7 +315,7 @@ const skillShareRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // not surface to the user — the rotation already committed in the DB.
       void marketplaceMaterializer
         .get()
-        .revoke(params.id)
+        .revoke({ kind: "link", id: params.id })
         .catch((err: unknown) => {
           logger.warn(
             { err, shareLinkId: params.id },
@@ -383,7 +382,7 @@ const skillShareRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // to the user — revocation already took effect in the DB.
       void marketplaceMaterializer
         .get()
-        .revoke(id)
+        .revoke({ kind: "link", id })
         .catch((err: unknown) => {
           logger.warn(
             { err, shareLinkId: id },
@@ -494,59 +493,6 @@ async function validatePluginsForLink(params: {
 function parsePluginPlatform(value: string | null): PluginPlatform | null {
   const parsed = PluginPlatformSchema.safeParse(value);
   return parsed.success ? parsed.data : null;
-}
-
-/**
- * Deterministic marketplace name for an organization. Also used by the
- * connection-setup script endpoint, which creates share links at render time.
- *
- * The name is frozen at create time and registered in the user's local client
- * config under this exact name — changing it later would silently break every
- * installed marketplace, so we snapshot the current app+org branding now.
- *
- * Format: `<app-slug>-<org-slug>-<kind>`, where kind reflects whether the
- * generated marketplace carries skills, plugins, or both.
- * Falls back to a hex slice of the org id if both slug and name are unusable.
- */
-export async function deriveMarketplaceName(
-  organizationId: string,
-  kind: "skills" | "plugins" | "extensions" = "skills",
-): Promise<string> {
-  const org = await OrganizationModel.getById(organizationId);
-  const appSlug = slugify(org?.appName ?? DEFAULT_APP_NAME) || "archestra";
-  const orgSlug =
-    slugify(org?.slug ?? "") ||
-    slugify(org?.name ?? "") ||
-    hexFallback(organizationId);
-  return capLength(`${appSlug}-${orgSlug}-${kind}`);
-}
-
-function marketplaceKind(params: {
-  skillIds: string[];
-  pluginIds: string[];
-}): "skills" | "plugins" | "extensions" {
-  if (params.skillIds.length === 0) return "plugins";
-  if (params.pluginIds.length === 0) return "skills";
-  return "extensions";
-}
-
-function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-function hexFallback(organizationId: string): string {
-  const cleaned = organizationId.replace(/[^a-fA-F0-9]/g, "").toLowerCase();
-  return cleaned.slice(0, 8) || "default0";
-}
-
-/** Shared Claude/Codex/Copilot plugin and marketplace name limit. */
-function capLength(name: string): string {
-  const MAX = 64;
-  return name.length <= MAX ? name : name.slice(0, MAX).replace(/-+$/g, "");
 }
 
 function toShareLinkResponse(

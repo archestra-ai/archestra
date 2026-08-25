@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/organization.query");
@@ -27,11 +27,23 @@ function setPermission(hasPermission: boolean) {
   );
 }
 
-function setOrganization(onlineSkillCatalogEnabled: boolean) {
+function setOrganization(
+  onlineSkillCatalogEnabled: boolean,
+  skillMarketplaceAnonymousAccess = false,
+) {
   vi.mocked(useOrganization).mockReturnValue({
-    data: { onlineSkillCatalogEnabled },
+    data: { onlineSkillCatalogEnabled, skillMarketplaceAnonymousAccess },
     isPending: false,
   } as ReturnType<typeof useOrganization>);
+}
+
+/** The page has two selects; index them by the block they belong to. */
+function catalogSelect() {
+  return screen.getAllByRole("combobox")[0];
+}
+
+function marketplaceSelect() {
+  return screen.getAllByRole("combobox")[1];
 }
 
 beforeEach(() => {
@@ -60,21 +72,33 @@ describe("SkillsSettingsPage", () => {
     renderPage();
 
     expect(screen.getByText("Online skill catalog")).toBeInTheDocument();
-    expect(screen.getByRole("combobox")).toHaveTextContent("Enabled");
+    expect(catalogSelect()).toHaveTextContent("Enabled");
   });
 
   it("reflects a disabled online catalog from the organization", () => {
     setOrganization(false);
     renderPage();
 
-    expect(screen.getByRole("combobox")).toHaveTextContent("Disabled");
+    expect(catalogSelect()).toHaveTextContent("Disabled");
   });
 
   it("disables the control when the user cannot update Skills settings", () => {
     setPermission(false);
     renderPage();
 
-    expect(screen.getByRole("combobox")).toBeDisabled();
+    expect(catalogSelect()).toBeDisabled();
+    expect(marketplaceSelect()).toBeDisabled();
+  });
+
+  it("renders the marketplace access setting and reflects anonymous access", () => {
+    renderPage();
+    expect(screen.getByText("Skills marketplace access")).toBeInTheDocument();
+    expect(marketplaceSelect()).toHaveTextContent("Require a token");
+
+    cleanup();
+    setOrganization(true, true);
+    renderPage();
+    expect(marketplaceSelect()).toHaveTextContent("Allow anonymous clones");
   });
 
   it("shows a loading state instead of the control while the org is pending", () => {

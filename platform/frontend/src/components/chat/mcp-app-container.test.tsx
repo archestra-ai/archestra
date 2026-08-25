@@ -1770,11 +1770,7 @@ describe("McpAppSection error handling", () => {
     vi.clearAllMocks();
   });
 
-  it("degrades silently for a third-party app when the UI resource can't be read", async () => {
-    // A third-party tool advertises a ui:// resource its upstream server can't
-    // serve (e.g. -32601 Method not found). The tool result is shown regardless,
-    // so the failed app load must fold away rather than show a "Failed to load
-    // app" card. defaultProps is an agent (third-party) render — no appId.
+  it("shows a retryable error for a third-party app when the UI resource can't be read", async () => {
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
       .mockRejectedValue(new Error("MCP error -32601: Method not found"));
@@ -1792,10 +1788,12 @@ describe("McpAppSection error handling", () => {
     // Flush the rejection handler + re-render.
     await act(async () => {});
 
-    expect(screen.queryByText(/failed to load app/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/failed to load app/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /retry/i })).toBeInTheDocument();
     expect(document.querySelector("iframe")).not.toBeInTheDocument();
-    // The app folded away, but its tool-call details stay inspectable.
-    expect(screen.getByTestId("tool-details")).toBeInTheDocument();
+    expect(
+      screen.queryByText("This app rendered nothing to display."),
+    ).not.toBeInTheDocument();
 
     fetchSpy.mockRestore();
   });

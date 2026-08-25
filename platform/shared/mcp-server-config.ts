@@ -18,10 +18,13 @@ export const OAuthConfigSchema = z
     well_known_url: z.string().optional(),
     default_scopes: z.array(z.string()),
     supports_resource_metadata: z.boolean(),
-    // Extra scopes always appended to the requested scopes on the
-    // authorization_code flow, on top of configured/discovered scopes. Defaults
-    // to `["offline_access"]` when unset so the provider returns a refresh
-    // token; clear it for providers that reject `offline_access` (e.g. Google).
+    // Extra scopes appended to the requested scopes on the authorization_code
+    // flow, on top of configured/discovered scopes. Defaults to
+    // `["offline_access"]` when unset so the provider returns a refresh token;
+    // clear it for providers that reject `offline_access` (e.g. Google). These
+    // are additions to a scope set rather than a set of their own: when nothing
+    // is configured and discovery advertises nothing, the authorization request
+    // omits `scope` entirely and these are dropped with it.
     additional_scopes: z.array(z.string()).optional(),
     generic_oauth: z.boolean().optional(),
     token_endpoint: z.string().optional(),

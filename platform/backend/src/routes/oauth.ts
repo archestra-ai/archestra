@@ -162,7 +162,8 @@ export async function resolveOAuthScopesForAuthorization(params: {
   scopesToUse: string[];
 }> {
   // Append the catalog item's additional scopes on top of the configured or
-  // discovered scopes, deduped. Defaults to `["offline_access"]` when unset so
+  // discovered scopes, deduped — but only when there are any to append to; see
+  // the guard below. Defaults to `["offline_access"]` when unset so
   // the provider issues a refresh token (`offline_access` is a behavioral scope
   // that providers like Microsoft Entra omit from metadata and require to be
   // requested). Clear it for providers that reject it (e.g. Google).

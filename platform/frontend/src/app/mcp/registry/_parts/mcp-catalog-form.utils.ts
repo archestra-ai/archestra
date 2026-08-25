@@ -12,6 +12,40 @@ import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 type McpCatalogApiData =
   archestraApiTypes.CreateInternalMcpCatalogItemData["body"];
 
+/**
+ * The starting point for an OAuth section the user has not filled in yet:
+ * every field blank, so `transformFormToApiData` sends exactly what is on
+ * screen. Shared by the new-entry form and by external-catalog import, which
+ * must not drift apart.
+ */
+export function emptyOauthFormConfig(): NonNullable<
+  McpCatalogFormValues["oauthConfig"]
+> {
+  return {
+    client_id: "",
+    client_secret: "",
+    audience: "",
+    resource: "",
+    redirect_uris:
+      typeof window !== "undefined"
+        ? `${window.location.origin}/oauth-callback`
+        : "",
+    scopes: "",
+    // offline_access is a behavioral scope, not an API one: it is appended to
+    // a configured or discovered scope set so the provider returns a refresh
+    // token, and is dropped along with everything else when there is no such
+    // set to append it to.
+    additional_scopes: "offline_access",
+    supports_resource_metadata: true,
+    grantType: "authorization_code",
+    authServerUrl: "",
+    authorizationEndpoint: "",
+    wellKnownUrl: "",
+    resourceMetadataUrl: "",
+    tokenEndpoint: "",
+  };
+}
+
 // Transform function to convert form values to API format
 export function transformFormToApiData(
   values: McpCatalogFormValues,
@@ -763,25 +797,7 @@ export function transformExternalCatalogToFormValues(
         includeBearerPrefix: config.valuePrefix === "Bearer ",
         sensitive: config.sensitive ?? false,
       })),
-    oauthConfig: oauthConfig ?? {
-      client_id: "",
-      client_secret: "",
-      audience: "",
-      resource: "",
-      redirect_uris:
-        typeof window !== "undefined"
-          ? `${window.location.origin}/oauth-callback`
-          : "",
-      scopes: "",
-      additional_scopes: "offline_access",
-      supports_resource_metadata: true,
-      grantType: "authorization_code",
-      authServerUrl: "",
-      authorizationEndpoint: "",
-      wellKnownUrl: "",
-      resourceMetadataUrl: "",
-      tokenEndpoint: "",
-    },
+    oauthConfig: oauthConfig ?? emptyOauthFormConfig(),
     localConfig: localConfig ?? {
       command: "",
       arguments: "",

@@ -21,7 +21,6 @@ import {
 } from "@archestra/shared";
 import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
 import { BotIcon, CheckCircleIcon, ClockIcon } from "lucide-react";
-import Link from "next/link";
 import {
   Fragment,
   memo,
@@ -102,6 +101,11 @@ import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpInstallOrchestrator } from "@/lib/mcp/mcp-install-orchestrator.hook";
 import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
+import {
+  AttachmentImage,
+  AttachmentLink,
+  AttachmentVideo,
+} from "./attachment-content";
 import { AuthErrorTool, type AuthErrorToolProps } from "./auth-error-tool";
 import {
   collectSubagentToolCalls,
@@ -1045,6 +1049,7 @@ export function ChatMessages({
                                   attachments={extractFileAttachments(
                                     message.parts,
                                   )}
+                                  conversationId={conversationId}
                                   skill={getSkillAttribution(message.metadata)}
                                   onStartEdit={handleStartEdit}
                                   onCancelEdit={handleCancelEdit}
@@ -1155,6 +1160,7 @@ export function ChatMessages({
                                   attachments={extractFileAttachments(
                                     message.parts,
                                   )}
+                                  conversationId={conversationId}
                                   skill={getSkillAttribution(message.metadata)}
                                   onStartEdit={handleStartEdit}
                                   onCancelEdit={handleCancelEdit}
@@ -1185,26 +1191,24 @@ export function ChatMessages({
                             >
                               <div className="max-w-sm">
                                 {isImage && (
-                                  <img
-                                    src={filePart.url}
+                                  <AttachmentImage
+                                    url={filePart.url}
+                                    conversationId={conversationId}
                                     alt={filePart.filename || "Attached image"}
                                     className="max-w-full max-h-64 rounded-lg object-contain"
                                   />
                                 )}
                                 {isVideo && (
-                                  <video
-                                    src={filePart.url}
-                                    controls
+                                  <AttachmentVideo
+                                    url={filePart.url}
+                                    conversationId={conversationId}
                                     className="max-w-full max-h-64 rounded-lg"
-                                  >
-                                    <track kind="captions" />
-                                  </video>
+                                  />
                                 )}
                                 {isPdf && (
-                                  <Link
-                                    href={filePart.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
+                                  <AttachmentLink
+                                    url={filePart.url}
+                                    conversationId={conversationId}
                                     download={filePart.filename}
                                     className="flex items-center gap-2 text-sm rounded-lg border bg-muted/50 p-2 hover:bg-muted transition-colors"
                                   >
@@ -1219,13 +1223,12 @@ export function ChatMessages({
                                     <span className="font-medium truncate">
                                       {filePart.filename || "PDF Document"}
                                     </span>
-                                  </Link>
+                                  </AttachmentLink>
                                 )}
                                 {!isImage && !isVideo && !isPdf && (
-                                  <a
-                                    href={filePart.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
+                                  <AttachmentLink
+                                    url={filePart.url}
+                                    conversationId={conversationId}
                                     download={filePart.filename}
                                     className="flex items-center gap-2 text-sm rounded-lg border bg-muted/50 p-2 hover:bg-muted transition-colors"
                                   >
@@ -1246,7 +1249,7 @@ export function ChatMessages({
                                     <span className="truncate">
                                       {filePart.filename || "Attached file"}
                                     </span>
-                                  </a>
+                                  </AttachmentLink>
                                 )}
                               </div>
                             </div>

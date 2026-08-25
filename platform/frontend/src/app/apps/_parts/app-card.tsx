@@ -15,6 +15,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
 import { LabelTags } from "@/components/label-tags";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { ScopeBadge } from "@/components/scope-badge";
@@ -42,6 +43,7 @@ import {
 import { appRunUrl } from "@/lib/apps/app-run-url";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { setPendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-handoff";
+import { useFeature } from "@/lib/config/config.query";
 import { cn } from "@/lib/utils";
 import { AppDeleteDialog } from "./app-delete-dialog";
 
@@ -184,6 +186,7 @@ function OwnedAppCard({
 }) {
   const router = useRouter();
   const openApp = useOpenAppInChat();
+  const lockedChatEnabled = useFeature("lockedChatEnabled") ?? false;
   const { data: canDelete } = useHasPermissions({ app: ["delete"] });
   // A personal app the caller only reaches through app:admin oversight
   // (viewerRole "admin") — i.e. someone else's personal app — gets a visible
@@ -199,9 +202,9 @@ function OwnedAppCard({
   const [isOpening, setIsOpening] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
-  const handleOpen = async () => {
+  const handleOpen = async (lockedChat = false) => {
     setIsOpening(true);
-    const result = await openApp.mutateAsync(app.id);
+    const result = await openApp.mutateAsync({ appId: app.id, lockedChat });
     if (result?.conversationId) {
       router.push(`/chat/${result.conversationId}`);
     } else {
@@ -214,7 +217,7 @@ function OwnedAppCard({
       <Card className="relative flex min-h-[180px] cursor-pointer flex-col gap-0 p-4 transition-all hover:border-primary hover:bg-muted/40 hover:shadow-md">
         <button
           type="button"
-          onClick={handleOpen}
+          onClick={() => void handleOpen()}
           disabled={isOpening}
           className="absolute inset-0 rounded-xl"
           aria-label={`Open ${app.name} in new chat`}
@@ -272,6 +275,16 @@ function OwnedAppCard({
                 Open in new tab
               </Link>
             </DropdownMenuItem>
+            {/* Opening an app is where an app chat is started, so it is where
+                the locked-chat choice has to be offered — there is no composer
+                to toggle beforehand. Hidden unless the instance has the
+                feature on, like the composer's own toggle. */}
+            {lockedChatEnabled ? (
+              <DropdownMenuItem onSelect={() => void handleOpen(true)}>
+                <LockedChatIcon className="h-4 w-4" />
+                Open as locked chat
+              </DropdownMenuItem>
+            ) : null}
             {canDelete ? (
               <>
                 <DropdownMenuSeparator />
@@ -319,17 +332,19 @@ function ExternalAppCard({ app }: { app: ExternalApp }) {
   // Stays true from click through the redirect; see OwnedAppCard for the same
   // reasoning. Only a failure resets it (the card unmounts on success).
   const [isOpening, setIsOpening] = useState(false);
+  const lockedChatEnabled = useFeature("lockedChatEnabled") ?? false;
 
   // Standalone run page (chrome-less /a namespace, like the owned /a/[appId]),
   // pinned to this exact install for explicit "open in new tab".
   const runHref = `/a/catalog/${app.catalogId}?install=${encodeURIComponent(app.mcpServerId)}&resource=${encodeURIComponent(app.resourceUri)}`;
   const serverHref = `/mcp/registry/${app.catalogId}`;
 
-  const handleOpen = async () => {
+  const handleOpen = async (lockedChat = false) => {
     setIsOpening(true);
     const result = await openApp.mutateAsync({
       mcpServerId: app.mcpServerId,
       resourceUri: app.resourceUri,
+      lockedChat,
     });
     if (result?.conversationId) {
       if (result.mode === "prompt" && result.prompt) {
@@ -348,7 +363,7 @@ function ExternalAppCard({ app }: { app: ExternalApp }) {
     <Card className="relative flex min-h-[180px] cursor-pointer flex-col gap-0 p-4 transition-all hover:border-primary hover:bg-muted/40 hover:shadow-md">
       <button
         type="button"
-        onClick={handleOpen}
+        onClick={() => void handleOpen()}
         disabled={isOpening}
         className="absolute inset-0 rounded-xl"
         aria-label={`Open ${app.name} in new chat`}
@@ -392,6 +407,14 @@ function ExternalAppCard({ app }: { app: ExternalApp }) {
               </Link>
             </DropdownMenuItem>
           )}
+          {/* Same reasoning as the owned card: opening the app is where the
+              app chat is created, so it is where the lock is chosen. */}
+          {lockedChatEnabled ? (
+            <DropdownMenuItem onSelect={() => void handleOpen(true)}>
+              <LockedChatIcon className="h-4 w-4" />
+              Open as locked chat
+            </DropdownMenuItem>
+          ) : null}
           <DropdownMenuItem asChild>
             <Link href={serverHref}>
               <Server className="h-4 w-4" />

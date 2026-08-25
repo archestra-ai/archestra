@@ -68,11 +68,6 @@ export interface ChatPromptInputToolsProps {
   /** Whether file uploads are allowed (controlled by organization setting) */
   allowFileUploads?: boolean;
   /**
-   * Grey out the attachment button (locked chats: attachment bytes
-   * are stored unencrypted server-side, so the backend rejects them).
-   */
-  attachmentsDisabledByLockedChat?: boolean;
-  /**
    * Whether the next chat will be created locked-chat. New-chat composer only —
    * the toggle renders only while there is no conversation yet.
    */
@@ -172,7 +167,6 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   onApiKeyChange,
   onProviderChange,
   allowFileUploads = false,
-  attachmentsDisabledByLockedChat = false,
   lockedChat = false,
   onLockedChatChange,
   sandboxAvailable = false,
@@ -258,15 +252,12 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   const showLockedChatToggle =
     lockedChatEnabled && !conversationId && !!onLockedChatChange;
 
+  // Files staged before the toggle survive it: a locked chat stores its
+  // attachments sealed under the conversation key, so the first message can
+  // carry them just as an unlocked one would.
   const toggleLockedChat = useCallback(() => {
-    // Files staged before the toggle would ride the first message of a chat
-    // that rejects attachments — drop them now (the attach button greys out
-    // while the toggle is on).
-    if (!lockedChat) {
-      attachments.clear();
-    }
     onLockedChatChange?.(!lockedChat);
-  }, [lockedChat, onLockedChatChange, attachments]);
+  }, [lockedChat, onLockedChatChange]);
 
   // While the toggle is on screen, Alt+I toggles the draft in place: the
   // global shortcut dispatches this cancelable event before navigating and
@@ -518,29 +509,9 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
         <NotRecommendedForAgentsNoticeBadge />
       )}
 
-      {/* File attachment button - always visible. LockedChat greys it out
-          (the backend rejects attachments there because their bytes are
-          stored unencrypted); the org-level toggle greys it out with a
-          settings pointer. */}
-      {attachmentsDisabledByLockedChat ? (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span
-              className="inline-flex cursor-not-allowed"
-              data-testid={E2eTestId.ChatDisabledFileUploadButton}
-            >
-              <PromptInputButton disabled>
-                <PaperclipIcon className="size-4" />
-              </PromptInputButton>
-            </span>
-          </TooltipTrigger>
-          <TooltipContent side="top" sideOffset={4}>
-            <span>
-              Attachments are stored unencrypted, so locked chats can't use them
-            </span>
-          </TooltipContent>
-        </Tooltip>
-      ) : showFileUploadButton ? (
+      {/* File attachment button - always visible. The org-level toggle greys
+          it out with a settings pointer. */}
+      {showFileUploadButton ? (
         <Tooltip>
           <TooltipTrigger asChild>
             <Button

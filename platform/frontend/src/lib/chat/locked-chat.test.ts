@@ -97,7 +97,9 @@ describe("isActionAvailableForConversation", () => {
       isActionAvailableForConversation({ lockedChat: false }, "share"),
     ).toBe(true);
     // Not-yet-loaded conversations don't hide anything prematurely.
-    expect(isActionAvailableForConversation(null, "attachments")).toBe(true);
+    expect(isActionAvailableForConversation(null, "sandboxCommands")).toBe(
+      true,
+    );
     expect(isActionAvailableForConversation(undefined, "fork")).toBe(true);
   });
 });

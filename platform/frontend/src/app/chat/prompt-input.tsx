@@ -304,12 +304,13 @@ const PromptInputContent = ({
   // can read it too.
   const { data: conversation } = useConversation(conversationId);
 
-  // LockedChat is "active" for the composer both while chatting in an
-  // locked chat and while the new-chat toggle is on — either way
-  // the backend will reject attachments and sandbox `!` commands, so their
-  // affordances are hidden (not disabled).
+  // LockedChat is "active" for the composer both while chatting in a locked
+  // chat and while the new-chat toggle is on. It drives the composer's own
+  // dressing (the notice strip and dashed border) and hides the affordances
+  // the backend still rejects — sandbox `!` commands. Uploads are NOT among
+  // them any more: a locked chat's attachments are sealed under its key.
   const lockedChatActive =
-    !isActionAvailableForConversation(conversation, "attachments") ||
+    !isActionAvailableForConversation(conversation, "sandboxCommands") ||
     (lockedChat && !conversationId);
   const appName = useAppName();
 
@@ -318,7 +319,7 @@ const PromptInputContent = ({
   // conversation's Files panel (and staged into the sandbox when one is
   // available), so uploads are gated only by the org-level toggle (and the
   // locked-chat block) and the OS picker is unrestricted.
-  const showFileUploadButton = allowFileUploads && !lockedChatActive;
+  const showFileUploadButton = allowFileUploads;
 
   // Chat placeholders from organization settings
   const { data: orgData } = useOrganization();
@@ -1046,7 +1047,6 @@ const PromptInputContent = ({
             onApiKeyChange={onApiKeyChange}
             onProviderChange={onProviderChange}
             allowFileUploads={allowFileUploads}
-            attachmentsDisabledByLockedChat={lockedChatActive}
             lockedChat={lockedChat}
             onLockedChatChange={onLockedChatChange}
             sandboxAvailable={sandboxAvailable}

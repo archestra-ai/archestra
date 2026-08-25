@@ -1,9 +1,12 @@
 "use client";
 
 import { AlertTriangle, BookPlus, FileText, Paperclip } from "lucide-react";
-import Link from "next/link";
 import { useState } from "react";
 import { Message, MessageContent } from "@/components/ai-elements/message";
+import {
+  AttachmentImage,
+  AttachmentLink,
+} from "@/components/chat/attachment-content";
 import {
   EditableMessageEditor,
   useMessageEditor,
@@ -39,6 +42,12 @@ interface EditableUserMessageProps {
   isEditing: boolean;
   editDisabled?: boolean;
   attachments?: FileAttachment[];
+  /**
+   * The conversation these attachments belong to. Needed to open them in a
+   * locked chat, where the bytes only come back to a request bearing that
+   * conversation's key.
+   */
+  conversationId?: string;
   /** Skill the user invoked via slash command for this message, if any. */
   skill?: { name: string; href?: string };
   onStartEdit: (partKey: string, messageId: string) => void;
@@ -58,6 +67,7 @@ export function EditableUserMessage({
   isEditing,
   editDisabled = false,
   attachments = [],
+  conversationId,
   skill,
   onStartEdit,
   onCancelEdit,
@@ -147,9 +157,10 @@ export function EditableUserMessage({
         {imageAttachments.length > 0 && (
           <div className="flex flex-wrap gap-1 justify-end mb-2">
             {imageAttachments.map((attachment) => (
-              <img
+              <AttachmentImage
                 key={attachment.url}
-                src={attachment.url}
+                url={attachment.url}
+                conversationId={conversationId}
                 alt={attachment.filename || "Attached image"}
                 className="max-h-32 rounded-lg object-cover"
               />
@@ -164,10 +175,9 @@ export function EditableUserMessage({
                 key={attachment.url}
                 className="group/attachment flex items-center gap-1 rounded-lg border bg-muted/50 p-1"
               >
-                <Link
-                  href={attachment.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <AttachmentLink
+                  url={attachment.url}
+                  conversationId={conversationId}
                   download={attachment.filename}
                   className="flex min-w-0 items-center gap-2 rounded-md px-1.5 py-1 text-sm transition-colors hover:bg-muted"
                 >
@@ -187,7 +197,7 @@ export function EditableUserMessage({
                         filename: attachment.filename,
                       })}
                   </span>
-                </Link>
+                </AttachmentLink>
                 <SaveAttachmentButton attachment={attachment} />
               </div>
             ))}

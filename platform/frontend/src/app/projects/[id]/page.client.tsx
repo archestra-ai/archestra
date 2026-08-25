@@ -58,6 +58,7 @@ import {
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useCreateConversation } from "@/lib/chat/chat.query";
 import { conversationStorageKeys } from "@/lib/chat/chat-utils";
+import { generateLockedChatKey } from "@/lib/chat/locked-chat";
 import { setPendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-handoff";
 import { useFileDeletion } from "@/lib/chat/use-file-deletion";
 import { useDialogFlagUrlParam } from "@/lib/hooks/use-dialog-url-param";
@@ -309,15 +310,22 @@ function ProjectChatInput({
   return (
     <NewChatComposer
       projectDefaultAgentId={defaultAgentId}
-      onSubmit={({ text, agentId, modelId, apiKeyId }) => {
+      onSubmit={({ text, agentId, modelId, apiKeyId, lockedChat }) => {
         // Ignore a second submit while the first create is still in flight.
         if (createConversation.isPending) return;
+        // Locked chat: the key is generated here, in the browser, and rides
+        // the create request as a header — the mutation stores it under the
+        // new conversation id before this page navigates to it. A project
+        // holds a locked chat like any other; it just does not share its
+        // instructions or files with it.
+        const lockedChatKey = lockedChat ? generateLockedChatKey() : null;
         createConversation.mutate(
           {
             agentId,
             modelId: modelId || undefined,
             chatApiKeyId: apiKeyId ?? undefined,
             projectId,
+            ...(lockedChatKey ? { lockedChat: true, lockedChatKey } : {}),
           },
           {
             onSuccess: (conversation) => {

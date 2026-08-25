@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import ArchestraPromptInput from "@/app/chat/prompt-input";
 import { useDefaultAgentId, useInternalAgents } from "@/lib/agent.query";
 import { useMemberDefaultModel } from "@/lib/chat/chat.query";
@@ -38,6 +38,8 @@ export function NewChatComposer({
     agentId: string;
     modelId: string;
     apiKeyId: string | null;
+    /** Whether the composer's locked-chat toggle was on at submit. */
+    lockedChat: boolean;
   }) => void;
   /** The pinned agent of the project this composer starts chats in, if any. */
   projectDefaultAgentId?: string | null;
@@ -57,6 +59,10 @@ export function NewChatComposer({
   const { data: chatApiKeys = [] } = useLlmProviderApiKeys();
   const { data: organization, isPending: isOrgLoading } = useOrganization();
   const { data: memberDefault } = useMemberDefaultModel();
+  // Same toggle as the /chat composer. It renders only where the instance has
+  // locked chats enabled (the button checks that itself), and the choice
+  // travels with the handoff so the caller creates the conversation locked.
+  const [lockedChat, setLockedChat] = useState(false);
 
   const {
     agentId,
@@ -116,8 +122,10 @@ export function NewChatComposer({
             // set — an empty array clears any abandoned prior set so a text-only
             // handoff never inherits stale files.
             setPendingChatHandoffFiles(files);
-            onSubmit({ text, agentId, modelId, apiKeyId });
+            onSubmit({ text, agentId, modelId, apiKeyId, lockedChat });
           }}
+          lockedChat={lockedChat}
+          onLockedChatChange={setLockedChat}
           status="ready"
           selectedModel={modelId}
           onModelChange={onModelChange}

@@ -139,6 +139,12 @@ const EDIT_EXCERPT_MAX_EDITS = 5;
  * from applyStrReplaceEdits; overlong inserted text is elided in the middle and
  * window truncation is marked with `…`.
  *
+ * Every window edge snaps off a surrogate pair (see `snapBack`/`snapForward`).
+ * These indices are UTF-16 code units, so a context window or span cap landing
+ * mid-pair would emit half an astral character — an unpaired surrogate that no
+ * provider can encode as UTF-8, and which poisons the transcript it is stored
+ * in: every later turn replays it and is rejected again.
+ *
  * The excerpt echoes edited source (which a model may have filled with markdown —
  * an image, heading, or code fence — or, for an app, the author-set name in a
  * title), so the source region is wrapped in a fence that always outgrows any
@@ -152,10 +158,13 @@ export function buildAppliedEditExcerpts(
 ): string {
   const shown = spans.slice(0, EDIT_EXCERPT_MAX_EDITS);
   const blocks = shown.map((span) => {
-    const beforeStart = Math.max(0, span.start - EDIT_EXCERPT_CONTEXT_CHARS);
-    const afterEnd = Math.min(
-      content.length,
-      span.end + EDIT_EXCERPT_CONTEXT_CHARS,
+    const beforeStart = snapForward(
+      content,
+      Math.max(0, span.start - EDIT_EXCERPT_CONTEXT_CHARS),
+    );
+    const afterEnd = snapBack(
+      content,
+      Math.min(content.length, span.end + EDIT_EXCERPT_CONTEXT_CHARS),
     );
     const before = `${beforeStart > 0 ? "…" : ""}${content.slice(beforeStart, span.start)}`;
     const after = `${content.slice(span.end, afterEnd)}${afterEnd < content.length ? "…" : ""}`;
@@ -191,7 +200,32 @@ export function formatSkippedEditsNote(skipped: SkippedEdit[]): string {
 function capHint(span: string, max = 1500): string {
   if (span.length <= max) return span;
   const half = Math.floor((max - 20) / 2);
-  return `${span.slice(0, half)}\n…[elided]…\n${span.slice(span.length - half)}`;
+  const head = span.slice(0, snapBack(span, half));
+  const tail = span.slice(snapForward(span, span.length - half));
+  return `${head}\n…[elided]…\n${tail}`;
+}
+
+// Window edges, snapped off the middle of a surrogate pair. `index` splits a
+// pair when the unit there is a low surrogate preceded by a high one; a start
+// edge moves forward past the pair, an end edge moves back before it. Dropping
+// the whole character beats emitting an unpaired half: the excerpt is a
+// human/model-readable window, and a stray half-character travels on into the
+// transcript that echoes it.
+function splitsSurrogatePair(text: string, index: number): boolean {
+  if (index <= 0 || index >= text.length) return false;
+  const unit = text.charCodeAt(index);
+  const prev = text.charCodeAt(index - 1);
+  return unit >= 0xdc00 && unit <= 0xdfff && prev >= 0xd800 && prev <= 0xdbff;
+}
+
+/** Snap a start edge forward, off a pair it would otherwise cut. */
+function snapForward(text: string, index: number): number {
+  return splitsSurrogatePair(text, index) ? index + 1 : index;
+}
+
+/** Snap an end edge back, off a pair it would otherwise cut. */
+function snapBack(text: string, index: number): number {
+  return splitsSurrogatePair(text, index) ? index - 1 : index;
 }
 
 // Count every start position where `needle` matches, including overlapping ones

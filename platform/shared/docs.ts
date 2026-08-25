@@ -32,6 +32,7 @@ export const DocsPage = {
   PlatformAiToolGuardrails: "platform-ai-tool-guardrails",
   PlatformEnterpriseManagedAuth: "platform-enterprise-managed-auth",
   PlatformEnvironments: "platform-environments",
+  PlatformEvals: "platform-evals",
   PlatformFoundry: "platform-foundry",
   PlatformIdentityProviders: "platform-identity-providers",
   PlatformKnowledge: "platform-knowledge",

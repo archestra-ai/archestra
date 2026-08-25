@@ -64,8 +64,8 @@ test("create an eval suite, manage cases, and reach the run dialog", async ({
 
   // Edit the case.
   await page
-    .getByRole("button", { name: /^Edit$/i })
-    .first()
+    .getByRole("row", { name: /Greeting/ })
+    .getByRole("button", { name: /Edit/i })
     .click();
   const editDialog = page.getByRole("dialog");
   await editDialog.getByLabel(/Name/i).fill("Greeting v2");

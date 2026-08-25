@@ -3031,8 +3031,18 @@ export function ChatPageContent({
     );
   }
 
-  // Show loading spinner while essential data is loading
-  if (isLoadingApiKeyCheck || isLoadingAgents || isPlaywrightCheckLoading) {
+  // Hold the screen only for what the first paint is actually made of: which
+  // agent this chat starts on (the roster) and whether there is a key at all
+  // (composer vs. the connect-a-provider screen). The browser-tooling check is
+  // deliberately NOT here. It cannot even start until the roster has resolved
+  // an agent, and then costs a round trip for that agent's tools and
+  // delegations plus one more for each enabled sub-agent's tools — three
+  // dependent waves before anything is drawn, for a decision that changes
+  // nothing on screen at first paint. `isPlaywrightSetupVisible` below already
+  // carries its loading state (submit stays disabled, the browser panel stays
+  // shut) and `isPlaywrightSetupRequired` is false until the answer is known,
+  // so the setup card appears when it resolves rather than flashing.
+  if (isLoadingApiKeyCheck || isLoadingAgents) {
     return (
       <div className="flex items-center justify-center h-full">
         <LoadingState />

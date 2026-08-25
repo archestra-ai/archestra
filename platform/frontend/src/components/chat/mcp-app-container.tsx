@@ -189,7 +189,6 @@ export function McpAppEntryPill({
   appName,
   toolName,
   toolCallId,
-  icon,
   state,
   onClick,
 }: {
@@ -198,8 +197,6 @@ export function McpAppEntryPill({
   /** Full prefixed tool name — fallback label when no app name is known. */
   toolName: string;
   toolCallId?: string;
-  /** App icon (e.g. an McpCatalogIcon); falls back to the generic app glyph. */
-  icon?: React.ReactNode;
   /** Tool-call state for the status dot, matching the tool-call circles. */
   state?: "running" | "completed" | "error" | "denied";
   /** Runs on every pill click, before the app toggle (e.g. to collapse an
@@ -220,13 +217,11 @@ export function McpAppEntryPill({
   // both stay in sync after an edit (the props are captured at render time).
   const { data: ownedApp } = useApp(appId ?? null);
   const headerName = ownedApp?.name || appName || mcpToolLabel(toolName);
-  // An explicit icon from the caller wins; otherwise the owned app's own icon
-  // identifies it, and the pill falls back to the generic app glyph.
-  const pillIcon =
-    icon ??
-    (ownedApp?.icon ? (
-      <McpCatalogIcon icon={ownedApp.icon} size={16} fallback={AppWindow} />
-    ) : undefined);
+  // The pill identifies the APP, so it shows the app's own icon and never the
+  // serving MCP catalog's; without one it falls back to the generic app glyph.
+  const pillIcon = ownedApp?.icon ? (
+    <McpCatalogIcon icon={ownedApp.icon} size={16} fallback={AppWindow} />
+  ) : undefined;
 
   const standalone = !toolCallId;
   const canonicalId = toolCallId ? canonicalToolCallId(toolCallId) : undefined;

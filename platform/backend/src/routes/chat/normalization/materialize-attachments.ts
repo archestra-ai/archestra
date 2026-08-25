@@ -6,7 +6,11 @@ import config from "@/config";
 import logger from "@/logging";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
 import { SKILL_SANDBOX_ATTACHMENTS_DIR } from "@/skills-sandbox/runtime-image";
-import type { ChatMessage, ChatMessagePart } from "@/types";
+import type {
+  ChatMessage,
+  ChatMessagePart,
+  ConversationContentKey,
+} from "@/types";
 import {
   isAttachmentRefUrl,
   parseAttachmentIdFromUrl,
@@ -55,6 +59,10 @@ export async function materializeAttachments({
   // in the Files panel (and the sandbox, when it fits) instead of inflating the
   // request past what the provider accepts. Unbounded when omitted.
   inlineByteLimit = Number.POSITIVE_INFINITY,
+  // The locked chat's browser-held key. Its attachment rows hold sealed bytes
+  // and filenames, so rehydrating one for the provider needs the key; null for
+  // an ordinary chat, whose rows are plaintext.
+  conversationKey = null,
 }: {
   messages: ChatMessage[];
   conversationId: string;
@@ -63,6 +71,7 @@ export async function materializeAttachments({
   rerouteBinaryDocsToSandbox?: boolean;
   sandboxAvailable?: boolean;
   inlineByteLimit?: number;
+  conversationKey?: ConversationContentKey | null;
 }): Promise<ChatMessage[]> {
   const refIds = collectRefIds(messages);
   // Even when there are no refs to rehydrate, we still walk every part —
@@ -74,8 +83,10 @@ export async function materializeAttachments({
   // mime type and size alone. Reading its bytes on every turn would mean
   // re-streaming a large file out of Postgres for the whole life of the
   // conversation just to render a one-line notice.
-  const attachments =
-    await ConversationAttachmentModel.findByIdsWithoutData(refIds);
+  const attachments = await ConversationAttachmentModel.findByIdsWithoutData(
+    refIds,
+    conversationKey,
+  );
   // Filter to attachments owned by the current conversation. Anything
   // referencing an id outside this conversation is silently dropped from
   // the rehydration map — those parts stay with their ref URL, which
@@ -97,8 +108,10 @@ export async function materializeAttachments({
   const inlinedIds = Array.from(byId.values())
     .filter((attachment) => bypassReason(attachment, policy) === null)
     .map((attachment) => attachment.id);
-  const withData =
-    await ConversationAttachmentModel.findByIdsWithData(inlinedIds);
+  const withData = await ConversationAttachmentModel.findByIdsWithData(
+    inlinedIds,
+    conversationKey,
+  );
   const bytesById = new Map(withData.map((a) => [a.id, a.fileData]));
 
   return messages.map((message) => {

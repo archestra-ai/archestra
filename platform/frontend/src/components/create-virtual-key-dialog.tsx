@@ -312,17 +312,17 @@ export function CreateVirtualKeyDialog({
         createdKeyValue
           ? isPassthrough
             ? "Passthrough Key Created"
-            : "Virtual API Key Created"
+            : "Standard Key Created"
           : isPassthrough
             ? "Create Passthrough Key"
-            : "Create Virtual API Key"
+            : "Create Standard Key"
       }
       description={
         createdKeyValue
           ? undefined
           : isPassthrough
             ? "Create an attribution key for requests that pass a provider credential through."
-            : "Map this virtual key to provider API keys."
+            : "Map this standard key to provider API keys."
       }
       size="medium"
       isDirty={isDirty}

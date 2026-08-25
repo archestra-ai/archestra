@@ -95,7 +95,7 @@ describe("CreateVirtualKeyDialog", () => {
     renderDialog("standard");
 
     expect(
-      screen.getByRole("heading", { name: "Create Virtual API Key" }),
+      screen.getByRole("heading", { name: "Create Standard Key" }),
     ).toBeInTheDocument();
     expect(screen.getByPlaceholderText("My virtual key")).toBeInTheDocument();
     expect(screen.getByLabelText("Name")).toHaveValue(

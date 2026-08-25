@@ -490,8 +490,7 @@ function GenericProxyInstructions({
                 />
                 <p className="text-[11px] text-muted-foreground">
                   Use this as your API key. Revoke it any time by deleting the
-                  &quot;{virtualKey.name}&quot; key on the Virtual API Keys
-                  page.
+                  &quot;{virtualKey.name}&quot; key on the Virtual Keys page.
                 </p>
                 <CreditWarningNotice warning={virtualKey.creditWarning} />
               </div>
@@ -673,8 +672,7 @@ function ModelRouterInstructions() {
                   />
                   <p className="text-[11px] text-muted-foreground">
                     Use this as your API key. Revoke it any time by deleting the
-                    &quot;{virtualKey.name}&quot; key on the Virtual API Keys
-                    page.
+                    &quot;{virtualKey.name}&quot; key on the Virtual Keys page.
                   </p>
                   <CreditWarningNotice warning={virtualKey.creditWarning} />
                 </div>

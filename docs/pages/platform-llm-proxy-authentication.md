@@ -8,12 +8,12 @@ lastUpdated: 2026-08-25
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-The LLM Proxy supports direct provider API keys, virtual API keys, passthrough virtual keys, OAuth access tokens, and JWKS via an external identity provider.
+The LLM Proxy supports direct provider API keys, standard virtual keys, passthrough virtual keys, OAuth access tokens, and JWKS via an external identity provider.
 
 | Method | Best for | Model Router | Notes |
 | --- | --- | --- | --- |
 | Direct provider key | Simple provider-specific proxy calls | No | Sends the raw provider key with each request. |
-| Virtual API key | Provider-specific LLM clients, generic Model Router clients, and individual developers | Yes | Works as a provider key replacement on provider-specific proxy routes, or as the `apiKey` for Model Router clients. |
+| Standard virtual key | Provider-specific LLM clients, generic Model Router clients, and individual developers | Yes | Works as a provider key replacement on provider-specific proxy routes, or as the `apiKey` for Model Router clients. |
 | Passthrough virtual key | Authenticating proxy user while passing provider credentials through (e.g. a Claude Code subscription) | N/A | Sent in the `X-Archestra-Virtual-Key` header alongside another credential; carries no provider key of its own. |
 | LLM OAuth client access token | Backend services, production apps, and external bots | Yes | OAuth `client_credentials` grant; the client brings its own provider keys. |
 | User OAuth access token | Apps acting for an individual user | Yes | Authorization code flow with the `llm:proxy` scope; the app can self-register or use a confidential client configured on the LLM Proxy page. Resolves the user's own provider keys. |
@@ -33,20 +33,20 @@ curl -X POST "https://archestra.example.com/v1/openai/chat/completions" \
 
 This is the simplest approach but means the real provider key is sent with every request from your client application.
 
-## Virtual API Keys
+## Standard Virtual Keys
 
-Virtual API keys are platform-managed bearer tokens that map to one or more provider API keys stored in Archestra. The real provider keys never leave Archestra — clients only see the virtual token. You can delete a virtual key without rotating the underlying provider key, and set an optional expiration date on it. Each underlying provider key can have a custom base URL, for a proxy or self-hosted endpoint. The Virtual Keys page labels these **Standard** keys. A standard key grants access; a [passthrough key](#passthrough-virtual-keys) only says who is calling.
+Standard virtual keys are platform-managed bearer tokens that map to one or more provider API keys stored in Archestra. The real provider keys never leave Archestra — clients only see the virtual token. You can delete a standard key without rotating the underlying provider key, and set an optional expiration date on it. Each underlying provider key can have a custom base URL, for a proxy or self-hosted endpoint.
 
-### Creating Virtual Keys
+### Creating Standard Keys
 
 1. Go to **LLM Proxy** and open the **Virtual Keys** tab
-2. Create a virtual key
+2. Create a standard key
 3. Map at least one provider API key
 4. Copy the generated token (shown only once)
 
-### Using Virtual Keys
+### Using Standard Keys
 
-Use the virtual key in place of the provider key:
+Use the standard key in place of the provider key:
 
 ```bash
 curl -X POST "https://archestra.example.com/v1/openai/chat/completions" \
@@ -55,19 +55,19 @@ curl -X POST "https://archestra.example.com/v1/openai/chat/completions" \
   -d '{"model": "gpt-4o", "messages": [{"role": "user", "content": "Hello"}]}'
 ```
 
-The proxy resolves the virtual key to the mapped provider key and base URL, then forwards the request.
+The proxy resolves the standard key to the mapped provider key and base URL, then forwards the request.
 
 ### Provider Matching
 
-Each virtual key can map one key per provider. Provider-specific proxy routes use the mapped key for that route provider. For example, an OpenAI route requires an OpenAI mapping.
+Each standard key can map one key per provider. Provider-specific proxy routes use the mapped key for that route provider. For example, an OpenAI route requires an OpenAI mapping.
 
-### Model Router Virtual Keys
+### Standard Keys on the Model Router
 
-Model Router routes require a virtual key with at least one provider key mapping. Direct provider API keys are rejected on `/v1/model-router/*`.
+Model Router routes require a standard key with at least one provider key mapping. Direct provider API keys are rejected on `/v1/model-router/*`.
 
 The `/models` endpoint returns models only for mapped providers, and `/responses` or `/chat/completions` can only route to those providers.
 
-Use the same virtual key against the Model Router base URL:
+Use the same standard key against the Model Router base URL:
 
 ```bash
 curl -X POST "https://archestra.example.com/v1/model-router/responses" \

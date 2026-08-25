@@ -70,7 +70,7 @@ graph TB
 
 ## Authentication
 
-The LLM Proxy supports direct provider API keys, virtual API keys, LLM OAuth client access tokens, and JWKS via an external identity provider. See [Authentication](/docs/platform-llm-proxy-authentication) for details.
+The LLM Proxy supports direct provider API keys, standard and passthrough virtual keys, LLM OAuth client access tokens, and JWKS via an external identity provider. See [Authentication](/docs/platform-llm-proxy-authentication) for details.
 
 ## OpenAI-Compatible Model Router
 

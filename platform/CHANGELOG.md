@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.3.44](https://github.com/archestra-ai/archestra/compare/platform-v1.3.43...platform-v1.3.44) (2026-08-25)
+
+
+### Features
+
+* **chat:** attachments, projects and app chats for locked chats ([#7455](https://github.com/archestra-ai/archestra/issues/7455)) ([b36942f](https://github.com/archestra-ai/archestra/commit/b36942f782f3198255144fb037f6e20618a4a51d))
+
+
+### Bug Fixes
+
+* **mcp-oauth:** a blank Scopes field sends no scope instead of an invented read write ([#7457](https://github.com/archestra-ai/archestra/issues/7457)) ([9a531be](https://github.com/archestra-ai/archestra/commit/9a531be4e062fad3bca5e132392dd06948375002))
+* **sso:** stop serving identity-provider secrets to the browser ([#7453](https://github.com/archestra-ai/archestra/issues/7453)) ([64bda16](https://github.com/archestra-ai/archestra/commit/64bda16f088299b6819eb10b96373573bac30d41))
+
 ## [1.3.43](https://github.com/archestra-ai/archestra/compare/platform-v1.3.42...platform-v1.3.43) (2026-08-25)
 
 

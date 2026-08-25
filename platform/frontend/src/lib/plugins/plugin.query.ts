@@ -189,7 +189,20 @@ export function useImportGithubPluginMarketplace() {
         );
       }
       if (data.failed.length > 0) {
-        toast.warning(`${data.failed.length} plugin import failed`);
+        const reasons = data.failed
+          .slice(0, 3)
+          .map((failure) => `${failure.name}: ${failure.error}`)
+          .join(" · ");
+        toast.warning(
+          `${data.failed.length} plugin import${data.failed.length === 1 ? "" : "s"} failed`,
+          {
+            description:
+              data.failed.length > 3
+                ? `${reasons} · +${data.failed.length - 3} more`
+                : reasons,
+            duration: 10_000,
+          },
+        );
       }
     },
   });

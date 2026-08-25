@@ -95,7 +95,8 @@ export async function prepareGithubMarketplaceImports(params: {
   let exhaustedReason: string | null = null;
   for (const selection of params.selections) {
     if (!exhaustedReason && Date.now() >= deadlineAt) {
-      exhaustedReason = "Marketplace import time budget was exhausted";
+      exhaustedReason =
+        "Marketplace import time budget was exhausted; retry with fewer plugins selected";
     }
     if (exhaustedReason) {
       failed.push({ name: selection.name, error: exhaustedReason });

@@ -506,125 +506,138 @@ div:has(> [data-testid="emoji-picker-list-header"]) {
   }
 }
 
-/* OpenAPPA is the first-party Plugin. A restrained accent hairline and one
-   smooth glint every 12 seconds distinguish it without persistent motion. */
-@keyframes plugin-featured-glint {
-  0%,
-  72%,
-  100% {
-    opacity: 0;
-    transform: translate3d(-120%, 0, 0) skewX(-16deg);
-  }
-  79% {
-    opacity: 0.12;
-  }
-  87% {
-    opacity: 0.28;
-    transform: translate3d(280%, 0, 0) skewX(-16deg);
-  }
-  91% {
-    opacity: 0;
-    transform: translate3d(280%, 0, 0) skewX(-16deg);
-  }
-}
-
-.plugin-featured-action,
-.plugin-featured-repository-option {
+/* OpenAPPA stays an ordinary pinned row; only its install action is featured. */
+button.plugin-featured-action {
+  --plugin-featured-spark: color-mix(
+    in oklab,
+    white 40%,
+    var(--primary) 60%
+  );
   position: relative;
   overflow: hidden;
-  isolation: isolate;
+  border-color: color-mix(in oklab, var(--primary) 45%, transparent);
+  background-color: color-mix(in oklab, var(--primary) 5%, transparent);
+  /* Position the strips from the real border rather than the inset padding
+     box, so their orbit follows the control's outline. */
+  background-origin: border-box;
+  background-image:
+    linear-gradient(
+      90deg,
+      transparent,
+      var(--plugin-featured-spark) 50%,
+      transparent
+    ),
+    linear-gradient(
+      180deg,
+      transparent,
+      var(--plugin-featured-spark) 50%,
+      transparent
+    ),
+    linear-gradient(
+      90deg,
+      transparent,
+      var(--plugin-featured-spark) 50%,
+      transparent
+    ),
+    linear-gradient(
+      180deg,
+      transparent,
+      var(--plugin-featured-spark) 50%,
+      transparent
+    );
+  background-size:
+    8px 2px,
+    2px 8px,
+    8px 2px,
+    2px 8px;
+  background-repeat: no-repeat;
+  background-position:
+    -8px 0,
+    100% -8px,
+    calc(100% + 8px) 100%,
+    0 calc(100% + 8px);
+  animation: plugin-featured-action-border-spark 6s linear infinite;
 }
 
-.plugin-featured-row > td::after,
-.plugin-featured-action::after,
-.plugin-featured-repository-option::after {
+button.plugin-featured-action:hover {
+  background-color: color-mix(in oklab, var(--primary) 9%, transparent);
+}
+
+/* One perimeter tour, then rest. The shorter cycle keeps the small action
+   noticeable without turning it into constant motion. */
+@keyframes plugin-featured-action-border-spark {
+  0%,
+  20% {
+    background-position:
+      -8px 0,
+      100% -8px,
+      calc(100% + 8px) 100%,
+      0 calc(100% + 8px);
+  }
+  35% {
+    background-position:
+      calc(100% + 8px) 0,
+      100% -8px,
+      calc(100% + 8px) 100%,
+      0 calc(100% + 8px);
+  }
+  50% {
+    background-position:
+      calc(100% + 8px) 0,
+      100% calc(100% + 8px),
+      calc(100% + 8px) 100%,
+      0 calc(100% + 8px);
+  }
+  65% {
+    background-position:
+      calc(100% + 8px) 0,
+      100% calc(100% + 8px),
+      -8px 100%,
+      0 calc(100% + 8px);
+  }
+  80%,
+  100% {
+    background-position:
+      calc(100% + 8px) 0,
+      100% calc(100% + 8px),
+      -8px 100%,
+      0 -8px;
+  }
+}
+
+button.plugin-featured-action::after {
   content: "";
   position: absolute;
-  inset: 0 auto 0 -30%;
-  width: 26%;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 60%;
   pointer-events: none;
   background: linear-gradient(
-    90deg,
+    100deg,
     transparent 0%,
-    color-mix(in oklab, white 16%, transparent) 28%,
-    color-mix(in oklab, white 55%, var(--primary)) 47%,
-    color-mix(in oklab, white 82%, var(--primary)) 50%,
-    color-mix(in oklab, white 34%, var(--primary)) 54%,
-    color-mix(in oklab, white 10%, transparent) 72%,
+    color-mix(in oklab, var(--primary) 20%, transparent) 35%,
+    color-mix(in oklab, white 12%, var(--primary) 30%) 50%,
+    color-mix(in oklab, var(--primary) 20%, transparent) 65%,
     transparent 100%
   );
-  mix-blend-mode: soft-light;
-  opacity: 0;
-  transform: translate3d(-120%, 0, 0) skewX(-16deg);
-  animation: plugin-featured-glint 12s cubic-bezier(0.16, 1, 0.3, 1) infinite;
-  animation-delay: var(--plugin-featured-delay, 0s);
+  transform: translate3d(-150%, 0, 0) skewX(-16deg);
+  animation: plugin-featured-action-glint 5s ease-in-out infinite;
 }
 
-.plugin-featured-row {
-  outline: 1px solid color-mix(in oklab, var(--primary) 30%, transparent);
-  outline-offset: -1px;
-}
-
-.plugin-featured-row > td {
-  position: relative;
-  overflow: hidden;
-  isolation: isolate;
-  background-color: color-mix(in oklab, var(--primary) 3%, transparent);
-  background-image: linear-gradient(
-    180deg,
-    color-mix(in oklab, white 4%, transparent),
-    transparent 55%
-  );
-}
-
-.plugin-featured-row > td:nth-child(2) {
-  --plugin-featured-delay: 40ms;
-}
-
-.plugin-featured-row > td:nth-child(3) {
-  --plugin-featured-delay: 80ms;
-}
-
-.plugin-featured-row > td:nth-child(4) {
-  --plugin-featured-delay: 120ms;
-}
-
-.plugin-featured-row > td:nth-child(5) {
-  --plugin-featured-delay: 160ms;
-}
-
-.plugin-featured-row > td:nth-child(6) {
-  --plugin-featured-delay: 200ms;
-}
-
-.plugin-featured-row > td:nth-child(7) {
-  --plugin-featured-delay: 240ms;
-}
-
-.plugin-featured-row > td:nth-child(8) {
-  --plugin-featured-delay: 280ms;
-}
-
-.plugin-featured-row > td:nth-child(9) {
-  --plugin-featured-delay: 320ms;
-}
-
-.plugin-featured-action {
-  border-color: color-mix(in oklab, var(--primary) 38%, var(--border));
-  color: color-mix(in oklab, var(--primary) 68%, var(--foreground));
-  background-color: color-mix(in oklab, var(--primary) 4%, transparent);
-  box-shadow: inset 0 1px 0 color-mix(in oklab, white 16%, transparent);
-}
-
-.plugin-featured-repository-option {
-  color: color-mix(in oklab, var(--primary) 42%, var(--foreground));
-  background-color: color-mix(in oklab, var(--primary) 2%, transparent);
+@keyframes plugin-featured-action-glint {
+  0% {
+    transform: translate3d(-150%, 0, 0) skewX(-16deg);
+  }
+  18%,
+  100% {
+    transform: translate3d(260%, 0, 0) skewX(-16deg);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .plugin-featured-row > td::after,
-  .plugin-featured-action::after,
-  .plugin-featured-repository-option::after {
+  button.plugin-featured-action,
+  button.plugin-featured-action::after {
     animation: none;
   }
 }

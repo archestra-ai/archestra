@@ -43509,10 +43509,6 @@
                   "organizationId": {
                     "type": "string"
                   },
-                  "deletedAuthorEmail": {
-                    "nullable": true,
-                    "type": "string"
-                  },
                   "scope": {
                     "type": "string",
                     "enum": [
@@ -49393,10 +49389,6 @@
                 "type": "object",
                 "properties": {
                   "organizationId": {
-                    "type": "string"
-                  },
-                  "deletedAuthorEmail": {
-                    "nullable": true,
                     "type": "string"
                   },
                   "scope": {

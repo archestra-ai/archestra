@@ -13023,7 +13023,6 @@ export type GetAgentsResponse = GetAgentsResponses[keyof GetAgentsResponses];
 export type CreateAgentData = {
     body: {
         organizationId?: string;
-        deletedAuthorEmail?: string | null;
         scope: 'personal' | 'team' | 'org';
         name: string;
         isDefault?: boolean;
@@ -14390,7 +14389,6 @@ export type GetAgentResponse = GetAgentResponses[keyof GetAgentResponses];
 export type UpdateAgentData = {
     body: {
         organizationId?: string;
-        deletedAuthorEmail?: string | null;
         scope?: 'personal' | 'team' | 'org';
         name?: string;
         isDefault?: boolean;

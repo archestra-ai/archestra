@@ -29,12 +29,14 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature, useProviderBaseUrls } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
+import { providerSearchHaystack } from "@/lib/provider-search";
 import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
-import { LlmProviderSelectItems } from "./llm-provider-select-items";
+import { LlmProviderOptionLabel } from "./llm-provider-select-items";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
+import { SearchableSelect } from "./ui/searchable-select";
 import { SecretInput } from "./ui/secret-input";
 import {
   Select,
@@ -169,6 +171,11 @@ const PROVIDER_CONFIG: Record<
      * the organization's own label for it; a plain string otherwise.
      */
     description?: string | ((providerLabel: string) => string);
+    /**
+     * A second line under the entry's name in the provider picker, for an
+     * entry whose name does not say what it covers.
+     */
+    optionSubtext?: string;
     baseUrlRequired?: boolean;
     /** Whether this provider can be used for embeddings (defaults to true). */
     supportsEmbeddings?: boolean;
@@ -265,15 +272,23 @@ const PROVIDER_CONFIG: Record<
     consoleName: "OpenRouter",
   },
   vllm: {
-    name: "vLLM",
+    // This entry is the generic OpenAI-compatible path, not the vLLM project's
+    // own integration: the adapter only speaks `/v1/chat/completions`, so every
+    // server implementing that shape runs through it. The provider id stays
+    // `vllm` — it is what every stored key, env var and proxy route already
+    // says — while the label names what the entry actually covers.
+    name: "OpenAI-compatible",
     icon: "/icons/vllm.png",
     placeholder: "optional-api-key",
     enabled: true,
     consoleUrl: "https://docs.vllm.ai/",
     consoleName: "vLLM Docs",
-    // A vLLM key is a server, not an account, so the endpoint is the whole
+    optionSubtext: "vLLM, llama.cpp, LM Studio, SGLang, TGI, LocalAI",
+    description:
+      "For any server that exposes an OpenAI-compatible /v1 API — vLLM, llama.cpp, LM Studio, SGLang, TGI, LocalAI, and others. Point the Base URL at your server; most self-hosted deployments need no API key.",
+    // A key here is a server, not an account, so the endpoint is the whole
     // point of the form and belongs above "advanced settings" rather than
-    // hidden inside it. It is also unusable when blank — vLLM has no default
+    // hidden inside it. It is also unusable when blank — there is no default
     // endpoint, so an unset base URL routes to api.openai.com.
     baseUrlRequired: true,
   },
@@ -617,6 +632,103 @@ export function LlmProviderApiKeyForm({
     !forEmbedding &&
     allowedOllamaTransports.length > 1;
   const showProviderField = !(progressive && allowedProviderSet.size === 1);
+  /**
+   * The provider picker's items, sorted by the label the organization actually
+   * sees. `searchText` carries the entry's aliases on top of its label so a
+   * generic entry is reachable by the product the operator runs — searching
+   * "LM Studio" finds the OpenAI-compatible entry that serves it.
+   */
+  const providerOptions = useMemo(
+    () =>
+      Object.entries(PROVIDER_CONFIG)
+        // Personal subscription-only providers do not belong in the API-key
+        // flow. The two Ollama transports are one product and collapse to a
+        // single provider entry.
+        .filter(
+          ([key]) =>
+            (allowPersonalSubscriptions ||
+              !providerRequiresPerUserCredential(
+                key as CreateLlmProviderApiKeyBody["provider"],
+              )) &&
+            (!isOllamaProvider(key) || key === ollamaListedTransport),
+        )
+        // Providers the admins turned off are not offered. The one already
+        // selected stays in the list even when hidden, so an existing key's
+        // disabled trigger still renders its own provider.
+        .filter(
+          ([key]) =>
+            key === provider ||
+            !providerCatalog.isHidden(
+              key as CreateLlmProviderApiKeyBody["provider"],
+            ),
+        )
+        .map(([key, config]) => {
+          const providerKey = key as CreateLlmProviderApiKeyBody["provider"];
+          return {
+            providerKey,
+            config,
+            name:
+              key === ollamaListedTransport
+                ? collapsedOllamaLabel
+                : providerCatalog.label(providerKey),
+          };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map(({ providerKey, config, name }) => {
+          const isGeminiDisabledByVertexAi =
+            providerKey === "gemini" && geminiVertexAiEnabled;
+          const isBedrockDisabledByIamAuth =
+            providerKey === "bedrock" && bedrockIamAuthEnabled;
+          const isEmbeddingUnsupported =
+            forEmbedding && config.supportsEmbeddings === false;
+          // Why the entry cannot be picked outranks what it covers, so the
+          // embedding notice takes the one subtext line when both apply.
+          const subtext = isEmbeddingUnsupported
+            ? "Not supported for embeddings"
+            : config.optionSubtext;
+
+          return {
+            value: providerKey,
+            label: name,
+            searchText: providerSearchHaystack({
+              provider: providerKey,
+              labels: [name, subtext],
+            }),
+            disabled:
+              !allowedProviderSet.has(providerKey) ||
+              !config.enabled ||
+              isGeminiDisabledByVertexAi ||
+              isBedrockDisabledByIamAuth ||
+              isEmbeddingUnsupported,
+            content: (
+              <LlmProviderOptionLabel
+                icon={config.icon}
+                name={name}
+                subtext={subtext}
+                showComingSoon={!config.enabled}
+                showGeminiVertexAiBadge={isGeminiDisabledByVertexAi}
+                showBedrockIamBadge={isBedrockDisabledByIamAuth}
+              />
+            ),
+            // The trigger is one line tall, so the selected entry drops the
+            // subtext and the badges that only explain a disabled option.
+            selectedContent: (
+              <LlmProviderOptionLabel icon={config.icon} name={name} />
+            ),
+          };
+        }),
+    [
+      allowPersonalSubscriptions,
+      allowedProviderSet,
+      bedrockIamAuthEnabled,
+      collapsedOllamaLabel,
+      forEmbedding,
+      geminiVertexAiEnabled,
+      ollamaListedTransport,
+      provider,
+      providerCatalog,
+    ],
+  );
   const showConfiguredStyling = isEditMode && !hasApiKeyChanged;
 
   const existingPrimaryKey = useMemo(() => {
@@ -892,8 +1004,8 @@ export function LlmProviderApiKeyForm({
       </p>
       {isVllm && (
         <p className="text-xs text-muted-foreground">
-          One URL per server. If you run more than one vLLM server, add each as
-          its own vLLM key — every model is routed to the server that hosts it.
+          One URL per server. If you run more than one, add each as its own key
+          — every model is routed to the server that hosts it.
         </p>
       )}
       {isSelfHostedProvider(provider) && (
@@ -963,7 +1075,12 @@ export function LlmProviderApiKeyForm({
             {showProviderField && (
               <div className="space-y-2">
                 <Label htmlFor="llm-provider-api-key-provider">Provider</Label>
-                <Select
+                <SearchableSelect
+                  id="llm-provider-api-key-provider"
+                  ariaLabel="Provider"
+                  className="w-full"
+                  searchPlaceholder="Search providers..."
+                  emptyMessage="No matching providers found."
                   value={
                     isOllamaProvider(provider)
                       ? ollamaListedTransport
@@ -976,86 +1093,8 @@ export function LlmProviderApiKeyForm({
                     )
                   }
                   disabled={isEditMode || isPending || disableProvider}
-                >
-                  <SelectTrigger
-                    id="llm-provider-api-key-provider"
-                    className="w-full"
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <LlmProviderSelectItems
-                      options={Object.entries(PROVIDER_CONFIG)
-                        // Personal subscription-only providers do not belong in
-                        // the API-key flow. The two Ollama transports are one
-                        // product and collapse to a single provider entry.
-                        .filter(
-                          ([key]) =>
-                            (allowPersonalSubscriptions ||
-                              !providerRequiresPerUserCredential(
-                                key as CreateLlmProviderApiKeyBody["provider"],
-                              )) &&
-                            (!isOllamaProvider(key) ||
-                              key === ollamaListedTransport),
-                        )
-                        // Providers the admins turned off are not offered. The
-                        // one already selected stays in the list even when
-                        // hidden, so an existing key's disabled trigger still
-                        // renders its own provider.
-                        .filter(
-                          ([key]) =>
-                            key === provider ||
-                            !providerCatalog.isHidden(
-                              key as CreateLlmProviderApiKeyBody["provider"],
-                            ),
-                        )
-                        .map(
-                          ([key, config]) =>
-                            [
-                              key,
-                              {
-                                ...config,
-                                name:
-                                  key === ollamaListedTransport
-                                    ? collapsedOllamaLabel
-                                    : providerCatalog.label(
-                                        key as CreateLlmProviderApiKeyBody["provider"],
-                                      ),
-                              },
-                            ] as const,
-                        )
-                        .sort(([, a], [, b]) => a.name.localeCompare(b.name))
-                        .map(([key, config]) => {
-                          const providerKey =
-                            key as CreateLlmProviderApiKeyBody["provider"];
-                          const isGeminiDisabledByVertexAi =
-                            providerKey === "gemini" && geminiVertexAiEnabled;
-                          const isBedrockDisabledByIamAuth =
-                            providerKey === "bedrock" && bedrockIamAuthEnabled;
-                          const isEmbeddingUnsupported =
-                            forEmbedding && config.supportsEmbeddings === false;
-
-                          return {
-                            value: providerKey,
-                            icon: config.icon,
-                            name: config.name,
-                            disabled:
-                              !allowedProviderSet.has(providerKey) ||
-                              !config.enabled ||
-                              isGeminiDisabledByVertexAi ||
-                              isBedrockDisabledByIamAuth ||
-                              isEmbeddingUnsupported,
-                            subtext: isEmbeddingUnsupported
-                              ? "Not supported for embeddings"
-                              : undefined,
-                            showComingSoon: !config.enabled,
-                            showGeminiVertexAiBadge: isGeminiDisabledByVertexAi,
-                            showBedrockIamBadge: isBedrockDisabledByIamAuth,
-                          };
-                        })}
-                    />
-                  </SelectContent>
-                </Select>
+                  items={providerOptions}
+                />
               </div>
             )}
 

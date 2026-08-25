@@ -42681,10 +42681,6 @@
                             "nullable": true,
                             "type": "string"
                           },
-                          "deletedAuthorName": {
-                            "nullable": true,
-                            "type": "string"
-                          },
                           "deletedAuthorEmail": {
                             "nullable": true,
                             "type": "string"
@@ -43170,7 +43166,6 @@
                           "id",
                           "organizationId",
                           "authorId",
-                          "deletedAuthorName",
                           "deletedAuthorEmail",
                           "scope",
                           "name",
@@ -43514,10 +43509,6 @@
                   "organizationId": {
                     "type": "string"
                   },
-                  "deletedAuthorName": {
-                    "nullable": true,
-                    "type": "string"
-                  },
                   "deletedAuthorEmail": {
                     "nullable": true,
                     "type": "string"
@@ -43859,10 +43850,6 @@
                       "type": "string"
                     },
                     "authorId": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "deletedAuthorName": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -44351,7 +44338,6 @@
                     "id",
                     "organizationId",
                     "authorId",
-                    "deletedAuthorName",
                     "deletedAuthorEmail",
                     "scope",
                     "name",
@@ -44748,10 +44734,6 @@
                         "type": "string"
                       },
                       "authorId": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "deletedAuthorName": {
                         "nullable": true,
                         "type": "string"
                       },
@@ -45240,7 +45222,6 @@
                       "id",
                       "organizationId",
                       "authorId",
-                      "deletedAuthorName",
                       "deletedAuthorEmail",
                       "scope",
                       "name",
@@ -45844,10 +45825,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "deletedAuthorName": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "deletedAuthorEmail": {
                       "nullable": true,
                       "type": "string"
@@ -46333,7 +46310,6 @@
                     "id",
                     "organizationId",
                     "authorId",
-                    "deletedAuthorName",
                     "deletedAuthorEmail",
                     "scope",
                     "name",
@@ -46642,10 +46618,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "deletedAuthorName": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "deletedAuthorEmail": {
                       "nullable": true,
                       "type": "string"
@@ -47131,7 +47103,6 @@
                     "id",
                     "organizationId",
                     "authorId",
-                    "deletedAuthorName",
                     "deletedAuthorEmail",
                     "scope",
                     "name",
@@ -47804,10 +47775,6 @@
                           "nullable": true,
                           "type": "string"
                         },
-                        "deletedAuthorName": {
-                          "nullable": true,
-                          "type": "string"
-                        },
                         "deletedAuthorEmail": {
                           "nullable": true,
                           "type": "string"
@@ -48293,7 +48260,6 @@
                         "id",
                         "organizationId",
                         "authorId",
-                        "deletedAuthorName",
                         "deletedAuthorEmail",
                         "scope",
                         "name",
@@ -48649,10 +48615,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "deletedAuthorName": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "deletedAuthorEmail": {
                       "nullable": true,
                       "type": "string"
@@ -49138,7 +49100,6 @@
                     "id",
                     "organizationId",
                     "authorId",
-                    "deletedAuthorName",
                     "deletedAuthorEmail",
                     "scope",
                     "name",
@@ -49432,10 +49393,6 @@
                 "type": "object",
                 "properties": {
                   "organizationId": {
-                    "type": "string"
-                  },
-                  "deletedAuthorName": {
-                    "nullable": true,
                     "type": "string"
                   },
                   "deletedAuthorEmail": {
@@ -49786,10 +49743,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "deletedAuthorName": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "deletedAuthorEmail": {
                       "nullable": true,
                       "type": "string"
@@ -50275,7 +50228,6 @@
                     "id",
                     "organizationId",
                     "authorId",
-                    "deletedAuthorName",
                     "deletedAuthorEmail",
                     "scope",
                     "name",
@@ -51866,10 +51818,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "deletedAuthorName": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "deletedAuthorEmail": {
                       "nullable": true,
                       "type": "string"
@@ -52355,7 +52303,6 @@
                     "id",
                     "organizationId",
                     "authorId",
-                    "deletedAuthorName",
                     "deletedAuthorEmail",
                     "scope",
                     "name",
@@ -52704,10 +52651,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "deletedAuthorName": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "deletedAuthorEmail": {
                       "nullable": true,
                       "type": "string"
@@ -53193,7 +53136,6 @@
                     "id",
                     "organizationId",
                     "authorId",
-                    "deletedAuthorName",
                     "deletedAuthorEmail",
                     "scope",
                     "name",
@@ -57381,10 +57323,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "deletedAuthorName": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "deletedAuthorEmail": {
                       "nullable": true,
                       "type": "string"
@@ -57870,7 +57808,6 @@
                     "id",
                     "organizationId",
                     "authorId",
-                    "deletedAuthorName",
                     "deletedAuthorEmail",
                     "scope",
                     "name",
@@ -264842,10 +264779,6 @@
                         "nullable": true,
                         "type": "string"
                       },
-                      "formerOwnerName": {
-                        "nullable": true,
-                        "type": "string"
-                      },
                       "formerOwnerEmail": {
                         "nullable": true,
                         "type": "string"
@@ -264858,7 +264791,6 @@
                       "scope",
                       "ownerId",
                       "ownerEmail",
-                      "formerOwnerName",
                       "formerOwnerEmail"
                     ],
                     "additionalProperties": false
@@ -265417,10 +265349,6 @@
                               "nullable": true,
                               "type": "string"
                             },
-                            "formerOwnerName": {
-                              "nullable": true,
-                              "type": "string"
-                            },
                             "formerOwnerEmail": {
                               "nullable": true,
                               "type": "string"
@@ -265433,7 +265361,6 @@
                             "scope",
                             "ownerId",
                             "ownerEmail",
-                            "formerOwnerName",
                             "formerOwnerEmail"
                           ],
                           "additionalProperties": false
@@ -266116,10 +266043,6 @@
                             "nullable": true,
                             "type": "string"
                           },
-                          "formerOwnerName": {
-                            "nullable": true,
-                            "type": "string"
-                          },
                           "formerOwnerEmail": {
                             "nullable": true,
                             "type": "string"
@@ -266132,7 +266055,6 @@
                           "scope",
                           "ownerId",
                           "ownerEmail",
-                          "formerOwnerName",
                           "formerOwnerEmail"
                         ],
                         "additionalProperties": false
@@ -266690,10 +266612,6 @@
                             "nullable": true,
                             "type": "string"
                           },
-                          "formerOwnerName": {
-                            "nullable": true,
-                            "type": "string"
-                          },
                           "formerOwnerEmail": {
                             "nullable": true,
                             "type": "string"
@@ -266706,7 +266624,6 @@
                           "scope",
                           "ownerId",
                           "ownerEmail",
-                          "formerOwnerName",
                           "formerOwnerEmail"
                         ],
                         "additionalProperties": false
@@ -267573,10 +267490,6 @@
                             "nullable": true,
                             "type": "string"
                           },
-                          "formerOwnerName": {
-                            "nullable": true,
-                            "type": "string"
-                          },
                           "formerOwnerEmail": {
                             "nullable": true,
                             "type": "string"
@@ -267589,7 +267502,6 @@
                           "scope",
                           "ownerId",
                           "ownerEmail",
-                          "formerOwnerName",
                           "formerOwnerEmail"
                         ],
                         "additionalProperties": false
@@ -268479,10 +268391,6 @@
                             "nullable": true,
                             "type": "string"
                           },
-                          "formerOwnerName": {
-                            "nullable": true,
-                            "type": "string"
-                          },
                           "formerOwnerEmail": {
                             "nullable": true,
                             "type": "string"
@@ -268495,7 +268403,6 @@
                           "scope",
                           "ownerId",
                           "ownerEmail",
-                          "formerOwnerName",
                           "formerOwnerEmail"
                         ],
                         "additionalProperties": false
@@ -270641,10 +270548,6 @@
                             "nullable": true,
                             "type": "string"
                           },
-                          "formerOwnerName": {
-                            "nullable": true,
-                            "type": "string"
-                          },
                           "formerOwnerEmail": {
                             "nullable": true,
                             "type": "string"
@@ -270657,7 +270560,6 @@
                           "scope",
                           "ownerId",
                           "ownerEmail",
-                          "formerOwnerName",
                           "formerOwnerEmail"
                         ],
                         "additionalProperties": false

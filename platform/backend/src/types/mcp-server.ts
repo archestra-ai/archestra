@@ -23,10 +23,10 @@ import { ResourceVisibilityScopeSchema } from "./visibility";
  *
  * Both live owner fields are null together when the agent has no author — the
  * FK is `ON DELETE SET NULL` and users are hard-deleted, so an agent outlives
- * its author. `formerOwnerName` / `formerOwnerEmail` then carry who they were,
- * captured at deletion time (`agents.deleted_author_*`), so such a row can
- * still be attributed instead of shrugged at. All four are null for an agent
- * that never had an author, and for one orphaned before that capture existed.
+ * its author. `formerOwnerEmail` then carries who they were, captured at
+ * deletion time (`agents.deleted_author_email`), so such a row can still be
+ * attributed instead of shrugged at. All three are null for an agent that
+ * never had an author, and for one orphaned before that capture existed.
  *
  * A surface that names an owner has to distinguish these cases rather than
  * fall back to the scope, which is how the Usage tab came to print the word
@@ -45,7 +45,6 @@ export const McpServerAgentUsageSchema = z.object({
   ownerId: z.string().nullable(),
   ownerEmail: z.string().nullable(),
   /** Who the author was, retained from before their account was deleted. */
-  formerOwnerName: z.string().nullable(),
   formerOwnerEmail: z.string().nullable(),
 });
 

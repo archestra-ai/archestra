@@ -1,5 +1,5 @@
 {
-  "id": "6d911bda-2bb3-4c5c-be0d-13d4a67391e5",
+  "id": "0240a057-88e0-45ed-8108-748e1b67e3e4",
   "prevId": "ae895c0d-cb90-4d95-ae6e-19edc508a046",
   "version": "7",
   "dialect": "postgresql",
@@ -2059,12 +2059,6 @@
         },
         "author_id": {
           "name": "author_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "deleted_author_name": {
-          "name": "deleted_author_name",
           "type": "text",
           "primaryKey": false,
           "notNull": false

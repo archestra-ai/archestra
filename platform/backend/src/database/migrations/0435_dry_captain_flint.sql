@@ -1,0 +1,1 @@
+ALTER TABLE "agents" ADD COLUMN "deleted_author_email" text;

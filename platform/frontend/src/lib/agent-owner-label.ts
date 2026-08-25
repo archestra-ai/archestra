@@ -7,12 +7,12 @@ export type AgentOwner =
   /** A personal agent belonging to somebody else. */
   | { kind: "user"; email: string }
   /**
-   * A personal agent whose author's account was deleted, named from the
-   * identity captured at deletion time. "Their account is gone" is a better
-   * answer than either a bare name (which invites someone to go looking for a
-   * colleague who has left) or a shrug.
+   * A personal agent whose author's account was deleted, named from the email
+   * captured at deletion time. "Their account is gone" is a better answer than
+   * either a bare address (which invites someone to go looking for a colleague
+   * who has left) or a shrug.
    */
-  | { kind: "deleted"; name: string | null; email: string }
+  | { kind: "deleted"; email: string }
   /**
    * A personal agent with no author on record and nothing retained about them:
    * an agent orphaned before that capture existed. `agents.author_id` is
@@ -42,7 +42,6 @@ export function describeAgentOwner(
     scope: ResourceVisibilityScope;
     ownerId: string | null;
     ownerEmail: string | null;
-    formerOwnerName?: string | null;
     formerOwnerEmail?: string | null;
   },
   currentUserId: string | null | undefined,
@@ -59,11 +58,7 @@ export function describeAgentOwner(
   // The live author is checked first: the retained identity is only ever
   // written as an account is deleted, so the two cannot both be current.
   if (agent.formerOwnerEmail) {
-    return {
-      kind: "deleted",
-      name: agent.formerOwnerName ?? null,
-      email: agent.formerOwnerEmail,
-    };
+    return { kind: "deleted", email: agent.formerOwnerEmail };
   }
   return { kind: "unknown" };
 }

@@ -394,10 +394,7 @@ describe("McpServerModel", () => {
       makeMcpServer,
     }) => {
       const org = await makeOrganization();
-      const kim = await makeUser({
-        name: "Kim Alvarez",
-        email: "kim@example.com",
-      });
+      const kim = await makeUser({ email: "kim@example.com" });
       await makeAgent({
         organizationId: org.id,
         name: "Nightly Backlog Groomer",
@@ -424,7 +421,6 @@ describe("McpServerModel", () => {
                 name: "Nightly Backlog Groomer",
                 ownerId: null,
                 ownerEmail: null,
-                formerOwnerName: "Kim Alvarez",
                 formerOwnerEmail: "kim@example.com",
               }),
             ],
@@ -457,7 +453,6 @@ describe("McpServerModel", () => {
           name: "Shared Gateway",
           ownerId: null,
           ownerEmail: null,
-          formerOwnerName: null,
           formerOwnerEmail: null,
         }),
       ]);

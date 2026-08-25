@@ -12921,7 +12921,6 @@ export type GetAgentsResponses = {
             id: string;
             organizationId: string;
             authorId: string | null;
-            deletedAuthorName: string | null;
             deletedAuthorEmail: string | null;
             scope: 'personal' | 'team' | 'org';
             name: string;
@@ -13024,7 +13023,6 @@ export type GetAgentsResponse = GetAgentsResponses[keyof GetAgentsResponses];
 export type CreateAgentData = {
     body: {
         organizationId?: string;
-        deletedAuthorName?: string | null;
         deletedAuthorEmail?: string | null;
         scope: 'personal' | 'team' | 'org';
         name: string;
@@ -13159,7 +13157,6 @@ export type CreateAgentResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        deletedAuthorName: string | null;
         deletedAuthorEmail: string | null;
         scope: 'personal' | 'team' | 'org';
         name: string;
@@ -13359,7 +13356,6 @@ export type GetAllAgentsResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        deletedAuthorName: string | null;
         deletedAuthorEmail: string | null;
         scope: 'personal' | 'team' | 'org';
         name: string;
@@ -13618,7 +13614,6 @@ export type GetDefaultMcpGatewayResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        deletedAuthorName: string | null;
         deletedAuthorEmail: string | null;
         scope: 'personal' | 'team' | 'org';
         name: string;
@@ -13789,7 +13784,6 @@ export type GetDefaultLlmProxyResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        deletedAuthorName: string | null;
         deletedAuthorEmail: string | null;
         scope: 'personal' | 'team' | 'org';
         name: string;
@@ -14040,7 +14034,6 @@ export type ImportAgentResponses = {
             id: string;
             organizationId: string;
             authorId: string | null;
-            deletedAuthorName: string | null;
             deletedAuthorEmail: string | null;
             scope: 'personal' | 'team' | 'org';
             name: string;
@@ -14304,7 +14297,6 @@ export type GetAgentResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        deletedAuthorName: string | null;
         deletedAuthorEmail: string | null;
         scope: 'personal' | 'team' | 'org';
         name: string;
@@ -14398,7 +14390,6 @@ export type GetAgentResponse = GetAgentResponses[keyof GetAgentResponses];
 export type UpdateAgentData = {
     body: {
         organizationId?: string;
-        deletedAuthorName?: string | null;
         deletedAuthorEmail?: string | null;
         scope?: 'personal' | 'team' | 'org';
         name?: string;
@@ -14535,7 +14526,6 @@ export type UpdateAgentResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        deletedAuthorName: string | null;
         deletedAuthorEmail: string | null;
         scope: 'personal' | 'team' | 'org';
         name: string;
@@ -14964,7 +14954,6 @@ export type RestoreAgentVersionResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        deletedAuthorName: string | null;
         deletedAuthorEmail: string | null;
         scope: 'personal' | 'team' | 'org';
         name: string;
@@ -15146,7 +15135,6 @@ export type CloneAgentResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        deletedAuthorName: string | null;
         deletedAuthorEmail: string | null;
         scope: 'personal' | 'team' | 'org';
         name: string;
@@ -16474,7 +16462,6 @@ export type RestoreAgentResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        deletedAuthorName: string | null;
         deletedAuthorEmail: string | null;
         scope: 'personal' | 'team' | 'org';
         name: string;
@@ -67479,7 +67466,6 @@ export type GetMcpServerAutoModeAgentsResponses = {
         scope: 'personal' | 'team' | 'org';
         ownerId: string | null;
         ownerEmail: string | null;
-        formerOwnerName: string | null;
         formerOwnerEmail: string | null;
     }>;
 };
@@ -67616,7 +67602,6 @@ export type GetMcpServersResponses = {
             scope: 'personal' | 'team' | 'org';
             ownerId: string | null;
             ownerEmail: string | null;
-            formerOwnerName: string | null;
             formerOwnerEmail: string | null;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
@@ -67776,7 +67761,6 @@ export type InstallMcpServerResponses = {
             scope: 'personal' | 'team' | 'org';
             ownerId: string | null;
             ownerEmail: string | null;
-            formerOwnerName: string | null;
             formerOwnerEmail: string | null;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
@@ -67994,7 +67978,6 @@ export type GetMcpServerResponses = {
             scope: 'personal' | 'team' | 'org';
             ownerId: string | null;
             ownerEmail: string | null;
-            formerOwnerName: string | null;
             formerOwnerEmail: string | null;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
@@ -68137,7 +68120,6 @@ export type ReauthenticateMcpServerResponses = {
             scope: 'personal' | 'team' | 'org';
             ownerId: string | null;
             ownerEmail: string | null;
-            formerOwnerName: string | null;
             formerOwnerEmail: string | null;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
@@ -68367,7 +68349,6 @@ export type RestoreMcpServerResponses = {
             scope: 'personal' | 'team' | 'org';
             ownerId: string | null;
             ownerEmail: string | null;
-            formerOwnerName: string | null;
             formerOwnerEmail: string | null;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
@@ -68966,7 +68947,6 @@ export type ReinstallMcpServerResponses = {
             scope: 'personal' | 'team' | 'org';
             ownerId: string | null;
             ownerEmail: string | null;
-            formerOwnerName: string | null;
             formerOwnerEmail: string | null;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';

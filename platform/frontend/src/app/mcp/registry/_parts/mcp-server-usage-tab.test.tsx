@@ -26,7 +26,6 @@ const agent = (
     scope: "org" | "team" | "personal";
     ownerId: string | null;
     ownerEmail: string | null;
-    formerOwnerName: string | null;
     formerOwnerEmail: string | null;
   }> = {},
 ) => ({
@@ -36,7 +35,6 @@ const agent = (
   scope: "org" as const,
   ownerId: null,
   ownerEmail: null,
-  formerOwnerName: null,
   formerOwnerEmail: null,
   ...overrides,
 });
@@ -115,7 +113,7 @@ describe("McpServerUsageTab", () => {
     expect(within(row).queryByText("Personal")).not.toBeInTheDocument();
   });
 
-  it("names a deleted author, in the past tense, from the retained identity", () => {
+  it("names a deleted author, in the past tense, from the retained email", () => {
     render(
       <McpServerUsageTab
         serversForCatalog={[
@@ -126,7 +124,6 @@ describe("McpServerUsageTab", () => {
               scope: "personal",
               ownerId: null,
               ownerEmail: null,
-              formerOwnerName: "Kim Alvarez",
               formerOwnerEmail: "kim@example.com",
             }),
           ]),
@@ -140,34 +137,9 @@ describe("McpServerUsageTab", () => {
       .closest("tr") as HTMLElement;
 
     expect(
-      within(row).getByText("Deleted user (Kim Alvarez)"),
+      within(row).getByText("Deleted user (kim@example.com)"),
     ).toBeInTheDocument();
     expect(within(row).queryByText("Personal")).not.toBeInTheDocument();
-  });
-
-  it("falls back to the retained email when the deleted author has no name", () => {
-    render(
-      <McpServerUsageTab
-        serversForCatalog={[
-          server([
-            agent({
-              id: "1",
-              name: "Nightly Backlog Groomer",
-              scope: "personal",
-              ownerId: null,
-              ownerEmail: null,
-              formerOwnerName: null,
-              formerOwnerEmail: "kim@example.com",
-            }),
-          ]),
-        ]}
-        autoModeAgents={[]}
-      />,
-    );
-
-    expect(
-      screen.getByText("Deleted user (kim@example.com)"),
-    ).toBeInTheDocument();
   });
 
   it("says the owner is unknown when nothing about the author was retained", () => {

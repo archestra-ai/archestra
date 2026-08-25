@@ -1,9 +1,12 @@
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import type { ConversationContentKey } from "@/types/conversation";
 import {
+  decryptBytesWithKey,
   decryptStringWithKey,
+  encryptBytesWithKey,
   encryptStringWithKey,
   isContentEnvelope,
+  isEncryptedEnvelope,
 } from "@/utils/crypto";
 import { isLockedChatEscrowConfigured } from "./locked-chat-escrow";
 
@@ -139,7 +142,10 @@ export type LockedChatContentContext =
   | "mcp_tool_calls.tool_result"
   | "conversation_chat_errors.error"
   | "chat_tool_execution_claims.result"
-  | "chat_active_run_events.payloads";
+  | "chat_active_run_events.payloads"
+  | "conversation_attachments.file_data"
+  | "conversation_attachments.original_name"
+  | "conversation_attachments.text_preview";
 
 /**
  * A resolved authorization to write one conversation's locked-chat AUDIT
@@ -223,6 +229,90 @@ export function decryptLockedChatMessageRow<T extends object>(
     context: "messages.content",
   });
   return row;
+}
+
+/**
+ * Encrypt a bare string for a TEXT column (as opposed to
+ * {@link encryptLockedChatValue}, which wraps a JSON value in an
+ * `{ __encrypted }` object for a JSONB one). Returns the bare `v1:` envelope,
+ * which is what the column then holds.
+ */
+export function encryptLockedChatText(
+  value: string,
+  params: LockedChatAuditContext & { context: LockedChatContentContext },
+): string {
+  return encryptStringWithKey(
+    value,
+    params.dek,
+    lockedChatAad(params.context, params.conversationId),
+  );
+}
+
+/**
+ * Decrypt a TEXT column written by {@link encryptLockedChatText}. A value that
+ * is not an envelope passes through unchanged, so a column written before the
+ * chat was locked still reads.
+ */
+export function decryptLockedChatText(
+  value: string,
+  params: LockedChatAuditContext & { context: LockedChatContentContext },
+): string {
+  if (!isEncryptedEnvelope(value)) return value;
+  return decryptStringWithKey(
+    value,
+    params.dek,
+    lockedChatAad(params.context, params.conversationId),
+  );
+}
+
+/**
+ * Encrypt raw bytes (an attachment's file data) under the conversation DEK.
+ * Uses the compact binary envelope rather than the string one: these payloads
+ * run to megabytes, where base64's ~33% inflation is a real storage cost.
+ */
+export function encryptLockedChatBytes(
+  value: Buffer,
+  params: LockedChatAuditContext & { context: LockedChatContentContext },
+): Buffer {
+  return encryptBytesWithKey(
+    value,
+    params.dek,
+    lockedChatAad(params.context, params.conversationId),
+  );
+}
+
+/** Decrypt bytes written by {@link encryptLockedChatBytes}. */
+export function decryptLockedChatBytes(
+  value: Buffer,
+  params: LockedChatAuditContext & { context: LockedChatContentContext },
+): Buffer {
+  return decryptBytesWithKey(
+    value,
+    params.dek,
+    lockedChatAad(params.context, params.conversationId),
+  );
+}
+
+/**
+ * Dedup key for an attachment in a locked chat: an HMAC of the bytes under the
+ * conversation DEK rather than a bare SHA-256 of them.
+ *
+ * The plain hash is a fingerprint anyone can recompute, so a stored one lets a
+ * reader of the database confirm a guess — "is this the layoff spreadsheet I
+ * already have a copy of?" — about a chat whose bytes they cannot read. Keying
+ * it under the DEK keeps the property the column exists for (same bytes in the
+ * same conversation collide, so re-sent history reuses one row) and removes the
+ * one it was never meant to have.
+ */
+export function lockedChatContentHash(
+  value: Buffer,
+  params: LockedChatAuditContext,
+): string {
+  return createHmac("sha256", params.dek)
+    .update("archestra-locked-chat-attachment-hash-v1")
+    .update(params.conversationId)
+    .update(value)
+    .digest("hex");
 }
 
 // === Internal ===

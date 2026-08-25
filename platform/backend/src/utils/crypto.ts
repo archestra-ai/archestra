@@ -21,6 +21,10 @@ const VERSION_PREFIX = "v1";
  */
 const ENVELOPE_PATTERN = /^v1:[A-Za-z0-9_-]+:[A-Za-z0-9_-]+:[A-Za-z0-9_-]+$/;
 
+/** Version byte leading the binary envelope; `v1` in one byte. */
+const BYTES_ENVELOPE_VERSION = 1;
+const BYTES_ENVELOPE_HEADER_LENGTH = 1 + IV_LENGTH + AUTH_TAG_LENGTH;
+
 let cachedKey: Buffer | null = null;
 
 /**
@@ -101,6 +105,68 @@ export function decryptStringWithKey(
     decipher.final(),
   ]);
   return decrypted.toString("utf8");
+}
+
+/**
+ * Encrypt arbitrary BYTES under an explicit key into a compact binary
+ * envelope: `<version byte> | iv(12) | authTag(16) | ciphertext`.
+ *
+ * The string envelope above is the right shape for JSON columns, but it
+ * base64s its payload — a ~33% inflation that is invisible on a chat message
+ * and expensive on a multi-megabyte file. Attachment bytes live in a `bytea`
+ * column, so they are stored as raw ciphertext with a 29-byte header instead.
+ *
+ * `aad` binds the ciphertext to a context exactly as it does for strings, so a
+ * blob cannot be transplanted between columns or between conversations.
+ */
+export function encryptBytesWithKey(
+  plaintext: Buffer,
+  key: Buffer,
+  aad?: string,
+): Buffer {
+  const iv = randomBytes(IV_LENGTH);
+  const cipher = createCipheriv(ALGORITHM, key, iv, {
+    authTagLength: AUTH_TAG_LENGTH,
+  });
+  if (aad) {
+    cipher.setAAD(Buffer.from(aad, "utf8"));
+  }
+  const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+  return Buffer.concat([
+    Buffer.of(BYTES_ENVELOPE_VERSION),
+    iv,
+    cipher.getAuthTag(),
+    ciphertext,
+  ]);
+}
+
+/**
+ * Decrypt a binary envelope produced by {@link encryptBytesWithKey}. Throws on
+ * a malformed header or authentication failure (wrong key OR wrong AAD).
+ */
+export function decryptBytesWithKey(
+  envelope: Buffer,
+  key: Buffer,
+  aad?: string,
+): Buffer {
+  if (!isEncryptedBytesEnvelope(envelope)) {
+    throw new Error("Invalid encrypted bytes format");
+  }
+  const iv = envelope.subarray(1, 1 + IV_LENGTH);
+  const authTag = envelope.subarray(
+    1 + IV_LENGTH,
+    BYTES_ENVELOPE_HEADER_LENGTH,
+  );
+  const ciphertext = envelope.subarray(BYTES_ENVELOPE_HEADER_LENGTH);
+
+  const decipher = createDecipheriv(ALGORITHM, key, iv, {
+    authTagLength: AUTH_TAG_LENGTH,
+  });
+  if (aad) {
+    decipher.setAAD(Buffer.from(aad, "utf8"));
+  }
+  decipher.setAuthTag(authTag);
+  return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
 }
 
 /**
@@ -233,6 +299,24 @@ function getEncryptionKey(): Buffer {
 
   cachedKey = deriveKeyFromSecret(encryptionSecret);
   return cachedKey;
+}
+
+/**
+ * Whether a buffer is long enough to be a binary envelope and carries the
+ * version byte.
+ *
+ * Deliberately NOT a content check: arbitrary file bytes can begin with the
+ * same byte, so this cannot decide on its own whether a column holds
+ * ciphertext. The row says that (`conversation_attachments.locked_chat`);
+ * this only rejects a value too short to parse before slicing it.
+ */
+function isEncryptedBytesEnvelope(value: Buffer): boolean {
+  // `>=`, not `>`: an empty payload encrypts to exactly a header, and that is
+  // a valid envelope that must decrypt back to zero bytes.
+  return (
+    value.length >= BYTES_ENVELOPE_HEADER_LENGTH &&
+    value[0] === BYTES_ENVELOPE_VERSION
+  );
 }
 
 function toBase64Url(buf: Buffer): string {

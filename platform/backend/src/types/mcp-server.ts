@@ -41,7 +41,15 @@ export const McpServerAgentUsageSchema = z.object({
   name: z.string(),
   agentType: AgentTypeSchema,
   scope: ResourceVisibilityScopeSchema,
-  /** The author's user id — `agents.author_id`. */
+  /**
+   * The AGENT's author — `agents.author_id`. Not to be confused with
+   * `SelectMcpServerSchema.ownerEmail` further down this file, which is the
+   * person who installed the SERVER (`mcp_server.owner_id`): the two live in
+   * the same file and mean different people. Named for the pre-existing
+   * `ownerEmail` it sits beside rather than for the column, so the pair stays
+   * consistent; renaming both to `author*` is worth doing, but it reaches
+   * `ToolDelegationTarget` too and belongs in its own change.
+   */
   ownerId: z.string().nullable(),
   ownerEmail: z.string().nullable(),
   /** Who the author was, retained from before their account was deleted. */

@@ -6,7 +6,11 @@ import {
 } from "@archestra/shared";
 import logger from "@/logging";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
-import type { ChatMessage, ChatMessagePart } from "@/types";
+import type {
+  ChatMessage,
+  ChatMessagePart,
+  ConversationContentKey,
+} from "@/types";
 import { loadPdfParser } from "../context-compaction";
 
 const ATTACHMENT_URL_PREFIX = "/api/chat/attachments/";
@@ -19,14 +23,27 @@ const SYNC_PDF_PARSE_MAX_BYTES = 10 * 1024 * 1024; // 10MB
  * bytes in `chat_attachments`, and rewrites the part's `url` to a server-side
  * reference. Mutates `messages` in place. Idempotent across re-uploads of the
  * same bytes within an org (content-hash dedup).
+ *
+ * In a locked chat every stored column that carries content — the bytes, the
+ * filename, the extracted text — is sealed under `conversationKey`, and the
+ * dedup hash is keyed by it. The route resolves that key before calling here
+ * and fails the turn without one, so a locked chat never reaches this with a
+ * null key and never writes an attachment in the clear.
  */
 export async function extractInlineAttachments(args: {
   messages: ChatMessage[];
   conversationId: string;
   organizationId: string;
   uploadedByUserId: string;
+  conversationKey?: ConversationContentKey | null;
 }): Promise<void> {
-  const { messages, conversationId, organizationId, uploadedByUserId } = args;
+  const {
+    messages,
+    conversationId,
+    organizationId,
+    uploadedByUserId,
+    conversationKey,
+  } = args;
 
   for (const message of messages) {
     if (!message.parts) continue;
@@ -45,8 +62,10 @@ export async function extractInlineAttachments(args: {
         if (!decoded) continue;
 
         const { buffer, mimeType } = decoded;
-        const contentHash =
-          ConversationAttachmentModel.computeContentHash(buffer);
+        const contentHash = ConversationAttachmentModel.computeContentHash(
+          buffer,
+          conversationKey,
+        );
         const filename =
           typeof part.filename === "string" && part.filename.length > 0
             ? part.filename
@@ -65,20 +84,29 @@ export async function extractInlineAttachments(args: {
           await ConversationAttachmentModel.findByConversationAndContentHash(
             conversationId,
             contentHash,
+            conversationKey,
           );
         if (!attachment) {
-          attachment = await ConversationAttachmentModel.create({
-            organizationId,
-            conversationId,
-            uploadedByUserId,
-            originalName: filename,
-            mimeType: partMime,
-            fileSize: buffer.byteLength,
-            contentHash,
-            fileData: buffer,
-            textPreviewStatus: "pending",
-          });
-          await extractTextPreview(attachment.id, partMime, buffer);
+          attachment = await ConversationAttachmentModel.create(
+            {
+              organizationId,
+              conversationId,
+              uploadedByUserId,
+              originalName: filename,
+              mimeType: partMime,
+              fileSize: buffer.byteLength,
+              contentHash,
+              fileData: buffer,
+              textPreviewStatus: "pending",
+            },
+            conversationKey,
+          );
+          await extractTextPreview(
+            attachment.id,
+            partMime,
+            buffer,
+            conversationKey,
+          );
         }
 
         rewritePartToRef(
@@ -221,6 +249,7 @@ async function extractTextPreview(
   attachmentId: string,
   mimeType: string,
   buffer: Buffer,
+  conversationKey?: ConversationContentKey | null,
 ): Promise<void> {
   if (isTextLikeMimeType(mimeType)) {
     const text = buffer
@@ -231,6 +260,7 @@ async function extractTextPreview(
       attachmentId,
       "ok",
       text,
+      conversationKey,
     );
     return;
   }
@@ -243,6 +273,7 @@ async function extractTextPreview(
       attachmentId,
       "unsupported",
       null,
+      conversationKey,
     );
     return;
   }
@@ -259,6 +290,7 @@ async function extractTextPreview(
       attachmentId,
       "ok",
       text,
+      conversationKey,
     );
   } catch (err) {
     logger.warn(
@@ -269,6 +301,7 @@ async function extractTextPreview(
       attachmentId,
       "failed",
       null,
+      conversationKey,
     );
   }
 }

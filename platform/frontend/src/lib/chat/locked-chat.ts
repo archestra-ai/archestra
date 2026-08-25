@@ -15,6 +15,13 @@ import { conversationStorageKeys } from "@/lib/chat/chat-utils";
 export const LOCKED_CHAT_KEY_HEADER = "x-archestra-locked-chat-key";
 
 /**
+ * Prefix of the chat-attachment byte endpoint. Bytes served from here are
+ * sealed in a locked chat, so they are fetched with the key header rather than
+ * linked directly — see `useAttachmentContentUrl`.
+ */
+export const ATTACHMENT_CONTENT_URL_PREFIX = "/api/chat/attachments/";
+
+/**
  * Generate a fresh conversation DEK: 32 random bytes, base64url-encoded
  * without padding (the wire format the backend parses).
  *
@@ -94,19 +101,23 @@ export function lockedChatRequestHeaders(
 }
 
 /**
- * Actions the backend rejects for locked chats. Single source for
- * the UI affordances that must be hidden: attachments, sandbox `!` commands,
- * share, fork, create-project-from-chat, AI title generation, and compaction.
+ * Actions the backend rejects for locked chats. Single source for the UI
+ * affordances that must be hidden: sandbox `!` commands, share, fork,
+ * create-project-from-chat, move-to-project, AI title generation, compaction,
+ * and copying an attachment into a knowledge base.
+ *
+ * Attachments are deliberately NOT here — uploads work in a locked chat, sealed
+ * under the conversation key.
  */
 export type LockedChatBlockedAction =
-  | "attachments"
   | "sandboxCommands"
   | "share"
   | "fork"
   | "createProject"
   | "changeProject"
   | "generateTitle"
-  | "compaction";
+  | "compaction"
+  | "saveToKnowledge";
 
 /**
  * Whether an action is available for a conversation. All of the

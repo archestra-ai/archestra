@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -30,10 +31,15 @@ describe("promote a chat attachment into the knowledge repository", () => {
     orgId: string;
     body?: string;
     originalName?: string;
+    lockedChat?: boolean;
   }) {
     const [conversation] = await db
       .insert(schema.conversationsTable)
-      .values({ userId: params.ownerId, organizationId: params.orgId })
+      .values({
+        userId: params.ownerId,
+        organizationId: params.orgId,
+        ...(params.lockedChat ? { lockedChat: true } : {}),
+      })
       .returning();
 
     const fileData = Buffer.from(
@@ -107,6 +113,28 @@ describe("promote a chat attachment into the knowledge repository", () => {
       url: `/api/knowledge-files/${id}/content`,
     });
     expect(content.body).toContain("Backups are encrypted at rest.");
+  });
+
+  test("refuses an attachment from a locked chat", async () => {
+    // Promoting would write the opened bytes into a repository document other
+    // members can read and the indexer can quote back — the plaintext copy the
+    // chat's encryption exists to prevent.
+    const { attachment } = await makeAttachment({
+      ownerId: user.id,
+      orgId: organizationId,
+      lockedChat: true,
+    });
+
+    const response = await promote({ attachmentId: attachment.id });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("locked chat");
+
+    const stored = await db
+      .select()
+      .from(schema.kbFilesTable)
+      .where(eq(schema.kbFilesTable.organizationId, organizationId));
+    expect(stored).toHaveLength(0);
   });
 
   test("takes an override name", async () => {

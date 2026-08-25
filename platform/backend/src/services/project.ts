@@ -125,6 +125,14 @@ class ProjectService {
     if (meta.projectId) {
       throw new ApiError(409, "This chat already belongs to a project");
     }
+    // Same rule as creating or moving a chat into a project (see the chat
+    // routes): this turns the conversation into a project chat, so a locked one
+    // would end up in a shared space listing a conversation nobody there can
+    // open. The UI already hides the action; this is the authoritative check a
+    // custom client also meets.
+    if (meta.lockedChat) {
+      throw new ApiError(400, "Locked chats cannot be turned into a project");
+    }
 
     const name =
       params.name?.trim() || meta.title?.trim() || "Untitled project";

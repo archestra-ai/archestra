@@ -13,6 +13,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { getFilePreviewKind } from "@/lib/chat/file-preview-kind";
+import { useAttachmentContentUrl } from "@/lib/chat/locked-chat-attachment";
 import { useUpdateFileContent } from "@/lib/skills-sandbox/use-update-file-content";
 
 /** Anything previewable: a display name, a MIME type, and a byte endpoint. */
@@ -41,6 +42,7 @@ export function FilePreview({
   editing = false,
   fileId,
   onExitEdit,
+  conversationId,
 }: {
   file: PreviewableFile;
   onClose?: () => void;
@@ -50,6 +52,13 @@ export function FilePreview({
   fileId?: string;
   /** Called when the editor saves or cancels, so the caller can clear `editing`. */
   onExitEdit?: () => void;
+  /**
+   * The conversation this file is being previewed from, when there is one. A
+   * locked chat's attachment only serves its bytes to a request bearing the
+   * conversation key, so the URL is resolved through it once below and every
+   * renderer beneath sees an ordinary (`blob:`) URL.
+   */
+  conversationId?: string;
 }) {
   const kind = getFilePreviewKind(file.mimeType, file.name);
   // After a save the bytes change but the URL doesn't, so a plain re-render would
@@ -57,7 +66,24 @@ export function FilePreview({
   // nonce into the URL to force the reload; the byte route is `no-cache`/ETag so
   // it revalidates against the new content.
   const [reloadNonce, setReloadNonce] = useState(0);
-  const contentUrl = withReload(file.contentUrl, reloadNonce);
+  // The nonce rides the URL into the resolver, so a save re-fetches (and mints
+  // a fresh blob) instead of showing the bytes from before it.
+  const resolved = useAttachmentContentUrl(
+    withReload(file.contentUrl, reloadNonce),
+    conversationId,
+  );
+  const contentUrl = resolved.url;
+
+  if (resolved.failed) {
+    return (
+      <p className="p-4 text-xs text-muted-foreground">
+        Failed to load preview.
+      </p>
+    );
+  }
+  if (contentUrl === null) {
+    return <p className="p-4 text-xs text-muted-foreground">Loading…</p>;
+  }
 
   if (editing && fileId) {
     return (

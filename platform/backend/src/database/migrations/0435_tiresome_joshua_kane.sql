@@ -1,0 +1,1 @@
+ALTER TABLE "conversation_attachments" ADD COLUMN "locked_chat" boolean DEFAULT false NOT NULL;

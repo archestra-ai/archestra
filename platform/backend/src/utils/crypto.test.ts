@@ -1,8 +1,11 @@
+import { randomBytes } from "node:crypto";
 import { describe, expect, test } from "vitest";
 import config from "@/config";
 import {
   _resetCachedKey,
+  decryptBytesWithKey,
   decryptSecretValue,
+  encryptBytesWithKey,
   encryptSecretValue,
   isEncryptedSecret,
 } from "./crypto";
@@ -142,5 +145,64 @@ describe("key management", () => {
       config.secretsManager.encryptionSecret = original;
       _resetCachedKey();
     }
+  });
+});
+
+describe("encryptBytesWithKey / decryptBytesWithKey", () => {
+  const key = randomBytes(32);
+  const aad = "conversation_attachments.file_data|incognito:conv-1";
+
+  test("round-trips arbitrary binary content", () => {
+    // Deliberately not text: the whole point of this pair is carrying file
+    // bytes, including NULs and every high byte, without a text encoding.
+    const plaintext = Buffer.concat([
+      Buffer.from([0x00, 0xff, 0x01, 0x00]),
+      randomBytes(4096),
+    ]);
+    const envelope = encryptBytesWithKey(plaintext, key, aad);
+
+    expect(envelope.equals(plaintext)).toBe(false);
+    expect(decryptBytesWithKey(envelope, key, aad).equals(plaintext)).toBe(
+      true,
+    );
+  });
+
+  test("round-trips an empty payload", () => {
+    const envelope = encryptBytesWithKey(Buffer.alloc(0), key, aad);
+    expect(decryptBytesWithKey(envelope, key, aad).byteLength).toBe(0);
+  });
+
+  test("refuses a different key, a different AAD, or tampered bytes", () => {
+    const plaintext = randomBytes(64);
+    const envelope = encryptBytesWithKey(plaintext, key, aad);
+
+    expect(() => decryptBytesWithKey(envelope, randomBytes(32), aad)).toThrow();
+    // The AAD binds ciphertext to one column of one conversation, so a blob
+    // moved between either must not open — this is what stops a database-level
+    // writer transplanting one attachment's bytes onto another row.
+    expect(() =>
+      decryptBytesWithKey(
+        envelope,
+        key,
+        "conversation_attachments.file_data|incognito:conv-2",
+      ),
+    ).toThrow();
+    expect(() =>
+      decryptBytesWithKey(
+        envelope,
+        key,
+        "conversation_attachments.text_preview|incognito:conv-1",
+      ),
+    ).toThrow();
+
+    const tampered = Buffer.from(envelope);
+    tampered[tampered.length - 1] ^= 0xff;
+    expect(() => decryptBytesWithKey(tampered, key, aad)).toThrow();
+  });
+
+  test("rejects a buffer too short to be an envelope", () => {
+    expect(() => decryptBytesWithKey(Buffer.alloc(8), key, aad)).toThrow(
+      /Invalid encrypted bytes format/,
+    );
   });
 });

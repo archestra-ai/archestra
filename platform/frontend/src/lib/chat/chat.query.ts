@@ -170,8 +170,14 @@ export function useConversationFiles(conversationId?: string) {
     queryKey: ["conversation-files", conversationId],
     queryFn: () => {
       if (!conversationId) return null;
+      // The key opens the attachment filenames for a locked chat; without it
+      // the server still lists the files, under a placeholder name.
       return callApi(
-        () => getChatConversationFiles({ path: { id: conversationId } }),
+        () =>
+          getChatConversationFiles({
+            path: { id: conversationId },
+            headers: lockedChatRequestHeaders(conversationId),
+          }),
         null,
         { silent: true },
       );

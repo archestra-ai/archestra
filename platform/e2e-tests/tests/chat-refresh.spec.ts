@@ -9,26 +9,26 @@ import { expect, test } from "./api-fixtures";
 test.describe.configure({ retries: 2 });
 
 /**
- * The browser-tooling check's two dependent waves. Neither can even begin
- * until the roster has resolved which agent the chat starts on, so holding the
- * first paint for them put two more sequential round trips in front of a
- * screen that draws none of what they decide — the composer's own loading
- * posture already covers the gap.
+ * Everything the new-chat screen's first paint used to be held behind:
  *
- * Stalling them is what makes this deterministic: it asserts the screen no
- * longer *needs* them at paint time, rather than racing a stopwatch. The
- * roster and key requests are deliberately left alone — whether those are
- * served from the network or from the restored refresh snapshot varies with
- * how much an organization has in them, and this test is about the waves that
- * are gone either way.
+ * - the agent roster, the largest thing this page fetches and the one the
+ *   refresh snapshot cannot always keep, and
+ * - the agent's tools and delegations, which the browser-tooling check reads —
+ *   a second and third wave that cannot even begin until the roster has
+ *   resolved an agent.
+ *
+ * Holding all of them open is what makes this deterministic: it asserts the
+ * screen no longer *needs* any of them to draw a usable composer, rather than
+ * racing a stopwatch against them.
  */
-const DEPENDENT_ROUTES = [
+const FIRST_PAINT_ROUTES = [
+  "**/api/agents/all*",
   "**/api/agents/*/tools*",
   "**/api/agents/*/delegations*",
 ];
 
 test.describe("New chat refresh", () => {
-  test("paints the composer without waiting on the browser-tooling check", async ({
+  test("draws a typeable composer before the agent roster arrives", async ({
     page,
     request,
     makeApiRequest,
@@ -44,22 +44,30 @@ test.describe("New chat refresh", () => {
     await expectChatReady(page);
 
     // Held open for the rest of the test. A handler that never settles the
-    // route is the point: if either is back in the first-paint gate, the
-    // reload below never gets past its loading state.
-    for (const pattern of DEPENDENT_ROUTES) {
+    // route is the point: if any of these is back in front of the first paint,
+    // the reload below never gets past its loading state.
+    for (const pattern of FIRST_PAINT_ROUTES) {
       await page.route(pattern, () => {});
     }
 
     await page.reload({ waitUntil: "commit" });
 
-    // The composer on screen is the assertion: the gate this test is about
-    // renders a full-area loading state *instead of* the page, so a visible
-    // composer is proof it cleared without the stalled requests. The composer
-    // is not editable here and should not be — with the check held open
-    // forever, its own loading posture (submit disabled until it knows whether
-    // a browser is needed) never lifts. That posture is the point: it is what
-    // makes holding the whole screen unnecessary.
+    // Not merely on screen — it takes a draft, which is the first thing anyone
+    // does on this page.
     await expectChatReady(page);
-    await expect(page.getByTestId(E2eTestId.ChatPromptTextarea)).toBeVisible();
+    const textarea = page.getByTestId(E2eTestId.ChatPromptTextarea);
+    await expect(textarea).toBeEditable();
+    await textarea.fill("drafted before the roster arrived");
+    await expect(textarea).toHaveValue("drafted before the roster arrived");
+
+    // Sending is the one thing that genuinely needs the roster, because that is
+    // what resolves the agent the message would go to. It stays visibly off
+    // rather than accepting a click the submit handler would drop.
+    await expect(page.getByRole("button", { name: "Submit" })).toBeDisabled();
+
+    // An empty roster means "no agents" only once it has loaded. An
+    // organization that has agents must never be told it has none while its
+    // roster is still in flight.
+    await expect(page.getByText("No agents yet")).toHaveCount(0);
   });
 });

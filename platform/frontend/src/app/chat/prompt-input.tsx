@@ -166,7 +166,13 @@ export interface ArchestraPromptInputProps
   onStop?: () => void;
   status: ChatStatus;
   // Tools integration props
-  agentId: string;
+  /**
+   * Null while the new-chat screen is still resolving which agent this chat
+   * starts on. The composer renders its chrome regardless — a toolbar that
+   * fills in reads better than a spinner where the page should be — and submit
+   * is held disabled by the caller until it resolves.
+   */
+  agentId: string | null;
   /**
    * Input modalities supported by the selected model. Only used to mirror the
    * backend ingest policy in validateFile — the composer accepts any file type
@@ -185,6 +191,13 @@ export interface ArchestraPromptInputProps
   } | null;
   /** Disable the submit button (e.g., when Playwright setup overlay is visible) */
   submitDisabled?: boolean;
+  /**
+   * Disable sending while leaving the composer typeable. `submitDisabled`
+   * locks the whole thing, which is right when the composer must not be used
+   * at all; this is for the narrower case where the draft is welcome but has
+   * nowhere to go yet — the new-chat screen before its agent has resolved.
+   */
+  sendDisabled?: boolean;
   /** Disable chat input while context compaction is running */
   isContextCompacting?: boolean;
   /** Manually compact the active conversation */
@@ -243,6 +256,7 @@ const PromptInputContent = ({
   lastCompaction,
   agentLlmApiKeyId,
   submitDisabled = false,
+  sendDisabled = false,
   subscriptionConnectRequired = false,
   isContextCompacting = false,
   onCompactConversation,
@@ -333,7 +347,7 @@ const PromptInputContent = ({
   // Scoped to the conversation agent's environment: a slash command must not
   // offer a skill the backend's activation gate would refuse.
   const { data: skillsData } = useSkillsPaginated(
-    { limit: 100, forAgentId: agentId },
+    { limit: 100, forAgentId: agentId ?? undefined },
     { enabled: skillSlashCommandsEnabled && !!agentId },
   );
   const skillCommands = useMemo<SkillCommand[]>(() => {
@@ -1009,7 +1023,7 @@ const PromptInputContent = ({
         <PromptInputBody>
           {isPlaywrightSetupVisible && conversationId ? (
             <PlaywrightInstallInline
-              agentId={agentId}
+              agentId={agentId ?? undefined}
               conversationId={conversationId}
             />
           ) : (
@@ -1089,7 +1103,11 @@ const PromptInputContent = ({
                 <PromptInputSubmit
                   className="!h-8"
                   status={submitStatus}
-                  disabled={composerLocked || subscriptionConnectRequired}
+                  disabled={
+                    composerLocked ||
+                    subscriptionConnectRequired ||
+                    sendDisabled
+                  }
                   onClick={(event) => {
                     // While a response is in-flight the button shows Stop; a
                     // click stops the stream instead of submitting the form
@@ -1155,6 +1173,7 @@ const ArchestraPromptInput = ({
   inputModalities,
   agentLlmApiKeyId,
   submitDisabled,
+  sendDisabled,
   subscriptionConnectRequired,
   isContextCompacting,
   onCompactConversation,
@@ -1178,7 +1197,7 @@ const ArchestraPromptInput = ({
   onRemoveExternalMcpSkillAttachment,
   onRestoreExternalMcpSkillAttachment,
 }: ArchestraPromptInputProps) => {
-  const { data: activeAgent } = useProfile(agentId);
+  const { data: activeAgent } = useProfile(agentId ?? undefined);
   const sandboxAvailable = activeAgent?.sandboxAvailable ?? false;
   const sandboxByteLimit =
     useFeature("sandboxArtifactBytesLimit") ?? DEFAULT_SANDBOX_ARTIFACT_BYTES;
@@ -1268,6 +1287,7 @@ const ArchestraPromptInput = ({
           lastCompaction={lastCompaction}
           agentLlmApiKeyId={agentLlmApiKeyId}
           submitDisabled={submitDisabled}
+          sendDisabled={sendDisabled}
           subscriptionConnectRequired={subscriptionConnectRequired}
           subscriptionProvider={subscriptionProvider}
           isContextCompacting={isContextCompacting}

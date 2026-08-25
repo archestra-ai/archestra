@@ -70,6 +70,7 @@ import {
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import {
   useCancelChatMcpTask,
+  useConversation,
   useProfileToolsWithIds,
 } from "@/lib/chat/chat.query";
 import { useUpdateChatMessage } from "@/lib/chat/chat-message.query";
@@ -83,6 +84,7 @@ import {
   PERSISTED_MESSAGE_ID_METADATA_KEY,
 } from "@/lib/chat/chat-utils";
 import { useGlobalChat } from "@/lib/chat/global-chat.context";
+import { isActionAvailableForConversation } from "@/lib/chat/locked-chat";
 import {
   hasToolPartsWithAuthErrors,
   isAuthInstructionText,
@@ -310,6 +312,13 @@ export function ChatMessages({
   }, [agentTools, catalogItems]);
 
   const updateChatMessageMutation = useUpdateChatMessage(conversationId);
+  // Resolved once for the whole transcript: a locked chat's attachments cannot
+  // be copied into a knowledge base, so their chips do not offer it.
+  const { data: messagesConversation } = useConversation(conversationId);
+  const canSaveToKnowledge = isActionAvailableForConversation(
+    messagesConversation,
+    "saveToKnowledge",
+  );
 
   // Get early UI data from the chat session
   const { getSession } = useGlobalChat();
@@ -1050,6 +1059,7 @@ export function ChatMessages({
                                     message.parts,
                                   )}
                                   conversationId={conversationId}
+                                  canSaveToKnowledge={canSaveToKnowledge}
                                   skill={getSkillAttribution(message.metadata)}
                                   onStartEdit={handleStartEdit}
                                   onCancelEdit={handleCancelEdit}
@@ -1161,6 +1171,7 @@ export function ChatMessages({
                                     message.parts,
                                   )}
                                   conversationId={conversationId}
+                                  canSaveToKnowledge={canSaveToKnowledge}
                                   skill={getSkillAttribution(message.metadata)}
                                   onStartEdit={handleStartEdit}
                                   onCancelEdit={handleCancelEdit}

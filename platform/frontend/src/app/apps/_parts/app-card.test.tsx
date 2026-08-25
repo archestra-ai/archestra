@@ -32,6 +32,12 @@ vi.mock("@/lib/app.query", () => ({
 
 vi.mock("@/lib/auth/auth.query");
 
+// The card reads the locked-chat flag to decide whether to offer "Open as
+// locked chat". Off here: these tests are about the card's ordinary actions.
+vi.mock("@/lib/config/config.query", () => ({
+  useFeature: () => false,
+}));
+
 // Stub the delete dialog so the card test asserts it opens, not its internals.
 vi.mock("./app-delete-dialog", () => ({
   AppDeleteDialog: ({ open, app }: { open: boolean; app: { name: string } }) =>
@@ -171,6 +177,8 @@ describe("ExternalAppCard", () => {
     expect(openExternalMutate).toHaveBeenCalledWith({
       mcpServerId: "srv-1",
       resourceUri: "ui://pm/board.html",
+      // The ordinary open; "Open as locked chat" is the one that sends true.
+      lockedChat: false,
     });
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/chat/conv-1"));
     // A seeded render needs no opening prompt.

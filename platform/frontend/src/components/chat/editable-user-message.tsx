@@ -20,14 +20,12 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useConversation } from "@/lib/chat/chat.query";
 import {
   getAttachmentFallbackLabel,
   isCsvAttachment,
   isPlainTextAttachment,
 } from "@/lib/chat/chat-attachment-display";
 import { attachmentIdFromUrl } from "@/lib/chat/conversation-files";
-import { isActionAvailableForConversation } from "@/lib/chat/locked-chat";
 import { cn } from "@/lib/utils";
 
 export interface FileAttachment {
@@ -50,6 +48,14 @@ interface EditableUserMessageProps {
    * conversation's key.
    */
   conversationId?: string;
+  /**
+   * Whether an attachment on this message may be copied into a knowledge base.
+   * False in a locked chat, where the backend refuses it — copying would write
+   * a plaintext copy others can read. Decided by the caller, which already
+   * knows the conversation, so a transcript of N messages does not open N
+   * subscriptions to it.
+   */
+  canSaveToKnowledge?: boolean;
   /** Skill the user invoked via slash command for this message, if any. */
   skill?: { name: string; href?: string };
   onStartEdit: (partKey: string, messageId: string) => void;
@@ -70,20 +76,13 @@ export function EditableUserMessage({
   editDisabled = false,
   attachments = [],
   conversationId,
+  canSaveToKnowledge = true,
   skill,
   onStartEdit,
   onCancelEdit,
   onSave,
 }: EditableUserMessageProps) {
   const [isRegenerateConfirming, setIsRegenerateConfirming] = useState(false);
-  // A locked chat's attachment cannot be copied into a knowledge base — that
-  // would write a plaintext copy others can read — so the chip does not offer
-  // an action the backend refuses.
-  const { data: conversation } = useConversation(conversationId);
-  const canSaveToKnowledge = isActionAvailableForConversation(
-    conversation,
-    "saveToKnowledge",
-  );
   const editor = useMessageEditor({
     text,
     isEditing,

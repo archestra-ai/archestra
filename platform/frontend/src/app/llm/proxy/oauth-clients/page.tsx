@@ -414,35 +414,38 @@ function OauthClientsTable() {
                         showSelfAsMe
                       />
                     </div>
-                    <div className="flex min-w-0 items-center gap-1 font-mono text-xs">
-                      <code className="min-w-0 truncate">
-                        {client.clientId}
-                      </code>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        className="shrink-0"
-                        aria-label={`Copy client ID for ${client.name}`}
-                        onClick={async () => {
-                          await copyToClipboard(client.clientId);
-                          toast.success("Client ID copied");
-                        }}
-                      >
-                        <Copy className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                    {client.providerApiKeys.length > 0 && (
-                      <p className="truncate text-xs text-muted-foreground">
-                        {[
-                          ...new Set(
-                            client.providerApiKeys.map((mapping) =>
-                              providerCatalog.label(mapping.provider),
+                    {/* Client ID left, mapped providers in the row's spare width. */}
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-1 font-mono text-xs">
+                        <code className="min-w-0 truncate">
+                          {client.clientId}
+                        </code>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          className="shrink-0"
+                          aria-label={`Copy client ID for ${client.name}`}
+                          onClick={async () => {
+                            await copyToClipboard(client.clientId);
+                            toast.success("Client ID copied");
+                          }}
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                      {client.providerApiKeys.length > 0 && (
+                        <p className="min-w-0 shrink truncate text-right text-xs text-muted-foreground">
+                          {[
+                            ...new Set(
+                              client.providerApiKeys.map((mapping) =>
+                                providerCatalog.label(mapping.provider),
+                              ),
                             ),
-                          ),
-                        ].join(", ")}
-                      </p>
-                    )}
+                          ].join(", ")}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </TableCard>
               ))}

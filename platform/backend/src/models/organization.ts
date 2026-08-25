@@ -514,7 +514,17 @@ class OrganizationModel {
 
     const enabled = organization?.onlineSkillCatalogEnabled ?? true;
     try {
-      await cacheManager.set(cacheKey, enabled);
+      // Short TTL by design, unlike the other org-settings reads. This set can
+      // race a concurrent PATCH (select old value -> PATCH updates the row and
+      // deletes the key -> this set lands) and there is no version guard, so a
+      // stale `true` CAN be re-cached after an admin turns the catalog off.
+      // The cache's default hour is far too long a window for a setting that
+      // gates what an org can import; a minute is not.
+      await cacheManager.set(
+        cacheKey,
+        enabled,
+        ONLINE_SKILL_CATALOG_CACHE_TTL_MS,
+      );
     } catch {
       // Cache writes are best-effort here; tests and early startup may not
       // have the distributed cache initialized yet.
@@ -844,6 +854,12 @@ function getOrganizationSettingsCacheKey(organizationId: string) {
 function getOrganizationAuthEnforcementCacheKey(organizationId: string) {
   return `${CacheKey.OrganizationSettings}-auth-enforcement-${organizationId}` as const;
 }
+
+/**
+ * One minute. See the set() call in `getOnlineSkillCatalogEnabled` for why a
+ * stale value can land in the cache at all; this bounds how long it lives.
+ */
+const ONLINE_SKILL_CATALOG_CACHE_TTL_MS = 60_000;
 
 function getOrganizationOnlineSkillCatalogCacheKey(organizationId: string) {
   return `${CacheKey.OrganizationSettings}-online-skill-catalog-${organizationId}` as const;

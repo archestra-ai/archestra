@@ -3,6 +3,7 @@
 import {
   DocsPage,
   type IdentityProviderFormValues,
+  type IdentityProviderSecretPath,
   OAUTH_TOKEN_TYPE,
 } from "@archestra/shared";
 import { Plus, X } from "lucide-react";
@@ -63,6 +64,12 @@ interface OidcConfigFormProps {
   hidePkce?: boolean;
   /** Hide the Provider ID field (for predefined providers like Okta, Google, GitHub) */
   hideProviderId?: boolean;
+  /**
+   * Secret fields the server already holds a value for. Reads redact the values
+   * themselves, so this is what lets a stored credential render as "stored,
+   * leave blank to keep" instead of an empty box that looks wiped.
+   */
+  configuredSecretPaths?: IdentityProviderSecretPath[];
 }
 
 export function OidcConfigForm({
@@ -71,8 +78,11 @@ export function OidcConfigForm({
   activeSection,
   hidePkce,
   hideProviderId,
+  configuredSecretPaths,
 }: OidcConfigFormProps) {
   const [newScope, setNewScope] = useState("");
+  const isSecretStored = (path: IdentityProviderSecretPath) =>
+    configuredSecretPaths?.includes(path) ?? false;
 
   const scopes = form.watch("oidcConfig.scopes") || [];
   const issuer = form.watch("issuer") || "";
@@ -267,11 +277,21 @@ export function OidcConfigForm({
               <FormItem>
                 <FormLabel>Client Secret</FormLabel>
                 <FormControl>
-                  <SecretInput placeholder="your-client-secret" {...field} />
+                  <SecretInput
+                    placeholder={
+                      isSecretStored("oidcConfig.clientSecret")
+                        ? STORED_SECRET_PLACEHOLDER
+                        : "your-client-secret"
+                    }
+                    {...field}
+                  />
                 </FormControl>
                 <FormDescription>
                   The client secret provided by your OIDC provider.
                 </FormDescription>
+                <StoredSecretNote
+                  stored={isSecretStored("oidcConfig.clientSecret")}
+                />
                 <FormMessage />
               </FormItem>
             )}
@@ -538,6 +558,7 @@ export function OidcConfigForm({
           inferredEnterpriseExchangeType={inferredEnterpriseExchangeType}
           subjectTokenTypeDefault={subjectTokenTypeDefault}
           embedded={!!activeSection}
+          isSecretStored={isSecretStored}
         />
       )}
 
@@ -569,6 +590,8 @@ function EnterpriseManagedCredentialsForm(props: {
   inferredEnterpriseExchangeType: "okta_managed" | "rfc8693" | "entra_obo";
   subjectTokenTypeDefault: EnterpriseSubjectTokenType;
   embedded?: boolean;
+  /** See `OidcConfigForm`'s `configuredSecretPaths`. */
+  isSecretStored: (path: IdentityProviderSecretPath) => boolean;
 }) {
   const {
     authenticationDefault,
@@ -576,6 +599,7 @@ function EnterpriseManagedCredentialsForm(props: {
     inferredEnterpriseExchangeType,
     subjectTokenTypeDefault,
     embedded = false,
+    isSecretStored,
   } = props;
   const appName = useAppName();
   const identityProvidersDocsUrl = getFrontendDocsUrl(
@@ -631,12 +655,26 @@ function EnterpriseManagedCredentialsForm(props: {
             <FormItem>
               <FormLabel>Exchange Client Secret</FormLabel>
               <FormControl>
-                <SecretInput placeholder="Optional" {...field} />
+                <SecretInput
+                  placeholder={
+                    isSecretStored(
+                      "oidcConfig.enterpriseManagedCredentials.clientSecret",
+                    )
+                      ? STORED_SECRET_PLACEHOLDER
+                      : "Optional"
+                  }
+                  {...field}
+                />
               </FormControl>
               <FormDescription>
                 Only used when the exchange endpoint authenticates with a client
                 secret.
               </FormDescription>
+              <StoredSecretNote
+                stored={isSecretStored(
+                  "oidcConfig.enterpriseManagedCredentials.clientSecret",
+                )}
+              />
               <FormMessage />
             </FormItem>
           )}
@@ -776,7 +814,13 @@ function EnterpriseManagedCredentialsForm(props: {
             <FormLabel>Private Key PEM</FormLabel>
             <FormControl>
               <SecretTextarea
-                placeholder="-----BEGIN PRIVATE KEY-----"
+                placeholder={
+                  isSecretStored(
+                    "oidcConfig.enterpriseManagedCredentials.privateKeyPem",
+                  )
+                    ? STORED_SECRET_PLACEHOLDER
+                    : "-----BEGIN PRIVATE KEY-----"
+                }
                 className="min-h-32 font-mono text-xs"
                 {...field}
               />
@@ -784,6 +828,11 @@ function EnterpriseManagedCredentialsForm(props: {
             <FormDescription>
               Only used for <code>private_key_jwt</code> authentication.
             </FormDescription>
+            <StoredSecretNote
+              stored={isSecretStored(
+                "oidcConfig.enterpriseManagedCredentials.privateKeyPem",
+              )}
+            />
             <FormMessage />
           </FormItem>
         )}
@@ -792,6 +841,24 @@ function EnterpriseManagedCredentialsForm(props: {
   );
 
   return <div className={embedded ? "space-y-4" : "space-y-6"}>{content}</div>;
+}
+
+const STORED_SECRET_PLACEHOLDER = "••••••••";
+
+/**
+ * Explains why a saved secret shows up as an empty box. The value is redacted
+ * server-side and never sent to the browser, so submitting the form unchanged
+ * keeps whatever is stored.
+ */
+function StoredSecretNote({ stored }: { stored: boolean }) {
+  if (!stored) return null;
+
+  return (
+    <FormDescription>
+      A value is already stored. Leave blank to keep it, or enter a new value to
+      replace.
+    </FormDescription>
+  );
 }
 
 function getEnterpriseExchangeHint(

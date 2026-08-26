@@ -643,6 +643,8 @@ const AgentForm = (props: Omit<AgentFormProps, "footer">) => (
 );
 
 const baseAgent = {
+  runnerConfig: null,
+  runnerSecretId: null,
   id: "00000000-0000-4000-8000-000000000001",
   organizationId: "00000000-0000-4000-8000-000000000010",
   name: "Existing Agent",

@@ -89,6 +89,12 @@ archestra:
     ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED: "true"
+    # Bound staging database growth while retaining lower-volume operational
+    # history longer than the high-volume LLM and MCP payload logs.
+    ARCHESTRA_AUDIT_LOG_RETENTION_DAYS: "90"
+    ARCHESTRA_CHAT_CONVERSATIONS_RETENTION_DAYS: "90"
+    ARCHESTRA_LLM_LOGS_RETENTION_DAYS: "30"
+    ARCHESTRA_MCP_LOGS_RETENTION_DAYS: "30"
     # Apps Hackathon session recording. The documented flag deliberately cannot
     # open this on a licensed deployment (see parseHackathonRecorderEnabled),
     # and staging activates the enterprise license above — so it takes the

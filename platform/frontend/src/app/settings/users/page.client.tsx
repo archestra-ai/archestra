@@ -612,6 +612,7 @@ function MembersTab({
         actions={<TabButtons activeTab={activeTab} onTabChange={onTabChange} />}
       >
         <SearchInput
+          isLoading={isFetching}
           objectNamePlural="users"
           searchFields={["name", "email"]}
           paramName="name"

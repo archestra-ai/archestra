@@ -283,6 +283,7 @@ export function ConnectorDocumentsTable({
     <div className="space-y-4">
       <FilterBar className="!mb-3">
         <SearchInput
+          isLoading={isFetching}
           value={search}
           syncQueryParams={false}
           placeholder="Search documents by title"

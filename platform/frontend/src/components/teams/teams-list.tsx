@@ -298,6 +298,7 @@ export function TeamsList() {
       <div className="space-y-6">
         <FilterBar className={!hasLabelFilters ? "!mb-3" : undefined}>
           <SearchInput
+            isLoading={isLoading}
             objectNamePlural="teams"
             searchFields={["name"]}
             className={filterSearchClass}

@@ -430,6 +430,7 @@ export function ChannelsSection({
             }
           >
             <SearchInput
+              isLoading={isFetching}
               placeholder="Search channels..."
               paramName="search"
               className={filterSearchClass}

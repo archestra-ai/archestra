@@ -535,6 +535,7 @@ export default function KnowledgeFilesPage() {
           )}
 
           <SearchInput
+            isLoading={isLoading}
             value={search}
             onSearchChange={(value) => {
               setSearch(value);

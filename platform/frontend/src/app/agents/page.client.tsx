@@ -621,6 +621,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                 actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
               >
                 <SearchInput
+                  isLoading={isFetching}
                   objectNamePlural="agents"
                   searchFields={["name"]}
                   paramName="name"

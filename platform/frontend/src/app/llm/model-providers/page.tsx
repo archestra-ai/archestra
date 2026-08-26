@@ -798,6 +798,7 @@ export default function ApiKeysPage() {
       <div className="space-y-4">
         <FilterBar className="!mb-3">
           <SearchInput
+            isLoading={isFetching}
             objectNamePlural="credentials"
             searchFields={["name"]}
             paramName="search"

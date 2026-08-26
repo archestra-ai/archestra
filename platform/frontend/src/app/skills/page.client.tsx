@@ -716,6 +716,7 @@ function SkillsList() {
                   actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
                 >
                   <SearchInput
+                    isLoading={isFetching}
                     paramName="search"
                     className={filterSearchClass}
                   />

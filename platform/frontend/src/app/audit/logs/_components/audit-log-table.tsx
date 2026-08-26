@@ -640,6 +640,7 @@ export function AuditLogTable() {
         ]}
       >
         <SearchInput
+          isLoading={isFetching}
           objectNamePlural="audit events"
           searchFields={["actor", "path", "resource"]}
           paramName="search"

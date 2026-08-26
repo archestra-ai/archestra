@@ -430,6 +430,7 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
           actions={headerAction}
         >
           <SearchInput
+            isLoading={isLoading}
             objectNamePlural="roles"
             searchFields={["name"]}
             paramName="name"

@@ -262,6 +262,7 @@ function ProjectsList() {
             {!isDeletedView && (
               <>
                 <SearchInput
+                  isLoading={isFetching}
                   placeholder="Search projects"
                   paramName="search"
                   className={filterSearchClass}

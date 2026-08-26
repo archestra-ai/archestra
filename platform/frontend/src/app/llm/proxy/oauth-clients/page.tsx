@@ -303,6 +303,7 @@ function OauthClientsTable() {
         <div className="mb-3">
           <FilterBar actions={<TableCardViewToggle />}>
             <SearchInput
+              isLoading={query.isFetching}
               objectNamePlural="OAuth clients"
               searchFields={["name"]}
               paramName="search"

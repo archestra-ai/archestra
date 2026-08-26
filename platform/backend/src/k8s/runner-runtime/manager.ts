@@ -11,7 +11,7 @@ import {
   withK8sApiRetry,
 } from "@/k8s/shared";
 import logger from "@/logging";
-import { RunnerEventModel, RunnerModel } from "@/models";
+import { RunnerEventModel, RunnerModel, VirtualApiKeyModel } from "@/models";
 import McpDeploymentLeaseModel, {
   ClusterLeaseHeldError,
 } from "@/models/mcp-deployment-lease";
@@ -29,12 +29,7 @@ import {
   buildRunnerSecret,
   type RunnerLaunchSpec,
 } from "./manifests";
-import {
-  RUNNER_LEASE_SCOPE,
-  RUNNER_MANAGED_SELECTOR,
-  runnerNames,
-  runnerPodSelector,
-} from "./naming";
+import { RUNNER_LEASE_SCOPE, runnerNames, runnerPodSelector } from "./naming";
 
 /**
  * Owns the Kubernetes side of a Runner's life: create the workload, observe
@@ -174,19 +169,27 @@ class RunnerRuntimeManager {
    * bring-your-own CLI that owns its own input loop.
    */
   async steer(params: { runner: Runner; message: string }): Promise<void> {
-    const { runner, message } = params;
+    const { runner } = params;
     const podName = await this.findPodName(runner);
     if (!podName) {
       throw new Error(`Runner ${runner.id} has no running pod to steer`);
+    }
+    // A steer is one message. Newlines are stripped rather than escaped
+    // because both delivery paths treat them as submit: send-keys -l passes
+    // them to the pty as Enter, and the FIFO reader takes a line at a time —
+    // either way an embedded newline would submit half a message.
+    const message = params.message.replace(/[\r\n]+/g, " ").trim();
+    if (!message) {
+      throw new Error("A steer message cannot be only whitespace");
     }
     const command =
       runner.steerMode === "tmux_keys"
         ? [
             "/bin/sh",
             "-c",
-            // -l sends the text literally; Enter is a separate keystroke so a
-            // message containing newlines cannot submit half of itself.
-            `tmux send-keys -t agent -l ${shellQuote(message)} && tmux send-keys -t agent Enter`,
+            // `--` stops tmux reading a message that begins with a dash as
+            // its own options; Enter is sent separately as the submit.
+            `tmux send-keys -t agent -l -- ${shellQuote(message)} && tmux send-keys -t agent Enter`,
           ]
         : [
             "/bin/sh",
@@ -219,6 +222,9 @@ class RunnerRuntimeManager {
    * after a partial failure.
    */
   async teardown(runner: Runner): Promise<void> {
+    // The key outlives the pod otherwise: a stopped session's ANTHROPIC_API_KEY
+    // would keep working forever, still charging its creator.
+    await this.revokeVirtualKey(runner);
     if (!this.isEnabled || !runner.deploymentName) {
       return;
     }
@@ -330,9 +336,15 @@ class RunnerRuntimeManager {
     });
     if (!claimed) return;
 
-    await this.withRunnerLease(runner, async () => {
+    const tornDown = await this.withRunnerLease(runner, async () => {
       await this.teardown(runner);
     });
+    if (!tornDown) {
+      // Another operation holds this runner's lease, so nothing was removed.
+      // Leaving it in `stopping` keeps it in listLive for the next pass;
+      // marking it stopped here would hide a pod that is still running.
+      return;
+    }
 
     await RunnerModel.transition({
       id: runner.id,
@@ -484,10 +496,11 @@ class RunnerRuntimeManager {
    * held elsewhere means another replica is doing this work, so we skip rather
    * than duplicate it.
    */
+  /** Returns false when another operation holds the lease and nothing ran. */
   private async withRunnerLease(
     runner: Runner,
     operation: () => Promise<void>,
-  ): Promise<void> {
+  ): Promise<boolean> {
     try {
       await McpDeploymentLeaseModel.withLease(
         { scope: RUNNER_LEASE_SCOPE, key: runner.id },
@@ -496,10 +509,32 @@ class RunnerRuntimeManager {
           await lease.assertOwned();
         },
       );
+      return true;
     } catch (error) {
-      if (error instanceof ClusterLeaseHeldError) return;
+      if (error instanceof ClusterLeaseHeldError) return false;
       throw error;
     }
+  }
+
+  /**
+   * Revoke and forget the personal virtual key minted for this runner. Best
+   * effort: a key that cannot be deleted is logged rather than blocking a
+   * teardown, since leaving the pod running is the worse outcome.
+   */
+  private async revokeVirtualKey(runner: Runner): Promise<void> {
+    if (!runner.virtualApiKeyId) return;
+    try {
+      await VirtualApiKeyModel.delete(runner.virtualApiKeyId);
+    } catch (error) {
+      logger.warn(
+        { error, runnerId: runner.id },
+        "Failed to revoke a runner's virtual key",
+      );
+      return;
+    }
+    await RunnerModel.update(runner.id, runner.organizationId, {
+      virtualApiKeyId: null,
+    });
   }
 
   private async execInPod(params: {
@@ -558,9 +593,6 @@ class RunnerRuntimeManager {
 }
 
 export default new RunnerRuntimeManager();
-
-/** @public — used by the convergence sweep and by tests. */
-export { RUNNER_MANAGED_SELECTOR };
 
 // ===================== helpers =====================
 

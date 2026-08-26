@@ -150,4 +150,40 @@ describe("buildRunnerPlatformEgressPolicy", () => {
     expect(policy.spec?.policyTypes).toEqual(["Egress"]);
     expect(policy.spec?.egress?.[0]?.ports?.[0]?.port).toBe(9000);
   });
+
+  it("permits DNS, without which the pod cannot resolve the platform at all", () => {
+    // Once any egress policy selects a pod, its egress is clamped to the union
+    // of the selecting policies — and no other policy selects runner pods, so
+    // omitting DNS here would break every session at its first call.
+    const policy = buildRunnerPlatformEgressPolicy({
+      spec: SPEC,
+      platformNamespace: "archestra",
+      platformPodLabels: { "app.kubernetes.io/name": "archestra" },
+      platformPorts: [9000],
+    });
+
+    const dnsRules = (policy.spec?.egress ?? []).filter((rule) =>
+      rule.ports?.some((port) => port.port === 53),
+    );
+    expect(dnsRules.length).toBeGreaterThanOrEqual(2);
+    expect(
+      dnsRules.some((rule) =>
+        rule.to?.some(
+          (target) =>
+            target.podSelector?.matchLabels?.["k8s-app"] === "kube-dns",
+        ),
+      ),
+    ).toBe(true);
+    // Clusters whose resolver is not that labelled pod need the CIDR fallback.
+    expect(
+      dnsRules.some((rule) =>
+        rule.to?.some((target) => target.ipBlock?.cidr === "0.0.0.0/0"),
+      ),
+    ).toBe(true);
+    for (const rule of dnsRules) {
+      const protocols = (rule.ports ?? []).map((port) => port.protocol);
+      expect(protocols).toContain("UDP");
+      expect(protocols).toContain("TCP");
+    }
+  });
 });

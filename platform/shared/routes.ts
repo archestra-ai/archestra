@@ -452,7 +452,7 @@ export const RouteId = {
   DeleteServiceAccountToken: "deleteServiceAccountToken",
 
   // Virtual API Key Routes
-  // Runners: long-running agent sessions in their own container.
+  // Runner Routes — long-running agent sessions in their own container.
   GetAllRunners: "getAllRunners",
   GetRunner: "getRunner",
   GetRunnerEvents: "getRunnerEvents",

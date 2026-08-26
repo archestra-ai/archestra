@@ -212,14 +212,6 @@ class RunnerModel {
       .filter((name): name is string => name !== null);
   }
 
-  /** Audit hook snapshot; see `AuditableModel`. */
-  static async findByIdForAudit(
-    id: string,
-    orgId: string,
-  ): Promise<Record<string, unknown> | null> {
-    return RunnerModel.findById(id, orgId);
-  }
-
   static async delete(id: string, organizationId: string): Promise<boolean> {
     const deleted = await db
       .delete(schema.runnersTable)

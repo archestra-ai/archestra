@@ -19,6 +19,7 @@ import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 // biome-ignore lint/style/noRestrictedImports: runtime-gated EE model import
 import { isIdleHibernationOffered } from "@/k8s/mcp-server-runtime/hibernation.ee";
+import { runnerRuntimeManager } from "@/k8s/runner-runtime";
 // SPDX-SnippetEnd
 import {
   getGoogleDriveOAuthRedirectUri,
@@ -226,7 +227,9 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           mcpServerAlertingEnabled: config.mcpServer.alertingEnabled,
           // SPDX-SnippetEnd
           sandbox: skillSandboxRuntimeService.isEnabled,
-          runners: config.runners.enabled && McpServerRuntimeManager.isEnabled,
+          // The same predicate the routes gate on, so the UI can never offer
+          // a feature whose endpoints answer 404.
+          runners: runnerRuntimeManager.isEnabled,
           plugins: config.plugins.enabled,
           sandboxArtifactBytesLimit: config.skillsSandbox.artifactBytesLimit,
           chatAttachmentStorageBytesLimit:

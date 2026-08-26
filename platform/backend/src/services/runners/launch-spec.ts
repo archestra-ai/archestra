@@ -96,6 +96,15 @@ export async function buildRunnerLaunchSpec(params: {
 
   const proxyUrl = `${platformBaseUrl}/v1/anthropic/${runner.agentId}`;
   const nonSecretEnv: Record<string, string> = {
+    // The agent's own environment goes first: the proxy and gateway addresses
+    // below must win. A config entry overriding ANTHROPIC_BASE_URL would be
+    // exactly the bypass the platform-URL guard above exists to prevent.
+    ...Object.fromEntries(
+      (agent.runnerConfig?.environment ?? []).map(({ key, value }) => [
+        key,
+        value,
+      ]),
+    ),
     ARCHESTRA_RUNNER_ID: runner.id,
     ARCHESTRA_RUNNER_NAME: runner.name,
     ARCHESTRA_RUNNER_STEER_FIFO: RUNNER_STEER_FIFO,
@@ -103,12 +112,6 @@ export async function buildRunnerLaunchSpec(params: {
     ANTHROPIC_BASE_URL: proxyUrl,
     ARCHESTRA_MCP_GATEWAY_URL: `${platformBaseUrl}/v1/mcp/${runner.agentId}`,
     ...(runner.task ? { ARCHESTRA_RUNNER_TASK: runner.task } : {}),
-    ...Object.fromEntries(
-      (agent.runnerConfig?.environment ?? []).map(({ key, value }) => [
-        key,
-        value,
-      ]),
-    ),
   };
 
   const secretEnv: Record<string, string> = {

@@ -1,5 +1,7 @@
+import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
 import { runnerRuntimeManager } from "@/k8s/runner-runtime";
+import logger from "@/logging";
 import {
   AgentModel,
   EnvironmentModel,
@@ -80,6 +82,21 @@ export async function startRunner(params: {
     // visible in the session timeline and not only in this response.
     const reason =
       error instanceof Error ? error.message : "Failed to start the runner";
+    // `failed` is terminal, so the reconciler never revisits this row. Tear
+    // down here or the Secret holding the caller's personal credentials, the
+    // network policy and any created workload are stranded for good.
+    const current = await RunnerModel.findById(
+      runner.id,
+      params.organizationId,
+    );
+    await runnerRuntimeManager
+      .teardown(current ?? runner)
+      .catch((teardownError) => {
+        logger.warn(
+          { error: teardownError, runnerId: runner.id },
+          "Teardown after a failed runner launch did not complete",
+        );
+      });
     await RunnerModel.transition({
       id: runner.id,
       organizationId: params.organizationId,
@@ -124,6 +141,40 @@ async function assertImageIsTrusted(params: {
       `Image ${params.image} is not in the trusted registries configured for ${label}`,
     );
   }
+}
+
+/**
+ * Strip privileges a caller is not entitled to grant.
+ *
+ * A privileged runner pod holds host devices and full capabilities, so it is
+ * node-level access, not an agent setting. It is only accepted from a caller
+ * who already holds runner:admin — without this, any member able to edit an
+ * agent could grant themselves host root by starting a runner from it.
+ */
+export async function sanitizeRunnerConfigForWriter<
+  T extends { privileged?: boolean } | null | undefined,
+>(params: {
+  runnerConfig: T;
+  userId: string;
+  organizationId: string;
+}): Promise<T> {
+  const { runnerConfig } = params;
+  if (!runnerConfig || runnerConfig.privileged !== true) {
+    return runnerConfig;
+  }
+  const mayGrant = await userHasPermission(
+    params.userId,
+    params.organizationId,
+    "runner",
+    "admin",
+  );
+  if (mayGrant) {
+    return runnerConfig;
+  }
+  throw new ApiError(
+    403,
+    "Only a runner administrator can configure a privileged runner",
+  );
 }
 
 export async function requireRunnableAgent(

@@ -47,7 +47,7 @@ const registry = defineArchestraTools([
       "Start a long-running agent session in its own container for an agent that has runner configuration. The session runs on YOUR behalf: it uses your credentials and its LLM usage is attributed to you. Returns immediately — the session provisions in the background, so poll get_runner for its state.",
     schema: z
       .object({
-        agentId: z.string().describe("ID of the agent to run."),
+        agentId: z.string().uuid().describe("ID of the agent to run."),
         name: z
           .string()
           .min(1)
@@ -64,6 +64,9 @@ const registry = defineArchestraTools([
     async handler({ args, context }) {
       if (!context.userId || !context.organizationId) {
         return errorResult("Authentication required");
+      }
+      if (!runnerRuntimeManager.isEnabled) {
+        return errorResult("Runners are not enabled on this deployment");
       }
       try {
         {
@@ -135,7 +138,7 @@ const registry = defineArchestraTools([
     title: "Get Runner",
     description:
       "Get one agent session with its recent timeline: state changes, steer messages and lifecycle notices.",
-    schema: z.object({ runnerId: z.string() }).strict(),
+    schema: z.object({ runnerId: z.string().uuid() }).strict(),
     outputSchema: z.object({
       runner: RunnerOutputItemSchema,
       events: z.array(
@@ -182,7 +185,7 @@ const registry = defineArchestraTools([
       "Send a message into a live agent session. The message is delivered at a turn boundary, so it never interrupts a tool call already in flight. Only the person who started the session can steer it.",
     schema: z
       .object({
-        runnerId: z.string(),
+        runnerId: z.string().uuid(),
         message: z.string().min(1).max(20_000),
       })
       .strict(),
@@ -231,7 +234,7 @@ const registry = defineArchestraTools([
       "Stop a live agent session and remove its container. In-memory session state is lost, so stop only when the work is finished or abandoned.",
     schema: z
       .object({
-        runnerId: z.string(),
+        runnerId: z.string().uuid(),
         reason: z.string().max(500).optional(),
       })
       .strict(),

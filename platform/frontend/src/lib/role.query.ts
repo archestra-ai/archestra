@@ -42,10 +42,16 @@ export const roleKeys = {
  * predefined one (naming a role "Admin" yields `admin`), and a walk that races
  * a role being created, since a new name shifts the ordering under the offsets.
  * Predefined roles are served first and so win the collision.
+ *
+ * The walk still stops at `useAllMatching`'s ceiling, stated here rather than
+ * inherited quietly, since an unstated ceiling is what this was. It sits far
+ * above any workable number of roles: a picker listing a thousand of them has
+ * problems that fetching the thousand-and-first would not fix.
  */
 export function useRoles() {
   return useAllMatching<Role>({
     queryKey: [...roleKeys.lists()],
+    max: 1000,
     fetchPage: async ({ limit, offset }) => {
       const response = await getRoles({ query: { limit, offset } });
       throwOnApiError(response.error, { toastOnError: false });

@@ -51,6 +51,7 @@ import type {
   UserStatisticsSortBy,
 } from "@/types";
 import { isUuid } from "@/utils/uuid";
+import AgentModel from "./agent";
 import AgentTeamModel from "./agent-team";
 
 class StatisticsModel {
@@ -412,6 +413,7 @@ class StatisticsModel {
         agentId: schema.agentsTable.id,
         agentName: schema.agentsTable.name,
         agentType: schema.agentsTable.agentType,
+        organizationId: schema.agentsTable.organizationId,
         teamName: schema.teamsTable.name,
         timeBucket: sql<string>`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt})`,
         requests: sql<number>`CAST(COUNT(*) AS INTEGER)`,
@@ -450,6 +452,7 @@ class StatisticsModel {
         schema.agentsTable.id,
         schema.agentsTable.name,
         schema.agentsTable.agentType,
+        schema.agentsTable.organizationId,
         schema.teamsTable.name,
         sql`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt})`,
       )
@@ -457,7 +460,9 @@ class StatisticsModel {
         sql`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt})`,
       );
 
-    const rawTimeSeriesData = await query;
+    const rawTimeSeriesData = await StatisticsModel.collapseProxyRows(
+      await query,
+    );
 
     const timeSeriesData = StatisticsModel.groupTimeSeries(
       rawTimeSeriesData,
@@ -467,6 +472,11 @@ class StatisticsModel {
 
     // Aggregate data by agent
     const agentMap = new Map<string, AgentStatistics>();
+    // Rows collapsed onto the LLM Proxy above can repeat a bucket (one per
+    // originating proxy row), so points are merged by timestamp rather than
+    // appended — a series with a duplicate timestamp reads as whichever point
+    // a consumer looks up first, not as the bucket's total.
+    const seriesByAgent = new Map<string, Map<string, number>>();
 
     for (const row of timeSeriesData) {
       // Use stored cost from interactions (already calculated per-model)
@@ -485,19 +495,28 @@ class StatisticsModel {
           cost: 0,
           timeSeries: [],
         });
+        seriesByAgent.set(row.agentId, new Map());
       }
 
       const agent = agentMap.get(row.agentId);
-      if (!agent) continue;
+      const series = seriesByAgent.get(row.agentId);
+      if (!agent || !series) continue;
       agent.requests += Number(row.requests);
       agent.inputTokens += Number(row.inputTokens);
       agent.outputTokens += Number(row.outputTokens);
       agent.cacheReadTokens += Number(row.cacheReadTokens) || 0;
       agent.cost += cost;
-      agent.timeSeries.push({
-        timestamp: row.timeBucket,
-        value: cost,
-      });
+      series.set(row.timeBucket, (series.get(row.timeBucket) ?? 0) + cost);
+    }
+
+    for (const agent of agentMap.values()) {
+      agent.timeSeries = Array.from(
+        seriesByAgent.get(agent.agentId) ?? [],
+        ([timestamp, value]) => ({ timestamp, value }),
+      )
+        // Chronological regardless of the order the rows arrived in: buckets
+        // are uniformly formatted within a response, so they sort as strings.
+        .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
     }
 
     return Array.from(agentMap.values());
@@ -2238,7 +2257,75 @@ class StatisticsModel {
     }
     return byUser;
   }
+
+  /**
+   * Report every proxy-attributed row against the organization's single LLM
+   * Proxy.
+   *
+   * An organization has exactly one LLM Proxy. The rows that preceded that
+   * consolidation were left in place so their history stays reachable, and
+   * `resolveAgent` collapses their ids — and those of legacy dual-purpose
+   * `profile` rows — onto the elected proxy for every new request. Reporting
+   * follows the same rule, so the proxy's spend is one entity over time
+   * rather than a leaderboard of names that no longer resolve to anything a
+   * reader can open, configure, or send traffic to.
+   *
+   * Rows whose organization has no elected proxy (none exists until the
+   * organization's first proxy request or the next startup seed) are left
+   * untouched rather than dropped: their cost is real either way.
+   */
+  private static async collapseProxyRows<
+    T extends {
+      agentId: string;
+      agentName: string;
+      agentType: string;
+      organizationId: string;
+      teamName: string | null;
+    },
+  >(rows: T[]): Promise<T[]> {
+    const proxyOrganizationIds = [
+      ...new Set(
+        rows
+          .filter((row) => PROXY_ATTRIBUTED_AGENT_TYPES.has(row.agentType))
+          .map((row) => row.organizationId),
+      ),
+    ];
+    if (proxyOrganizationIds.length === 0) {
+      return rows;
+    }
+
+    const proxies = await AgentModel.findOrgLlmProxies(proxyOrganizationIds);
+
+    return rows.map((row) => {
+      if (!PROXY_ATTRIBUTED_AGENT_TYPES.has(row.agentType)) {
+        return row;
+      }
+      const proxy = proxies.get(row.organizationId);
+      if (!proxy) {
+        return row;
+      }
+      return {
+        ...row,
+        agentId: proxy.id,
+        agentName: proxy.name,
+        agentType: "llm_proxy",
+        // The LLM Proxy is an org-scoped singleton and carries no team gating;
+        // a donor row's team would misattribute the whole proxy to it.
+        teamName: null,
+      };
+    });
+  }
 }
+
+/**
+ * Agent types whose interactions are LLM Proxy traffic: the proxy itself and
+ * the legacy dual-purpose `profile` rows it absorbed. Kept in step with the
+ * alias handling in `resolveAgent`.
+ */
+const PROXY_ATTRIBUTED_AGENT_TYPES: ReadonlySet<string> = new Set([
+  "llm_proxy",
+  "profile",
+]);
 
 // ─── Billing-mode-aware cost aggregates ─────────────────────────────────────
 // An interaction's `cost` is the list-price estimate. "Billed spend" is that

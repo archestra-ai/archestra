@@ -2436,6 +2436,42 @@ class AgentModel {
     return { ...row, labels };
   }
 
+  /**
+   * Each organization's elected LLM Proxy, keyed by organization id.
+   *
+   * Read-only, unlike {@link getOrgLlmProxy}: reporting paths look at history
+   * for organizations they do not otherwise touch, and must not mint a proxy
+   * row as a side effect of being read. Organizations without one are simply
+   * absent from the map.
+   */
+  static async findOrgLlmProxies(
+    organizationIds: string[],
+  ): Promise<Map<string, { id: string; name: string }>> {
+    if (organizationIds.length === 0) {
+      return new Map();
+    }
+
+    const rows = await db
+      .select({
+        organizationId: schema.agentsTable.organizationId,
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+      })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          inArray(schema.agentsTable.organizationId, organizationIds),
+          eq(schema.agentsTable.agentType, "llm_proxy"),
+          eq(schema.agentsTable.isDefault, true),
+          notDeleted(schema.agentsTable),
+        ),
+      );
+
+    return new Map(
+      rows.map((row) => [row.organizationId, { id: row.id, name: row.name }]),
+    );
+  }
+
   private static async findOrgLlmProxyRow(organizationId: string) {
     const [row] = await db
       .select()

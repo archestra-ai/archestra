@@ -436,20 +436,46 @@ const evalRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const groupId = crypto.randomUUID();
       const runs = [];
-      for (const agent of agents) {
-        runs.push(
-          await EvalRunModel.createWithResults({
-            organizationId,
-            suiteId: suite.id,
-            agentId: agent.id,
-            groupId,
-            agentNameSnapshot: agent.name,
-            modelSnapshot: agent.llmModel ?? null,
-            name: body.name ?? null,
-            createdBy: user.id,
-            cases,
-          }),
+      try {
+        for (const agent of agents) {
+          runs.push(
+            await EvalRunModel.createWithResults({
+              organizationId,
+              suiteId: suite.id,
+              agentId: agent.id,
+              groupId,
+              agentNameSnapshot: agent.name,
+              modelSnapshot: agent.llmModel ?? null,
+              name: body.name ?? null,
+              createdBy: user.id,
+              cases,
+            }),
+          );
+        }
+      } catch (error) {
+        // Creation failed partway through the group. Without compensation the
+        // earlier runs would sit `pending` forever — never enqueued, and
+        // invisible to the caller, who only sees the 500.
+        const message = error instanceof Error ? error.message : String(error);
+        logger.error(
+          { suiteId: suite.id, groupId, error: message },
+          "[Evals] Failed to create comparison runs",
         );
+        for (const run of runs) {
+          await EvalRunModel.markFailed(
+            run.id,
+            "A sibling run in this comparison could not be created",
+          );
+          await EvalRunResultModel.cancelPendingByRun(run.id);
+          const counts = await EvalRunResultModel.countByStatus(run.id);
+          await EvalRunModel.updateCounts(run.id, {
+            passedCases: counts.passed,
+            failedCases: counts.failed,
+            erroredCases: counts.error,
+            canceledCases: counts.canceled,
+          });
+        }
+        throw new ApiError(500, "Failed to create the eval runs");
       }
 
       let enqueued = 0;

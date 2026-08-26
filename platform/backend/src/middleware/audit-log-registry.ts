@@ -707,8 +707,9 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
         : null;
     },
   },
-  // Run creation under the suite path; the resource is the new run, so the
-  // handler supplies `auditResourceId`/`auditAfter` from the created row.
+  // Run creation under the suite path; one request creates a run per agent,
+  // so the handler supplies `auditResourceId`/`auditAfter` keyed on the
+  // shared group id covering every created run.
   "/api/eval-suites/:id/runs": {
     resourceType: "evalRun",
     action: "evalRun.created",

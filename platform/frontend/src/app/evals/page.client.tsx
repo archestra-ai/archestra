@@ -346,9 +346,16 @@ function EvalSuitesList() {
         description="Their cases will be deleted. Past runs keep their results."
         isPending={bulkDelete.isPending}
         onConfirm={async () => {
-          await bulkDelete.mutateAsync(pageSelection.map((s) => s.id));
+          const outcome = await bulkDelete.mutateAsync(
+            pageSelection.map((s) => s.id),
+          );
           setBulkDeleteOpen(false);
-          clearSelection();
+          // Rows that failed to delete stay selected for a retry; the rest
+          // clear with their deleted suites.
+          const failedIds = outcome?.failed.map((f) => f.id) ?? [];
+          setRowSelection(
+            Object.fromEntries(failedIds.map((id) => [id, true])),
+          );
         }}
       />
     </PageLayout>

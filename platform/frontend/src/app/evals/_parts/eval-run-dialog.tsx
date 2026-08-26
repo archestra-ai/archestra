@@ -84,8 +84,8 @@ export function EvalRunDialog({
               emptyMessage="No agents found."
             />
             <p className="text-muted-foreground text-xs">
-              Pick several agents to compare them side by side on the same
-              cases.
+              Pick several agents to compare them side by side on the same cases
+              — up to {MAX_AGENTS_PER_RUN} per run.
             </p>
           </div>
           <div className="space-y-2">

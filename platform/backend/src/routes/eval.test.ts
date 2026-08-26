@@ -454,6 +454,44 @@ describe("eval routes", () => {
     ).toBe(409);
   });
 
+  test("multi-agent creation failure compensates already-created runs", async ({
+    makeInternalAgent,
+  }) => {
+    const agentA = await makeInternalAgent({ organizationId });
+    const agentB = await makeInternalAgent({ organizationId });
+    const suite = await createSuite("Partial failure suite");
+    await addCase(suite.id);
+
+    const original = EvalRunModel.createWithResults.bind(EvalRunModel);
+    const spy = vi
+      .spyOn(EvalRunModel, "createWithResults")
+      .mockImplementationOnce(original)
+      .mockImplementationOnce(() => {
+        throw new Error("db down");
+      });
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/eval-suites/${suite.id}/runs`,
+      payload: { agentIds: [agentA.id, agentB.id] },
+    });
+    spy.mockRestore();
+    expect(response.statusCode).toBe(500);
+
+    // The run created before the failure is failed out, its snapshot rows are
+    // closed, and nothing was enqueued.
+    const runs = await EvalRunModel.listByOrganization({
+      organizationId,
+      limit: 10,
+      offset: 0,
+    });
+    expect(runs).toHaveLength(1);
+    expect(runs[0].status).toBe("failed");
+    expect(runs[0].error).toContain("could not be created");
+    const results = await EvalRunResultModel.listAllByRun(runs[0].id);
+    expect(results.every((r) => r.status === "canceled")).toBe(true);
+    expect(enqueueMock).not.toHaveBeenCalled();
+  });
+
   test("multi-agent run creation makes one run per agent under one group", async ({
     makeInternalAgent,
   }) => {

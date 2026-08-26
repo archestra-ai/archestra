@@ -51,15 +51,19 @@ export function RoleFilterSelect({
         {
           value: allOptionValue,
           label: "All roles",
-          // Indented past an icon it doesn't have, so its label lines up with
-          // the roles beneath it. "All roles" is not a role, and borrowing
-          // either role icon for it would claim it is a kind of one.
+          // In the list it is indented past an icon it doesn't have, so its
+          // label lines up with the roles beneath it. "All roles" is not a
+          // role, and borrowing either role icon for it would claim it is a
+          // kind of one.
           content: (
             <span className="flex items-center gap-2">
               <span aria-hidden className="h-4 w-4 shrink-0" />
               All roles
             </span>
           ),
+          // On the closed trigger there is no column of icons to line up with,
+          // so the same indent just reads as a stray gap before the text.
+          selectedContent: "All roles",
         },
       ]}
       items={roles.map((role) => {

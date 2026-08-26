@@ -13120,7 +13120,6 @@ export type CreateAgentData = {
                 value: string;
             }>;
         } | null;
-        runnerSecretId?: string | null;
         passthroughHeaders?: Array<string> | null;
         toolExposureMode?: 'full' | 'search_and_run_only';
         missingCredentialBehavior?: 'allow' | 'warn' | 'block';
@@ -14471,7 +14470,6 @@ export type UpdateAgentData = {
                 value: string;
             }>;
         } | null;
-        runnerSecretId?: string | null;
         passthroughHeaders?: Array<string> | null;
         toolExposureMode?: 'full' | 'search_and_run_only';
         missingCredentialBehavior?: 'allow' | 'warn' | 'block';

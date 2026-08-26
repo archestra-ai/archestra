@@ -1,5 +1,0 @@
--- drizzle-migration-linter: allow-breaking
--- drizzle-migration-linter: reason=Both columns are nullable additions to agents with no default, so existing rows and older writers are unaffected: an agent without runner configuration simply cannot be started as a Runner. The foreign key targets `secret`, and it validates against zero rows because no agent has a runner secret yet. ON DELETE set null is deliberate: removing the shared credential bag must leave the agent's other configuration intact.
-ALTER TABLE "agents" ADD COLUMN "runner_config" jsonb;--> statement-breakpoint
-ALTER TABLE "agents" ADD COLUMN "runner_secret_id" uuid;--> statement-breakpoint
-ALTER TABLE "agents" ADD CONSTRAINT "agents_runner_secret_id_secret_id_fk" FOREIGN KEY ("runner_secret_id") REFERENCES "public"."secret"("id") ON DELETE set null ON UPDATE no action;

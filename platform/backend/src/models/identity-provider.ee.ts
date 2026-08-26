@@ -643,7 +643,14 @@ class IdentityProviderModel {
 
     // Register with Better Auth
     await auth.api.registerSSOProvider({
-      body: betterAuthRegistrationData,
+      body: {
+        ...betterAuthRegistrationData,
+        ...(betterAuthRegistrationData.oidcConfig && {
+          oidcConfig: withoutBlankDiscoveryEndpoint(
+            betterAuthRegistrationData.oidcConfig,
+          ),
+        }),
+      },
       headers: new Headers(headers),
     });
 
@@ -1006,6 +1013,31 @@ async function hydrateOidcConfigForRegistration<
   };
 }
 
+/**
+ * Drops a blank `discoveryEndpoint` from the config handed to Better Auth.
+ *
+ * Better Auth validates every OIDC endpoint on the registration body with
+ * `z.url()`, so it rejects an empty string outright rather than reading it as
+ * "not configured". A provider that skips discovery legitimately has none —
+ * GitHub publishes no OpenID discovery document, so its preset sets
+ * `skipDiscovery` and points the authorization/token/userinfo endpoints at
+ * GitHub's OAuth URLs directly — and would otherwise fail registration with
+ * "Invalid URL".
+ *
+ * Only the outbound body is trimmed. The stored config keeps the empty string,
+ * which is the shape both the API schema and the admin form expect.
+ */
+function withoutBlankDiscoveryEndpoint<
+  T extends { discoveryEndpoint?: string },
+>(oidcConfig: T): T | Omit<T, "discoveryEndpoint"> {
+  if (oidcConfig.discoveryEndpoint) {
+    return oidcConfig;
+  }
+
+  const { discoveryEndpoint: _discoveryEndpoint, ...rest } = oidcConfig;
+  return rest;
+}
+
 async function discoverOidcConfig(
   oidcConfig: IdentityProviderOidcConfig,
 ): Promise<IdentityProviderOidcConfig> {
@@ -1059,6 +1091,14 @@ async function discoverOidcConfig(
       ...oidcConfig,
       issuer: oidcConfig.issuer.trim() || discoveredIssuer,
       skipDiscovery: true,
+      /**
+       * Record where the document was actually fetched from. Callers may leave
+       * this blank and let it be derived from the issuer, and the derived URL is
+       * the one that answered — persisting it keeps RP-initiated logout (which
+       * re-reads the document for `end_session_endpoint`) working, and keeps a
+       * blank string out of the Better Auth registration body.
+       */
+      discoveryEndpoint,
       authorizationEndpoint: discoveryDocument.authorization_endpoint,
       tokenEndpoint: discoveryDocument.token_endpoint,
       jwksEndpoint: discoveryDocument.jwks_uri,

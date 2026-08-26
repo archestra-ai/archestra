@@ -3,7 +3,7 @@ title: "Identity Providers"
 category: Administration
 description: "Index of identity-related configuration in Archestra — SSO sign-in, downstream token exchange, role mapping, team sync, and per-provider walkthroughs"
 order: 2
-lastUpdated: 2026-05-07
+lastUpdated: 2026-08-25
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -84,6 +84,7 @@ OIDC sign-in with **Okta-managed** downstream token exchange (private key JWT, I
 
 **GitHub limitations:**
 
+- GitHub publishes no OIDC discovery document. Archestra registers the provider with the authorization, token, and user info endpoints set directly, and leaves the discovery endpoint blank
 - Users must have a **public email** set in their GitHub profile — GitHub's OAuth `/user` endpoint does not expose private emails
 - PKCE is automatically disabled for GitHub (not supported by GitHub)
 

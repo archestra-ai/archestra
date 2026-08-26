@@ -87,6 +87,76 @@ describe("normalizeIdentityProviderFormValues", () => {
     );
   });
 
+  it("leaves the discovery endpoint blank for providers that skip discovery", () => {
+    const normalized = normalizeIdentityProviderFormValues(
+      makeOidcFormValues({
+        providerId: "GitHub",
+        issuer: "https://github.com",
+        oidcConfig: {
+          issuer: "https://github.com",
+          skipDiscovery: true,
+          pkce: false,
+          clientId: "client-id",
+          clientSecret: "client-secret",
+          discoveryEndpoint: "",
+          authorizationEndpoint: "https://github.com/login/oauth/authorize",
+          tokenEndpoint: "https://github.com/login/oauth/access_token",
+          userInfoEndpoint: "https://api.github.com/user",
+          mapping: { id: "id", email: "email", name: "name" },
+        },
+      }),
+    );
+
+    expect(normalized.oidcConfig?.discoveryEndpoint).toBe("");
+    expect(normalized.oidcConfig?.authorizationEndpoint).toBe(
+      "https://github.com/login/oauth/authorize",
+    );
+  });
+
+  it("keeps an explicit discovery endpoint even when discovery is skipped", () => {
+    const normalized = normalizeIdentityProviderFormValues(
+      makeOidcFormValues({
+        providerId: "generic-oidc",
+        issuer: "https://login.example.com",
+        oidcConfig: {
+          issuer: "https://login.example.com",
+          skipDiscovery: true,
+          pkce: true,
+          clientId: "client-id",
+          clientSecret: "client-secret",
+          discoveryEndpoint:
+            "https://discovery.example.com/.well-known/openid-configuration",
+          mapping: { id: "sub", email: "email", name: "name" },
+        },
+      }),
+    );
+
+    expect(normalized.oidcConfig?.discoveryEndpoint).toBe(
+      "https://discovery.example.com/.well-known/openid-configuration",
+    );
+  });
+
+  it("still derives a blank discovery endpoint from the issuer when discovery runs", () => {
+    const normalized = normalizeIdentityProviderFormValues(
+      makeOidcFormValues({
+        providerId: "Okta",
+        issuer: "https://integrator-8514409.okta.com",
+        oidcConfig: {
+          issuer: "",
+          pkce: true,
+          clientId: "client-id",
+          clientSecret: "client-secret",
+          discoveryEndpoint: "",
+          mapping: { id: "sub", email: "email", name: "name" },
+        },
+      }),
+    );
+
+    expect(normalized.oidcConfig?.discoveryEndpoint).toBe(
+      "https://integrator-8514409.okta.com/.well-known/openid-configuration",
+    );
+  });
+
   it("fills inferred Keycloak enterprise-managed defaults when the section is used", () => {
     const normalized = normalizeIdentityProviderFormValues(
       makeOidcFormValues({

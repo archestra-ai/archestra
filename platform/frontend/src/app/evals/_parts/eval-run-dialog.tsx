@@ -2,14 +2,12 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+  DialogBody,
+  DialogForm,
+  DialogStickyFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -60,20 +58,19 @@ export function EvalRunDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Run eval suite</DialogTitle>
-          <DialogDescription>
-            Every case is sent to the agent and graded against its assertions.
-            The run executes in the background.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4">
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Run eval suite"
+      description="Every case is sent to the agent and graded against its assertions. The run executes in the background."
+      size="small"
+    >
+      <DialogForm onSubmit={() => void start()}>
+        <DialogBody className="space-y-4">
           <div className="space-y-2">
             <Label>Agent</Label>
             <Select value={agentId} onValueChange={setAgentId}>
-              <SelectTrigger>
+              <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select an agent" />
               </SelectTrigger>
               <SelectContent>
@@ -95,20 +92,20 @@ export function EvalRunDialog({
               maxLength={200}
             />
           </div>
-        </div>
-        <DialogFooter>
+        </DialogBody>
+        <DialogStickyFooter>
           <Button
             type="button"
             variant="outline"
             onClick={() => onOpenChange(false)}
           >
-            <span>Cancel</span>
+            Cancel
           </Button>
-          <Button onClick={start} disabled={!agentId || createRun.isPending}>
+          <Button type="submit" disabled={!agentId || createRun.isPending}>
             <span>{createRun.isPending ? "Starting…" : "Start run"}</span>
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </DialogStickyFooter>
+      </DialogForm>
+    </FormDialog>
   );
 }

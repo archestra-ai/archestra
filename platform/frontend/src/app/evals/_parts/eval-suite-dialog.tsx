@@ -2,14 +2,12 @@
 
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
+import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+  DialogBody,
+  DialogForm,
+  DialogStickyFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -79,17 +77,16 @@ export function EvalSuiteDialog({
   const pending = createSuite.isPending || updateSuite.isPending;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>
-            {isEdit ? "Edit eval suite" : "New eval suite"}
-          </DialogTitle>
-          <DialogDescription>
-            A suite is a set of test cases you can run against an agent.
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={onSubmit} className="space-y-4">
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={isEdit ? "Edit eval suite" : "New eval suite"}
+      description="A suite is a set of test cases you can run against an agent."
+      size="small"
+      isDirty={form.formState.isDirty}
+    >
+      <DialogForm onSubmit={() => void onSubmit()}>
+        <DialogBody className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="eval-suite-name">Name</Label>
             <Input
@@ -107,20 +104,20 @@ export function EvalSuiteDialog({
               {...form.register("description", { maxLength: 2000 })}
             />
           </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              <span>Cancel</span>
-            </Button>
-            <Button type="submit" disabled={pending || !form.watch("name")}>
-              <span>{isEdit ? "Save" : "Create"}</span>
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+        </DialogBody>
+        <DialogStickyFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={pending || !form.watch("name")}>
+            <span>{isEdit ? "Save" : "Create"}</span>
+          </Button>
+        </DialogStickyFooter>
+      </DialogForm>
+    </FormDialog>
   );
 }

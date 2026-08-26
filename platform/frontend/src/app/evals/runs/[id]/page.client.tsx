@@ -1,6 +1,13 @@
 "use client";
 
-import { ArrowLeft, Ban, Check, ExternalLink, X } from "lucide-react";
+import {
+  ArrowLeft,
+  Ban,
+  Check,
+  ChevronDown,
+  ExternalLink,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
@@ -269,6 +276,9 @@ function ResultCard({ result }: { result: EvalRunResult }) {
           >
             {result.status}
           </Badge>
+          <ChevronDown
+            className={`text-muted-foreground h-4 w-4 shrink-0 transition-transform ${expanded ? "rotate-180" : ""}`}
+          />
         </CardHeader>
       </button>
       {expanded && (

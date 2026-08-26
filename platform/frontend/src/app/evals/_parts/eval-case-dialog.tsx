@@ -2,14 +2,12 @@
 
 import { Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+  DialogBody,
+  DialogForm,
+  DialogStickyFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -242,16 +240,15 @@ export function EvalCaseDialog({
   const pending = createCase.isPending || updateCase.isPending;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{isEdit ? "Edit case" : "New case"}</DialogTitle>
-          <DialogDescription>
-            One input message for the agent, plus the assertions its answer must
-            satisfy. All assertions must pass for the case to pass.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4">
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={isEdit ? "Edit case" : "New case"}
+      description="One input message for the agent, plus the assertions its answer must satisfy. All assertions must pass for the case to pass."
+      size="medium"
+    >
+      <DialogForm onSubmit={() => void submit()}>
+        <DialogBody className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="eval-case-name">Name</Label>
             <Input
@@ -304,21 +301,21 @@ export function EvalCaseDialog({
               <span>Add assertion</span>
             </Button>
           </div>
-        </div>
-        <DialogFooter>
+        </DialogBody>
+        <DialogStickyFooter>
           <Button
             type="button"
             variant="outline"
             onClick={() => onOpenChange(false)}
           >
-            <span>Cancel</span>
+            Cancel
           </Button>
-          <Button onClick={submit} disabled={!canSubmit || pending}>
+          <Button type="submit" disabled={!canSubmit || pending}>
             <span>{isEdit ? "Save case" : "Add case"}</span>
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </DialogStickyFooter>
+      </DialogForm>
+    </FormDialog>
   );
 }
 

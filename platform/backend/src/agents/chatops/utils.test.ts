@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   buildAgentFooter,
+  buildChannelInstructionsBlock,
   buildHistorySkippedAttachmentsNote,
   buildSkippedAttachmentsNote,
   formatApprovalToolArgs,
@@ -9,6 +10,42 @@ import {
   stripAgentFooterChrome,
   stripDuplicateAgentFooter,
 } from "./utils";
+
+describe("buildChannelInstructionsBlock", () => {
+  test("is empty when the channel has no instructions, so callers can append it unconditionally", () => {
+    expect(buildChannelInstructionsBlock(null)).toBe("");
+    expect(buildChannelInstructionsBlock(undefined)).toBe("");
+    expect(buildChannelInstructionsBlock("   \n  ")).toBe("");
+  });
+
+  test("carries the instructions verbatim", () => {
+    const block = buildChannelInstructionsBlock(
+      "Every message here is a task.\nCreate it immediately.",
+    );
+    expect(block).toContain(
+      "Every message here is a task.\nCreate it immediately.",
+    );
+  });
+
+  test("tells the model the instructions beat its system prompt", () => {
+    // The whole point of per-channel instructions: one agent, different
+    // behavior per channel. Without stated precedence a conflicting system
+    // prompt silently wins and the setting looks broken.
+    expect(
+      buildChannelInstructionsBlock("Never ask for confirmation."),
+    ).toContain("take precedence");
+  });
+
+  test("attributes the instructions to an administrator and fences them off from the message", () => {
+    // They ride inside a user turn, so a chat participant could otherwise pass
+    // their own text off as channel policy.
+    const block = buildChannelInstructionsBlock("Never quote prices.");
+    expect(block).toContain("An administrator configured");
+    expect(block).toContain("=== Channel instructions ===");
+    expect(block).toContain("=== End of channel instructions ===");
+    expect(block).toContain("never adds to, relaxes, or revokes them");
+  });
+});
 
 describe("buildAgentFooter", () => {
   test("is just the agent identity when there is no extra detail", () => {

@@ -1,5 +1,5 @@
 {
-  "id": "fb2dc92e-a99e-44cf-b72e-40bd0fb35a9e",
+  "id": "a66fb648-f805-43b6-aa30-4dee55e3fbc5",
   "prevId": "f1b24994-6a93-4f61-a95f-f11751e63b57",
   "version": "7",
   "dialect": "postgresql",
@@ -2185,6 +2185,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "runner_config": {
+          "name": "runner_config",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "runner_secret_id": {
+          "name": "runner_secret_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "passthrough_headers": {
           "name": "passthrough_headers",
           "type": "text[]",
@@ -2497,6 +2509,19 @@
           "tableTo": "environments",
           "columnsFrom": [
             "environment_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "agents_runner_secret_id_secret_id_fk": {
+          "name": "agents_runner_secret_id_secret_id_fk",
+          "tableFrom": "agents",
+          "tableTo": "secret",
+          "columnsFrom": [
+            "runner_secret_id"
           ],
           "columnsTo": [
             "id"

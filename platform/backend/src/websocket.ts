@@ -13,16 +13,41 @@ import type * as k8s from "@kubernetes/client-node";
 import type { WebSocket, WebSocketServer } from "ws";
 import { WebSocket as WS, WebSocketServer as WSS } from "ws";
 import { betterAuth, hasPermission } from "@/auth";
+import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
 import { BrowserStreamSocketClientContext } from "@/features/browser-stream/websocket/browser-stream.websocket";
 import McpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
+import { runnerRuntimeManager } from "@/k8s/runner-runtime";
 import logger from "@/logging";
-import { McpServerModel, UserModel } from "@/models";
+import {
+  McpServerModel,
+  RunnerEventModel,
+  RunnerModel,
+  UserModel,
+} from "@/models";
 import { reportMcpDeploymentStatuses } from "@/observability/metrics/mcp";
 import { isPredefinedAdmin } from "@/services/agent-tool-assignment";
 
 interface McpLogsSubscription {
   serverId: string;
+  stream: PassThrough;
+  abortController: AbortController;
+}
+
+interface RunnerAttachSubscription {
+  runnerId: string;
+  stdin: PassThrough;
+  stdout: PassThrough;
+  stderr: PassThrough;
+  socket: {
+    readyState: number;
+    close: () => void;
+    send: (data: Buffer) => void;
+  };
+}
+
+interface RunnerLogsSubscription {
+  runnerId: string;
   stream: PassThrough;
   abortController: AbortController;
 }
@@ -65,6 +90,10 @@ class WebSocketService {
   private wss: WebSocketServer | null = null;
   private mcpLogsSubscriptions: Map<WebSocket, McpLogsSubscription> = new Map();
   private mcpExecSubscriptions: Map<WebSocket, McpExecSubscription> = new Map();
+  private runnerAttachSubscriptions: Map<WebSocket, RunnerAttachSubscription> =
+    new Map();
+  private runnerLogsSubscriptions: Map<WebSocket, RunnerLogsSubscription> =
+    new Map();
   private mcpDeploymentStatusSubscriptions: Map<
     WebSocket,
     McpDeploymentStatusSubscription
@@ -159,6 +188,52 @@ class WebSocketService {
         message.payload.cols,
         message.payload.rows,
       );
+    },
+    subscribe_runner_attach: (ws, message, clientContext) => {
+      if (message.type !== "subscribe_runner_attach") return;
+      return this.handleSubscribeRunnerAttach(
+        ws,
+        message.payload.runnerId,
+        clientContext,
+      );
+    },
+    unsubscribe_runner_attach: (ws) => {
+      this.unsubscribeRunnerAttach(ws);
+    },
+    runner_attach_input: (ws, message) => {
+      if (message.type !== "runner_attach_input") return;
+      const subscription = this.runnerAttachSubscriptions.get(ws);
+      if (subscription?.runnerId !== message.payload.runnerId) return;
+      subscription.stdin.write(message.payload.data);
+    },
+    runner_attach_resize: (ws, message) => {
+      if (message.type !== "runner_attach_resize") return;
+      const subscription = this.runnerAttachSubscriptions.get(ws);
+      if (subscription?.runnerId !== message.payload.runnerId) return;
+      // SPDY channel 4 carries terminal dimensions; without it tmux keeps the
+      // default 80x24 and redraws the pane to a size nobody is looking at.
+      const resize = JSON.stringify({
+        Width: message.payload.cols,
+        Height: message.payload.rows,
+      });
+      const frame = Buffer.alloc(resize.length + 1);
+      frame[0] = 4;
+      frame.write(resize, 1);
+      if (subscription.socket.readyState <= 1) {
+        subscription.socket.send(frame);
+      }
+    },
+    subscribe_runner_logs: (ws, message, clientContext) => {
+      if (message.type !== "subscribe_runner_logs") return;
+      return this.handleSubscribeRunnerLogs(
+        ws,
+        message.payload.runnerId,
+        message.payload.lines ?? MCP_DEFAULT_LOG_LINES,
+        clientContext,
+      );
+    },
+    unsubscribe_runner_logs: (ws) => {
+      this.unsubscribeRunnerLogs(ws);
     },
     subscribe_mcp_deployment_statuses: (ws, _message, clientContext) => {
       return this.handleSubscribeMcpDeploymentStatuses(ws, clientContext);
@@ -433,6 +508,202 @@ class WebSocketService {
         "MCP logs client unsubscribed",
       );
     }
+  }
+
+  /**
+   * Attach the browser to a runner's live session.
+   *
+   * Authorization is narrower than being able to see the runner: attaching
+   * lands inside a shell running under the creator's own credentials, so only
+   * they or a runner admin may do it.
+   */
+  private async handleSubscribeRunnerAttach(
+    ws: WebSocket,
+    runnerId: string,
+    clientContext: WebSocketClientContext,
+  ): Promise<void> {
+    this.unsubscribeRunnerAttach(ws);
+
+    const runner = await RunnerModel.findById(
+      runnerId,
+      clientContext.organizationId,
+    );
+    if (!runner) {
+      this.sendToClient(ws, {
+        type: "runner_attach_error",
+        payload: { runnerId, error: "Runner not found" },
+      });
+      return;
+    }
+    if (!(await this.mayControlRunner(runner, clientContext))) {
+      this.sendToClient(ws, {
+        type: "runner_attach_error",
+        payload: {
+          runnerId,
+          error: "Only the person who started this runner can attach to it",
+        },
+      });
+      return;
+    }
+
+    const stdin = new PassThrough();
+    const stdout = new PassThrough();
+    const stderr = new PassThrough();
+
+    try {
+      const { podName, command, socket } = await runnerRuntimeManager.attach({
+        runner,
+        stdin,
+        stdout,
+        stderr,
+        onStatus: (status) => {
+          if (status.status === "Failure") {
+            this.sendToClient(ws, {
+              type: "runner_attach_closed",
+              payload: { runnerId, reason: status.message ?? undefined },
+            });
+          }
+        },
+      });
+
+      this.runnerAttachSubscriptions.set(ws, {
+        runnerId,
+        stdin,
+        stdout,
+        stderr,
+        socket: socket as unknown as RunnerAttachSubscription["socket"],
+      });
+
+      for (const stream of [stdout, stderr]) {
+        stream.on("data", (chunk: Buffer) => {
+          this.sendToClient(ws, {
+            type: "runner_attach_output",
+            payload: { runnerId, data: chunk.toString() },
+          });
+        });
+      }
+
+      socket.on("close", () => {
+        this.sendToClient(ws, {
+          type: "runner_attach_closed",
+          payload: { runnerId },
+        });
+        this.unsubscribeRunnerAttach(ws);
+      });
+
+      this.sendToClient(ws, {
+        type: "runner_attach_started",
+        payload: { runnerId, command, podName },
+      });
+      await RunnerEventModel.append({
+        runnerId,
+        kind: "attached",
+        message: "A human attached to the session",
+        actorUserId: clientContext.userId,
+      });
+    } catch (error) {
+      this.sendToClient(ws, {
+        type: "runner_attach_error",
+        payload: {
+          runnerId,
+          error: error instanceof Error ? error.message : "Could not attach",
+        },
+      });
+      this.unsubscribeRunnerAttach(ws);
+    }
+  }
+
+  private unsubscribeRunnerAttach(ws: WebSocket): void {
+    const subscription = this.runnerAttachSubscriptions.get(ws);
+    if (!subscription) return;
+    this.runnerAttachSubscriptions.delete(ws);
+    subscription.stdin.destroy();
+    subscription.stdout.destroy();
+    subscription.stderr.destroy();
+    // Closing the exec detaches tmux; the session itself keeps running, which
+    // is the whole point of attaching to a multiplexer rather than a raw pty.
+    if (subscription.socket.readyState <= 1) {
+      subscription.socket.close();
+    }
+  }
+
+  private async handleSubscribeRunnerLogs(
+    ws: WebSocket,
+    runnerId: string,
+    lines: number,
+    clientContext: WebSocketClientContext,
+  ): Promise<void> {
+    this.unsubscribeRunnerLogs(ws);
+
+    const runner = await RunnerModel.findById(
+      runnerId,
+      clientContext.organizationId,
+    );
+    if (!runner) {
+      this.sendToClient(ws, {
+        type: "runner_logs_error",
+        payload: { runnerId, error: "Runner not found" },
+      });
+      return;
+    }
+
+    const abortController = new AbortController();
+    const stream = new PassThrough();
+    this.runnerLogsSubscriptions.set(ws, { runnerId, stream, abortController });
+
+    stream.on("data", (chunk: Buffer) => {
+      this.sendToClient(ws, {
+        type: "runner_logs",
+        payload: { runnerId, logs: chunk.toString() },
+      });
+    });
+    stream.on("end", () => {
+      this.sendToClient(ws, {
+        type: "runner_logs_ended",
+        payload: { runnerId },
+      });
+      this.unsubscribeRunnerLogs(ws);
+    });
+
+    try {
+      await runnerRuntimeManager.streamLogs({
+        runner,
+        destination: stream,
+        lines,
+        abortSignal: abortController.signal,
+      });
+    } catch (error) {
+      this.sendToClient(ws, {
+        type: "runner_logs_error",
+        payload: {
+          runnerId,
+          error: error instanceof Error ? error.message : "Could not read logs",
+        },
+      });
+      this.unsubscribeRunnerLogs(ws);
+    }
+  }
+
+  private unsubscribeRunnerLogs(ws: WebSocket): void {
+    const subscription = this.runnerLogsSubscriptions.get(ws);
+    if (!subscription) return;
+    this.runnerLogsSubscriptions.delete(ws);
+    subscription.abortController.abort();
+    subscription.stream.destroy();
+  }
+
+  /** Creator or runner admin — the same rule the REST and MCP surfaces apply. */
+  private async mayControlRunner(
+    runner: { createdByUserId: string },
+    clientContext: WebSocketClientContext,
+  ): Promise<boolean> {
+    if (runner.createdByUserId === clientContext.userId) return true;
+    return userHasPermission(
+      clientContext.userId,
+      clientContext.organizationId,
+      "runner",
+      "admin",
+    );
   }
 
   private async handleSubscribeMcpExec(

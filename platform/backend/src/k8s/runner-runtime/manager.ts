@@ -1,4 +1,6 @@
+import type { Readable, Writable } from "node:stream";
 import type * as k8s from "@kubernetes/client-node";
+import type WebSocket from "ws";
 import config from "@/config";
 import { resolveRuntimeOwnerReferences } from "@/k8s/mcp-server-runtime/runtime-owner";
 import {
@@ -27,6 +29,8 @@ import {
   buildRunnerJob,
   buildRunnerPlatformEgressPolicy,
   buildRunnerSecret,
+  RUNNER_CONTAINER_NAME,
+  RUNNER_TMUX_SESSION,
   type RunnerLaunchSpec,
 } from "./manifests";
 import { RUNNER_LEASE_SCOPE, runnerNames, runnerPodSelector } from "./naming";
@@ -214,6 +218,81 @@ class RunnerRuntimeManager {
       (pod) => pod.status?.phase === "Running" && pod.metadata?.name,
     );
     return running?.metadata?.name ?? null;
+  }
+
+  /**
+   * Attach a caller's streams to the live tmux session.
+   *
+   * `tmux attach` rather than a fresh shell: the point is to land inside the
+   * session the agent is already using, seeing its scrollback and typing into
+   * the same pane, which is what makes interjecting possible at all. Detaching
+   * leaves the session running — closing the browser tab must never end a
+   * session that is mid-task.
+   */
+  async attach(params: {
+    runner: Runner;
+    stdin: Readable;
+    stdout: Writable;
+    stderr: Writable;
+    onStatus?: (status: k8s.V1Status) => void;
+  }): Promise<{ podName: string; command: string; socket: WebSocket }> {
+    const clients = this.requireClients();
+    const podName = await this.findPodName(params.runner);
+    if (!podName) {
+      throw new Error("This runner has no running pod to attach to");
+    }
+    const namespace = params.runner.namespace ?? getK8sNamespace();
+    const socket = await clients.exec.exec(
+      namespace,
+      podName,
+      RUNNER_CONTAINER_NAME,
+      ["/bin/sh", "-c", `tmux attach -t ${RUNNER_TMUX_SESSION}`],
+      params.stdout,
+      params.stderr,
+      params.stdin,
+      true,
+      params.onStatus,
+    );
+    await RunnerModel.touchActivity(params.runner.id);
+    return {
+      podName,
+      command: `kubectl exec -it -n ${namespace} ${podName} -c ${RUNNER_CONTAINER_NAME} -- tmux attach -t ${RUNNER_TMUX_SESSION}`,
+      socket,
+    };
+  }
+
+  /** Follow the session's stdout, which is what the agent loop prints. */
+  async streamLogs(params: {
+    runner: Runner;
+    destination: Writable;
+    lines: number;
+    abortSignal?: AbortSignal;
+  }): Promise<void> {
+    const clients = this.requireClients();
+    const podName = await this.findPodName(params.runner);
+    if (!podName) {
+      throw new Error("This runner has no running pod to read logs from");
+    }
+    const namespace = params.runner.namespace ?? getK8sNamespace();
+    const request = await clients.log.log(
+      namespace,
+      podName,
+      RUNNER_CONTAINER_NAME,
+      params.destination,
+      {
+        follow: true,
+        tailLines: params.lines,
+        pretty: false,
+        timestamps: false,
+      },
+    );
+    params.abortSignal?.addEventListener(
+      "abort",
+      () => {
+        request.abort();
+      },
+      { once: true },
+    );
   }
 
   /**

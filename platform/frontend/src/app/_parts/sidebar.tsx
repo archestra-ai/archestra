@@ -32,6 +32,7 @@ import {
   Slack,
   Sparkles,
   Star,
+  TerminalSquare,
   Waypoints,
 } from "lucide-react";
 import Link from "next/link";
@@ -295,6 +296,13 @@ const contentNavGroups: NavGroup[] = [
           SKILLS_SECTION_PREFIXES.some((prefix) => pathname.startsWith(prefix)),
         // "New", the default: the row is named for Skills, which is new. The
         // Plugins tab keeps its own Beta chip in the tab bar.
+        beta: true,
+      },
+      {
+        title: "Runners",
+        url: "/runners",
+        icon: TerminalSquare,
+        customIsActive: (pathname: string) => pathname.startsWith("/runners"),
         beta: true,
       },
       {
@@ -712,6 +720,10 @@ export function AppSidebar() {
   });
   const showConnect = canReadMcpGateway && canReadLlmProxy;
   const pluginsEnabled = useFeature("plugins");
+  // Three-state: undefined while loading. Rendering the row only on an
+  // explicit true keeps a disabled deployment from flashing a nav item that
+  // leads to a 404.
+  const runnersEnabled = useFeature("runners");
 
   const [sidebarMode, pickSidebarMode] = useSidebarMode(pathname);
   const chatListFadeIn = useOnce();
@@ -731,20 +743,22 @@ export function AppSidebar() {
 
   const filteredNavGroups = contentNavGroups.map((group) => ({
     ...group,
-    items: group.items.map((item) => {
-      if (item.url === "/llm/costs") {
-        return { ...item, url: getCostsNavigationUrl(permissionMap) };
-      }
-      // Naming a page after a feature this deployment turned off sends the
-      // reader looking for a tab that isn't there.
-      if (item.url === "/skills") {
-        return {
-          ...item,
-          ...getSkillsNavigation({ permissionMap, pluginsEnabled }),
-        };
-      }
-      return item;
-    }),
+    items: group.items
+      .filter((item) => item.url !== "/runners" || runnersEnabled === true)
+      .map((item) => {
+        if (item.url === "/llm/costs") {
+          return { ...item, url: getCostsNavigationUrl(permissionMap) };
+        }
+        // Naming a page after a feature this deployment turned off sends the
+        // reader looking for a tab that isn't there.
+        if (item.url === "/skills") {
+          return {
+            ...item,
+            ...getSkillsNavigation({ permissionMap, pluginsEnabled }),
+          };
+        }
+        return item;
+      }),
   }));
 
   return (

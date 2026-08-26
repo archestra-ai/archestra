@@ -263,7 +263,9 @@ class RunnerRuntimeManager {
 
     for (const [kind, remove] of deletions) {
       try {
-        await remove();
+        // Retried like the create path: a transient error here would strand the
+        // object for good, because a terminal runner leaves every sweep.
+        await withK8sApiRetry(remove, { label: `delete runner ${kind}` });
       } catch (error) {
         if (isK8sNotFoundError(error)) continue;
         logger.warn(
@@ -346,12 +348,16 @@ class RunnerRuntimeManager {
       return;
     }
 
-    await RunnerModel.transition({
+    const finalized = await RunnerModel.transition({
       id: runner.id,
       organizationId: runner.organizationId,
       to: "stopped",
+      // Guarded: another pass may have concluded this session failed while we
+      // were tearing down, and an unguarded write would overwrite that verdict.
+      from: ["stopping"],
       statusReason: reason,
     });
+    if (!finalized) return;
     reportRunnerTerminated(outcome);
     await RunnerEventModel.append({
       runnerId: runner.id,
@@ -424,6 +430,25 @@ class RunnerRuntimeManager {
       await this.markFailed(runner, describeJobFailure(job));
       return;
     }
+    // A process that died between claiming `stopping` and tearing down would
+    // otherwise wedge here forever: no branch below advances a stopping runner,
+    // so its Job would run on with nothing ever collecting it.
+    if (runner.state === "stopping") {
+      const tornDown = await this.withRunnerLease(runner, async () => {
+        await this.teardown(runner);
+      });
+      if (tornDown) {
+        await RunnerModel.transition({
+          id: runner.id,
+          organizationId: runner.organizationId,
+          to: "stopped",
+          from: ["stopping"],
+          statusReason: runner.statusReason ?? "Stopped",
+        });
+      }
+      return;
+    }
+
     if ((job.status?.active ?? 0) > 0 && runner.state !== "running") {
       const podName = await this.findPodName(runner);
       if (!podName) return;
@@ -456,13 +481,21 @@ class RunnerRuntimeManager {
       statusReason: reason,
     });
     if (!claimed) return;
-    await this.teardown(runner);
-    await RunnerModel.transition({
+    const tornDown = await this.withRunnerLease(runner, async () => {
+      await this.teardown(runner);
+    });
+    if (!tornDown) return;
+    const finished = await RunnerModel.transition({
       id: runner.id,
       organizationId: runner.organizationId,
       to: "stopped",
+      // Guarded: another pass may have concluded this session failed while we
+      // were tearing down, and an unguarded write would overwrite that verdict
+      // with a cheerier one.
+      from: ["stopping"],
       statusReason: reason,
     });
+    if (!finished) return;
     reportRunnerTerminated("completed");
     await RunnerEventModel.append({
       runnerId: runner.id,
@@ -481,7 +514,9 @@ class RunnerRuntimeManager {
       statusReason: reason,
     });
     if (!claimed) return;
-    await this.teardown(runner);
+    await this.withRunnerLease(runner, async () => {
+      await this.teardown(runner);
+    });
     reportRunnerTerminated("failed");
     await RunnerEventModel.append({
       runnerId: runner.id,

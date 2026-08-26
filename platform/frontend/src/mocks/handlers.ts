@@ -168,6 +168,10 @@ export const handlers: HttpHandler[] = [
     },
   }),
   ...getJson("/api/internal_mcp_catalog", catalogSeed),
+  // Batched catalog tools (the tool pickers' one-request replacement for the
+  // per-catalog fan-out). Ahead of the `:catalogId` patterns below so a literal
+  // "tools" segment can never be read as a catalog id.
+  ...getJson("/api/internal_mcp_catalog/tools", []),
   ...getJson("/api/internal_mcp_catalog/labels/keys", []),
   ...getJson("/api/internal_mcp_catalog/:catalogId/children", []),
   ...getJson("/api/mcp_server", installedServersSeed),

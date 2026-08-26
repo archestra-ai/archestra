@@ -280,6 +280,99 @@ describe("StatisticsModel", () => {
       expect(result.map((row) => row.agentId)).toContain(activeAgent.id);
       expect(result.map((row) => row.agentId)).not.toContain(deletedAgent.id);
     });
+
+    test("reports every proxy-attributed interaction against the organization's single LLM Proxy", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+      makeInteraction,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const llmProxy = await AgentModel.getOrgLlmProxy(org.id);
+      // Rows that predate the single-proxy consolidation: still in the table so
+      // their history stays reachable, but no longer reachable as themselves.
+      const retiredProxy = await makeAgent({
+        organizationId: org.id,
+        agentType: "llm_proxy",
+        name: "Retired Proxy",
+      });
+      const legacyProfile = await makeAgent({
+        organizationId: org.id,
+        agentType: "profile",
+        name: "Legacy Profile",
+      });
+      const chatAgent = await makeAgent({
+        organizationId: org.id,
+        agentType: "agent",
+        name: "Chat Agent",
+      });
+
+      // One instant, so all four land in the same bucket and a series that
+      // failed to merge would show up as repeated points.
+      const createdAt = new Date();
+      await makeInteraction(llmProxy.id, { cost: "1", createdAt });
+      await makeInteraction(retiredProxy.id, { cost: "10", createdAt });
+      await makeInteraction(legacyProfile.id, { cost: "100", createdAt });
+      await makeInteraction(chatAgent.id, { cost: "500", createdAt });
+
+      const result = await StatisticsModel.getAgentStatistics(
+        "24h",
+        user.id,
+        true,
+      );
+
+      const proxyRows = result.filter((row) => row.agentType === "llm_proxy");
+      expect(proxyRows).toHaveLength(1);
+      expect(proxyRows[0]).toMatchObject({
+        agentId: llmProxy.id,
+        agentName: llmProxy.name,
+        requests: 3,
+        cost: 111,
+      });
+      // The retired rows are not reported as entities of their own.
+      expect(result.map((row) => row.agentId)).not.toContain(retiredProxy.id);
+      expect(result.map((row) => row.agentId)).not.toContain(legacyProfile.id);
+
+      // A collapsed series totals each bucket rather than repeating it: a
+      // duplicate timestamp reads as whichever point a consumer looks up
+      // first, not as the bucket's total.
+      expect(proxyRows[0].timeSeries).toHaveLength(1);
+      expect(proxyRows[0].timeSeries[0].value).toBeCloseTo(111);
+
+      // Non-proxy agents keep their own attribution.
+      expect(result.find((row) => row.agentId === chatAgent.id)).toMatchObject({
+        agentType: "agent",
+        cost: 500,
+      });
+    });
+
+    test("leaves proxy rows alone when their organization has no elected LLM Proxy", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+      makeInteraction,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const orphanProxy = await makeAgent({
+        organizationId: org.id,
+        agentType: "llm_proxy",
+        name: "Orphan Proxy",
+      });
+      await makeInteraction(orphanProxy.id, { cost: "7" });
+
+      const result = await StatisticsModel.getAgentStatistics(
+        "24h",
+        user.id,
+        true,
+      );
+
+      // Spend is real whether or not an elected proxy exists to fold it into.
+      expect(
+        result.find((row) => row.agentId === orphanProxy.id),
+      ).toMatchObject({ agentName: "Orphan Proxy", cost: 7 });
+    });
   });
 
   describe("getModelStatistics", () => {

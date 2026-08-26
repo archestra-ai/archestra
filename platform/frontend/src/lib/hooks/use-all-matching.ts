@@ -17,15 +17,23 @@ export function useAllMatching<T>({
   fetchPage,
   max = DEFAULT_MAX_ROWS,
   enabled = true,
+  select,
 }: {
   queryKey: unknown[];
   fetchPage: (page: { limit: number; offset: number }) => Promise<T[]>;
   max?: number;
   enabled?: boolean;
+  /**
+   * Post-processes the collected rows, for callers that need the whole set in
+   * hand to do it — de-duplicating across pages, say, which no single page can
+   * see enough to do.
+   */
+  select?: (rows: T[]) => T[];
 }) {
   return useQuery({
     queryKey,
     enabled,
+    select,
     queryFn: async () => {
       const collected: T[] = [];
 

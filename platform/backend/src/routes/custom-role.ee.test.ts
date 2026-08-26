@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
 import { betterAuth, hasPermission } from "@/auth";
 import db, { schema } from "@/database";
+import { enterpriseTier } from "@/enterprise-tier";
 import OrganizationRoleModel from "@/models/organization-role";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -28,6 +29,11 @@ describe("custom role routes", () => {
 
   beforeEach(async ({ makeAdmin, makeMember, makeOrganization }) => {
     vi.clearAllMocks();
+
+    // Small team => enterprise core active. The shared setup's reset targets
+    // the clean project's module registry; this mocked-project file has to
+    // seed the instance its own route imports.
+    enterpriseTier.setUserCountForTesting(0);
 
     // These better-auth org-role API methods are not part of the canonical
     // @/auth mock surface, so wire them onto betterAuth.api here. The casts
@@ -927,5 +933,87 @@ describe("custom role routes", () => {
       url: `/api/roles/${dbRole.id}`,
     });
     expect(getDeletedResponse.statusCode).toBe(404);
+  });
+  // === Enterprise licence gate ===
+
+  describe("without an enterprise licence", () => {
+    // Past the small-team threshold with no licence flag: core inactive.
+    beforeEach(() => {
+      enterpriseTier.setUserCountForTesting(1_000);
+    });
+
+    test("refuses to create a custom role", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/roles",
+        payload: { name: "Ops Admin", permission: { agent: ["read"] } },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json().error.message).toContain("enterprise feature");
+      expect(createOrgRoleMock).not.toHaveBeenCalled();
+    });
+
+    test("refuses to update a custom role", async ({ makeCustomRole }) => {
+      // An editable role is a creatable role by another name: renaming one and
+      // rewriting its permissions would otherwise walk straight around the
+      // create gate.
+      const role = await makeCustomRole(organizationId, {
+        role: "ops_admin",
+        name: "Ops Admin",
+        permission: { agent: ["read"] },
+      });
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/roles/${role.id}`,
+        payload: { name: "Ops Superadmin", permission: { apiKey: ["read"] } },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json().error.message).toContain("enterprise feature");
+      expect(updateOrgRoleMock).not.toHaveBeenCalled();
+      expect(
+        (await OrganizationRoleModel.getById(role.id, organizationId))?.name,
+      ).toBe("Ops Admin");
+    });
+
+    test("still deletes a custom role, so an org that outgrew the free tier can unwind", async ({
+      makeCustomRole,
+    }) => {
+      const role = await makeCustomRole(organizationId, {
+        role: "ops_admin",
+        name: "Ops Admin",
+        permission: { agent: ["read"] },
+      });
+      deleteOrgRoleMock.mockResolvedValue({ success: true, error: null });
+
+      const response = await app.inject({
+        method: "DELETE",
+        url: `/api/roles/${role.id}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(deleteOrgRoleMock).toHaveBeenCalledTimes(1);
+    });
+
+    test("still lists roles, so the page renders its list dimmed rather than empty", async ({
+      makeCustomRole,
+    }) => {
+      await makeCustomRole(organizationId, {
+        role: "ops_admin",
+        name: "Ops Admin",
+        permission: { agent: ["read"] },
+      });
+
+      const response = await app.inject({ method: "GET", url: "/api/roles" });
+
+      expect(response.statusCode).toBe(200);
+      expect(
+        (response.json() as { data: { role: string }[] }).data.map(
+          (r) => r.role,
+        ),
+      ).toContain("ops_admin");
+    });
   });
 });

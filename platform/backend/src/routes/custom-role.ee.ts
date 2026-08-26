@@ -7,6 +7,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { betterAuth } from "@/auth";
 import { syncSystemRoleForRoleHolders } from "@/auth/system-role-sync";
+import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import { OrganizationRoleModel, UserModel } from "@/models";
 import {
@@ -67,6 +68,8 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
+      assertCustomRolesLicensed();
+
       const { name, description, permission } = request.body;
       const { organizationId, user } = request;
 
@@ -169,6 +172,8 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
       reply,
     ) => {
+      assertCustomRolesLicensed();
+
       // Cannot update predefined roles
       if (OrganizationRoleModel.isPredefinedRole(roleId)) {
         throw new ApiError(403, "Cannot update predefined roles");
@@ -368,6 +373,31 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
 export default customRoleRoutes;
 
 // === Internal helpers
+
+/**
+ * Custom roles are an enterprise feature, with the small-team allowance
+ * applied (see `enterpriseTier`). Only the operations that ADD to an
+ * organization's RBAC configuration are refused without a licence: creating a
+ * role, and editing an existing one — an ungated edit would be a create in
+ * disguise, since renaming a role and rewriting its permissions produces a new
+ * role in all but id.
+ *
+ * Deleting stays open on purpose. It is the unwind direction, it grants
+ * nothing, and a deployment that grows past the free-tier threshold must still
+ * be able to remove the custom roles it made while under it. (Same shape as
+ * two-factor enrolment in `better-auth.ts`, where enabling is gated but
+ * disabling is not.) Reads stay open too: permission resolution depends on
+ * them, and the roles page renders its list dimmed rather than empty.
+ */
+function assertCustomRolesLicensed(): void {
+  if (!enterpriseTier.isCoreActive()) {
+    throw new ApiError(
+      403,
+      "Custom roles are an enterprise feature. Please contact " +
+        "sales@archestra.ai to enable it.",
+    );
+  }
+}
 
 function normalizeRoleResponse(roleData: {
   id: string;

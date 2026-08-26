@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
 import { Version } from "@/components/version";
+import { MAIN_CONTENT_ID } from "@/lib/app-shell-region";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import {
   ConnectivityProvider,
@@ -48,11 +49,6 @@ const SIDEBAR_COLLAPSED_PERMISSION: Permissions = {
 const SITE_NOTIFICATION_READ_PERMISSION: Permissions = {
   siteNotification: ["read"],
 };
-
-// Target for the "skip to main content" link (WCAG 2.4.1 Bypass Blocks). The
-// <main> element carries this id and tabIndex={-1} so activating the link moves
-// keyboard focus past the sidebar navigation and into the page content.
-const MAIN_CONTENT_ID = "main-content";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -187,6 +183,12 @@ export function AppShell({ children }: AppShellProps) {
           <NavAwareSidebarCircleToggle />
           <AppSidebar />
           <MaintenanceModeOverlay />
+          {/* MAIN_CONTENT_ID + tabIndex={-1} make this the "skip to main
+              content" target (WCAG 2.4.1 Bypass Blocks), so activating that
+              link moves keyboard focus past the sidebar navigation and into
+              the page. A fullscreen MCP App sizes itself to the same element
+              (see McpAppCard), which is why the id is shared rather than
+              spelled twice. */}
           <main
             id={MAIN_CONTENT_ID}
             tabIndex={-1}

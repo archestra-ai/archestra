@@ -360,7 +360,12 @@ function SidebarCircleToggle({
           }}
           className={cn(
             "group/circle-toggle hidden md:flex items-center justify-center",
-            "fixed top-1/2 z-30 h-10 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full",
+            // The pill straddles the sidebar's edge, so it overhangs the main
+            // region and any fixed overlay anchored there (a fullscreen MCP
+            // App) would clip its right half. z-50 keeps it whole; portalled
+            // dialogs share that layer but come later in the DOM, so they still
+            // cover it.
+            "fixed top-1/2 z-50 h-10 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full",
             // Extend the hit area beyond the 14px-wide pill to meet the 24px
             // minimum target size (WCAG 2.5.8).
             "after:absolute after:-inset-x-1.5 after:inset-y-0 after:content-['']",

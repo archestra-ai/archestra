@@ -1,7 +1,11 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
-import type { ColumnDef } from "@tanstack/react-table";
+import type {
+  ColumnDef,
+  OnChangeFn,
+  RowSelectionState,
+} from "@tanstack/react-table";
 import {
   AppWindow,
   Loader2,
@@ -14,8 +18,6 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
-import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { LabelTags } from "@/components/label-tags";
 import { ScopeBadge } from "@/components/scope-badge";
 import {
@@ -23,38 +25,34 @@ import {
   TableRowActions,
 } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
-import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { DataTable } from "@/components/ui/data-table";
-import { PermissionButton } from "@/components/ui/permission-button";
 import {
-  useBulkDeleteApps,
-  useBulkUpdateAppVisibility,
   useOpenAppInChat,
   useOpenExternalAppInChat,
   usePinApp,
 } from "@/lib/app.query";
-import { reportBulkOutcome } from "@/lib/bulk-action";
 import { setPendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-handoff";
-import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { AppTypeIcon } from "./app-card";
 import { AppDeleteDialog } from "./app-delete-dialog";
 
 type AppListItem = archestraApiTypes.GetAppsResponses["200"]["data"][number];
 type OwnedApp = Extract<AppListItem, { source: "owned" }>;
 
-// Table variant of one apps section (the caller keeps the same Pinned /
-// owned / external grouping as the card view). Row click opens the app in a
-// new chat, exactly like clicking a card; the actions mirror each card's
-// menu, with the type icon distinguishing owned vs MCP-server apps. The
-// settings dialog lives on the page (deep-linkable `settings` URL param), so
-// the table only reports which app to open it for.
+// Table variant of one apps section. Its parent owns selection and bulk actions
+// so this view and the equivalent card grid act on the same selected apps.
 export function AppsTable({
   apps,
   onOpenSettings,
+  rowSelection,
+  setRowSelection,
+  onPageRowIdsChange,
 }: {
   apps: AppListItem[];
   onOpenSettings: (app: { id: string }) => void;
+  rowSelection: RowSelectionState;
+  setRowSelection: OnChangeFn<RowSelectionState>;
+  onPageRowIdsChange: (ids: string[]) => void;
 }) {
   const router = useRouter();
   const openOwnedApp = useOpenAppInChat();
@@ -65,39 +63,10 @@ export function AppsTable({
   // resets it.
   const [openingKey, setOpeningKey] = useState<string | null>(null);
   const [deletingApp, setDeletingApp] = useState<OwnedApp | null>(null);
-  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
-  const [bulkVisibilityOpen, setBulkVisibilityOpen] = useState(false);
-  const bulkDelete = useBulkDeleteApps();
-  const bulkVisibility = useBulkUpdateAppVisibility();
-  const {
-    rowSelection,
-    setRowSelection,
-    onPageRowIdsChange,
-    clearSelection,
-    selected,
-    selectAllMatching,
-  } = useBulkSelection({
-    rows: apps,
-    getId: rowKey,
-    // Only apps authored here can be deleted; the external ones are ui://
-    // resources belonging to an installed MCP server.
-    canSelect: (app) => app.source === "owned",
-    filterSignature: `apps:${apps.length}`,
-    matchDescription: "were built here",
-  });
-  // `canSelect` already keeps this to owned apps; the guard is what tells the
-  // union apart, since only those carry an id.
-  const selectedOwnedApps = selected.filter(
-    (app): app is OwnedApp => app.source === "owned",
-  );
-  const selectedApps = selectedOwnedApps.map((app) => ({
-    id: app.id,
-    name: app.name,
-  }));
 
   const handleOpen = async (app: AppListItem) => {
     if (openingKey) return;
-    setOpeningKey(rowKey(app));
+    setOpeningKey(getAppRowKey(app));
     if (app.source === "owned") {
       const result = await openOwnedApp.mutateAsync(app.id);
       if (result?.conversationId) {
@@ -152,7 +121,7 @@ export function AppsTable({
       size: 600,
       cell: ({ row }) => {
         const app = row.original;
-        const isOpening = openingKey === rowKey(app);
+        const isOpening = openingKey === getAppRowKey(app);
         return (
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-2">
@@ -284,37 +253,10 @@ export function AppsTable({
 
   return (
     <>
-      <BulkActionsBar
-        count={selectedApps.length}
-        noun="app"
-        onClear={clearSelection}
-        busy={bulkDelete.isPending}
-        selectAllMatching={selectAllMatching}
-        className="mb-3"
-      >
-        <PermissionButton
-          permissions={{ app: ["update"] }}
-          variant="outline"
-          size="sm"
-          onClick={() => setBulkVisibilityOpen(true)}
-        >
-          <span>Edit visibility</span>
-        </PermissionButton>
-        <PermissionButton
-          permissions={{ app: ["delete"] }}
-          variant="destructive"
-          size="sm"
-          onClick={() => setBulkDeleteOpen(true)}
-        >
-          <Trash2 className="h-4 w-4" />
-          <span>Delete</span>
-        </PermissionButton>
-      </BulkActionsBar>
-
       <DataTable
         columns={columns}
         data={apps}
-        getRowId={rowKey}
+        getRowId={getAppRowKey}
         rowSelection={rowSelection}
         onRowSelectionChange={setRowSelection}
         onPageRowIdsChange={onPageRowIdsChange}
@@ -324,69 +266,6 @@ export function AppsTable({
         emptyMessage="No apps here yet"
         hidePaginationWhenSinglePage
       />
-
-      {bulkDeleteOpen && (
-        <DeleteConfirmDialog
-          open={bulkDeleteOpen}
-          onOpenChange={setBulkDeleteOpen}
-          title="Delete apps"
-          description={`Delete ${selectedApps.length} ${
-            selectedApps.length === 1 ? "app" : "apps"
-          }? This cannot be undone.`}
-          isPending={bulkDelete.isPending}
-          onConfirm={() => {
-            bulkDelete.mutate(selectedApps, {
-              onSuccess: (outcome) => {
-                reportBulkOutcome({
-                  outcome,
-                  verb: "Deleted",
-                  failureVerb: "delete",
-                  noun: "app",
-                });
-                setBulkDeleteOpen(false);
-                if (outcome.failed.length === 0) clearSelection();
-              },
-            });
-          }}
-          confirmLabel="Delete apps"
-          pendingLabel="Deleting..."
-        />
-      )}
-
-      {bulkVisibilityOpen && (
-        <BulkVisibilityDialog
-          open={bulkVisibilityOpen}
-          onOpenChange={setBulkVisibilityOpen}
-          noun="app"
-          isPending={bulkVisibility.isPending}
-          items={selectedOwnedApps.map((app) => ({
-            id: app.id,
-            scope: app.scope,
-            // The list row carries the scope but not the teams or people an
-            // app reaches, so a team-scoped selection opens asking for them
-            // rather than seeding an audience it cannot see.
-            teams: [],
-            users: [],
-          }))}
-          onApply={async (change) => {
-            const outcome = await bulkVisibility.mutateAsync({
-              apps: selectedApps,
-              scope: change.scope,
-              teamIds: change.teamIds,
-              userIds: change.userIds,
-            });
-            reportBulkOutcome({
-              outcome,
-              verb: "Updated",
-              failureVerb: "update",
-              noun: "app",
-            });
-            if (outcome.succeeded.length === 0) return false;
-            if (outcome.failed.length === 0) clearSelection();
-            return true;
-          }}
-        />
-      )}
 
       {deletingApp && (
         <AppDeleteDialog
@@ -401,11 +280,11 @@ export function AppsTable({
   );
 }
 
-// === internal helpers ===
+// === shared helpers ===
 
-// Same key rationale as the card grid: several tools of one server can share
-// a widget resource, so the tool-scoped name disambiguates.
-function rowKey(app: AppListItem): string {
+// Several tools of one server can share a widget resource, so the tool-scoped
+// name disambiguates external cards and rows.
+export function getAppRowKey(app: AppListItem): string {
   return app.source === "owned"
     ? app.id
     : `${app.mcpServerId}:${app.resourceUri}:${app.name}`;

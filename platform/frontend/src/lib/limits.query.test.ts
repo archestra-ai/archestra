@@ -4,6 +4,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  useBulkDeleteLimits,
   useCreateLimit,
   useDeleteLimit,
   useLimit,
@@ -20,6 +21,7 @@ vi.mock("@archestra/shared", () => ({
     createLimit: vi.fn(),
     updateLimit: vi.fn(),
     deleteLimit: vi.fn(),
+    bulkDeleteLimits: vi.fn(),
   },
 }));
 
@@ -54,6 +56,7 @@ function renderLimitsPage(editId?: string) {
       create: useCreateLimit(),
       update: useUpdateLimit(),
       remove: useDeleteLimit(),
+      bulkRemove: useBulkDeleteLimits(),
     }),
     { wrapper },
   );
@@ -110,6 +113,25 @@ describe("limits query cache", () => {
     rerender();
 
     expect(result.current.list.data).toEqual([limitRow]);
+  });
+
+  it("uses the generated bulk delete endpoint", async () => {
+    vi.mocked(archestraApiSdk.bulkDeleteLimits).mockResolvedValue({
+      error: undefined,
+      data: {
+        succeeded: [{ id: limitRow.id, name: "agent limit" }],
+        failed: [],
+      },
+    } as never);
+
+    const { result } = renderLimitsPage();
+    await act(async () => {
+      await result.current.bulkRemove.mutateAsync([{ id: limitRow.id }]);
+    });
+
+    expect(vi.mocked(archestraApiSdk.bulkDeleteLimits)).toHaveBeenCalledWith({
+      body: { ids: [limitRow.id] },
+    });
   });
 
   it("fetches a limit by id for the edit dialog", async () => {

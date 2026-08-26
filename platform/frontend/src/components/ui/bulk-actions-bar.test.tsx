@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { BulkActionsBar } from "./bulk-actions-bar";
+import { BulkActions, BulkActionsBar } from "./bulk-actions-bar";
 
 describe("BulkActionsBar", () => {
   it("renders no bar until something is selected", () => {
@@ -82,6 +82,46 @@ describe("BulkActionsBar", () => {
     expect(onClear).toHaveBeenCalledTimes(1);
   });
 
+  it("reserves a compact in-flow slot by default for collection actions", () => {
+    const { container, rerender } = render(
+      <BulkActions count={0} noun="skill" countTestId="count" />,
+    );
+
+    expect(container.querySelector("div")?.className).toContain("h-[42px]");
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(container.querySelector('[aria-live="polite"]')?.textContent).toBe(
+      "",
+    );
+
+    rerender(<BulkActions count={2} noun="skill" countTestId="count" />);
+
+    expect(container.querySelector("div")?.className).not.toContain("h-[42px]");
+    expect(screen.getByTestId("count").textContent).toBe("2 skills selected");
+  });
+
+  it("blocks an ID-list action above the default bulk limit", () => {
+    render(
+      <BulkActions count={501} noun="skill">
+        <button type="button">Delete</button>
+      </BulkActions>,
+    );
+
+    expect(screen.getByRole("button", { name: "Delete" })).toBeDisabled();
+    expect(
+      screen.getByText("Select at most 500 items at a time."),
+    ).toBeVisible();
+  });
+
+  it("disables actions while the matching set or mutation is busy", () => {
+    render(
+      <BulkActions count={2} noun="skill" busy>
+        <button type="button">Delete</button>
+      </BulkActions>,
+    );
+
+    expect(screen.getByRole("button", { name: "Delete" })).toBeDisabled();
+  });
+
   describe("selecting past the current page", () => {
     const selectAll = (over: Partial<Parameters<typeof BulkActionsBar>[0]>) =>
       render(
@@ -120,6 +160,12 @@ describe("BulkActionsBar", () => {
           onSelectAll: vi.fn(),
         },
       });
+
+      expect(offer()).toBeNull();
+    });
+
+    it("withholds the escalation while bulk actions are busy", () => {
+      selectAll({ busy: true });
 
       expect(offer()).toBeNull();
     });

@@ -4,15 +4,16 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useMemberSearch } from "@/lib/member.query";
+import { useBulkDeleteMembers, useMemberSearch } from "@/lib/member.query";
 
 vi.mock("sonner");
 
 vi.mock("@archestra/shared", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@archestra/shared")>()),
-  archestraApiSdk: { getMembers: vi.fn() },
+  archestraApiSdk: { bulkDeleteMembers: vi.fn(), getMembers: vi.fn() },
 }));
 
+const bulkDeleteMembers = vi.mocked(archestraApiSdk.bulkDeleteMembers);
 const getMembers = vi.mocked(archestraApiSdk.getMembers);
 
 function membersResponse(
@@ -58,6 +59,7 @@ function renderMemberSearch(selectedUserIds: string[] = []) {
 describe("useMemberSearch", () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
+    bulkDeleteMembers.mockReset();
     getMembers.mockReset();
     getMembers.mockResolvedValue(
       membersResponse([ADA, CHARLES]) as unknown as Awaited<
@@ -115,5 +117,45 @@ describe("useMemberSearch", () => {
 
     expect(result.current.isSearching).toBe(true);
     expect(result.current.emptyMessage).toBe("Searching…");
+  });
+});
+
+describe("useBulkDeleteMembers", () => {
+  it("sends mixed member targets in one generated request", async () => {
+    bulkDeleteMembers.mockResolvedValue({
+      data: {
+        succeeded: [
+          { kind: "member", id: "member-id" },
+          { kind: "pendingSignup", id: "pending-id" },
+        ],
+        failed: [],
+      },
+      error: undefined,
+    } as Awaited<ReturnType<typeof archestraApiSdk.bulkDeleteMembers>>);
+
+    const queryClient = new QueryClient({
+      defaultOptions: { mutations: { retry: false } },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(QueryClientProvider, { client: queryClient }, children);
+    const { result } = renderHook(() => useBulkDeleteMembers(), { wrapper });
+
+    act(() => {
+      result.current.mutate([
+        { kind: "member", id: "member-id" },
+        { kind: "pendingSignup", id: "pending-id" },
+      ]);
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(bulkDeleteMembers).toHaveBeenCalledTimes(1);
+    expect(bulkDeleteMembers).toHaveBeenCalledWith({
+      body: {
+        targets: [
+          { kind: "member", id: "member-id" },
+          { kind: "pendingSignup", id: "pending-id" },
+        ],
+      },
+    });
   });
 });

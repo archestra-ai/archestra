@@ -1,4 +1,4 @@
-import { RouteId } from "@archestra/shared";
+import { MAX_BULK_IDS, RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { LimitModel } from "@/models";
@@ -14,6 +14,15 @@ import {
   UpdateLimitSchema,
   UuidIdSchema,
 } from "@/types";
+import { BulkOutcomeSchema, runBulk } from "./bulk-route";
+
+const BulkDeleteLimitsBodySchema = z.object({
+  ids: z
+    .array(UuidIdSchema)
+    .min(1)
+    .max(MAX_BULK_IDS)
+    .describe("Limit ids to delete. Duplicates are collapsed."),
+});
 
 const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -166,6 +175,62 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send(limit);
+    },
+  );
+
+  fastify.delete(
+    "/api/limits/bulk",
+    {
+      schema: {
+        operationId: RouteId.BulkDeleteLimits,
+        description:
+          "Delete several limits in one request. Missing or out-of-organization ids are reported in `failed` while visible limits are deleted.",
+        tags: ["Limits"],
+        body: BulkDeleteLimitsBodySchema,
+        response: constructResponseSchema(BulkOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const { organizationId } = request;
+      const outcome = await runBulk({
+        ids: request.body.ids,
+        logLabel: "limits bulk delete",
+        notFoundMessage: "Limit not found",
+        unexpectedMessage: "Could not delete this limit",
+        load: async (ids) =>
+          new Map(
+            (await LimitModel.findByIdsInOrganization(ids, organizationId))
+              .filter((limit) => limit.entityType !== "user")
+              .map((limit) => [limit.id, limit]),
+          ),
+        describe: (limit) => `${limit.entityType} limit`,
+        applyAll: (entries) =>
+          LimitModel.deleteMany(entries.map(({ id }) => id)),
+        audit: {
+          target: request,
+          snapshot: async (ids) => ({
+            limits: (
+              await LimitModel.findByIdsInOrganization(ids, organizationId)
+            )
+              .filter((limit) => limit.entityType !== "user")
+              .map((limit) => ({
+                id: limit.id,
+                entityType: limit.entityType,
+                entityId: limit.entityId,
+                limitType: limit.limitType,
+                limitValue: limit.limitValue,
+                model: limit.model,
+                mcpServerName: limit.mcpServerName,
+                toolName: limit.toolName,
+                cleanupInterval: limit.cleanupInterval,
+              }))
+              .sort((a, b) => a.id.localeCompare(b.id)),
+          }),
+        },
+      });
+      if (outcome.succeeded.length === 0) request.auditSkip = true;
+
+      return reply.send(outcome);
     },
   );
 

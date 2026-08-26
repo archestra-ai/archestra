@@ -5,11 +5,13 @@ import {
   isPlaywrightCatalogItem,
   MCP_CATALOG_REAUTH_QUERY_PARAM,
   MCP_CATALOG_SERVER_QUERY_PARAM,
+  type McpDeploymentStatusEntry,
 } from "@archestra/shared";
-import { CheckCircle2, Route } from "lucide-react";
+import { CheckCircle2, Download, Route, Trash2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import {
   FilterBar,
@@ -31,11 +33,15 @@ import {
 import { SearchInput } from "@/components/search-input";
 import {
   TableCardGrid,
+  TableCardSelectionScope,
   TableCardView,
   TableCardViewContent,
   TableCardViewToggle,
 } from "@/components/table-card-view";
-import { Button } from "@/components/ui/button";
+import {
+  BulkActions,
+  type SelectAllMatching,
+} from "@/components/ui/bulk-actions-bar";
 import {
   Empty,
   EmptyDescription,
@@ -43,6 +49,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { PermissionButton } from "@/components/ui/permission-button";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useInitiateOAuth } from "@/lib/auth/oauth.query";
 import {
@@ -53,8 +60,11 @@ import {
   setOAuthState,
   setOAuthTeamId,
 } from "@/lib/auth/oauth-session";
+import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useFeature } from "@/lib/config/config.query";
 import { useEnvironments } from "@/lib/environment.query";
+import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
+import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDialogs } from "@/lib/hooks/use-dialog";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
@@ -64,6 +74,8 @@ import {
   useReinstallInternalMcpCatalogItem,
 } from "@/lib/mcp/internal-mcp-catalog.query";
 import {
+  type McpDeploymentFeedState,
+  useBulkUninstallMcpServers,
   useMcpDeploymentStatuses,
   useMcpInstallationStatusCacheSync,
   useMcpServers,
@@ -1275,141 +1287,39 @@ export function InternalMCPCatalog({
         ) : (
           <div className="space-y-6">
             {personalItems.length > 0 && (
-              <div className="space-y-3">
-                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-                  Personal
-                </h3>
-                <TableCardViewContent
-                  table={
-                    <McpServerTable
-                      items={personalItems}
-                      getServerInfo={getInstalledServerInfo}
-                      envLabelByCatalog={envLabelByCatalog}
-                      issuesByCatalog={issuesByCatalog}
-                      deploymentFeedState={deploymentFeedState}
-                      deploymentStatuses={deploymentStatuses}
-                      installingItemId={installingItemId}
-                      onInstall={handleTableInstall}
-                      onReinstall={handleReinstall}
-                      onCancelInstallation={install.cancelInstallation}
-                    />
-                  }
-                  cards={
-                    <TableCardGrid className={CARD_GRID_CLASS}>
-                      {personalItems.map((item) => {
-                        const serverInfo = getInstalledServerInfo(item);
-                        return (
-                          <McpServerCard
-                            variant={
-                              item.serverType === "builtin"
-                                ? "builtin"
-                                : item.serverType === "remote"
-                                  ? "remote"
-                                  : "local"
-                            }
-                            key={item.id}
-                            item={item}
-                            installedServer={serverInfo.installedServer}
-                            installingItemId={installingItemId}
-                            installationStatus={
-                              serverInfo.installedServer
-                                ?.localInstallationStatus || undefined
-                            }
-                            deploymentStatuses={deploymentStatuses}
-                            deploymentFeedState={deploymentFeedState}
-                            issues={issuesByCatalog.get(item.id)}
-                            onInstallRemoteServer={() =>
-                              install.installRemote(item)
-                            }
-                            onInstallLocalServer={() =>
-                              isPlaywrightCatalogItem(item.id)
-                                ? install.installPlaywright(item)
-                                : install.installLocal(item)
-                            }
-                            onReinstall={(flagged, options) =>
-                              handleReinstall(item, flagged, options)
-                            }
-                            onCancelInstallation={install.cancelInstallation}
-                            isBuiltInPlaywright={isPlaywrightCatalogItem(
-                              item.id,
-                            )}
-                          />
-                        );
-                      })}
-                    </TableCardGrid>
-                  }
-                />
-              </div>
+              <McpServerCatalogSection
+                title="Personal"
+                items={personalItems}
+                getServerInfo={getInstalledServerInfo}
+                envLabelByCatalog={envLabelByCatalog}
+                issuesByCatalog={issuesByCatalog}
+                deploymentFeedState={deploymentFeedState}
+                deploymentStatuses={deploymentStatuses}
+                installingItemId={installingItemId}
+                onInstall={handleTableInstall}
+                onReinstall={handleReinstall}
+                onCancelInstallation={install.cancelInstallation}
+                isBuiltInPlaywright={isPlaywrightCatalogItem}
+                showTitle
+              />
             )}
 
             {sharedItems.length > 0 ? (
-              <div className="space-y-3">
-                {personalItems.length > 0 && (
-                  <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-                    Shared
-                  </h3>
-                )}
-                <TableCardViewContent
-                  table={
-                    <McpServerTable
-                      items={sharedItems}
-                      getServerInfo={getInstalledServerInfo}
-                      envLabelByCatalog={envLabelByCatalog}
-                      issuesByCatalog={issuesByCatalog}
-                      deploymentFeedState={deploymentFeedState}
-                      deploymentStatuses={deploymentStatuses}
-                      installingItemId={installingItemId}
-                      onInstall={handleTableInstall}
-                      onReinstall={handleReinstall}
-                      onCancelInstallation={install.cancelInstallation}
-                    />
-                  }
-                  cards={
-                    <TableCardGrid className={CARD_GRID_CLASS}>
-                      {sharedItems.map((item) => {
-                        const serverInfo = getInstalledServerInfo(item);
-                        return (
-                          <McpServerCard
-                            variant={
-                              item.serverType === "builtin"
-                                ? "builtin"
-                                : item.serverType === "remote"
-                                  ? "remote"
-                                  : "local"
-                            }
-                            key={item.id}
-                            item={item}
-                            installedServer={serverInfo.installedServer}
-                            installingItemId={installingItemId}
-                            installationStatus={
-                              serverInfo.installedServer
-                                ?.localInstallationStatus || undefined
-                            }
-                            deploymentStatuses={deploymentStatuses}
-                            deploymentFeedState={deploymentFeedState}
-                            issues={issuesByCatalog.get(item.id)}
-                            onInstallRemoteServer={() =>
-                              install.installRemote(item)
-                            }
-                            onInstallLocalServer={() =>
-                              isPlaywrightCatalogItem(item.id)
-                                ? install.installPlaywright(item)
-                                : install.installLocal(item)
-                            }
-                            onReinstall={(flagged, options) =>
-                              handleReinstall(item, flagged, options)
-                            }
-                            onCancelInstallation={install.cancelInstallation}
-                            isBuiltInPlaywright={isPlaywrightCatalogItem(
-                              item.id,
-                            )}
-                          />
-                        );
-                      })}
-                    </TableCardGrid>
-                  }
-                />
-              </div>
+              <McpServerCatalogSection
+                title="Shared"
+                items={sharedItems}
+                getServerInfo={getInstalledServerInfo}
+                envLabelByCatalog={envLabelByCatalog}
+                issuesByCatalog={issuesByCatalog}
+                deploymentFeedState={deploymentFeedState}
+                deploymentStatuses={deploymentStatuses}
+                installingItemId={installingItemId}
+                onInstall={handleTableInstall}
+                onReinstall={handleReinstall}
+                onCancelInstallation={install.cancelInstallation}
+                isBuiltInPlaywright={isPlaywrightCatalogItem}
+                showTitle={personalItems.length > 0}
+              />
             ) : (
               personalItems.length === 0 && (
                 <EmptyState
@@ -1528,6 +1438,262 @@ export function InternalMCPCatalog({
   );
 }
 
+function McpServerCatalogSection({
+  title,
+  items,
+  getServerInfo,
+  envLabelByCatalog,
+  issuesByCatalog,
+  deploymentFeedState,
+  deploymentStatuses,
+  installingItemId,
+  onInstall,
+  onReinstall,
+  onCancelInstallation,
+  isBuiltInPlaywright,
+  showTitle,
+}: {
+  title: string;
+  items: CatalogItem[];
+  getServerInfo: (item: CatalogItem) => {
+    installedServer?: InstalledServer;
+    isInstallInProgress?: boolean;
+  };
+  envLabelByCatalog: Map<string, string | null>;
+  issuesByCatalog: Map<string, McpServerIssue[]>;
+  deploymentFeedState: McpDeploymentFeedState;
+  deploymentStatuses: Record<string, McpDeploymentStatusEntry>;
+  installingItemId: string | null;
+  onInstall: (item: CatalogItem) => void;
+  onReinstall: (
+    item: CatalogItem,
+    flaggedInstalls?: Array<{ id: string; name: string }>,
+    options?: { alsoReinstallCatalog?: boolean },
+  ) => void | Promise<void>;
+  onCancelInstallation: (serverId: string) => void;
+  isBuiltInPlaywright: (catalogId: string) => boolean;
+  showTitle: boolean;
+}) {
+  const canSelect = (item: CatalogItem) =>
+    installingItemId !== item.id && !getServerInfo(item).isInstallInProgress;
+  const {
+    rowSelection,
+    setRowSelection,
+    onPageRowIdsChange,
+    clearSelection,
+    selected,
+    selectAllMatching,
+  } = useBulkSelection({
+    rows: items,
+    getId: (item) => item.id,
+    canSelect,
+    filterSignature: `mcp-registry:${items.map((item) => item.id).join(",")}`,
+    matchDescription: "match the current filters",
+  });
+  const cardSelection = useBulkCardSelection({
+    rows: items,
+    getRowId: (item) => item.id,
+    rowSelection,
+    setRowSelection,
+    canSelect,
+  });
+
+  const selectedToInstall = selected.filter(
+    (item) => !getServerInfo(item).installedServer,
+  );
+  const selectedToUninstall = selected
+    .filter((item) => getServerInfo(item).installedServer)
+    .map((item) => ({
+      id: getServerInfo(item).installedServer?.id ?? item.id,
+      name: item.name,
+    }));
+
+  return (
+    <div className="space-y-3">
+      {showTitle && (
+        <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+          {title}
+        </h3>
+      )}
+      <McpServerBulkActions
+        selected={selected}
+        selectedToInstall={selectedToInstall}
+        selectedToUninstall={selectedToUninstall}
+        clearSelection={clearSelection}
+        selectAllMatching={selectAllMatching}
+        onInstall={onInstall}
+      />
+      <TableCardViewContent
+        table={
+          <McpServerTable
+            items={items}
+            getServerInfo={getServerInfo}
+            envLabelByCatalog={envLabelByCatalog}
+            issuesByCatalog={issuesByCatalog}
+            deploymentFeedState={deploymentFeedState}
+            deploymentStatuses={deploymentStatuses}
+            installingItemId={installingItemId}
+            onInstall={onInstall}
+            onReinstall={onReinstall}
+            onCancelInstallation={onCancelInstallation}
+            selection={{
+              rowSelection,
+              onRowSelectionChange: setRowSelection,
+              onPageRowIdsChange,
+            }}
+          />
+        }
+        cards={
+          <TableCardSelectionScope
+            rowIds={items.filter(canSelect).map((item) => item.id)}
+            onVisibleRowIdsChange={onPageRowIdsChange}
+          >
+            <TableCardGrid className={CARD_GRID_CLASS}>
+              {items.map((item) => {
+                const serverInfo = getServerInfo(item);
+                return (
+                  <McpServerCard
+                    variant={
+                      item.serverType === "builtin"
+                        ? "builtin"
+                        : item.serverType === "remote"
+                          ? "remote"
+                          : "local"
+                    }
+                    key={item.id}
+                    item={item}
+                    installedServer={serverInfo.installedServer}
+                    installingItemId={installingItemId}
+                    installationStatus={
+                      serverInfo.installedServer?.localInstallationStatus ||
+                      undefined
+                    }
+                    deploymentStatuses={deploymentStatuses}
+                    deploymentFeedState={deploymentFeedState}
+                    issues={issuesByCatalog.get(item.id)}
+                    onInstallRemoteServer={() => onInstall(item)}
+                    onInstallLocalServer={() => onInstall(item)}
+                    onReinstall={(flagged, options) =>
+                      onReinstall(item, flagged, options)
+                    }
+                    onCancelInstallation={onCancelInstallation}
+                    isBuiltInPlaywright={isBuiltInPlaywright(item.id)}
+                    selection={{
+                      ...cardSelection(item),
+                      disabled: !canSelect(item),
+                    }}
+                  />
+                );
+              })}
+            </TableCardGrid>
+          </TableCardSelectionScope>
+        }
+      />
+    </div>
+  );
+}
+
+function McpServerBulkActions({
+  selected,
+  selectedToInstall,
+  selectedToUninstall,
+  clearSelection,
+  selectAllMatching,
+  onInstall,
+}: {
+  selected: readonly CatalogItem[];
+  selectedToInstall: readonly CatalogItem[];
+  selectedToUninstall: Array<{ id: string; name: string }>;
+  clearSelection: () => void;
+  selectAllMatching: SelectAllMatching;
+  onInstall: (item: CatalogItem) => void;
+}) {
+  const [bulkUninstallOpen, setBulkUninstallOpen] = useState(false);
+  const bulkUninstall = useBulkUninstallMcpServers();
+
+  return (
+    <>
+      <BulkActions
+        count={selected.length}
+        noun="server"
+        onClear={clearSelection}
+        busy={bulkUninstall.isPending}
+        selectAllMatching={selectAllMatching}
+      >
+        <PermissionButton
+          permissions={{ mcpServerInstallation: ["create"] }}
+          variant="outline"
+          size="sm"
+          disabled={selectedToInstall.length !== 1}
+          tooltip={
+            selectedToInstall.length === 0
+              ? "Every selected server is already installed."
+              : selectedToInstall.length > 1
+                ? "Install servers one at a time so each configuration can be reviewed."
+                : undefined
+          }
+          onClick={() => {
+            const item = selectedToInstall[0];
+            if (!item) return;
+            onInstall(item);
+            clearSelection();
+          }}
+        >
+          <Download className="h-4 w-4" />
+          <span>
+            Install{countSuffix(selectedToInstall.length, selected.length)}
+          </span>
+        </PermissionButton>
+        <PermissionButton
+          permissions={{ mcpServerInstallation: ["delete"] }}
+          variant="destructive"
+          size="sm"
+          disabled={selectedToUninstall.length === 0}
+          tooltip={
+            selectedToUninstall.length === 0
+              ? "None of the selected servers are installed."
+              : undefined
+          }
+          onClick={() => setBulkUninstallOpen(true)}
+        >
+          <Trash2 className="h-4 w-4" />
+          <span>
+            Uninstall{countSuffix(selectedToUninstall.length, selected.length)}
+          </span>
+        </PermissionButton>
+      </BulkActions>
+
+      {bulkUninstallOpen && (
+        <DeleteConfirmDialog
+          open={bulkUninstallOpen}
+          onOpenChange={setBulkUninstallOpen}
+          title="Uninstall MCP servers"
+          description={`Uninstall ${selectedToUninstall.length} ${
+            selectedToUninstall.length === 1 ? "server" : "servers"
+          }? Agents using their tools lose access.`}
+          isPending={bulkUninstall.isPending}
+          onConfirm={() => {
+            bulkUninstall.mutate(selectedToUninstall, {
+              onSuccess: (outcome) => {
+                reportBulkOutcome({
+                  outcome,
+                  verb: "Uninstalled",
+                  failureVerb: "uninstall",
+                  noun: "server",
+                });
+                setBulkUninstallOpen(false);
+                if (outcome.failed.length === 0) clearSelection();
+              },
+            });
+          }}
+          confirmLabel="Uninstall servers"
+          pendingLabel="Uninstalling..."
+        />
+      )}
+    </>
+  );
+}
+
 /**
  * The start of the oldest issue on an item, or null when none of them records
  * one. Only re-authentication failures carry a timestamp today.
@@ -1592,3 +1758,7 @@ function McpCatalogLabelKeyRow({
  */
 const CARD_GRID_CLASS =
   "grid-cols-[repeat(auto-fill,minmax(19rem,1fr))] lg:grid-cols-[repeat(auto-fill,minmax(19rem,1fr))] 2xl:grid-cols-[repeat(auto-fill,minmax(19rem,1fr))]";
+
+function countSuffix(applicable: number, selected: number): string {
+  return applicable > 0 && applicable < selected ? ` (${applicable})` : "";
+}

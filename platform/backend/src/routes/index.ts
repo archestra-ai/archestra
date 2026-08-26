@@ -79,6 +79,7 @@ export { default as zhipuaiProxyRoutes } from "./proxy/routes/zhipuai";
 export { default as scheduleTriggerRoutes } from "./schedule-trigger";
 export { default as secretsRoutes } from "./secrets";
 export { default as serviceAccountRoutes } from "./service-account";
+export { default as sessionRoutes } from "./session/session.routes";
 export { default as siteNotificationRoutes } from "./site-notification";
 export { default as externalMcpSkillRoutes } from "./skill/external-mcp-skill.routes";
 export { default as skillRoutes } from "./skill/skill.routes";

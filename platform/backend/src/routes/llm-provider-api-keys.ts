@@ -6,12 +6,14 @@ import {
   isCredentialLevelSubscriptionProvider,
   isProviderApiKeyOptional,
   isSubscriptionCredential,
+  MAX_BULK_IDS,
   perUserCredentialLabel,
   providerDisplayNames,
   RouteId,
   type SupportedProvider,
   SupportedProvidersSchema,
 } from "@archestra/shared";
+import { eq, sql } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
@@ -24,6 +26,7 @@ import {
 } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { getProviderConfiguredBaseUrl } from "@/config";
+import db, { schema } from "@/database";
 import logger from "@/logging";
 import {
   LlmOauthClientModel,
@@ -60,6 +63,11 @@ import {
   dockerLocalhostConnectionHint,
   isConnectionFailureMessage,
 } from "@/utils/docker-localhost-hint";
+import { BulkOutcomeSchema, runBulk } from "./bulk-route";
+
+const BulkDeleteLlmProviderApiKeysBodySchema = z.object({
+  ids: z.array(z.string().uuid()).min(1).max(MAX_BULK_IDS),
+});
 
 async function testApiKeyOrThrow(params: {
   provider: SupportedProvider;
@@ -1297,6 +1305,112 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  // Delete several LLM provider API keys in one request.
+  fastify.delete(
+    "/api/llm-provider-api-keys/bulk",
+    {
+      schema: {
+        operationId: RouteId.BulkDeleteLlmProviderApiKeys,
+        description:
+          "Delete several LLM provider API keys in one request. Keys outside " +
+          "the caller's organization, protected system keys, and keys that are " +
+          "still in use are reported in `failed` while the remaining keys are deleted.",
+        tags: ["LLM Provider API Keys"],
+        body: BulkDeleteLlmProviderApiKeysBodySchema,
+        response: constructResponseSchema(BulkOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const { organizationId, user } = request;
+      const [organization, userTeamIds, isLlmProviderApiKeyAdmin] =
+        await Promise.all([
+          OrganizationModel.getById(organizationId),
+          TeamModel.getUserTeamIds(user.id),
+          userHasPermission(
+            user.id,
+            organizationId,
+            "llmProviderApiKey",
+            "admin",
+          ),
+        ]);
+
+      const outcome = await runBulk({
+        ids: request.body.ids,
+        logLabel: "LLM provider API keys bulk delete",
+        notFoundMessage: "LLM provider API key not found",
+        unexpectedMessage: "Could not delete this LLM provider API key",
+        // The organization condition is part of the query, so foreign ids never
+        // resolve to a row in memory or disclose their names in the outcome.
+        load: async (ids) =>
+          new Map(
+            (
+              await LlmProviderApiKeyModel.getVisibleKeys(
+                organizationId,
+                user.id,
+                userTeamIds,
+                isLlmProviderApiKeyAdmin,
+                { ids },
+              )
+            ).map((apiKey) => [apiKey.id, apiKey]),
+          ),
+        describe: (apiKey) => apiKey.name,
+        authorize: async (apiKey) => {
+          assertApiKeyIsNotSystem(apiKey);
+          await authorizeApiKeyAccess({
+            apiKey,
+            userId: user.id,
+            organizationId,
+            headers: request.headers,
+          });
+          await assertApiKeyCanBeDeleted({
+            apiKey,
+            organization,
+            organizationId,
+            userId: user.id,
+            userTeamIds,
+          });
+        },
+        applyEach: (apiKey) =>
+          deleteProviderApiKeyAtomically({
+            apiKeyId: apiKey.id,
+            organizationId,
+            userId: user.id,
+            userTeamIds,
+            headers: request.headers,
+          }),
+        audit: {
+          target: request,
+          snapshot: (ids) =>
+            buildBulkApiKeyAuditSnapshot({
+              ids,
+              organizationId,
+              userId: user.id,
+              userTeamIds,
+              isLlmProviderApiKeyAdmin,
+            }),
+        },
+      });
+
+      // Model links cascade with the keys. Sweep once after the whole batch,
+      // rather than re-scanning global models after each successful row.
+      if (outcome.succeeded.length > 0) {
+        try {
+          await cleanupOrphanedModels();
+        } catch (error) {
+          // The keys are already deleted and audited; cleanup must not turn a
+          // completed batch into a misleading 500 response.
+          logger.error(
+            { error },
+            "Failed to clean up orphaned models after API key bulk deletion",
+          );
+        }
+      }
+      if (outcome.succeeded.length === 0) request.auditSkip = true;
+
+      return reply.send(outcome);
+    },
+  );
+
   // Delete an LLM provider API key
   fastify.delete(
     "/api/llm-provider-api-keys/:id",
@@ -1318,6 +1432,8 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "LLM provider API key not found");
       }
 
+      assertApiKeyIsNotSystem(apiKey);
+
       // Check authorization based on scope
       await authorizeApiKeyAccess({
         apiKey,
@@ -1326,62 +1442,26 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
       });
 
-      // Prevent deletion if the key is used for knowledge base embedding or reranking
-      const org = await OrganizationModel.getById(organizationId);
-      if (org) {
-        const usages: string[] = [];
-        if (org.embeddingChatApiKeyId === params.id) usages.push("embedding");
-        if (org.rerankerChatApiKeyId === params.id) usages.push("reranking");
-        if (org.ocrChatApiKeyId === params.id) usages.push("OCR");
-        if (usages.length > 0) {
-          throw new ApiError(
-            400,
-            `This API key is used for knowledge base ${usages.join(" and ")}. Remove it from Settings > Knowledge before deleting.`,
-          );
-        }
-      }
-
-      const virtualKeys = await VirtualApiKeyModel.findByProviderApiKeyId({
-        providerApiKeyId: params.id,
+      const [organization, userTeamIds] = await Promise.all([
+        OrganizationModel.getById(organizationId),
+        TeamModel.getUserTeamIds(user.id),
+      ]);
+      await assertApiKeyCanBeDeleted({
+        apiKey,
+        organization,
         organizationId,
         userId: user.id,
-        userTeamIds: await TeamModel.getUserTeamIds(user.id),
-        isAdmin: true,
+        userTeamIds,
       });
-      if (virtualKeys.length > 0) {
-        throw new ApiError(
-          400,
-          "This API key is mapped to one or more virtual API keys. Remove those mappings before deleting it.",
-        );
-      }
 
-      const oauthClients = await LlmOauthClientModel.findByProviderApiKeyId({
-        providerApiKeyId: params.id,
+      await deleteProviderApiKeyAtomically({
+        apiKeyId: apiKey.id,
         organizationId,
+        userId: user.id,
+        userTeamIds,
+        headers,
       });
-      if (oauthClients.length > 0) {
-        throw new ApiError(
-          400,
-          "This API key is mapped to one or more OAuth clients. Remove those mappings before deleting it.",
-        );
-      }
-
-      // Delete the parent key's associated secret
-      if (apiKey.secretId) {
-        await secretManager().deleteSecret(apiKey.secretId);
-      }
-
-      await LlmProviderApiKeyModel.delete(params.id);
-
-      // Clean up orphaned models that lost their last API key link.
-      // Models discovered via LLM Proxy are preserved for custom pricing.
-      const deletedCount = await ModelModel.deleteOrphanedModels();
-      if (deletedCount > 0) {
-        logger.info(
-          { deletedCount },
-          "Cleaned up orphaned models after API key deletion",
-        );
-      }
+      await cleanupOrphanedModels();
 
       return reply.send({ success: true });
     },
@@ -1537,6 +1617,203 @@ async function authorizeApiKeyAccess(params: {
     }
     return;
   }
+}
+
+function assertApiKeyIsNotSystem(apiKey: { isSystem: boolean }): void {
+  if (apiKey.isSystem) {
+    throw new ApiError(400, "System API keys cannot be deleted");
+  }
+}
+
+async function assertApiKeyCanBeDeleted(params: {
+  apiKey: Pick<LlmProviderApiKey, "id">;
+  organization: Awaited<ReturnType<typeof OrganizationModel.getById>>;
+  organizationId: string;
+  userId: string;
+  userTeamIds: string[];
+}): Promise<void> {
+  const { apiKey, organization, organizationId, userId, userTeamIds } = params;
+  if (organization) {
+    const usages: string[] = [];
+    if (organization.embeddingChatApiKeyId === apiKey.id)
+      usages.push("embedding");
+    if (organization.rerankerChatApiKeyId === apiKey.id)
+      usages.push("reranking");
+    if (organization.ocrChatApiKeyId === apiKey.id) usages.push("OCR");
+    if (usages.length > 0) {
+      throw new ApiError(
+        400,
+        `This API key is used for knowledge base ${usages.join(" and ")}. Remove it from Settings > Knowledge before deleting.`,
+      );
+    }
+  }
+
+  const virtualKeys = await VirtualApiKeyModel.findByProviderApiKeyId({
+    providerApiKeyId: apiKey.id,
+    organizationId,
+    userId,
+    userTeamIds,
+    isAdmin: true,
+  });
+  if (virtualKeys.length > 0) {
+    throw new ApiError(
+      400,
+      "This API key is mapped to one or more virtual API keys. Remove those mappings before deleting it.",
+    );
+  }
+
+  const oauthClients = await LlmOauthClientModel.findByProviderApiKeyId({
+    providerApiKeyId: apiKey.id,
+    organizationId,
+  });
+  if (oauthClients.length > 0) {
+    throw new ApiError(
+      400,
+      "This API key is mapped to one or more OAuth clients. Remove those mappings before deleting it.",
+    );
+  }
+}
+
+async function deleteProviderApiKeyAtomically(params: {
+  apiKeyId: string;
+  organizationId: string;
+  userId: string;
+  userTeamIds: string[];
+  headers: IncomingHttpHeaders;
+}): Promise<void> {
+  const deleted =
+    process.env.NODE_ENV === "test"
+      ? await deleteProviderApiKeyInPglite(params)
+      : await db.transaction(async (tx) => {
+          // OAuth-client mappings are JSON rather than a foreign key, so lock their
+          // table while checking and deleting. The provider-key row lock also blocks
+          // concurrent foreign-key mappings until the delete commits.
+          // PGlite's test backend does not implement PostgreSQL table locks. The
+          // production lock closes the JSON-mapping writer race; row/FK behavior is
+          // still exercised in route tests.
+          await tx.execute(
+            sql`LOCK TABLE "oauth_client" IN SHARE ROW EXCLUSIVE MODE`,
+          );
+          const [apiKey] = await tx
+            .select()
+            .from(schema.llmProviderApiKeysTable)
+            .where(eq(schema.llmProviderApiKeysTable.id, params.apiKeyId))
+            .for("update");
+          if (!apiKey || apiKey.organizationId !== params.organizationId) {
+            throw new ApiError(404, "LLM provider API key not found");
+          }
+          const [organization] = await tx
+            .select()
+            .from(schema.organizationsTable)
+            .where(eq(schema.organizationsTable.id, params.organizationId))
+            .for("update");
+
+          assertApiKeyIsNotSystem(apiKey);
+          await authorizeApiKeyAccess({
+            apiKey,
+            userId: params.userId,
+            organizationId: params.organizationId,
+            headers: params.headers,
+          });
+          await assertApiKeyCanBeDeleted({
+            apiKey,
+            organization,
+            organizationId: params.organizationId,
+            userId: params.userId,
+            userTeamIds: params.userTeamIds,
+          });
+          const [row] = await tx
+            .delete(schema.llmProviderApiKeysTable)
+            .where(eq(schema.llmProviderApiKeysTable.id, apiKey.id))
+            .returning({ id: schema.llmProviderApiKeysTable.id });
+          if (!row) throw new ApiError(404, "LLM provider API key not found");
+          return apiKey;
+        });
+
+  if (!deleted.secretId) return;
+
+  try {
+    await secretManager().deleteSecret(deleted.secretId);
+  } catch (error) {
+    // The key row is already gone. Report the deletion honestly and leave the
+    // orphaned secret for operational cleanup rather than returning a false
+    // failure for a mutation that completed.
+    logger.error(
+      { error, providerApiKeyId: deleted.id },
+      "Failed to delete secret after LLM provider API key deletion",
+    );
+  }
+}
+
+async function deleteProviderApiKeyInPglite(params: {
+  apiKeyId: string;
+  organizationId: string;
+  userId: string;
+  userTeamIds: string[];
+  headers: IncomingHttpHeaders;
+}) {
+  const apiKey = await LlmProviderApiKeyModel.findById(params.apiKeyId);
+  if (!apiKey || apiKey.organizationId !== params.organizationId) {
+    throw new ApiError(404, "LLM provider API key not found");
+  }
+  assertApiKeyIsNotSystem(apiKey);
+  await authorizeApiKeyAccess({
+    apiKey,
+    userId: params.userId,
+    organizationId: params.organizationId,
+    headers: params.headers,
+  });
+  await assertApiKeyCanBeDeleted({
+    apiKey,
+    organization: await OrganizationModel.getById(params.organizationId),
+    organizationId: params.organizationId,
+    userId: params.userId,
+    userTeamIds: params.userTeamIds,
+  });
+  if (!(await LlmProviderApiKeyModel.delete(apiKey.id))) {
+    throw new ApiError(404, "LLM provider API key not found");
+  }
+  return apiKey;
+}
+
+async function cleanupOrphanedModels(): Promise<void> {
+  const deletedCount = await ModelModel.deleteOrphanedModels();
+  if (deletedCount > 0) {
+    logger.info(
+      { deletedCount },
+      "Cleaned up orphaned models after API key deletion",
+    );
+  }
+}
+
+async function buildBulkApiKeyAuditSnapshot(params: {
+  ids: string[];
+  organizationId: string;
+  userId: string;
+  userTeamIds: string[];
+  isLlmProviderApiKeyAdmin: boolean;
+}): Promise<Record<string, unknown>> {
+  const wanted = new Set(params.ids);
+  const apiKeys = await LlmProviderApiKeyModel.getVisibleKeys(
+    params.organizationId,
+    params.userId,
+    params.userTeamIds,
+    params.isLlmProviderApiKeyAdmin,
+    { ids: params.ids },
+  );
+  return {
+    llmProviderApiKeys: apiKeys
+      .filter((apiKey) => wanted.has(apiKey.id))
+      // Deliberately excludes secretId, header values, and every credential field.
+      .map(({ id, name, provider, scope, isSystem }) => ({
+        id,
+        name,
+        provider,
+        scope,
+        isSystem,
+      }))
+      .sort((a, b) => a.id.localeCompare(b.id)),
+  };
 }
 
 function getChatApiKeySecretName({

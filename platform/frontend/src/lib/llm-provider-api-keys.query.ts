@@ -7,6 +7,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { toBulkOutcome } from "@/lib/bulk-action";
 import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
 
@@ -47,6 +48,7 @@ type AvailableLlmProviderApiKeysParams =
 
 const {
   createLlmProviderApiKey,
+  bulkDeleteLlmProviderApiKeys,
   deleteLlmProviderApiKey,
   getAvailableLlmProviderApiKeys,
   getLlmProviderApiKey,
@@ -283,6 +285,32 @@ export function useDeleteLlmProviderApiKey() {
         return;
       }
       toast.success("API key deleted successfully");
+      queryClient.invalidateQueries({ queryKey: ["llm-provider-api-keys"] });
+      queryClient.invalidateQueries({
+        queryKey: ["available-llm-provider-api-keys"],
+      });
+      queryClient.invalidateQueries({ queryKey: ["llm-models"] });
+      queryClient.invalidateQueries({ queryKey: ["models-with-api-keys"] });
+    },
+  });
+}
+
+/**
+ * Deletes a selection in one request so dependent or protected keys can report
+ * partial failures without issuing a client-side delete fan-out.
+ */
+export function useBulkDeleteLlmProviderApiKeys() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (keys: readonly { id: string }[]) => {
+      const { data, error } = await bulkDeleteLlmProviderApiKeys({
+        body: { ids: keys.map((key) => key.id) },
+      });
+      throwOnApiError(error);
+      return toBulkOutcome(data ?? { succeeded: [], failed: [] });
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["llm-provider-api-keys"] });
       queryClient.invalidateQueries({
         queryKey: ["available-llm-provider-api-keys"],

@@ -51,6 +51,8 @@ import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { BulkActions } from "@/components/ui/bulk-actions-bar";
+import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import {
@@ -59,6 +61,7 @@ import {
   DialogStickyFooter,
 } from "@/components/ui/dialog";
 import { InlineTag } from "@/components/ui/inline-tag";
+import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Select,
   SelectContent,
@@ -74,13 +77,16 @@ import {
 } from "@/components/ui/tooltip";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useLlmOauthClients } from "@/lib/llm-oauth-clients.query";
 import {
+  useBulkDeleteLlmProviderApiKeys,
   useDeleteLlmProviderApiKey,
   useLlmProviderApiKey,
   useLlmProviderApiKeys,
@@ -112,6 +118,16 @@ type ModelProviderRow =
       credential: LlmProviderApiKeyResponse | null;
       defaultValues: Partial<LlmProviderApiKeyFormValues>;
     };
+
+function persistedCredentialForRow(
+  row: ModelProviderRow,
+): LlmProviderApiKeyResponse | null {
+  return row.kind === "credential" ? row : row.credential;
+}
+
+function modelProviderRowId(row: ModelProviderRow): string {
+  return persistedCredentialForRow(row)?.id ?? row.id;
+}
 
 const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   name: "",
@@ -183,6 +199,7 @@ export default function ApiKeysPage() {
   const currentUserId = useSession()?.data?.user?.id;
   const updateMutation = useUpdateLlmProviderApiKey();
   const deleteMutation = useDeleteLlmProviderApiKey();
+  const bulkDeleteMutation = useBulkDeleteLlmProviderApiKeys();
   const byosEnabled = useFeature("byosEnabled");
   const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
   const anthropicWifEnabled = useFeature("anthropicWifEnabled");
@@ -194,6 +211,7 @@ export default function ApiKeysPage() {
     { kind: "subscription" }
   > | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false);
   const [selectedApiKey, setSelectedApiKey] =
     useState<LlmProviderApiKeyResponse | null>(null);
 
@@ -234,6 +252,7 @@ export default function ApiKeysPage() {
       if (organization.embeddingChatApiKeyId === keyId)
         usages.push("embedding");
       if (organization.rerankerChatApiKeyId === keyId) usages.push("reranking");
+      if (organization.ocrChatApiKeyId === keyId) usages.push("OCR");
       return usages.length > 0
         ? `Used for knowledge base ${usages.join(" and ")}`
         : null;
@@ -451,8 +470,60 @@ export default function ApiKeysPage() {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [allApiKeys, providerCatalog]);
 
+  const {
+    rowSelection,
+    setRowSelection,
+    onPageRowIdsChange,
+    clearSelection,
+    selected,
+    selectAllMatching,
+  } = useBulkSelection({
+    rows,
+    getId: modelProviderRowId,
+    canSelect: (row) => {
+      const credential = persistedCredentialForRow(row);
+      return (
+        credential !== null &&
+        !credential.isSystem &&
+        getKeyUsage(credential.id) === null
+      );
+    },
+    filterSignature: `${search}\u0000${providerFilter}`,
+    matchDescription:
+      search || providerFilter !== "all"
+        ? "match the current filters"
+        : "are configured",
+  });
+  const selectedApiKeys = selected.flatMap((row) => {
+    const credential = persistedCredentialForRow(row);
+    return credential ? [credential] : [];
+  });
+
   const columns: ColumnDef<ModelProviderRow>[] = useMemo(
     () => [
+      createSelectColumn<ModelProviderRow>({
+        rowLabel: (row) => `Select ${row.name}`,
+        allLabel: "Select all deletable credentials on this page",
+        canSelect: (row) => {
+          const credential = persistedCredentialForRow(row);
+          return (
+            credential !== null &&
+            !credential.isSystem &&
+            getKeyUsage(credential.id) === null
+          );
+        },
+        disabledReason: (row) => {
+          const credential = persistedCredentialForRow(row);
+          if (!credential) {
+            return "Connect this subscription before it can be deleted";
+          }
+          if (credential.isSystem) return "System keys cannot be deleted";
+          const usage = getKeyUsage(credential.id);
+          return usage
+            ? `${usage}. Remove it from Settings > Knowledge before deleting.`
+            : "Unavailable for bulk actions";
+        },
+      }),
       {
         accessorKey: "name",
         header: "Name",
@@ -770,10 +841,30 @@ export default function ApiKeysPage() {
           )}
 
         <div data-testid={E2eTestId.ChatApiKeysTable}>
+          <BulkActions
+            count={selectedApiKeys.length}
+            noun="API key"
+            onClear={clearSelection}
+            busy={bulkDeleteMutation.isPending}
+            selectAllMatching={selectAllMatching}
+          >
+            <PermissionButton
+              permissions={{ llmProviderApiKey: ["delete"] }}
+              variant="destructive"
+              size="sm"
+              onClick={() => setIsBulkDeleteDialogOpen(true)}
+            >
+              <Trash2 className="h-4 w-4" />
+              <span>Delete</span>
+            </PermissionButton>
+          </BulkActions>
           <DataTable
             columns={columns}
             data={rows}
-            getRowId={(row) => row.id}
+            getRowId={modelProviderRowId}
+            rowSelection={rowSelection}
+            onRowSelectionChange={setRowSelection}
+            onPageRowIdsChange={onPageRowIdsChange}
             hideSelectedCount
             isLoading={permissionsPending || isFetching}
             emptyIcon={Boxes}
@@ -885,6 +976,31 @@ export default function ApiKeysPage() {
             (blockingOauthClientsData?.pagination.total ?? 0) > 0
           }
           confirmLabel="Delete API Key"
+          pendingLabel="Deleting..."
+        />
+        <DeleteConfirmDialog
+          open={isBulkDeleteDialogOpen}
+          onOpenChange={setIsBulkDeleteDialogOpen}
+          title="Delete API keys"
+          description={`Delete ${selectedApiKeys.length} ${
+            selectedApiKeys.length === 1 ? "API key" : "API keys"
+          }? This cannot be undone.`}
+          isPending={bulkDeleteMutation.isPending}
+          onConfirm={() => {
+            bulkDeleteMutation.mutate(selectedApiKeys, {
+              onSuccess: (outcome) => {
+                reportBulkOutcome({
+                  outcome,
+                  verb: "Deleted",
+                  failureVerb: "delete",
+                  noun: "API key",
+                });
+                setIsBulkDeleteDialogOpen(false);
+                if (outcome.failed.length === 0) clearSelection();
+              },
+            });
+          }}
+          confirmLabel="Delete API keys"
           pendingLabel="Deleting..."
         />
       </div>

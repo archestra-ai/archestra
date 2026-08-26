@@ -1,7 +1,6 @@
 "use client";
 
 import { E2eTestId, getRoleDisplayName } from "@archestra/shared";
-import { useMutation } from "@tanstack/react-query";
 import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -34,7 +33,7 @@ import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -50,9 +49,10 @@ import {
 } from "@/components/ui/select";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import { reportBulkOutcome, runBulkAction } from "@/lib/bulk-action";
+import { type BulkOutcome, reportBulkOutcome } from "@/lib/bulk-action";
 import { copyToClipboard } from "@/lib/clipboard";
 import { useDisableInvitations } from "@/lib/config/config.query";
+import { useControlledRowSelection } from "@/lib/hooks/use-bulk-selection";
 import {
   useCanImpersonate,
   useImpersonateUser,
@@ -62,6 +62,7 @@ import {
   type Invitation,
   type Member,
   useAllMatchingMembers,
+  useBulkDeleteMembers,
   useCancelInvitationMutation,
   useInvitationsPaginated,
   useMembersPaginated,
@@ -307,6 +308,7 @@ function MembersTab({
   });
 
   const updateMemberRole = useUpdateMemberRole();
+  const bulkDeleteMembers = useBulkDeleteMembers();
   const removeMember = useRemoveMember();
   const { data: signupStatus } = useMemberSignupStatus();
   const pendingSignupMembers = signupStatus?.pendingSignupMembers ?? [];
@@ -384,6 +386,16 @@ function MembersTab({
   const filterSignature = JSON.stringify({ nameFilter, roleFilter });
   const [escalatedFor, setEscalatedFor] = useState<string | null>(null);
   const allMatchingSelected = escalatedFor === filterSignature;
+  const { effectiveRowSelection, onRowSelectionChange } =
+    useControlledRowSelection({
+      rowSelection,
+      setRowSelection,
+      rows: members,
+      getRowId: (row) => row.id,
+      allMatchingSelected,
+      clearEscalation: () => setEscalatedFor(null),
+      canSelect: (row) => !isSelf(row),
+    });
   const { data: allMatchingMembers, isFetching: isFetchingAllMatching } =
     useAllMatchingMembers(
       { name: nameFilter || undefined, role: roleFilter || undefined },
@@ -391,29 +403,16 @@ function MembersTab({
     );
 
   const pageSelection = members.filter(
-    (row) => !isSelf(row) && rowSelection[row.id],
+    (row) => !isSelf(row) && effectiveRowSelection[row.id],
   );
   const selectedMembers =
     allMatchingSelected && allMatchingMembers
       ? allMatchingMembers.filter((row) => !isSelf(row))
       : pageSelection;
 
-  // Two removal routes behind one action: an accepted member leaves the
-  // organization, a pending one has their invitation withdrawn.
-  const bulkRemove = useMutation({
-    mutationFn: async (selection: readonly Member[]) =>
-      runBulkAction({
-        items: selection,
-        describe: (row) => row.email,
-        run: async (row) => {
-          if (pendingSignupFor(row)) {
-            await deletePendingSignupMember.mutateAsync(row.userId);
-            return;
-          }
-          await removeMember.mutateAsync(row.id);
-        },
-      }),
-  });
+  const selectableTotal = allMatchingMembers
+    ? allMatchingMembers.filter((row) => !isSelf(row)).length
+    : Math.max(0, (pagination?.total ?? 0) - (members.some(isSelf) ? 1 : 0));
 
   const columns: ColumnDef<Member>[] = [
     createSelectColumn<Member>({
@@ -622,24 +621,24 @@ function MembersTab({
       </FilterBar>
 
       <LoadingWrapper isPending={isPending} loadingFallback={<LoadingState />}>
-        <BulkActionsBar
+        <BulkActions
           count={selectedMembers.length}
           noun="user"
           onClear={clearSelection}
-          busy={bulkRemove.isPending || isFetchingAllMatching}
+          busy={bulkDeleteMembers.isPending || isFetchingAllMatching}
           selectAllMatching={{
-            total: pagination?.total ?? 0,
+            total: selectableTotal,
             pageFullySelected:
               members.length > 0 &&
-              pageSelection.length ===
-                members.filter((row) => !isSelf(row)).length,
+              members
+                .filter((row) => !isSelf(row))
+                .every((row) => effectiveRowSelection[row.id]),
             active: allMatchingSelected,
             onSelectAll: () => setEscalatedFor(filterSignature),
             matchDescription: nameFilter
               ? "match this search query"
               : "match the current filters",
           }}
-          className="mb-3"
         >
           <PermissionButton
             permissions={{ member: ["delete"] }}
@@ -650,13 +649,13 @@ function MembersTab({
             <Trash2 className="h-4 w-4" />
             <span>Remove</span>
           </PermissionButton>
-        </BulkActionsBar>
+        </BulkActions>
 
         <DataTable
           columns={columns}
           data={members}
-          rowSelection={rowSelection}
-          onRowSelectionChange={setRowSelection}
+          rowSelection={effectiveRowSelection}
+          onRowSelectionChange={onRowSelectionChange}
           hideSelectedCount
           manualPagination
           getRowId={(row) => row.id}
@@ -703,20 +702,35 @@ function MembersTab({
           description={`Remove ${selectedMembers.length} ${
             selectedMembers.length === 1 ? "user" : "users"
           } from the organization? Pending invitations are withdrawn; accepted members lose access.`}
-          isPending={bulkRemove.isPending}
+          isPending={bulkDeleteMembers.isPending}
           onConfirm={() => {
-            bulkRemove.mutate(selectedMembers, {
-              onSuccess: (outcome) => {
-                reportBulkOutcome({
-                  outcome,
-                  verb: "Removed",
-                  failureVerb: "remove",
-                  noun: "user",
-                });
-                setBulkRemoveOpen(false);
-                if (outcome.failed.length === 0) clearSelection();
+            const labels = new Map(
+              selectedMembers.map((member) => [
+                pendingSignupFor(member)
+                  ? `pendingSignup:${member.userId}`
+                  : `member:${member.id}`,
+                member.email,
+              ]),
+            );
+            bulkDeleteMembers.mutate(
+              selectedMembers.map((member) =>
+                pendingSignupFor(member)
+                  ? { kind: "pendingSignup" as const, id: member.userId }
+                  : { kind: "member" as const, id: member.id },
+              ),
+              {
+                onSuccess: (outcome) => {
+                  reportBulkOutcome({
+                    outcome: toBulkOutcome(outcome, labels),
+                    verb: "Removed",
+                    failureVerb: "remove",
+                    noun: "user",
+                  });
+                  setBulkRemoveOpen(false);
+                  if (outcome.failed.length === 0) clearSelection();
+                },
               },
-            });
+            );
           }}
           confirmLabel="Remove users"
           pendingLabel="Removing..."
@@ -1028,6 +1042,24 @@ function InvitationsTab({
 // ===
 // Helpers
 // ===
+
+function toBulkOutcome(
+  outcome: {
+    succeeded: Array<{ kind: string; id: string }>;
+    failed: Array<{ kind: string; id: string; error: string }>;
+  },
+  labels: ReadonlyMap<string, string>,
+): BulkOutcome {
+  const labelFor = (target: { kind: string; id: string }) =>
+    labels.get(`${target.kind}:${target.id}`) ?? "Unknown";
+  return {
+    succeeded: outcome.succeeded.map(labelFor),
+    failed: outcome.failed.map((target) => ({
+      label: labelFor(target),
+      error: target.error,
+    })),
+  };
+}
 
 function getInitials(name: string): string {
   return name

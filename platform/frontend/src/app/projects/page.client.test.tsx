@@ -10,6 +10,8 @@ const mockRouterPush = vi.fn();
 const mockDeleteMutateAsync = vi.fn();
 const mockUpdateMutateAsync = vi.fn();
 const mockSetShareMutateAsync = vi.fn();
+const mockBulkDeleteMutate = vi.fn();
+const mockBulkUpdateVisibilityMutateAsync = vi.fn();
 /** The detail the edit dialog loads; tests override the pin and sharing. */
 let mockEditingProject: Record<string, unknown> = {};
 const mockPinMutate = vi.fn();
@@ -132,8 +134,45 @@ vi.mock("@/components/agent-icon-picker", () => ({
 }));
 
 vi.mock("@/components/delete-confirm-dialog", () => ({
-  DeleteConfirmDialog: ({ open, title }: { open: boolean; title: string }) =>
-    open ? <div>{title}</div> : null,
+  DeleteConfirmDialog: ({
+    open,
+    title,
+    onConfirm,
+  }: {
+    open: boolean;
+    title: string;
+    onConfirm: () => void;
+  }) =>
+    open ? (
+      <div>
+        {title}
+        <button type="button" onClick={onConfirm}>
+          Confirm
+        </button>
+      </div>
+    ) : null,
+}));
+
+vi.mock("@/components/bulk-visibility-dialog", () => ({
+  BulkVisibilityDialog: ({
+    open,
+    onApply,
+  }: {
+    open: boolean;
+    onApply: (change: {
+      scope: "personal";
+      teamIds: string[];
+      userIds: string[];
+    }) => void;
+  }) =>
+    open ? (
+      <button
+        type="button"
+        onClick={() => onApply({ scope: "personal", teamIds: [], userIds: [] })}
+      >
+        Apply sharing
+      </button>
+    ) : null,
 }));
 
 vi.mock("@/components/standard-dialog", () => ({
@@ -248,11 +287,12 @@ vi.mock("@/lib/projects/projects.query", () => ({
     mutateAsync: mockDeleteMutateAsync,
     isPending: false,
   }),
-  // The table view's bulk bar reaches for this; the tests below only drive the
-  // view toggle, so an inert mutation is enough.
-  useBulkDeleteProjects: () => ({ mutate: vi.fn(), isPending: false }),
+  useBulkDeleteProjects: () => ({
+    mutate: mockBulkDeleteMutate,
+    isPending: false,
+  }),
   useBulkUpdateProjectVisibility: () => ({
-    mutateAsync: vi.fn(),
+    mutateAsync: mockBulkUpdateVisibilityMutateAsync,
     isPending: false,
   }),
   useUpdateProject: () => ({
@@ -316,6 +356,10 @@ describe("ProjectsPageClient", () => {
     mockDeleteMutateAsync.mockResolvedValue(true);
     mockUpdateMutateAsync.mockResolvedValue(true);
     mockSetShareMutateAsync.mockResolvedValue(true);
+    mockBulkUpdateVisibilityMutateAsync.mockResolvedValue({
+      succeeded: ["Project"],
+      failed: [],
+    });
     mockEditingProject = {
       id: "owner",
       name: "Owner project",
@@ -370,7 +414,7 @@ describe("ProjectsPageClient", () => {
 
     expect(screen.getByText("Pin")).toBeInTheDocument();
     expect(screen.getByText("Edit details")).toBeInTheDocument();
-    expect(screen.getByText("Delete")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
     expect(screen.queryByText("Unpin")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByText("Pin"));
@@ -384,7 +428,7 @@ describe("ProjectsPageClient", () => {
       screen.getByRole("heading", { name: "Edit project" }),
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText("Delete"));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(screen.getByText("Delete Owner project?")).toBeInTheDocument();
   });
 
@@ -677,6 +721,52 @@ describe("ProjectsPageClient", () => {
       id: "pinned-owner",
       pinned: false,
     });
+  });
+
+  it("shows card bulk actions and targets the selected project", async () => {
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data:
+            permissions.project?.includes("update") === true ||
+            permissions.project?.includes("delete") === true,
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    mockProjects = [
+      makeProject({ id: "first", name: "First project" }),
+      makeProject({ id: "second", name: "Second project" }),
+    ];
+
+    render(<ProjectsPageClient />);
+
+    expect(screen.queryByText("1 project selected")).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Select First project" }),
+    );
+
+    expect(screen.getAllByText("1 project selected")).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "Edit sharing" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply sharing" }));
+
+    await waitFor(() =>
+      expect(mockBulkUpdateVisibilityMutateAsync).toHaveBeenCalledWith({
+        projects: [expect.objectContaining({ id: "first" })],
+        scope: "personal",
+        teamIds: [],
+        userIds: [],
+      }),
+    );
+
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Select Second project" }),
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: "Delete" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+    expect(mockBulkDeleteMutate).toHaveBeenCalledWith(
+      [{ id: "second", name: "Second project" }],
+      expect.any(Object),
+    );
   });
 });
 

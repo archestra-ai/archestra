@@ -218,6 +218,28 @@ class LimitModel {
   }
 
   /**
+   * Loads requested limits only when their owning entity belongs to the
+   * organization. Limits do not carry an organization id directly, so this
+   * reuses the same entity-based scope predicate as every org-scoped limit read.
+   */
+  static async findByIdsInOrganization(
+    ids: string[],
+    organizationId: string,
+  ): Promise<Limit[]> {
+    if (ids.length === 0) return [];
+
+    return db
+      .select()
+      .from(schema.limitsTable)
+      .where(
+        and(
+          inArray(schema.limitsTable.id, ids),
+          buildOrganizationLimitScopeCondition(organizationId),
+        ),
+      );
+  }
+
+  /**
    * Patch a limit
    */
   static async patch(
@@ -287,6 +309,17 @@ class LimitModel {
     await db.delete(schema.limitsTable).where(eq(schema.limitsTable.id, id));
 
     return true;
+  }
+
+  /** Deletes an already organization-fenced batch in one statement. */
+  static async deleteMany(ids: string[]): Promise<string[]> {
+    if (ids.length === 0) return [];
+
+    const deleted = await db
+      .delete(schema.limitsTable)
+      .where(inArray(schema.limitsTable.id, ids))
+      .returning({ id: schema.limitsTable.id });
+    return deleted.map(({ id }) => id);
   }
 
   /**

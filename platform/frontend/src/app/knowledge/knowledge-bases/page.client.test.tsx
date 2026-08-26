@@ -12,6 +12,7 @@ import { useTeams } from "@/lib/teams/team.query";
 import KnowledgeBasesPage from "./page.client";
 
 const mockUseKnowledgeBasesPaginated = vi.fn();
+const mockUseAllMatchingKnowledgeBases = vi.fn();
 const mockUseConnectors = vi.fn();
 const mockRestoreMutate = vi.fn();
 const mockPurgeMutateAsync = vi.fn();
@@ -25,7 +26,8 @@ vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
     mutateAsync: vi.fn(),
     isPending: false,
   }),
-  useAllMatchingKnowledgeBases: () => ({ data: [] }),
+  useAllMatchingKnowledgeBases: (...args: unknown[]) =>
+    mockUseAllMatchingKnowledgeBases(...args),
   useBulkDeleteKnowledgeBases: () => ({ mutate: vi.fn(), isPending: false }),
   useRestoreKnowledgeBase: () => ({
     mutate: mockRestoreMutate,
@@ -124,6 +126,10 @@ function makeConnector(overrides: Record<string, unknown>) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockUseAllMatchingKnowledgeBases.mockReturnValue({
+    data: [],
+    isFetching: false,
+  });
   vi.mocked(useHasPermissions).mockReturnValue({
     data: true,
   } as ReturnType<typeof useHasPermissions>);
@@ -234,6 +240,48 @@ describe("KnowledgeBasesPage", () => {
     expect(
       screen.getAllByText(/1 knowledge base selected/i).length,
     ).toBeGreaterThan(0);
+  });
+
+  it("keeps the bulk bar visible while all matching knowledge bases load", async () => {
+    mockUseKnowledgeBasesPaginated.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: "kb-1",
+            name: "Handbook",
+            description: null,
+            connectors: [],
+            totalDocsIndexed: 0,
+            assignedAgents: [],
+          },
+        ],
+        pagination: { total: 2 },
+      },
+      isPending: false,
+      isFetching: false,
+      isLoadingError: false,
+      refetch: vi.fn(),
+    });
+    mockUseAllMatchingKnowledgeBases.mockImplementation(
+      (_filters: unknown, options?: { enabled?: boolean }) => ({
+        data: undefined,
+        isFetching: options?.enabled ?? false,
+      }),
+    );
+
+    render(<KnowledgeBasesPage />);
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "Select Handbook" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: /Select all 2 knowledge bases/i }),
+    );
+
+    expect(
+      screen
+        .getAllByText(/All 2 knowledge bases selected/i)
+        .some((element) => element.getAttribute("aria-hidden") === "true"),
+    ).toBe(true);
   });
 
   it("deleted view: rows show how long they have sat in the trash and collapse to Restore + Delete permanently", async () => {

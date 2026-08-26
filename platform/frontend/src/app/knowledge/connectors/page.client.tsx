@@ -4,7 +4,6 @@ import {
   type archestraApiTypes,
   CONNECTOR_TYPE_LABELS,
   type ConnectorType,
-  MAX_BULK_IDS,
 } from "@archestra/shared";
 import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import { ArchiveRestore, Database, Pencil, Trash2 } from "lucide-react";
@@ -41,7 +40,7 @@ import {
   TableCardViewToggle,
 } from "@/components/table-card-view";
 import { TableRowActions } from "@/components/table-row-actions";
-import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -55,6 +54,8 @@ import {
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useFeature } from "@/lib/config/config.query";
+import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
+import { useControlledRowSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { useKnowledgeConnectorCatalog } from "@/lib/integration-overrides";
 import {
@@ -178,19 +179,35 @@ function ConnectorsList() {
   // re-pointing "all N" at a different N.
   const filterSignature = `${search}|${connectorTypeFilter}|${isDeletedView}`;
   const allMatchingActive = selectAllMatchingFor === filterSignature;
-  const { data: allMatching } = useAllMatchingConnectors(
-    {
-      search: search || undefined,
-      connectorType:
-        connectorTypeFilter === "all"
-          ? undefined
-          : (connectorTypeFilter as NonNullable<
-              archestraApiTypes.GetConnectorsData["query"]
-            >["connectorType"]),
-      status: isDeletedView ? "deleted" : undefined,
-    },
-    { enabled: allMatchingActive },
-  );
+  const { effectiveRowSelection, onRowSelectionChange } =
+    useControlledRowSelection({
+      rowSelection,
+      setRowSelection,
+      rows: items,
+      getRowId: (row) => row.id,
+      allMatchingSelected: allMatchingActive,
+      clearEscalation: () => setSelectAllMatchingFor(null),
+    });
+  const cardSelection = useBulkCardSelection({
+    rows: items,
+    getRowId: (connector) => connector.id,
+    rowSelection: effectiveRowSelection,
+    setRowSelection: onRowSelectionChange,
+  });
+  const { data: allMatching, isFetching: isFetchingAllMatching } =
+    useAllMatchingConnectors(
+      {
+        search: search || undefined,
+        connectorType:
+          connectorTypeFilter === "all"
+            ? undefined
+            : (connectorTypeFilter as NonNullable<
+                archestraApiTypes.GetConnectorsData["query"]
+              >["connectorType"]),
+        status: isDeletedView ? "deleted" : undefined,
+      },
+      { enabled: allMatchingActive },
+    );
 
   const clearSelection = useCallback(() => {
     setRowSelection({});
@@ -199,11 +216,11 @@ function ConnectorsList() {
 
   // The deleted view has its own lifecycle actions (restore, purge), so bulk
   // editing is offered only over live connectors.
-  const selectedConnectors = isDeletedView
+  const pageSelection = isDeletedView
     ? []
-    : allMatchingActive
-      ? (allMatching ?? [])
-      : items.filter((connector) => rowSelection[connector.id]);
+    : items.filter((connector) => effectiveRowSelection[connector.id]);
+  const selectedConnectors =
+    allMatchingActive && allMatching ? allMatching : pageSelection;
   const hasActiveFilters =
     !!search || connectorTypeFilter !== "all" || isDeletedView;
 
@@ -453,22 +470,26 @@ function ConnectorsList() {
           ) : (
             <>
               {!isDeletedView && (
-                <BulkActionsBar
+                <BulkActions
                   count={selectedConnectors.length}
                   noun="connector"
                   onClear={clearSelection}
-                  busy={bulkDelete.isPending || bulkVisibility.isPending}
+                  busy={
+                    bulkDelete.isPending ||
+                    bulkVisibility.isPending ||
+                    isFetchingAllMatching
+                  }
                   selectAllMatching={{
                     total: pagination?.total ?? items.length,
                     pageFullySelected:
                       items.length > 0 &&
-                      items.every((connector) => rowSelection[connector.id]),
+                      items.every(
+                        (connector) => effectiveRowSelection[connector.id],
+                      ),
                     active: allMatchingActive,
                     onSelectAll: () => setSelectAllMatchingFor(filterSignature),
                     matchDescription: "match this search",
-                    max: MAX_BULK_IDS,
                   }}
-                  className="mb-3"
                 >
                   <PermissionButton
                     permissions={{ knowledgeSource: ["update"] }}
@@ -487,7 +508,7 @@ function ConnectorsList() {
                     <Trash2 className="h-4 w-4" />
                     <span>Delete</span>
                   </PermissionButton>
-                </BulkActionsBar>
+                </BulkActions>
               )}
 
               <TableCardViewContent
@@ -524,13 +545,7 @@ function ConnectorsList() {
                         }
                         description={connector.description}
                         actions={connectorActions(connector)}
-                        selected={!!rowSelection[connector.id]}
-                        onSelectedChange={(selected) => {
-                          const next = { ...rowSelection };
-                          if (selected) next[connector.id] = true;
-                          else delete next[connector.id];
-                          setRowSelection(next);
-                        }}
+                        {...cardSelection(connector)}
                         selectionLabel={`Select ${connector.name}`}
                         footer={
                           <div className="flex items-center justify-between gap-3">
@@ -557,9 +572,11 @@ function ConnectorsList() {
                     columns={isDeletedView ? deletedColumns : columns}
                     data={items}
                     getRowId={(row) => row.id}
-                    rowSelection={isDeletedView ? undefined : rowSelection}
+                    rowSelection={
+                      isDeletedView ? undefined : effectiveRowSelection
+                    }
                     onRowSelectionChange={
-                      isDeletedView ? undefined : setRowSelection
+                      isDeletedView ? undefined : onRowSelectionChange
                     }
                     // The deleted view always counts as filtered (see
                     // hasActiveFilters), so its empty state is the filtered one below.

@@ -1,7 +1,7 @@
 "use client";
 
 import { DocsPage, getDocsUrl } from "@archestra/shared";
-import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
+import type { ColumnDef } from "@tanstack/react-table";
 import { Info, Pencil, Plus, Trash2, TriangleAlert, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -12,7 +12,7 @@ import { ReinstallConfirmBar } from "@/components/reinstall-confirm-bar";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -303,7 +303,7 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
 
   return (
     <div className="space-y-4">
-      <BulkActionsBar
+      <BulkActions
         count={selectedEnvironments.length}
         noun="environment"
         onClear={clearSelection}
@@ -319,7 +319,7 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
           <Trash2 className="h-4 w-4" />
           <span>Delete</span>
         </PermissionButton>
-      </BulkActionsBar>
+      </BulkActions>
 
       <DataTable
         columns={columns}

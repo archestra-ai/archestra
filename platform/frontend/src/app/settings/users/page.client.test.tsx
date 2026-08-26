@@ -1,12 +1,18 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({ bulkDeleteMembers: vi.fn() }));
 
 vi.mock("next/navigation");
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/organization.query");
 vi.mock("@/lib/member.query", () => ({
   useAllMatchingMembers: vi.fn(() => ({ data: [], isFetching: false })),
+  useBulkDeleteMembers: vi.fn(() => ({
+    mutate: mocks.bulkDeleteMembers,
+    isPending: false,
+  })),
   useMembersPaginated: vi.fn(),
   useInvitationsPaginated: vi.fn(() => ({
     data: { data: [], pagination: { total: 0 } },
@@ -144,6 +150,29 @@ beforeEach(() => {
 });
 
 describe("Users settings — members table", () => {
+  it("submits accepted and pending users in one mixed bulk request", () => {
+    const accepted = makeMember(1);
+    const pending = makeMember(2);
+    renderPage({
+      members: [accepted, pending],
+      total: 2,
+      pendingSignupMembers: [pendingSignupFor(pending)],
+    });
+
+    fireEvent.click(screen.getByLabelText(`Select ${accepted.email}`));
+    fireEvent.click(screen.getByLabelText(`Select ${pending.email}`));
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove users" }));
+
+    expect(mocks.bulkDeleteMembers).toHaveBeenCalledWith(
+      [
+        { kind: "member", id: accepted.id },
+        { kind: "pendingSignup", id: pending.userId },
+      ],
+      expect.any(Object),
+    );
+  });
+
   it("counts a pending-signup member once, so a full page is not followed by an empty one", () => {
     const members = Array.from({ length: PAGE_SIZE }, (_, i) =>
       makeMember(i + 1),

@@ -30,7 +30,6 @@ import {
   AgentModel,
   InteractionModel,
   InternalMcpCatalogModel,
-  InvitationModel,
   KbDocumentModel,
   KnowledgeBaseConnectorModel,
   LlmProviderApiKeyModel,
@@ -42,11 +41,10 @@ import {
   SessionModel,
   TeamModel,
   ToolModel,
-  UserModel,
-  UserTokenModel,
 } from "@/models";
 import { reconcileCatalogDeployments } from "@/services/environments/deployment-reconciliation";
 import { knowledgeSettingsService } from "@/services/knowledge-settings";
+import { removeMemberTarget } from "@/services/member-removal";
 import {
   ApiError,
   AppearanceSettingsSchema,
@@ -1190,9 +1188,12 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         })
         .from(schema.invitationsTable)
         .where(
-          like(
-            schema.invitationsTable.status,
-            `${AUTO_PROVISIONED_INVITATION_STATUS}%`,
+          and(
+            eq(schema.invitationsTable.organizationId, organizationId),
+            like(
+              schema.invitationsTable.status,
+              `${AUTO_PROVISIONED_INVITATION_STATUS}%`,
+            ),
           ),
         );
 
@@ -1263,55 +1264,25 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
     },
-    async ({ organizationId, params }, reply) => {
-      const { userId } = params;
+    async ({ organizationId, params, user }, reply) => {
+      const result = await removeMemberTarget({
+        organizationId,
+        actorUserId: user.id,
+        target: { kind: "pendingSignup", id: params.userId },
+      });
 
-      // Verify user has no account (is actually pending signup)
-      const [account] = await db
-        .select({ userId: schema.accountsTable.userId })
-        .from(schema.accountsTable)
-        .where(eq(schema.accountsTable.userId, userId))
-        .limit(1);
-
-      if (account) {
+      if (result.status === "classification_changed") {
         throw new ApiError(
           400,
           "Cannot delete a member who has already completed signup",
         );
       }
-
-      // Get user email to find their invitation
-      const user = await UserModel.getById(userId);
-      if (!user) {
+      if (result.status === "self") {
+        throw new ApiError(400, "You cannot remove your own account");
+      }
+      if (result.status === "not_found") {
         throw new ApiError(404, "User not found");
       }
-
-      // Delete invitation(s) with auto-provisioned status for this email
-      const invitations = await db
-        .select({ id: schema.invitationsTable.id })
-        .from(schema.invitationsTable)
-        .where(
-          and(
-            eq(schema.invitationsTable.email, user.email),
-            like(
-              schema.invitationsTable.status,
-              `${AUTO_PROVISIONED_INVITATION_STATUS}%`,
-            ),
-          ),
-        );
-
-      for (const inv of invitations) {
-        await InvitationModel.delete(inv.id);
-      }
-
-      // Delete personal tokens
-      await UserTokenModel.deleteByUserAndOrg(userId, organizationId);
-
-      // Delete member record
-      await MemberModel.deleteByMemberOrUserId(userId, organizationId);
-
-      // Delete user record (no other memberships since auto-provisioned)
-      await UserModel.delete(userId);
 
       return reply.send({ success: true });
     },

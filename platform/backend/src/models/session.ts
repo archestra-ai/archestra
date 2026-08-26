@@ -61,6 +61,32 @@ class SessionModel {
   }
 
   /**
+   * Find sessions from a requested set that belong to one user. The caller owns
+   * authorization; this model keeps the ownership fence in the query itself.
+   */
+  static async findByIdsForUser(params: { ids: string[]; userId: string }) {
+    const { ids, userId } = params;
+    logger.debug(
+      { userId, count: ids.length },
+      "SessionModel.findByIdsForUser: fetching sessions",
+    );
+    const sessions = await db
+      .select({ id: schema.sessionsTable.id })
+      .from(schema.sessionsTable)
+      .where(
+        and(
+          eq(schema.sessionsTable.userId, userId),
+          inArray(schema.sessionsTable.id, ids),
+        ),
+      );
+    logger.debug(
+      { userId, count: sessions.length },
+      "SessionModel.findByIdsForUser: completed",
+    );
+    return sessions;
+  }
+
+  /**
    * Create a new session
    */
   static async create(data: InsertSession) {
@@ -103,6 +129,29 @@ class SessionModel {
       .where(eq(schema.sessionsTable.id, id));
     logger.debug({ id }, "SessionModel.deleteById: completed");
     return result;
+  }
+
+  /** Delete requested sessions only when they belong to the given user. */
+  static async deleteByIdsForUser(params: { ids: string[]; userId: string }) {
+    const { ids, userId } = params;
+    logger.debug(
+      { userId, count: ids.length },
+      "SessionModel.deleteByIdsForUser: deleting sessions",
+    );
+    const deleted = await db
+      .delete(schema.sessionsTable)
+      .where(
+        and(
+          eq(schema.sessionsTable.userId, userId),
+          inArray(schema.sessionsTable.id, ids),
+        ),
+      )
+      .returning({ id: schema.sessionsTable.id });
+    logger.debug(
+      { userId, count: deleted.length },
+      "SessionModel.deleteByIdsForUser: completed",
+    );
+    return deleted;
   }
 
   /**

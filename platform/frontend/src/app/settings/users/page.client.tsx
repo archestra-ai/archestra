@@ -69,7 +69,6 @@ import {
   useUpdateMemberRole,
 } from "@/lib/member.query";
 import {
-  type PendingSignupMember,
   useActiveOrganization,
   useDeletePendingSignupMember,
   useMemberSignupStatus,
@@ -310,17 +309,29 @@ function MembersTab({
 
   const members = membersResponse?.data || [];
   const pagination = membersResponse?.pagination;
-  const tableRows =
-    pageIndex === 0 ? [...pendingSignupMembers, ...members] : members;
+
+  /**
+   * Pending-signup users are ordinary rows of the `member` table — the
+   * signup-status endpoint just reports which of them have no account record
+   * yet — so `/api/members` already returns them, on whichever page they sort
+   * onto. Their pending-ness is therefore an attribute of a member row, looked
+   * up here, and never a row of its own: prepending them produced a duplicate
+   * of each on page one, a first page longer than the page size, and a total
+   * inflated past the real member count, which in turn advertised a trailing
+   * page whose offset lands beyond the last member and renders empty.
+   */
+  const pendingSignupByUserId = new Map(
+    pendingSignupMembers.map((pending) => [pending.userId, pending]),
+  );
+  const pendingSignupFor = (member: Member) =>
+    pendingSignupByUserId.get(member.userId);
 
   // Show the column while the requirement is on, and keep showing it once
   // anyone is enrolled — turning the requirement off should not blind admins
   // to who still has 2FA.
   const showTwoFactorColumn =
     !!organization?.requireTwoFactor ||
-    members.some(
-      (member) => "twoFactorEnabled" in member && member.twoFactorEnabled,
-    );
+    members.some((member) => member.twoFactorEnabled);
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [bulkRemoveOpen, setBulkRemoveOpen] = useState(false);
@@ -329,15 +340,11 @@ function MembersTab({
     setEscalatedFor(null);
   }, []);
 
-  const rowKey = (row: Member | PendingSignupMember) =>
-    "provider" in row ? `pending-${row.userId}` : row.id;
-
   /**
    * Your own membership is never part of a selection — removing yourself from
    * the organization mid-batch would revoke the session doing the removing.
    */
-  const isSelf = (row: Member | PendingSignupMember) =>
-    row.userId === currentUserId;
+  const isSelf = (row: Member) => row.userId === currentUserId;
 
   const filterSignature = JSON.stringify({ nameFilter, roleFilter });
   const [escalatedFor, setEscalatedFor] = useState<string | null>(null);
@@ -348,8 +355,8 @@ function MembersTab({
       { enabled: allMatchingSelected },
     );
 
-  const pageSelection = tableRows.filter(
-    (row) => !isSelf(row) && rowSelection[rowKey(row)],
+  const pageSelection = members.filter(
+    (row) => !isSelf(row) && rowSelection[row.id],
   );
   const selectedMembers =
     allMatchingSelected && allMatchingMembers
@@ -359,12 +366,12 @@ function MembersTab({
   // Two removal routes behind one action: an accepted member leaves the
   // organization, a pending one has their invitation withdrawn.
   const bulkRemove = useMutation({
-    mutationFn: async (selection: readonly (Member | PendingSignupMember)[]) =>
+    mutationFn: async (selection: readonly Member[]) =>
       runBulkAction({
         items: selection,
         describe: (row) => row.email,
         run: async (row) => {
-          if ("provider" in row) {
+          if (pendingSignupFor(row)) {
             await deletePendingSignupMember.mutateAsync(row.userId);
             return;
           }
@@ -373,8 +380,8 @@ function MembersTab({
       }),
   });
 
-  const columns: ColumnDef<Member | PendingSignupMember>[] = [
-    createSelectColumn<Member | PendingSignupMember>({
+  const columns: ColumnDef<Member>[] = [
+    createSelectColumn<Member>({
       rowLabel: (row) => `Select ${row.email}`,
       allLabel: "Select all users on this page",
       canSelect: (row) => !isSelf(row),
@@ -386,12 +393,13 @@ function MembersTab({
       header: "",
       cell: ({ row }) => {
         const member = row.original;
-        if ("provider" in member) {
+        const pending = pendingSignupFor(member);
+        if (pending) {
           return (
             <div className="flex items-center justify-center">
               <div className="flex h-8 w-8 items-center justify-center rounded-full border bg-muted/40">
                 <AuthProviderIcon
-                  providerId={member.provider}
+                  providerId={pending.provider}
                   size={16}
                   className="rounded-sm"
                 />
@@ -445,7 +453,7 @@ function MembersTab({
             id: "twoFactor",
             header: "2FA",
             cell: ({ row }) =>
-              "provider" in row.original ? (
+              pendingSignupFor(row.original) ? (
                 <span className="text-sm text-muted-foreground">—</span>
               ) : row.original.twoFactorEnabled ? (
                 <span
@@ -464,14 +472,14 @@ function MembersTab({
                   <span>Not enrolled</span>
                 </span>
               ),
-          } satisfies ColumnDef<Member | PendingSignupMember>,
+          } satisfies ColumnDef<Member>,
         ]
       : []),
     {
       id: "joined",
       header: "Joined",
       cell: ({ row }) =>
-        "provider" in row.original ? (
+        pendingSignupFor(row.original) ? (
           <span className="text-sm text-muted-foreground">
             Pending (auto-provisioned)
           </span>
@@ -489,7 +497,8 @@ function MembersTab({
       enableHiding: false,
       cell: ({ row }) => {
         const member = row.original;
-        if ("provider" in member) {
+        const pending = pendingSignupFor(member);
+        if (pending) {
           return (
             <TableRowActions
               itemName={member.email}
@@ -497,13 +506,13 @@ function MembersTab({
                 {
                   icon: <Copy className="h-4 w-4" />,
                   label: "Copy invitation link",
-                  disabled: !member.invitationId,
-                  disabledTooltip: member.invitationId
+                  disabled: !pending.invitationId,
+                  disabledTooltip: pending.invitationId
                     ? undefined
                     : "No invitation link available",
                   onClick: async () => {
-                    if (!member.invitationId) return;
-                    const link = `${window.location.origin}/auth/sign-up-with-invitation?invitationId=${member.invitationId}&email=${encodeURIComponent(member.email)}`;
+                    if (!pending.invitationId) return;
+                    const link = `${window.location.origin}/auth/sign-up-with-invitation?invitationId=${pending.invitationId}&email=${encodeURIComponent(member.email)}`;
                     await copyToClipboard(link);
                   },
                 },
@@ -584,13 +593,11 @@ function MembersTab({
           onClear={clearSelection}
           busy={bulkRemove.isPending || isFetchingAllMatching}
           selectAllMatching={{
-            // Members only: the pending-signup rows come from a separate,
-            // unpaginated source shown on page one alone.
             total: pagination?.total ?? 0,
             pageFullySelected:
-              tableRows.length > 0 &&
+              members.length > 0 &&
               pageSelection.length ===
-                tableRows.filter((row) => !isSelf(row)).length,
+                members.filter((row) => !isSelf(row)).length,
             active: allMatchingSelected,
             onSelectAll: () => setEscalatedFor(filterSignature),
             matchDescription: nameFilter
@@ -612,18 +619,16 @@ function MembersTab({
 
         <DataTable
           columns={columns}
-          data={tableRows}
+          data={members}
           rowSelection={rowSelection}
           onRowSelectionChange={setRowSelection}
           hideSelectedCount
           manualPagination
-          getRowId={(row) =>
-            "provider" in row ? `pending-${row.userId}` : row.id
-          }
+          getRowId={(row) => row.id}
           pagination={{
             pageIndex,
             pageSize,
-            total: (pagination?.total || 0) + pendingSignupMembers.length,
+            total: pagination?.total || 0,
           }}
           onPaginationChange={handlePaginationChange}
           isLoading={isFetching}

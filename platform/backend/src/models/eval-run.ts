@@ -7,6 +7,7 @@ type EvalRunListFilters = {
   suiteId?: string;
   agentId?: string;
   status?: EvalRunStatus;
+  groupId?: string;
 };
 
 class EvalRunModel {
@@ -19,6 +20,8 @@ class EvalRunModel {
     organizationId: string;
     suiteId: string;
     agentId: string;
+    /** Shared by runs started together (multi-agent comparison). */
+    groupId: string;
     agentNameSnapshot: string;
     modelSnapshot: string | null;
     name: string | null;
@@ -26,7 +29,7 @@ class EvalRunModel {
     cases: Array<
       Pick<
         typeof schema.evalCasesTable.$inferSelect,
-        "id" | "name" | "input" | "assertions" | "position"
+        "id" | "name" | "messages" | "assertions" | "position"
       >
     >;
   }): Promise<EvalRun> {
@@ -37,6 +40,7 @@ class EvalRunModel {
           organizationId: params.organizationId,
           suiteId: params.suiteId,
           agentId: params.agentId,
+          groupId: params.groupId,
           agentNameSnapshot: params.agentNameSnapshot,
           modelSnapshot: params.modelSnapshot,
           name: params.name,
@@ -51,7 +55,7 @@ class EvalRunModel {
             runId: run.id,
             caseId: evalCase.id,
             caseName: evalCase.name,
-            input: evalCase.input,
+            messages: evalCase.messages,
             assertions: evalCase.assertions,
             position: evalCase.position,
           })),
@@ -266,6 +270,9 @@ function buildListFilters(filters: EvalRunListFilters): SQL[] {
   }
   if (filters.status !== undefined) {
     conditions.push(eq(schema.evalRunsTable.status, filters.status));
+  }
+  if (filters.groupId !== undefined) {
+    conditions.push(eq(schema.evalRunsTable.groupId, filters.groupId));
   }
   return conditions;
 }

@@ -36669,7 +36669,7 @@ export type GetEvalSuiteCasesResponses = {
         id: string;
         suiteId: string;
         name: string;
-        input: string;
+        messages: Array<string>;
         assertions: Array<{
             type: 'exact_match';
             expected: string;
@@ -36710,7 +36710,7 @@ export type GetEvalSuiteCasesResponse = GetEvalSuiteCasesResponses[keyof GetEval
 export type CreateEvalSuiteCaseData = {
     body: {
         name: string;
-        input: string;
+        messages: Array<string>;
         assertions: Array<{
             type: 'exact_match';
             expected: string;
@@ -36821,7 +36821,7 @@ export type CreateEvalSuiteCaseResponses = {
         id: string;
         suiteId: string;
         name: string;
-        input: string;
+        messages: Array<string>;
         assertions: Array<{
             type: 'exact_match';
             expected: string;
@@ -36947,7 +36947,7 @@ export type DeleteEvalCaseResponse = DeleteEvalCaseResponses[keyof DeleteEvalCas
 export type UpdateEvalCaseData = {
     body: {
         name?: string;
-        input?: string;
+        messages?: Array<string>;
         assertions?: Array<{
             type: 'exact_match';
             expected: string;
@@ -37058,7 +37058,7 @@ export type UpdateEvalCaseResponses = {
         id: string;
         suiteId: string;
         name: string;
-        input: string;
+        messages: Array<string>;
         assertions: Array<{
             type: 'exact_match';
             expected: string;
@@ -37098,7 +37098,7 @@ export type UpdateEvalCaseResponse = UpdateEvalCaseResponses[keyof UpdateEvalCas
 
 export type CreateEvalRunData = {
     body: {
-        agentId: string;
+        agentIds: Array<string>;
         name?: string;
     };
     path: {
@@ -37177,11 +37177,12 @@ export type CreateEvalRunResponses = {
     /**
      * Default Response
      */
-    200: {
+    200: Array<{
         id: string;
         organizationId: string;
         suiteId: string;
         agentId: string;
+        groupId: string;
         name: string | null;
         createdBy: string | null;
         status: 'pending' | 'running' | 'completed' | 'failed' | 'canceled';
@@ -37197,7 +37198,7 @@ export type CreateEvalRunResponses = {
         completedAt: string | null;
         createdAt: string;
         updatedAt: string;
-    };
+    }>;
 };
 
 export type CreateEvalRunResponse = CreateEvalRunResponses[keyof CreateEvalRunResponses];
@@ -37211,6 +37212,7 @@ export type GetEvalRunsData = {
         suiteId?: string;
         agentId?: string;
         status?: 'pending' | 'running' | 'completed' | 'failed' | 'canceled';
+        groupId?: string;
     };
     url: '/api/eval-runs';
 };
@@ -37290,6 +37292,7 @@ export type GetEvalRunsResponses = {
             organizationId: string;
             suiteId: string;
             agentId: string;
+            groupId: string;
             name: string | null;
             createdBy: string | null;
             status: 'pending' | 'running' | 'completed' | 'failed' | 'canceled';
@@ -37402,6 +37405,7 @@ export type GetEvalRunResponses = {
         organizationId: string;
         suiteId: string;
         agentId: string;
+        groupId: string;
         name: string | null;
         createdBy: string | null;
         status: 'pending' | 'running' | 'completed' | 'failed' | 'canceled';
@@ -37514,7 +37518,7 @@ export type GetEvalRunResultsResponses = {
             runId: string;
             caseId: string | null;
             caseName: string;
-            input: string;
+            messages: Array<string>;
             assertions: Array<{
                 type: 'exact_match';
                 expected: string;
@@ -37662,6 +37666,7 @@ export type CancelEvalRunResponses = {
         organizationId: string;
         suiteId: string;
         agentId: string;
+        groupId: string;
         name: string | null;
         createdBy: string | null;
         status: 'pending' | 'running' | 'completed' | 'failed' | 'canceled';

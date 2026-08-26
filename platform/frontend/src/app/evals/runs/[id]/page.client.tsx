@@ -285,9 +285,24 @@ function ResultCard({ result }: { result: EvalRunResult }) {
         <CardContent className="space-y-4 border-t pt-4">
           <div>
             <h4 className="text-muted-foreground mb-1 text-xs font-medium uppercase">
-              Input
+              {result.messages.length > 1 ? "Conversation" : "Input"}
             </h4>
-            <p className="whitespace-pre-wrap text-sm">{result.input}</p>
+            <div className="space-y-2">
+              {result.messages.map((message, index) => (
+                <p
+                  // biome-ignore lint/suspicious/noArrayIndexKey: ordered turn list
+                  key={index}
+                  className="whitespace-pre-wrap text-sm"
+                >
+                  {result.messages.length > 1 ? (
+                    <span className="text-muted-foreground mr-1 text-xs tabular-nums">
+                      {index + 1}.
+                    </span>
+                  ) : null}
+                  {message}
+                </p>
+              ))}
+            </div>
           </div>
           {result.outputText !== null && (
             <div>

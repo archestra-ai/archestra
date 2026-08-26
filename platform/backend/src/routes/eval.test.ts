@@ -100,7 +100,7 @@ describe("eval routes", () => {
       url: `/api/eval-suites/${suiteId}/cases`,
       payload: {
         name: "case one",
-        input: "say ok",
+        messages: ["say ok"],
         assertions: SAMPLE_ASSERTIONS,
         ...overrides,
       },
@@ -263,15 +263,15 @@ describe("eval routes", () => {
     const agent = await makeInternalAgent({ organizationId });
     const suite = await createSuite("Run suite");
     await addCase(suite.id);
-    await addCase(suite.id, { name: "case two", input: "say ok again" });
+    await addCase(suite.id, { name: "case two", messages: ["say ok again"] });
 
     const response = await app.inject({
       method: "POST",
       url: `/api/eval-suites/${suite.id}/runs`,
-      payload: { agentId: agent.id, name: "ci-build-42" },
+      payload: { agentIds: [agent.id], name: "ci-build-42" },
     });
     expect(response.statusCode).toBe(200);
-    const run = response.json();
+    const [run] = response.json();
     expect(run.status).toBe("pending");
     expect(run.totalCases).toBe(2);
     expect(run.agentNameSnapshot).toBe(agent.name);
@@ -285,10 +285,11 @@ describe("eval routes", () => {
     expect(results).toHaveLength(2);
     expect(results.every((r) => r.status === "pending")).toBe(true);
 
-    const audit = await auditRowsFor(run.id, "evalRun.created");
+    const audit = await auditRowsFor(run.groupId, "evalRun.created");
     expect(audit[0].resourceType).toBe("evalRun");
     expect(audit[0].after).toMatchObject({
-      id: run.id,
+      groupId: run.groupId,
+      runIds: [run.id],
       suiteName: "Run suite",
       totalCases: 2,
     });
@@ -307,7 +308,7 @@ describe("eval routes", () => {
         await app.inject({
           method: "POST",
           url: `/api/eval-suites/${suite.id}/runs`,
-          payload: { agentId: agent.id },
+          payload: { agentIds: [agent.id] },
         })
       ).statusCode,
     ).toBe(422);
@@ -320,7 +321,7 @@ describe("eval routes", () => {
         await app.inject({
           method: "POST",
           url: `/api/eval-suites/${suite.id}/runs`,
-          payload: { agentId: crypto.randomUUID() },
+          payload: { agentIds: [crypto.randomUUID()] },
         })
       ).statusCode,
     ).toBe(404);
@@ -335,7 +336,7 @@ describe("eval routes", () => {
         await app.inject({
           method: "POST",
           url: `/api/eval-suites/${suite.id}/runs`,
-          payload: { agentId: gateway.id },
+          payload: { agentIds: [gateway.id] },
         })
       ).statusCode,
     ).toBe(422);
@@ -352,7 +353,7 @@ describe("eval routes", () => {
     const response = await app.inject({
       method: "POST",
       url: `/api/eval-suites/${suite.id}/runs`,
-      payload: { agentId: agent.id },
+      payload: { agentIds: [agent.id] },
     });
     expect(response.statusCode).toBe(500);
 
@@ -378,9 +379,9 @@ describe("eval routes", () => {
     const createResponse = await app.inject({
       method: "POST",
       url: `/api/eval-suites/${suite.id}/runs`,
-      payload: { agentId: agent.id },
+      payload: { agentIds: [agent.id] },
     });
-    const run = createResponse.json();
+    const [run] = createResponse.json();
 
     const bySuite = await app.inject({
       method: "GET",
@@ -422,11 +423,11 @@ describe("eval routes", () => {
     const agent = await makeInternalAgent({ organizationId });
     const suite = await createSuite("Cancel suite");
     await addCase(suite.id);
-    const run = (
+    const [run] = (
       await app.inject({
         method: "POST",
         url: `/api/eval-suites/${suite.id}/runs`,
-        payload: { agentId: agent.id },
+        payload: { agentIds: [agent.id] },
       })
     ).json();
 
@@ -451,6 +452,44 @@ describe("eval routes", () => {
         })
       ).statusCode,
     ).toBe(409);
+  });
+
+  test("multi-agent run creation makes one run per agent under one group", async ({
+    makeInternalAgent,
+  }) => {
+    const agentA = await makeInternalAgent({ organizationId });
+    const agentB = await makeInternalAgent({ organizationId });
+    const suite = await createSuite("Comparison suite");
+    await addCase(suite.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/eval-suites/${suite.id}/runs`,
+      payload: { agentIds: [agentA.id, agentB.id], name: "matrix" },
+    });
+    expect(response.statusCode).toBe(200);
+    const runs = response.json();
+    expect(runs).toHaveLength(2);
+    expect(new Set(runs.map((r: { groupId: string }) => r.groupId)).size).toBe(
+      1,
+    );
+    expect(runs.map((r: { agentId: string }) => r.agentId).sort()).toEqual(
+      [agentA.id, agentB.id].sort(),
+    );
+    expect(enqueueMock).toHaveBeenCalledTimes(2);
+
+    // The shared group id filters the runs list to exactly this comparison.
+    const byGroup = await app.inject({
+      method: "GET",
+      url: `/api/eval-runs?groupId=${runs[0].groupId}`,
+    });
+    expect(byGroup.json().pagination.total).toBe(2);
+
+    const audit = await auditRowsFor(runs[0].groupId, "evalRun.created");
+    expect(audit[0].after).toMatchObject({
+      groupId: runs[0].groupId,
+      runIds: runs.map((r: { id: string }) => r.id),
+    });
   });
 
   test("suite list filters by name", async () => {
@@ -512,7 +551,7 @@ describe("eval routes", () => {
       Array.from({ length: MAX_CASES_PER_SUITE }, (_, i) => ({
         suiteId: suite.id,
         name: `seed ${i}`,
-        input: "x",
+        messages: ["x"],
         assertions: SAMPLE_ASSERTIONS,
         position: i + 1,
       })),
@@ -522,7 +561,7 @@ describe("eval routes", () => {
       url: `/api/eval-suites/${suite.id}/cases`,
       payload: {
         name: "one too many",
-        input: "x",
+        messages: ["x"],
         assertions: SAMPLE_ASSERTIONS,
       },
     });

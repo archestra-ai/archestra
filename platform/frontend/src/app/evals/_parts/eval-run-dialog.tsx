@@ -11,19 +11,14 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import { useProfilesPaginated } from "@/lib/agent.query";
 import { useCreateEvalRun } from "@/lib/evals/eval.query";
 
 const AGENT_PICKER_LIMIT = 100;
+const MAX_AGENTS_PER_RUN = 10;
 
-/** Pick an agent (and optional run label), then start the eval run. */
+/** Pick one or more agents (and an optional label), then start the eval run. */
 export function EvalRunDialog({
   open,
   onOpenChange,
@@ -34,7 +29,7 @@ export function EvalRunDialog({
   suiteId: string;
 }) {
   const router = useRouter();
-  const [agentId, setAgentId] = useState<string>("");
+  const [agentIds, setAgentIds] = useState<string[]>([]);
   const [runName, setRunName] = useState("");
   const createRun = useCreateEvalRun();
 
@@ -47,14 +42,21 @@ export function EvalRunDialog({
   const agents = agentsQuery.data?.data ?? [];
 
   const start = async () => {
-    if (!agentId) return;
-    const run = await createRun.mutateAsync({
+    if (agentIds.length === 0) return;
+    const runs = await createRun.mutateAsync({
       suiteId,
-      body: { agentId, ...(runName ? { name: runName } : {}) },
+      body: { agentIds, ...(runName ? { name: runName } : {}) },
     });
     onOpenChange(false);
     setRunName("");
-    if (run) router.push(`/evals/runs/${run.id}`);
+    setAgentIds([]);
+    if (!runs || runs.length === 0) return;
+    if (runs.length === 1) {
+      router.push(`/evals/runs/${runs[0].id}`);
+    } else {
+      // A comparison group lands on the suite's Runs tab, focused on itself.
+      router.push(`/evals/${suiteId}?tab=runs&group=${runs[0].groupId}`);
+    }
   };
 
   return (
@@ -62,25 +64,29 @@ export function EvalRunDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="Run eval suite"
-      description="Every case is sent to the agent and graded against its assertions. The run executes in the background."
+      description="Every case is sent to each agent and graded against its assertions. Runs execute in the background."
       size="small"
     >
       <DialogForm onSubmit={() => void start()}>
         <DialogBody className="space-y-4">
           <div className="space-y-2">
-            <Label>Agent</Label>
-            <Select value={agentId} onValueChange={setAgentId}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select an agent" />
-              </SelectTrigger>
-              <SelectContent>
-                {agents.map((agent) => (
-                  <SelectItem key={agent.id} value={agent.id}>
-                    {agent.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label>Agents</Label>
+            <MultiSelectCombobox
+              options={agents.map((agent) => ({
+                value: agent.id,
+                label: agent.name,
+              }))}
+              value={agentIds}
+              onChange={(value) =>
+                setAgentIds(value.slice(0, MAX_AGENTS_PER_RUN))
+              }
+              placeholder="Select agents…"
+              emptyMessage="No agents found."
+            />
+            <p className="text-muted-foreground text-xs">
+              Pick several agents to compare them side by side on the same
+              cases.
+            </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="eval-run-name">Run label</Label>
@@ -101,8 +107,17 @@ export function EvalRunDialog({
           >
             Cancel
           </Button>
-          <Button type="submit" disabled={!agentId || createRun.isPending}>
-            <span>{createRun.isPending ? "Starting…" : "Start run"}</span>
+          <Button
+            type="submit"
+            disabled={agentIds.length === 0 || createRun.isPending}
+          >
+            <span>
+              {createRun.isPending
+                ? "Starting…"
+                : agentIds.length > 1
+                  ? `Start ${agentIds.length} runs`
+                  : "Start run"}
+            </span>
           </Button>
         </DialogStickyFooter>
       </DialogForm>

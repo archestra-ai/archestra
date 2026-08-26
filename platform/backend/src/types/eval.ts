@@ -134,6 +134,16 @@ export const EvalCaseAssertionsSchema = z
   .min(1)
   .max(20);
 
+/**
+ * Ordered user messages of one case. Sent to the agent one at a time within a
+ * single conversation; the final answer is what text assertions grade, while
+ * tool assertions see the whole conversation's calls.
+ */
+export const EvalCaseMessagesSchema = z
+  .array(z.string().min(1).max(100_000))
+  .min(1)
+  .max(20);
+
 /** Outcome of one assertion against one case output. */
 export const EvalAssertionResultSchema = z.object({
   type: EvalAssertionTypeSchema,
@@ -168,10 +178,12 @@ export type UpdateEvalSuite = z.infer<typeof UpdateEvalSuiteSchema>;
 
 export const SelectEvalCaseSchema = createSelectSchema(schema.evalCasesTable, {
   assertions: EvalCaseAssertionsSchema,
+  messages: EvalCaseMessagesSchema,
 });
 // `position` is owned by the model (appended at max+1), not by callers.
 export const InsertEvalCaseSchema = createInsertSchema(schema.evalCasesTable, {
   assertions: EvalCaseAssertionsSchema,
+  messages: EvalCaseMessagesSchema,
 }).omit({
   id: true,
   position: true,
@@ -180,9 +192,10 @@ export const InsertEvalCaseSchema = createInsertSchema(schema.evalCasesTable, {
 });
 export const UpdateEvalCaseSchema = createUpdateSchema(schema.evalCasesTable, {
   assertions: EvalCaseAssertionsSchema.optional(),
+  messages: EvalCaseMessagesSchema.optional(),
 }).pick({
   name: true,
-  input: true,
+  messages: true,
   assertions: true,
 });
 
@@ -204,6 +217,7 @@ export const SelectEvalRunResultSchema = createSelectSchema(
   {
     status: EvalRunResultStatusSchema,
     assertions: EvalCaseAssertionsSchema,
+    messages: EvalCaseMessagesSchema,
     toolCalls: z.array(z.string()).nullable(),
     assertionResults: z.array(EvalAssertionResultSchema).nullable(),
   },

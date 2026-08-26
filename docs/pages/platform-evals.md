@@ -3,7 +3,7 @@ title: Evals (Beta)
 category: Agents
 order: 13
 description: Test suites that grade an agent's answers against assertions
-lastUpdated: 2026-08-25
+lastUpdated: 2026-08-26
 ---
 
 ![Eval suites](/docs/automated_screenshots/platform-evals_suites-list.webp)
@@ -14,7 +14,7 @@ Go to **Evals** in the sidebar to create a suite.
 
 ## Suites and Cases
 
-A suite is a named collection of cases. A case has one input message and a list of assertions. The agent gets the input as a normal chat message; its answer must satisfy every assertion for the case to pass.
+A suite is a named collection of cases. A case has one or more messages and a list of assertions. The agent gets each message as a normal chat turn, in order, within one conversation. Its answer to the last message must satisfy every assertion for the case to pass. Tool assertions see the whole conversation.
 
 Assertions come in seven types:
 
@@ -34,7 +34,9 @@ The LLM judge uses your organization's default model. It returns a pass or fail 
 
 ## Runs
 
-Press **Run**, pick an agent, and optionally label the run — a CI build number, for example. The run executes in the background: each case is sent to the agent, graded, and recorded. Cases run one at a time, in order.
+Press **Run**, pick one or more agents, and optionally label the run — a CI build number, for example. Runs execute in the background: each case is sent to the agent, graded, and recorded. Cases run one at a time, in order.
+
+Picking several agents creates one run per agent and groups them into a comparison — one row per agent with status, pass rate, and cost. Use it to try the same suite against different models or prompt variants.
 
 A run snapshots the suite's cases when it starts. Editing a case afterwards changes future runs, not the one in flight.
 
@@ -54,6 +56,5 @@ Freya maintains a support agent for a bicycle shop. She keeps a "Support answers
 
 ## Beta Limitations
 
-- Cases are single-turn: one input message, one answer.
 - Tool assertions see the agent's own tool calls, not those of delegated sub-agents.
 - The judge model is the organization default; per-suite judge models are not yet supported.

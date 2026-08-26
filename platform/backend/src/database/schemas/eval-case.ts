@@ -11,8 +11,9 @@ import type { EvalAssertion } from "@/types/eval";
 import evalSuitesTable from "./eval-suite";
 
 /**
- * Eval cases: a single-turn input prompt plus the assertions its output must
- * satisfy. Belongs to a suite; ordered within the suite by `position`.
+ * Eval cases: one or more ordered user messages sent to the agent in a single
+ * conversation, plus the assertions the final answer must satisfy. Belongs to
+ * a suite; ordered within the suite by `position`.
  */
 const evalCasesTable = pgTable(
   "eval_cases",
@@ -22,8 +23,12 @@ const evalCasesTable = pgTable(
       .notNull()
       .references(() => evalSuitesTable.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
-    /** The user message sent to the agent for this case. */
-    input: text("input").notNull(),
+    /**
+     * Ordered user messages sent within one conversation; the agent answers
+     * each in turn and assertions grade the final answer (tool assertions see
+     * the whole conversation).
+     */
+    messages: jsonb("messages").$type<string[]>().notNull(),
     /** Typed assertion list (validated ≥1 at the API layer); all must pass. */
     assertions: jsonb("assertions").$type<EvalAssertion[]>().notNull(),
     /** Order within the suite; appended at max+1 on create. */

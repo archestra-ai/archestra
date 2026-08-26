@@ -30,7 +30,7 @@ test("create appends cases with increasing positions", async ({
     insert: {
       suiteId: suite.id,
       name: "first",
-      input: "1",
+      messages: ["1"],
       assertions: SAMPLE_ASSERTIONS,
     },
   });
@@ -39,7 +39,7 @@ test("create appends cases with increasing positions", async ({
     insert: {
       suiteId: suite.id,
       name: "second",
-      input: "2",
+      messages: ["2"],
       assertions: SAMPLE_ASSERTIONS,
     },
   });
@@ -64,7 +64,7 @@ test("create rejects foreign-org and soft-deleted suites", async ({
       insert: {
         suiteId: suite.id,
         name: "x",
-        input: "x",
+        messages: ["x"],
         assertions: SAMPLE_ASSERTIONS,
       },
     }),
@@ -77,7 +77,7 @@ test("create rejects foreign-org and soft-deleted suites", async ({
       insert: {
         suiteId: suite.id,
         name: "x",
-        input: "x",
+        messages: ["x"],
         assertions: SAMPLE_ASSERTIONS,
       },
     }),
@@ -94,7 +94,7 @@ test("create enforces the per-suite case cap", async ({ makeOrganization }) => {
     Array.from({ length: MAX_CASES_PER_SUITE }, (_, i) => ({
       suiteId: suite.id,
       name: `seed ${i}`,
-      input: "x",
+      messages: ["x"],
       assertions: SAMPLE_ASSERTIONS,
       position: i + 1,
     })),
@@ -106,7 +106,7 @@ test("create enforces the per-suite case cap", async ({ makeOrganization }) => {
       insert: {
         suiteId: suite.id,
         name: "one too many",
-        input: "x",
+        messages: ["x"],
         assertions: SAMPLE_ASSERTIONS,
       },
     }),
@@ -124,7 +124,7 @@ test("findById, update and delete are org-scoped", async ({
     insert: {
       suiteId: suite.id,
       name: "target",
-      input: "input",
+      messages: ["input"],
       assertions: SAMPLE_ASSERTIONS,
     },
   });
@@ -154,7 +154,11 @@ test("findById, update and delete are org-scoped", async ({
   const updated = await EvalCaseModel.update({
     id: evalCase.id,
     organizationId: org.id,
-    updates: { name: "renamed", input: "new input", assertions: newAssertions },
+    updates: {
+      name: "renamed",
+      messages: ["new input"],
+      assertions: newAssertions,
+    },
   });
   expect(updated?.name).toBe("renamed");
   expect(updated?.assertions).toEqual(newAssertions);

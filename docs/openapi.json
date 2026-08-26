@@ -132309,8 +132309,15 @@
                       "name": {
                         "type": "string"
                       },
-                      "input": {
-                        "type": "string"
+                      "messages": {
+                        "minItems": 1,
+                        "maxItems": 20,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100000
+                        }
                       },
                       "assertions": {
                         "minItems": 1,
@@ -132537,7 +132544,7 @@
                       "id",
                       "suiteId",
                       "name",
-                      "input",
+                      "messages",
                       "assertions",
                       "position",
                       "createdAt",
@@ -132803,10 +132810,15 @@
                     "minLength": 1,
                     "maxLength": 200
                   },
-                  "input": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 100000
+                  "messages": {
+                    "minItems": 1,
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100000
+                    }
                   },
                   "assertions": {
                     "minItems": 1,
@@ -133006,7 +133018,7 @@
                 },
                 "required": [
                   "name",
-                  "input",
+                  "messages",
                   "assertions"
                 ]
               }
@@ -133046,8 +133058,15 @@
                     "name": {
                       "type": "string"
                     },
-                    "input": {
-                      "type": "string"
+                    "messages": {
+                      "minItems": 1,
+                      "maxItems": 20,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100000
+                      }
                     },
                     "assertions": {
                       "minItems": 1,
@@ -133274,7 +133293,7 @@
                     "id",
                     "suiteId",
                     "name",
-                    "input",
+                    "messages",
                     "assertions",
                     "position",
                     "createdAt",
@@ -133541,10 +133560,15 @@
                     "minLength": 1,
                     "maxLength": 200
                   },
-                  "input": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 100000
+                  "messages": {
+                    "minItems": 1,
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100000
+                    }
                   },
                   "assertions": {
                     "minItems": 1,
@@ -133779,8 +133803,15 @@
                     "name": {
                       "type": "string"
                     },
-                    "input": {
-                      "type": "string"
+                    "messages": {
+                      "minItems": 1,
+                      "maxItems": 20,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100000
+                      }
                     },
                     "assertions": {
                       "minItems": 1,
@@ -134007,7 +134038,7 @@
                     "id",
                     "suiteId",
                     "name",
-                    "input",
+                    "messages",
                     "assertions",
                     "position",
                     "createdAt",
@@ -134535,7 +134566,7 @@
         "tags": [
           "Evals"
         ],
-        "description": "Run an eval suite against an agent. Snapshots the suite's current cases and executes asynchronously.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`eval:execute`: Run eval suites against agents and cancel runs",
+        "description": "Run an eval suite against one or more agents. One run is created per agent (a shared group id links them for comparison); each snapshots the suite's current cases and executes asynchronously.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`eval:execute`: Run eval suites against agents and cancel runs",
         "requestBody": {
           "required": true,
           "content": {
@@ -134543,10 +134574,15 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "agentId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  "agentIds": {
+                    "minItems": 1,
+                    "maxItems": 10,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    }
                   },
                   "name": {
                     "type": "string",
@@ -134555,7 +134591,7 @@
                   }
                 },
                 "required": [
-                  "agentId"
+                  "agentIds"
                 ]
               }
             }
@@ -134579,121 +134615,130 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "organizationId": {
+                        "type": "string"
+                      },
+                      "suiteId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "agentId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "groupId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "name": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "createdBy": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "pending",
+                          "running",
+                          "completed",
+                          "failed",
+                          "canceled"
+                        ]
+                      },
+                      "error": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "agentNameSnapshot": {
+                        "type": "string"
+                      },
+                      "modelSnapshot": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "totalCases": {
+                        "type": "integer",
+                        "minimum": -2147483648,
+                        "maximum": 2147483647
+                      },
+                      "passedCases": {
+                        "type": "integer",
+                        "minimum": -2147483648,
+                        "maximum": 2147483647
+                      },
+                      "failedCases": {
+                        "type": "integer",
+                        "minimum": -2147483648,
+                        "maximum": 2147483647
+                      },
+                      "erroredCases": {
+                        "type": "integer",
+                        "minimum": -2147483648,
+                        "maximum": 2147483647
+                      },
+                      "canceledCases": {
+                        "type": "integer",
+                        "minimum": -2147483648,
+                        "maximum": 2147483647
+                      },
+                      "startedAt": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "completedAt": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "updatedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
                     },
-                    "organizationId": {
-                      "type": "string"
-                    },
-                    "suiteId": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "agentId": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "name": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "createdBy": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string",
-                      "enum": [
-                        "pending",
-                        "running",
-                        "completed",
-                        "failed",
-                        "canceled"
-                      ]
-                    },
-                    "error": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "agentNameSnapshot": {
-                      "type": "string"
-                    },
-                    "modelSnapshot": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "totalCases": {
-                      "type": "integer",
-                      "minimum": -2147483648,
-                      "maximum": 2147483647
-                    },
-                    "passedCases": {
-                      "type": "integer",
-                      "minimum": -2147483648,
-                      "maximum": 2147483647
-                    },
-                    "failedCases": {
-                      "type": "integer",
-                      "minimum": -2147483648,
-                      "maximum": 2147483647
-                    },
-                    "erroredCases": {
-                      "type": "integer",
-                      "minimum": -2147483648,
-                      "maximum": 2147483647
-                    },
-                    "canceledCases": {
-                      "type": "integer",
-                      "minimum": -2147483648,
-                      "maximum": 2147483647
-                    },
-                    "startedAt": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "completedAt": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "createdAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "updatedAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "organizationId",
-                    "suiteId",
-                    "agentId",
-                    "name",
-                    "createdBy",
-                    "status",
-                    "error",
-                    "agentNameSnapshot",
-                    "modelSnapshot",
-                    "totalCases",
-                    "passedCases",
-                    "failedCases",
-                    "erroredCases",
-                    "canceledCases",
-                    "startedAt",
-                    "completedAt",
-                    "createdAt",
-                    "updatedAt"
-                  ],
-                  "additionalProperties": false
+                    "required": [
+                      "id",
+                      "organizationId",
+                      "suiteId",
+                      "agentId",
+                      "groupId",
+                      "name",
+                      "createdBy",
+                      "status",
+                      "error",
+                      "agentNameSnapshot",
+                      "modelSnapshot",
+                      "totalCases",
+                      "passedCases",
+                      "failedCases",
+                      "erroredCases",
+                      "canceledCases",
+                      "startedAt",
+                      "completedAt",
+                      "createdAt",
+                      "updatedAt"
+                    ],
+                    "additionalProperties": false
+                  }
                 }
               }
             }
@@ -134999,6 +135044,16 @@
             "in": "query",
             "name": "status",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "query",
+            "name": "groupId",
+            "required": false
           }
         ],
         "responses": {
@@ -135028,6 +135083,11 @@
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
                           "agentId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "groupId": {
                             "type": "string",
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
@@ -135110,6 +135170,7 @@
                           "organizationId",
                           "suiteId",
                           "agentId",
+                          "groupId",
                           "name",
                           "createdBy",
                           "status",
@@ -135461,6 +135522,11 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "groupId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "name": {
                       "nullable": true,
                       "type": "string"
@@ -135554,6 +135620,7 @@
                     "organizationId",
                     "suiteId",
                     "agentId",
+                    "groupId",
                     "name",
                     "createdBy",
                     "status",
@@ -135890,8 +135957,15 @@
                           "caseName": {
                             "type": "string"
                           },
-                          "input": {
-                            "type": "string"
+                          "messages": {
+                            "minItems": 1,
+                            "maxItems": 20,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 100000
+                            }
                           },
                           "assertions": {
                             "minItems": 1,
@@ -136224,7 +136298,7 @@
                           "runId",
                           "caseId",
                           "caseName",
-                          "input",
+                          "messages",
                           "assertions",
                           "position",
                           "status",
@@ -136579,6 +136653,11 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "groupId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "name": {
                       "nullable": true,
                       "type": "string"
@@ -136657,6 +136736,7 @@
                     "organizationId",
                     "suiteId",
                     "agentId",
+                    "groupId",
                     "name",
                     "createdBy",
                     "status",

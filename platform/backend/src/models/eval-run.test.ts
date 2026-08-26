@@ -29,7 +29,7 @@ async function makeSuiteWithCases(params: {
         insert: {
           suiteId: suite.id,
           name: `case ${i + 1}`,
-          input: `input ${i + 1}`,
+          messages: [`input ${i + 1}`],
           assertions: SAMPLE_ASSERTIONS,
         },
       }),
@@ -52,6 +52,7 @@ async function makeRun(params: {
     organizationId: params.organizationId,
     suiteId: suite.id,
     agentId: params.agentId,
+    groupId: crypto.randomUUID(),
     agentNameSnapshot: "Test Agent",
     modelSnapshot: "claude-sonnet-5",
     name: null,
@@ -82,16 +83,16 @@ test("createWithResults snapshots cases into pending results", async ({
   expect(results).toHaveLength(2);
   expect(results.map((r) => r.status)).toEqual(["pending", "pending"]);
   expect(results.map((r) => r.caseId)).toEqual(cases.map((c) => c.id));
-  expect(results.map((r) => r.input)).toEqual(["input 1", "input 2"]);
+  expect(results.map((r) => r.messages)).toEqual([["input 1"], ["input 2"]]);
 
   // Editing the case afterwards does not change the snapshot.
   await EvalCaseModel.update({
     id: cases[0].id,
     organizationId: org.id,
-    updates: { input: "edited later" },
+    updates: { messages: ["edited later"] },
   });
   const after = await EvalRunResultModel.listAllByRun(run.id);
-  expect(after[0].input).toBe("input 1");
+  expect(after[0].messages).toEqual(["input 1"]);
 });
 
 test("case deletion nulls caseId on results but keeps the snapshot", async ({

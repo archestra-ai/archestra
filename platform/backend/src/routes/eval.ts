@@ -27,6 +27,7 @@ import {
 } from "@/types";
 import {
   EvalCaseAssertionsSchema,
+  EvalCaseMessagesSchema,
   EvalRunStatusSchema,
   SelectEvalCaseSchema,
   SelectEvalRunResultSchema,
@@ -55,7 +56,7 @@ const UpdateEvalSuiteBodySchema = z
 
 const CaseBodyFieldsSchema = z.object({
   name: z.string().min(1).max(200),
-  input: z.string().min(1).max(100_000),
+  messages: EvalCaseMessagesSchema,
   assertions: EvalCaseAssertionsSchema,
 });
 
@@ -64,8 +65,11 @@ const UpdateEvalCaseBodySchema = CaseBodyFieldsSchema.partial().refine(
   { message: "At least one field must be provided" },
 );
 
+const MAX_AGENTS_PER_RUN = 10;
+
 const CreateEvalRunBodySchema = z.object({
-  agentId: UuidIdSchema,
+  /** One run is created per agent; several agents make a comparison group. */
+  agentIds: z.array(UuidIdSchema).min(1).max(MAX_AGENTS_PER_RUN),
   /** Optional label, e.g. a CI build identifier. */
   name: z.string().min(1).max(200).optional(),
 });
@@ -377,11 +381,11 @@ const evalRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.CreateEvalRun,
         description:
-          "Run an eval suite against an agent. Snapshots the suite's current cases and executes asynchronously.",
+          "Run an eval suite against one or more agents. One run is created per agent (a shared group id links them for comparison); each snapshots the suite's current cases and executes asynchronously.",
         tags: ["Evals"],
         params: z.object({ id: UuidIdSchema }),
         body: CreateEvalRunBodySchema,
-        response: constructResponseSchema(SelectEvalRunSchema),
+        response: constructResponseSchema(z.array(SelectEvalRunSchema)),
       },
     },
     async (request, reply) => {
@@ -396,26 +400,33 @@ const evalRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Eval suite not found");
       }
 
-      const agent = await AgentModel.findById(body.agentId);
-      if (!agent || agent.organizationId !== organizationId) {
-        throw new ApiError(404, "Agent not found");
-      }
-      if (agent.agentType !== "agent") {
-        throw new ApiError(422, "Evals can only run against internal agents");
-      }
-      // Same access rule as everywhere agents are executed: an agent-type
-      // admin bypasses team scoping, everyone else needs personal/team access.
+      // Validate every agent before creating anything: a bad id fails the
+      // whole request rather than starting a partial comparison group.
+      const agentIds = [...new Set(body.agentIds)];
       const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
         userId: user.id,
         organizationId,
       });
-      const hasAgentAccess = await AgentTeamModel.userHasAgentAccess(
-        user.id,
-        agent.id,
-        isAgentAdmin,
-      );
-      if (!hasAgentAccess) {
-        throw new ApiError(403, "You do not have access to this agent");
+      const agents = [];
+      for (const agentId of agentIds) {
+        const agent = await AgentModel.findById(agentId);
+        if (!agent || agent.organizationId !== organizationId) {
+          throw new ApiError(404, "Agent not found");
+        }
+        if (agent.agentType !== "agent") {
+          throw new ApiError(422, "Evals can only run against internal agents");
+        }
+        // Same access rule as everywhere agents are executed: an agent-type
+        // admin bypasses team scoping, everyone else needs personal/team access.
+        const hasAgentAccess = await AgentTeamModel.userHasAgentAccess(
+          user.id,
+          agent.id,
+          isAgentAdmin,
+        );
+        if (!hasAgentAccess) {
+          throw new ApiError(403, "You do not have access to this agent");
+        }
+        agents.push(agent);
       }
 
       const cases = await EvalCaseModel.listBySuite(suite.id);
@@ -423,56 +434,70 @@ const evalRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(422, "Eval suite has no cases");
       }
 
-      const run = await EvalRunModel.createWithResults({
-        organizationId,
-        suiteId: suite.id,
-        agentId: agent.id,
-        agentNameSnapshot: agent.name,
-        modelSnapshot: agent.llmModel ?? null,
-        name: body.name ?? null,
-        createdBy: user.id,
-        cases,
-      });
+      const groupId = crypto.randomUUID();
+      const runs = [];
+      for (const agent of agents) {
+        runs.push(
+          await EvalRunModel.createWithResults({
+            organizationId,
+            suiteId: suite.id,
+            agentId: agent.id,
+            groupId,
+            agentNameSnapshot: agent.name,
+            modelSnapshot: agent.llmModel ?? null,
+            name: body.name ?? null,
+            createdBy: user.id,
+            cases,
+          }),
+        );
+      }
 
-      try {
-        await taskQueueService.enqueue({
-          taskType: "eval_run_execute",
-          payload: { runId: run.id },
-        });
-      } catch (error) {
-        // Compensate: a run nobody will ever execute must not sit pending.
-        const message = error instanceof Error ? error.message : String(error);
-        logger.error(
-          { runId: run.id, error: message },
-          "[Evals] Failed to enqueue eval run",
-        );
-        await EvalRunModel.markFailed(
-          run.id,
-          "Failed to enqueue the run for execution",
-        );
-        await EvalRunResultModel.cancelPendingByRun(run.id);
-        const counts = await EvalRunResultModel.countByStatus(run.id);
-        await EvalRunModel.updateCounts(run.id, {
-          passedCases: counts.passed,
-          failedCases: counts.failed,
-          erroredCases: counts.error,
-          canceledCases: counts.canceled,
-        });
+      let enqueued = 0;
+      for (const run of runs) {
+        try {
+          await taskQueueService.enqueue({
+            taskType: "eval_run_execute",
+            payload: { runId: run.id },
+          });
+          enqueued += 1;
+        } catch (error) {
+          // Compensate: a run nobody will ever execute must not sit pending.
+          const message =
+            error instanceof Error ? error.message : String(error);
+          logger.error(
+            { runId: run.id, error: message },
+            "[Evals] Failed to enqueue eval run",
+          );
+          await EvalRunModel.markFailed(
+            run.id,
+            "Failed to enqueue the run for execution",
+          );
+          await EvalRunResultModel.cancelPendingByRun(run.id);
+          const counts = await EvalRunResultModel.countByStatus(run.id);
+          await EvalRunModel.updateCounts(run.id, {
+            passedCases: counts.passed,
+            failedCases: counts.failed,
+            erroredCases: counts.error,
+            canceledCases: counts.canceled,
+          });
+        }
+      }
+      if (enqueued === 0) {
         throw new ApiError(500, "Failed to enqueue the eval run");
       }
 
-      // The resource is the new run, not the suite named in the path.
-      request.auditResourceId = { value: run.id };
+      // The resource is the run group, not the suite named in the path.
+      request.auditResourceId = { value: groupId };
       request.auditAfter = {
-        id: run.id,
-        suiteId: run.suiteId,
+        groupId,
+        suiteId: suite.id,
         suiteName: suite.name,
-        agentId: run.agentId,
-        agentName: agent.name,
-        name: run.name,
-        totalCases: run.totalCases,
+        agents: agents.map(({ id, name }) => ({ id, name })),
+        runIds: runs.map((run) => run.id),
+        name: body.name ?? null,
+        totalCases: cases.length,
       };
-      return reply.send(run);
+      return reply.send(runs);
     },
   );
 
@@ -487,6 +512,7 @@ const evalRoutes: FastifyPluginAsyncZod = async (fastify) => {
           suiteId: UuidIdSchema.optional(),
           agentId: UuidIdSchema.optional(),
           status: EvalRunStatusSchema.optional(),
+          groupId: UuidIdSchema.optional(),
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(SelectEvalRunSchema),
@@ -494,10 +520,13 @@ const evalRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (
-      { query: { limit, offset, suiteId, agentId, status }, organizationId },
+      {
+        query: { limit, offset, suiteId, agentId, status, groupId },
+        organizationId,
+      },
       reply,
     ) => {
-      const filters = { organizationId, suiteId, agentId, status };
+      const filters = { organizationId, suiteId, agentId, status, groupId };
       const [data, total] = await Promise.all([
         EvalRunModel.listByOrganization({ ...filters, limit, offset }),
         EvalRunModel.countByOrganization(filters),

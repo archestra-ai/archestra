@@ -53,7 +53,11 @@ async function seedRun(params: {
   organizationId: string;
   agentId: string;
   userId: string;
-  cases: Array<{ name: string; input: string; assertions: EvalAssertion[] }>;
+  cases: Array<{
+    name: string;
+    messages: string[];
+    assertions: EvalAssertion[];
+  }>;
 }) {
   const suite = await EvalSuiteModel.create({
     organizationId: params.organizationId,
@@ -72,6 +76,7 @@ async function seedRun(params: {
     organizationId: params.organizationId,
     suiteId: suite.id,
     agentId: params.agentId,
+    groupId: crypto.randomUUID(),
     agentNameSnapshot: "Test Agent",
     modelSnapshot: null,
     name: null,
@@ -108,10 +113,14 @@ describe("handleEvalRunExecution", () => {
       agentId: agent.id,
       userId: actor.id,
       cases: [
-        { name: "passing", input: "what is 6x7?", assertions: CONTAINS_42 },
+        {
+          name: "passing",
+          messages: ["what is 6x7?"],
+          assertions: CONTAINS_42,
+        },
         {
           name: "failing",
-          input: "what is 6x7?",
+          messages: ["what is 6x7?"],
           assertions: [
             {
               type: "contains",
@@ -174,7 +183,7 @@ describe("handleEvalRunExecution", () => {
       cases: [
         {
           name: "judged",
-          input: "explain",
+          messages: ["explain"],
           assertions: [{ type: "llm_judge", criteria: "answer is correct" }],
         },
       ],
@@ -186,7 +195,7 @@ describe("handleEvalRunExecution", () => {
     expect(mockRunLlmJudge).toHaveBeenCalledWith(
       expect.objectContaining({
         criteria: "answer is correct",
-        input: "explain",
+        input: "User:\nexplain",
         outputText: "the answer is 42",
         organizationId: org.id,
         userId: actor.id,
@@ -195,6 +204,57 @@ describe("handleEvalRunExecution", () => {
     );
     expect(result.status).toBe("passed");
     expect(result.judgeSessionId).toBe(`eval-judge-${result.id}`);
+  });
+
+  test("a multi-message case replays history and aggregates tools and tokens", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalAgent,
+  }) => {
+    const org = await makeOrganization();
+    const actor = await makeUser();
+    await makeMember(actor.id, org.id);
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    const { run } = await seedRun({
+      organizationId: org.id,
+      agentId: agent.id,
+      userId: actor.id,
+      cases: [
+        {
+          name: "two turns",
+          messages: ["first question", "second question"],
+          assertions: CONTAINS_42,
+        },
+      ],
+    });
+
+    await handleEvalRunExecution({ runId: run.id });
+
+    expect(mockExecuteA2AMessage).toHaveBeenCalledTimes(2);
+    const first = mockExecuteA2AMessage.mock.calls[0][0];
+    expect(first.messages).toEqual([
+      { role: "user", content: "first question" },
+    ]);
+    const second = mockExecuteA2AMessage.mock.calls[1][0];
+    expect(second.messages).toEqual([
+      { role: "user", content: "first question" },
+      { role: "assistant", content: "the answer is 42" },
+      { role: "user", content: "second question" },
+    ]);
+    // Both turns share the case's LLM session.
+    expect(first.sessionId).toBe(second.sessionId);
+
+    const [result] = await EvalRunResultModel.listAllByRun(run.id);
+    expect(result.status).toBe("passed");
+    // Tool calls and token usage accumulate across turns.
+    expect(result.toolCalls).toEqual([
+      "archestra__whoami",
+      "archestra__whoami",
+    ]);
+    expect(result.inputTokens).toBe(200);
+    expect(result.outputTokens).toBe(40);
+    expect(result.totalTokens).toBe(240);
   });
 
   test("an agent execution error marks the case errored and continues", async ({
@@ -212,8 +272,8 @@ describe("handleEvalRunExecution", () => {
       agentId: agent.id,
       userId: actor.id,
       cases: [
-        { name: "boom", input: "a", assertions: CONTAINS_42 },
-        { name: "ok", input: "b", assertions: CONTAINS_42 },
+        { name: "boom", messages: ["a"], assertions: CONTAINS_42 },
+        { name: "ok", messages: ["b"], assertions: CONTAINS_42 },
       ],
     });
 
@@ -251,7 +311,7 @@ describe("handleEvalRunExecution", () => {
       cases: [
         {
           name: "judged",
-          input: "x",
+          messages: ["x"],
           assertions: [{ type: "llm_judge", criteria: "anything" }],
         },
       ],
@@ -279,7 +339,7 @@ describe("handleEvalRunExecution", () => {
       organizationId: org.id,
       agentId: agent.id,
       userId: actor.id,
-      cases: [{ name: "c", input: "x", assertions: CONTAINS_42 }],
+      cases: [{ name: "c", messages: ["x"], assertions: CONTAINS_42 }],
     });
     await EvalRunModel.cancel(run.id, org.id);
 
@@ -307,7 +367,7 @@ describe("handleEvalRunExecution", () => {
       organizationId: org.id,
       agentId: agent.id,
       userId: actor.id,
-      cases: [{ name: "c", input: "x", assertions: CONTAINS_42 }],
+      cases: [{ name: "c", messages: ["x"], assertions: CONTAINS_42 }],
     });
 
     // The cancel arrives while the (only) case is executing.
@@ -341,9 +401,9 @@ describe("handleEvalRunExecution", () => {
       agentId: agent.id,
       userId: actor.id,
       cases: [
-        { name: "done", input: "a", assertions: CONTAINS_42 },
-        { name: "crashed", input: "b", assertions: CONTAINS_42 },
-        { name: "todo", input: "c", assertions: CONTAINS_42 },
+        { name: "done", messages: ["a"], assertions: CONTAINS_42 },
+        { name: "crashed", messages: ["b"], assertions: CONTAINS_42 },
+        { name: "todo", messages: ["c"], assertions: CONTAINS_42 },
       ],
     });
     const results = await EvalRunResultModel.listAllByRun(run.id);
@@ -390,8 +450,8 @@ describe("handleEvalRunExecution", () => {
       agentId: agent.id,
       userId: actor.id,
       cases: [
-        { name: "in-flight", input: "a", assertions: CONTAINS_42 },
-        { name: "todo", input: "b", assertions: CONTAINS_42 },
+        { name: "in-flight", messages: ["a"], assertions: CONTAINS_42 },
+        { name: "todo", messages: ["b"], assertions: CONTAINS_42 },
       ],
     });
     const results = await EvalRunResultModel.listAllByRun(run.id);
@@ -430,7 +490,7 @@ describe("handleEvalRunExecution", () => {
       organizationId: org.id,
       agentId: agent.id,
       userId: actor.id,
-      cases: [{ name: "c", input: "x", assertions: CONTAINS_42 }],
+      cases: [{ name: "c", messages: ["x"], assertions: CONTAINS_42 }],
     });
 
     await handleEvalRunExecution({ runId: run.id });
@@ -465,7 +525,7 @@ describe("handleEvalRunExecution", () => {
       organizationId: org.id,
       agentId: agent.id,
       userId: actor.id,
-      cases: [{ name: "c", input: "x", assertions: CONTAINS_42 }],
+      cases: [{ name: "c", messages: ["x"], assertions: CONTAINS_42 }],
     });
     await EvalRunModel.markRunning(run.id);
     await EvalRunModel.finalize({

@@ -1,3 +1,4 @@
+import type { ModelMessage } from "ai";
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import config from "@/config";
@@ -256,7 +257,14 @@ async function executeCase(params: {
   try {
     // Headless, conversation-less execution under the run creator's identity.
     // Approval-gated tools fail fast (blockOnApprovalRequired defaults true):
-    // there is nobody to approve in an eval.
+    // there is nobody to approve in an eval. A case's messages are sent one
+    // at a time; each turn sees the accumulated history (user turns plus the
+    // agent's final answers — intermediate tool traffic is not replayed), and
+    // the final answer is what text assertions grade. All turns share the
+    // case's LLM session and timeout.
+    const history: ModelMessage[] = [];
+    const toolCalls: string[] = [];
+    const usage = { input: 0, output: 0, total: 0, seen: false };
     const execution = await tracing.startActiveEvalCaseSpan({
       runId: run.id,
       suiteId: run.suiteId,
@@ -264,19 +272,38 @@ async function executeCase(params: {
       agentId: run.agentId,
       agentName: run.agentNameSnapshot,
       sessionId,
-      callback: () =>
-        executeA2AMessage({
-          agentId: run.agentId,
-          message: result.input,
-          organizationId: run.organizationId,
-          userId: actorId,
-          sessionId,
-          source: "eval:run",
-          abortSignal: abortController.signal,
-        }),
+      callback: async () => {
+        let last: Awaited<ReturnType<typeof executeA2AMessage>> | null = null;
+        for (const userMessage of result.messages) {
+          if (abortController.signal.aborted) {
+            throw new Error("Aborted between case messages");
+          }
+          history.push({ role: "user", content: userMessage });
+          last = await executeA2AMessage({
+            agentId: run.agentId,
+            message: userMessage,
+            messages: [...history],
+            organizationId: run.organizationId,
+            userId: actorId,
+            sessionId,
+            source: "eval:run",
+            abortSignal: abortController.signal,
+          });
+          history.push({ role: "assistant", content: last.text });
+          toolCalls.push(...extractTopLevelToolNames(last.responseUiMessage));
+          if (last.usage) {
+            usage.seen = true;
+            usage.input += last.usage.promptTokens;
+            usage.output += last.usage.completionTokens;
+            usage.total += last.usage.totalTokens;
+          }
+        }
+        if (!last) {
+          throw new Error("Case has no messages");
+        }
+        return last;
+      },
     });
-
-    const toolCalls = extractTopLevelToolNames(execution.responseUiMessage);
     const evaluation = await evaluateAssertions({
       assertions: result.assertions,
       outputText: execution.text,
@@ -286,7 +313,7 @@ async function executeCase(params: {
           const verdict = await runLlmJudge({
             criteria: assertion.criteria,
             expected: assertion.expected,
-            input: result.input,
+            input: renderTranscript(history),
             outputText: execution.text,
             organizationId: run.organizationId,
             userId: actorId,
@@ -318,9 +345,9 @@ async function executeCase(params: {
       assertionResults: evaluation.results,
       sessionId,
       judgeSessionId,
-      inputTokens: execution.usage?.promptTokens ?? null,
-      outputTokens: execution.usage?.completionTokens ?? null,
-      totalTokens: execution.usage?.totalTokens ?? null,
+      inputTokens: usage.seen ? usage.input : null,
+      outputTokens: usage.seen ? usage.output : null,
+      totalTokens: usage.seen ? usage.total : null,
       durationMs: Date.now() - startedAtMs,
     });
   } catch (error) {
@@ -360,6 +387,20 @@ async function failRun(runId: string, error: string): Promise<void> {
   await EvalRunModel.markFailed(runId, error);
   await EvalRunResultModel.cancelPendingByRun(runId);
   await syncCounts(runId);
+}
+
+/**
+ * Conversation as the LLM judge sees it. The final assistant answer is passed
+ * separately as the graded output, so it is omitted here.
+ */
+function renderTranscript(history: ModelMessage[]): string {
+  const turns = history.slice(0, -1);
+  return turns
+    .map(
+      (message) =>
+        `${message.role === "user" ? "User" : "Assistant"}:\n${typeof message.content === "string" ? message.content : JSON.stringify(message.content)}`,
+    )
+    .join("\n\n");
 }
 
 /** Copy the results table's tallies onto the (already terminal) run row. */

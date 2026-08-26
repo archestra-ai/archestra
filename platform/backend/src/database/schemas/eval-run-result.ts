@@ -17,7 +17,7 @@ import evalCasesTable from "./eval-case";
 import evalRunsTable from "./eval-run";
 
 /**
- * Per-case outcome of an eval run. Case name/input/assertions are snapshotted
+ * Per-case outcome of an eval run. Case name/messages/assertions are snapshotted
  * at run creation so results stay meaningful after the case is edited or
  * deleted (`caseId` goes null on case delete).
  */
@@ -33,7 +33,7 @@ const evalRunResultsTable = pgTable(
     }),
     // Snapshots taken at run creation.
     caseName: text("case_name").notNull(),
-    input: text("input").notNull(),
+    messages: jsonb("messages").$type<string[]>().notNull(),
     assertions: jsonb("assertions").$type<EvalAssertion[]>().notNull(),
     position: integer("position").notNull(),
     status: text("status")

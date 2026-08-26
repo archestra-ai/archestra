@@ -40,15 +40,13 @@ test("create an eval suite, manage cases, and reach the run dialog", async ({
   await page.getByRole("button", { name: /Add case/i }).click();
   const caseDialog = page.getByRole("dialog");
   await caseDialog.getByLabel(/Name/i).fill("Greeting");
-  await caseDialog.getByLabel(/Input/i).fill("Say hello");
-  await caseDialog
-    .getByPlaceholder(/Values \(comma-separated\)/i)
-    .fill("hello");
+  await caseDialog.getByLabel(/^Message$/i).fill("Say hello");
+  await caseDialog.getByPlaceholder(/e\.g\. refund, 30 days/i).fill("hello");
   await caseDialog.getByRole("button", { name: /Add case/i }).click();
 
-  // The case lands in the table with its assertion chip.
+  // The case lands in the table with its human-readable assertion chip.
   await expect(page.getByRole("cell", { name: "Greeting" })).toBeVisible();
-  await expect(page.getByText("contains").first()).toBeVisible();
+  await expect(page.getByText(/Answer contains/i).first()).toBeVisible();
 
   // Run dialog opens now that a case exists.
   await page.getByRole("button", { name: /^Run$/i }).click();

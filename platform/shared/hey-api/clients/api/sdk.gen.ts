@@ -3446,7 +3446,7 @@ export const updateEvalCase = <ThrowOnError extends boolean = false>(options: Op
 });
 
 /**
- * Run an eval suite against an agent. Snapshots the suite's current cases and executes asynchronously.
+ * Run an eval suite against one or more agents. One run is created per agent (a shared group id links them for comparison); each snapshots the suite's current cases and executes asynchronously.
  *
  * Authentication:
  *

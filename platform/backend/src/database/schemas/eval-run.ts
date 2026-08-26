@@ -27,6 +27,12 @@ const evalRunsTable = pgTable(
     agentId: uuid("agent_id")
       .notNull()
       .references(() => agentsTable.id, { onDelete: "cascade" }),
+    /**
+     * Runs started together (one "Run" against several agents) share a group
+     * id; the UI renders such a group as a side-by-side comparison. A run
+     * started alone is simply the only member of its group.
+     */
+    groupId: uuid("group_id").notNull().defaultRandom(),
     /** Optional user-supplied label (e.g. a CI build identifier). */
     name: text("name"),
     /**
@@ -63,6 +69,7 @@ const evalRunsTable = pgTable(
     ),
     index("eval_runs_suite_id_idx").on(table.suiteId),
     index("eval_runs_agent_id_idx").on(table.agentId),
+    index("eval_runs_group_id_idx").on(table.groupId),
   ],
 );
 

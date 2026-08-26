@@ -113,7 +113,7 @@ test("listByOrganization returns case counts and skips deleted suites", async ({
       insert: {
         suiteId: withCases.id,
         name,
-        input: "say hello",
+        messages: ["say hello"],
         assertions: SAMPLE_ASSERTIONS,
       },
     });
@@ -147,7 +147,7 @@ test("findByIdForAudit snapshots the case list", async ({
     insert: {
       suiteId: suite.id,
       name: "case one",
-      input: "hi",
+      messages: ["hi"],
       assertions: SAMPLE_ASSERTIONS,
     },
   });
@@ -159,7 +159,7 @@ test("findByIdForAudit snapshots the case list", async ({
     cases: [
       {
         name: "case one",
-        input: "hi",
+        messages: ["hi"],
         position: 1,
         assertions: SAMPLE_ASSERTIONS,
       },

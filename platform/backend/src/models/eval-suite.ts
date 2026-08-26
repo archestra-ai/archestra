@@ -169,7 +169,7 @@ class EvalSuiteModel {
       cases: cases.map((evalCase) => ({
         id: evalCase.id,
         name: evalCase.name,
-        input: evalCase.input,
+        messages: evalCase.messages,
         assertions: evalCase.assertions,
         position: evalCase.position,
       })),

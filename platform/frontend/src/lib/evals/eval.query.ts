@@ -42,6 +42,7 @@ export const evalKeys = {
     suiteId?: string;
     agentId?: string;
     status?: string;
+    groupId?: string;
     limit?: number;
     offset?: number;
   }) => [...evalKeys.all, "runs", params] as const,
@@ -282,6 +283,7 @@ export function useEvalRuns(params: {
       ? S
       : never
     : never;
+  groupId?: string;
   limit?: number;
   offset?: number;
   /** Poll at this interval only while the page contains an unfinished run. */

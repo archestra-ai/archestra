@@ -97,6 +97,36 @@ class EvalCaseModel {
     return row?.evalCase ?? null;
   }
 
+  /**
+   * The requested cases that belong to the given suite within the caller's
+   * organization; ids of foreign or unknown cases are simply absent.
+   */
+  static async listByIdsInSuite(params: {
+    ids: string[];
+    suiteId: string;
+    organizationId: string;
+  }): Promise<EvalCase[]> {
+    if (params.ids.length === 0) return [];
+    const rows = await db
+      .select({ evalCase: schema.evalCasesTable })
+      .from(schema.evalCasesTable)
+      .innerJoin(
+        schema.evalSuitesTable,
+        and(
+          eq(schema.evalCasesTable.suiteId, schema.evalSuitesTable.id),
+          eq(schema.evalSuitesTable.organizationId, params.organizationId),
+          notDeleted(schema.evalSuitesTable),
+        ),
+      )
+      .where(
+        and(
+          inArray(schema.evalCasesTable.id, params.ids),
+          eq(schema.evalCasesTable.suiteId, params.suiteId),
+        ),
+      );
+    return rows.map((row) => row.evalCase);
+  }
+
   static async update(params: {
     id: string;
     organizationId: string;

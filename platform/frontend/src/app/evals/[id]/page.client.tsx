@@ -1,8 +1,10 @@
 "use client";
 
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import {
   ArrowLeft,
+  FlaskConical,
+  GitCompareArrows,
   Pencil,
   Play,
   Plus,
@@ -17,24 +19,44 @@ import {
   useRouter,
   useSearchParams,
 } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
+import { FilterBar, filterSearchClass } from "@/components/filter-bar";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
+import { SearchInput } from "@/components/search-input";
+import {
+  TableCard,
+  TableCardList,
+  TableCardView,
+  TableCardViewContent,
+  TableCardViewToggle,
+} from "@/components/table-card-view";
 import {
   type TableRowAction,
   TableRowActions,
 } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
+import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
+import { DATA_TABLE_SELECT_COLUMN_SIZE } from "@/components/ui/data-table.constants";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   type EvalCase,
   type EvalRun,
+  useBulkDeleteEvalCases,
   useDeleteEvalCase,
   useEvalRun,
   useEvalRuns,
@@ -52,7 +74,15 @@ import { EvalRunStatusBadge } from "../_parts/eval-run-status-badge";
 import { EvalSuiteDialog } from "../_parts/eval-suite-dialog";
 
 const RUNS_POLL_INTERVAL_MS = 5000;
-const MAX_ASSERTION_CHIPS = 3;
+const MAX_ASSERTION_CHIPS = 2;
+
+const RUN_STATUS_FILTERS = [
+  "pending",
+  "running",
+  "completed",
+  "failed",
+  "canceled",
+] as const;
 
 /** Prefilled first case, so an empty suite explains itself by example. */
 const EXAMPLE_CASE: EvalCaseTemplate = {
@@ -129,93 +159,6 @@ function EvalSuiteDetail() {
     setCaseDialogOpen(true);
   };
 
-  const caseColumns: ColumnDef<EvalCase>[] = [
-    {
-      accessorKey: "position",
-      header: "#",
-      size: 40,
-      cell: ({ row }) => (
-        <span className="text-muted-foreground">{row.original.position}</span>
-      ),
-    },
-    {
-      accessorKey: "name",
-      header: "Name",
-      cell: ({ row }) => (
-        <span className="font-medium">{row.original.name}</span>
-      ),
-    },
-    {
-      id: "message",
-      header: "Message",
-      cell: ({ row }) => (
-        <div className="flex max-w-md items-center gap-2">
-          <span className="text-muted-foreground line-clamp-1">
-            {row.original.messages[0]}
-          </span>
-          {row.original.messages.length > 1 && (
-            <Badge variant="secondary" className="shrink-0 text-xs">
-              {row.original.messages.length} turns
-            </Badge>
-          )}
-        </div>
-      ),
-    },
-    {
-      id: "assertions",
-      header: "Assertions",
-      cell: ({ row }) => {
-        const assertions = row.original.assertions;
-        const shown = assertions.slice(0, MAX_ASSERTION_CHIPS);
-        return (
-          <div className="flex flex-wrap gap-1">
-            {shown.map((assertion, index) => (
-              <Badge
-                // biome-ignore lint/suspicious/noArrayIndexKey: assertions have no id
-                key={index}
-                variant="outline"
-                className="max-w-72 text-xs"
-              >
-                <span className="truncate">
-                  {summarizeAssertion(assertion)}
-                </span>
-              </Badge>
-            ))}
-            {assertions.length > MAX_ASSERTION_CHIPS && (
-              <Badge variant="outline" className="text-xs">
-                +{assertions.length - MAX_ASSERTION_CHIPS} more
-              </Badge>
-            )}
-          </div>
-        );
-      },
-    },
-    {
-      id: "actions",
-      cell: ({ row }) => {
-        if (!canUpdate) return null;
-        const actions: TableRowAction[] = [
-          {
-            label: "Edit",
-            icon: <Pencil className="h-4 w-4" />,
-            onClick: () => {
-              setCaseTemplate(null);
-              setCaseToEdit(row.original);
-              setCaseDialogOpen(true);
-            },
-          },
-          {
-            label: "Delete",
-            icon: <Trash2 className="h-4 w-4" />,
-            className: "text-destructive",
-            onClick: () => setCaseToDelete(row.original),
-          },
-        ];
-        return <TableRowActions actions={actions} />;
-      },
-    },
-  ];
-
   return (
     <PageLayout
       title={suite?.name ?? "Eval suite"}
@@ -237,14 +180,16 @@ function EvalSuiteDetail() {
       }
       tabs={[
         { label: "Cases", href: pathname, selected: !isRunsTab },
-        {
-          label: "Runs",
-          href: `${pathname}?tab=runs`,
-          selected: isRunsTab,
-        },
+        { label: "Runs", href: `${pathname}?tab=runs`, selected: isRunsTab },
       ]}
       actionButton={
         <div className="flex gap-2">
+          {!isRunsTab && canUpdate && (
+            <Button variant="outline" onClick={() => openNewCaseDialog(null)}>
+              <Plus className="mr-2 h-4 w-4" />
+              <span>Add case</span>
+            </Button>
+          )}
           {canUpdate && (
             <Button variant="outline" onClick={() => setEditSuiteOpen(true)}>
               <Pencil className="mr-2 h-4 w-4" />
@@ -266,50 +211,21 @@ function EvalSuiteDetail() {
       {isRunsTab ? (
         <SuiteRunHistory suiteId={suiteId} focusedGroupId={focusedGroupId} />
       ) : (
-        <section className="space-y-3">
-          {cases.length > 0 && canUpdate && (
-            <div className="flex justify-end">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => openNewCaseDialog(null)}
-              >
-                <Plus className="mr-1 h-3.5 w-3.5" />
-                <span>Add case</span>
-              </Button>
-            </div>
-          )}
-          {casesQuery.isLoadingError ? (
-            <QueryLoadError
-              title="Couldn't load cases"
-              onRetry={() => casesQuery.refetch()}
-            />
-          ) : cases.length === 0 && !casesQuery.isLoading ? (
-            <EmptyState
-              title="No cases yet"
-              description="A case is one test: a message you would send the agent, plus assertions its answer must pass. Runs execute every case and grade the answers."
-              action={
-                canUpdate ? (
-                  <div className="flex gap-2">
-                    <Button onClick={() => openNewCaseDialog(null)}>
-                      <Plus className="mr-2 h-4 w-4" />
-                      <span>Add case</span>
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => openNewCaseDialog(EXAMPLE_CASE)}
-                    >
-                      <Sparkles className="mr-2 h-4 w-4" />
-                      <span>Start from an example</span>
-                    </Button>
-                  </div>
-                ) : undefined
-              }
-            />
-          ) : (
-            <DataTable columns={caseColumns} data={cases} />
-          )}
-        </section>
+        <SuiteCases
+          suiteId={suiteId}
+          cases={cases}
+          isLoading={casesQuery.isLoading}
+          isLoadingError={casesQuery.isLoadingError}
+          onRetry={() => casesQuery.refetch()}
+          canUpdate={!!canUpdate}
+          onAddExample={() => openNewCaseDialog(EXAMPLE_CASE)}
+          onEdit={(evalCase) => {
+            setCaseTemplate(null);
+            setCaseToEdit(evalCase);
+            setCaseDialogOpen(true);
+          }}
+          onDelete={setCaseToDelete}
+        />
       )}
 
       <EvalCaseDialog
@@ -353,6 +269,312 @@ function EvalSuiteDetail() {
   );
 }
 
+// === Cases tab ===
+
+function SuiteCases({
+  suiteId,
+  cases,
+  isLoading,
+  isLoadingError,
+  onRetry,
+  canUpdate,
+  onAddExample,
+  onEdit,
+  onDelete,
+}: {
+  suiteId: string;
+  cases: EvalCase[];
+  isLoading: boolean;
+  isLoadingError: boolean;
+  onRetry: () => void;
+  canUpdate: boolean;
+  onAddExample: () => void;
+  onEdit: (evalCase: EvalCase) => void;
+  onDelete: (evalCase: EvalCase) => void;
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const search = searchParams.get("search") ?? "";
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const bulkDelete = useBulkDeleteEvalCases();
+
+  const filtered = search
+    ? cases.filter((evalCase) =>
+        [evalCase.name, ...evalCase.messages]
+          .join("\n")
+          .toLowerCase()
+          .includes(search.toLowerCase()),
+      )
+    : cases;
+  const selected = filtered.filter((evalCase) => rowSelection[evalCase.id]);
+
+  const rowActions = (evalCase: EvalCase): TableRowAction[] => [
+    {
+      label: "Edit",
+      icon: <Pencil className="h-4 w-4" />,
+      onClick: () => onEdit(evalCase),
+    },
+    {
+      label: "Delete",
+      icon: <Trash2 className="h-4 w-4" />,
+      className: "text-destructive",
+      onClick: () => onDelete(evalCase),
+    },
+  ];
+
+  const columns: ColumnDef<EvalCase>[] = [
+    ...(canUpdate
+      ? [
+          {
+            id: "select",
+            size: DATA_TABLE_SELECT_COLUMN_SIZE,
+            header: ({ table }) => (
+              <Checkbox
+                checked={
+                  table.getIsAllPageRowsSelected() ||
+                  (table.getIsSomePageRowsSelected() && "indeterminate")
+                }
+                onCheckedChange={(value) =>
+                  table.toggleAllPageRowsSelected(!!value)
+                }
+                aria-label="Select all cases"
+              />
+            ),
+            cell: ({ row }) => (
+              <Checkbox
+                checked={row.getIsSelected()}
+                onCheckedChange={(value) => row.toggleSelected(!!value)}
+                onClick={(event) => event.stopPropagation()}
+                aria-label={`Select ${row.original.name}`}
+              />
+            ),
+          } satisfies ColumnDef<EvalCase>,
+        ]
+      : []),
+    {
+      accessorKey: "name",
+      header: "Name",
+      cell: ({ row }) => (
+        <span className="font-medium">{row.original.name}</span>
+      ),
+    },
+    {
+      id: "message",
+      header: "Message",
+      cell: ({ row }) => (
+        <div className="flex max-w-sm items-center gap-2">
+          <span className="text-muted-foreground line-clamp-1">
+            {row.original.messages[0]}
+          </span>
+          {row.original.messages.length > 1 && (
+            <Badge variant="secondary" className="shrink-0 text-xs">
+              {row.original.messages.length} turns
+            </Badge>
+          )}
+        </div>
+      ),
+    },
+    {
+      id: "assertions",
+      header: "Assertions",
+      cell: ({ row }) => (
+        <AssertionChips assertions={row.original.assertions} />
+      ),
+    },
+    {
+      id: "actions",
+      size: 110,
+      header: () => <div className="pr-2 text-right">Actions</div>,
+      cell: ({ row }) => {
+        if (!canUpdate) return null;
+        return (
+          <div className="flex justify-end">
+            <TableRowActions actions={rowActions(row.original)} />
+          </div>
+        );
+      },
+    },
+  ];
+
+  const hasActiveFilters = search.length > 0;
+  if (!isLoadingError && !isLoading && cases.length === 0) {
+    return (
+      <EmptyState
+        icon={FlaskConical}
+        title="No cases yet"
+        description='A case is one test: a message you would send the agent, plus assertions its answer must pass. Add one with "Add case", or start from a working example.'
+        action={
+          canUpdate ? (
+            <Button variant="outline" onClick={onAddExample}>
+              <Sparkles className="mr-2 h-4 w-4" />
+              <span>Start from an example</span>
+            </Button>
+          ) : undefined
+        }
+      />
+    );
+  }
+
+  return (
+    <TableCardView storageKey="archestra-eval-cases-view" defaultMode="table">
+      <div className="space-y-4">
+        <FilterBar
+          onClearFilters={
+            hasActiveFilters ? () => router.replace(pathname) : undefined
+          }
+          actions={<TableCardViewToggle order={["table", "cards"]} />}
+        >
+          <SearchInput
+            paramName="search"
+            placeholder="Search cases…"
+            className={filterSearchClass}
+          />
+        </FilterBar>
+
+        {selected.length > 0 && (
+          <BulkActionsBar
+            count={selected.length}
+            noun="case"
+            onClear={() => setRowSelection({})}
+          >
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setBulkDeleteOpen(true)}
+            >
+              <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+              <span>Delete</span>
+            </Button>
+          </BulkActionsBar>
+        )}
+
+        {isLoadingError ? (
+          <QueryLoadError title="Couldn't load cases" onRetry={onRetry} />
+        ) : (
+          <TableCardViewContent
+            cards={
+              <TableCardList
+                itemCount={filtered.length}
+                isLoading={isLoading}
+                emptyIcon={FlaskConical}
+                emptyMessage="No cases yet"
+                hasActiveFilters={hasActiveFilters}
+                filteredEmptyMessage="No cases match this search."
+                onClearFilters={() => router.replace(pathname)}
+              >
+                {filtered.map((evalCase) => (
+                  <TableCard
+                    key={evalCase.id}
+                    title={evalCase.name}
+                    description={evalCase.messages[0]}
+                    icon={<FlaskConical className="h-4 w-4" />}
+                    selected={!!rowSelection[evalCase.id]}
+                    onSelectedChange={
+                      canUpdate
+                        ? (value) =>
+                            setRowSelection((current) => ({
+                              ...current,
+                              [evalCase.id]: value,
+                            }))
+                        : undefined
+                    }
+                    selectionLabel={`Select ${evalCase.name}`}
+                    actions={
+                      canUpdate ? (
+                        <TableRowActions actions={rowActions(evalCase)} />
+                      ) : undefined
+                    }
+                    footer={
+                      <span>
+                        {evalCase.assertions.length}{" "}
+                        {evalCase.assertions.length === 1
+                          ? "assertion"
+                          : "assertions"}
+                        {evalCase.messages.length > 1
+                          ? ` · ${evalCase.messages.length} turns`
+                          : ""}
+                      </span>
+                    }
+                  >
+                    <AssertionChips assertions={evalCase.assertions} />
+                  </TableCard>
+                ))}
+              </TableCardList>
+            }
+            table={
+              <DataTable
+                columns={columns}
+                data={filtered}
+                isLoading={isLoading}
+                getRowId={(row) => row.id}
+                rowSelection={rowSelection}
+                onRowSelectionChange={setRowSelection}
+                hideSelectedCount
+                emptyMessage={
+                  hasActiveFilters
+                    ? "No cases match this search."
+                    : "No cases yet"
+                }
+              />
+            }
+          />
+        )}
+      </div>
+
+      <DeleteConfirmDialog
+        open={bulkDeleteOpen}
+        onOpenChange={setBulkDeleteOpen}
+        title={`Delete ${selected.length} ${selected.length === 1 ? "case" : "cases"}?`}
+        description="Past run results keep their snapshots."
+        isPending={bulkDelete.isPending}
+        onConfirm={async () => {
+          const outcome = await bulkDelete.mutateAsync({
+            suiteId,
+            ids: selected.map((evalCase) => evalCase.id),
+          });
+          setBulkDeleteOpen(false);
+          // Rows that failed to delete stay selected for a retry.
+          const failedIds = outcome?.failed.map((f) => f.id) ?? [];
+          setRowSelection(
+            Object.fromEntries(failedIds.map((id) => [id, true])),
+          );
+        }}
+      />
+    </TableCardView>
+  );
+}
+
+function AssertionChips({
+  assertions,
+}: {
+  assertions: EvalCase["assertions"];
+}) {
+  const shown = assertions.slice(0, MAX_ASSERTION_CHIPS);
+  return (
+    <div className="flex max-w-md flex-wrap gap-1">
+      {shown.map((assertion, index) => (
+        <Badge
+          // biome-ignore lint/suspicious/noArrayIndexKey: assertions have no id
+          key={index}
+          variant="outline"
+          className="max-w-56 text-xs"
+        >
+          <span className="truncate">{summarizeAssertion(assertion)}</span>
+        </Badge>
+      ))}
+      {assertions.length > MAX_ASSERTION_CHIPS && (
+        <Badge variant="outline" className="text-xs">
+          +{assertions.length - MAX_ASSERTION_CHIPS} more
+        </Badge>
+      )}
+    </div>
+  );
+}
+
+// === Runs tab ===
+
 function SuiteRunHistory({
   suiteId,
   focusedGroupId,
@@ -362,26 +584,57 @@ function SuiteRunHistory({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const runSearch = searchParams.get("runSearch") ?? "";
+  const [status, setStatus] = useState<string>("all");
   const [pagination, setPagination] = useState({
     pageIndex: 0,
     pageSize: DEFAULT_TABLE_LIMIT,
   });
 
+  // A changed filter starts back at the first page of the filtered list.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset on filter change
+  useEffect(() => {
+    setPagination((current) => ({ ...current, pageIndex: 0 }));
+  }, [runSearch, status]);
+
   const runsQuery = useEvalRuns({
     suiteId,
+    search: runSearch || undefined,
+    status:
+      status === "all"
+        ? undefined
+        : (status as (typeof RUN_STATUS_FILTERS)[number]),
     limit: pagination.pageSize,
     offset: pagination.pageIndex * pagination.pageSize,
     pollWhileActiveMs: RUNS_POLL_INTERVAL_MS,
   });
   const runs = runsQuery.data?.data ?? [];
   const total = runsQuery.data?.pagination.total ?? 0;
+  const hasActiveFilters = runSearch.length > 0 || status !== "all";
+  const clearFilters = () => {
+    setStatus("all");
+    router.replace(`${pathname}?tab=runs`);
+  };
 
   // Batches visible on this page: a group id shared by 2+ fetched runs gets a
-  // Compare affordance on its rows.
+  // Compare action on its rows. (Page-scoped; a group split across pages is
+  // still reachable through the comparison view a batch redirects to.)
   const groupSizes = new Map<string, number>();
   for (const run of runs) {
     groupSizes.set(run.groupId, (groupSizes.get(run.groupId) ?? 0) + 1);
   }
+
+  const rowActions = (run: EvalRun): TableRowAction[] => {
+    if ((groupSizes.get(run.groupId) ?? 0) < 2) return [];
+    return [
+      {
+        label: "Compare agents in this batch",
+        icon: <GitCompareArrows className="h-4 w-4" />,
+        onClick: () => router.push(`${pathname}?tab=runs&group=${run.groupId}`),
+      },
+    ];
+  };
 
   const columns: ColumnDef<EvalRun>[] = [
     {
@@ -418,59 +671,123 @@ function SuiteRunHistory({
       cell: ({ row }) => <PassCell run={row.original} />,
     },
     {
-      id: "compare",
-      header: "",
+      id: "actions",
       size: 90,
+      header: () => <div className="pr-2 text-right">Actions</div>,
       cell: ({ row }) => {
-        if ((groupSizes.get(row.original.groupId) ?? 0) < 2) return null;
+        const actions = rowActions(row.original);
+        if (actions.length === 0) return null;
         return (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={(event) => {
-              event.stopPropagation();
-              router.push(`${pathname}?tab=runs&group=${row.original.groupId}`);
-            }}
-          >
-            Compare
-          </Button>
+          <div className="flex justify-end">
+            {/* TableRowActions stops propagation itself, keeping row-click nav intact. */}
+            <TableRowActions actions={actions} />
+          </div>
         );
       },
     },
   ];
 
   return (
-    <div className="space-y-6">
-      {focusedGroupId && (
-        <RunGroupComparison suiteId={suiteId} groupId={focusedGroupId} />
-      )}
-      <section className="space-y-3">
+    <TableCardView storageKey="archestra-eval-runs-view" defaultMode="table">
+      <div className="space-y-4">
+        {focusedGroupId && (
+          <RunGroupComparison suiteId={suiteId} groupId={focusedGroupId} />
+        )}
+
+        <FilterBar
+          onClearFilters={hasActiveFilters ? clearFilters : undefined}
+          actions={<TableCardViewToggle order={["table", "cards"]} />}
+        >
+          <SearchInput
+            paramName="runSearch"
+            placeholder="Search label or agent…"
+            className={filterSearchClass}
+          />
+          <Select value={status} onValueChange={setStatus}>
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              {RUN_STATUS_FILTERS.map((value) => (
+                <SelectItem key={value} value={value}>
+                  {value[0].toUpperCase() + value.slice(1)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </FilterBar>
+
         {runsQuery.isLoadingError ? (
           <QueryLoadError
             title="Couldn't load runs"
             onRetry={() => runsQuery.refetch()}
           />
-        ) : total === 0 && !runsQuery.isLoading ? (
-          <EmptyState
-            title="No runs yet"
-            description="Run this suite against one or more agents to see graded results here. Runs against several agents are grouped for side-by-side comparison."
-          />
         ) : (
-          <DataTable
-            columns={columns}
-            data={runs}
-            manualPagination
-            pagination={{
-              pageIndex: pagination.pageIndex,
-              pageSize: pagination.pageSize,
-              total,
-            }}
-            onPaginationChange={setPagination}
-            onRowClick={(row) => router.push(`/evals/runs/${row.id}`)}
+          <TableCardViewContent
+            cards={
+              <TableCardList
+                itemCount={runs.length}
+                isLoading={runsQuery.isLoading}
+                emptyIcon={Play}
+                emptyMessage="No runs yet"
+                emptyDescription="Run this suite against one or more agents to see graded results here."
+                hasActiveFilters={hasActiveFilters}
+                filteredEmptyMessage="No runs match these filters."
+                onClearFilters={clearFilters}
+                pagination={{ ...pagination, total }}
+                onPaginationChange={(value) =>
+                  setPagination((current) => ({ ...current, ...value }))
+                }
+              >
+                {runs.map((run) => (
+                  <TableCard
+                    key={run.id}
+                    title={
+                      <Link
+                        href={`/evals/runs/${run.id}`}
+                        className="hover:underline"
+                      >
+                        {run.name ?? formatDate({ date: run.createdAt })}
+                      </Link>
+                    }
+                    description={run.agentNameSnapshot}
+                    icon={<Play className="h-4 w-4" />}
+                    actions={
+                      rowActions(run).length > 0 ? (
+                        <TableRowActions actions={rowActions(run)} />
+                      ) : undefined
+                    }
+                    footer={<span>{formatDate({ date: run.createdAt })}</span>}
+                  >
+                    <div className="flex items-center gap-3">
+                      <EvalRunStatusBadge status={run.status} />
+                      <PassCell run={run} />
+                    </div>
+                  </TableCard>
+                ))}
+              </TableCardList>
+            }
+            table={
+              <DataTable
+                columns={columns}
+                data={runs}
+                isLoading={runsQuery.isLoading}
+                manualPagination
+                pagination={{ ...pagination, total }}
+                onPaginationChange={setPagination}
+                onRowClick={(row) => router.push(`/evals/runs/${row.id}`)}
+                emptyMessage={
+                  hasActiveFilters
+                    ? "No runs match these filters."
+                    : "No runs yet"
+                }
+              />
+            }
           />
         )}
-      </section>
-    </div>
+      </div>
+    </TableCardView>
   );
 }
 

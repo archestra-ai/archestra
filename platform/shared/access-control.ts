@@ -1753,6 +1753,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.BulkDeleteEvalSuites]: {
     eval: ["delete"],
   },
+  [RouteId.BulkDeleteEvalCases]: {
+    eval: ["update"],
+  },
 
   // Knowledge Base Routes
   [RouteId.GetKnowledgeBases]: { knowledgeSource: ["read"] },

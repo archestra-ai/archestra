@@ -1,6 +1,16 @@
-import { and, count, desc, eq, inArray, type SQL } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  or,
+  type SQL,
+} from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import type { EvalRun, EvalRunStatus } from "@/types/eval";
+import { escapeLikePattern } from "@/utils/sql-search";
 
 type EvalRunListFilters = {
   organizationId: string;
@@ -8,6 +18,8 @@ type EvalRunListFilters = {
   agentId?: string;
   status?: EvalRunStatus;
   groupId?: string;
+  /** Case-insensitive substring over the run label and agent name snapshot. */
+  search?: string;
 };
 
 class EvalRunModel {
@@ -273,6 +285,14 @@ function buildListFilters(filters: EvalRunListFilters): SQL[] {
   }
   if (filters.groupId !== undefined) {
     conditions.push(eq(schema.evalRunsTable.groupId, filters.groupId));
+  }
+  if (filters.search) {
+    const pattern = `%${escapeLikePattern(filters.search)}%`;
+    const match = or(
+      ilike(schema.evalRunsTable.name, pattern),
+      ilike(schema.evalRunsTable.agentNameSnapshot, pattern),
+    );
+    if (match) conditions.push(match);
   }
   return conditions;
 }

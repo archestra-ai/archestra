@@ -454,6 +454,82 @@ describe("eval routes", () => {
     ).toBe(409);
   });
 
+  test("run list search matches label and agent name", async ({
+    makeInternalAgent,
+  }) => {
+    const agentA = await makeInternalAgent({
+      organizationId,
+      name: "Billing Bot",
+    });
+    const agentB = await makeInternalAgent({ organizationId, name: "Other" });
+    const suite = await createSuite("Search suite");
+    await addCase(suite.id);
+    await app.inject({
+      method: "POST",
+      url: `/api/eval-suites/${suite.id}/runs`,
+      payload: { agentIds: [agentA.id], name: "nightly-77" },
+    });
+    await app.inject({
+      method: "POST",
+      url: `/api/eval-suites/${suite.id}/runs`,
+      payload: { agentIds: [agentB.id] },
+    });
+
+    const byLabel = await app.inject({
+      method: "GET",
+      url: "/api/eval-runs?search=nightly-7",
+    });
+    expect(byLabel.json().pagination.total).toBe(1);
+    expect(byLabel.json().data[0].name).toBe("nightly-77");
+
+    const byAgent = await app.inject({
+      method: "GET",
+      url: "/api/eval-runs?search=billing",
+    });
+    expect(byAgent.json().pagination.total).toBe(1);
+    expect(byAgent.json().data[0].agentNameSnapshot).toBe("Billing Bot");
+  });
+
+  test("bulk case delete fences to the suite and audits the parent", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const suite = await createSuite("Bulk case suite");
+    const keep = await addCase(suite.id, { name: "keep" });
+    const drop = await addCase(suite.id, { name: "drop", messages: ["bye"] });
+    const otherSuite = await createSuite("Other suite");
+    const foreign = await addCase(otherSuite.id, { name: "foreign" });
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/api/eval-suites/${suite.id}/cases/bulk`,
+      payload: { ids: [drop.id, foreign.id] },
+    });
+    expect(response.statusCode).toBe(200);
+    const outcome = response.json();
+    expect(outcome.succeeded.map((r: { id: string }) => r.id)).toEqual([
+      drop.id,
+    ]);
+    expect(outcome.failed).toEqual([
+      { id: foreign.id, name: null, error: "Eval case not found" },
+    ]);
+
+    // The named case is gone, the sibling and the foreign suite's case stay.
+    const remaining = await EvalCaseModel.listBySuite(suite.id);
+    expect(remaining.map((c) => c.id)).toEqual([keep.id]);
+    expect(await EvalCaseModel.listBySuite(otherSuite.id)).toHaveLength(1);
+
+    // Audited as evalSuite.updated on the parent, diffing the case list.
+    const rows = await auditRowsFor(suite.id, "evalSuite.updated");
+    const bulkRow = rows.find(
+      (row) =>
+        JSON.stringify(row.before).includes("drop") &&
+        !JSON.stringify(row.after).includes("drop"),
+    );
+    expect(bulkRow).toBeTruthy();
+  });
+
   test("multi-agent creation failure compensates already-created runs", async ({
     makeInternalAgent,
   }) => {

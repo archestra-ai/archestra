@@ -36859,6 +36859,105 @@ export type CreateEvalSuiteCaseResponses = {
 
 export type CreateEvalSuiteCaseResponse = CreateEvalSuiteCaseResponses[keyof CreateEvalSuiteCaseResponses];
 
+export type BulkDeleteEvalCasesData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/eval-suites/{id}/cases/bulk';
+};
+
+export type BulkDeleteEvalCasesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteEvalCasesError = BulkDeleteEvalCasesErrors[keyof BulkDeleteEvalCasesErrors];
+
+export type BulkDeleteEvalCasesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteEvalCasesResponse = BulkDeleteEvalCasesResponses[keyof BulkDeleteEvalCasesResponses];
+
 export type DeleteEvalCaseData = {
     body?: never;
     path: {
@@ -37213,6 +37312,7 @@ export type GetEvalRunsData = {
         agentId?: string;
         status?: 'pending' | 'running' | 'completed' | 'failed' | 'canceled';
         groupId?: string;
+        search?: string;
     };
     url: '/api/eval-runs';
 };

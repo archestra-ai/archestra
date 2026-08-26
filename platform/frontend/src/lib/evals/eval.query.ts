@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { handleApiError, throwOnApiError, toApiError } from "../utils";
 
 const {
+  bulkDeleteEvalCases,
   bulkDeleteEvalSuites,
   getEvalSuites,
   createEvalSuite,
@@ -43,6 +44,7 @@ export const evalKeys = {
     agentId?: string;
     status?: string;
     groupId?: string;
+    search?: string;
     limit?: number;
     offset?: number;
   }) => [...evalKeys.all, "runs", params] as const,
@@ -249,6 +251,36 @@ export function useDeleteEvalCase() {
   });
 }
 
+export function useBulkDeleteEvalCases() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: { suiteId: string; ids: string[] }) => {
+      const { data, error } = await bulkDeleteEvalCases({
+        path: { id: params.suiteId },
+        body: { ids: params.ids },
+      });
+      if (error) {
+        handleApiError(error);
+        throw toApiError(error);
+      }
+      return data;
+    },
+    onSuccess: (outcome) => {
+      if (!outcome) return;
+      if (outcome.failed.length > 0) {
+        toast.warning(
+          `Deleted ${outcome.succeeded.length}; ${outcome.failed.length} could not be deleted`,
+        );
+      } else {
+        toast.success(
+          `Deleted ${outcome.succeeded.length} ${outcome.succeeded.length === 1 ? "case" : "cases"}`,
+        );
+      }
+      queryClient.invalidateQueries({ queryKey: evalKeys.all });
+    },
+  });
+}
+
 // === Runs ===
 
 export function useCreateEvalRun() {
@@ -284,6 +316,7 @@ export function useEvalRuns(params: {
       : never
     : never;
   groupId?: string;
+  search?: string;
   limit?: number;
   offset?: number;
   /** Poll at this interval only while the page contains an unfinished run. */

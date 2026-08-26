@@ -304,6 +304,68 @@ const evalRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.delete(
+    "/api/eval-suites/:id/cases/bulk",
+    {
+      schema: {
+        operationId: RouteId.BulkDeleteEvalCases,
+        description:
+          "Delete several cases of one eval suite in one request. An id that " +
+          "does not belong to this suite (or the caller's organization) is " +
+          "reported in `failed` and the rest of the batch still applies.",
+        tags: ["Evals"],
+        params: z.object({ id: UuidIdSchema }),
+        body: BulkDeleteBodySchema,
+        response: constructResponseSchema(BulkOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const {
+        params: { id },
+        organizationId,
+      } = request;
+      const suite = await EvalSuiteModel.findById(id, organizationId);
+      if (!suite) {
+        throw new ApiError(404, "Eval suite not found");
+      }
+
+      // Audited like every case mutation: as evalSuite.updated on the parent
+      // suite, whose audit snapshot carries the case list on both sides.
+      const snapshot = async () =>
+        (await EvalSuiteModel.findByIdForAudit(suite.id, organizationId)) ?? {};
+
+      const outcome = await runBulk({
+        ids: request.body.ids,
+        logLabel: "eval cases bulk delete",
+        notFoundMessage: "Eval case not found",
+        unexpectedMessage: "Could not delete this case",
+        load: async (ids) =>
+          new Map(
+            (
+              await EvalCaseModel.listByIdsInSuite({
+                ids,
+                suiteId: suite.id,
+                organizationId,
+              })
+            ).map((evalCase) => [evalCase.id, evalCase] as const),
+          ),
+        describe: (evalCase) => evalCase.name,
+        applyEach: async (evalCase) => {
+          const deleted = await EvalCaseModel.delete({
+            id: evalCase.id,
+            organizationId,
+          });
+          if (!deleted) {
+            throw new ApiError(404, "Eval case not found");
+          }
+        },
+        audit: { target: request, snapshot },
+      });
+
+      return reply.send(outcome);
+    },
+  );
+
   fastify.put(
     "/api/eval-cases/:id",
     {
@@ -539,6 +601,7 @@ const evalRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId: UuidIdSchema.optional(),
           status: EvalRunStatusSchema.optional(),
           groupId: UuidIdSchema.optional(),
+          search: z.string().optional(),
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(SelectEvalRunSchema),
@@ -547,12 +610,19 @@ const evalRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (
       {
-        query: { limit, offset, suiteId, agentId, status, groupId },
+        query: { limit, offset, suiteId, agentId, status, groupId, search },
         organizationId,
       },
       reply,
     ) => {
-      const filters = { organizationId, suiteId, agentId, status, groupId };
+      const filters = {
+        organizationId,
+        suiteId,
+        agentId,
+        status,
+        groupId,
+        search,
+      };
       const [data, total] = await Promise.all([
         EvalRunModel.listByOrganization({ ...filters, limit, offset }),
         EvalRunModel.countByOrganization(filters),

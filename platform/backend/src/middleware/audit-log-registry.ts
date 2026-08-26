@@ -694,6 +694,13 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "evalSuite.updated",
     fetchById: (id, orgId) => EvalSuiteModel.findByIdForAudit(id, orgId),
   },
+  // Bulk case deletion under the suite path; the route snapshots the suite
+  // on both sides of the batch via the bulk helper.
+  "/api/eval-suites/:id/cases/bulk": {
+    resourceType: "evalSuite",
+    action: "evalSuite.updated",
+    fetchById: (id, orgId) => EvalSuiteModel.findByIdForAudit(id, orgId),
+  },
   // The path param is a CASE id; the before-snapshot resolves it to the
   // owning suite. After a delete the case row is gone, so the handler sets
   // `auditAfter` (and points `auditResourceId` at the suite).

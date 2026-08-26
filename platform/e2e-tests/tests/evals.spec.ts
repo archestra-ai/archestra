@@ -45,7 +45,9 @@ test("create an eval suite, manage cases, and reach the run dialog", async ({
   await caseDialog.getByRole("button", { name: /Add case/i }).click();
 
   // The case lands in the table with its human-readable assertion chip.
-  await expect(page.getByRole("cell", { name: "Greeting" })).toBeVisible();
+  await expect(
+    page.getByRole("cell", { name: "Greeting", exact: true }),
+  ).toBeVisible();
   await expect(page.getByText(/Answer contains/i).first()).toBeVisible();
 
   // Run dialog opens now that a case exists.
@@ -68,7 +70,9 @@ test("create an eval suite, manage cases, and reach the run dialog", async ({
   const editDialog = page.getByRole("dialog");
   await editDialog.getByLabel(/Name/i).fill("Greeting v2");
   await editDialog.getByRole("button", { name: /Save case/i }).click();
-  await expect(page.getByRole("cell", { name: "Greeting v2" })).toBeVisible();
+  await expect(
+    page.getByRole("cell", { name: "Greeting v2", exact: true }),
+  ).toBeVisible();
 
   // Delete the suite from the list page.
   await goToPage(page, "/evals");

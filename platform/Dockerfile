@@ -352,6 +352,13 @@ RUN apk --no-cache upgrade && \
     # never re-ran against the newer index — pin curl/libcurl explicitly so the fixed version
     # is guaranteed (and adding this line busts the stale cache).
     apk add --no-cache --upgrade "curl>=8.20.0-r0" "libcurl>=8.20.0-r0" && \
+    # CVE-2026-63076, CVE-2026-63075, CVE-2026-63072, CVE-2026-54874, CVE-2026-18798,
+    # CVE-2026-14457, CVE-2026-14456: OpenSSL vulnerabilities (HIGH) fixed in 3.5.8-r0.
+    # The pinned base ships 3.5.6-r0 and only the libraries are installed here — the
+    # `openssl` CLI package is not — so the floors go on libcrypto3/libssl3. Same stale-layer
+    # hazard as the curl pin above: the bare `apk upgrade` cannot lift a Docker-cached layer,
+    # so the explicit floors both guarantee the fixed version and bust the cache.
+    apk add --no-cache --upgrade "libcrypto3>=3.5.8-r0" "libssl3>=3.5.8-r0" && \
     # Install PostgreSQL 17, pgvector, supervisord, and git.
     # The skill-marketplace clone endpoint needs the git CLI (materialize.ts) and
     # git-http-backend, the smart-HTTP CGI — which Alpine ships in git-daemon, not git.

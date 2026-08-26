@@ -3,7 +3,7 @@ title: Telegram
 category: Agents
 order: 7
 description: Connect Archestra agents to Telegram chats and groups
-lastUpdated: 2026-07-21
+lastUpdated: 2026-08-26
 ---
 
 Archestra connects to Telegram through a bot. Messages sent to the bot — in direct messages or group chats — are routed to the configured agent, and responses appear back in the chat.
@@ -54,6 +54,12 @@ In supergroups with Topics enabled, each forum topic is a separate conversation 
 Each chat shows up on the channel page, where you assign the agent that answers there. Groups appear the moment the bot is added; DMs appear when the account is linked.
 
 ![DM and group chats with their default agents on the Telegram channel page](/docs/automated_screenshots/platform-telegram_channels.webp)
+
+### Channel Instructions
+
+Each chat can carry its own instructions for the agent — free text you write on the **Messaging Channels** → **Telegram** page, next to the agent assignment. Archestra sends them to the agent with every message in that chat, alongside the agent's own instructions. Where the two disagree, the chat's instructions win, so one agent can behave differently in each chat it answers in.
+
+Write them as you would talk to the agent. "Every message in this chat is a task — create it immediately, don't ask for confirmation" is a typical one. Clearing the box removes them.
 
 ### Commands
 

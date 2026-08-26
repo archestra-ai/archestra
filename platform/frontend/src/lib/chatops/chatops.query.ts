@@ -52,6 +52,7 @@ export function useUpdateChatOpsBinding() {
       id: string;
       agentId?: string | null;
       answerAllMessages?: boolean;
+      channelInstructions?: string | null;
     }) => {
       const { data, error } = await archestraApiSdk.updateChatOpsBinding({
         path: { id: params.id },
@@ -59,6 +60,9 @@ export function useUpdateChatOpsBinding() {
           ...(params.agentId !== undefined && { agentId: params.agentId }),
           ...(params.answerAllMessages !== undefined && {
             answerAllMessages: params.answerAllMessages,
+          }),
+          ...(params.channelInstructions !== undefined && {
+            channelInstructions: params.channelInstructions,
           }),
         },
       });

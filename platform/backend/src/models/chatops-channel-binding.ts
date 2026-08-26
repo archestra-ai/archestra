@@ -292,6 +292,9 @@ class ChatOpsChannelBindingModel {
         ...(input.answerAllMessages !== undefined && {
           answerAllMessages: input.answerAllMessages,
         }),
+        ...(input.channelInstructions !== undefined && {
+          channelInstructions: input.channelInstructions,
+        }),
       })
       .where(eq(schema.chatopsChannelBindingsTable.id, id))
       .returning();
@@ -808,6 +811,10 @@ class ChatOpsChannelBindingModel {
       channelName: binding.channelName ?? null,
       agentId: binding.agentId,
       isDm: binding.isDm,
+      answerAllMessages: binding.answerAllMessages,
+      // Admin-authored channel policy, not a secret — and the only field some
+      // updates change, so omitting it would leave those with an empty diff.
+      channelInstructions: binding.channelInstructions ?? null,
       dmOwnerEmail: binding.dmOwnerEmail ?? null,
       createdAt: binding.createdAt.toISOString(),
     };

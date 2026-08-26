@@ -75,6 +75,7 @@ import SlackProvider from "./slack-provider";
 import TelegramProvider from "./telegram-provider";
 import {
   buildAgentFooter,
+  buildChannelInstructionsBlock,
   buildHistorySkippedAttachmentsNote,
   buildSkippedAttachmentsNote,
   errorMessage,
@@ -877,6 +878,14 @@ export class ChatOpsManager {
         ...silenceOption,
       ].join("\n");
     }
+
+    // Per-channel instructions the admin wrote for this channel, last in the
+    // framing so they sit closest to the message they govern. Appending them to
+    // systemPrefix — rather than to the agent's system prompt — is what makes
+    // them per-channel: the same agent bound to another channel never sees
+    // them, and an edit applies from the next message with nothing to
+    // invalidate.
+    systemPrefix += buildChannelInstructionsBlock(binding.channelInstructions);
 
     // Server-side sessions persist every turn in the thread's A2A context, so
     // the stored turn stays clean — sender attribution only (needed in groups

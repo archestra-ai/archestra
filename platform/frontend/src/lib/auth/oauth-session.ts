@@ -300,6 +300,7 @@ export function clearReauthContext() {
 
 /** Remove all install-flow context stored before the OAuth redirect. */
 export function clearInstallContext() {
+  sessionStorage.removeItem(OAUTH_MCP_SERVER_ID);
   sessionStorage.removeItem(OAUTH_STATE);
   sessionStorage.removeItem(OAUTH_CATALOG_ID);
   sessionStorage.removeItem(OAUTH_TEAM_ID);

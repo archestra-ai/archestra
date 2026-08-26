@@ -12,16 +12,7 @@ import {
 } from "@/components/ui/select";
 import { useAllPermissions } from "@/lib/auth/auth.query";
 import { useRoles } from "@/lib/role.query";
-
-/**
- * Converts a string to title case, splitting on hyphens, underscores, and spaces.
- */
-function toTitleCase(str: string): string {
-  return str
-    .split(/[-_\s]+/)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(" ");
-}
+import { formatRoleName } from "@/lib/utils/role";
 
 interface RoleSelectProps {
   value?: string;
@@ -110,7 +101,7 @@ export function RoleSelect({
               <span className="flex flex-col items-start">
                 <RoleOptionLabel
                   predefined={role.predefined}
-                  label={toTitleCase(role.name)}
+                  label={formatRoleName(role.name)}
                 />
                 {missing.length > 0 ? (
                   <UngrantableHint missing={missing} />
@@ -153,7 +144,7 @@ export function RoleSelectContent({
               <span className="flex flex-col items-start">
                 <RoleOptionLabel
                   predefined={role.predefined}
-                  label={toTitleCase(role.name)}
+                  label={formatRoleName(role.name)}
                 />
                 {missing.length > 0 ? (
                   <UngrantableHint missing={missing} />

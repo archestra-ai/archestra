@@ -15,6 +15,7 @@ import {
 import { FormDialog } from "@/components/form-dialog";
 import { LoadingState, LoadingWrapper } from "@/components/loading";
 import { QueryLoadError } from "@/components/query-load-error";
+import { RoleFilterSelect } from "@/components/role-filter-select";
 import { SearchInput } from "@/components/search-input";
 import { AccountHealthBadge } from "@/components/service-account-status-badge";
 import {
@@ -148,16 +149,6 @@ export default function ServiceAccountsSettingsPage() {
       updateQueryParams({ search: null, role: null, status: null, page: "1" }),
     [updateQueryParams],
   );
-
-  // Roles come from the accounts themselves rather than a fixed list, so a
-  // custom org role becomes filterable the moment one account uses it.
-  const roleOptions = useMemo(() => {
-    const roles = [...new Set(serviceAccounts.map((a) => a.role))].sort();
-    return [
-      { value: ALL, label: "All roles" },
-      ...roles.map((role) => ({ value: role, label: formatRoleName(role) })),
-    ];
-  }, [serviceAccounts]);
 
   const filteredServiceAccounts = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -376,7 +367,7 @@ export default function ServiceAccountsSettingsPage() {
                   searchFields={["name"]}
                   className={filterSearchClass}
                 />
-                <FilterSelect
+                <RoleFilterSelect
                   value={roleFilter}
                   onValueChange={(value) =>
                     updateQueryParams({
@@ -384,8 +375,7 @@ export default function ServiceAccountsSettingsPage() {
                       page: "1",
                     })
                   }
-                  placeholder="Filter by role"
-                  items={roleOptions}
+                  allOptionValue={ALL}
                 />
                 <FilterSelect
                   value={statusFilter}

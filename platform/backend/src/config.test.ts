@@ -61,6 +61,7 @@ import config, {
   parseHelmReleaseName,
   // SPDX-SnippetEnd
   parseK8sResourceQuantity,
+  parseKeepAliveTimeoutMs,
   parseLogFormat,
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -677,6 +678,76 @@ describe("parseBodyLimit", () => {
     test("should return default value for space between number and unit", () => {
       expect(parseBodyLimit("50 MB", DEFAULT_VALUE)).toBe(DEFAULT_VALUE);
     });
+  });
+});
+
+describe("parseKeepAliveTimeoutMs", () => {
+  const DEFAULT_VALUE = 620_000;
+
+  test("uses the default when unset or empty", () => {
+    expect(parseKeepAliveTimeoutMs(undefined, DEFAULT_VALUE)).toBe(
+      DEFAULT_VALUE,
+    );
+    expect(parseKeepAliveTimeoutMs("", DEFAULT_VALUE)).toBe(DEFAULT_VALUE);
+  });
+
+  test("honours a positive millisecond value", () => {
+    expect(parseKeepAliveTimeoutMs("900000", DEFAULT_VALUE)).toBe(900_000);
+  });
+
+  test("tolerates surrounding whitespace", () => {
+    expect(parseKeepAliveTimeoutMs("  900000  ", DEFAULT_VALUE)).toBe(900_000);
+  });
+
+  // Zero cannot express "never close" downstream — Fastify coerces a falsy
+  // keepAliveTimeout back to its own 72s default and the Next.js standalone
+  // server ignores it — so honouring 0 would quietly apply a timeout the
+  // operator did not ask for. Fall back to the documented default instead.
+  test.each([
+    ["0"],
+    ["-1"],
+    ["-620000"],
+  ])("falls back to the default for non-positive input %s", (value) => {
+    expect(parseKeepAliveTimeoutMs(value, DEFAULT_VALUE)).toBe(DEFAULT_VALUE);
+  });
+
+  test.each([
+    ["abc"],
+    ["null"],
+    ["  "],
+  ])("falls back to the default for unparsable input %s", (value) => {
+    expect(parseKeepAliveTimeoutMs(value, DEFAULT_VALUE)).toBe(DEFAULT_VALUE);
+  });
+
+  // parseInt would stop at the first non-digit and hand back the leading
+  // prefix: "620_000" -> 620ms, "620s" -> 620ms, "1.5" -> 1ms. A sub-second
+  // keep-alive is two orders of magnitude BELOW Node's own 5s default, so a
+  // typo would silently make the dropped-request failure this setting exists
+  // to prevent far worse than doing nothing at all.
+  //
+  // Asserted against a sentinel rather than DEFAULT_VALUE: several of these
+  // inputs evaluate to exactly 620000 ("6.2e5"), so against the real default a
+  // parser that ACCEPTED them would return the same number a rejecting one
+  // does, and the assertion could never fail.
+  const REJECTED = 777_777;
+
+  test.each([
+    ["620_000"],
+    ["620s"],
+    ["1.5"],
+    ["620000abc"],
+    // Evaluates to 620000. Number() alone reads it as a valid integer and
+    // accepts it; only the digits-only screen rejects it.
+    ["6.2e5"],
+    // Number("1e6") is 1000000, an integer the entrypoint's digits-only screen
+    // rejects — accepting it here would put the two servers on different
+    // windows, the split normalizing in the entrypoint exists to prevent.
+    ["1e6"],
+    // Number("0x1") is 1: a 1ms keep-alive, the exact sub-second window this
+    // guard exists to reject, slipping through as a "valid" positive integer.
+    ["0x1"],
+  ])("refuses to truncate malformed input %s to a sub-second timeout", (value) => {
+    expect(parseKeepAliveTimeoutMs(value, REJECTED)).toBe(REJECTED);
   });
 });
 

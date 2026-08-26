@@ -371,6 +371,33 @@ fi
 # rewriting a config file and preserves every legal URL character verbatim.
 export DATABASE_URL="$EFFECTIVE_DATABASE_URL"
 
+# Normalize the keep-alive timeout before either server reads it.
+#
+# The backend validates this itself and falls back to the default on a bad
+# value, but supervisord hands the raw string to the Next.js server as
+# KEEP_ALIVE_TIMEOUT, and that server treats anything unparsable as "unset" and
+# drops to Node's 5s default. Without this, one typo would leave the two servers
+# on wildly different windows — and silently put the *public-facing* one back on
+# the 5s window this setting exists to move it off. Validating once here keeps
+# both processes on the same number whatever the input was.
+KEEP_ALIVE_DEFAULT_MS=620000
+keep_alive_ms="$ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS"
+keep_alive_invalid=""
+case "$keep_alive_ms" in
+    "") keep_alive_ms="$KEEP_ALIVE_DEFAULT_MS" ;;
+    # Any non-digit rules it out: "-5", "1.5", "620_000", "620s", "abc".
+    *[!0-9]*) keep_alive_invalid=1 ;;
+    # All digits, so reject only zero (and anything the shell cannot compare,
+    # e.g. a value too large for its integer arithmetic).
+    *) [ "$keep_alive_ms" -gt 0 ] 2>/dev/null || keep_alive_invalid=1 ;;
+esac
+if [ -n "$keep_alive_invalid" ]; then
+    echo "WARNING: invalid ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS value '$ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS', using default ${KEEP_ALIVE_DEFAULT_MS}ms" >&2
+    keep_alive_ms="$KEEP_ALIVE_DEFAULT_MS"
+fi
+export ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS="$keep_alive_ms"
+unset keep_alive_ms keep_alive_invalid
+
 # ngrok tunneling (ARCHESTRA_NGROK_AUTH_TOKEN / ARCHESTRA_NGROK_DOMAIN) is now
 # handled in-process by the backend via the ngrok agent SDK — no binary download
 # or supervisord program is needed. See backend/src/ngrok-tunnel-manager.ts.

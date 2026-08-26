@@ -419,9 +419,87 @@ export const parseBodyLimit = (
   return defaultValue;
 };
 
+/**
+ * Parse the idle keep-alive timeout (ms) an HTTP server holds a connection open
+ * for after finishing a response.
+ *
+ * This is a "must be longer than whatever proxies you" setting, not a tuning
+ * knob: when a reverse proxy or cloud load balancer pools connections to the
+ * origin, and the origin closes an idle one first, the proxy can dispatch a
+ * request onto a socket that is being torn down at that instant. That race
+ * surfaces to the end client as an intermittent dropped connection or 502 on a
+ * request that would otherwise have succeeded — rare enough to look like a flaky
+ * network, frequent enough to interrupt long agent sessions.
+ *
+ * Only a positive integer is honoured. Zero cannot express "never close" here
+ * (Fastify coerces a falsy `keepAliveTimeout` back to its own default, and the
+ * Next.js standalone server likewise ignores `0`), so any non-positive or
+ * unparsable value falls back to the default rather than silently producing a
+ * different timeout than the operator asked for.
+ *
+ * Digits only, rather than parseInt, and it matters more here than it does for
+ * `parseOutputTokenCeiling`: parseInt stops at the first non-digit, so a
+ * plausible typo — "620_000", "620s", "1.5" — would yield a sub-second
+ * keep-alive rather than the default. That is not a mildly wrong value; it is two orders of
+ * magnitude below Node's own 5s default, so a typo would make the very failure
+ * this setting exists to prevent dramatically worse, silently. Invalid input is
+ * logged rather than swallowed, because the symptom (an occasional dropped
+ * request) gives an operator nothing to trace back to the typo.
+ *
+ * @public — exported for testability
+ */
+export const parseKeepAliveTimeoutMs = (
+  envValue: string | undefined,
+  defaultValue: number,
+): number => {
+  const value = envValue?.trim();
+  if (!value) {
+    return defaultValue;
+  }
+
+  // Digits only, like `parseBodyLimit`'s plain-number path. Number() alone
+  // would still admit two hazards it reads as valid integers: "0x1" parses to
+  // a 1ms keep-alive — the very sub-second window this guard exists to reject —
+  // and "1e6" parses to 1000000 while the container entrypoint, which screens
+  // on the same digits-only rule, rejects it and exports the default. Accepting
+  // a form the entrypoint refuses reintroduces the split between the two
+  // servers that normalizing there was meant to close.
+  if (!/^\d+$/.test(value)) {
+    logger.warn(
+      `Invalid ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS value "${value}", using default ${defaultValue}ms`,
+    );
+    return defaultValue;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    logger.warn(
+      `Invalid ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS value "${value}", using default ${defaultValue}ms`,
+    );
+    return defaultValue;
+  }
+
+  return parsed;
+};
+
 // 70MB body limit: accommodates the 50MB user-facing file cap with
 // headroom for base64 encoding overhead (~33%) on chat attachment uploads.
 const DEFAULT_BODY_LIMIT = 70 * 1024 * 1024;
+
+/**
+ * Idle keep-alive window for every HTTP server we run (the Fastify API and, via
+ * `KEEP_ALIVE_TIMEOUT`, the Next.js server).
+ *
+ * Node's own default is 5s and Fastify's is 72s — both below the keep-alive
+ * timeout used by common load balancers, which is what makes the reuse race
+ * described on {@link parseKeepAliveTimeoutMs} reachable. The Google Cloud
+ * external Application Load Balancer is the strictest of the usual suspects: it
+ * holds backend connections for a fixed 600s and does not let you lower that, so
+ * the origin has to outlast it. 620s clears 600s with enough margin to absorb
+ * scheduling jitter, and comfortably clears the shorter windows used by AWS ALB
+ * (60s) and nginx (75s).
+ */
+const DEFAULT_KEEP_ALIVE_TIMEOUT_MS = 620_000;
 
 const DEFAULT_DATABASE_POOL_MAX = 50;
 const MAX_DATABASE_POOL_MAX = 500;
@@ -2038,6 +2116,18 @@ const config = {
       DEFAULT_BODY_LIMIT,
     ),
     trustProxy: parseTrustProxy(process.env.ARCHESTRA_TRUST_PROXY),
+    /**
+     * How long an idle keep-alive connection is held open before the server
+     * closes it. Must stay above the keep-alive timeout of anything proxying
+     * this server — see {@link parseKeepAliveTimeoutMs}. Configurable via
+     * ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS, which also drives the Next.js
+     * server (mapped to KEEP_ALIVE_TIMEOUT in the container's supervisord
+     * config) so both processes share one setting.
+     */
+    keepAliveTimeoutMs: parseKeepAliveTimeoutMs(
+      process.env.ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS,
+      DEFAULT_KEEP_ALIVE_TIMEOUT_MS,
+    ),
     /**
      * When set, a dedicated Fastify listener additionally serves the
      * publicly-exposable endpoints (currently the MS Teams incoming webhook)

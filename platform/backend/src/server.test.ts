@@ -481,6 +481,27 @@ describe("createFastifyInstance", () => {
     });
   });
 
+  describe("keep-alive", () => {
+    // A load balancer that pools connections to this server will reuse an idle
+    // one right up to its own keep-alive deadline. If we close first, it can
+    // dispatch a request onto a socket we are tearing down, and the client sees
+    // a dropped request on a call that was otherwise fine — intermittent, and
+    // indistinguishable from a flaky network. Google Cloud's external
+    // Application Load Balancer is the strictest of the common ones: a fixed,
+    // non-configurable 600s. Neither the compiler nor Fastify complains if the
+    // option goes missing — Fastify quietly falls back to its own 72s default —
+    // so this pins the one property that keeps the race closed.
+    const LOAD_BALANCER_KEEP_ALIVE_MS = 600_000;
+
+    test("outlasts the longest load-balancer keep-alive window", () => {
+      const app = createFastifyInstance();
+
+      expect(app.server.keepAliveTimeout).toBeGreaterThan(
+        LOAD_BALANCER_KEEP_ALIVE_MS,
+      );
+    });
+  });
+
   describe("logging verification", () => {
     test("logs 500+ errors at error level", async () => {
       const app = createFastifyInstance();

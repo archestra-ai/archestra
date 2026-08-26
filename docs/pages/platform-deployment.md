@@ -2,7 +2,7 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-08-22
+lastUpdated: 2026-08-26
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -385,6 +385,20 @@ archestra:
       appgw.ingress.kubernetes.io/connection-draining-timeout: "60"
 ```
 
+##### Keep-Alive Timeouts
+
+Response timeouts are only half of the setting. A load balancer also keeps idle connections to Archestra open and reuses them for later requests. If Archestra closes one of those connections first, the load balancer can send a request onto it at the moment it goes away. That request fails in transit. The client sees an occasional dropped request or a 502 on a call that would otherwise have worked.
+
+Archestra holds an idle connection for 620 seconds, which clears the longest window in common use — Google Cloud holds backend connections for a fixed 600 seconds. Set `ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS` higher if your load balancer keeps connections longer than that:
+
+```yaml
+archestra:
+  env:
+    ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS: "900000" # 900s
+```
+
+The value applies to both the API and the frontend server.
+
 ##### Other Ingress Controllers (nginx, Traefik, etc.)
 
 For nginx-ingress:
@@ -741,6 +755,12 @@ The following environment variables can be used to configure Archestra Platform.
   - Each request resolves to the calling client's IP rather than the proxy's. Per-IP rate limits and audit `sourceIp` values follow that IP. Behind a load balancer they stay per-client instead of collapsing onto one shared address.
   - Prefer the IP/CIDR list over `true`. With `true`, Archestra trusts a client-supplied `X-Forwarded-For` header, so a caller can choose the IP it is rate-limited and audited under. List your proxy's own ranges instead.
   - This setting does not affect the OAuth public origin. A forwarded host is always checked against `ARCHESTRA_API_BASE_URL` and `ARCHESTRA_FRONTEND_URL`, so name your public host in one of them.
+
+- **`ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS`** - How long each HTTP server holds an idle keep-alive connection open before closing it. Applies to the API and the frontend server.
+  - Default: `620000` (620 seconds)
+  - Value: digits only, a positive whole number of milliseconds. Anything else — a decimal, a unit suffix, a digit separator, scientific or hex notation — falls back to the default and logs a warning, rather than being truncated to the digits it starts with. The container entrypoint applies the same rule before either server starts, so both always agree.
+  - Keep it above the keep-alive timeout of every proxy and load balancer in front of Archestra. A proxy that outlives the server can reuse a connection while the server closes it, which drops the request. See [Keep-Alive Timeouts](#keep-alive-timeouts).
+  - Lower it only when nothing pools connections to Archestra.
 
 - **`ARCHESTRA_API_BODY_LIMIT`** - Maximum request body size for LLM proxy and chat routes.
   - Default: `70MB` (73400320 bytes)

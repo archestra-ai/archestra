@@ -10,6 +10,7 @@ export * from "./catalog-runtime-fields";
 export * from "./catalog-shape-fixtures";
 export * from "./chat";
 export * from "./chat-error";
+export * from "./chatops-channels";
 export * from "./citation-quotes";
 export * from "./consts";
 export * from "./docs";

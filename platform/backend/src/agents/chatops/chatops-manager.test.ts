@@ -28,6 +28,7 @@ import * as a2aExecutor from "@/agents/a2a-executor";
 import db, { schema } from "@/database";
 import {
   A2AMessageModel,
+  AgentModel,
   AgentTeamModel,
   ChatOpsChannelBindingModel,
   ChatOpsConfigModel,
@@ -4781,5 +4782,290 @@ describe("ChatOpsManager server-side sessions", () => {
     expect(texts).toContain("second message");
     expect(texts).toContain("Second reply");
     expect(texts).not.toContain("First reply");
+  });
+});
+
+// =============================================================================
+// Per-channel instructions — the free-text policy an admin sets on a channel
+// binding, delivered with each message rather than baked into the agent.
+// =============================================================================
+
+describe("ChatOpsManager per-channel instructions", () => {
+  const INSTRUCTIONS =
+    "Every message in this channel is a task — create it immediately, don't ask for confirmation.";
+
+  function stubProvider(
+    overrides: Partial<ChatOpsProvider> & {
+      providerId: ChatOpsProvider["providerId"];
+      getUserEmail: ChatOpsProvider["getUserEmail"];
+    },
+  ): ChatOpsProvider {
+    return {
+      displayName: overrides.providerId,
+      isConfigured: () => true,
+      initialize: async () => {},
+      cleanup: async () => {},
+      validateWebhookRequest: async () => true,
+      handleValidationChallenge: () => null,
+      parseWebhookNotification: async () => null,
+      sendReply: async () => "reply-id",
+      parseInteractivePayload: () => null,
+      sendAgentSelectionCard: async () => {},
+      getThreadHistory: async () => [],
+      getChannelName: async () => "instructions-channel",
+      getWorkspaceId: () => null,
+      getWorkspaceName: () => null,
+      hasMissingScopes: () => false,
+      notifyMissingScopes: async () => {},
+      downloadFiles: async () => [],
+      discoverChannels: async () => null,
+      addApprovalRequestForm: async () => {},
+      updateApprovalRequest: async () => {},
+      ...overrides,
+    } as ChatOpsProvider;
+  }
+
+  async function bindChannel(
+    ctx: {
+      makeOrganization: (...args: never[]) => Promise<{ id: string }>;
+      makeUser: (opts: { email: string }) => Promise<{ id: string }>;
+      makeTeam: (orgId: string, userId: string) => Promise<{ id: string }>;
+      makeTeamMember: (teamId: string, userId: string) => Promise<unknown>;
+      makeInternalAgent: (opts: {
+        organizationId: string;
+        teams: string[];
+      }) => Promise<{ id: string }>;
+    },
+    binding: {
+      provider: "slack" | "telegram";
+      channelId: string;
+      workspaceId?: string | null;
+      channelInstructions?: string | null;
+    },
+  ): Promise<{ senderEmail: string; agentId: string }> {
+    const senderEmail = `instructions-${crypto.randomUUID()}@example.com`;
+    const org = await ctx.makeOrganization();
+    const user = await ctx.makeUser({ email: senderEmail });
+    const team = await ctx.makeTeam(org.id, user.id);
+    await ctx.makeTeamMember(team.id, user.id);
+    const agent = await ctx.makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    const created = await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: binding.provider,
+      channelId: binding.channelId,
+      workspaceId: binding.workspaceId ?? null,
+      agentId: agent.id,
+    });
+    if (binding.channelInstructions !== undefined) {
+      await ChatOpsChannelBindingModel.update(created.id, {
+        channelInstructions: binding.channelInstructions,
+      });
+    }
+    return { senderEmail, agentId: agent.id };
+  }
+
+  function mockExecutor() {
+    return vi.spyOn(a2aExecutor, "executeA2AMessage").mockResolvedValue({
+      text: "Done",
+      messageId: crypto.randomUUID(),
+      finishReason: "stop",
+      responseUiMessage: {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        parts: [{ type: "text", text: "Done" }],
+      },
+    });
+  }
+
+  test("hands the channel's instructions to the model with the message", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const executorSpy = mockExecutor();
+    const { senderEmail, agentId } = await bindChannel(
+      {
+        makeOrganization,
+        makeUser,
+        makeTeam,
+        makeTeamMember,
+        makeInternalAgent,
+      },
+      {
+        provider: "slack",
+        channelId: "C_INSTR",
+        workspaceId: "T_INSTR",
+        channelInstructions: INSTRUCTIONS,
+      },
+    );
+
+    await new ChatOpsManager().processMessage({
+      message: {
+        messageId: "1786399123.000100",
+        channelId: "C_INSTR",
+        workspaceId: "T_INSTR",
+        threadId: "1786399123.000100",
+        senderId: "U_INSTR",
+        senderName: "Slack User",
+        text: "the checkout page is broken",
+        rawText: "the checkout page is broken",
+        timestamp: new Date(),
+        isThreadReply: false,
+        metadata: { channelType: "im", conversationType: "personal" },
+      },
+      provider: stubProvider({
+        providerId: "slack",
+        getUserEmail: async () => senderEmail,
+      }),
+    });
+
+    const sent = executorSpy.mock.calls[0][0].message;
+    expect(sent).toContain(INSTRUCTIONS);
+    expect(sent).toContain("take precedence");
+    // Still the message the user actually sent — the framing rides along with
+    // it rather than replacing it.
+    expect(sent).toContain("the checkout page is broken");
+
+    // Delivered per message, NOT merged into the agent — otherwise the same
+    // agent bound to another channel would inherit this channel's policy.
+    const agent = await AgentModel.findById(agentId);
+    expect(agent?.systemPrompt ?? "").not.toContain(INSTRUCTIONS);
+  });
+
+  test("adds nothing when the channel has no instructions", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const executorSpy = mockExecutor();
+    const { senderEmail } = await bindChannel(
+      {
+        makeOrganization,
+        makeUser,
+        makeTeam,
+        makeTeamMember,
+        makeInternalAgent,
+      },
+      { provider: "slack", channelId: "C_NOINSTR", workspaceId: "T_NOINSTR" },
+    );
+
+    await new ChatOpsManager().processMessage({
+      message: {
+        messageId: "1786399123.000200",
+        channelId: "C_NOINSTR",
+        workspaceId: "T_NOINSTR",
+        threadId: "1786399123.000200",
+        senderId: "U_INSTR",
+        senderName: "Slack User",
+        text: "hello",
+        rawText: "hello",
+        timestamp: new Date(),
+        isThreadReply: false,
+        metadata: { channelType: "im", conversationType: "personal" },
+      },
+      provider: stubProvider({
+        providerId: "slack",
+        getUserEmail: async () => senderEmail,
+      }),
+    });
+
+    expect(executorSpy.mock.calls[0][0].message).not.toContain(
+      "Channel instructions",
+    );
+  });
+
+  test("rides every turn of a server-side session without being persisted into its history", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const executorSpy = vi
+      .spyOn(a2aExecutor, "executeA2AMessage")
+      .mockImplementation(async () => {
+        const id = crypto.randomUUID();
+        return {
+          text: "Done",
+          messageId: id,
+          finishReason: "stop",
+          responseUiMessage: {
+            id,
+            role: "assistant",
+            parts: [{ type: "text", text: "Done" }],
+          },
+        };
+      });
+    const { senderEmail } = await bindChannel(
+      {
+        makeOrganization,
+        makeUser,
+        makeTeam,
+        makeTeamMember,
+        makeInternalAgent,
+      },
+      {
+        provider: "telegram",
+        channelId: "tg-instr-1",
+        channelInstructions: INSTRUCTIONS,
+      },
+    );
+    const provider = stubProvider({
+      providerId: "telegram",
+      usesServerSideSessions: true,
+      getUserEmail: async () => senderEmail,
+      getChannelName: async () => null,
+    });
+    const manager = new ChatOpsManager();
+
+    for (const text of ["first message", "second message"]) {
+      await manager.processMessage({
+        message: {
+          messageId: `tg-instr-${crypto.randomUUID()}`,
+          channelId: "tg-instr-1",
+          workspaceId: null,
+          senderId: "tg-user-instr",
+          senderName: "Alice",
+          text,
+          rawText: text,
+          timestamp: new Date(),
+          isThreadReply: false,
+          metadata: { channelType: "im", conversationType: "personal" },
+        },
+        provider,
+      });
+    }
+
+    // Both executed turns carry them — an instruction that only rode the first
+    // message would stop applying as soon as the conversation continued.
+    expect(executorSpy).toHaveBeenCalledTimes(2);
+    for (const call of executorSpy.mock.calls) {
+      expect(call[0].message).toContain(INSTRUCTIONS);
+    }
+
+    // ...but the stored conversation stays clean, so editing the channel's
+    // instructions changes what the model sees from the next message on rather
+    // than leaving copies of the old text in the history.
+    const mapping = await ChatOpsThreadContextModel.findByThread({
+      provider: "telegram",
+      channelId: "tg-instr-1",
+      workspaceId: null,
+      threadId: "tg-instr-1",
+    });
+    if (!mapping) throw new Error("mapping missing");
+    const persisted = await A2AMessageModel.findByContextId(mapping.contextId);
+    const texts = persisted.map(
+      (m) => (m.content as { parts: Array<{ text: string }> }).parts[0].text,
+    );
+    expect(texts).toContain("first message");
+    expect(texts.some((t) => t.includes(INSTRUCTIONS))).toBe(false);
   });
 });

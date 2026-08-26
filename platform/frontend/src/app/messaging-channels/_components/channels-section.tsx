@@ -8,6 +8,7 @@ import {
   ChevronUp,
   Hash,
   Inbox,
+  MessageSquareText,
   Plus,
   Search,
   TriangleAlert,
@@ -67,6 +68,7 @@ import {
 } from "@/lib/chatops/chatops.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { cn } from "@/lib/utils";
+import { ChannelInstructionsDialog } from "./channel-instructions-dialog";
 import { ChannelsEmptyState } from "./channels-empty-state";
 import type { ProviderConfig } from "./types";
 
@@ -137,6 +139,10 @@ export function ChannelsSection({
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
+  /** Binding whose instructions are open in the editor, if any. */
+  const [instructionsBindingId, setInstructionsBindingId] = useState<
+    string | null
+  >(null);
 
   const toggleSelected = useCallback((id: string) => {
     setSelectedIds((prev) => {
@@ -171,6 +177,8 @@ export function ChannelsSection({
     [bindingsResponse?.workspacesWithUnmentionedTraffic],
   );
   const hasMultipleWorkspaces = workspaces.length > 1;
+  const instructionsBinding =
+    bindings.find((b) => b.id === instructionsBindingId) ?? null;
 
   const totalCount = (counts?.configured ?? 0) + (counts?.unassigned ?? 0);
 
@@ -294,6 +302,16 @@ export function ChannelsSection({
 
   const handleToggleAnswerAll = (bindingId: string, answerAll: boolean) => {
     updateMutation.mutate({ id: bindingId, answerAllMessages: answerAll });
+  };
+
+  const handleSaveInstructions = (
+    bindingId: string,
+    channelInstructions: string | null,
+  ) => {
+    updateMutation.mutate(
+      { id: bindingId, channelInstructions },
+      { onSuccess: () => setInstructionsBindingId(null) },
+    );
   };
 
   const handleDmAssignAgent = (agentId: string | null) => {
@@ -494,7 +512,7 @@ export function ChannelsSection({
 
           {/* Table */}
           <div className="overflow-hidden rounded-md border">
-            <Table>
+            <Table className={CHANNEL_TABLE_MIN_WIDTH}>
               <TableHeader className="bg-muted border-b-2 border-border">
                 <TableRow>
                   <TableHead className="w-[40px]">
@@ -528,11 +546,15 @@ export function ChannelsSection({
                       />
                     </Button>
                   </TableHead>
+                  {/* `table-fixed` splits the leftover width evenly, so the
+                      narrow columns are pinned to keep it for the two that
+                      carry long names. */}
                   <TableHead>Default Agent</TableHead>
+                  <TableHead className="w-[110px]">Instructions</TableHead>
                   {providerConfig.supportsAnswerAll && (
-                    <TableHead>Replies to</TableHead>
+                    <TableHead className="w-[150px]">Replies to</TableHead>
                   )}
-                  <TableHead>Status</TableHead>
+                  <TableHead className="w-[110px]">Status</TableHead>
                   <TableHead className="w-[80px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -540,7 +562,7 @@ export function ChannelsSection({
                 <TableBody>
                   <TableRow>
                     <TableCell
-                      colSpan={providerConfig.supportsAnswerAll ? 6 : 5}
+                      colSpan={providerConfig.supportsAnswerAll ? 7 : 6}
                       className="h-48"
                     >
                       <EmptyState
@@ -562,6 +584,7 @@ export function ChannelsSection({
                     providerStatus={providerStatus}
                     onAssignAgent={handleAssignAgent}
                     onToggleAnswerAll={handleToggleAnswerAll}
+                    onEditInstructions={setInstructionsBindingId}
                     workspacesWithUnmentionedTraffic={
                       workspacesWithUnmentionedTraffic
                     }
@@ -602,6 +625,29 @@ export function ChannelsSection({
           provider={providerConfig.provider}
         />
       )}
+
+      {instructionsBinding && (
+        <ChannelInstructionsDialog
+          open
+          onOpenChange={(next) => {
+            if (!next) setInstructionsBindingId(null);
+          }}
+          channelLabel={
+            instructionsBinding.isDm
+              ? "your direct messages"
+              : `#${instructionsBinding.channelName ?? instructionsBinding.channelId}`
+          }
+          agentName={
+            agentList.find((a) => a.id === instructionsBinding.agentId)?.name ??
+            null
+          }
+          instructions={instructionsBinding.channelInstructions ?? null}
+          isSaving={updateMutation.isPending}
+          onSave={(instructions) =>
+            handleSaveInstructions(instructionsBinding.id, instructions)
+          }
+        />
+      )}
     </section>
   );
 }
@@ -618,6 +664,7 @@ function ChannelRows({
   providerStatus,
   onAssignAgent,
   onToggleAnswerAll,
+  onEditInstructions,
   workspacesWithUnmentionedTraffic,
   isUpdating,
   selectedIds,
@@ -636,6 +683,7 @@ function ChannelRows({
     isDm?: boolean;
     agentId?: string | null;
     answerAllMessages?: boolean;
+    channelInstructions?: string | null;
   }>;
   channelAgentList: Agent[];
   dmAgentList: Agent[];
@@ -645,6 +693,7 @@ function ChannelRows({
   } | null;
   onAssignAgent: (bindingId: string, agentId: string | null) => void;
   onToggleAnswerAll: (bindingId: string, answerAll: boolean) => void;
+  onEditInstructions: (bindingId: string) => void;
   workspacesWithUnmentionedTraffic: Set<string>;
   isUpdating: boolean;
   selectedIds: Set<string>;
@@ -682,6 +731,9 @@ function ChannelRows({
               onAssign={onDmAssignAgent}
               isDm
             />
+          </TableCell>
+          <TableCell>
+            <InstructionsCell />
           </TableCell>
           {showAnswerAll && (
             <TableCell>
@@ -721,7 +773,7 @@ function ChannelRows({
       {bindings.length === 0 && !showVirtualDmRow && (
         <TableRow>
           <TableCell
-            colSpan={showAnswerAll ? 6 : 5}
+            colSpan={showAnswerAll ? 7 : 6}
             className="h-16 text-center text-sm text-muted-foreground"
           >
             No matching channels
@@ -771,6 +823,12 @@ function ChannelRows({
                 isUpdating={isUpdating}
                 onAssign={(agentId) => onAssignAgent(binding.id, agentId)}
                 isDm={binding.isDm}
+              />
+            </TableCell>
+            <TableCell>
+              <InstructionsCell
+                instructions={binding.channelInstructions ?? null}
+                onEdit={() => onEditInstructions(binding.id)}
               />
             </TableCell>
             {showAnswerAll && (
@@ -954,6 +1012,53 @@ function StatusBadge({ assigned }: { assigned: boolean }) {
 // Per-channel "answer all messages" toggle
 // ---------------------------------------------------------------------------
 
+/**
+ * The Instructions column: a button that opens the editor, labelled by whether
+ * the channel already has instructions, with the text itself in a tooltip so
+ * the table shows what is configured without opening anything.
+ *
+ * Rendered with no props for the placeholder DM row, which has no binding yet —
+ * there is nothing to attach instructions to until an agent is assigned.
+ */
+function InstructionsCell({
+  instructions,
+  onEdit,
+}: {
+  instructions?: string | null;
+  onEdit?: () => void;
+}) {
+  if (!onEdit) {
+    return <span className="text-xs text-muted-foreground">—</span>;
+  }
+  const button = (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="h-7 gap-1.5 px-2 text-xs"
+      onClick={onEdit}
+    >
+      <MessageSquareText
+        className={cn(
+          "h-3.5 w-3.5",
+          instructions ? "text-primary" : "text-muted-foreground",
+        )}
+      />
+      <span className={instructions ? undefined : "text-muted-foreground"}>
+        {instructions ? "Edit" : "Add"}
+      </span>
+    </Button>
+  );
+  if (!instructions) return button;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{button}</TooltipTrigger>
+      <TooltipContent className="max-w-sm whitespace-pre-wrap text-left">
+        {instructions}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 function AnswerAllCell({
   isDm,
   checked = false,
@@ -1038,7 +1143,10 @@ function AgentPicker({
           <Button
             variant="outline"
             size="sm"
-            className="h-7 gap-1.5 text-xs min-w-[180px]"
+            // max-w-full so a long agent name truncates inside its cell
+            // instead of widening the button over the next column — the table
+            // is `table-fixed`, so the cell will not grow to fit it.
+            className="h-7 gap-1.5 text-xs min-w-[180px] max-w-full"
             disabled={isUpdating}
           >
             <Bot className="h-3.5 w-3.5 shrink-0" />
@@ -1122,16 +1230,21 @@ function AgentPicker({
 // Loading skeleton
 // ---------------------------------------------------------------------------
 
+/**
+ * Placeholder for the first load. Its columns and width floor mirror the loaded
+ * table's, so the page does not reflow the moment the data lands.
+ */
 function ChannelTableSkeleton() {
   return (
     <div className="overflow-hidden rounded-md border">
-      <Table>
+      <Table className={CHANNEL_TABLE_MIN_WIDTH}>
         <TableHeader className="bg-muted border-b-2 border-border">
           <TableRow>
             <TableHead className="w-[40px]" />
             <TableHead>Channel</TableHead>
             <TableHead>Default Agent</TableHead>
-            <TableHead>Status</TableHead>
+            <TableHead className="w-[110px]">Instructions</TableHead>
+            <TableHead className="w-[110px]">Status</TableHead>
             <TableHead className="w-[80px]">Actions</TableHead>
           </TableRow>
         </TableHeader>
@@ -1151,6 +1264,9 @@ function ChannelTableSkeleton() {
                 <Skeleton className="h-7 w-20 rounded" />
               </TableCell>
               <TableCell>
+                <Skeleton className="h-7 w-12 rounded" />
+              </TableCell>
+              <TableCell>
                 <Skeleton className="h-5 w-20 rounded-full" />
               </TableCell>
               <TableCell>
@@ -1163,3 +1279,10 @@ function ChannelTableSkeleton() {
     </div>
   );
 }
+
+/**
+ * `table-fixed` shrinks every column to fit, so on a narrow viewport the cells
+ * stop being wide enough for their content and it spills over the neighbouring
+ * column. A floor lets the table's own horizontal scroll take over instead.
+ */
+const CHANNEL_TABLE_MIN_WIDTH = "min-w-[70rem]";

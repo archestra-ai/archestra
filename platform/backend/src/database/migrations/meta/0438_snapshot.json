@@ -1,5 +1,5 @@
 {
-  "id": "2b40eee5-325b-4e03-aac0-56616e0b9304",
+  "id": "f1b24994-6a93-4f61-a95f-f11751e63b57",
   "prevId": "b7a16604-465a-42f7-a206-4eb00cae6c5b",
   "version": "7",
   "dialect": "postgresql",
@@ -3660,13 +3660,6 @@
           "notNull": true,
           "default": true
         },
-        "open_in_fullscreen": {
-          "name": "open_in_fullscreen",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
         "locked": {
           "name": "locked",
           "type": "boolean",
@@ -4713,6 +4706,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
+        },
+        "channel_instructions": {
+          "name": "channel_instructions",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "dm_owner_email": {
           "name": "dm_owner_email",

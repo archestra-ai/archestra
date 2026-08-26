@@ -3,7 +3,7 @@ title: MS Teams
 category: Agents
 order: 8
 description: Connect Archestra agents to Microsoft Teams channels
-lastUpdated: 2026-07-30
+lastUpdated: 2026-08-26
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -57,6 +57,12 @@ By default the bot answers only when @mentioned in a channel. You can switch a s
 Mute still works per thread: send `mute` in a thread to silence it until you @mention the bot there again. Direct messages and group chats already answer every message, so the toggle does not apply to them.
 
 This needs the `ChannelMessage.Read.Group` permission, which the team owner consents to when the app is installed. If the toggle appears to do nothing, reinstall the app so the owner is asked again.
+
+### Channel Instructions
+
+Each channel can carry its own instructions for the agent — free text you write on the **Messaging Channels** → **MS Teams** page, next to the agent assignment. Archestra sends them to the agent with every message in that channel, alongside the agent's own instructions. Where the two disagree, the channel's instructions win, so one agent can behave differently in each channel it answers in.
+
+Write them as you would talk to the agent. "Every message in this channel is a task — create it immediately, don't ask for confirmation" is a typical one. Clearing the box removes them.
 
 ### Commands
 

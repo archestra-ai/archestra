@@ -46,6 +46,13 @@ const chatopsChannelBindingsTable = pgTable(
      * DM bindings, which always reply.
      */
     answerAllMessages: boolean("answer_all_messages").notNull().default(false),
+    /**
+     * Free-text instructions an admin writes for this channel. They are handed
+     * to the model with every message the channel routes to its agent — never
+     * baked into the agent's system prompt — so one agent can behave
+     * differently per channel. Null or empty means no channel instructions.
+     */
+    channelInstructions: text("channel_instructions"),
     /** Email of the user who owns this DM binding (null for channel bindings) */
     dmOwnerEmail: varchar("dm_owner_email", { length: 256 }),
     /** The internal agent to route messages to */

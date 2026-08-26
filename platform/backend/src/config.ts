@@ -437,10 +437,10 @@ export const parseBodyLimit = (
  * unparsable value falls back to the default rather than silently producing a
  * different timeout than the operator asked for.
  *
- * Number() (not parseInt) for the same reason as `parseOutputTokenCeiling`, and
- * it matters more here: parseInt stops at the first non-digit, so a plausible
- * typo — "620_000", "620s", "1.5" — would yield a sub-second keep-alive rather
- * than the default. That is not a mildly wrong value; it is two orders of
+ * Digits only, rather than parseInt, and it matters more here than it does for
+ * `parseOutputTokenCeiling`: parseInt stops at the first non-digit, so a
+ * plausible typo — "620_000", "620s", "1.5" — would yield a sub-second
+ * keep-alive rather than the default. That is not a mildly wrong value; it is two orders of
  * magnitude below Node's own 5s default, so a typo would make the very failure
  * this setting exists to prevent dramatically worse, silently. Invalid input is
  * logged rather than swallowed, because the symptom (an occasional dropped
@@ -454,6 +454,20 @@ export const parseKeepAliveTimeoutMs = (
 ): number => {
   const value = envValue?.trim();
   if (!value) {
+    return defaultValue;
+  }
+
+  // Digits only, like `parseBodyLimit`'s plain-number path. Number() alone
+  // would still admit two hazards it reads as valid integers: "0x1" parses to
+  // a 1ms keep-alive — the very sub-second window this guard exists to reject —
+  // and "1e6" parses to 1000000 while the container entrypoint, which screens
+  // on the same digits-only rule, rejects it and exports the default. Accepting
+  // a form the entrypoint refuses reintroduces the split between the two
+  // servers that normalizing there was meant to close.
+  if (!/^\d+$/.test(value)) {
+    logger.warn(
+      `Invalid ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS value "${value}", using default ${defaultValue}ms`,
+    );
     return defaultValue;
   }
 

@@ -724,14 +724,30 @@ describe("parseKeepAliveTimeoutMs", () => {
   // keep-alive is two orders of magnitude BELOW Node's own 5s default, so a
   // typo would silently make the dropped-request failure this setting exists
   // to prevent far worse than doing nothing at all.
+  //
+  // Asserted against a sentinel rather than DEFAULT_VALUE: several of these
+  // inputs evaluate to exactly 620000 ("6.2e5"), so against the real default a
+  // parser that ACCEPTED them would return the same number a rejecting one
+  // does, and the assertion could never fail.
+  const REJECTED = 777_777;
+
   test.each([
     ["620_000"],
     ["620s"],
     ["1.5"],
-    ["6.2e5"],
     ["620000abc"],
+    // Evaluates to 620000. Number() alone reads it as a valid integer and
+    // accepts it; only the digits-only screen rejects it.
+    ["6.2e5"],
+    // Number("1e6") is 1000000, an integer the entrypoint's digits-only screen
+    // rejects — accepting it here would put the two servers on different
+    // windows, the split normalizing in the entrypoint exists to prevent.
+    ["1e6"],
+    // Number("0x1") is 1: a 1ms keep-alive, the exact sub-second window this
+    // guard exists to reject, slipping through as a "valid" positive integer.
+    ["0x1"],
   ])("refuses to truncate malformed input %s to a sub-second timeout", (value) => {
-    expect(parseKeepAliveTimeoutMs(value, DEFAULT_VALUE)).toBe(DEFAULT_VALUE);
+    expect(parseKeepAliveTimeoutMs(value, REJECTED)).toBe(REJECTED);
   });
 });
 

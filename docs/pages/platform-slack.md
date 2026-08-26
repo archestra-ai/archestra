@@ -3,7 +3,7 @@ title: Slack
 category: Agents
 order: 7
 description: Connect Archestra agents to Slack channels
-lastUpdated: 2026-08-24
+lastUpdated: 2026-08-26
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -61,6 +61,14 @@ To stop the bot replying in a thread, send `mute` (you can address it by name wi
 By default the bot answers only when @mentioned in a channel. You can switch a single channel to answer every message instead — no mention needed. On the **Agent Triggers** → **Slack** page, set that channel's **Replies to** toggle to **All messages**. Other channels stay mentions-only.
 
 Mute still works per thread: send `mute` in a thread to silence it until you @mention the bot there again. Direct messages already answer every message, so the toggle does not apply to them.
+
+### Channel Instructions
+
+Each channel can carry its own instructions for the agent — free text you write on the **Messaging Channels** → **Slack** page, next to the agent assignment. Archestra sends them to the agent with every message in that channel, alongside the agent's own instructions. Where the two disagree, the channel's instructions win, so one agent can behave differently in each channel it answers in.
+
+Write them as you would talk to the agent. "Every message in this channel is a task — create it immediately, don't ask for confirmation" is a typical one. Clearing the box removes them.
+
+![The channel instructions editor open on a Slack channel](/docs/automated_screenshots/platform-slack_channel-instructions.webp)
 
 ### Commands
 

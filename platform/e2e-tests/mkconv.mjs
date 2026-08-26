@@ -1,0 +1,11 @@
+import { chromium } from "@playwright/test";
+const APP = "3c2349db-be05-4d55-9b17-3406fd5b43f0";
+const browser = await chromium.launch();
+const page = await browser.newPage();
+await page.goto("http://localhost:3000/apps", { waitUntil: "domcontentloaded" });
+await page.waitForTimeout(3000);
+await page.request.patch(`http://localhost:9000/api/apps/${APP}`, { data: { openInFullscreen: false } });
+const r = await page.request.post(`http://localhost:9000/api/apps/${APP}/open-in-chat`);
+const { conversationId } = await r.json();
+console.log(conversationId);
+await browser.close();

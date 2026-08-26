@@ -381,7 +381,10 @@ export function McpAppEntryContent({
 
   const handleShowInPanel = () => {
     if (!toolCallId) return;
-    setDisplayMode("inline"); // panel is the app's frame — never fullscreen there
+    // Hand the app over inline: the panel instance owns its own display mode
+    // from here (including the app's fullscreen default), so leaving this one
+    // fullscreen would only strand an invisible overlay behind the panel.
+    setDisplayMode("inline");
     setPanelApp(toolCallId);
     openRightPanel();
   };

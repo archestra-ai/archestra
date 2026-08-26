@@ -27,6 +27,8 @@ interface SearchableSelectProps {
   value: string;
   onValueChange: (value: string) => void;
   placeholder?: string;
+  /** Applied to the trigger, so a sibling `<Label htmlFor>` can point at it. */
+  id?: string;
   /**
    * Accessible name for the trigger. `role="combobox"` takes its name from the
    * author rather than from the trigger's contents, so without this the control
@@ -59,6 +61,7 @@ export function SearchableSelect({
   value,
   onValueChange,
   placeholder = "Select...",
+  id,
   ariaLabel,
   searchPlaceholder = "Search...",
   items,
@@ -146,6 +149,7 @@ export function SearchableSelect({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
+          id={id}
           variant="outline"
           role="combobox"
           aria-expanded={open}

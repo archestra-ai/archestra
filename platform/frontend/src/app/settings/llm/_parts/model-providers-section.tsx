@@ -24,6 +24,7 @@ import {
   useOrganization,
   useUpdateIntegrationSettings,
 } from "@/lib/organization.query";
+import { providerSearchHaystack } from "@/lib/provider-search";
 
 /**
  * Which model providers this deployment offers, and what it calls them.
@@ -63,10 +64,14 @@ export function ModelProvidersSection() {
   const hasChanges = JSON.stringify(draft) !== savedKey;
 
   // Matches the organization's own name too, so a renamed provider is findable
-  // by the name people here actually know it by.
+  // by the name people here actually know it by, and the entry's aliases, so a
+  // generic entry is findable by the products it serves.
   const query = search.trim().toLowerCase();
   const visible = SupportedProviders.filter((provider) =>
-    `${builtInProviderLabel(provider)} ${draft[provider]?.displayName ?? ""}`
+    providerSearchHaystack({
+      provider,
+      labels: [builtInProviderLabel(provider), draft[provider]?.displayName],
+    })
       .toLowerCase()
       .includes(query),
   );

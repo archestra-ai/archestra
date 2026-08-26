@@ -253,6 +253,32 @@ describe("LlmProviderApiKeyForm", () => {
     expect(screen.getAllByText("OpenAI").length).toBeGreaterThan(0);
   });
 
+  it("finds the OpenAI-compatible entry by the server the operator runs", async () => {
+    // Self-hosted servers (llama.cpp, LM Studio, SGLang, TGI, LocalAI) all
+    // route through the `vllm` provider. Searching for the one you run has to
+    // land on it — nobody types "vLLM" looking for LM Studio.
+    const user = userEvent.setup();
+    renderForm({ credentialMode: "api-key", progressive: true });
+
+    await user.click(screen.getByLabelText("Provider"));
+    await user.type(
+      screen.getByPlaceholderText("Search providers..."),
+      "lm studio",
+    );
+
+    const match = await screen.findByRole("button", {
+      name: /OpenAI-compatible/,
+    });
+    expect(match).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^OpenAI$/ })).toBeNull();
+
+    await user.click(match);
+
+    await waitFor(() => {
+      expect(form.getValues("provider")).toBe("vllm");
+    });
+  });
+
   it("clears provider-specific credentials when the provider changes", async () => {
     renderForm();
 

@@ -1,6 +1,7 @@
 import {
   KeyRound,
   ListChecks,
+  Lock,
   MonitorSmartphone,
   ShieldCheck,
   Ticket,
@@ -33,6 +34,12 @@ export const accountSections = [
     label: "Gateway Token",
     href: "/account/gateway-token",
     Icon: Ticket,
+  },
+  {
+    id: "credentials",
+    label: "Credentials",
+    href: "/account/credentials",
+    Icon: Lock,
   },
   {
     id: "two-factor",

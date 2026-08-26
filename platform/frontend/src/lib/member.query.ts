@@ -65,10 +65,9 @@ type RawInvitation = NonNullable<
 /**
  * Every member matching the table's filters, not just the page in view.
  *
- * Members only. The pending-signup rows the table prepends come from a
- * separate, unpaginated source and are shown on page one alone, so an
- * escalation that promised "every user matching these filters" could not
- * honestly include them.
+ * This is the whole roster the table paginates over — users who have not
+ * completed signup are members too, so "every user matching these filters"
+ * covers them as well.
  */
 export function useAllMatchingMembers(
   query: Pick<MembersQuery, "name" | "role">,

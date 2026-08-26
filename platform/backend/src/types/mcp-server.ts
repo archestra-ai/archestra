@@ -21,12 +21,16 @@ import { ResourceVisibilityScopeSchema } from "./visibility";
  * reads as duplicates. `scope`, `ownerId` and `ownerEmail` are carried
  * alongside so the UI can attribute each one to its owner.
  *
- * Both live owner fields are null together when the agent has no author — the
- * FK is `ON DELETE SET NULL` and users are hard-deleted, so an agent outlives
- * its author. `formerOwnerEmail` then carries who they were, captured at
- * deletion time (`agents.deleted_author_email`), so such a row can still be
- * attributed instead of shrugged at. All three are null for an agent that
- * never had an author, and for one orphaned before that capture existed.
+ * Both owner fields are null together when the agent has no author, and for a
+ * PERSONAL agent that means one thing: the author's account was deleted. The
+ * FK is `ON DELETE SET NULL` and users are hard-deleted, so the agent outlives
+ * the person. Every create path stamps an author, and both routes that could
+ * make an existing agent personal refuse to do so without one, so there is no
+ * other way into that state — a consumer may say "deleted", not "unknown".
+ *
+ * Who they were is NOT recoverable, here or anywhere: sixteen tables lose a
+ * user identity the same way. Retaining it belongs in user deletion, not in a
+ * column per table — see the PR discussion.
  *
  * A surface that names an owner has to distinguish these cases rather than
  * fall back to the scope, which is how the Usage tab came to print the word
@@ -52,8 +56,6 @@ export const McpServerAgentUsageSchema = z.object({
    */
   ownerId: z.string().nullable(),
   ownerEmail: z.string().nullable(),
-  /** Who the author was, retained from before their account was deleted. */
-  formerOwnerEmail: z.string().nullable(),
 });
 
 export type McpServerAgentUsage = z.infer<typeof McpServerAgentUsageSchema>;

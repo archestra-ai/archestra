@@ -42681,10 +42681,6 @@
                             "nullable": true,
                             "type": "string"
                           },
-                          "deletedAuthorEmail": {
-                            "nullable": true,
-                            "type": "string"
-                          },
                           "scope": {
                             "type": "string",
                             "enum": [
@@ -43166,7 +43162,6 @@
                           "id",
                           "organizationId",
                           "authorId",
-                          "deletedAuthorEmail",
                           "scope",
                           "name",
                           "slug",
@@ -43849,10 +43844,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "deletedAuthorEmail": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "scope": {
                       "type": "string",
                       "enum": [
@@ -44334,7 +44325,6 @@
                     "id",
                     "organizationId",
                     "authorId",
-                    "deletedAuthorEmail",
                     "scope",
                     "name",
                     "slug",
@@ -44730,10 +44720,6 @@
                         "type": "string"
                       },
                       "authorId": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "deletedAuthorEmail": {
                         "nullable": true,
                         "type": "string"
                       },
@@ -45218,7 +45204,6 @@
                       "id",
                       "organizationId",
                       "authorId",
-                      "deletedAuthorEmail",
                       "scope",
                       "name",
                       "slug",
@@ -45821,10 +45806,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "deletedAuthorEmail": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "scope": {
                       "type": "string",
                       "enum": [
@@ -46306,7 +46287,6 @@
                     "id",
                     "organizationId",
                     "authorId",
-                    "deletedAuthorEmail",
                     "scope",
                     "name",
                     "slug",
@@ -46614,10 +46594,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "deletedAuthorEmail": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "scope": {
                       "type": "string",
                       "enum": [
@@ -47099,7 +47075,6 @@
                     "id",
                     "organizationId",
                     "authorId",
-                    "deletedAuthorEmail",
                     "scope",
                     "name",
                     "slug",
@@ -47771,10 +47746,6 @@
                           "nullable": true,
                           "type": "string"
                         },
-                        "deletedAuthorEmail": {
-                          "nullable": true,
-                          "type": "string"
-                        },
                         "scope": {
                           "type": "string",
                           "enum": [
@@ -48256,7 +48227,6 @@
                         "id",
                         "organizationId",
                         "authorId",
-                        "deletedAuthorEmail",
                         "scope",
                         "name",
                         "slug",
@@ -48608,10 +48578,6 @@
                       "type": "string"
                     },
                     "authorId": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "deletedAuthorEmail": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -49096,7 +49062,6 @@
                     "id",
                     "organizationId",
                     "authorId",
-                    "deletedAuthorEmail",
                     "scope",
                     "name",
                     "slug",
@@ -49735,10 +49700,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "deletedAuthorEmail": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "scope": {
                       "type": "string",
                       "enum": [
@@ -50220,7 +50181,6 @@
                     "id",
                     "organizationId",
                     "authorId",
-                    "deletedAuthorEmail",
                     "scope",
                     "name",
                     "slug",
@@ -51810,10 +51770,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "deletedAuthorEmail": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "scope": {
                       "type": "string",
                       "enum": [
@@ -52295,7 +52251,6 @@
                     "id",
                     "organizationId",
                     "authorId",
-                    "deletedAuthorEmail",
                     "scope",
                     "name",
                     "slug",
@@ -52643,10 +52598,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "deletedAuthorEmail": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "scope": {
                       "type": "string",
                       "enum": [
@@ -53128,7 +53079,6 @@
                     "id",
                     "organizationId",
                     "authorId",
-                    "deletedAuthorEmail",
                     "scope",
                     "name",
                     "slug",
@@ -57315,10 +57265,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "deletedAuthorEmail": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "scope": {
                       "type": "string",
                       "enum": [
@@ -57800,7 +57746,6 @@
                     "id",
                     "organizationId",
                     "authorId",
-                    "deletedAuthorEmail",
                     "scope",
                     "name",
                     "slug",
@@ -264770,10 +264715,6 @@
                       "ownerEmail": {
                         "nullable": true,
                         "type": "string"
-                      },
-                      "formerOwnerEmail": {
-                        "nullable": true,
-                        "type": "string"
                       }
                     },
                     "required": [
@@ -264782,8 +264723,7 @@
                       "agentType",
                       "scope",
                       "ownerId",
-                      "ownerEmail",
-                      "formerOwnerEmail"
+                      "ownerEmail"
                     ],
                     "additionalProperties": false
                   }
@@ -265340,10 +265280,6 @@
                             "ownerEmail": {
                               "nullable": true,
                               "type": "string"
-                            },
-                            "formerOwnerEmail": {
-                              "nullable": true,
-                              "type": "string"
                             }
                           },
                           "required": [
@@ -265352,8 +265288,7 @@
                             "agentType",
                             "scope",
                             "ownerId",
-                            "ownerEmail",
-                            "formerOwnerEmail"
+                            "ownerEmail"
                           ],
                           "additionalProperties": false
                         }
@@ -266034,10 +265969,6 @@
                           "ownerEmail": {
                             "nullable": true,
                             "type": "string"
-                          },
-                          "formerOwnerEmail": {
-                            "nullable": true,
-                            "type": "string"
                           }
                         },
                         "required": [
@@ -266046,8 +265977,7 @@
                           "agentType",
                           "scope",
                           "ownerId",
-                          "ownerEmail",
-                          "formerOwnerEmail"
+                          "ownerEmail"
                         ],
                         "additionalProperties": false
                       }
@@ -266603,10 +266533,6 @@
                           "ownerEmail": {
                             "nullable": true,
                             "type": "string"
-                          },
-                          "formerOwnerEmail": {
-                            "nullable": true,
-                            "type": "string"
                           }
                         },
                         "required": [
@@ -266615,8 +266541,7 @@
                           "agentType",
                           "scope",
                           "ownerId",
-                          "ownerEmail",
-                          "formerOwnerEmail"
+                          "ownerEmail"
                         ],
                         "additionalProperties": false
                       }
@@ -267481,10 +267406,6 @@
                           "ownerEmail": {
                             "nullable": true,
                             "type": "string"
-                          },
-                          "formerOwnerEmail": {
-                            "nullable": true,
-                            "type": "string"
                           }
                         },
                         "required": [
@@ -267493,8 +267414,7 @@
                           "agentType",
                           "scope",
                           "ownerId",
-                          "ownerEmail",
-                          "formerOwnerEmail"
+                          "ownerEmail"
                         ],
                         "additionalProperties": false
                       }
@@ -268382,10 +268302,6 @@
                           "ownerEmail": {
                             "nullable": true,
                             "type": "string"
-                          },
-                          "formerOwnerEmail": {
-                            "nullable": true,
-                            "type": "string"
                           }
                         },
                         "required": [
@@ -268394,8 +268310,7 @@
                           "agentType",
                           "scope",
                           "ownerId",
-                          "ownerEmail",
-                          "formerOwnerEmail"
+                          "ownerEmail"
                         ],
                         "additionalProperties": false
                       }
@@ -270539,10 +270454,6 @@
                           "ownerEmail": {
                             "nullable": true,
                             "type": "string"
-                          },
-                          "formerOwnerEmail": {
-                            "nullable": true,
-                            "type": "string"
                           }
                         },
                         "required": [
@@ -270551,8 +270462,7 @@
                           "agentType",
                           "scope",
                           "ownerId",
-                          "ownerEmail",
-                          "formerOwnerEmail"
+                          "ownerEmail"
                         ],
                         "additionalProperties": false
                       }

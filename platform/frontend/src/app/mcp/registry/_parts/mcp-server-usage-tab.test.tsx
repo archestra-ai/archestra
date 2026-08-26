@@ -26,7 +26,6 @@ const agent = (
     scope: "org" | "team" | "personal";
     ownerId: string | null;
     ownerEmail: string | null;
-    formerOwnerEmail: string | null;
   }> = {},
 ) => ({
   id: "a1",
@@ -35,7 +34,6 @@ const agent = (
   scope: "org" as const,
   ownerId: null,
   ownerEmail: null,
-  formerOwnerEmail: null,
   ...overrides,
 });
 
@@ -113,7 +111,7 @@ describe("McpServerUsageTab", () => {
     expect(within(row).queryByText("Personal")).not.toBeInTheDocument();
   });
 
-  it("names a deleted author, in the past tense, from the retained email", () => {
+  it("says the author's account was deleted rather than calling the agent 'Personal'", () => {
     render(
       <McpServerUsageTab
         serversForCatalog={[
@@ -124,7 +122,6 @@ describe("McpServerUsageTab", () => {
               scope: "personal",
               ownerId: null,
               ownerEmail: null,
-              formerOwnerEmail: "kim@example.com",
             }),
           ]),
         ]}
@@ -136,37 +133,9 @@ describe("McpServerUsageTab", () => {
       .getByText("Nightly Backlog Groomer")
       .closest("tr") as HTMLElement;
 
-    expect(
-      within(row).getByText("Deleted user (kim@example.com)"),
-    ).toBeInTheDocument();
-    expect(within(row).queryByText("Personal")).not.toBeInTheDocument();
-  });
-
-  it("says the owner is unknown when nothing about the author was retained", () => {
-    render(
-      <McpServerUsageTab
-        serversForCatalog={[
-          server([
-            agent({
-              id: "1",
-              name: "Orphaned Assistant",
-              scope: "personal",
-              ownerId: null,
-              ownerEmail: null,
-            }),
-          ]),
-        ]}
-        autoModeAgents={[]}
-      />,
-    );
-
-    const row = screen
-      .getByText("Orphaned Assistant")
-      .closest("tr") as HTMLElement;
-
-    expect(within(row).getByText("Unknown")).toBeInTheDocument();
-    // The bug: an unknown owner used to fall back to the scope, so a row
-    // belonging to nobody was worded exactly like the viewer's own.
+    expect(within(row).getByText("Deleted user")).toBeInTheDocument();
+    // The bug: a missing owner used to fall back to the scope, so a row whose
+    // owner was gone was worded exactly like the viewer's own.
     expect(within(row).queryByText("Personal")).not.toBeInTheDocument();
     expect(within(row).queryByText("You")).not.toBeInTheDocument();
   });

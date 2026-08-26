@@ -13,7 +13,6 @@ import McpServerModel, {
 } from "./mcp-server";
 import McpServerUserModel from "./mcp-server-user";
 import SecretModel from "./secret";
-import UserModel from "./user";
 
 const uiMeta = (resourceUri: string) => ({ _meta: { ui: { resourceUri } } });
 
@@ -386,49 +385,6 @@ describe("McpServerModel", () => {
       ]);
     });
 
-    test("still names the author after their account is deleted", async ({
-      makeOrganization,
-      makeUser,
-      makeAgent,
-      makeInternalMcpCatalog,
-      makeMcpServer,
-    }) => {
-      const org = await makeOrganization();
-      const kim = await makeUser({ email: "kim@example.com" });
-      await makeAgent({
-        organizationId: org.id,
-        name: "Nightly Backlog Groomer",
-        agentType: "agent",
-        scope: "personal",
-        accessAllTools: true,
-        authorId: kim.id,
-      });
-      const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
-      await makeMcpServer({ catalogId: catalog.id });
-
-      await UserModel.delete(kim.id);
-
-      // `agents.author_id` is ON DELETE SET NULL and the user row is gone, so
-      // without the snapshot the agent would be unattributable for good.
-      expect(
-        await AgentModel.getAutoModeAgentDetailsByOrganizations([org.id]),
-      ).toEqual(
-        new Map([
-          [
-            org.id,
-            [
-              expect.objectContaining({
-                name: "Nightly Backlog Groomer",
-                ownerId: null,
-                ownerEmail: null,
-                formerOwnerEmail: "kim@example.com",
-              }),
-            ],
-          ],
-        ]),
-      );
-    });
-
     test("reports a null owner for an authorless agent", async ({
       makeOrganization,
       makeAgent,
@@ -453,7 +409,6 @@ describe("McpServerModel", () => {
           name: "Shared Gateway",
           ownerId: null,
           ownerEmail: null,
-          formerOwnerEmail: null,
         }),
       ]);
     });

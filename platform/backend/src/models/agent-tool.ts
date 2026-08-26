@@ -691,7 +691,6 @@ class AgentToolModel {
         scope: schema.agentsTable.scope,
         ownerId: schema.agentsTable.authorId,
         ownerEmail: schema.usersTable.email,
-        formerOwnerEmail: schema.agentsTable.deletedAuthorEmail,
       })
       .from(schema.agentToolsTable)
       .innerJoin(

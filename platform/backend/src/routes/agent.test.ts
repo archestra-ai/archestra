@@ -146,31 +146,6 @@ describe("agent routes", () => {
       expect(Array.isArray(agent.teams)).toBe(true);
     });
 
-    test("ignores a client-supplied deleted-author identity", async () => {
-      const name = `Forged Owner ${crypto.randomUUID().slice(0, 8)}`;
-
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/agents",
-        payload: {
-          name,
-          scope: "personal",
-          teams: [],
-          // Only AgentModel.snapshotAuthorIdentityForDeletion may write this.
-          // Honouring it here would let a caller forge an attribution: the MCP
-          // Usage tab renders it as "Deleted user (<address>)".
-          deletedAuthorEmail: "someone-else@example.com",
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-      const [row] = await db
-        .select({ deletedAuthorEmail: schema.agentsTable.deletedAuthorEmail })
-        .from(schema.agentsTable)
-        .where(eq(schema.agentsTable.id, response.json().id));
-      expect(row.deletedAuthorEmail).toBeNull();
-    });
-
     test("should create agent with suggestedPrompts", async () => {
       const name = `Agent With Suggestions ${crypto.randomUUID().slice(0, 8)}`;
 

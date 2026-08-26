@@ -393,21 +393,8 @@ export const auth = betterAuth({
     user: {
       delete: {
         before: async (user: { id: string }) => {
-          // The agents.author_id FK uses ON DELETE SET NULL, so an agent that
-          // survives its author keeps the row but loses every trace of who
-          // wrote it — the `user` row is hard-deleted. Copy the identity onto
-          // the agents first, while it is still readable, so surfaces that
-          // name an owner can still name this one. Mirrors UserModel.delete
-          // (see there); idempotent, so both paths running it is harmless.
-          try {
-            await AgentModel.snapshotAuthorIdentityForDeletion(user.id);
-          } catch (error) {
-            logger.error(
-              { err: error, userId: user.id },
-              "[databaseHooks:user] Failed to snapshot agent author identity",
-            );
-          }
-          // Personal MCP gateways must NOT survive
+          // The agents.author_id FK uses ON DELETE SET NULL so non-personal agents
+          // keep their authorship history. Personal MCP gateways must NOT survive
           // the user — the deletion guard in routes/agent.ts blocks DELETE while
           // is_personal_gateway = true, so an orphaned row would be undeletable.
           // Swallow errors so a transient cleanup failure doesn't block the

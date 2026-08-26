@@ -274,7 +274,6 @@ class AgentModel {
         scope: schema.agentsTable.scope,
         ownerId: schema.agentsTable.authorId,
         ownerEmail: schema.usersTable.email,
-        formerOwnerEmail: schema.agentsTable.deletedAuthorEmail,
       })
       .from(schema.agentsTable)
       // Personal agents share a name across members, so the owner is what
@@ -3471,44 +3470,6 @@ class AgentModel {
     }
 
     return inserted.length;
-  }
-
-  /**
-   * Record the author's email on every agent they authored, immediately before
-   * their `user` row goes.
-   *
-   * `agents.author_id` is `ON DELETE SET NULL` and users are hard-deleted, so
-   * an agent that outlives its author would otherwise be unattributable
-   * forever — nothing to tell a departed colleague's agent from one that never
-   * had an owner. Surfaces that name an owner then have to shrug, which is
-   * exactly what they were doing.
-   *
-   * Must run BEFORE the user row is deleted (it reads that row), and it is
-   * idempotent, so the two deletion paths that both call it — `UserModel
-   * .delete` for the app-driven removals and better-auth's `user.delete.before`
-   * hook for the self-service endpoint — are safe to overlap.
-   */
-  static async snapshotAuthorIdentityForDeletion(
-    userId: string,
-    tx?: Transaction,
-  ): Promise<void> {
-    const dbx = tx ?? db;
-
-    const [user] = await dbx
-      .select({ email: schema.usersTable.email })
-      .from(schema.usersTable)
-      .where(eq(schema.usersTable.id, userId))
-      .limit(1);
-
-    // Already gone (a re-run, or a caller that deleted first): there is
-    // nothing left to copy, and overwriting with null would erase a snapshot
-    // an earlier pass got right.
-    if (!user) return;
-
-    await dbx
-      .update(schema.agentsTable)
-      .set({ deletedAuthorEmail: user.email })
-      .where(eq(schema.agentsTable.authorId, userId));
   }
 
   /**

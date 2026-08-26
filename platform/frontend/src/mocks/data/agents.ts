@@ -8,7 +8,6 @@ export function makeAgent(overrides: Partial<Agent> = {}): Agent {
     id: "test-agent",
     organizationId: "test-org",
     authorId: "test-user-admin",
-    deletedAuthorEmail: null,
     scope: "personal",
     name: "test-agent",
     slug: null,

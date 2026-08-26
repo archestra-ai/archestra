@@ -4270,7 +4270,6 @@ describe("mcp server core route coverage", () => {
           scope: "personal",
           ownerId: user.id,
           ownerEmail: user.email,
-          formerOwnerEmail: null,
         },
       ]);
     });

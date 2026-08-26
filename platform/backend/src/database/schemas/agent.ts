@@ -51,24 +51,6 @@ const agentsTable = softDeletablePgTable(
     authorId: text("author_id").references(() => usersTable.id, {
       onDelete: "set null",
     }),
-    /**
-     * The author's email, captured just before their account is deleted.
-     *
-     * `author_id` is `ON DELETE SET NULL` and users are hard-deleted (removing
-     * someone's last org membership deletes the user — see `UserModel.delete`;
-     * there is no soft delete on `user`), so without this an agent that
-     * outlives its author can no longer name them at all.
-     *
-     * Written ONLY at deletion time, never on create: while the author exists,
-     * `author_id` is the single source of truth and a denormalised copy would
-     * drift the moment they changed their email. So the pair
-     * `author_id IS NULL AND deleted_author_email IS NOT NULL` means exactly
-     * "the author's account was deleted, and this is who they were".
-     *
-     * Null for agents orphaned before this column existed, and for agents that
-     * never had an author (org-scoped seeds, built-ins).
-     */
-    deletedAuthorEmail: text("deleted_author_email"),
     scope: text("scope").$type<AgentScope>().notNull().default("personal"),
     name: text("name").notNull(),
     slug: text("slug"),

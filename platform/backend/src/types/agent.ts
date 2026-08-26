@@ -391,11 +391,6 @@ export const InsertAgentSchemaBase = createInsertSchema(
     createdAt: true,
     updatedAt: true,
     authorId: true,
-    // Written only by AgentModel.snapshotAuthorIdentityForDeletion as the
-    // author's account is deleted. Accepting it from a request body would let
-    // a caller forge an attribution — the Usage tab renders it as "Deleted
-    // user (…)" — so it is omitted alongside authorId, which it shadows.
-    deletedAuthorEmail: true,
     isPersonalGateway: true,
     // Which skills a gateway publishes over skill:// is decided by the
     // skill-assignment routes, which carry a `skill:read` floor. Accepting the
@@ -436,11 +431,6 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
     createdAt: true,
     updatedAt: true,
     authorId: true,
-    // Written only by AgentModel.snapshotAuthorIdentityForDeletion as the
-    // author's account is deleted. Accepting it from a request body would let
-    // a caller forge an attribution — the Usage tab renders it as "Deleted
-    // user (…)" — so it is omitted alongside authorId, which it shadows.
-    deletedAuthorEmail: true,
     isPersonalGateway: true,
     // Which skills a gateway publishes over skill:// is decided by the
     // skill-assignment routes, which carry a `skill:read` floor. Accepting the

@@ -12921,7 +12921,6 @@ export type GetAgentsResponses = {
             id: string;
             organizationId: string;
             authorId: string | null;
-            deletedAuthorEmail: string | null;
             scope: 'personal' | 'team' | 'org';
             name: string;
             slug: string | null;
@@ -13156,7 +13155,6 @@ export type CreateAgentResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        deletedAuthorEmail: string | null;
         scope: 'personal' | 'team' | 'org';
         name: string;
         slug: string | null;
@@ -13355,7 +13353,6 @@ export type GetAllAgentsResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        deletedAuthorEmail: string | null;
         scope: 'personal' | 'team' | 'org';
         name: string;
         slug: string | null;
@@ -13613,7 +13610,6 @@ export type GetDefaultMcpGatewayResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        deletedAuthorEmail: string | null;
         scope: 'personal' | 'team' | 'org';
         name: string;
         slug: string | null;
@@ -13783,7 +13779,6 @@ export type GetDefaultLlmProxyResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        deletedAuthorEmail: string | null;
         scope: 'personal' | 'team' | 'org';
         name: string;
         slug: string | null;
@@ -14033,7 +14028,6 @@ export type ImportAgentResponses = {
             id: string;
             organizationId: string;
             authorId: string | null;
-            deletedAuthorEmail: string | null;
             scope: 'personal' | 'team' | 'org';
             name: string;
             slug: string | null;
@@ -14296,7 +14290,6 @@ export type GetAgentResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        deletedAuthorEmail: string | null;
         scope: 'personal' | 'team' | 'org';
         name: string;
         slug: string | null;
@@ -14524,7 +14517,6 @@ export type UpdateAgentResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        deletedAuthorEmail: string | null;
         scope: 'personal' | 'team' | 'org';
         name: string;
         slug: string | null;
@@ -14952,7 +14944,6 @@ export type RestoreAgentVersionResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        deletedAuthorEmail: string | null;
         scope: 'personal' | 'team' | 'org';
         name: string;
         slug: string | null;
@@ -15133,7 +15124,6 @@ export type CloneAgentResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        deletedAuthorEmail: string | null;
         scope: 'personal' | 'team' | 'org';
         name: string;
         slug: string | null;
@@ -16460,7 +16450,6 @@ export type RestoreAgentResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        deletedAuthorEmail: string | null;
         scope: 'personal' | 'team' | 'org';
         name: string;
         slug: string | null;
@@ -67464,7 +67453,6 @@ export type GetMcpServerAutoModeAgentsResponses = {
         scope: 'personal' | 'team' | 'org';
         ownerId: string | null;
         ownerEmail: string | null;
-        formerOwnerEmail: string | null;
     }>;
 };
 
@@ -67600,7 +67588,6 @@ export type GetMcpServersResponses = {
             scope: 'personal' | 'team' | 'org';
             ownerId: string | null;
             ownerEmail: string | null;
-            formerOwnerEmail: string | null;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
         alertMutes: Array<{
@@ -67759,7 +67746,6 @@ export type InstallMcpServerResponses = {
             scope: 'personal' | 'team' | 'org';
             ownerId: string | null;
             ownerEmail: string | null;
-            formerOwnerEmail: string | null;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
@@ -67976,7 +67962,6 @@ export type GetMcpServerResponses = {
             scope: 'personal' | 'team' | 'org';
             ownerId: string | null;
             ownerEmail: string | null;
-            formerOwnerEmail: string | null;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
@@ -68118,7 +68103,6 @@ export type ReauthenticateMcpServerResponses = {
             scope: 'personal' | 'team' | 'org';
             ownerId: string | null;
             ownerEmail: string | null;
-            formerOwnerEmail: string | null;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
@@ -68347,7 +68331,6 @@ export type RestoreMcpServerResponses = {
             scope: 'personal' | 'team' | 'org';
             ownerId: string | null;
             ownerEmail: string | null;
-            formerOwnerEmail: string | null;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
@@ -68945,7 +68928,6 @@ export type ReinstallMcpServerResponses = {
             scope: 'personal' | 'team' | 'org';
             ownerId: string | null;
             ownerEmail: string | null;
-            formerOwnerEmail: string | null;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };

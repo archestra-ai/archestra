@@ -121,16 +121,12 @@ function OwnerCell({ owner }: { owner: AgentOwner }) {
     case "user":
       return <span>{owner.email}</span>;
     case "deleted":
-      // Named, but explicitly past tense: without "Deleted user" the row reads
-      // as a colleague you could still go and ask about it.
-      return <span>Deleted user ({owner.email})</span>;
-    case "unknown":
       return (
         <span
           className="italic"
-          title="This personal agent's author is not on record — their account was deleted before we began keeping it."
+          title="The account that owned this agent has been deleted."
         >
-          Unknown
+          Deleted user
         </span>
       );
     case "scope":

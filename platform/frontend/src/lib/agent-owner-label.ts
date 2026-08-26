@@ -7,21 +7,19 @@ export type AgentOwner =
   /** A personal agent belonging to somebody else. */
   | { kind: "user"; email: string }
   /**
-   * A personal agent whose author's account was deleted, named from the email
-   * captured at deletion time. "Their account is gone" is a better answer than
-   * either a bare address (which invites someone to go looking for a colleague
-   * who has left) or a shrug.
+   * A personal agent whose author's account was deleted. Inferred, not stored:
+   * the FK is `ON DELETE SET NULL` and users are hard-deleted, every create
+   * path stamps an author, and both routes that could make an existing agent
+   * personal refuse to do so without one — so a personal agent with no author
+   * got that way exactly one way.
+   *
+   * Naming WHO is deliberately out of reach. The identity is destroyed for
+   * sixteen tables at once, and recovering it belongs in user deletion rather
+   * than a snapshot column per table. "Their account is gone" is the true
+   * statement available, and it beats both a shrug and the "Personal" that
+   * used to stand here.
    */
-  | { kind: "deleted"; email: string }
-  /**
-   * A personal agent with no author on record and nothing retained about them:
-   * an agent orphaned before that capture existed. `agents.author_id` is
-   * `ON DELETE SET NULL`, so the owner is not merely unloaded, it is gone.
-   * Callers must say that rather than substitute the scope — the word
-   * "Personal" in an owner column reads as "mine", which is how these rows came
-   * to be mistaken for the viewer's own.
-   */
-  | { kind: "unknown" }
+  | { kind: "deleted" }
   /**
    * A team- or organization-scoped agent. It belongs to the team or the org,
    * not to a person, so the scope IS the answer here — unlike the personal
@@ -42,7 +40,6 @@ export function describeAgentOwner(
     scope: ResourceVisibilityScope;
     ownerId: string | null;
     ownerEmail: string | null;
-    formerOwnerEmail?: string | null;
   },
   currentUserId: string | null | undefined,
 ): AgentOwner {
@@ -55,12 +52,9 @@ export function describeAgentOwner(
   if (agent.ownerEmail) {
     return { kind: "user", email: agent.ownerEmail };
   }
-  // The live author is checked first: the retained identity is only ever
-  // written as an account is deleted, so the two cannot both be current.
-  if (agent.formerOwnerEmail) {
-    return { kind: "deleted", email: agent.formerOwnerEmail };
-  }
-  return { kind: "unknown" };
+  // `ownerEmail` comes from the join on `ownerId`, so the two are null
+  // together: no author means the account behind it is gone.
+  return { kind: "deleted" };
 }
 
 /**

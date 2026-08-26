@@ -109,7 +109,13 @@ export function ServiceLogoPicker({ onSelect }: ServiceLogoPickerProps) {
                 Popular services
               </p>
             )}
-            <div className="grid grid-cols-6 gap-1">
+            {/*
+              Four columns, not six: the label below each logo now wraps
+              instead of truncating, and at six the cell was narrow enough that
+              ordinary names ("Kubernetes", "PostgreSQL") broke mid-word. Four
+              fits the large majority on one line and caps the rest at two.
+            */}
+            <div className="grid grid-cols-4 gap-1">
               {visibleIcons.map((icon) => (
                 <button
                   key={icon.slug}
@@ -137,7 +143,14 @@ export function ServiceLogoPicker({ onSelect }: ServiceLogoPickerProps) {
                       <path d={icon.path} />
                     </svg>
                   )}
-                  <span className="text-[10px] leading-tight text-muted-foreground truncate w-full text-center">
+                  {/*
+                    Wraps rather than truncating. Truncating turned "Slackware"
+                    into "Slack…", which reads as Slack itself — the label has
+                    to stay legible, and it is the only thing separating two
+                    brands whose logos look nothing alike. `break-words` is the
+                    backstop for a single token too long for even this cell.
+                  */}
+                  <span className="text-[10px] leading-tight text-muted-foreground w-full text-center text-balance break-words">
                     {icon.title}
                   </span>
                 </button>

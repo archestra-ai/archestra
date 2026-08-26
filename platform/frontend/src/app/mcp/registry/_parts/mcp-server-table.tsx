@@ -133,14 +133,19 @@ export function McpServerTable({
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   const canSelect = (item: CatalogItem) =>
-    installingItemId !== item.id && !getServerInfo(item).isInstallInProgress;
+    (!!attention || !!getServerInfo(item).installedServer) &&
+    installingItemId !== item.id &&
+    !getServerInfo(item).isInstallInProgress;
 
   const standardColumns: ColumnDef<CatalogItem>[] = [
     createSelectColumn<CatalogItem>({
       rowLabel: (item) => `Select ${item.name}`,
       allLabel: "Select all MCP servers on this page",
       canSelect,
-      disabledReason: () => "Wait for installation to finish",
+      disabledReason: (item) =>
+        !attention && !getServerInfo(item).installedServer
+          ? "Install this server before selecting it"
+          : "Wait for installation to finish",
     }),
     {
       id: "name",

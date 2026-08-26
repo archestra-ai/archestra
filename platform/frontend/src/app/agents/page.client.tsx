@@ -616,7 +616,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       <TableCardView storageKey="archestra-agents-view">
         <div>
           <div>
-            <div className="mb-6 flex flex-col gap-2">
+            <div className="mb-3 flex flex-col gap-2">
               <FilterBar
                 actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
               >

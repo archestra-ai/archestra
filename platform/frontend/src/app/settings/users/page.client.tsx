@@ -608,7 +608,7 @@ function MembersTab({
   return (
     <>
       <FilterBar
-        className="mb-4"
+        className={isPending ? "mb-4" : "mb-3"}
         actions={<TabButtons activeTab={activeTab} onTabChange={onTabChange} />}
       >
         <SearchInput

@@ -796,7 +796,7 @@ export default function ApiKeysPage() {
       actionButton={addApiKeyButton}
     >
       <div className="space-y-4">
-        <FilterBar className="mb-4">
+        <FilterBar className="!mb-3">
           <SearchInput
             objectNamePlural="credentials"
             searchFields={["name"]}
@@ -829,7 +829,7 @@ export default function ApiKeysPage() {
 
         {byosEnabled &&
           apiKeys.some((key) => key.secretStorageType === "database") && (
-            <Alert variant="destructive">
+            <Alert variant="destructive" className="!mb-3">
               <AlertTriangle className="h-4 w-4" />
               <AlertTitle>Database-stored API keys detected</AlertTitle>
               <AlertDescription>

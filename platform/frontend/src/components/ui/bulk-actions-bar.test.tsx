@@ -87,7 +87,10 @@ describe("BulkActionsBar", () => {
       <BulkActions count={0} noun="skill" countTestId="count" />,
     );
 
-    expect(container.querySelector("div")?.className).toContain("h-[42px]");
+    const emptySlot = container.querySelector('[data-slot="bulk-actions-bar"]');
+    expect(emptySlot?.className).toContain("h-[42px]");
+    expect(emptySlot?.className).toContain("!mb-3");
+    expect(emptySlot?.className).toContain("[&+*]:!mt-0");
     expect(screen.queryByRole("button")).toBeNull();
     expect(container.querySelector('[aria-live="polite"]')?.textContent).toBe(
       "",
@@ -95,7 +98,18 @@ describe("BulkActionsBar", () => {
 
     rerender(<BulkActions count={2} noun="skill" countTestId="count" />);
 
-    expect(container.querySelector("div")?.className).not.toContain("h-[42px]");
+    const selectedSlot = container.querySelector(
+      '[data-slot="bulk-actions-bar"]',
+    );
+    expect(selectedSlot?.className).toContain("h-[42px]");
+    expect(selectedSlot?.className).toContain("!mb-3");
+    expect(selectedSlot?.className).toContain("[&+*]:!mt-0");
+    expect(selectedSlot?.querySelector("div")?.className).toContain(
+      "flex-nowrap",
+    );
+    expect(selectedSlot?.querySelector("div")?.className).toContain(
+      "overflow-x-auto",
+    );
     expect(screen.getByTestId("count").textContent).toBe("2 skills selected");
   });
 

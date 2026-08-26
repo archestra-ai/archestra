@@ -345,10 +345,12 @@ function FilterOptionList({
 }
 
 export function RegistryFilterChips({
+  className,
   selected,
   onRemove,
   onClearAll,
 }: {
+  className?: string;
   selected: RegistryFilters;
   onRemove: (group: FilterGroup, value: string) => void;
   onClearAll: () => void;
@@ -375,7 +377,7 @@ export function RegistryFilterChips({
   if (entries.length === 0) return null;
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className={cn("flex flex-wrap items-center gap-2", className)}>
       {entries.map((entry) => (
         <Badge
           key={`${entry.group}-${entry.value}`}

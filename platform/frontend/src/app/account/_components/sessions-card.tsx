@@ -164,7 +164,7 @@ export function SessionsCard() {
 
   return (
     <section className="w-full space-y-5">
-      <div className="space-y-1">
+      <div className={isLoadingError ? "space-y-1" : "space-y-1 !mb-3"}>
         <h2 className="text-sm font-medium leading-5">Sessions</h2>
         <p className="text-sm leading-5 text-muted-foreground">
           Manage where your account is signed in.

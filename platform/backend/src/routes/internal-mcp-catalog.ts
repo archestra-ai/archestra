@@ -119,6 +119,19 @@ const ToolWithAssignedAgentCountSchema = z.object({
     }),
   ),
 });
+
+/**
+ * The minimum a tool picker needs to group tools by server and resolve saved
+ * per-tool selections: no parameters, no descriptions, no assignment fan-out.
+ * Keeping the batched route this lean is the point — the payload it replaces
+ * was one full tool list (with per-tool assigned-agent rows) per catalog item.
+ */
+const CatalogToolReferenceSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  catalogId: z.string(),
+});
+
 const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
     "/api/internal_mcp_catalog",
@@ -667,6 +680,34 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send(catalogItem);
+    },
+  );
+
+  fastify.get(
+    "/api/internal_mcp_catalog/tools",
+    {
+      schema: {
+        operationId: RouteId.GetInternalMcpCatalogToolsBatch,
+        description:
+          "Get id/name/catalog for every listable tool across all catalog items the caller can see, in one request. Backs the tool pickers, which previously issued one request per catalog item.",
+        tags: ["MCP Catalog"],
+        response: constructResponseSchema(z.array(CatalogToolReferenceSchema)),
+      },
+    },
+    async (request, reply) => {
+      const { success: isAdmin } = await hasPermission(
+        { mcpServerInstallation: ["admin"] },
+        request.headers,
+      );
+      // Scoped to exactly the catalogs GET /api/internal_mcp_catalog would
+      // list for this caller — app backings included, which stay behind the
+      // `app:read`-gated includeApps path there and are excluded here too.
+      const catalogIds = await InternalMcpCatalogModel.findAccessibleIds({
+        userId: request.user.id,
+        isAdmin,
+        organizationId: request.organizationId,
+      });
+      return reply.send(await ToolModel.findListableByCatalogIds(catalogIds));
     },
   );
 

@@ -1863,10 +1863,24 @@ export function ChatPageContent({
         !isReadOnlyConversation && hasChatAccess && canUpdateAgent !== false,
     },
   );
-  // Treat both loading and required as "visible" for disabling submit, hiding arrow, etc.
+  // Two different answers, and they must not be spelled the same way.
+  //
+  // `isPlaywrightSetupNeeded` is the resolved one: this user has no browser and
+  // this agent's enabled tools want one. It is what may take the composer's
+  // place, because it is the only state the install card is true about.
+  //
+  // `isPlaywrightCheckPending` is "we do not know yet" — the agent's tools,
+  // its delegations and each enabled sub-agent's tools are still in flight.
+  // Sending waits for it (a message could reach for a browser that is not
+  // there), but the draft does not: the input stays typeable and untouched.
+  //
+  // `isPlaywrightSetupVisible` is the union, and stays the guard for the things
+  // that must hold for both — submitting, and opening the browser panel.
   // Only applies to users who can actually perform the installation.
+  const isPlaywrightSetupNeeded = !!canUpdateAgent && isPlaywrightSetupRequired;
+  const isPlaywrightCheckPending = !!canUpdateAgent && isPlaywrightCheckLoading;
   const isPlaywrightSetupVisible =
-    !!canUpdateAgent && (isPlaywrightSetupRequired || isPlaywrightCheckLoading);
+    isPlaywrightSetupNeeded || isPlaywrightCheckPending;
 
   // Stream usage and compaction results both update this live context estimate.
   const tokensUsed = contextTokensUsed ?? tokenUsage?.totalTokens;
@@ -3047,10 +3061,9 @@ export function ChatPageContent({
   //   than a spinner where the page should be.
   // - The browser-tooling check, which cannot even start until the roster has
   //   resolved an agent and then costs a round trip for that agent's tools and
-  //   delegations plus one per enabled sub-agent. `isPlaywrightSetupVisible`
-  //   already carries its loading state and `isPlaywrightSetupRequired` stays
-  //   false until the answer is known, so the setup card appears when it
-  //   resolves rather than flashing.
+  //   delegations plus one per enabled sub-agent. Only its resolved answer
+  //   (`isPlaywrightSetupNeeded`) reaches the composer, so the setup card
+  //   appears when the check lands rather than while it runs.
   if (isLoadingApiKeyCheck) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -3507,10 +3520,14 @@ export function ChatPageContent({
                                 conversation?.agent?.llmApiKeyId ?? null
                               }
                               submitDisabled={
-                                isPlaywrightSetupVisible ||
+                                isPlaywrightSetupNeeded ||
                                 isApplyingAgentSelection ||
                                 isAgentSubscriptionMetadataPending
                               }
+                              // Still working out whether this agent needs a
+                              // browser. That is no reason to take the input
+                              // away — only to hold the send.
+                              sendDisabled={isPlaywrightCheckPending}
                               subscriptionConnectRequired={
                                 conversationPerUserConnect.needsConnect
                               }
@@ -3526,8 +3543,8 @@ export function ChatPageContent({
                                   ? handleCompactConversation
                                   : undefined
                               }
-                              isPlaywrightSetupVisible={
-                                isPlaywrightSetupVisible
+                              isPlaywrightSetupRequired={
+                                isPlaywrightSetupNeeded
                               }
                               selectorAgentId={activeAgentId}
                               onAgentChange={handleConversationAgentChange}
@@ -3630,7 +3647,7 @@ export function ChatPageContent({
                         )}
                       </div>
                     )}
-                    {isPlaywrightSetupRequired && canUpdateAgent && (
+                    {isPlaywrightSetupNeeded && (
                       <PlaywrightInstallDialog
                         agentId={playwrightSetupAgentId}
                         conversationId={conversationId}
@@ -3738,10 +3755,7 @@ export function ChatPageContent({
                                   // the first paint no longer waits on, which
                                   // on a reload would hand the spinner's wait
                                   // to a disabled textarea.
-                                  submitDisabled={
-                                    !!canUpdateAgent &&
-                                    isPlaywrightSetupRequired
-                                  }
+                                  submitDisabled={isPlaywrightSetupNeeded}
                                   // Still resolving which agent this chat
                                   // starts on, or what tooling and credentials
                                   // it brings. The draft is welcome — start
@@ -3761,8 +3775,8 @@ export function ChatPageContent({
                                   subscriptionProvider={
                                     initialPerUserConnect.provider
                                   }
-                                  isPlaywrightSetupVisible={
-                                    isPlaywrightSetupVisible
+                                  isPlaywrightSetupRequired={
+                                    isPlaywrightSetupNeeded
                                   }
                                   selectorAgentId={initialAgentId}
                                   onAgentChange={handleInitialAgentChange}

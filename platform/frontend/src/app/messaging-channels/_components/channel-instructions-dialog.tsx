@@ -5,6 +5,7 @@ import { useState } from "react";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { cn } from "@/lib/utils";
 
 const PLACEHOLDER =
@@ -84,13 +85,11 @@ export function ChannelInstructionsDialog({
       }}
       footer={
         <>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </Button>
+          {/* DialogCancelButton, not a plain Button calling onOpenChange(false):
+              that closed the dialog directly and skipped the unsaved-changes
+              guard, so Cancel threw away a dirty edit without asking while Esc,
+              the backdrop and the X all confirmed first. */}
+          <DialogCancelButton>Cancel</DialogCancelButton>
           <Button type="submit" disabled={isSaving || overLimit}>
             <span>Save</span>
           </Button>

@@ -19951,6 +19951,7 @@ export type CreateAppResponses = {
         } | null;
         latestVersion: number;
         enabled: boolean;
+        openInFullscreen: boolean;
         locked: boolean;
         createdAt: string;
         updatedAt: string;
@@ -21043,6 +21044,7 @@ export type GetAppResponses = {
         } | null;
         latestVersion: number;
         enabled: boolean;
+        openInFullscreen: boolean;
         locked: boolean;
         createdAt: string;
         updatedAt: string;
@@ -21101,6 +21103,7 @@ export type UpdateAppData = {
             keyId?: string;
             valueId?: string;
         }>;
+        openInFullscreen?: boolean;
         teamIds?: Array<string>;
         userIds?: Array<string>;
     };
@@ -21213,6 +21216,7 @@ export type UpdateAppResponses = {
         } | null;
         latestVersion: number;
         enabled: boolean;
+        openInFullscreen: boolean;
         locked: boolean;
         createdAt: string;
         updatedAt: string;
@@ -21549,6 +21553,7 @@ export type EnableAppResponses = {
         } | null;
         latestVersion: number;
         enabled: boolean;
+        openInFullscreen: boolean;
         locked: boolean;
         createdAt: string;
         updatedAt: string;
@@ -21689,6 +21694,7 @@ export type DisableAppResponses = {
         } | null;
         latestVersion: number;
         enabled: boolean;
+        openInFullscreen: boolean;
         locked: boolean;
         createdAt: string;
         updatedAt: string;
@@ -21829,6 +21835,7 @@ export type LockAppResponses = {
         } | null;
         latestVersion: number;
         enabled: boolean;
+        openInFullscreen: boolean;
         locked: boolean;
         createdAt: string;
         updatedAt: string;
@@ -21969,6 +21976,7 @@ export type UnlockAppResponses = {
         } | null;
         latestVersion: number;
         enabled: boolean;
+        openInFullscreen: boolean;
         locked: boolean;
         createdAt: string;
         updatedAt: string;

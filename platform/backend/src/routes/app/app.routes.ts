@@ -954,7 +954,13 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const patch: Partial<
         Pick<
           App,
-          "name" | "slug" | "description" | "scope" | "environmentId" | "icon"
+          | "name"
+          | "slug"
+          | "description"
+          | "scope"
+          | "environmentId"
+          | "icon"
+          | "openInFullscreen"
         >
       > = {};
       if (body.name !== undefined) patch.name = body.name;
@@ -964,6 +970,8 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (body.environmentId !== undefined)
         patch.environmentId = body.environmentId;
       if (body.icon !== undefined) patch.icon = body.icon;
+      if (body.openInFullscreen !== undefined)
+        patch.openInFullscreen = body.openInFullscreen;
 
       // Permissions ride the version envelope; an html-bearing edit inherits
       // the current head's value when the caller omits it.

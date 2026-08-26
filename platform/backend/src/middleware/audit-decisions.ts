@@ -25,6 +25,7 @@ import OrganizationModel from "@/models/organization";
 import OrganizationRoleModel from "@/models/organization-role";
 import PluginModel from "@/models/plugin";
 import ProjectModel from "@/models/project";
+import RunnerModel from "@/models/runner";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ServiceAccountModel from "@/models/service-account";
 import SkillModel from "@/models/skill";
@@ -34,6 +35,7 @@ import TeamTokenModel from "@/models/team-token";
 import ToolModel from "@/models/tool";
 import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
 import TrustedDataPolicyModel from "@/models/trusted-data-policy";
+import UserCredentialModel from "@/models/user-credential";
 import UserTokenModel from "@/models/user-token";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 
@@ -85,6 +87,8 @@ export const AUDIT_DECISIONS = {
   // Audited resources — mutations captured via AUDITABLE_ROUTES
   // =========================================================================
   agentsTable: { audited: true, model: AgentModel },
+  runnersTable: { audited: true, model: RunnerModel },
+  userCredentialsTable: { audited: true, model: UserCredentialModel },
   agentToolsTable: { audited: true, model: AgentToolModel },
   apikeysTable: { audited: true, model: ApiKeyModel },
   chatopsChannelBindingsTable: {
@@ -587,6 +591,11 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason:
       "derived per-viewer marketplace repo; created implicitly on clone, carries no user-authored state",
+  },
+  runnerEventsTable: {
+    audited: false,
+    reason:
+      "child of runner; append-only session timeline with its own read surface",
   },
   skillSandboxesTable: {
     audited: false,

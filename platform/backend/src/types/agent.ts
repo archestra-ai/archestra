@@ -19,6 +19,7 @@ import { z } from "zod";
 import { schema } from "@/database";
 import { SuggestedPromptInputSchema } from "./agent-suggested-prompt";
 import { AgentLabelWithDetailsSchema } from "./label";
+import { RunnerConfigSchema } from "./runner";
 import { SelectToolSchema } from "./tool";
 import {
   type ResourceVisibilityScope,
@@ -209,6 +210,7 @@ const selectExtendedFields = {
   missingCredentialBehavior: MissingCredentialBehaviorSchema,
   builtInAgentConfig: BuiltInAgentConfigSchema.nullable(),
   passthroughHeaders: z.array(z.string()).nullable(),
+  runnerConfig: RunnerConfigSchema.nullable(),
 };
 
 const insertExtendedFields = {
@@ -219,6 +221,7 @@ const insertExtendedFields = {
   missingCredentialBehavior: MissingCredentialBehaviorSchema.optional(),
   builtInAgentConfig: BuiltInAgentConfigSchema.nullable().optional(),
   passthroughHeaders: PassthroughHeadersSchema,
+  runnerConfig: RunnerConfigSchema.nullish(),
 };
 
 /**

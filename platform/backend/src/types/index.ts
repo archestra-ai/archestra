@@ -79,6 +79,7 @@ export * from "./plugin-marketplace";
 export * from "./plugin-skill";
 export * from "./project";
 export * from "./role";
+export * from "./runner";
 export * from "./schedule-trigger";
 export * from "./secret";
 export * from "./secrets-manager";

@@ -454,6 +454,19 @@ export const RouteId = {
   DeleteServiceAccountToken: "deleteServiceAccountToken",
 
   // Virtual API Key Routes
+  // Runners: long-running agent sessions in their own container.
+  GetAllRunners: "getAllRunners",
+  GetRunner: "getRunner",
+  GetRunnerEvents: "getRunnerEvents",
+  GetRunnerPreflight: "getRunnerPreflight",
+  CreateRunner: "createRunner",
+  SteerRunner: "steerRunner",
+  StopRunner: "stopRunner",
+  DeleteRunner: "deleteRunner",
+  // Personal credentials a user supplies for the agents they run.
+  GetAllUserCredentials: "getAllUserCredentials",
+  UpsertUserCredential: "upsertUserCredential",
+  DeleteUserCredential: "deleteUserCredential",
   GetAllVirtualApiKeys: "getAllVirtualApiKeys",
   GetVirtualApiKey: "getVirtualApiKey",
   GetVirtualApiKeyValue: "getVirtualApiKeyValue",

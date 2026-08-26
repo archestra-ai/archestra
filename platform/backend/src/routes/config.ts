@@ -89,6 +89,13 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               mcpServerAlertingEnabled: z.boolean(),
               // SPDX-SnippetEnd
               sandbox: z.boolean(),
+              /**
+               * Runners: long-running agentic sessions in their own pods.
+               * True only when the feature is switched on AND the Kubernetes
+               * runtime is configured — the UI must not offer to start a
+               * runner nothing can schedule.
+               */
+              runners: z.boolean(),
               plugins: z.boolean(),
               // Max size of a file the sandbox can stage. The chat composer caps
               // sandbox-routed uploads at this instead of guessing.
@@ -219,6 +226,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           mcpServerAlertingEnabled: config.mcpServer.alertingEnabled,
           // SPDX-SnippetEnd
           sandbox: skillSandboxRuntimeService.isEnabled,
+          runners: config.runners.enabled && McpServerRuntimeManager.isEnabled,
           plugins: config.plugins.enabled,
           sandboxArtifactBytesLimit: config.skillsSandbox.artifactBytesLimit,
           chatAttachmentStorageBytesLimit:

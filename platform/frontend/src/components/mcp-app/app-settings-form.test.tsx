@@ -81,6 +81,36 @@ vi.mock("@/components/environment-selector", () => ({
   EnvironmentSelector: () => null,
 }));
 
+// The picker itself (emoji tab, logo tab, upload, clear) is a shared component;
+// here it only has to report a chosen value so the save path can be asserted.
+vi.mock("@/components/agent-icon-picker", () => ({
+  AgentIconPicker: ({
+    value,
+    onChange,
+  }: {
+    value: string | null;
+    onChange: (icon: string | null) => void;
+  }) => (
+    <>
+      <span data-testid="icon-value">{value ?? "none"}</span>
+      <button
+        type="button"
+        data-testid="pick-icon"
+        onClick={() => onChange("🚀")}
+      >
+        pick icon
+      </button>
+      <button
+        type="button"
+        data-testid="clear-icon"
+        onClick={() => onChange(null)}
+      >
+        clear icon
+      </button>
+    </>
+  ),
+}));
+
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useOrganizationMembers } from "@/lib/organization.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";
@@ -153,7 +183,7 @@ describe("AppSettingsForm save", () => {
   test("saves trimmed identity fields and closes; unchanged tools fire no mutations", async () => {
     const { container, onBack } = renderForm();
 
-    fireEvent.change(screen.getByLabelText("Name"), {
+    fireEvent.change(screen.getByLabelText("Name *"), {
       target: { value: "  Budget v2  " },
     });
     submitForm(container);
@@ -173,10 +203,60 @@ describe("AppSettingsForm save", () => {
         // Labels are replaced wholesale too, so the full current set rides
         // every save — here the fixture's empty one.
         labels: [],
+        icon: null,
       },
     });
     expect(assignMutateAsync).not.toHaveBeenCalled();
     expect(unassignMutateAsync).not.toHaveBeenCalled();
+  });
+
+  test("sends a picked icon", async () => {
+    const { container, onBack } = renderForm();
+
+    fireEvent.click(screen.getByTestId("pick-icon"));
+    submitForm(container);
+
+    await waitFor(() => expect(onBack).toHaveBeenCalled());
+    expect(updateMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.objectContaining({ icon: "🚀" }),
+      }),
+    );
+  });
+
+  test("seeds from the app's icon and re-sends it on an unrelated save", async () => {
+    const { container, onBack, getByTestId } = renderForm({
+      app: { ...APP, icon: "🚀" } as typeof APP,
+    });
+    expect(getByTestId("icon-value")).toHaveTextContent("🚀");
+
+    fireEvent.change(screen.getByLabelText("Name *"), {
+      target: { value: "Budget v2" },
+    });
+    submitForm(container);
+
+    await waitFor(() => expect(onBack).toHaveBeenCalled());
+    expect(updateMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.objectContaining({ name: "Budget v2", icon: "🚀" }),
+      }),
+    );
+  });
+
+  test("clearing the icon sends null so it goes back to the generic glyph", async () => {
+    const { container, onBack } = renderForm({
+      app: { ...APP, icon: "🚀" } as typeof APP,
+    });
+
+    fireEvent.click(screen.getByTestId("clear-icon"));
+    submitForm(container);
+
+    await waitFor(() => expect(onBack).toHaveBeenCalled());
+    expect(updateMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.objectContaining({ icon: null }),
+      }),
+    );
   });
 
   test("assigns a staged tool with dynamic credential resolution on save", async () => {
@@ -302,7 +382,7 @@ describe("AppSettingsForm save", () => {
   test("an empty name blocks submit and shows a validation message", async () => {
     const { container, onBack } = renderForm();
 
-    fireEvent.change(screen.getByLabelText("Name"), {
+    fireEvent.change(screen.getByLabelText("Name *"), {
       target: { value: "   " },
     });
     submitForm(container);
@@ -346,7 +426,7 @@ describe("AppSettingsForm URL field", () => {
   test("omits an unchanged slug so a save cannot 409 against its own row", async () => {
     const { container, onBack } = renderForm({ app: SLUGGED });
 
-    fireEvent.change(screen.getByLabelText("Name"), {
+    fireEvent.change(screen.getByLabelText("Name *"), {
       target: { value: "Budget v2" },
     });
     submitForm(container);

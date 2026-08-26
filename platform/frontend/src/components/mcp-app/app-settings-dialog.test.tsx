@@ -44,6 +44,7 @@ const app = {
   templateId: null,
   mcpServerId: "server-1",
   spec: null,
+  icon: null,
   latestVersion: 1,
   enabled: true,
   locked: false,
@@ -118,7 +119,7 @@ describe("AppSettingsDialog", () => {
 
     await act(async () => releaseRequest());
     expect(
-      await screen.findByRole("textbox", { name: "Name" }),
+      await screen.findByRole("textbox", { name: "Name *" }),
     ).toBeInTheDocument();
   });
 
@@ -141,7 +142,7 @@ describe("AppSettingsDialog", () => {
     fireEvent.click(retry);
 
     expect(
-      await screen.findByRole("textbox", { name: "Name" }),
+      await screen.findByRole("textbox", { name: "Name *" }),
     ).toBeInTheDocument();
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Save" })).toBeEnabled(),
@@ -158,7 +159,7 @@ describe("AppSettingsDialog", () => {
       await screen.findByRole("status", { name: "App settings unavailable" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("textbox", { name: "Name" }),
+      screen.queryByRole("textbox", { name: "Name *" }),
     ).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
@@ -178,7 +179,7 @@ describe("AppSettingsDialog", () => {
 
     renderDialog(queryClient);
     expect(
-      await screen.findByRole("textbox", { name: "Name" }),
+      await screen.findByRole("textbox", { name: "Name *" }),
     ).toBeInTheDocument();
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Save" })).toBeEnabled(),
@@ -195,13 +196,13 @@ describe("AppSettingsDialog", () => {
     );
 
     expect(requests).toBe(1);
-    expect(screen.getByRole("textbox", { name: "Name" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Name *" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
   });
 
   it("closes on Cancel and remounts a fresh form when reopened", async () => {
     renderControlledDialog();
-    const nameInput = await screen.findByRole("textbox", { name: "Name" });
+    const nameInput = await screen.findByRole("textbox", { name: "Name *" });
     fireEvent.change(nameInput, { target: { value: "Unsaved name" } });
     expect(nameInput).toHaveValue("Unsaved name");
 
@@ -211,7 +212,7 @@ describe("AppSettingsDialog", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Open settings" }));
 
-    expect(await screen.findByRole("textbox", { name: "Name" })).toHaveValue(
+    expect(await screen.findByRole("textbox", { name: "Name *" })).toHaveValue(
       app.name,
     );
   });

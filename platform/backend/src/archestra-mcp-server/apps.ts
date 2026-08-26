@@ -609,6 +609,7 @@ const registry = defineArchestraTools([
           app: created,
           scope,
           environmentId,
+          icon: args.icon ?? null,
           userId,
           organizationId,
           teamIds: [],

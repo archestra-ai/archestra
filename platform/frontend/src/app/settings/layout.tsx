@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { createContext, useContext, useMemo, useState } from "react";
 import { PageLayout } from "@/components/page-layout";
 import { SectionNav } from "@/components/section-nav";
+import { useDisableInvitations } from "@/lib/config/config.query";
 import { resolveSettingsSection, useSettingsTabs } from "./settings-tabs";
 
 const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
@@ -104,9 +105,21 @@ const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
   },
   "/settings/users": {
     title: "Users",
-    description: "Manage users, their roles, and user invitations.",
+    description: <UsersDescription />,
   },
 };
+
+/**
+ * The invitations half of this page only exists when the deployment allows
+ * invitations at all (`ARCHESTRA_AUTH_DISABLE_INVITATIONS`), so the blurb
+ * stops promising it when the tab and the invite button are hidden.
+ */
+function UsersDescription() {
+  const disableInvitations = useDisableInvitations();
+  return disableInvitations === false
+    ? "Manage users, their roles, and user invitations."
+    : "Manage users and their roles.";
+}
 
 type SettingsLayoutContextType = {
   setActionButton: (button: React.ReactNode) => void;

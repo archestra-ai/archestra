@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { type MouseEventHandler, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
@@ -36,6 +36,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -144,6 +145,12 @@ export type McpServerCardProps = {
   onCancelInstallation?: (serverId: string) => void;
   /** When true, renders as a built-in Playwright server (non-editable, personal-only) */
   isBuiltInPlaywright?: boolean;
+  selection?: {
+    selected: boolean;
+    onSelectedChange: (selected: boolean) => void;
+    onSelectionClick: MouseEventHandler<HTMLButtonElement>;
+    disabled?: boolean;
+  };
 };
 
 export type McpServerCardVariant = "remote" | "local" | "builtin";
@@ -166,6 +173,7 @@ export function McpServerCard({
   onReinstall,
   onCancelInstallation,
   isBuiltInPlaywright = false,
+  selection,
 }: McpServerCardBaseProps) {
   const isPlaywrightVariant = isBuiltInPlaywright;
 
@@ -562,6 +570,33 @@ export function McpServerCard({
     >
       <Pencil className="h-4 w-4" />
     </Button>
+  );
+
+  const selectionCheckbox = selection ? (
+    <Checkbox
+      checked={selection.selected}
+      disabled={selection.disabled}
+      aria-label={`Select ${item.name}`}
+      onCheckedChange={(checked) =>
+        selection.onSelectedChange(checked === true)
+      }
+      onClick={(event) => selection.onSelectionClick(event)}
+    />
+  ) : null;
+  const selectionControl = selection?.disabled ? (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className="inline-flex cursor-not-allowed"
+          title="Wait for installation to finish"
+        >
+          {selectionCheckbox}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>Wait for installation to finish</TooltipContent>
+    </Tooltip>
+  ) : (
+    selectionCheckbox
   );
 
   // A 4th connection folds into the +N count rather than lengthening the
@@ -1074,7 +1109,7 @@ export function McpServerCard({
       // `overflow-hidden` is a backstop, not the fix: the rows inside are laid
       // out to fit. It means that if some future combination still doesn't,
       // the card clips it instead of painting it over its neighbour.
-      className="flex flex-col relative pt-4 gap-4 h-full overflow-hidden"
+      className={`flex flex-col relative pt-4 gap-4 h-full overflow-hidden ${selection?.selected ? "border-primary bg-primary/5" : ""}`}
       data-testid={`${E2eTestId.McpServerCard}-${item.name}`}
     >
       <CardHeader className="gap-0">
@@ -1119,7 +1154,10 @@ export function McpServerCard({
               className="mt-2"
             />
           </div>
-          {canEditCatalog && settingsButton}
+          <div className="flex shrink-0 items-center gap-1">
+            {selectionControl}
+            {canEditCatalog && settingsButton}
+          </div>
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 flex-grow">

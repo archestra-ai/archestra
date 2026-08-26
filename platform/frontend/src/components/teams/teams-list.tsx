@@ -5,7 +5,7 @@ import {
   E2eTestId,
 } from "@archestra/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
+import type { ColumnDef } from "@tanstack/react-table";
 import { Eye, Pencil, Plus, Trash2, Users } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -30,7 +30,7 @@ import {
   type TableRowAction,
   TableRowActions,
 } from "@/components/table-row-actions";
-import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -313,13 +313,12 @@ export function TeamsList() {
           <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />
         )}
 
-        <BulkActionsBar
+        <BulkActions
           count={selectedTeams.length}
           noun="team"
           onClear={clearSelection}
           selectAllMatching={selectAllMatching}
           busy={bulkDelete.isPending}
-          className="mb-3"
         >
           <PermissionButton
             permissions={{ team: ["delete"] }}
@@ -330,7 +329,7 @@ export function TeamsList() {
             <Trash2 className="h-4 w-4" />
             <span>Delete</span>
           </PermissionButton>
-        </BulkActionsBar>
+        </BulkActions>
 
         <DataTable
           columns={columns}

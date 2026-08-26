@@ -61,7 +61,7 @@ export const BulkOutcomeSchema = z.object({
 
 export type BulkOutcome = z.infer<typeof BulkOutcomeSchema>;
 
-type BulkEntry<TItem> = { id: string; item: TItem };
+type BulkEntry<TItem> = { id: string; item: TItem; name: string };
 
 /**
  * Runs one bulk action over a batch of ids and reports what happened to each.
@@ -109,8 +109,14 @@ export async function runBulk<TItem>({
   authorize?: (item: TItem, id: string) => void | Promise<void>;
   /** Write one row. Mutually exclusive with `applyAll`. */
   applyEach?: (item: TItem, id: string) => Promise<void>;
-  /** Write every authorized row at once. Mutually exclusive with `applyEach`. */
-  applyAll?: (entries: BulkEntry<TItem>[]) => Promise<void>;
+  /**
+   * Write every authorized row at once. Mutually exclusive with `applyEach`.
+   * Return changed IDs when a concurrent disappearance must not be reported as
+   * success; omit the return only when the write is all-or-nothing.
+   */
+  applyAll?: (
+    entries: BulkEntry<TItem>[],
+  ) => Promise<void> | Promise<readonly string[]>;
   /**
    * Turns a resource-specific error into the reason shown for that row —
    * a name collision, a foreign key that says the row is still in use.
@@ -160,7 +166,8 @@ export async function runBulk<TItem>({
       if (applyEach) {
         await applyEach(item, id);
       } else {
-        authorized.push({ id, item });
+        authorized.push({ id, item, name });
+        continue;
       }
       succeeded.push({ id, name });
     } catch (error) {
@@ -179,7 +186,12 @@ export async function runBulk<TItem>({
   }
 
   if (applyAll && authorized.length > 0) {
-    await applyAll(authorized);
+    const changedIds = await applyAll(authorized);
+    const changed = changedIds ? new Set(changedIds) : null;
+    for (const { id, name } of authorized) {
+      if (!changed || changed.has(id)) succeeded.push({ id, name });
+      else failed.push({ id, name, error: unexpectedMessage });
+    }
   }
 
   if (audit) {

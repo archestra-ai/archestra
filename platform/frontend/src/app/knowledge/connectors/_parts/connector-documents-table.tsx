@@ -18,7 +18,7 @@ import {
   type TableRowAction,
   TableRowActions,
 } from "@/components/table-row-actions";
-import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -30,6 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { reportBulkOutcome } from "@/lib/bulk-action";
+import { useControlledRowSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { useConnectorUserGroups } from "@/lib/knowledge/connector.query";
@@ -154,13 +155,22 @@ export function ConnectorDocumentsTable({
   // re-pointing "all N" at a different N.
   const filterSignature = `${connectorId}|${search}|${group}`;
   const allMatchingActive = selectAllMatchingFor === filterSignature;
+  const { effectiveRowSelection, onRowSelectionChange } =
+    useControlledRowSelection({
+      rowSelection,
+      setRowSelection,
+      rows: documents,
+      getRowId: (row) => row.id,
+      allMatchingSelected: allMatchingActive,
+      clearEscalation: () => setSelectAllMatchingFor(null),
+    });
   const clearSelection = useCallback(() => {
     setRowSelection({});
     setSelectAllMatchingFor(null);
   }, []);
 
   const selectedDocuments = documents.filter(
-    (document) => rowSelection[document.id],
+    (document) => effectiveRowSelection[document.id],
   );
   // Escalating does not fetch the matching rows — the delete sends the filter,
   // so the only thing needed on screen is how many there are. That is what
@@ -313,23 +323,23 @@ export function ConnectorDocumentsTable({
         )}
       </FilterBar>
 
-      <BulkActionsBar
+      <BulkActions
         count={selectedCount}
         noun="document"
         onClear={clearSelection}
         busy={bulkDelete.isPending}
+        maxSelection={null}
         selectAllMatching={{
           total: totalDocuments,
           pageFullySelected:
             documents.length > 0 &&
-            documents.every((document) => rowSelection[document.id]),
+            documents.every((document) => effectiveRowSelection[document.id]),
           active: allMatchingActive,
           onSelectAll: () => setSelectAllMatchingFor(filterSignature),
           matchDescription: "match this search",
-          // No `max`: the delete sends the filter rather than an id list, so
-          // there is no cap for the matching set to outgrow.
+          // The delete sends the filter rather than an id list, so there is no
+          // cap for the matching set to outgrow.
         }}
-        className="mb-3"
       >
         <PermissionButton
           permissions={{ knowledgeSource: ["delete"] }}
@@ -340,14 +350,14 @@ export function ConnectorDocumentsTable({
           <Trash2 className="h-4 w-4" />
           <span>Delete</span>
         </PermissionButton>
-      </BulkActionsBar>
+      </BulkActions>
 
       <DataTable
         columns={columns}
         data={documents}
         getRowId={(row) => row.id}
-        rowSelection={rowSelection}
-        onRowSelectionChange={setRowSelection}
+        rowSelection={effectiveRowSelection}
+        onRowSelectionChange={onRowSelectionChange}
         hideSelectedCount
         isLoading={isFetching}
         manualPagination

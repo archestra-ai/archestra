@@ -28,7 +28,6 @@ import { type UseFormReturn, useFieldArray, useForm } from "react-hook-form";
 import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { AgentIconPicker } from "@/components/agent-icon-picker";
 import {
   type ProfileLabel,
   ProfileLabels,
@@ -43,6 +42,7 @@ import { EnvironmentVariablesFormField } from "@/components/environment-variable
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { HeaderDialog, type HeaderDraft } from "@/components/header-dialog";
 import { HeadersReadOnlyTable } from "@/components/headers-read-only-table";
+import { IdentityFields } from "@/components/identity-fields";
 import { ReinstallConfirmBar } from "@/components/reinstall-confirm-bar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -982,21 +982,19 @@ export function McpCatalogForm({
             {catalogButton}
 
             <div className="space-y-4">
-              <div className="flex items-stretch gap-3">
-                <AgentIconPicker
-                  value={form.watch("icon") ?? null}
-                  fallbackType="server"
-                  onChange={(icon) =>
-                    form.setValue("icon", icon, { shouldDirty: true })
-                  }
-                  showLogos
-                  className="h-auto w-16 self-stretch rounded-md"
-                />
+              <IdentityFields
+                icon={form.watch("icon") ?? null}
+                onIconChange={(icon) =>
+                  form.setValue("icon", icon, { shouldDirty: true })
+                }
+                fallbackType="server"
+                showLogos
+              >
                 <FormField
                   control={form.control}
                   name="name"
                   render={({ field }) => (
-                    <FormItem className="flex-1">
+                    <FormItem>
                       <FormLabel>
                         Name <span className="text-destructive">*</span>
                         <ReinstallHint
@@ -1022,7 +1020,7 @@ export function McpCatalogForm({
                     </FormItem>
                   )}
                 />
-              </div>
+              </IdentityFields>
               <FormField
                 control={form.control}
                 name="description"

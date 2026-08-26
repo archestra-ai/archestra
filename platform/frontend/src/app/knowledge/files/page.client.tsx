@@ -27,13 +27,14 @@ import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
-import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { BulkActions } from "@/components/ui/bulk-actions-bar";
+import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useSession } from "@/lib/auth/auth.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
+import { useControlledRowSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
   type KnowledgeDirectory,
@@ -184,9 +185,30 @@ export default function KnowledgeFilesPage() {
     ];
   }, [directories, files, openDirectoryId, search]);
 
+  /**
+   * An escalation is remembered as the view it was made in, so opening a
+   * different directory or changing the search drops it rather than silently
+   * re-pointing "all 40 documents" at a different 40.
+   */
+  const viewSignature = JSON.stringify({ openDirectoryId, search });
+  const [escalatedFor, setEscalatedFor] = useState<string | null>(null);
+  const allMatchingSelected = escalatedFor === viewSignature;
+  const { effectiveRowSelection, onRowSelectionChange } =
+    useControlledRowSelection({
+      rowSelection,
+      setRowSelection,
+      rows,
+      getRowId: (row) => row.id,
+      allMatchingSelected,
+      clearEscalation: () => setEscalatedFor(null),
+    });
+
   const selectedIds = useMemo(
-    () => Object.keys(rowSelection).filter((id) => rowSelection[id]),
-    [rowSelection],
+    () =>
+      Object.keys(effectiveRowSelection).filter(
+        (id) => effectiveRowSelection[id],
+      ),
+    [effectiveRowSelection],
   );
   const selectedFileIds = selectedIds
     .filter((id) => id.startsWith("file:"))
@@ -207,15 +229,6 @@ export default function KnowledgeFilesPage() {
         total + (directories.find((d) => d.id === id)?.fileCount ?? 0),
       0,
     );
-
-  /**
-   * An escalation is remembered as the view it was made in, so opening a
-   * different directory or changing the search drops it rather than silently
-   * re-pointing "all 40 documents" at a different 40.
-   */
-  const viewSignature = JSON.stringify({ openDirectoryId, search });
-  const [escalatedFor, setEscalatedFor] = useState<string | null>(null);
-  const allMatchingSelected = escalatedFor === viewSignature;
 
   const { data: allMatchingFiles, isFetching: isFetchingAllMatching } =
     useAllMatchingKnowledgeFiles(
@@ -247,14 +260,16 @@ export default function KnowledgeFilesPage() {
       }))
     : [
         ...rows
-          .filter((row) => row.kind === "directory" && rowSelection[row.id])
+          .filter(
+            (row) => row.kind === "directory" && effectiveRowSelection[row.id],
+          )
           .map((row) => ({
             kind: "directory" as const,
             id: row.id.slice(4),
             name: row.kind === "directory" ? row.directory.name : "",
           })),
         ...rows
-          .filter((row) => row.kind === "file" && rowSelection[row.id])
+          .filter((row) => row.kind === "file" && effectiveRowSelection[row.id])
           .map((row) => ({
             kind: "file" as const,
             id: row.id.slice(5),
@@ -276,34 +291,13 @@ export default function KnowledgeFilesPage() {
 
   const columns: ColumnDef<Row>[] = useMemo(
     () => [
-      {
-        id: "select",
-        header: ({ table }) => (
-          <Checkbox
-            checked={
-              table.getIsAllPageRowsSelected() ||
-              (table.getIsSomePageRowsSelected() && "indeterminate")
-            }
-            onCheckedChange={(value) =>
-              table.toggleAllPageRowsSelected(!!value)
-            }
-            aria-label="Select all"
-          />
-        ),
-        cell: ({ row }) => (
-          <Checkbox
-            checked={row.getIsSelected()}
-            onCheckedChange={(value) => row.toggleSelected(!!value)}
-            aria-label={`Select ${
-              row.original.kind === "directory"
-                ? row.original.directory.name
-                : row.original.file.filename
-            }`}
-          />
-        ),
-        size: 30,
-        minSize: 44,
-      },
+      createSelectColumn<Row>({
+        rowLabel: (row) =>
+          `Select ${
+            row.kind === "directory" ? row.directory.name : row.file.filename
+          }`,
+        allLabel: "Select all files and directories on this page",
+      }),
       {
         id: "name",
         header: "Name",
@@ -557,7 +551,7 @@ export default function KnowledgeFilesPage() {
         {/* Visibility follows the ticked rows, not the document count: picking
             an empty directory selects something the bar has to be able to
             report on and clear, even though it resolves to no documents. */}
-        <BulkActionsBar
+        <BulkActions
           count={allMatchingSelected ? actionDocumentCount : selectedIds.length}
           noun="document"
           label={`${actionDocumentCount} ${
@@ -612,7 +606,7 @@ export default function KnowledgeFilesPage() {
           >
             <span>Add to knowledge base</span>
           </PermissionButton>
-        </BulkActionsBar>
+        </BulkActions>
 
         {isLoadingError ? (
           <QueryLoadError
@@ -633,8 +627,8 @@ export default function KnowledgeFilesPage() {
             getRowId={(row) => row.id}
             // The bulk bar above already names the count.
             hideSelectedCount
-            rowSelection={rowSelection}
-            onRowSelectionChange={setRowSelection}
+            rowSelection={effectiveRowSelection}
+            onRowSelectionChange={onRowSelectionChange}
             // Cell contents (badges, knowledge-base names) cannot shrink, so a
             // narrow viewport scrolls the table instead of wrapping headers one
             // letter per line.

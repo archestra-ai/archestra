@@ -3564,4 +3564,35 @@ describe("checkLimitsBeforeRequest cleanup integration", () => {
   test("cleanup with no options at all resolves without error", async () => {
     await expect(LimitModel.cleanupLimitsIfNeeded({})).resolves.toBeUndefined();
   });
+
+  test("batch loads and deletes only limits in the requested organization", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const foreignOrganization = await makeOrganization();
+    const limit = await LimitModel.create({
+      entityType: "organization",
+      entityId: organization.id,
+      limitType: "token_cost",
+      limitValue: 100,
+      model: ["gpt-4o"],
+    });
+    const foreignLimit = await LimitModel.create({
+      entityType: "organization",
+      entityId: foreignOrganization.id,
+      limitType: "token_cost",
+      limitValue: 100,
+      model: ["gpt-4o"],
+    });
+
+    const visible = await LimitModel.findByIdsInOrganization(
+      [limit.id, foreignLimit.id],
+      organization.id,
+    );
+    expect(visible.map((row) => row.id)).toEqual([limit.id]);
+
+    await LimitModel.deleteMany(visible.map((row) => row.id));
+    expect(await LimitModel.findById(limit.id)).toBeNull();
+    expect(await LimitModel.findById(foreignLimit.id)).not.toBeNull();
+  });
 });

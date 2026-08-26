@@ -52,6 +52,7 @@ const uiTestMatch = [
   "**/audit-log.spec.ts",
   "**/auth-origin.spec.ts",
   "**/auth-redirect.spec.ts",
+  "**/chat-browser-setup.spec.ts",
   "**/chat-message-queue.spec.ts",
   "**/chat-permissions.spec.ts",
   "**/chat-refresh.spec.ts",

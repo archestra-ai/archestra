@@ -4,7 +4,7 @@ import { E2eTestId, parseFullToolName } from "@archestra/shared";
 import { Search, UserPlus, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { StandardDialog } from "@/components/standard-dialog";
-import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -149,7 +149,7 @@ export function McpToolsDialog({
       )}
 
       {!isLoading && (
-        <BulkActionsBar
+        <BulkActions
           count={selectedToolIds.length}
           noun="tool"
           onClear={() => setSelectedToolIds([])}
@@ -158,7 +158,7 @@ export function McpToolsDialog({
             <Users className="h-4 w-4" />
             Bulk Assign to Profiles
           </Button>
-        </BulkActionsBar>
+        </BulkActions>
       )}
 
       {isLoading ? (

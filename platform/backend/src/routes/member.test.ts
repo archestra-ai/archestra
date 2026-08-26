@@ -8,37 +8,41 @@ describe("member routes", () => {
   let user: User;
   let organizationId: string;
 
-  beforeEach(async ({ makeAdmin, makeMember, makeOrganization }) => {
-    user = await makeAdmin();
-    const organization = await makeOrganization();
-    organizationId = organization.id;
-    await makeMember(user.id, organizationId, { role: "admin" });
+  beforeEach(
+    async ({ makeAccount, makeAdmin, makeMember, makeOrganization }) => {
+      user = await makeAdmin();
+      await makeAccount(user.id);
+      const organization = await makeOrganization();
+      organizationId = organization.id;
+      await makeMember(user.id, organizationId, { role: "admin" });
 
-    app = createFastifyInstance();
-    app.addHook("onRequest", async (request) => {
-      (
-        request as typeof request & {
-          user: unknown;
-          organizationId: string;
-        }
-      ).user = user;
-      (
-        request as typeof request & {
-          user: { id: string };
-          organizationId: string;
-        }
-      ).organizationId = organizationId;
-    });
+      app = createFastifyInstance();
+      app.addHook("onRequest", async (request) => {
+        (
+          request as typeof request & {
+            user: unknown;
+            organizationId: string;
+          }
+        ).user = user;
+        (
+          request as typeof request & {
+            user: { id: string };
+            organizationId: string;
+          }
+        ).organizationId = organizationId;
+      });
 
-    const { default: memberRoutes } = await import("./member");
-    await app.register(memberRoutes);
-  });
+      const { default: memberRoutes } = await import("./member");
+      await app.register(memberRoutes);
+    },
+  );
 
   afterEach(async () => {
     await app.close();
   });
 
   test("returns paginated members for the current organization", async ({
+    makeAccount,
     makeMember,
     makeUser,
   }) => {
@@ -46,6 +50,8 @@ describe("member routes", () => {
     const beta = await makeUser({ name: "Beta Example" });
     await makeMember(alpha.id, organizationId, { role: "member" });
     await makeMember(beta.id, organizationId, { role: "editor" });
+    await makeAccount(alpha.id);
+    await makeAccount(beta.id);
 
     const response = await app.inject({
       method: "GET",
@@ -70,6 +76,7 @@ describe("member routes", () => {
   });
 
   test("filters members by name or email and role", async ({
+    makeAccount,
     makeMember,
     makeUser,
   }) => {
@@ -83,6 +90,8 @@ describe("member routes", () => {
     });
     await makeMember(targetUser.id, organizationId, { role: "member" });
     await makeMember(otherUser.id, organizationId, { role: "editor" });
+    await makeAccount(targetUser.id);
+    await makeAccount(otherUser.id);
 
     const response = await app.inject({
       method: "GET",
@@ -108,6 +117,7 @@ describe("member routes", () => {
   });
 
   test("matches search tokens regardless of the order they are stored in", async ({
+    makeAccount,
     makeMember,
     makeUser,
   }) => {
@@ -118,6 +128,7 @@ describe("member routes", () => {
       email: "ada.lovelace@example.com",
     });
     await makeMember(targetUser.id, organizationId, { role: "member" });
+    await makeAccount(targetUser.id);
 
     const response = await app.inject({
       method: "GET",
@@ -130,6 +141,7 @@ describe("member routes", () => {
   });
 
   test("matches when tokens are spread across name and email", async ({
+    makeAccount,
     makeMember,
     makeUser,
   }) => {
@@ -138,6 +150,7 @@ describe("member routes", () => {
       email: "analytical.engine@example.com",
     });
     await makeMember(targetUser.id, organizationId, { role: "member" });
+    await makeAccount(targetUser.id);
 
     const response = await app.inject({
       method: "GET",
@@ -150,6 +163,7 @@ describe("member routes", () => {
   });
 
   test("requires every token to match, so extra words still narrow results", async ({
+    makeAccount,
     makeMember,
     makeUser,
   }) => {
@@ -163,6 +177,8 @@ describe("member routes", () => {
     });
     await makeMember(ada.id, organizationId, { role: "member" });
     await makeMember(charles.id, organizationId, { role: "member" });
+    await makeAccount(ada.id);
+    await makeAccount(charles.id);
 
     const response = await app.inject({
       method: "GET",
@@ -176,6 +192,7 @@ describe("member routes", () => {
   });
 
   test("treats LIKE wildcards in the query as literal characters", async ({
+    makeAccount,
     makeMember,
     makeUser,
   }) => {
@@ -184,6 +201,7 @@ describe("member routes", () => {
       email: "ada@example.com",
     });
     await makeMember(targetUser.id, organizationId, { role: "member" });
+    await makeAccount(targetUser.id);
 
     const response = await app.inject({
       method: "GET",

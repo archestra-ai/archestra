@@ -1,5 +1,6 @@
 "use client";
 
+import { MAX_BULK_IDS } from "@archestra/shared";
 import type { ReactNode } from "react";
 import { LoadingState } from "@/components/loading";
 import { Button } from "@/components/ui/button";
@@ -41,10 +42,9 @@ export interface SelectAllMatching {
   max?: number;
 }
 
-interface BulkActionsBarProps {
+export interface BulkActionsBarProps {
   /**
-   * How many rows are ticked. The bar is hidden entirely at 0, so a table
-   * carries no bulk chrome until the selection makes it mean something.
+   * How many rows are ticked. The visible bar is hidden entirely at 0.
    */
   count: number;
   /** Noun for the default label, e.g. `"skill"` → "3 skills selected". */
@@ -66,8 +66,58 @@ interface BulkActionsBarProps {
   selectAllMatching?: SelectAllMatching;
   /** The bar carries no outer spacing of its own; place it in the caller's flow. */
   className?: string;
+  /**
+   * Keeps a compact, invisible bar mounted at zero selection so showing the
+   * controls does not displace the collection beneath them.
+   */
+  reserveSpace?: boolean;
   /** The actions themselves, laid out at the end of the bar. */
   children?: ReactNode;
+}
+
+/**
+ * Default collection bulk actions. Unlike the low-level bar, this keeps the
+ * compact action box in normal flow at zero selection so table and card
+ * layouts never move when the controls appear.
+ */
+export function BulkActions({
+  selectAllMatching,
+  maxSelection = MAX_BULK_IDS,
+  busy,
+  children,
+  ...props
+}: Omit<BulkActionsBarProps, "reserveSpace"> & {
+  /** `null` only for actions that send a filter instead of an ID list. */
+  maxSelection?: number | null;
+}) {
+  const cappedSelectAll =
+    selectAllMatching &&
+    selectAllMatching.max === undefined &&
+    maxSelection !== null
+      ? { ...selectAllMatching, max: maxSelection }
+      : selectAllMatching;
+  const actionCount = cappedSelectAll?.active
+    ? cappedSelectAll.total
+    : props.count;
+  const overLimit = maxSelection !== null && actionCount > maxSelection;
+
+  return (
+    <BulkActionsBar
+      {...props}
+      busy={busy}
+      selectAllMatching={cappedSelectAll}
+      reserveSpace
+    >
+      {overLimit ? (
+        <span className="text-sm text-destructive">
+          Select at most {maxSelection} items at a time.
+        </span>
+      ) : null}
+      <fieldset disabled={overLimit || busy} className="contents">
+        {children}
+      </fieldset>
+    </BulkActionsBar>
+  );
 }
 
 /**
@@ -88,6 +138,7 @@ export function BulkActionsBar({
   countTestId,
   selectAllMatching,
   className,
+  reserveSpace,
   children,
 }: BulkActionsBarProps) {
   const pluralize = (n: number) => (n === 1 ? noun : (plural ?? `${noun}s`));
@@ -101,6 +152,7 @@ export function BulkActionsBar({
   // it — and only when the caller's action could carry the whole set.
   const offerSelectAll =
     selectAllMatching !== undefined &&
+    !busy &&
     !selectAllMatching.active &&
     selectAllMatching.pageFullySelected &&
     selectAllMatching.total > count &&
@@ -118,26 +170,26 @@ export function BulkActionsBar({
         {count > 0 ? text : ""}
       </span>
 
-      {count > 0 && (
+      {count === 0 && reserveSpace ? (
+        <div aria-hidden="true" className={cn("h-[42px]", className)} />
+      ) : count > 0 ? (
         <div
           className={cn(
-            "rounded-md border bg-muted/40",
-            // The offer is a second row, so the padding moves inside to let it
-            // span the full width with its own separator.
-            offerSelectAll ? "" : "px-3 py-2",
+            "rounded-md border bg-muted/40 px-3 py-2",
+            reserveSpace && "px-2 py-1",
             className,
           )}
         >
           <div
             className={cn(
               "flex flex-wrap items-center gap-2",
-              offerSelectAll && "px-3 py-2",
+              reserveSpace && "flex-nowrap gap-1.5 overflow-x-auto",
             )}
           >
             <span
               aria-hidden="true"
               data-testid={countTestId}
-              className="text-sm font-medium"
+              className="shrink-0 text-sm font-medium"
             >
               {text}
             </span>
@@ -147,32 +199,37 @@ export function BulkActionsBar({
                 <span>Clear</span>
               </Button>
             )}
-            <div className="ml-auto flex flex-wrap items-center gap-2">
+            {offerSelectAll && selectAllMatching ? (
+              <div className="flex min-w-0 shrink-0 items-center gap-1 text-sm">
+                <span className="hidden text-muted-foreground xl:inline">
+                  {count} {pluralize(count)} on this page selected.
+                </span>
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto min-w-0 p-0 text-sm"
+                  disabled={busy}
+                  onClick={selectAllMatching.onSelectAll}
+                >
+                  Select all {selectAllMatching.total}{" "}
+                  {pluralize(selectAllMatching.total)} that{" "}
+                  {selectAllMatching.matchDescription ??
+                    "match the current filters"}
+                  .
+                </Button>
+              </div>
+            ) : null}
+            <div
+              className={cn(
+                "ml-auto flex flex-wrap items-center gap-2",
+                reserveSpace && "shrink-0 flex-nowrap gap-1.5",
+              )}
+            >
               {children}
             </div>
           </div>
-
-          {offerSelectAll && selectAllMatching && (
-            <div className="flex flex-wrap items-center gap-1 border-t px-3 py-2 text-sm">
-              <span className="text-muted-foreground">
-                {count} {pluralize(count)} on this page selected.
-              </span>
-              <Button
-                variant="link"
-                size="sm"
-                className="h-auto p-0 text-sm"
-                onClick={selectAllMatching.onSelectAll}
-              >
-                Select all {selectAllMatching.total}{" "}
-                {pluralize(selectAllMatching.total)} that{" "}
-                {selectAllMatching.matchDescription ??
-                  "match the current filters"}
-                .
-              </Button>
-            </div>
-          )}
         </div>
-      )}
+      ) : null}
     </>
   );
 }

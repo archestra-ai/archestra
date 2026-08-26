@@ -31,7 +31,14 @@ export function McpRegistryAttentionBadge() {
   return (
     <SidebarMenuAction
       asChild
-      className="w-auto min-w-5 bg-destructive px-1 text-[11px] font-semibold tabular-nums text-destructive-foreground hover:bg-destructive hover:text-destructive-foreground"
+      // `SidebarMenuAction` is shadcn's square icon-button slot, so it arrives
+      // `rounded-md` and `aspect-square`. Neither suits a count: badges in this
+      // design system are circles (`Badge`, the collapsed-rail warning count,
+      // the registry filter count), and a square-aspect box grows *taller* as
+      // the number gets wider, so a three-digit count outgrew the 20px row.
+      // Fixing the height and rounding it fully gives a circle at one digit and
+      // a pill beyond that, which is what every other count here does.
+      className="aspect-auto h-5 w-auto min-w-5 rounded-full bg-destructive px-1 text-[11px] font-semibold tabular-nums text-destructive-foreground hover:bg-destructive hover:text-destructive-foreground"
     >
       <Link
         href={mcpRegistryFacetHref("you")}

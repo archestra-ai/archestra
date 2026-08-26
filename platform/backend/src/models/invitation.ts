@@ -1,4 +1,5 @@
-import { and, eq } from "drizzle-orm";
+import { AUTO_PROVISIONED_INVITATION_STATUS } from "@archestra/shared";
+import { and, eq, like } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import type {
@@ -209,6 +210,24 @@ class InvitationModel {
       .where(eq(schema.invitationsTable.id, invitationId));
     logger.debug({ invitationId }, "InvitationModel.delete: completed");
     return result;
+  }
+
+  static async deleteAutoProvisionedByEmailInOrganization(params: {
+    email: string;
+    organizationId: string;
+  }) {
+    await db
+      .delete(schema.invitationsTable)
+      .where(
+        and(
+          eq(schema.invitationsTable.email, params.email),
+          eq(schema.invitationsTable.organizationId, params.organizationId),
+          like(
+            schema.invitationsTable.status,
+            `${AUTO_PROVISIONED_INVITATION_STATUS}%`,
+          ),
+        ),
+      );
   }
 
   static async findByIdForAudit(

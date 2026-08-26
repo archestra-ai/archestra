@@ -23,7 +23,7 @@ import {
   type TableRowAction,
   TableRowActions,
 } from "@/components/table-row-actions";
-import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -38,6 +38,7 @@ import { PermissionButton } from "@/components/ui/permission-button";
 import { Textarea } from "@/components/ui/textarea";
 import { useAllPermissions } from "@/lib/auth/auth.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
+import { useControlledRowSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
@@ -290,8 +291,18 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
   // Predefined roles never enter a selection, so the counts and the offer are
   // both about the custom ones alone.
   const selectableOnPage = allRoles.filter((role) => !role.predefined);
+  const { effectiveRowSelection, onRowSelectionChange } =
+    useControlledRowSelection({
+      rowSelection,
+      setRowSelection,
+      rows: allRoles,
+      getRowId: (row) => row.id,
+      allMatchingSelected,
+      clearEscalation: () => setEscalatedFor(null),
+      canSelect: (row) => !row.predefined,
+    });
   const selectedOnPage = selectableOnPage.filter(
-    (role) => rowSelection[role.id],
+    (role) => effectiveRowSelection[role.id],
   );
   const selectedRoles =
     allMatchingSelected && allMatchingRoles
@@ -432,7 +443,7 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
           />
         ) : (
           <>
-            <BulkActionsBar
+            <BulkActions
               count={selectedRoles.length}
               noun="role"
               onClear={clearSelection}
@@ -448,7 +459,6 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
                   ? "match this search query"
                   : "can be deleted",
               }}
-              className="mb-3"
             >
               <PermissionButton
                 permissions={{ ac: ["delete"] }}
@@ -459,14 +469,14 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
                 <Trash2 className="h-4 w-4" />
                 <span>Delete</span>
               </PermissionButton>
-            </BulkActionsBar>
+            </BulkActions>
 
             <DataTable
               columns={columns}
               data={allRoles}
               getRowId={(row) => row.id}
-              rowSelection={rowSelection}
-              onRowSelectionChange={setRowSelection}
+              rowSelection={effectiveRowSelection}
+              onRowSelectionChange={onRowSelectionChange}
               isLoading={isLoading}
               manualPagination
               pagination={{

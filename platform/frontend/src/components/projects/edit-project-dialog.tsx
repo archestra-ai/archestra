@@ -8,8 +8,8 @@ import {
 import { Globe, Lock, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
-import { AgentIconPicker } from "@/components/agent-icon-picker";
 import { AgentSelector } from "@/components/agent-selector";
+import { IdentityFields } from "@/components/identity-fields";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { AssignmentCombobox } from "@/components/ui/assignment-combobox";
 import { Badge } from "@/components/ui/badge";
@@ -281,53 +281,57 @@ function EditProjectDialogForm({
         </>
       }
     >
-      <div className="flex items-start gap-3">
-        <AgentIconPicker
-          value={icon}
-          onChange={(next) =>
-            form.setValue("icon", next, { shouldDirty: true })
-          }
-          fallbackType="project"
-        />
-        <div className="flex-1 space-y-3 min-w-0">
-          <Input
-            aria-label="Project name"
-            placeholder="Project name"
-            maxLength={PROJECT_NAME_MAX_LENGTH}
-            aria-invalid={!!form.formState.errors.name}
-            {...form.register("name", {
-              required: "Project name is required.",
-              maxLength: {
-                value: PROJECT_NAME_MAX_LENGTH,
-                message: `Project name must be ${PROJECT_NAME_MAX_LENGTH} characters or fewer.`,
-              },
-            })}
-          />
-          {form.formState.errors.name?.message && (
-            <p className="text-xs text-destructive">
-              {form.formState.errors.name.message}
-            </p>
-          )}
-          <Textarea
-            aria-label="Project description"
-            placeholder="What is this project about?"
-            rows={3}
-            maxLength={PROJECT_DESCRIPTION_MAX_LENGTH}
-            aria-invalid={!!form.formState.errors.description}
-            {...form.register("description", {
-              maxLength: {
-                value: PROJECT_DESCRIPTION_MAX_LENGTH,
-                message: `Description must be ${PROJECT_DESCRIPTION_MAX_LENGTH} characters or fewer.`,
-              },
-            })}
-          />
-          {form.formState.errors.description?.message && (
-            <p className="text-xs text-destructive">
-              {form.formState.errors.description.message}
-            </p>
-          )}
+      <IdentityFields
+        icon={icon}
+        onIconChange={(next) =>
+          form.setValue("icon", next, { shouldDirty: true })
+        }
+        fallbackType="project"
+      >
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="edit-project-name">Name *</Label>
+            <Input
+              id="edit-project-name"
+              maxLength={PROJECT_NAME_MAX_LENGTH}
+              aria-invalid={!!form.formState.errors.name}
+              {...form.register("name", {
+                required: "Project name is required.",
+                maxLength: {
+                  value: PROJECT_NAME_MAX_LENGTH,
+                  message: `Project name must be ${PROJECT_NAME_MAX_LENGTH} characters or fewer.`,
+                },
+              })}
+            />
+            {form.formState.errors.name?.message && (
+              <p className="text-xs text-destructive">
+                {form.formState.errors.name.message}
+              </p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-project-description">Description</Label>
+            <Textarea
+              id="edit-project-description"
+              placeholder="What is this project about?"
+              rows={3}
+              maxLength={PROJECT_DESCRIPTION_MAX_LENGTH}
+              aria-invalid={!!form.formState.errors.description}
+              {...form.register("description", {
+                maxLength: {
+                  value: PROJECT_DESCRIPTION_MAX_LENGTH,
+                  message: `Description must be ${PROJECT_DESCRIPTION_MAX_LENGTH} characters or fewer.`,
+                },
+              })}
+            />
+            {form.formState.errors.description?.message && (
+              <p className="text-xs text-destructive">
+                {form.formState.errors.description.message}
+              </p>
+            )}
+          </div>
         </div>
-      </div>
+      </IdentityFields>
 
       <VisibilitySelector
         heading="Sharing"

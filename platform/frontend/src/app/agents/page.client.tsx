@@ -69,7 +69,7 @@ import {
   TableCardViewToggle,
 } from "@/components/table-card-view";
 import { Badge } from "@/components/ui/badge";
-import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -91,6 +91,8 @@ import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { FIELD_LABEL } from "@/lib/design/resource-lexicon";
 import { useEnvironments } from "@/lib/environment.query";
+import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
+import { useControlledRowSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
   useDefaultEnvironment,
@@ -324,7 +326,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const bulkDelete = useBulkDeleteProfiles();
   const [bulkVisibilityOpen, setBulkVisibilityOpen] = useState(false);
   const bulkVisibility = useBulkUpdateProfileVisibility();
-
   // Derived from what is on screen rather than read straight out of
   // `rowSelection`: the table is server-paginated, so ids left behind by
   // another page drop out of both the count and the request. The trash view
@@ -332,12 +333,27 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const filterSignature = JSON.stringify(listFilters);
   const [escalatedFor, setEscalatedFor] = useState<string | null>(null);
   const allMatchingSelected = escalatedFor === filterSignature;
+  const { effectiveRowSelection, onRowSelectionChange } =
+    useControlledRowSelection({
+      rowSelection,
+      setRowSelection,
+      rows: agents,
+      getRowId: (row) => row.id,
+      allMatchingSelected,
+      clearEscalation: () => setEscalatedFor(null),
+    });
+  const cardSelection = useBulkCardSelection({
+    rows: agents,
+    getRowId: (row) => row.id,
+    rowSelection: effectiveRowSelection,
+    setRowSelection: onRowSelectionChange,
+  });
   const { data: allMatching, isFetching: isFetchingAllMatching } =
     useAllMatchingProfiles(listFilters, { enabled: allMatchingSelected });
 
   const pageSelection = isDeletedView
     ? []
-    : agents.filter((agent) => rowSelection[agent.id]);
+    : agents.filter((agent) => effectiveRowSelection[agent.id]);
   const selectedAgents =
     allMatchingSelected && allMatching ? allMatching : pageSelection;
   const clearSelection = useCallback(() => {
@@ -629,7 +645,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               <ActiveFilterBadges adminPermission={{ agent: ["admin"] }} />
             </div>
 
-            <BulkActionsBar
+            <BulkActions
               count={selectedAgents.length}
               noun="agent"
               onClear={clearSelection}
@@ -644,7 +660,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                   ? "match this search query"
                   : "match the current filters",
               }}
-              className="mb-3"
             >
               <PermissionButton
                 permissions={{ agent: ["update"] }}
@@ -664,7 +679,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                 <Trash2 className="h-4 w-4" />
                 <span>Delete</span>
               </PermissionButton>
-            </BulkActionsBar>
+            </BulkActions>
 
             <div data-testid={E2eTestId.AgentsTable}>
               <TableCardViewContent
@@ -696,13 +711,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                         }
                         description={agent.description}
                         actions={renderAgentActions(agent)}
-                        selected={!!rowSelection[agent.id]}
-                        onSelectedChange={(selected) => {
-                          const next = { ...rowSelection };
-                          if (selected) next[agent.id] = true;
-                          else delete next[agent.id];
-                          setRowSelection(next);
-                        }}
+                        {...cardSelection(agent)}
                         selectionLabel={`Select ${agent.name}`}
                         footer={
                           <AgentLastUsedFooter lastUsedAt={agent.lastUsedAt} />
@@ -733,8 +742,8 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                     data={agents}
                     isLoading={showLoading}
                     getRowId={(row) => row.id}
-                    rowSelection={rowSelection}
-                    onRowSelectionChange={setRowSelection}
+                    rowSelection={effectiveRowSelection}
+                    onRowSelectionChange={onRowSelectionChange}
                     hideSelectedCount
                     sorting={sorting}
                     onSortingChange={handleSortingChange}

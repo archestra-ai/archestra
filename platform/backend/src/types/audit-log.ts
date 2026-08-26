@@ -104,6 +104,7 @@ export const AuditEventNameSchema = z.enum([
   "limit.created",
   "limit.updated",
   "limit.deleted",
+  "limit.bulk_deleted",
   "llmModel.updated",
   "llmModel.synced",
   "llmModel.bulk_updated",
@@ -115,6 +116,7 @@ export const AuditEventNameSchema = z.enum([
   "llmProviderApiKey.created",
   "llmProviderApiKey.deleted",
   "llmProxy.updated",
+  "llmProviderApiKey.bulk_deleted",
   "mcpOauthClient.created",
   "mcpOauthClient.updated",
   "mcpOauthClient.deleted",
@@ -126,6 +128,7 @@ export const AuditEventNameSchema = z.enum([
   "mcpServer.reinstalled",
   "mcpServer.hardReset",
   "mcpServer.bulk_deleted",
+  "member.bulk_deleted",
   // Retired with the MCP server installation request feature. Kept in the
   // vocabulary because audit rows written before its removal still carry these
   // names — dropping them would render that history as raw dotted keys. No
@@ -203,6 +206,7 @@ export const AuditEventNameSchema = z.enum([
   "auth.signed_out",
   "auth.signed_up",
   "auth.sso_callback",
+  "auth.sessions_revoked",
   // Catch-all for unregistered routes; logged + warned so we can extend.
   "unknown.created",
   "unknown.updated",

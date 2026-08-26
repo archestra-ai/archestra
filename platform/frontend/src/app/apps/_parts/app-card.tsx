@@ -22,6 +22,7 @@ import { ScopeBadge } from "@/components/scope-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -44,6 +45,7 @@ import { appRunUrl } from "@/lib/apps/app-run-url";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { setPendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-handoff";
 import { useFeature } from "@/lib/config/config.query";
+import type { BulkCardSelectionProps } from "@/lib/hooks/use-bulk-card-selection";
 import { cn } from "@/lib/utils";
 import { AppDeleteDialog } from "./app-delete-dialog";
 
@@ -54,16 +56,64 @@ type ExternalApp = Extract<AppListItem, { source: "external" }>;
 export function AppCard({
   app,
   onOpenSettings,
+  selection,
 }: {
   app: AppListItem;
   // The settings dialog (and its URL param) lives at the list level, so the
   // card only reports which app to open it for.
   onOpenSettings?: (app: OwnedApp) => void;
+  /** `null` renders the disabled external-app selection control. */
+  selection?: BulkCardSelectionProps | null;
 }) {
   return app.source === "owned" ? (
-    <OwnedAppCard app={app} onOpenSettings={onOpenSettings} />
+    <OwnedAppCard
+      app={app}
+      onOpenSettings={onOpenSettings}
+      selection={selection ?? undefined}
+    />
   ) : (
-    <ExternalAppCard app={app} />
+    <ExternalAppCard app={app} showDisabledSelection={selection === null} />
+  );
+}
+
+function CardSelectionCheckbox({
+  label,
+  selection,
+  disabled = false,
+}: {
+  label: string;
+  selection?: BulkCardSelectionProps;
+  disabled?: boolean;
+}) {
+  const checkbox = (
+    <Checkbox
+      className={cn("relative z-10 mt-0.5", disabled && "pointer-events-none")}
+      checked={selection?.selected ?? false}
+      onCheckedChange={(value) => selection?.onSelectedChange(!!value)}
+      onClick={(event) => {
+        event.stopPropagation();
+        selection?.onSelectionClick(event);
+      }}
+      aria-label={label}
+      disabled={disabled}
+    />
+  );
+
+  if (!disabled) return checkbox;
+
+  const reason = "Installed apps are managed through their MCP server";
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className="relative z-10 inline-flex cursor-not-allowed"
+          title={reason}
+        >
+          {checkbox}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{reason}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -140,12 +190,13 @@ function CardOpeningOverlay() {
   );
 }
 
-// The app's type, as the leading icon (shared by cards and table rows).
-// External apps show the backing MCP server's registry icon (emoji or image)
-// when the catalog has one; McpCatalogIcon falls back to the same generic
-// Server glyph otherwise. The label (what "owned" vs "external" means) rides
-// in the tooltip + aria-label rather than a separate badge. Lifted above the
-// full-card click button so it can be hovered.
+// The app's leading icon (shared by cards and table rows): the icon set on the
+// app itself, or — for an external app — its backing MCP server's registry one,
+// both emoji or image. Without one, the glyph says which kind of app it is: the
+// app window for an owned app, the server glyph for an external one. The label
+// (what "owned" vs "external" means) rides in the tooltip + aria-label rather
+// than a separate badge. Lifted above the full-card click button so it can be
+// hovered.
 export function AppTypeIcon({
   owned,
   icon,
@@ -162,11 +213,11 @@ export function AppTypeIcon({
           aria-label={label}
           className="relative z-10 inline-flex text-muted-foreground"
         >
-          {owned ? (
-            <AppWindow className="h-4 w-4" />
-          ) : (
-            <McpCatalogIcon icon={icon} size={16} />
-          )}
+          <McpCatalogIcon
+            icon={icon}
+            size={16}
+            fallback={owned ? AppWindow : undefined}
+          />
         </span>
       </TooltipTrigger>
       <TooltipContent>{label}</TooltipContent>
@@ -180,9 +231,11 @@ export function AppTypeIcon({
 function OwnedAppCard({
   app,
   onOpenSettings,
+  selection,
 }: {
   app: OwnedApp;
   onOpenSettings?: (app: OwnedApp) => void;
+  selection?: BulkCardSelectionProps;
 }) {
   const router = useRouter();
   const openApp = useOpenAppInChat();
@@ -229,7 +282,13 @@ function OwnedAppCard({
             left, the scope pill / owner badge / overflow menu at the right. */}
         <div className="mb-1 flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
-            <AppTypeIcon owned />
+            {selection ? (
+              <CardSelectionCheckbox
+                label={`Select ${app.name}`}
+                selection={selection}
+              />
+            ) : null}
+            <AppTypeIcon owned icon={app.icon} />
             <CardTitle className="min-w-0 truncate leading-snug">
               {app.name}
             </CardTitle>
@@ -326,7 +385,13 @@ function OwnedAppCard({
 // the whole card is always a click target. The title is the server's catalog
 // display name, "/ <tool>"-suffixed (short tool name, never the slug prefix)
 // only when the server exposes several UI tools.
-function ExternalAppCard({ app }: { app: ExternalApp }) {
+function ExternalAppCard({
+  app,
+  showDisabledSelection,
+}: {
+  app: ExternalApp;
+  showDisabledSelection: boolean;
+}) {
   const router = useRouter();
   const openApp = useOpenExternalAppInChat();
   // Stays true from click through the redirect; see OwnedAppCard for the same
@@ -375,6 +440,9 @@ function ExternalAppCard({ app }: { app: ExternalApp }) {
           left, the scope pill / overflow menu at the right. */}
       <div className="mb-1 flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
+          {showDisabledSelection ? (
+            <CardSelectionCheckbox label={`Select ${app.name}`} disabled />
+          ) : null}
           <AppTypeIcon owned={false} icon={app.icon} />
           <CardTitle className="min-w-0 truncate leading-snug">
             {app.name}

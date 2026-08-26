@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { ReactElement } from "react";
+import { type ReactElement, useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/auth/auth.query");
@@ -51,6 +51,7 @@ vi.mock("@/lib/mcp/mcp-server.query", () => ({
 import type { Permissions } from "@archestra/shared";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
+import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
 import {
   useAppearanceSettings,
   useDefaultEnvironment,
@@ -125,6 +126,40 @@ const card = (
   />
 );
 
+function CardSelectionHarness() {
+  const items = [
+    item,
+    { ...item, id: "cat-2", name: "second-remote-server" },
+    { ...item, id: "cat-3", name: "third-remote-server" },
+  ];
+  const [rowSelection, setRowSelection] = useState({});
+  const cardSelection = useBulkCardSelection({
+    rows: items,
+    getRowId: (catalogItem) => catalogItem.id,
+    rowSelection,
+    setRowSelection,
+  });
+
+  return (
+    <>
+      {items.map((catalogItem) => (
+        <McpServerCard
+          key={catalogItem.id}
+          variant="remote"
+          item={catalogItem}
+          installingItemId={null}
+          deploymentStatuses={{}}
+          deploymentFeedState="ready"
+          onInstallRemoteServer={vi.fn()}
+          onInstallLocalServer={vi.fn()}
+          onReinstall={vi.fn()}
+          selection={cardSelection(catalogItem)}
+        />
+      ))}
+    </>
+  );
+}
+
 describe("McpServerCard uninstall permission", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -195,5 +230,55 @@ describe("McpServerCard uninstall permission", () => {
     );
 
     expect(screen.queryByTestId("oauth-reauth-state")).toBeNull();
+  });
+
+  it("selects a card range from the shared bulk-selection checkbox", async () => {
+    const user = userEvent.setup();
+    renderCard(<CardSelectionHarness />);
+
+    await user.click(
+      screen.getByRole("checkbox", { name: "Select some-remote-server" }),
+    );
+    await user.keyboard("{Shift>}");
+    await user.click(
+      screen.getByRole("checkbox", { name: "Select third-remote-server" }),
+    );
+    await user.keyboard("{/Shift}");
+
+    expect(
+      screen.getByRole("checkbox", { name: "Select second-remote-server" }),
+    ).toHaveAttribute("data-state", "checked");
+  });
+
+  it("keeps the bulk-selection checkbox disabled while installation is in progress", async () => {
+    const user = userEvent.setup();
+    const onSelectedChange = vi.fn();
+    renderCard(
+      <McpServerCard
+        variant="remote"
+        item={item}
+        installingItemId="cat-1"
+        deploymentStatuses={{}}
+        deploymentFeedState="ready"
+        onInstallRemoteServer={vi.fn()}
+        onInstallLocalServer={vi.fn()}
+        onReinstall={vi.fn()}
+        selection={{
+          selected: false,
+          onSelectedChange,
+          onSelectionClick: vi.fn(),
+          disabled: true,
+        }}
+      />,
+    );
+
+    const checkbox = screen.getByRole("checkbox", {
+      name: "Select some-remote-server",
+    });
+    expect(checkbox).toBeDisabled();
+
+    await user.click(checkbox);
+
+    expect(onSelectedChange).not.toHaveBeenCalled();
   });
 });

@@ -1230,6 +1230,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteLlmProviderApiKey]: {
     llmProviderApiKey: ["delete"],
   },
+  [RouteId.BulkDeleteLlmProviderApiKeys]: {
+    llmProviderApiKey: ["read", "delete"],
+  },
   [RouteId.GetApiKeys]: {
     apiKey: ["read"],
   },
@@ -1348,6 +1351,9 @@ export const requiredEndpointPermissionsMap: Partial<
     llmLimit: ["update"],
   },
   [RouteId.DeleteLimit]: {
+    llmLimit: ["delete"],
+  },
+  [RouteId.BulkDeleteLimits]: {
     llmLimit: ["delete"],
   },
   [RouteId.ListDefaultUserLimits]: {
@@ -1481,6 +1487,7 @@ export const requiredEndpointPermissionsMap: Partial<
   // so the auth pages can redirect when they don't apply. Auth is skipped in
   // middleware for this path.
   [RouteId.GetAuthState]: {},
+  [RouteId.BulkRevokeSessions]: {},
   /**
    * Get public appearance settings (theme, logo, font) for login page
    * Available to unauthenticated users
@@ -1535,6 +1542,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetFeedbackPopupActivation]: { organizationSettings: ["update"] }, // Feedback pop-up activation signal - admins only (the pop-up is admin-only)
   [RouteId.GetMemberSignupStatus]: {}, // Member signup status - available to all authenticated users
   [RouteId.GetMembers]: { member: ["read"] }, // List organization members (paginated)
+  [RouteId.BulkDeleteMembers]: { member: ["delete"] },
   // Visibility is scoped in the handler: member:read sees the full roster,
   // everyone else only the users they share a team with (the chat share
   // recipient picker), so the route itself is open to any authenticated user.

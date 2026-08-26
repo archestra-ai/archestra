@@ -1,9 +1,11 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
-import { AppWindow, Plus } from "lucide-react";
+import { AppWindow, Plus, Trash2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
+import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import {
   FilterBar,
@@ -28,10 +30,12 @@ import {
 import { SearchInput } from "@/components/search-input";
 import {
   TableCardGrid,
+  TableCardSelectionScope,
   TableCardView,
   TableCardViewContent,
   TableCardViewToggle,
 } from "@/components/table-card-view";
+import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Select,
@@ -40,16 +44,26 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useAppLabelKeys, useAppLabelValues, useApps } from "@/lib/app.query";
+import {
+  useAppLabelKeys,
+  useAppLabelValues,
+  useApps,
+  useBulkDeleteApps,
+  useBulkUpdateAppVisibility,
+} from "@/lib/app.query";
 import { sortAppsPinnedFirst } from "@/lib/apps/app-sort";
+import { reportBulkOutcome } from "@/lib/bulk-action";
+import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
+import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { AppCard } from "./_parts/app-card";
 import { AppCreateDialog } from "./_parts/app-create-dialog";
-import { AppsTable } from "./_parts/apps-table";
+import { AppsTable, getAppRowKey } from "./_parts/apps-table";
 
 const PAGE_SIZE = 100;
 
 type AppListItem = archestraApiTypes.GetAppsResponses["200"]["data"][number];
+type OwnedApp = Extract<AppListItem, { source: "owned" }>;
 
 export default function AppsPage() {
   const router = useRouter();
@@ -305,7 +319,7 @@ function AppLabelKeyRow({
   );
 }
 
-function AppSection({
+export function AppSection({
   title,
   apps,
   onOpenSettings,
@@ -314,35 +328,161 @@ function AppSection({
   apps: AppListItem[];
   onOpenSettings: (app: { id: string }) => void;
 }) {
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkVisibilityOpen, setBulkVisibilityOpen] = useState(false);
+  const bulkDelete = useBulkDeleteApps();
+  const bulkVisibility = useBulkUpdateAppVisibility();
+  const {
+    rowSelection,
+    setRowSelection,
+    onPageRowIdsChange,
+    clearSelection,
+    selected,
+    selectAllMatching,
+  } = useBulkSelection({
+    rows: apps,
+    getId: getAppRowKey,
+    canSelect: (app) => app.source === "owned",
+    filterSignature: `${title}:${apps.map(getAppRowKey).join(",")}`,
+    matchDescription: "were built here",
+  });
+  const cardSelection = useBulkCardSelection({
+    rows: apps,
+    getRowId: getAppRowKey,
+    rowSelection,
+    setRowSelection,
+    canSelect: (app) => app.source === "owned",
+  });
+  const selectedOwnedApps = selected.filter(
+    (app): app is OwnedApp => app.source === "owned",
+  );
+  const selectedApps = selectedOwnedApps.map((app) => ({
+    id: app.id,
+    name: app.name,
+  }));
+
   if (apps.length === 0) return null;
 
   return (
-    <section className="space-y-3">
+    <section className="space-y-[11px]">
       <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
         {title}
       </h2>
+      <BulkActions
+        count={selectedApps.length}
+        noun="app"
+        onClear={clearSelection}
+        busy={bulkDelete.isPending}
+        selectAllMatching={selectAllMatching}
+      >
+        <PermissionButton
+          permissions={{ app: ["update"] }}
+          variant="outline"
+          size="sm"
+          onClick={() => setBulkVisibilityOpen(true)}
+        >
+          <span>Edit visibility</span>
+        </PermissionButton>
+        <PermissionButton
+          permissions={{ app: ["delete"] }}
+          variant="destructive"
+          size="sm"
+          onClick={() => setBulkDeleteOpen(true)}
+        >
+          <Trash2 className="h-4 w-4" />
+          <span>Delete</span>
+        </PermissionButton>
+      </BulkActions>
       <TableCardViewContent
-        table={<AppsTable apps={apps} onOpenSettings={onOpenSettings} />}
+        table={
+          <AppsTable
+            apps={apps}
+            onOpenSettings={onOpenSettings}
+            rowSelection={rowSelection}
+            setRowSelection={setRowSelection}
+            onPageRowIdsChange={onPageRowIdsChange}
+          />
+        }
         cards={
-          <TableCardGrid>
-            {apps.map((app) => (
-              <AppCard
-                // Several tools of one server can share a widget resource, so
-                // (mcpServerId, resourceUri) alone collides; duplicate keys make
-                // React duplicate/omit cards on search re-renders, breaking the
-                // grid. The tool-scoped name disambiguates.
-                key={
-                  app.source === "owned"
-                    ? app.id
-                    : `${app.mcpServerId}:${app.resourceUri}:${app.name}`
-                }
-                app={app}
-                onOpenSettings={onOpenSettings}
-              />
-            ))}
-          </TableCardGrid>
+          <TableCardSelectionScope
+            rowIds={apps
+              .filter((app) => app.source === "owned")
+              .map(getAppRowKey)}
+            onVisibleRowIdsChange={onPageRowIdsChange}
+          >
+            <TableCardGrid>
+              {apps.map((app) => (
+                <AppCard
+                  key={getAppRowKey(app)}
+                  app={app}
+                  onOpenSettings={onOpenSettings}
+                  selection={app.source === "owned" ? cardSelection(app) : null}
+                />
+              ))}
+            </TableCardGrid>
+          </TableCardSelectionScope>
         }
       />
+
+      {bulkDeleteOpen && (
+        <DeleteConfirmDialog
+          open={bulkDeleteOpen}
+          onOpenChange={setBulkDeleteOpen}
+          title="Delete apps"
+          description={`Delete ${selectedApps.length} ${
+            selectedApps.length === 1 ? "app" : "apps"
+          }? This cannot be undone.`}
+          isPending={bulkDelete.isPending}
+          onConfirm={() => {
+            bulkDelete.mutate(selectedApps, {
+              onSuccess: (outcome) => {
+                reportBulkOutcome({
+                  outcome,
+                  verb: "Deleted",
+                  failureVerb: "delete",
+                  noun: "app",
+                });
+                setBulkDeleteOpen(false);
+                if (outcome.failed.length === 0) clearSelection();
+              },
+            });
+          }}
+          confirmLabel="Delete apps"
+          pendingLabel="Deleting..."
+        />
+      )}
+
+      {bulkVisibilityOpen && (
+        <BulkVisibilityDialog
+          open={bulkVisibilityOpen}
+          onOpenChange={setBulkVisibilityOpen}
+          noun="app"
+          isPending={bulkVisibility.isPending}
+          items={selectedOwnedApps.map((app) => ({
+            id: app.id,
+            scope: app.scope,
+            teams: [],
+            users: [],
+          }))}
+          onApply={async (change) => {
+            const outcome = await bulkVisibility.mutateAsync({
+              apps: selectedApps,
+              scope: change.scope,
+              teamIds: change.teamIds,
+              userIds: change.userIds,
+            });
+            reportBulkOutcome({
+              outcome,
+              verb: "Updated",
+              failureVerb: "update",
+              noun: "app",
+            });
+            if (outcome.succeeded.length === 0) return false;
+            if (outcome.failed.length === 0) clearSelection();
+            return true;
+          }}
+        />
+      )}
     </section>
   );
 }

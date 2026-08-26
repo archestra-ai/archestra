@@ -41,6 +41,7 @@ import { type AuditEventName, AuditEventNameSchema } from "@/types/audit-log";
 
 export type AuditResourceIdSource =
   | "organizationContext"
+  | "currentUser"
   | "currentUserPersonalToken";
 
 export type AuditableRouteConfig = {
@@ -54,6 +55,7 @@ export type AuditableRouteConfig = {
   /**
    * When set, the audited resource id is not taken from route params.
    * - `organizationContext`: `request.organizationId` (org settings, bulk org routes).
+   * - `currentUser`: `request.user.id` for personal account-level actions.
    * - `currentUserPersonalToken`: the caller's personal token row in the current org.
    */
   resourceIdSource?: AuditResourceIdSource;
@@ -76,6 +78,8 @@ export type AuditableRouteConfig = {
   actionByMethod?: Partial<
     Record<"POST" | "PUT" | "PATCH" | "DELETE", AuditEventName>
   >;
+  /** Skip unsuccessful attempts; the route sets `auditSkip` for no-op successes. */
+  onlyWhenChanged?: boolean;
 };
 
 /**
@@ -1120,6 +1124,12 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceIdSource: "organizationContext",
     actionByMethod: { DELETE: "team.bulk_deleted" },
   },
+  "/api/members/bulk": {
+    resourceType: "member",
+    resourceIdSource: "organizationContext",
+    actionByMethod: { DELETE: "member.bulk_deleted" },
+    onlyWhenChanged: true,
+  },
   "/api/mcp_server/bulk": {
     resourceType: "mcpServer",
     resourceIdSource: "organizationContext",
@@ -1139,6 +1149,16 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "llmModel",
     resourceIdSource: "organizationContext",
     actionByMethod: { PATCH: "llmModel.bulk_updated" },
+  },
+  "/api/limits/bulk": {
+    resourceType: "limit",
+    resourceIdSource: "organizationContext",
+    actionByMethod: { DELETE: "limit.bulk_deleted" },
+  },
+  "/api/llm-provider-api-keys/bulk": {
+    resourceType: "llmProviderApiKey",
+    resourceIdSource: "organizationContext",
+    actionByMethod: { DELETE: "llmProviderApiKey.bulk_deleted" },
   },
   "/api/knowledge-bases/bulk": {
     resourceType: "knowledgeBase",
@@ -1168,6 +1188,11 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
       PATCH: "knowledgeDirectory.bulk_updated",
       DELETE: "knowledgeDirectory.bulk_deleted",
     },
+  },
+  "/api/sessions/bulk": {
+    resourceType: "auth",
+    resourceIdSource: "currentUser",
+    action: "auth.sessions_revoked",
   },
 };
 

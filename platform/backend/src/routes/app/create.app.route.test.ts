@@ -1,8 +1,11 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import {
   AgentModel,
+  AppModel,
   AppVersionModel,
   ConversationModel,
+  InternalMcpCatalogModel,
+  McpServerModel,
   MemberModel,
   OrganizationModel,
 } from "@/models";
@@ -10,7 +13,14 @@ import EnvironmentModel from "@/models/environment";
 import EnvironmentResourceDefaultModel from "@/models/environment-resource-default";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  mustExist,
+  test,
+} from "@/test";
 import type { User } from "@/types";
 
 describe("POST /api/apps", () => {
@@ -62,6 +72,26 @@ describe("POST /api/apps", () => {
       scope: "org",
       latestVersion: 1,
     });
+  });
+
+  test("stores a supplied icon on the new app's backing catalog", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      payload: { name: "Iconned", icon: "🚀", scope: "org" },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().icon).toBe("🚀");
+
+    // The app row has no icon column; the value has to reach the backing
+    // catalog, which is what the MCP registry renders for the same entity.
+    const created = mustExist(await AppModel.findById(response.json().id));
+    const server = mustExist(
+      await McpServerModel.findById(mustExist(created.mcpServerId)),
+    );
+    expect(
+      (await InternalMcpCatalogModel.findById(server.catalogId))?.icon,
+    ).toBe("🚀");
   });
 
   test("seeds the default template server-side with the app name when html is omitted", async () => {

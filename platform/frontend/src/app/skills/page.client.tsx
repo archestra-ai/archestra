@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  type archestraApiTypes,
-  E2eTestId,
-  MAX_BULK_IDS,
-} from "@archestra/shared";
+import { type archestraApiTypes, E2eTestId } from "@archestra/shared";
 import type {
   ColumnDef,
   RowSelectionState,
@@ -65,11 +61,10 @@ import {
   TableRowActions,
 } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
-import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { BulkActions } from "@/components/ui/bulk-actions-bar";
+import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
-import { DATA_TABLE_SELECT_COLUMN_SIZE } from "@/components/ui/data-table.constants";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Select,
@@ -88,6 +83,8 @@ import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { ACTION_LABEL, notYoursToChange } from "@/lib/design/resource-lexicon";
 import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
+import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
+import { useControlledRowSelection } from "@/lib/hooks/use-bulk-selection";
 import { useIsGlobalAdmin } from "@/lib/organization.query";
 import {
   useAllMatchingSkills,
@@ -308,17 +305,8 @@ function SkillsList() {
 
   const items = skills?.data ?? [];
   const bulkDeleteSkills = useBulkDeleteSkills();
-
   // Derived from what is on screen rather than read straight out of
   // `rowSelection`: the table is server-paginated, so a bulk action must only
-  // ever touch rows the user can actually see. Ids left over from another page
-  // simply drop out here — including in the trash view, which renders no
-  // checkbox column and so must never surface a bar for a skill that was
-  // ticked while active and deleted from under the selection.
-  const pageSelection = isDeletedView
-    ? []
-    : items.filter((skill) => rowSelection[skill.id]);
-
   /**
    * An escalation is remembered as the filters it was made under, so changing
    * a filter drops it rather than silently re-pointing "all 203 skills" at a
@@ -329,9 +317,30 @@ function SkillsList() {
   const filterSignature = JSON.stringify(listFilters);
   const [escalatedFor, setEscalatedFor] = useState<string | null>(null);
   const allMatchingSelected = escalatedFor === filterSignature;
+  const { effectiveRowSelection, onRowSelectionChange } =
+    useControlledRowSelection({
+      rowSelection,
+      setRowSelection,
+      rows: items,
+      getRowId: (row) => row.id,
+      allMatchingSelected,
+      clearEscalation: () => setEscalatedFor(null),
+    });
+  const cardSelection = useBulkCardSelection({
+    rows: items,
+    getRowId: (row) => row.id,
+    rowSelection: effectiveRowSelection,
+    setRowSelection: onRowSelectionChange,
+  });
 
   const { data: allMatchingSkills, isFetching: isFetchingAllMatching } =
     useAllMatchingSkills(listFilters, { enabled: allMatchingSelected });
+
+  // Only visible rows enter a manual selection. Escalation materializes the
+  // visible page so table and card controls stay checked until changed.
+  const pageSelection = isDeletedView
+    ? []
+    : items.filter((skill) => effectiveRowSelection[skill.id]);
 
   const selectedSkills = allMatchingSelected
     ? (allMatchingSkills ?? pageSelection)
@@ -816,7 +825,7 @@ function SkillsList() {
                       </h2>
                     )}
 
-                    <BulkActionsBar
+                    <BulkActions
                       count={selectedSkills.length}
                       noun="skill"
                       countTestId={E2eTestId.SkillsBulkSelectionCount}
@@ -832,7 +841,6 @@ function SkillsList() {
                         matchDescription: search
                           ? "match this search query"
                           : "match the current filters",
-                        max: MAX_BULK_IDS,
                       }}
                     >
                       <PermissionButton
@@ -853,7 +861,7 @@ function SkillsList() {
                         <Trash2 className="h-4 w-4" />
                         <span>Delete</span>
                       </PermissionButton>
-                    </BulkActionsBar>
+                    </BulkActions>
 
                     <TableCardViewContent
                       forceTable={isDeletedView}
@@ -894,13 +902,7 @@ function SkillsList() {
                                 }
                                 description={skill.description}
                                 actions={renderSkillActions(skill)}
-                                selected={!!rowSelection[skill.id]}
-                                onSelectedChange={(selected) => {
-                                  const next = { ...rowSelection };
-                                  if (selected) next[skill.id] = true;
-                                  else delete next[skill.id];
-                                  setRowSelection(next);
-                                }}
+                                {...cardSelection(skill)}
                                 selectionLabel={`Select ${skill.name}`}
                                 footer={
                                   <div className="flex items-center justify-between gap-3">
@@ -967,8 +969,8 @@ function SkillsList() {
                               ? undefined
                               : (row) => router.push(`/skills/${row.id}`)
                           }
-                          rowSelection={rowSelection}
-                          onRowSelectionChange={setRowSelection}
+                          rowSelection={effectiveRowSelection}
+                          onRowSelectionChange={onRowSelectionChange}
                           isLoading={isFetching}
                           tableClassName="[&_td]:py-1.5"
                           fixedWidthColumnIds={[
@@ -1058,35 +1060,10 @@ function SkillsList() {
   );
 }
 
-/**
- * The multiselect checkbox column. Clicks are kept off the row so ticking a
- * skill does not also open its editor, which the row click opens.
- */
-const selectColumn: ColumnDef<SkillItem> = {
-  id: "select",
-  size: DATA_TABLE_SELECT_COLUMN_SIZE,
-  minSize: DATA_TABLE_SELECT_COLUMN_SIZE,
-  maxSize: DATA_TABLE_SELECT_COLUMN_SIZE,
-  header: ({ table }) => (
-    <Checkbox
-      checked={
-        table.getIsAllPageRowsSelected() ||
-        (table.getIsSomePageRowsSelected() && "indeterminate")
-      }
-      onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-      onClick={(event) => event.stopPropagation()}
-      aria-label="Select all skills on this page"
-    />
-  ),
-  cell: ({ row }) => (
-    <Checkbox
-      checked={row.getIsSelected()}
-      onCheckedChange={(value) => row.toggleSelected(!!value)}
-      onClick={(event) => event.stopPropagation()}
-      aria-label={`Select ${row.original.name}`}
-    />
-  ),
-};
+const selectColumn = createSelectColumn<SkillItem>({
+  rowLabel: (row) => `Select ${row.name}`,
+  allLabel: "Select all skills on this page",
+});
 
 function SortIcon({ isSorted }: { isSorted: "asc" | "desc" | false }) {
   const upArrow = <ChevronUp className="h-3 w-3" />;

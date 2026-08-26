@@ -106,6 +106,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "limit.created": "Limit created",
   "limit.updated": "Limit updated",
   "limit.deleted": "Limit deleted",
+  "limit.bulk_deleted": "Limits deleted",
   // LLM model
   "llmModel.updated": "LLM model updated",
   "llmModel.synced": "LLM model catalog synced",
@@ -120,6 +121,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "llmProviderApiKey.deleted": "LLM provider key deleted",
   // LLM Proxy
   "llmProxy.updated": "LLM Proxy updated",
+  "llmProviderApiKey.bulk_deleted": "LLM provider keys deleted",
   // MCP OAuth client
   "mcpOauthClient.created": "MCP OAuth client created",
   "mcpOauthClient.updated": "MCP OAuth client updated",
@@ -141,6 +143,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "member.created": "Member added",
   "member.role_updated": "Member role changed",
   "member.deleted": "Member removed",
+  "member.bulk_deleted": "Members removed",
   // Optimization rule
   // Retired with the LLM optimization rules feature; retained so audit rows
   // written before its removal still render with a readable label.
@@ -216,6 +219,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "auth.signed_out": "Sign out",
   "auth.signed_up": "Sign up",
   "auth.sso_callback": "SSO callback",
+  "auth.sessions_revoked": "Sessions revoked",
   // Catch-all fallbacks
   "unknown.created": "Unknown create",
   "unknown.updated": "Unknown update",

@@ -295,6 +295,7 @@ describe("MemberModel", () => {
 
   describe("findAllPaginated", () => {
     test("returns paginated members with user details", async ({
+      makeAccount,
       makeOrganization,
       makeUser,
       makeMember,
@@ -304,6 +305,8 @@ describe("MemberModel", () => {
       const user2 = await makeUser({ name: "Bob", email: "bob@test.com" });
       await makeMember(user1.id, org.id);
       await makeMember(user2.id, org.id);
+      await makeAccount(user1.id);
+      await makeAccount(user2.id);
 
       const result = await MemberModel.findAllPaginated({
         organizationId: org.id,
@@ -318,6 +321,7 @@ describe("MemberModel", () => {
     });
 
     test("reports each member's 2FA enrollment (null column reads as false)", async ({
+      makeAccount,
       makeOrganization,
       makeUser,
       makeMember,
@@ -330,6 +334,8 @@ describe("MemberModel", () => {
       const notEnrolled = await makeUser({ email: "not-enrolled@test.com" });
       await makeMember(enrolled.id, org.id);
       await makeMember(notEnrolled.id, org.id);
+      await makeAccount(enrolled.id);
+      await makeAccount(notEnrolled.id);
 
       const result = await MemberModel.findAllPaginated({
         organizationId: org.id,
@@ -344,6 +350,7 @@ describe("MemberModel", () => {
     });
 
     test("supports offset pagination", async ({
+      makeAccount,
       makeOrganization,
       makeUser,
       makeMember,
@@ -352,6 +359,7 @@ describe("MemberModel", () => {
       for (let i = 0; i < 5; i++) {
         const user = await makeUser({ email: `user${i}@test.com` });
         await makeMember(user.id, org.id);
+        await makeAccount(user.id);
       }
 
       const page1 = await MemberModel.findAllPaginated({
@@ -370,6 +378,7 @@ describe("MemberModel", () => {
     });
 
     test("filters by name (ILIKE on user name)", async ({
+      makeAccount,
       makeOrganization,
       makeUser,
       makeMember,
@@ -382,6 +391,8 @@ describe("MemberModel", () => {
       const bob = await makeUser({ name: "Bob Jones", email: "b@test.com" });
       await makeMember(alice.id, org.id);
       await makeMember(bob.id, org.id);
+      await makeAccount(alice.id);
+      await makeAccount(bob.id);
 
       const result = await MemberModel.findAllPaginated({
         organizationId: org.id,
@@ -394,6 +405,7 @@ describe("MemberModel", () => {
     });
 
     test("filters by name (ILIKE on user email)", async ({
+      makeAccount,
       makeOrganization,
       makeUser,
       makeMember,
@@ -409,6 +421,8 @@ describe("MemberModel", () => {
       });
       await makeMember(user1.id, org.id);
       await makeMember(user2.id, org.id);
+      await makeAccount(user1.id);
+      await makeAccount(user2.id);
 
       const result = await MemberModel.findAllPaginated({
         organizationId: org.id,
@@ -421,6 +435,7 @@ describe("MemberModel", () => {
     });
 
     test("filters by role", async ({
+      makeAccount,
       makeOrganization,
       makeUser,
       makeMember,
@@ -430,6 +445,8 @@ describe("MemberModel", () => {
       const admin = await makeUser({ email: "admin@test.com" });
       await makeMember(member.id, org.id);
       await makeMember(admin.id, org.id, { role: ADMIN_ROLE_NAME });
+      await makeAccount(member.id);
+      await makeAccount(admin.id);
 
       const result = await MemberModel.findAllPaginated({
         organizationId: org.id,
@@ -442,6 +459,7 @@ describe("MemberModel", () => {
     });
 
     test("combines name and role filters", async ({
+      makeAccount,
       makeOrganization,
       makeUser,
       makeMember,
@@ -453,6 +471,9 @@ describe("MemberModel", () => {
       await makeMember(u1.id, org.id, { role: ADMIN_ROLE_NAME });
       await makeMember(u2.id, org.id);
       await makeMember(u3.id, org.id, { role: ADMIN_ROLE_NAME });
+      await makeAccount(u1.id);
+      await makeAccount(u2.id);
+      await makeAccount(u3.id);
 
       const result = await MemberModel.findAllPaginated({
         organizationId: org.id,

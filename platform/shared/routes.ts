@@ -71,6 +71,7 @@ export const RouteId = {
   // Auth Routes
   GetDefaultCredentialsStatus: "getDefaultCredentialsStatus",
   GetAuthState: "getAuthState",
+  BulkRevokeSessions: "bulkRevokeSessions",
 
   // MCP Catalog Routes
   GetInternalMcpCatalog: "getInternalMcpCatalog",
@@ -125,6 +126,7 @@ export const RouteId = {
 
   // Team Routes
   GetMembers: "getMembers",
+  BulkDeleteMembers: "bulkDeleteMembers",
   GetTeams: "getTeams",
   CreateTeam: "createTeam",
   GetTeam: "getTeam",
@@ -427,6 +429,7 @@ export const RouteId = {
   UpdateLlmProviderApiKey: "updateLlmProviderApiKey",
   ReconnectLlmProviderApiKey: "reconnectLlmProviderApiKey",
   DeleteLlmProviderApiKey: "deleteLlmProviderApiKey",
+  BulkDeleteLlmProviderApiKeys: "bulkDeleteLlmProviderApiKeys",
 
   // User API Key Routes
   GetApiKeys: "getApiKeys",
@@ -481,6 +484,7 @@ export const RouteId = {
   GetLimit: "getLimit",
   UpdateLimit: "updateLimit",
   DeleteLimit: "deleteLimit",
+  BulkDeleteLimits: "bulkDeleteLimits",
 
   // Per-environment default user limits
   ListDefaultUserLimits: "listDefaultUserLimits",

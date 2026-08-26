@@ -719,13 +719,14 @@ export function ChatSidebarSection({
             className="cursor-pointer flex-1 justify-between"
           >
             <span className="flex items-center gap-2 min-w-0 flex-1">
-              {appItem.source === "owned" ? (
-                <AppWindow className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              ) : (
-                // The backing MCP server's registry icon, matching the app's
-                // card on the Apps page (falls back to the Server glyph).
-                <McpCatalogIcon icon={appItem.icon} size={14} />
-              )}
+              {/* The app's own icon for an owned app, its backing MCP server's
+                  registry icon for an external one — matching the app's card on
+                  the Apps page, down to the glyph each kind falls back to. */}
+              <McpCatalogIcon
+                icon={appItem.icon}
+                size={14}
+                fallback={appItem.source === "owned" ? AppWindow : undefined}
+              />
               <TruncatedText
                 message={appItem.name}
                 maxLength={MAX_TITLE_LENGTH}

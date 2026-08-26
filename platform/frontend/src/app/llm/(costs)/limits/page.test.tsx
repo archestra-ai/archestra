@@ -38,6 +38,7 @@ vi.mock("@/lib/limits.query", () => ({
   useCreateLimit: () => ({ mutateAsync: vi.fn() }),
   useUpdateLimit: () => ({ mutateAsync: vi.fn() }),
   useDeleteLimit: () => ({ mutateAsync: vi.fn() }),
+  useBulkDeleteLimits: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 // A configured default user limit drives the settings notice; the page reads the
@@ -128,8 +129,14 @@ vi.mock("@/components/ui/data-table", () => ({
   }: {
     data: Array<Record<string, unknown>>;
     columns: Array<{
+      id?: string;
+      accessorKey?: string;
       cell?: (info: {
-        row: { original: Record<string, unknown> };
+        row: {
+          original: Record<string, unknown>;
+          getIsSelected: () => boolean;
+          toggleSelected: (selected: boolean) => void;
+        };
       }) => React.ReactNode;
     }>;
   }) => (
@@ -140,16 +147,27 @@ vi.mock("@/components/ui/data-table", () => ({
           data-testid={`data-table-row-${String(row.id)}`}
         >
           {columns.map(
-            (
-              col: {
-                cell?: (info: {
-                  row: { original: Record<string, unknown> };
-                }) => React.ReactNode;
-              },
-              _colIndex: number,
-            ) => (
-              <span key={Math.random()}>
-                {col.cell ? col.cell({ row: { original: row } }) : null}
+            (col: {
+              id?: string;
+              accessorKey?: string;
+              cell?: (info: {
+                row: {
+                  original: Record<string, unknown>;
+                  getIsSelected: () => boolean;
+                  toggleSelected: (selected: boolean) => void;
+                };
+              }) => React.ReactNode;
+            }) => (
+              <span key={col.id ?? col.accessorKey}>
+                {col.cell
+                  ? col.cell({
+                      row: {
+                        original: row,
+                        getIsSelected: () => false,
+                        toggleSelected: vi.fn(),
+                      },
+                    })
+                  : null}
               </span>
             ),
           )}

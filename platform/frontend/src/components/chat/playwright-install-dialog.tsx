@@ -61,14 +61,25 @@ export function usePlaywrightSetupRequired(
   const {
     data: playwrightServers = [],
     isLoading: isLoadingPlaywrightServers,
+    isError: isPlaywrightServersError,
   } = useMcpServers({
     catalogId: PLAYWRIGHT_MCP_CATALOG_ID,
     enabled: options?.enabled,
   });
   const { data: session } = useSession();
+  const currentUserId = session?.user?.id;
   const isPlaywrightInstalledByCurrentUser = playwrightServers.some(
-    (s) => s.ownerId === session?.user?.id,
+    (s) => s.ownerId === currentUserId,
   );
+  // Everything below reads an empty server list as "this user has no browser".
+  // Two other things also produce an empty list: a lookup that failed, and one
+  // with no identity yet to match owners against. Neither is an answer. The
+  // failed one is the worse of the two to get wrong — it errors silently
+  // (`toastOnError: false`) and then just sits there, so reading it as "not
+  // installed" leaves the setup card up until something refetches, with
+  // nothing on screen saying why.
+  const isInstallStateUnknown =
+    isLoadingPlaywrightServers || isPlaywrightServersError || !currentUserId;
 
   // Identify Playwright tool IDs from the parent agent's profile tools
   const playwrightToolIds = useMemo(
@@ -158,7 +169,7 @@ export function usePlaywrightSetupRequired(
   // indistinguishable from "not installed" — claiming setup is required off that
   // shows the setup card to users who already have a browser.
   const isRequired =
-    !isLoadingPlaywrightServers &&
+    !isInstallStateUnknown &&
     !isPlaywrightInstalledByCurrentUser &&
     !isAwaitingEnabledTools &&
     (hasEnabledPlaywrightTool || enabledSubAgentHasPlaywrightTools);

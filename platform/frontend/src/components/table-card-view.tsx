@@ -3,6 +3,7 @@
 import { LayoutGrid, List, type LucideIcon, Search } from "lucide-react";
 import {
   createContext,
+  type MouseEventHandler,
   type ReactNode,
   useCallback,
   useContext,
@@ -133,6 +134,23 @@ export function TableCardViewContent({
   return <div className="hidden md:block">{table}</div>;
 }
 
+/** Keeps card-mode selection escalation scoped to the cards on screen. */
+export function TableCardSelectionScope({
+  rowIds,
+  onVisibleRowIdsChange,
+  children,
+}: {
+  rowIds: string[];
+  onVisibleRowIdsChange: (ids: string[]) => void;
+  children: ReactNode;
+}) {
+  useEffect(() => {
+    onVisibleRowIdsChange(rowIds);
+  }, [onVisibleRowIdsChange, rowIds]);
+
+  return children;
+}
+
 /** Knowledge-Base-style responsive grid shared by collection pages. */
 export function TableCardGrid({
   children,
@@ -230,7 +248,9 @@ export function TableCard({
   icon,
   actions,
   selected,
+  selectionDisabled,
   onSelectedChange,
+  onSelectionClick,
   selectionLabel,
   children,
   footer,
@@ -241,7 +261,9 @@ export function TableCard({
   icon?: ReactNode;
   actions?: ReactNode;
   selected?: boolean;
+  selectionDisabled?: boolean;
   onSelectedChange?: (selected: boolean) => void;
+  onSelectionClick?: MouseEventHandler<HTMLButtonElement>;
   selectionLabel?: string;
   children?: ReactNode;
   footer?: ReactNode;
@@ -262,7 +284,12 @@ export function TableCard({
           <Checkbox
             className="mt-1"
             checked={selected}
+            disabled={selectionDisabled}
             onCheckedChange={(value) => onSelectedChange(!!value)}
+            onClick={(event) => {
+              event.stopPropagation();
+              onSelectionClick?.(event);
+            }}
             aria-label={selectionLabel}
           />
         ) : null}

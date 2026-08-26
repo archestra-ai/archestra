@@ -5,19 +5,20 @@ import {
   PROJECT_DESCRIPTION_MAX_LENGTH,
   PROJECT_NAME_MAX_LENGTH,
 } from "@archestra/shared";
-import { FolderKanban, Plus } from "lucide-react";
+import { FolderKanban, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AgentIcon } from "@/components/agent-icon";
-import { AgentIconPicker } from "@/components/agent-icon-picker";
 import { AgentSelector } from "@/components/agent-selector";
 import { ApiKeyLoadError } from "@/components/api-key-load-error";
+import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { FilterBar, filterSearchClass } from "@/components/filter-bar";
+import { IdentityFields } from "@/components/identity-fields";
 import { LoadingState } from "@/components/loading";
 import { NoApiKeySetup } from "@/components/no-api-key-setup";
 import { PageLayout } from "@/components/page-layout";
@@ -35,18 +36,28 @@ import { SearchInput } from "@/components/search-input";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import {
   TableCardGrid,
+  TableCardSelectionScope,
   TableCardView,
   TableCardViewContent,
   TableCardViewToggle,
 } from "@/components/table-card-view";
 import { Badge } from "@/components/ui/badge";
+import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PermissionButton } from "@/components/ui/permission-button";
 import { Textarea } from "@/components/ui/textarea";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useInternalAgents } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { reportBulkOutcome } from "@/lib/bulk-action";
+import {
+  type BulkCardSelectionProps,
+  useBulkCardSelection,
+} from "@/lib/hooks/use-bulk-card-selection";
+import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { useHasAnyApiKey } from "@/lib/llm-provider-api-keys.query";
 import {
@@ -55,6 +66,8 @@ import {
 } from "@/lib/projects/project-permissions";
 import { sortProjectsPinnedFirst } from "@/lib/projects/project-sort";
 import {
+  useBulkDeleteProjects,
+  useBulkUpdateProjectVisibility,
   useCreateProject,
   useDeleteProject,
   usePermanentlyDeleteProject,
@@ -334,6 +347,60 @@ function ProjectSection({
   onEdit: (project: ProjectListItem) => void;
   onDelete: (project: ProjectListItem) => void;
 }) {
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkShareOpen, setBulkShareOpen] = useState(false);
+  const bulkDelete = useBulkDeleteProjects();
+  const bulkShare = useBulkUpdateProjectVisibility();
+  const { data: isProjectAdmin } = useHasPermissions({ project: ["admin"] });
+  const { data: canShareOrg } = useHasPermissions({ project: ["share-org"] });
+  const { data: canUpdateProjects } = useHasPermissions({
+    project: ["update"],
+  });
+  const { data: canDeleteProjects } = useHasPermissions({
+    project: ["delete"],
+  });
+  const canShareProjectItem = (project: ProjectListItem) =>
+    !!canUpdateProjects &&
+    canManageProject(project.viewerRole, !!isProjectAdmin);
+  const canDeleteProjectItem = (project: ProjectListItem) => {
+    const manageable = canManageProject(project.viewerRole, !!isProjectAdmin);
+    return !!(
+      canDeleteProjects &&
+      manageable &&
+      canDeleteProject({
+        viewerRole: project.viewerRole,
+        visibility: project.visibility,
+        isProjectAdmin: !!isProjectAdmin,
+        canShareOrg: !!canShareOrg,
+      })
+    );
+  };
+  const canSelectProject = (project: ProjectListItem) =>
+    canShareProjectItem(project) || canDeleteProjectItem(project);
+  const {
+    rowSelection,
+    setRowSelection,
+    onPageRowIdsChange,
+    clearSelection,
+    selected: selectedProjects,
+    selectAllMatching,
+  } = useBulkSelection({
+    rows: projects,
+    getId: (project) => project.id,
+    canSelect: canSelectProject,
+    filterSignature: `projects:${projects.map((project) => project.id).join(",")}`,
+    matchDescription: "are listed here",
+  });
+  const cardSelection = useBulkCardSelection({
+    rows: projects,
+    getRowId: (project) => project.id,
+    rowSelection,
+    setRowSelection,
+    canSelect: canSelectProject,
+  });
+  const selectedForSharing = selectedProjects.filter(canShareProjectItem);
+  const selectedForDelete = selectedProjects.filter(canDeleteProjectItem);
+
   if (projects.length === 0) return null;
 
   return (
@@ -343,6 +410,43 @@ function ProjectSection({
           {title}
         </h2>
       ) : null}
+      <BulkActions
+        count={selectedProjects.length}
+        noun="project"
+        onClear={clearSelection}
+        busy={bulkDelete.isPending || bulkShare.isPending}
+        selectAllMatching={selectAllMatching}
+      >
+        <PermissionButton
+          permissions={{ project: ["update"] }}
+          variant="outline"
+          size="sm"
+          disabled={selectedForSharing.length === 0}
+          tooltip={
+            selectedForSharing.length === 0
+              ? "None of the selected projects can be shared by you"
+              : undefined
+          }
+          onClick={() => setBulkShareOpen(true)}
+        >
+          <span>Edit sharing</span>
+        </PermissionButton>
+        <PermissionButton
+          permissions={{ project: ["delete"] }}
+          variant="destructive"
+          size="sm"
+          disabled={selectedForDelete.length === 0}
+          tooltip={
+            selectedForDelete.length === 0
+              ? "None of the selected projects can be deleted by you"
+              : undefined
+          }
+          onClick={() => setBulkDeleteOpen(true)}
+        >
+          <Trash2 className="h-4 w-4" />
+          <span>Delete</span>
+        </PermissionButton>
+      </BulkActions>
       <TableCardViewContent
         table={
           <ProjectsTable
@@ -350,23 +454,131 @@ function ProjectSection({
             onTogglePin={onTogglePin}
             onEdit={onEdit}
             onDelete={onDelete}
+            rowSelection={rowSelection}
+            onRowSelectionChange={setRowSelection}
+            onPageRowIdsChange={onPageRowIdsChange}
+            canSelect={canSelectProject}
           />
         }
         cards={
-          <TableCardGrid>
-            {projects.map((project) => (
-              <ProjectCard
-                key={project.id}
-                project={project}
-                onTogglePin={onTogglePin}
-                onEdit={onEdit}
-                onDelete={onDelete}
-              />
-            ))}
-          </TableCardGrid>
+          <ProjectCards
+            projects={projects}
+            cardSelection={cardSelection}
+            onVisibleRowIdsChange={onPageRowIdsChange}
+            onTogglePin={onTogglePin}
+            onEdit={onEdit}
+            onDelete={onDelete}
+          />
         }
       />
+      {bulkDeleteOpen && (
+        <DeleteConfirmDialog
+          open={bulkDeleteOpen}
+          onOpenChange={setBulkDeleteOpen}
+          title="Delete projects"
+          description={`Delete ${selectedForDelete.length} ${
+            selectedForDelete.length === 1 ? "project" : "projects"
+          }? Their chats and files go with them.`}
+          isPending={bulkDelete.isPending}
+          onConfirm={() => {
+            bulkDelete.mutate(
+              selectedForDelete.map((project) => ({
+                id: project.id,
+                name: project.name,
+              })),
+              {
+                onSuccess: (outcome) => {
+                  reportBulkOutcome({
+                    outcome,
+                    verb: "Deleted",
+                    failureVerb: "delete",
+                    noun: "project",
+                  });
+                  setBulkDeleteOpen(false);
+                  if (outcome.failed.length === 0) clearSelection();
+                },
+              },
+            );
+          }}
+          confirmLabel="Delete projects"
+          pendingLabel="Deleting..."
+        />
+      )}
+      {bulkShareOpen && (
+        <BulkVisibilityDialog
+          open={bulkShareOpen}
+          onOpenChange={setBulkShareOpen}
+          noun="project"
+          isPending={bulkShare.isPending}
+          items={selectedForSharing.map((project) => ({
+            id: project.id,
+            // A project's list row carries names rather than audience ids, so
+            // the dialog starts at the agreed scope and asks for the audience.
+            scope:
+              project.visibility === "organization"
+                ? "org"
+                : project.visibility === "team"
+                  ? "team"
+                  : "personal",
+            teams: [],
+            users: [],
+          }))}
+          onApply={async (change) => {
+            const outcome = await bulkShare.mutateAsync({
+              projects: selectedForSharing,
+              scope: change.scope,
+              teamIds: change.teamIds,
+              userIds: change.userIds,
+            });
+            reportBulkOutcome({
+              outcome,
+              verb: "Updated sharing for",
+              failureVerb: "update",
+              noun: "project",
+            });
+            if (outcome.succeeded.length === 0) return false;
+            if (outcome.failed.length === 0) clearSelection();
+            return true;
+          }}
+        />
+      )}
     </section>
+  );
+}
+
+function ProjectCards({
+  projects,
+  cardSelection,
+  onVisibleRowIdsChange,
+  onTogglePin,
+  onEdit,
+  onDelete,
+}: {
+  projects: ProjectListItem[];
+  cardSelection: (project: ProjectListItem) => BulkCardSelectionProps;
+  onVisibleRowIdsChange: (ids: string[]) => void;
+  onTogglePin: (project: ProjectListItem) => void;
+  onEdit: (project: ProjectListItem) => void;
+  onDelete: (project: ProjectListItem) => void;
+}) {
+  return (
+    <TableCardSelectionScope
+      rowIds={projects.map((project) => project.id)}
+      onVisibleRowIdsChange={onVisibleRowIdsChange}
+    >
+      <TableCardGrid>
+        {projects.map((project) => (
+          <ProjectCard
+            key={project.id}
+            project={project}
+            onTogglePin={onTogglePin}
+            onEdit={onEdit}
+            onDelete={onDelete}
+            {...cardSelection(project)}
+          />
+        ))}
+      </TableCardGrid>
+    </TableCardSelectionScope>
   );
 }
 
@@ -375,19 +587,27 @@ function ProjectCard({
   onTogglePin,
   onEdit,
   onDelete,
+  selected,
+  selectionDisabled,
+  onSelectedChange,
+  onSelectionClick,
 }: {
   project: ProjectListItem;
   onTogglePin: (project: ProjectListItem) => void;
   onEdit: (project: ProjectListItem) => void;
   onDelete: (project: ProjectListItem) => void;
-}) {
+} & BulkCardSelectionProps) {
   const { data: isProjectAdmin } = useHasPermissions({ project: ["admin"] });
   const { data: canShareOrg } = useHasPermissions({ project: ["share-org"] });
   return (
     // `relative` + the title link's stretched `::after` (after:inset-0) makes the
     // whole card a single click target for the project. Interactive children
     // (the actions menu) sit above it via `relative z-10`.
-    <div className="relative rounded-lg border p-4 transition-colors hover:bg-muted/50">
+    <div
+      className={`relative rounded-lg border p-4 transition-colors ${
+        selected ? "border-primary bg-primary/5" : "hover:bg-muted/50"
+      }`}
+    >
       <div className="flex items-center justify-between gap-2">
         <Link
           href={`/projects/${project.id}`}
@@ -399,6 +619,19 @@ function ProjectCard({
           <span className="min-w-0 truncate font-medium">{project.name}</span>
         </Link>
         <span className="relative z-10 flex shrink-0 items-center gap-1">
+          <Checkbox
+            checked={selected}
+            disabled={selectionDisabled}
+            onCheckedChange={(value) => onSelectedChange(!!value)}
+            onClick={onSelectionClick}
+            aria-label={`Select ${project.name}`}
+            aria-description={
+              selectionDisabled ? "You cannot modify this project" : undefined
+            }
+            title={
+              selectionDisabled ? "You cannot modify this project" : undefined
+            }
+          />
           {/* Scope pill (personal/team/org) on every card. The owner label is
               added only on another member's PERSONAL project (admin oversight),
               where the personal pill alone can't say whose it is — for team/org
@@ -524,54 +757,58 @@ function CreateProjectDialog({
         </>
       }
     >
-      <div className="flex items-start gap-3">
-        <AgentIconPicker
-          value={icon}
-          onChange={(next) =>
-            form.setValue("icon", next, { shouldDirty: true })
-          }
-          fallbackType="project"
-        />
-        <div className="flex-1 space-y-3 min-w-0">
-          <Input
-            autoFocus
-            aria-label="Project name"
-            placeholder="Project name"
-            maxLength={PROJECT_NAME_MAX_LENGTH}
-            aria-invalid={!!form.formState.errors.name}
-            {...form.register("name", {
-              required: "Project name is required.",
-              maxLength: {
-                value: PROJECT_NAME_MAX_LENGTH,
-                message: `Project name must be ${PROJECT_NAME_MAX_LENGTH} characters or fewer.`,
-              },
-            })}
-          />
-          {form.formState.errors.name?.message && (
-            <p className="text-xs text-destructive">
-              {form.formState.errors.name.message}
-            </p>
-          )}
-          <Textarea
-            aria-label="Project description"
-            placeholder="Description (optional)"
-            rows={3}
-            maxLength={PROJECT_DESCRIPTION_MAX_LENGTH}
-            aria-invalid={!!form.formState.errors.description}
-            {...form.register("description", {
-              maxLength: {
-                value: PROJECT_DESCRIPTION_MAX_LENGTH,
-                message: `Description must be ${PROJECT_DESCRIPTION_MAX_LENGTH} characters or fewer.`,
-              },
-            })}
-          />
-          {form.formState.errors.description?.message && (
-            <p className="text-xs text-destructive">
-              {form.formState.errors.description.message}
-            </p>
-          )}
+      <IdentityFields
+        icon={icon}
+        onIconChange={(next) =>
+          form.setValue("icon", next, { shouldDirty: true })
+        }
+        fallbackType="project"
+      >
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="new-project-name">Name *</Label>
+            <Input
+              autoFocus
+              id="new-project-name"
+              maxLength={PROJECT_NAME_MAX_LENGTH}
+              aria-invalid={!!form.formState.errors.name}
+              {...form.register("name", {
+                required: "Project name is required.",
+                maxLength: {
+                  value: PROJECT_NAME_MAX_LENGTH,
+                  message: `Project name must be ${PROJECT_NAME_MAX_LENGTH} characters or fewer.`,
+                },
+              })}
+            />
+            {form.formState.errors.name?.message && (
+              <p className="text-xs text-destructive">
+                {form.formState.errors.name.message}
+              </p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="new-project-description">Description</Label>
+            <Textarea
+              id="new-project-description"
+              placeholder="What is this project about?"
+              rows={3}
+              maxLength={PROJECT_DESCRIPTION_MAX_LENGTH}
+              aria-invalid={!!form.formState.errors.description}
+              {...form.register("description", {
+                maxLength: {
+                  value: PROJECT_DESCRIPTION_MAX_LENGTH,
+                  message: `Description must be ${PROJECT_DESCRIPTION_MAX_LENGTH} characters or fewer.`,
+                },
+              })}
+            />
+            {form.formState.errors.description?.message && (
+              <p className="text-xs text-destructive">
+                {form.formState.errors.description.message}
+              </p>
+            )}
+          </div>
         </div>
-      </div>
+      </IdentityFields>
 
       {canReadAgents === true && (
         <div className="space-y-1.5">

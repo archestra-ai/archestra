@@ -7,6 +7,7 @@ import {
 } from "@archestra/shared";
 import type {
   ColumnDef,
+  OnChangeFn,
   RowSelectionState,
   SortingState,
 } from "@tanstack/react-table";
@@ -34,10 +35,9 @@ import { WithPermissions } from "@/components/roles/with-permissions";
 import { SearchInput } from "@/components/search-input";
 import { ToolPolicyBulkActionsBar } from "@/components/tool-policy-bulk-actions";
 import { TruncatedText } from "@/components/truncated-text";
+import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
-import { DATA_TABLE_SELECT_COLUMN_SIZE } from "@/components/ui/data-table.constants";
 import {
   Tooltip,
   TooltipContent,
@@ -53,6 +53,7 @@ import {
   DEFAULT_SORT_BY,
   DEFAULT_TABLE_LIMIT,
 } from "@/consts";
+import { useControlledRowSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import {
@@ -277,8 +278,10 @@ export function AssignedToolsTable({
     [setPagination, clearSelection],
   );
 
-  const handleRowSelectionChange = useCallback(
-    (newRowSelection: RowSelectionState) => {
+  const handleRowSelectionChange = useCallback<OnChangeFn<RowSelectionState>>(
+    (updater) => {
+      const newRowSelection =
+        typeof updater === "function" ? updater(rowSelection) : updater;
       setRowSelection(newRowSelection);
 
       const newSelectedTools = Object.keys(newRowSelection)
@@ -287,8 +290,17 @@ export function AssignedToolsTable({
 
       setSelectedTools(newSelectedTools);
     },
-    [tools],
+    [rowSelection, tools],
   );
+  const { effectiveRowSelection, onRowSelectionChange } =
+    useControlledRowSelection({
+      rowSelection,
+      setRowSelection: handleRowSelectionChange,
+      rows: tools,
+      getRowId: (row) => row.id,
+      allMatchingSelected,
+      clearEscalation: () => setEscalatedFor(null),
+    });
 
   const handleSearchChange = useCallback(() => {
     clearSelection();
@@ -432,31 +444,10 @@ export function AssignedToolsTable({
 
   const columns: ColumnDef<ToolWithAssignmentsData>[] = useMemo(
     () => [
-      {
-        id: "select",
-        size: DATA_TABLE_SELECT_COLUMN_SIZE,
-        minSize: DATA_TABLE_SELECT_COLUMN_SIZE,
-        maxSize: DATA_TABLE_SELECT_COLUMN_SIZE,
-        header: ({ table }) => (
-          <Checkbox
-            checked={
-              table.getIsAllPageRowsSelected() ||
-              (table.getIsSomePageRowsSelected() && "indeterminate")
-            }
-            onCheckedChange={(value) =>
-              table.toggleAllPageRowsSelected(!!value)
-            }
-            aria-label="Select all"
-          />
-        ),
-        cell: ({ row }) => (
-          <Checkbox
-            checked={row.getIsSelected()}
-            onCheckedChange={(value) => row.toggleSelected(!!value)}
-            aria-label={`Select ${row.original.name}`}
-          />
-        ),
-      },
+      createSelectColumn<ToolWithAssignmentsData>({
+        rowLabel: (row) => `Select ${row.name}`,
+        allLabel: "Select all tools on this page",
+      }),
       {
         id: "name",
         accessorFn: (row) => row.name,
@@ -793,8 +784,8 @@ export function AssignedToolsTable({
         onPaginationChange={handlePaginationChange}
         // The bulk bar above already names the count.
         hideSelectedCount
-        rowSelection={rowSelection}
-        onRowSelectionChange={handleRowSelectionChange}
+        rowSelection={effectiveRowSelection}
+        onRowSelectionChange={onRowSelectionChange}
         getRowId={(row) => row.id}
         isLoading={isLoading}
         hasActiveFilters={

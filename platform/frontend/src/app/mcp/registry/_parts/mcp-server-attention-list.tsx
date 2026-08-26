@@ -3,7 +3,7 @@
 import type { RowSelectionState } from "@tanstack/react-table";
 import { Bell, BellOff, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { Button } from "@/components/ui/button";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useRestoreMcpServerAlerts } from "@/lib/mcp/mcp-server.query";
@@ -215,7 +215,7 @@ export function McpServerAttentionList({
 
   return (
     <div className="space-y-3" data-testid="mcp-registry-attention-list">
-      <BulkActionsBar
+      <BulkActions
         count={selectedItems.length}
         noun="MCP server"
         plural="MCP servers"
@@ -265,7 +265,7 @@ export function McpServerAttentionList({
             ) : null}
           </>
         )}
-      </BulkActionsBar>
+      </BulkActions>
 
       <McpServerTable
         items={items}

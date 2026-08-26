@@ -1,7 +1,6 @@
 "use client";
 
 import { E2eTestId, getRoleDisplayName } from "@archestra/shared";
-import { useMutation } from "@tanstack/react-query";
 import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -34,7 +33,7 @@ import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -50,9 +49,10 @@ import {
 } from "@/components/ui/select";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import { reportBulkOutcome, runBulkAction } from "@/lib/bulk-action";
+import { type BulkOutcome, reportBulkOutcome } from "@/lib/bulk-action";
 import { copyToClipboard } from "@/lib/clipboard";
 import { useDisableInvitations } from "@/lib/config/config.query";
+import { useControlledRowSelection } from "@/lib/hooks/use-bulk-selection";
 import {
   useCanImpersonate,
   useImpersonateUser,
@@ -62,6 +62,7 @@ import {
   type Invitation,
   type Member,
   useAllMatchingMembers,
+  useBulkDeleteMembers,
   useCancelInvitationMutation,
   useInvitationsPaginated,
   useMembersPaginated,
@@ -69,7 +70,6 @@ import {
   useUpdateMemberRole,
 } from "@/lib/member.query";
 import {
-  type PendingSignupMember,
   useActiveOrganization,
   useDeletePendingSignupMember,
   useMemberSignupStatus,
@@ -95,7 +95,15 @@ function UsersPageContent() {
   const router = useRouter();
   const pathname = usePathname();
 
-  const activeTab = searchParams.get("tab") || "users";
+  const invitationsEnabled = useInvitationsEnabled();
+  // A deployment with invitations turned off has no invitations tab to select,
+  // so a `?tab=invitations` link (a bookmark, or one shared before the flag was
+  // flipped) resolves to the users tab rather than an unreachable panel.
+  const tabFromUrl = searchParams.get("tab") || "users";
+  const activeTab =
+    tabFromUrl === "invitations" && invitationsEnabled
+      ? "invitations"
+      : "users";
 
   const setActiveTab = useCallback(
     (tab: string) => {
@@ -117,17 +125,23 @@ function UsersPageContent() {
     return () => setActionButton(null);
   }, [activeOrg, setActionButton]);
 
+  // With invitations off there is only one thing to show, so no tablist is
+  // rendered — and a tabpanel whose aria-labelledby points at a tab button that
+  // does not exist is worse than a plain container.
+  const tabPanelProps = invitationsEnabled
+    ? ({
+        // Single always-mounted panel keeps each tab's aria-controls
+        // pointing at an element that exists (the panel's content swaps).
+        role: "tabpanel",
+        id: USERS_TABPANEL_ID,
+        "aria-labelledby": `${activeTab}-tab`,
+      } as const)
+    : {};
+
   return (
     <LoadingWrapper isPending={isOrgPending} loadingFallback={<LoadingState />}>
       {activeOrg ? (
-        <div
-          className="space-y-6"
-          // Single always-mounted panel keeps each tab's aria-controls
-          // pointing at an element that exists (the panel's content swaps).
-          role="tabpanel"
-          id={USERS_TABPANEL_ID}
-          aria-labelledby={`${activeTab}-tab`}
-        >
+        <div className="space-y-6" {...tabPanelProps}>
           {activeTab === "users" ? (
             <MembersTab activeTab={activeTab} onTabChange={setActiveTab} />
           ) : (
@@ -151,6 +165,21 @@ const USER_TABS = [
   { id: "invitations", label: "Invitations" },
 ] as const;
 
+/**
+ * Whether this deployment can invite anyone at all.
+ *
+ * Invitations are a deployment-level switch
+ * (`ARCHESTRA_AUTH_DISABLE_INVITATIONS`), not a permission: with them off the
+ * invite endpoints refuse, so every invitation affordance — the invite button
+ * and the invitations tab — stays hidden rather than leading somewhere that
+ * cannot work. `undefined` means the public config is still in flight; treat
+ * that as off so the affordance never flashes in and then disappears.
+ */
+function useInvitationsEnabled() {
+  const disableInvitations = useDisableInvitations();
+  return disableInvitations === undefined ? false : !disableInvitations;
+}
+
 function TabButtons({
   activeTab,
   onTabChange,
@@ -158,6 +187,11 @@ function TabButtons({
   activeTab: string;
   onTabChange: (tab: string) => void;
 }) {
+  const invitationsEnabled = useInvitationsEnabled();
+  const tabs = USER_TABS.filter(
+    (tab) => tab.id !== "invitations" || invitationsEnabled,
+  );
+
   // Switching tabs swaps the whole MembersTab/InvitationsTab subtree —
   // including this component — so the newly active tab button must be
   // re-focused after the replacement mounts or keyboard focus drops to <body>.
@@ -168,6 +202,9 @@ function TabButtons({
     });
   };
 
+  // A switcher with a single destination is a label, not a control.
+  if (tabs.length < 2) return null;
+
   return (
     <div
       role="tablist"
@@ -176,7 +213,7 @@ function TabButtons({
       // the stock `p-1` around size-sm buttons stands 8px taller than the row.
       className="flex h-8 items-center gap-1 rounded-lg bg-muted p-0.5"
     >
-      {USER_TABS.map((tab) => {
+      {tabs.map((tab) => {
         const isActive = activeTab === tab.id;
         return (
           <Button
@@ -208,9 +245,7 @@ function TabButtons({
 function InviteUserButton({ organizationId }: { organizationId: string }) {
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const { data: canInvite } = useHasPermissions({ invitation: ["create"] });
-  const disableInvitations = useDisableInvitations();
-  const invitationsEnabled =
-    disableInvitations === undefined ? false : !disableInvitations;
+  const invitationsEnabled = useInvitationsEnabled();
 
   if (!invitationsEnabled || !canInvite) return null;
 
@@ -273,6 +308,7 @@ function MembersTab({
   });
 
   const updateMemberRole = useUpdateMemberRole();
+  const bulkDeleteMembers = useBulkDeleteMembers();
   const removeMember = useRemoveMember();
   const { data: signupStatus } = useMemberSignupStatus();
   const pendingSignupMembers = signupStatus?.pendingSignupMembers ?? [];
@@ -310,17 +346,29 @@ function MembersTab({
 
   const members = membersResponse?.data || [];
   const pagination = membersResponse?.pagination;
-  const tableRows =
-    pageIndex === 0 ? [...pendingSignupMembers, ...members] : members;
+
+  /**
+   * Pending-signup users are ordinary rows of the `member` table — the
+   * signup-status endpoint just reports which of them have no account record
+   * yet — so `/api/members` already returns them, on whichever page they sort
+   * onto. Their pending-ness is therefore an attribute of a member row, looked
+   * up here, and never a row of its own: prepending them produced a duplicate
+   * of each on page one, a first page longer than the page size, and a total
+   * inflated past the real member count, which in turn advertised a trailing
+   * page whose offset lands beyond the last member and renders empty.
+   */
+  const pendingSignupByUserId = new Map(
+    pendingSignupMembers.map((pending) => [pending.userId, pending]),
+  );
+  const pendingSignupFor = (member: Member) =>
+    pendingSignupByUserId.get(member.userId);
 
   // Show the column while the requirement is on, and keep showing it once
   // anyone is enrolled — turning the requirement off should not blind admins
   // to who still has 2FA.
   const showTwoFactorColumn =
     !!organization?.requireTwoFactor ||
-    members.some(
-      (member) => "twoFactorEnabled" in member && member.twoFactorEnabled,
-    );
+    members.some((member) => member.twoFactorEnabled);
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [bulkRemoveOpen, setBulkRemoveOpen] = useState(false);
@@ -329,52 +377,45 @@ function MembersTab({
     setEscalatedFor(null);
   }, []);
 
-  const rowKey = (row: Member | PendingSignupMember) =>
-    "provider" in row ? `pending-${row.userId}` : row.id;
-
   /**
    * Your own membership is never part of a selection — removing yourself from
    * the organization mid-batch would revoke the session doing the removing.
    */
-  const isSelf = (row: Member | PendingSignupMember) =>
-    row.userId === currentUserId;
+  const isSelf = (row: Member) => row.userId === currentUserId;
 
   const filterSignature = JSON.stringify({ nameFilter, roleFilter });
   const [escalatedFor, setEscalatedFor] = useState<string | null>(null);
   const allMatchingSelected = escalatedFor === filterSignature;
+  const { effectiveRowSelection, onRowSelectionChange } =
+    useControlledRowSelection({
+      rowSelection,
+      setRowSelection,
+      rows: members,
+      getRowId: (row) => row.id,
+      allMatchingSelected,
+      clearEscalation: () => setEscalatedFor(null),
+      canSelect: (row) => !isSelf(row),
+    });
   const { data: allMatchingMembers, isFetching: isFetchingAllMatching } =
     useAllMatchingMembers(
       { name: nameFilter || undefined, role: roleFilter || undefined },
       { enabled: allMatchingSelected },
     );
 
-  const pageSelection = tableRows.filter(
-    (row) => !isSelf(row) && rowSelection[rowKey(row)],
+  const pageSelection = members.filter(
+    (row) => !isSelf(row) && effectiveRowSelection[row.id],
   );
   const selectedMembers =
     allMatchingSelected && allMatchingMembers
       ? allMatchingMembers.filter((row) => !isSelf(row))
       : pageSelection;
 
-  // Two removal routes behind one action: an accepted member leaves the
-  // organization, a pending one has their invitation withdrawn.
-  const bulkRemove = useMutation({
-    mutationFn: async (selection: readonly (Member | PendingSignupMember)[]) =>
-      runBulkAction({
-        items: selection,
-        describe: (row) => row.email,
-        run: async (row) => {
-          if ("provider" in row) {
-            await deletePendingSignupMember.mutateAsync(row.userId);
-            return;
-          }
-          await removeMember.mutateAsync(row.id);
-        },
-      }),
-  });
+  const selectableTotal = allMatchingMembers
+    ? allMatchingMembers.filter((row) => !isSelf(row)).length
+    : Math.max(0, (pagination?.total ?? 0) - (members.some(isSelf) ? 1 : 0));
 
-  const columns: ColumnDef<Member | PendingSignupMember>[] = [
-    createSelectColumn<Member | PendingSignupMember>({
+  const columns: ColumnDef<Member>[] = [
+    createSelectColumn<Member>({
       rowLabel: (row) => `Select ${row.email}`,
       allLabel: "Select all users on this page",
       canSelect: (row) => !isSelf(row),
@@ -386,12 +427,13 @@ function MembersTab({
       header: "",
       cell: ({ row }) => {
         const member = row.original;
-        if ("provider" in member) {
+        const pending = pendingSignupFor(member);
+        if (pending) {
           return (
             <div className="flex items-center justify-center">
               <div className="flex h-8 w-8 items-center justify-center rounded-full border bg-muted/40">
                 <AuthProviderIcon
-                  providerId={member.provider}
+                  providerId={pending.provider}
                   size={16}
                   className="rounded-sm"
                 />
@@ -445,7 +487,7 @@ function MembersTab({
             id: "twoFactor",
             header: "2FA",
             cell: ({ row }) =>
-              "provider" in row.original ? (
+              pendingSignupFor(row.original) ? (
                 <span className="text-sm text-muted-foreground">—</span>
               ) : row.original.twoFactorEnabled ? (
                 <span
@@ -464,14 +506,14 @@ function MembersTab({
                   <span>Not enrolled</span>
                 </span>
               ),
-          } satisfies ColumnDef<Member | PendingSignupMember>,
+          } satisfies ColumnDef<Member>,
         ]
       : []),
     {
       id: "joined",
       header: "Joined",
       cell: ({ row }) =>
-        "provider" in row.original ? (
+        pendingSignupFor(row.original) ? (
           <span className="text-sm text-muted-foreground">
             Pending (auto-provisioned)
           </span>
@@ -489,7 +531,8 @@ function MembersTab({
       enableHiding: false,
       cell: ({ row }) => {
         const member = row.original;
-        if ("provider" in member) {
+        const pending = pendingSignupFor(member);
+        if (pending) {
           return (
             <TableRowActions
               itemName={member.email}
@@ -497,13 +540,13 @@ function MembersTab({
                 {
                   icon: <Copy className="h-4 w-4" />,
                   label: "Copy invitation link",
-                  disabled: !member.invitationId,
-                  disabledTooltip: member.invitationId
+                  disabled: !pending.invitationId,
+                  disabledTooltip: pending.invitationId
                     ? undefined
                     : "No invitation link available",
                   onClick: async () => {
-                    if (!member.invitationId) return;
-                    const link = `${window.location.origin}/auth/sign-up-with-invitation?invitationId=${member.invitationId}&email=${encodeURIComponent(member.email)}`;
+                    if (!pending.invitationId) return;
+                    const link = `${window.location.origin}/auth/sign-up-with-invitation?invitationId=${pending.invitationId}&email=${encodeURIComponent(member.email)}`;
                     await copyToClipboard(link);
                   },
                 },
@@ -578,26 +621,24 @@ function MembersTab({
       </FilterBar>
 
       <LoadingWrapper isPending={isPending} loadingFallback={<LoadingState />}>
-        <BulkActionsBar
+        <BulkActions
           count={selectedMembers.length}
           noun="user"
           onClear={clearSelection}
-          busy={bulkRemove.isPending || isFetchingAllMatching}
+          busy={bulkDeleteMembers.isPending || isFetchingAllMatching}
           selectAllMatching={{
-            // Members only: the pending-signup rows come from a separate,
-            // unpaginated source shown on page one alone.
-            total: pagination?.total ?? 0,
+            total: selectableTotal,
             pageFullySelected:
-              tableRows.length > 0 &&
-              pageSelection.length ===
-                tableRows.filter((row) => !isSelf(row)).length,
+              members.length > 0 &&
+              members
+                .filter((row) => !isSelf(row))
+                .every((row) => effectiveRowSelection[row.id]),
             active: allMatchingSelected,
             onSelectAll: () => setEscalatedFor(filterSignature),
             matchDescription: nameFilter
               ? "match this search query"
               : "match the current filters",
           }}
-          className="mb-3"
         >
           <PermissionButton
             permissions={{ member: ["delete"] }}
@@ -608,22 +649,20 @@ function MembersTab({
             <Trash2 className="h-4 w-4" />
             <span>Remove</span>
           </PermissionButton>
-        </BulkActionsBar>
+        </BulkActions>
 
         <DataTable
           columns={columns}
-          data={tableRows}
-          rowSelection={rowSelection}
-          onRowSelectionChange={setRowSelection}
+          data={members}
+          rowSelection={effectiveRowSelection}
+          onRowSelectionChange={onRowSelectionChange}
           hideSelectedCount
           manualPagination
-          getRowId={(row) =>
-            "provider" in row ? `pending-${row.userId}` : row.id
-          }
+          getRowId={(row) => row.id}
           pagination={{
             pageIndex,
             pageSize,
-            total: (pagination?.total || 0) + pendingSignupMembers.length,
+            total: pagination?.total || 0,
           }}
           onPaginationChange={handlePaginationChange}
           isLoading={isFetching}
@@ -663,20 +702,35 @@ function MembersTab({
           description={`Remove ${selectedMembers.length} ${
             selectedMembers.length === 1 ? "user" : "users"
           } from the organization? Pending invitations are withdrawn; accepted members lose access.`}
-          isPending={bulkRemove.isPending}
+          isPending={bulkDeleteMembers.isPending}
           onConfirm={() => {
-            bulkRemove.mutate(selectedMembers, {
-              onSuccess: (outcome) => {
-                reportBulkOutcome({
-                  outcome,
-                  verb: "Removed",
-                  failureVerb: "remove",
-                  noun: "user",
-                });
-                setBulkRemoveOpen(false);
-                if (outcome.failed.length === 0) clearSelection();
+            const labels = new Map(
+              selectedMembers.map((member) => [
+                pendingSignupFor(member)
+                  ? `pendingSignup:${member.userId}`
+                  : `member:${member.id}`,
+                member.email,
+              ]),
+            );
+            bulkDeleteMembers.mutate(
+              selectedMembers.map((member) =>
+                pendingSignupFor(member)
+                  ? { kind: "pendingSignup" as const, id: member.userId }
+                  : { kind: "member" as const, id: member.id },
+              ),
+              {
+                onSuccess: (outcome) => {
+                  reportBulkOutcome({
+                    outcome: toBulkOutcome(outcome, labels),
+                    verb: "Removed",
+                    failureVerb: "remove",
+                    noun: "user",
+                  });
+                  setBulkRemoveOpen(false);
+                  if (outcome.failed.length === 0) clearSelection();
+                },
               },
-            });
+            );
           }}
           confirmLabel="Remove users"
           pendingLabel="Removing..."
@@ -988,6 +1042,24 @@ function InvitationsTab({
 // ===
 // Helpers
 // ===
+
+function toBulkOutcome(
+  outcome: {
+    succeeded: Array<{ kind: string; id: string }>;
+    failed: Array<{ kind: string; id: string; error: string }>;
+  },
+  labels: ReadonlyMap<string, string>,
+): BulkOutcome {
+  const labelFor = (target: { kind: string; id: string }) =>
+    labels.get(`${target.kind}:${target.id}`) ?? "Unknown";
+  return {
+    succeeded: outcome.succeeded.map(labelFor),
+    failed: outcome.failed.map((target) => ({
+      label: labelFor(target),
+      error: target.error,
+    })),
+  };
+}
 
 function getInitials(name: string): string {
   return name

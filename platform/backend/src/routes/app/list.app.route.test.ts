@@ -242,6 +242,32 @@ describe("GET /api/apps", () => {
     expect(item?.teams).toEqual([{ id: team.id, name: "London HQ" }]);
   });
 
+  test("carries an owned app's icon so the card renders it like an external one", async ({
+    makeApp,
+  }) => {
+    const withIcon = await makeApp({
+      organizationId,
+      scope: "org",
+      authorId: user.id,
+      icon: "🚀",
+    });
+    const withoutIcon = await makeApp({
+      organizationId,
+      scope: "org",
+      authorId: user.id,
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/apps?limit=100&offset=0",
+    });
+    expect(res.statusCode).toBe(200);
+    const items = res.json().data as Array<Record<string, unknown>>;
+    expect(items.find((i) => i.id === withIcon.id)?.icon).toBe("🚀");
+    // Null rather than absent, so the card can fall back deliberately.
+    expect(items.find((i) => i.id === withoutIcon.id)?.icon).toBeNull();
+  });
+
   test("lists external UI-providing servers alongside owned apps, with trust disclosure", async ({
     makeApp,
     makeInternalMcpCatalog,

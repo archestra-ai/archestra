@@ -3,7 +3,7 @@ title: MCP Apps
 category: Apps
 order: 1
 description: User-authored MCP Apps — sandboxed HTML interfaces with their own data store and tools
-lastUpdated: 2026-08-16
+lastUpdated: 2026-08-25
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -51,6 +51,14 @@ Two settings in **Settings → Apps** govern how new apps start. Both are off by
 **New apps are locked by default** creates every new app [locked](#locking-an-app).
 
 Under either setting, the chat that created the app can finish building it. A new app never arrives frozen as an empty shell — you enable or unlock a finished app, not a starter template. Every other chat meets the setting from the app's first moment, and a disabled app is not even acknowledged there. Locking or disabling the app yourself ends that one exception.
+
+## Icons
+
+Give an app an icon in App settings — an emoji, or an image you upload. It shows wherever the app does: the `/apps` gallery, the pinned list in the sidebar, and the pill that opens it in chat. Without one, the app keeps the generic app glyph.
+
+An app and its backing MCP server share one icon, so setting it in App settings also sets it on the server's page in the [MCP registry](./platform-mcp).
+
+An agent can pick an icon when it scaffolds an app, so an app built in chat usually arrives with one.
 
 ## Labels
 

@@ -164,4 +164,24 @@ describe("SessionModel", () => {
       expect(allSessions[0]?.userId).toBe(testUser2Id);
     });
   });
+
+  describe("bulk ownership operations", () => {
+    test("finds and deletes only the requested user's sessions", async () => {
+      const visible = await SessionModel.findByIdsForUser({
+        ids: [testSessionId, testSession3Id],
+        userId: testUserId,
+      });
+
+      expect(visible).toEqual([{ id: testSessionId }]);
+
+      const deleted = await SessionModel.deleteByIdsForUser({
+        ids: [testSessionId, testSession3Id],
+        userId: testUserId,
+      });
+
+      expect(deleted).toEqual([{ id: testSessionId }]);
+      expect(await SessionModel.getById(testSessionId)).toHaveLength(0);
+      expect(await SessionModel.getById(testSession3Id)).toHaveLength(1);
+    });
+  });
 });

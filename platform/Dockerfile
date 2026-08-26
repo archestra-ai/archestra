@@ -336,6 +336,15 @@ ENV ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING="false"
 ENV ARCHESTRA_SENTRY_FRONTEND_DSN=""
 ENV ARCHESTRA_SENTRY_ENVIRONMENT=""
 
+# Idle keep-alive window (ms) for both HTTP servers in this image: the Fastify
+# API reads it directly, and supervisord maps it onto KEEP_ALIVE_TIMEOUT for the
+# Next.js standalone server, which otherwise falls back to Node's 5s default.
+# It has to stay above the keep-alive timeout of whatever proxies the container
+# (a cloud load balancer holds pooled connections far longer than 5s), so
+# declaring it here gives every deployment a safe value while leaving it
+# overridable per-deployment. See platform-deployment.md.
+ENV ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS="620000"
+
 # Cloud database CA bundle for SSL certificate validation
 # This allows sslmode=require to work with AWS RDS and Google Cloud SQL
 ENV NODE_EXTRA_CA_CERTS="/etc/ssl/certs/cloud-database-ca-bundle.pem"

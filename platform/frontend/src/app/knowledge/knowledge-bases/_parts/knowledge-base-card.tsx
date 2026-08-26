@@ -2,6 +2,7 @@
 
 import type { archestraApiTypes } from "@archestra/shared";
 import { Bot, Database, FileText, Plug, Plus } from "lucide-react";
+import type { MouseEventHandler } from "react";
 import { ConnectorChip } from "@/app/knowledge/knowledge-bases/_parts/connector-chip";
 import {
   type TableRowAction,
@@ -40,6 +41,7 @@ export function KnowledgeBaseCard({
   connectorsById,
   selected,
   onSelectedChange,
+  onSelectionClick,
   actions,
   onAddConnector,
   onEditConnector,
@@ -50,6 +52,7 @@ export function KnowledgeBaseCard({
   connectorsById: Map<string, ConnectorItem>;
   selected: boolean;
   onSelectedChange: (selected: boolean) => void;
+  onSelectionClick?: MouseEventHandler<HTMLButtonElement>;
   actions: TableRowAction[];
   onAddConnector: () => void;
   onEditConnector: (connector: ConnectorItem) => void;
@@ -71,6 +74,7 @@ export function KnowledgeBaseCard({
           className="mt-1"
           checked={selected}
           onCheckedChange={(value) => onSelectedChange(!!value)}
+          onClick={onSelectionClick}
           aria-label={`Select ${knowledgeBase.name}`}
         />
         <div className="min-w-0 flex-1">

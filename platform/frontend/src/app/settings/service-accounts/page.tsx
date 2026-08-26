@@ -15,7 +15,7 @@ import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -280,13 +280,12 @@ export default function ServiceAccountsSettingsPage() {
               />
             ) : (
               <>
-                <BulkActionsBar
+                <BulkActions
                   count={selectedAccounts.length}
                   noun="service account"
                   onClear={clearSelection}
                   busy={bulkDelete.isPending}
                   selectAllMatching={selectAllMatching}
-                  className="mb-3"
                 >
                   <PermissionButton
                     permissions={{ serviceAccount: ["delete"] }}
@@ -297,7 +296,7 @@ export default function ServiceAccountsSettingsPage() {
                     <Trash2 className="h-4 w-4" />
                     <span>Delete</span>
                   </PermissionButton>
-                </BulkActionsBar>
+                </BulkActions>
                 <DataTable
                   columns={columns}
                   data={filteredServiceAccounts}

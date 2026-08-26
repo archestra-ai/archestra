@@ -19,7 +19,7 @@ import { WithPermissions } from "@/components/roles/with-permissions";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
-import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -341,13 +341,12 @@ function ApiKeysCardContent() {
               />
             ) : (
               <>
-                <BulkActionsBar
+                <BulkActions
                   count={selectedApiKeys.length}
                   noun="API key"
                   onClear={clearSelection}
                   busy={bulkDelete.isPending}
                   selectAllMatching={selectAllMatching}
-                  className="mb-3"
                 >
                   <PermissionButton
                     permissions={{ apiKey: ["delete"] }}
@@ -370,7 +369,7 @@ function ApiKeysCardContent() {
                     <Trash2 className="h-4 w-4" />
                     <span>Delete</span>
                   </PermissionButton>
-                </BulkActionsBar>
+                </BulkActions>
 
                 <DataTable
                   columns={columns}

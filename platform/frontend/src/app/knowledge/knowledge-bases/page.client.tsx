@@ -1,6 +1,6 @@
 "use client";
 
-import { type archestraApiTypes, MAX_BULK_IDS } from "@archestra/shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import {
   ArchiveRestore,
@@ -40,7 +40,7 @@ import {
   type TableRowAction,
   TableRowActions,
 } from "@/components/table-row-actions";
-import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -53,6 +53,11 @@ import {
 } from "@/components/ui/tooltip";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { reportBulkOutcome } from "@/lib/bulk-action";
+import {
+  type BulkCardSelectionProps,
+  useBulkCardSelection,
+} from "@/lib/hooks/use-bulk-card-selection";
+import { useControlledRowSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
   useConnectors as useAllConnectors,
@@ -192,13 +197,29 @@ function KnowledgeBasesList() {
   // re-pointing "all N" at a different N.
   const filterSignature = `${search}|${isDeletedView}`;
   const allMatchingActive = selectAllMatchingFor === filterSignature;
-  const { data: allMatching } = useAllMatchingKnowledgeBases(
-    {
-      search: search || undefined,
-      status: isDeletedView ? "deleted" : undefined,
-    },
-    { enabled: allMatchingActive },
-  );
+  const { effectiveRowSelection, onRowSelectionChange } =
+    useControlledRowSelection({
+      rowSelection,
+      setRowSelection,
+      rows: items,
+      getRowId: (row) => row.id,
+      allMatchingSelected: allMatchingActive,
+      clearEscalation: () => setSelectAllMatchingFor(null),
+    });
+  const cardSelection = useBulkCardSelection({
+    rows: items,
+    getRowId: (knowledgeBase) => knowledgeBase.id,
+    rowSelection: effectiveRowSelection,
+    setRowSelection: onRowSelectionChange,
+  });
+  const { data: allMatching, isFetching: isFetchingAllMatching } =
+    useAllMatchingKnowledgeBases(
+      {
+        search: search || undefined,
+        status: isDeletedView ? "deleted" : undefined,
+      },
+      { enabled: allMatchingActive },
+    );
 
   const clearSelection = useCallback(() => {
     setRowSelection({});
@@ -207,11 +228,11 @@ function KnowledgeBasesList() {
 
   // The deleted view has its own lifecycle actions (restore, purge), so bulk
   // deletion is offered only over live knowledge bases.
-  const selectedKnowledgeBases = isDeletedView
+  const pageSelection = isDeletedView
     ? []
-    : allMatchingActive
-      ? (allMatching ?? [])
-      : items.filter((kb) => rowSelection[kb.id]);
+    : items.filter((kb) => effectiveRowSelection[kb.id]);
+  const selectedKnowledgeBases =
+    allMatchingActive && allMatching ? allMatching : pageSelection;
   const goToPage = useCallback(
     (next: { pageIndex: number; pageSize: number }) => {
       const params = new URLSearchParams(searchParams.toString());
@@ -440,22 +461,21 @@ function KnowledgeBasesList() {
           </div>
 
           {!isDeletedView && (
-            <BulkActionsBar
+            <BulkActions
               count={selectedKnowledgeBases.length}
               noun="knowledge base"
               plural="knowledge bases"
               onClear={clearSelection}
-              busy={bulkDelete.isPending}
+              busy={bulkDelete.isPending || isFetchingAllMatching}
               selectAllMatching={{
                 total: pagination?.total ?? items.length,
                 pageFullySelected:
-                  items.length > 0 && items.every((kb) => rowSelection[kb.id]),
+                  items.length > 0 &&
+                  items.every((kb) => effectiveRowSelection[kb.id]),
                 active: allMatchingActive,
                 onSelectAll: () => setSelectAllMatchingFor(filterSignature),
                 matchDescription: "match this search",
-                max: MAX_BULK_IDS,
               }}
-              className="mb-3"
             >
               <PermissionButton
                 permissions={{ knowledgeSource: ["delete"] }}
@@ -466,7 +486,7 @@ function KnowledgeBasesList() {
                 <Trash2 className="h-4 w-4" />
                 <span>Delete</span>
               </PermissionButton>
-            </BulkActionsBar>
+            </BulkActions>
           )}
 
           <TableCardViewContent
@@ -475,8 +495,7 @@ function KnowledgeBasesList() {
               <KnowledgeBaseCardGrid
                 knowledgeBases={items}
                 connectorsById={connectorsById}
-                rowSelection={rowSelection}
-                onRowSelectionChange={setRowSelection}
+                cardSelection={cardSelection}
                 rowActions={rowActions}
                 onAddConnector={setAddConnectorKbId}
                 onEditConnector={openEditConnector}
@@ -497,9 +516,9 @@ function KnowledgeBasesList() {
                 columns={isDeletedView ? deletedColumns : columns}
                 data={items}
                 getRowId={(row) => row.id}
-                rowSelection={isDeletedView ? undefined : rowSelection}
+                rowSelection={isDeletedView ? undefined : effectiveRowSelection}
                 onRowSelectionChange={
-                  isDeletedView ? undefined : setRowSelection
+                  isDeletedView ? undefined : onRowSelectionChange
                 }
                 hideSelectedCount
                 // The deleted view always counts as filtered (see hasActiveFilters),
@@ -648,8 +667,7 @@ type ConnectorItem =
 function KnowledgeBaseCardGrid({
   knowledgeBases,
   connectorsById,
-  rowSelection,
-  onRowSelectionChange,
+  cardSelection,
   rowActions,
   onAddConnector,
   onEditConnector,
@@ -662,8 +680,7 @@ function KnowledgeBaseCardGrid({
 }: {
   knowledgeBases: KnowledgeBaseItem[];
   connectorsById: Map<string, ConnectorItem>;
-  rowSelection: RowSelectionState;
-  onRowSelectionChange: (selection: RowSelectionState) => void;
+  cardSelection: (knowledgeBase: KnowledgeBaseItem) => BulkCardSelectionProps;
   rowActions: (kb: KnowledgeBaseItem) => TableRowAction[];
   onAddConnector: (knowledgeBaseId: string) => void;
   onEditConnector: (connector: ConnectorItem) => void;
@@ -703,16 +720,7 @@ function KnowledgeBaseCardGrid({
             key={kb.id}
             knowledgeBase={kb}
             connectorsById={connectorsById}
-            selected={!!rowSelection[kb.id]}
-            onSelectedChange={(selected) => {
-              const next = { ...rowSelection };
-              if (selected) {
-                next[kb.id] = true;
-              } else {
-                delete next[kb.id];
-              }
-              onRowSelectionChange(next);
-            }}
+            {...cardSelection(kb)}
             actions={rowActions(kb)}
             onAddConnector={() => onAddConnector(kb.id)}
             onEditConnector={onEditConnector}

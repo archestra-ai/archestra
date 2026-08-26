@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   TableCard,
   TableCardList,
+  TableCardSelectionScope,
   TableCardView,
   TableCardViewContent,
   TableCardViewToggle,
@@ -78,6 +79,21 @@ describe("TableCardView", () => {
     fireEvent.click(screen.getByLabelText("Select Knowledge source"));
 
     expect(onSelectedChange).toHaveBeenCalledWith(true);
+  });
+
+  it("reports the rows visible in card mode", () => {
+    const onVisibleRowIdsChange = vi.fn();
+
+    render(
+      <TableCardSelectionScope
+        rowIds={["one", "two"]}
+        onVisibleRowIdsChange={onVisibleRowIdsChange}
+      >
+        <span>Cards</span>
+      </TableCardSelectionScope>,
+    );
+
+    expect(onVisibleRowIdsChange).toHaveBeenCalledWith(["one", "two"]);
   });
 
   it("says nothing about an empty result while cards are still loading", () => {

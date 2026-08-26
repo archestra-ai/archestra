@@ -5,7 +5,7 @@ import { type ReactNode, useCallback, useState } from "react";
 import { toast } from "sonner";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import {
-  BulkActionsBar,
+  BulkActions,
   type SelectAllMatching,
 } from "@/components/ui/bulk-actions-bar";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -42,7 +42,7 @@ import {
  * Shared between the full guardrails table and the MCP server setup wizard's
  * Tools & Guardrails step. Owns the mutation/in-flight state and supplies the
  * policy controls; the surrounding bar — count, Clear, hide-when-empty — comes
- * from `BulkActionsBar`, so this matches every other table's bulk affordance.
+ * from `BulkActions`, so this matches every other table's bulk affordance.
  */
 export function ToolPolicyBulkActionsBar({
   selectedToolIds,
@@ -236,7 +236,7 @@ export function ToolPolicyBulkActionsBar({
   );
 
   return (
-    <BulkActionsBar
+    <BulkActions
       count={selectedToolIds.length}
       noun="tool"
       busy={isBulkUpdating || busy}
@@ -286,7 +286,7 @@ export function ToolPolicyBulkActionsBar({
         )),
       })}
       {configureWithSubagentButton}
-    </BulkActionsBar>
+    </BulkActions>
   );
 }
 

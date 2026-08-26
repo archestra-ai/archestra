@@ -12,6 +12,7 @@ import { useTeams } from "@/lib/teams/team.query";
 import ConnectorsPage from "./page.client";
 
 const mockUseConnectorsPaginated = vi.fn();
+const mockUseAllMatchingConnectors = vi.fn();
 const mockRestoreMutate = vi.fn();
 const mockPurgeMutateAsync = vi.fn();
 
@@ -23,7 +24,8 @@ vi.mock("@/lib/knowledge/connector.query", () => ({
     mutateAsync: vi.fn(),
     isPending: false,
   }),
-  useAllMatchingConnectors: () => ({ data: [] }),
+  useAllMatchingConnectors: (...args: unknown[]) =>
+    mockUseAllMatchingConnectors(...args),
   useBulkDeleteConnectors: () => ({ mutate: vi.fn(), isPending: false }),
   useBulkUpdateConnectorVisibility: () => ({
     mutateAsync: vi.fn(),
@@ -103,6 +105,10 @@ function makeConnector(overrides: Record<string, unknown>) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockUseAllMatchingConnectors.mockReturnValue({
+    data: [],
+    isFetching: false,
+  });
   vi.mocked(usePathname).mockReturnValue("/knowledge/connectors");
   vi.mocked(useSearchParams).mockReturnValue({
     get: () => null,
@@ -164,6 +170,44 @@ describe("ConnectorsPage", () => {
     expect(
       screen.getByText(/mirrors the source system's own permissions/),
     ).toBeInTheDocument();
+  });
+
+  it("keeps the bulk bar visible while all matching connectors load", async () => {
+    mockUseConnectorsPaginated.mockReturnValue({
+      data: {
+        data: [
+          makeConnector({ id: "conn-1", name: "First Connector" }),
+          makeConnector({ id: "conn-2", name: "Second Connector" }),
+        ],
+        pagination: { total: 3 },
+      },
+      isPending: false,
+      isFetching: false,
+      isError: false,
+    });
+    mockUseAllMatchingConnectors.mockImplementation(
+      (_filters: unknown, options?: { enabled?: boolean }) => ({
+        data: undefined,
+        isFetching: options?.enabled ?? false,
+      }),
+    );
+
+    render(<ConnectorsPage />);
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "Select First Connector" }),
+    );
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "Select Second Connector" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: /Select all 3 connectors/i }),
+    );
+
+    expect(
+      screen
+        .getAllByText(/All 3 connectors selected/i)
+        .some((element) => element.getAttribute("aria-hidden") === "true"),
+    ).toBe(true);
   });
 
   it("deleted view: rows show how long they have sat in the trash and collapse to Restore + Delete permanently", async () => {

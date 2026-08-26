@@ -63,7 +63,7 @@ import {
   TableCardViewToggle,
 } from "@/components/table-card-view";
 import { Badge } from "@/components/ui/badge";
-import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -87,6 +87,8 @@ import {
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
+import { useControlledRowSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useMyTeams } from "@/lib/teams/team.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
@@ -363,19 +365,33 @@ function McpGateways({
   const agents = agentsResponse?.data || [];
   const pagination = agentsResponse?.pagination;
   const showLoading = (isPending || isFetching) && agents.length === 0;
-
   // Derived from what is on screen rather than read straight out of
   // `rowSelection`: the table is server-paginated, so ids left behind by
   // another page drop out of both the count and the request.
   const filterSignature = JSON.stringify(listFilters);
   const [escalatedFor, setEscalatedFor] = useState<string | null>(null);
   const allMatchingSelected = escalatedFor === filterSignature;
+  const { effectiveRowSelection, onRowSelectionChange } =
+    useControlledRowSelection({
+      rowSelection,
+      setRowSelection,
+      rows: agents,
+      getRowId: (row) => row.id,
+      allMatchingSelected,
+      clearEscalation: () => setEscalatedFor(null),
+    });
+  const cardSelection = useBulkCardSelection({
+    rows: agents,
+    getRowId: (row) => row.id,
+    rowSelection: effectiveRowSelection,
+    setRowSelection: onRowSelectionChange,
+  });
   const { data: allMatching, isFetching: isFetchingAllMatching } =
     useAllMatchingProfiles(listFilters, { enabled: allMatchingSelected });
 
   const pageSelection = isDeletedView
     ? []
-    : agents.filter((row) => rowSelection[row.id]);
+    : agents.filter((row) => effectiveRowSelection[row.id]);
   const selectedGateways =
     allMatchingSelected && allMatching ? allMatching : pageSelection;
 
@@ -698,7 +714,7 @@ function McpGateways({
             </div>
 
             <div data-testid={E2eTestId.AgentsTable}>
-              <BulkActionsBar
+              <BulkActions
                 count={selectedGateways.length}
                 noun="gateway"
                 plural="gateways"
@@ -714,10 +730,9 @@ function McpGateways({
                     ? "match this search query"
                     : "match the current filters",
                 }}
-                className="mb-3"
               >
                 <PermissionButton
-                  permissions={{ agent: ["update"] }}
+                  permissions={{ mcpGateway: ["update"] }}
                   variant="outline"
                   size="sm"
                   onClick={() => setBulkVisibilityOpen(true)}
@@ -726,7 +741,7 @@ function McpGateways({
                   <span>Edit visibility</span>
                 </PermissionButton>
                 <PermissionButton
-                  permissions={{ agent: ["delete"] }}
+                  permissions={{ mcpGateway: ["delete"] }}
                   variant="destructive"
                   size="sm"
                   onClick={() => setBulkDeleteOpen(true)}
@@ -734,7 +749,7 @@ function McpGateways({
                   <Trash2 className="h-4 w-4" />
                   <span>Delete</span>
                 </PermissionButton>
-              </BulkActionsBar>
+              </BulkActions>
 
               <TableCardViewContent
                 forceTable={isDeletedView}
@@ -785,13 +800,7 @@ function McpGateways({
                         }
                         description={agent.description}
                         actions={renderGatewayActions(agent)}
-                        selected={!!rowSelection[agent.id]}
-                        onSelectedChange={(selected) => {
-                          const next = { ...rowSelection };
-                          if (selected) next[agent.id] = true;
-                          else delete next[agent.id];
-                          setRowSelection(next);
-                        }}
+                        {...cardSelection(agent)}
                         selectionLabel={`Select ${agent.name}`}
                         footer={
                           <AgentLastUsedFooter lastUsedAt={agent.lastUsedAt} />
@@ -819,8 +828,8 @@ function McpGateways({
                     data={agents}
                     isLoading={showLoading}
                     getRowId={(row) => row.id}
-                    rowSelection={rowSelection}
-                    onRowSelectionChange={setRowSelection}
+                    rowSelection={effectiveRowSelection}
+                    onRowSelectionChange={onRowSelectionChange}
                     hideSelectedCount
                     sorting={sorting}
                     onSortingChange={handleSortingChange}

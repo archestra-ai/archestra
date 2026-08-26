@@ -47,7 +47,7 @@ import {
   TableRowActions,
 } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
-import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -66,6 +66,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
+import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import {
   type PluginListItem,
@@ -312,6 +313,12 @@ function PluginsList() {
       sourceRepo,
       scopeFilter,
     }),
+  });
+  const cardSelection = useBulkCardSelection({
+    rows: filteredPlugins,
+    getRowId: (plugin) => plugin.id,
+    rowSelection: bulkSelection.rowSelection,
+    setRowSelection: bulkSelection.setRowSelection,
   });
   const bulkInstall = resolvePluginInstallSelection(bulkSelection.selected);
   const [installingPlugin, setInstallingPlugin] =
@@ -612,7 +619,7 @@ function PluginsList() {
             <PluginsEmptyState />
           ) : (
             <>
-              <div className="mb-6 flex flex-col gap-2">
+              <div className="mb-2 flex flex-col gap-2">
                 <FilterBar
                   onClearFilters={hasActiveFilters ? clearFilters : undefined}
                   moreFilters={[
@@ -745,7 +752,7 @@ function PluginsList() {
                 <ActiveFilterBadges adminPermission={{ plugin: ["admin"] }} />
               </div>
 
-              <BulkActionsBar
+              <BulkActions
                 count={bulkSelection.selected.length}
                 noun="plugin"
                 onClear={bulkSelection.clearSelection}
@@ -781,7 +788,7 @@ function PluginsList() {
                   <Trash2 className="h-4 w-4" />
                   <span>Delete</span>
                 </PermissionButton>
-              </BulkActionsBar>
+              </BulkActions>
 
               <TableCardViewContent
                 cards={
@@ -809,13 +816,7 @@ function PluginsList() {
                         }
                         description={plugin.description}
                         actions={renderPluginActions(plugin)}
-                        selected={!!bulkSelection.rowSelection[plugin.id]}
-                        onSelectedChange={(selected) => {
-                          const next = { ...bulkSelection.rowSelection };
-                          if (selected) next[plugin.id] = true;
-                          else delete next[plugin.id];
-                          bulkSelection.setRowSelection(next);
-                        }}
+                        {...cardSelection(plugin)}
                         selectionLabel={`Select ${plugin.displayName}`}
                         footer={
                           <div className="flex items-center justify-between gap-3">

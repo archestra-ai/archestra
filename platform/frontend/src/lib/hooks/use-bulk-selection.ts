@@ -1,6 +1,6 @@
 "use client";
 
-import type { RowSelectionState } from "@tanstack/react-table";
+import type { OnChangeFn, RowSelectionState } from "@tanstack/react-table";
 import { useCallback, useState } from "react";
 import type { SelectAllMatching } from "@/components/ui/bulk-actions-bar";
 
@@ -35,12 +35,13 @@ export function useBulkSelection<T>({
   /** Completes "…that {matchDescription}." */
   matchDescription?: string;
 }) {
-  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [storedRowSelection, setStoredRowSelection] =
+    useState<RowSelectionState>({});
   const [pageRowIds, setPageRowIds] = useState<string[]>([]);
   const [escalatedFor, setEscalatedFor] = useState<string | null>(null);
 
   const clearSelection = useCallback(() => {
-    setRowSelection({});
+    setStoredRowSelection({});
     setEscalatedFor(null);
   }, []);
 
@@ -56,10 +57,21 @@ export function useBulkSelection<T>({
 
   const selectable = canSelect ? rows.filter(canSelect) : rows;
   const allMatchingSelected = escalatedFor === filterSignature;
+  const allMatchingRowSelection = allMatchingSelected
+    ? Object.fromEntries(selectable.map((row) => [getId(row), true]))
+    : null;
+  const rowSelection = allMatchingRowSelection ?? storedRowSelection;
+  const setRowSelection: OnChangeFn<RowSelectionState> = (updater) => {
+    setStoredRowSelection((current) => {
+      const base = allMatchingRowSelection ?? current;
+      return typeof updater === "function" ? updater(base) : updater;
+    });
+    setEscalatedFor(null);
+  };
 
   const selected = allMatchingSelected
     ? selectable
-    : selectable.filter((row) => rowSelection[getId(row)]);
+    : selectable.filter((row) => storedRowSelection[getId(row)]);
 
   // Only rows that are both on screen and selectable: a page whose every
   // remaining row is unselectable is still "fully selected".
@@ -86,4 +98,49 @@ export function useBulkSelection<T>({
     selected,
     selectAllMatching,
   };
+}
+
+/**
+ * Gives server-paginated table and card views their effective visible-page
+ * selection while an "all matching" escalation is active. Manual changes are
+ * applied to that materialized page state before clearing the escalation.
+ */
+export function useControlledRowSelection<T>({
+  rowSelection,
+  setRowSelection,
+  rows,
+  getRowId,
+  allMatchingSelected,
+  clearEscalation,
+  canSelect,
+}: {
+  rowSelection: RowSelectionState;
+  setRowSelection: OnChangeFn<RowSelectionState>;
+  rows: readonly T[];
+  getRowId: (row: T) => string;
+  allMatchingSelected: boolean;
+  clearEscalation: () => void;
+  canSelect?: (row: T) => boolean;
+}) {
+  const effectiveRowSelection = allMatchingSelected
+    ? Object.fromEntries(
+        rows
+          .filter((row) => canSelect?.(row) ?? true)
+          .map((row) => [getRowId(row), true]),
+      )
+    : rowSelection;
+
+  const onRowSelectionChange: OnChangeFn<RowSelectionState> = useCallback(
+    (updater) => {
+      const next =
+        typeof updater === "function"
+          ? updater(effectiveRowSelection)
+          : updater;
+      setRowSelection(next);
+      clearEscalation();
+    },
+    [clearEscalation, effectiveRowSelection, setRowSelection],
+  );
+
+  return { effectiveRowSelection, onRowSelectionChange };
 }

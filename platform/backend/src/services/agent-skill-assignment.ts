@@ -6,7 +6,10 @@ import {
   SkillModel,
   SkillTeamModel,
 } from "@/models";
-import { explainAssignmentRejection } from "@/services/agent-skill-resolution";
+import {
+  explainAssignmentRejection,
+  publishesSkills,
+} from "@/services/agent-skill-resolution";
 import {
   type AgentSkillAssignments,
   type AgentSkillAssignmentsResponse,
@@ -17,6 +20,9 @@ import { isForeignKeyConstraintError } from "@/utils/db";
 
 /**
  * Which skills a gateway publishes over `skill://` (SEP-2640).
+ *
+ * Gateways only — see `publishesSkills` in agent-skill-resolution for why an
+ * internal agent and an LLM Proxy are not publishing surfaces.
  *
  * Mirrors tool assignment: an admin either hand-picks skills ("Custom", the
  * `agent_skills` set) or turns on Auto and prunes with exclusions. Both sets
@@ -206,14 +212,15 @@ class AgentSkillAssignmentService {
     if (!agent || agent.organizationId !== params.organizationId) {
       throw new ApiError(404, "Agent not found");
     }
-    // Skills are published over the MCP surface, which an LLM proxy does not
-    // have — the same reason tools and knowledge sources are not assignable
-    // there. Rejected rather than accepted-and-ignored so the admin UI and the
-    // API agree on where the section exists.
-    if (agent.agentType === "llm_proxy") {
+    // Publishing is a gateway surface — see `publishesSkills`. Rejected rather
+    // than accepted-and-ignored so the admin UI and the API agree on where the
+    // section exists: the editor is offered on gateways only, and an agent or
+    // LLM Proxy that accepted a write here would be storing a set nothing
+    // serves and no screen shows.
+    if (!publishesSkills(agent.agentType)) {
       throw new ApiError(
         400,
-        "Skills cannot be published by LLM Proxy agents, which have no MCP surface",
+        "Skills are published by MCP gateways only, which is the surface that serves them to clients",
       );
     }
     return agent;

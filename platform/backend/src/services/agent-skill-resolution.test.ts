@@ -437,6 +437,56 @@ test("a skill in another organization is unreachable by key", async ({
   ).toBeNull();
 });
 
+// Publishing is a gateway surface. The editor was once offered on internal
+// agents too, so an upgraded deployment can hold `agent_skills` rows — and an
+// Auto flag — against a type that no longer has a screen to manage them.
+// Resolution refuses them rather than serving a set nobody can see.
+for (const agentType of ["agent", "llm_proxy"] as const) {
+  test(`a ${agentType} serves nothing, even holding rows an earlier build let it store`, async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id, agentType });
+    const stale = await makeSkill(org.id, { name: "stale-assignment" });
+    await assignSkill({ agentId: agent.id, skillId: stale.id });
+
+    expect(await exposedNames(agent.id)).toEqual([]);
+    expect(
+      await resolveExposedSkill({
+        agentId: agent.id,
+        name: "stale-assignment",
+        authorId: null,
+      }),
+    ).toBeNull();
+  });
+}
+
+test("a non-gateway agent publishes nothing in Auto mode either", async ({
+  makeOrganization,
+  makeAgent,
+}) => {
+  // Auto reads the org catalog rather than an assignment set, so it is the
+  // path a stale `access_all_skills` flag would drag every organization skill
+  // onto.
+  const org = await makeOrganization();
+  const agent = await makeAgent({
+    organizationId: org.id,
+    agentType: "agent",
+    accessAllSkills: true,
+  });
+  await makeSkill(org.id, { name: "org-wide", scope: "org" });
+
+  expect(await exposedNames(agent.id)).toEqual([]);
+  expect(
+    await resolveExposedSkill({
+      agentId: agent.id,
+      name: "org-wide",
+      authorId: null,
+    }),
+  ).toBeNull();
+});
+
 test("assignment rejection explains each unpublishable case", async ({
   makeOrganization,
   makeAgent,

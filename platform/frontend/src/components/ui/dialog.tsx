@@ -197,7 +197,7 @@ function DialogStickyFooter({
       className={cn(
         // Counteract DialogContent padding and keep the footer's inner spacing
         // consistent on all sides.
-        "sticky bottom-0 z-10 mt-4 rounded-b-lg border-t px-4 py-3 shadow-[0_-1px_0_0_hsl(var(--border)),0_-12px_24px_-24px_hsl(var(--foreground)/0.3)] flex flex-col-reverse gap-2 sm:flex-row sm:justify-end",
+        "sticky bottom-0 z-10 mt-4 rounded-b-lg border-t px-4 py-3 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end",
         // Two stacked layers under the content, because a sticky footer has to
         // stay opaque over whatever scrolls beneath it:
         //
@@ -217,6 +217,9 @@ function DialogStickyFooter({
         "before:absolute before:inset-0 before:rounded-b-lg before:bg-background before:content-['']",
         "after:absolute after:inset-0 after:rounded-b-lg after:content-['']",
         "[&>*]:relative [&>*]:z-10",
+        // Soft lift separating the bar from whatever scrolls under it. The
+        // hairline above it is `border-t`, not a shadow layer.
+        "shadow-[0_-12px_24px_-24px] shadow-foreground/30",
         className,
       )}
       {...props}

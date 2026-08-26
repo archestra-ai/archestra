@@ -879,13 +879,18 @@ export class ChatOpsManager {
       ].join("\n");
     }
 
-    // Per-channel instructions the admin wrote for this channel, last in the
-    // framing so they sit closest to the message they govern. Appending them to
-    // systemPrefix — rather than to the agent's system prompt — is what makes
-    // them per-channel: the same agent bound to another channel never sees
-    // them, and an edit applies from the next message with nothing to
+    // Per-channel instructions the admin wrote for this channel. Built here but
+    // spliced in below, immediately ahead of the turn they govern, rather than
+    // appended to systemPrefix: a thread's replayed history goes between the
+    // two, so on systemPrefix the policy ends up separated from the message by
+    // the whole conversation — read as governing the history rather than the
+    // turn being answered. Keeping them off the agent's system prompt is what
+    // makes them per-channel: the same agent bound to another channel never
+    // sees them, and an edit applies from the next message with nothing to
     // invalidate.
-    systemPrefix += buildChannelInstructionsBlock(binding.channelInstructions);
+    const channelInstructions = buildChannelInstructionsBlock(
+      binding.channelInstructions,
+    );
 
     // Server-side sessions persist every turn in the thread's A2A context, so
     // the stored turn stays clean — sender attribution only (needed in groups
@@ -900,11 +905,13 @@ export class ChatOpsManager {
       fullMessage = isGroup
         ? `${message.senderName}: ${cleanedMessageText}`
         : cleanedMessageText;
-      ephemeralExecutionPrefix = systemPrefix;
+      // The A2A manager prepends this straight onto the executed turn's text,
+      // so the instructions are already adjacent to the message here.
+      ephemeralExecutionPrefix = `${systemPrefix}${channelInstructions}`;
     } else {
-      fullMessage = `${systemPrefix}\n\n${cleanedMessageText}`;
+      fullMessage = `${systemPrefix}${channelInstructions}\n\n${cleanedMessageText}`;
       if (contextMessages.length > 0) {
-        fullMessage = `${systemPrefix}\n\nThe earlier messages in this thread are below — this is your shared history in this conversation, so you DO have access to it and remember it. Use it to answer follow-up questions and references to "earlier", "before", or "what I just asked".\n\nConversation so far:\n${contextMessages.join("\n")}\n\nUser: ${cleanedMessageText}`;
+        fullMessage = `${systemPrefix}\n\nThe earlier messages in this thread are below — this is your shared history in this conversation, so you DO have access to it and remember it. Use it to answer follow-up questions and references to "earlier", "before", or "what I just asked".\n\nConversation so far:\n${contextMessages.join("\n")}${channelInstructions}\n\nUser: ${cleanedMessageText}`;
       }
     }
 

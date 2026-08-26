@@ -4938,6 +4938,77 @@ describe("ChatOpsManager per-channel instructions", () => {
     expect(agent?.systemPrompt ?? "").not.toContain(INSTRUCTIONS);
   });
 
+  test("keeps the instructions next to the message they govern once the thread has history", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    // A channel policy separated from the message by the whole conversation is
+    // a policy the model applies to the conversation instead of to the turn it
+    // is answering — it reads the history as the thing being governed and
+    // decides the message itself cannot ask for anything the policy did not
+    // enumerate. Both blocks have to be adjacent, with the instructions last.
+    const executorSpy = mockExecutor();
+    const { senderEmail } = await bindChannel(
+      {
+        makeOrganization,
+        makeUser,
+        makeTeam,
+        makeTeamMember,
+        makeInternalAgent,
+      },
+      {
+        provider: "slack",
+        channelId: "C_INSTR_HIST",
+        workspaceId: "T_INSTR_HIST",
+        channelInstructions: INSTRUCTIONS,
+      },
+    );
+
+    await new ChatOpsManager().processMessage({
+      message: {
+        messageId: "1786399123.000400",
+        channelId: "C_INSTR_HIST",
+        workspaceId: "T_INSTR_HIST",
+        threadId: "1786399123.000300",
+        senderId: "U_INSTR",
+        senderName: "Slack User",
+        text: "and now do the other thing",
+        rawText: "and now do the other thing",
+        timestamp: new Date(),
+        isThreadReply: true,
+        metadata: { channelType: "channel", conversationType: "channel" },
+      },
+      provider: stubProvider({
+        providerId: "slack",
+        getUserEmail: async () => senderEmail,
+        getThreadHistory: async () => [
+          {
+            messageId: "1786399123.000300",
+            senderId: "U_INSTR",
+            senderName: "Slack User",
+            text: "the checkout page is broken",
+            isFromBot: false,
+            timestamp: new Date(),
+          },
+        ],
+      }),
+    });
+
+    const sent = executorSpy.mock.calls[0][0].message;
+    expect(sent).toContain(INSTRUCTIONS);
+    expect(sent).toContain("the checkout page is broken");
+    // The history must not sit between the policy and the message.
+    expect(sent.indexOf("the checkout page is broken")).toBeLessThan(
+      sent.indexOf(INSTRUCTIONS),
+    );
+    expect(sent.indexOf(INSTRUCTIONS)).toBeLessThan(
+      sent.indexOf("and now do the other thing"),
+    );
+  });
+
   test("adds nothing when the channel has no instructions", async ({
     makeOrganization,
     makeUser,

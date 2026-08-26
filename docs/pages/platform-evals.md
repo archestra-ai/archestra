@@ -38,6 +38,8 @@ Press **Run**, pick one or more agents, and optionally label the run — a CI bu
 
 Picking several agents creates one run per agent and groups them into a comparison — one row per agent with status, pass rate, and cost. Use it to try the same suite against different models or prompt variants.
 
+![Run comparison](/docs/automated_screenshots/platform-evals_run-comparison.webp)
+
 A run snapshots the suite's cases when it starts. Editing a case afterwards changes future runs, not the one in flight.
 
 ![Run results](/docs/automated_screenshots/platform-evals_run-results.webp)

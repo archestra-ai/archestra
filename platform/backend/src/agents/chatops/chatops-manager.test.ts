@@ -4129,6 +4129,70 @@ describe("ChatOpsManager Slack conversation context", () => {
     };
   }
 
+  test("names the channel, so an instruction scoped to one can be checked", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    // Agent instructions are routinely written as "in #some-channel, do X".
+    // With only the opaque channel id in the framing, that precondition is
+    // unverifiable and the model guesses — and it guesses wrong confidently,
+    // refusing the channel's own rule on the grounds that it must be somewhere
+    // else. The binding already knows the name; it just has to be said.
+    const executorSpy = vi
+      .spyOn(a2aExecutor, "executeA2AMessage")
+      .mockResolvedValue({
+        text: "Done",
+        messageId: "msg-ctx-name",
+        finishReason: "stop",
+        responseUiMessage: {
+          id: "msg-ctx-name",
+          role: "assistant",
+          parts: [{ type: "text", text: "Done" }],
+        },
+      });
+
+    const user = await makeUser({ email: "slack-ctx-name@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "slack",
+      channelId: "C_CTX_NAME",
+      workspaceId: "T_CTX",
+      channelName: "task-feed",
+      agentId: agent.id,
+    });
+
+    await new ChatOpsManager().processMessage({
+      message: slackMessage({
+        messageId: "1786399123.900100",
+        channelId: "C_CTX_NAME",
+        metadata: {
+          eventType: "message",
+          channelType: "channel",
+          conversationType: "channel",
+        },
+      }),
+      provider: createSlackProvider({
+        getUserEmail: async () => "slack-ctx-name@example.com",
+      }),
+    });
+
+    const sent = executorSpy.mock.calls[0][0].message;
+    expect(sent).toContain("#task-feed");
+    // The id stays — tools are handed a channel+ts pair and need it.
+    expect(sent).toContain("C_CTX_NAME");
+  });
+
   test("hands the model the triggering message ts, not only the thread root", async ({
     makeUser,
     makeOrganization,
@@ -4936,6 +5000,77 @@ describe("ChatOpsManager per-channel instructions", () => {
     // agent bound to another channel would inherit this channel's policy.
     const agent = await AgentModel.findById(agentId);
     expect(agent?.systemPrompt ?? "").not.toContain(INSTRUCTIONS);
+  });
+
+  test("keeps the instructions next to the message they govern once the thread has history", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    // A channel policy separated from the message by the whole conversation is
+    // a policy the model applies to the conversation instead of to the turn it
+    // is answering — it reads the history as the thing being governed and
+    // decides the message itself cannot ask for anything the policy did not
+    // enumerate. Both blocks have to be adjacent, with the instructions last.
+    const executorSpy = mockExecutor();
+    const { senderEmail } = await bindChannel(
+      {
+        makeOrganization,
+        makeUser,
+        makeTeam,
+        makeTeamMember,
+        makeInternalAgent,
+      },
+      {
+        provider: "slack",
+        channelId: "C_INSTR_HIST",
+        workspaceId: "T_INSTR_HIST",
+        channelInstructions: INSTRUCTIONS,
+      },
+    );
+
+    await new ChatOpsManager().processMessage({
+      message: {
+        messageId: "1786399123.000400",
+        channelId: "C_INSTR_HIST",
+        workspaceId: "T_INSTR_HIST",
+        threadId: "1786399123.000300",
+        senderId: "U_INSTR",
+        senderName: "Slack User",
+        text: "and now do the other thing",
+        rawText: "and now do the other thing",
+        timestamp: new Date(),
+        isThreadReply: true,
+        metadata: { channelType: "channel", conversationType: "channel" },
+      },
+      provider: stubProvider({
+        providerId: "slack",
+        getUserEmail: async () => senderEmail,
+        getThreadHistory: async () => [
+          {
+            messageId: "1786399123.000300",
+            senderId: "U_INSTR",
+            senderName: "Slack User",
+            text: "the checkout page is broken",
+            isFromBot: false,
+            timestamp: new Date(),
+          },
+        ],
+      }),
+    });
+
+    const sent = executorSpy.mock.calls[0][0].message;
+    expect(sent).toContain(INSTRUCTIONS);
+    expect(sent).toContain("the checkout page is broken");
+    // The history must not sit between the policy and the message.
+    expect(sent.indexOf("the checkout page is broken")).toBeLessThan(
+      sent.indexOf(INSTRUCTIONS),
+    );
+    expect(sent.indexOf(INSTRUCTIONS)).toBeLessThan(
+      sent.indexOf("and now do the other thing"),
+    );
   });
 
   test("adds nothing when the channel has no instructions", async ({

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { cn } from "@/lib/utils";
 
 const PLACEHOLDER =
@@ -16,6 +17,11 @@ const PLACEHOLDER =
  * The instructions are handed to the agent with every message this channel
  * routes to it, on top of the agent's own instructions, so the same agent can
  * behave differently per channel.
+ *
+ * The copy says they add rather than restrict, because the box invites the
+ * opposite reading: someone writing a narrow rule here ("every message is a
+ * task") means it as one more thing the agent does, not as the only thing it
+ * is allowed to do in the channel.
  */
 export function ChannelInstructionsDialog({
   open,
@@ -58,15 +64,18 @@ export function ChannelInstructionsDialog({
           <span>
             Delivered to <strong>{agentName}</strong> with every message in this
             channel, on top of the agent&apos;s own instructions. Where the two
-            conflict, these win — so one agent can behave differently per
-            channel.
+            directly conflict, these win — so one agent can behave differently
+            per channel. They add to what the agent does rather than limiting
+            it: anything they don&apos;t mention, it still handles as usual.
           </span>
         ) : (
           <span>
             Delivered to this channel&apos;s agent with every message, on top of
-            the agent&apos;s own instructions. Where the two conflict, these win
-            — so one agent can behave differently per channel. Assign an agent
-            to this channel for them to take effect.
+            the agent&apos;s own instructions. Where the two directly conflict,
+            these win — so one agent can behave differently per channel. They
+            add to what the agent does rather than limiting it: anything they
+            don&apos;t mention, it still handles as usual. Assign an agent to
+            this channel for them to take effect.
           </span>
         )
       }
@@ -76,13 +85,11 @@ export function ChannelInstructionsDialog({
       }}
       footer={
         <>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </Button>
+          {/* DialogCancelButton, not a plain Button calling onOpenChange(false):
+              that closed the dialog directly and skipped the unsaved-changes
+              guard, so Cancel threw away a dirty edit without asking while Esc,
+              the backdrop and the X all confirmed first. */}
+          <DialogCancelButton>Cancel</DialogCancelButton>
           <Button type="submit" disabled={isSaving || overLimit}>
             <span>Save</span>
           </Button>

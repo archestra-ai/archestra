@@ -796,7 +796,20 @@ export class ChatOpsManager {
     // the "AgentName >" prefix is stripped from what the LLM sees
     const providerLabel = CHATOPS_PROVIDER_LABELS[provider.providerId];
     const threadRootTs = message.threadId ?? message.messageId;
-    let systemPrefix = `(${providerLabel} conversation, thread id: ${threadRootTs})`;
+    // The channel's NAME, not just its id. Agent instructions are routinely
+    // scoped by name — "in #task-feed, hand the task to the Crab Env
+    // subagent" — and the framing used to carry only the opaque channel id, so
+    // a rule like that was unverifiable: the model had to guess which channel
+    // it was standing in. It guesses wrong, and confidently, telling people in
+    // #task-feed to take their request to #task-feed. The binding already
+    // carries the name (it is what the channels table renders); it just never
+    // reached the model.
+    const channelLabel = binding.isDm
+      ? null
+      : (binding.channelName?.trim() ?? null) || null;
+    let systemPrefix = channelLabel
+      ? `(${providerLabel} conversation in "${channelLabel}", thread id: ${threadRootTs})`
+      : `(${providerLabel} conversation, thread id: ${threadRootTs})`;
     if (provider.providerId === "slack") {
       // Link to the message that actually triggered this run rather than the
       // thread root: Slack builds a reply's permalink with ?thread_ts=<root>,
@@ -814,6 +827,13 @@ export class ChatOpsManager {
       // then anchored to the thread opener instead of the triggering message.
       const contextLines = [
         `Slack conversation context:`,
+        // Name first: it is the one line here a human-written instruction is
+        // likely to key on, and the only one the model cannot derive.
+        ...(channelLabel
+          ? [`- Channel: #${channelLabel}`]
+          : binding.isDm
+            ? [`- Channel: a direct message`]
+            : []),
         `- Channel ID: ${message.channelId}`,
       ];
       if (message.messageId) {
@@ -879,13 +899,18 @@ export class ChatOpsManager {
       ].join("\n");
     }
 
-    // Per-channel instructions the admin wrote for this channel, last in the
-    // framing so they sit closest to the message they govern. Appending them to
-    // systemPrefix — rather than to the agent's system prompt — is what makes
-    // them per-channel: the same agent bound to another channel never sees
-    // them, and an edit applies from the next message with nothing to
+    // Per-channel instructions the admin wrote for this channel. Built here but
+    // spliced in below, immediately ahead of the turn they govern, rather than
+    // appended to systemPrefix: a thread's replayed history goes between the
+    // two, so on systemPrefix the policy ends up separated from the message by
+    // the whole conversation — read as governing the history rather than the
+    // turn being answered. Keeping them off the agent's system prompt is what
+    // makes them per-channel: the same agent bound to another channel never
+    // sees them, and an edit applies from the next message with nothing to
     // invalidate.
-    systemPrefix += buildChannelInstructionsBlock(binding.channelInstructions);
+    const channelInstructions = buildChannelInstructionsBlock(
+      binding.channelInstructions,
+    );
 
     // Server-side sessions persist every turn in the thread's A2A context, so
     // the stored turn stays clean — sender attribution only (needed in groups
@@ -900,11 +925,13 @@ export class ChatOpsManager {
       fullMessage = isGroup
         ? `${message.senderName}: ${cleanedMessageText}`
         : cleanedMessageText;
-      ephemeralExecutionPrefix = systemPrefix;
+      // The A2A manager prepends this straight onto the executed turn's text,
+      // so the instructions are already adjacent to the message here.
+      ephemeralExecutionPrefix = `${systemPrefix}${channelInstructions}`;
     } else {
-      fullMessage = `${systemPrefix}\n\n${cleanedMessageText}`;
+      fullMessage = `${systemPrefix}${channelInstructions}\n\n${cleanedMessageText}`;
       if (contextMessages.length > 0) {
-        fullMessage = `${systemPrefix}\n\nThe earlier messages in this thread are below — this is your shared history in this conversation, so you DO have access to it and remember it. Use it to answer follow-up questions and references to "earlier", "before", or "what I just asked".\n\nConversation so far:\n${contextMessages.join("\n")}\n\nUser: ${cleanedMessageText}`;
+        fullMessage = `${systemPrefix}\n\nThe earlier messages in this thread are below — this is your shared history in this conversation, so you DO have access to it and remember it. Use it to answer follow-up questions and references to "earlier", "before", or "what I just asked".\n\nConversation so far:\n${contextMessages.join("\n")}${channelInstructions}\n\nUser: ${cleanedMessageText}`;
       }
     }
 

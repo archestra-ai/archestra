@@ -17,12 +17,11 @@ import type {
   MissingCredentialBehavior,
   ToolExposureMode,
 } from "@/types/agent";
-import type { RunnerConfig } from "@/types/runner";
 import environmentsTable from "./environment";
 import identityProvidersTable from "./identity-provider";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
 import modelsTable from "./model";
-import secretsTable from "./secret";
+import runnersTable from "./runner";
 import { softDeletablePgTable } from "./soft-deletable-table";
 import usersTable from "./user";
 
@@ -128,21 +127,14 @@ const agentsTable = softDeletablePgTable(
     ),
 
     /**
-     * Runner configuration: the image a long-running session for this agent
-     * starts from, how it is steered, and the credentials it declares. Null =
-     * the agent cannot be run as a Runner.
+     * Runner this agent's long-running work executes on. Null = the agent has
+     * no long-running mode; its work runs in-process like every other agent.
      *
-     * Credential declarations name environment variables and their scope.
-     * `shared` values are resolved from `runnerSecretId`; `per_user` values
-     * come from the invoking user's own `user_credentials`, which is what lets
-     * an agent act with an individual's upstream identity.
+     * A reference rather than an inline spec: one container definition is
+     * shared by every agent that should run the same way, and changing it does
+     * not mean editing each of them.
      */
-    runnerConfig: jsonb("runner_config").$type<RunnerConfig | null>(),
-    /**
-     * Secret bag holding this agent's `shared`-scope runner credentials, keyed
-     * by declaration key. Same storage pattern as an MCP server's env secret.
-     */
-    runnerSecretId: uuid("runner_secret_id").references(() => secretsTable.id, {
+    runnerId: uuid("runner_id").references(() => runnersTable.id, {
       onDelete: "set null",
     }),
 

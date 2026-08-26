@@ -179,7 +179,8 @@ export {
 } from "./project";
 export { default as projectPinsTable } from "./project-pin";
 export { default as runnersTable } from "./runner";
-export { default as runnerEventsTable } from "./runner-event";
+export { default as runnerLabelsTable } from "./runner-label";
+export { default as runnerSessionsTable } from "./runner-session";
 export { default as scheduleTriggersTable } from "./schedule-trigger";
 export { default as scheduleTriggerRunsTable } from "./schedule-trigger-run";
 export { default as secretsTable } from "./secret";

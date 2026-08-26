@@ -6,36 +6,6 @@ import {
 import { z } from "zod";
 import { schema } from "@/database";
 
-// ===================== Runner lifecycle =====================
-
-/**
- * `pending` — row created, nothing provisioned yet.
- * `provisioning` — Kubernetes objects being created; pod not ready.
- * `running` — pod ready, agent process live.
- * `stopping` — teardown of a live runner in flight.
- * `stopped` — workload removed on purpose (TTL, idle, or explicit stop).
- * `failed` — provisioning or the agent process failed; `statusReason` explains.
- *
- * There is deliberately no scale-to-zero/hibernated state: a runner holds
- * in-memory session state that scaling down would destroy, so stopping is
- * always an explicit, user-visible outcome rather than a silent optimization.
- */
-export const RunnerStateSchema = z.enum([
-  "pending",
-  "provisioning",
-  "running",
-  "stopping",
-  "stopped",
-  "failed",
-]);
-export type RunnerState = z.infer<typeof RunnerStateSchema>;
-
-/** States in which no Kubernetes workload should exist. */
-export const RUNNER_TERMINAL_STATES: readonly RunnerState[] = [
-  "stopped",
-  "failed",
-];
-
 /**
  * How a steer message reaches the running process.
  *
@@ -46,14 +16,6 @@ export const RUNNER_TERMINAL_STATES: readonly RunnerState[] = [
  */
 export const RunnerSteerModeSchema = z.enum(["pipe", "tmux_keys"]);
 export type RunnerSteerMode = z.infer<typeof RunnerSteerModeSchema>;
-
-export const RunnerEventKindSchema = z.enum([
-  "state_changed",
-  "steer",
-  "attached",
-  "system",
-]);
-export type RunnerEventKind = z.infer<typeof RunnerEventKindSchema>;
 
 export const RunnerResourcesSchema = z.object({
   cpuRequest: z.string().optional(),
@@ -122,60 +84,35 @@ export const RUNNER_CREDENTIALS_REQUIRED_CODE = "RUNNER_CREDENTIALS_REQUIRED";
 
 // ===================== Agent runner configuration =====================
 
-/**
- * Fields carry no parse-time defaults on purpose: the column stores exactly
- * what an administrator configured, and the runtime applies deployment-level
- * fallbacks at spawn. A default applied here would make a parsed config differ
- * from the stored one.
- */
-export const RunnerConfigSchema = z.object({
-  /** Container image; omitted uses the platform default runner-agent image. */
-  image: z.string().min(1).max(512).optional(),
-  command: z.array(z.string()).optional(),
-  steerMode: RunnerSteerModeSchema.optional(),
-  /** Requires an admin to opt in; needed only by images running their own container runtime. */
-  privileged: z.boolean().optional(),
-  resources: RunnerResourcesSchema.optional(),
-  ttlHours: z
-    .number()
-    .int()
-    .positive()
-    .max(24 * 90)
-    .optional(),
-  idleTimeoutMinutes: z
-    .number()
-    .int()
-    .positive()
-    .max(60 * 24 * 30)
-    .optional(),
-  credentials: z.array(RunnerCredentialDeclarationSchema).optional(),
-  /** Non-secret environment variables passed through to the pod verbatim. */
-  environment: z
-    .array(z.object({ key: z.string().min(1), value: z.string() }))
-    .optional(),
+export const RunnerEnvironmentEntrySchema = z.object({
+  key: z.string().min(1),
+  value: z.string(),
 });
-export type RunnerConfig = z.infer<typeof RunnerConfigSchema>;
+export type RunnerEnvironmentEntry = z.infer<
+  typeof RunnerEnvironmentEntrySchema
+>;
 
 // ===================== Database-derived types =====================
 
 /**
- * drizzle-zod widens `$type<>` columns to plain strings, so each one is
- * restated here. Insert refinements additionally re-apply the optionality the
- * refinement would otherwise drop: a column with a database default, or a
- * nullable one, must stay omittable on insert.
+ * Column refinements: drizzle-zod widens `$type<>` columns to plain strings,
+ * and the insert side additionally restores the optionality a refinement drops
+ * for a column with a default or a nullable one.
  */
 const runnerSelectRefinements = {
-  state: RunnerStateSchema,
   steerMode: RunnerSteerModeSchema,
   resources: RunnerResourcesSchema.nullable(),
   command: z.array(z.string()).nullable(),
+  environment: z.array(RunnerEnvironmentEntrySchema).nullable(),
+  credentials: z.array(RunnerCredentialDeclarationSchema).nullable(),
 } as const;
 
 const runnerInsertRefinements = {
-  state: RunnerStateSchema.optional(),
   steerMode: RunnerSteerModeSchema.optional(),
   resources: RunnerResourcesSchema.nullish(),
   command: z.array(z.string()).nullish(),
+  environment: z.array(RunnerEnvironmentEntrySchema).nullish(),
+  credentials: z.array(RunnerCredentialDeclarationSchema).nullish(),
 } as const;
 
 export const SelectRunnerSchema = createSelectSchema(
@@ -185,50 +122,22 @@ export const SelectRunnerSchema = createSelectSchema(
 export const InsertRunnerSchema = createInsertSchema(
   schema.runnersTable,
   runnerInsertRefinements,
-).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-  nextEventSequence: true,
-});
-export const UpdateRunnerSchema = createUpdateSchema(schema.runnersTable, {
-  state: RunnerStateSchema.optional(),
-}).pick({
-  name: true,
-  state: true,
-  statusReason: true,
-  deploymentName: true,
-  namespace: true,
-  secretName: true,
-  virtualApiKeyId: true,
-  lastActivityAt: true,
-  startedAt: true,
-  stoppedAt: true,
-});
+).omit({ id: true, createdAt: true, updatedAt: true });
+export const UpdateRunnerSchema = createUpdateSchema(
+  schema.runnersTable,
+  runnerInsertRefinements,
+).omit({ id: true, organizationId: true, createdAt: true, updatedAt: true });
 
 export type Runner = z.infer<typeof SelectRunnerSchema>;
 export type InsertRunner = z.infer<typeof InsertRunnerSchema>;
 export type UpdateRunner = z.infer<typeof UpdateRunnerSchema>;
 
-export const SelectRunnerEventSchema = createSelectSchema(
-  schema.runnerEventsTable,
-  {
-    kind: RunnerEventKindSchema,
-    payload: z.record(z.string(), z.unknown()).nullable(),
-  },
+export const SelectRunnerSessionSchema = createSelectSchema(
+  schema.runnerSessionsTable,
 );
-export const InsertRunnerEventSchema = createInsertSchema(
-  schema.runnerEventsTable,
-  {
-    kind: RunnerEventKindSchema,
-    payload: z.record(z.string(), z.unknown()).nullish(),
-  },
-).omit({ id: true, createdAt: true, sequence: true });
+export const InsertRunnerSessionSchema = createInsertSchema(
+  schema.runnerSessionsTable,
+).omit({ id: true, startedAt: true });
 
-export type RunnerEvent = z.infer<typeof SelectRunnerEventSchema>;
-export type InsertRunnerEvent = z.infer<typeof InsertRunnerEventSchema>;
-
-export const SelectUserCredentialSchema = createSelectSchema(
-  schema.userCredentialsTable,
-);
-export type UserCredential = z.infer<typeof SelectUserCredentialSchema>;
+export type RunnerSession = z.infer<typeof SelectRunnerSessionSchema>;
+export type InsertRunnerSession = z.infer<typeof InsertRunnerSessionSchema>;

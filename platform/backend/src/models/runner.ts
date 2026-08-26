@@ -1,18 +1,13 @@
-import {
-  and,
-  asc,
-  desc,
-  eq,
-  inArray,
-  isNotNull,
-  lt,
-  or,
-  sql,
-} from "drizzle-orm";
+import { and, asc, count, eq, ilike, inArray, isNull, or } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { InsertRunner, Runner, RunnerState, UpdateRunner } from "@/types";
-import { RUNNER_TERMINAL_STATES } from "@/types";
+import type { InsertRunner, Runner, UpdateRunner } from "@/types";
 
+/**
+ * Runner definitions: the container an agent's long-running work executes in.
+ *
+ * A definition, not a session — sessions are A2A tasks, and the pod carrying
+ * one is recorded in `runner_sessions`.
+ */
 class RunnerModel {
   static async create(runner: InsertRunner): Promise<Runner> {
     const [created] = await db
@@ -22,11 +17,6 @@ class RunnerModel {
     return created;
   }
 
-  /**
-   * Organization-scoped read. Callers never look a runner up by bare id: a
-   * runner grants shell access to a pod holding its creator's credentials, so
-   * every lookup carries the tenant boundary.
-   */
   static async findById(
     id: string,
     organizationId: string,
@@ -46,29 +36,55 @@ class RunnerModel {
 
   static async list(params: {
     organizationId: string;
-    agentId?: string;
-    createdByUserId?: string;
-    states?: RunnerState[];
-  }): Promise<Runner[]> {
+    search?: string;
+    environmentId?: string | null;
+    /** Label filter as key -> accepted values; a runner must match every key. */
+    labels?: Record<string, string[]>;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ runners: Runner[]; total: number }> {
     const filters = [
       eq(schema.runnersTable.organizationId, params.organizationId),
     ];
-    if (params.agentId) {
-      filters.push(eq(schema.runnersTable.agentId, params.agentId));
+    if (params.search) {
+      const term = `%${params.search}%`;
+      const nameOrDescription = or(
+        ilike(schema.runnersTable.name, term),
+        ilike(schema.runnersTable.description, term),
+      );
+      if (nameOrDescription) filters.push(nameOrDescription);
     }
-    if (params.createdByUserId) {
+    // `undefined` means no filter at all; `null` means the Default environment,
+    // which is stored as a NULL column rather than a row of its own.
+    if (params.environmentId !== undefined) {
       filters.push(
-        eq(schema.runnersTable.createdByUserId, params.createdByUserId),
+        params.environmentId === null
+          ? isNull(schema.runnersTable.environmentId)
+          : eq(schema.runnersTable.environmentId, params.environmentId),
       );
     }
-    if (params.states?.length) {
-      filters.push(inArray(schema.runnersTable.state, params.states));
+
+    const matchingIds = await RunnerModel.idsMatchingLabels(params.labels);
+    if (matchingIds !== null) {
+      if (matchingIds.length === 0) return { runners: [], total: 0 };
+      filters.push(inArray(schema.runnersTable.id, matchingIds));
     }
-    return db
+
+    const where = and(...filters);
+    const [{ total }] = await db
+      .select({ total: count() })
+      .from(schema.runnersTable)
+      .where(where);
+
+    const runners = await db
       .select()
       .from(schema.runnersTable)
-      .where(and(...filters))
-      .orderBy(desc(schema.runnersTable.createdAt));
+      .where(where)
+      .orderBy(asc(schema.runnersTable.name))
+      .limit(params.limit ?? 50)
+      .offset(params.offset ?? 0);
+
+    return { runners, total };
   }
 
   static async update(
@@ -89,129 +105,6 @@ class RunnerModel {
     return updated ?? null;
   }
 
-  /**
-   * Move a runner to a new state, optionally only from an expected current
-   * state. The compare-and-set form is what keeps two reconciler passes (or a
-   * reconciler racing a user's stop) from both driving a transition — the
-   * loser gets null back and re-reads instead of clobbering.
-   */
-  static async transition(params: {
-    id: string;
-    organizationId: string;
-    to: RunnerState;
-    from?: RunnerState[];
-    statusReason?: string | null;
-  }): Promise<Runner | null> {
-    const filters = [
-      eq(schema.runnersTable.id, params.id),
-      eq(schema.runnersTable.organizationId, params.organizationId),
-    ];
-    if (params.from?.length) {
-      filters.push(inArray(schema.runnersTable.state, params.from));
-    }
-    const values: Record<string, unknown> = {
-      state: params.to,
-      updatedAt: new Date(),
-    };
-    if (params.statusReason !== undefined) {
-      values.statusReason = params.statusReason;
-    }
-    if (params.to === "running") {
-      values.startedAt = new Date();
-      values.lastActivityAt = new Date();
-    }
-    if (RUNNER_TERMINAL_STATES.includes(params.to)) {
-      values.stoppedAt = new Date();
-    }
-    const [updated] = await db
-      .update(schema.runnersTable)
-      .set(values)
-      .where(and(...filters))
-      .returning();
-    return updated ?? null;
-  }
-
-  /** Push the idle clock forward; called on steer, attach and heartbeat. */
-  static async touchActivity(id: string): Promise<void> {
-    await db
-      .update(schema.runnersTable)
-      .set({ lastActivityAt: new Date() })
-      .where(eq(schema.runnersTable.id, id));
-  }
-
-  /**
-   * Runners that should currently have a workload, across every organization.
-   * Used by the runtime manager's adopt pass on boot and by the reaper.
-   */
-  static async listLive(): Promise<Runner[]> {
-    return db
-      .select()
-      .from(schema.runnersTable)
-      .where(
-        inArray(schema.runnersTable.state, [
-          "pending",
-          "provisioning",
-          "running",
-          "stopping",
-        ]),
-      )
-      .orderBy(asc(schema.runnersTable.createdAt));
-  }
-
-  /**
-   * Live runners whose TTL has elapsed, or which have been idle past their
-   * timeout. Both clocks are evaluated in SQL so a backend restart cannot
-   * reset them.
-   */
-  static async listExpired(now: Date): Promise<Runner[]> {
-    return db
-      .select()
-      .from(schema.runnersTable)
-      .where(
-        and(
-          inArray(schema.runnersTable.state, ["running", "provisioning"]),
-          or(
-            and(
-              isNotNull(schema.runnersTable.ttlHours),
-              lt(
-                sql`${schema.runnersTable.createdAt} + make_interval(hours => ${schema.runnersTable.ttlHours})`,
-                now,
-              ),
-            ),
-            and(
-              isNotNull(schema.runnersTable.idleTimeoutMinutes),
-              isNotNull(schema.runnersTable.lastActivityAt),
-              lt(
-                sql`${schema.runnersTable.lastActivityAt} + make_interval(mins => ${schema.runnersTable.idleTimeoutMinutes})`,
-                now,
-              ),
-            ),
-          ),
-        ),
-      );
-  }
-
-  /** Deployment names of every runner still expected to own a workload. */
-  static async listLiveDeploymentNames(): Promise<string[]> {
-    const rows = await db
-      .select({ deploymentName: schema.runnersTable.deploymentName })
-      .from(schema.runnersTable)
-      .where(
-        and(
-          isNotNull(schema.runnersTable.deploymentName),
-          inArray(schema.runnersTable.state, [
-            "pending",
-            "provisioning",
-            "running",
-            "stopping",
-          ]),
-        ),
-      );
-    return rows
-      .map((row) => row.deploymentName)
-      .filter((name): name is string => name !== null);
-  }
-
   static async delete(id: string, organizationId: string): Promise<boolean> {
     const deleted = await db
       .delete(schema.runnersTable)
@@ -223,6 +116,57 @@ class RunnerModel {
       )
       .returning({ id: schema.runnersTable.id });
     return deleted.length > 0;
+  }
+
+  /** Audit hook snapshot; see `AuditableModel`. */
+  static async findByIdForAudit(
+    id: string,
+    orgId: string,
+  ): Promise<Record<string, unknown> | null> {
+    return RunnerModel.findById(id, orgId);
+  }
+
+  // ===================== internals =====================
+
+  /**
+   * Runner ids carrying every requested label key with one of its accepted
+   * values. Null means no label filter was asked for, which is different from
+   * a filter that matched nothing.
+   */
+  private static async idsMatchingLabels(
+    labels: Record<string, string[]> | undefined,
+  ): Promise<string[] | null> {
+    const entries = Object.entries(labels ?? {}).filter(
+      ([, values]) => values.length > 0,
+    );
+    if (entries.length === 0) return null;
+
+    let matching: string[] | null = null;
+    for (const [key, values] of entries) {
+      const rows = await db
+        .select({ runnerId: schema.runnerLabelsTable.runnerId })
+        .from(schema.runnerLabelsTable)
+        .innerJoin(
+          schema.labelKeysTable,
+          eq(schema.labelKeysTable.id, schema.runnerLabelsTable.labelKeyId),
+        )
+        .innerJoin(
+          schema.labelValuesTable,
+          eq(schema.labelValuesTable.id, schema.runnerLabelsTable.labelValueId),
+        )
+        .where(
+          and(
+            eq(schema.labelKeysTable.key, key),
+            inArray(schema.labelValuesTable.value, values),
+          ),
+        );
+      const ids = rows.map((row) => row.runnerId);
+      // Keys are ANDed: a runner has to satisfy every one of them.
+      matching =
+        matching === null ? ids : matching.filter((id) => ids.includes(id));
+      if (matching.length === 0) return [];
+    }
+    return matching;
   }
 }
 

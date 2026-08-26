@@ -15,6 +15,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { QueryLoadError } from "@/components/query-load-error";
 import {
   AssignmentCombobox,
   type AssignmentComboboxItem,
@@ -169,7 +170,11 @@ export const AgentToolExclusionsEditor = forwardRef<
   // per-catalog fan-out it used to issue (one request per catalog item, each
   // carrying full tool rows). Descriptions and groups are only needed by an
   // OPEN pill checklist, which fetches its own server's tools lazily.
-  const { data: allCatalogTools } = useAllCatalogTools({
+  const {
+    data: allCatalogTools,
+    isLoadingError: catalogToolsFailed,
+    refetch: refetchAllCatalogTools,
+  } = useAllCatalogTools({
     enabled: active,
   });
 
@@ -409,6 +414,26 @@ export const AgentToolExclusionsEditor = forwardRef<
     () => catalogItems.filter((catalog) => entries.has(catalog.id)),
     [catalogItems, entries],
   );
+
+  // The batched tool list is the one request this editor cannot initialize
+  // without, and it deliberately does NOT fall back to an empty list: doing so
+  // would resolve every saved exclusion to `unresolvedToolIds` and render as
+  // "nothing is disabled here". That makes a failed request indistinguishable
+  // from a slow one at the spinner below, so surface it with a retry rather
+  // than leaving the step stuck on "Loading exclusions..." forever.
+  if (catalogToolsFailed) {
+    return (
+      <QueryLoadError
+        className="py-6"
+        title="Couldn't load this gateway's tools"
+        description="The list of tools that can be disabled failed to load, so the tools already disabled here can't be shown yet."
+        onRetry={() => {
+          void refetchAllCatalogTools();
+        }}
+        retryTestId="retry-exclusions-tools"
+      />
+    );
+  }
 
   if (!initialized) {
     return (

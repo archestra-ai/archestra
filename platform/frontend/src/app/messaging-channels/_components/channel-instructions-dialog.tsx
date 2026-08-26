@@ -16,6 +16,11 @@ const PLACEHOLDER =
  * The instructions are handed to the agent with every message this channel
  * routes to it, on top of the agent's own instructions, so the same agent can
  * behave differently per channel.
+ *
+ * The copy says they add rather than restrict, because the box invites the
+ * opposite reading: someone writing a narrow rule here ("every message is a
+ * task") means it as one more thing the agent does, not as the only thing it
+ * is allowed to do in the channel.
  */
 export function ChannelInstructionsDialog({
   open,
@@ -58,15 +63,18 @@ export function ChannelInstructionsDialog({
           <span>
             Delivered to <strong>{agentName}</strong> with every message in this
             channel, on top of the agent&apos;s own instructions. Where the two
-            conflict, these win — so one agent can behave differently per
-            channel.
+            directly conflict, these win — so one agent can behave differently
+            per channel. They add to what the agent does rather than limiting
+            it: anything they don&apos;t mention, it still handles as usual.
           </span>
         ) : (
           <span>
             Delivered to this channel&apos;s agent with every message, on top of
-            the agent&apos;s own instructions. Where the two conflict, these win
-            — so one agent can behave differently per channel. Assign an agent
-            to this channel for them to take effect.
+            the agent&apos;s own instructions. Where the two directly conflict,
+            these win — so one agent can behave differently per channel. They
+            add to what the agent does rather than limiting it: anything they
+            don&apos;t mention, it still handles as usual. Assign an agent to
+            this channel for them to take effect.
           </span>
         )
       }

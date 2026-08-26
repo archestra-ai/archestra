@@ -1,16 +1,23 @@
 "use client";
 
 import { formatDistanceToNow } from "date-fns";
+import { Plus } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useFeature } from "@/lib/config/config.query";
 import { useRunners } from "@/lib/runners.query";
 import { RunnerStateBadge } from "./_parts/runner-state-badge";
+import { StartRunnerDialog } from "./_parts/start-runner-dialog";
 
 export function RunnersPageClient() {
   const runnersEnabled = useFeature("runners");
   const { data: runners, isLoading } = useRunners();
+  const [startOpen, setStartOpen] = useState(false);
+  const router = useRouter();
 
   // Three-state flag: render nothing while it is still loading, or the page
   // flashes a disabled notice at every reader on the way in.
@@ -29,20 +36,32 @@ export function RunnersPageClient() {
 
   return (
     <div className="p-6 flex flex-col gap-4">
-      <div>
-        <h1 className="text-2xl font-semibold">Runners</h1>
-        <p className="text-muted-foreground mt-1 max-w-prose">
-          Long-running agent sessions, each in its own container. Attach to one
-          to watch it work, or send it a message to change what it is doing.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">Runners</h1>
+          <p className="text-muted-foreground mt-1 max-w-prose">
+            Long-running agent sessions, each in its own container. Attach to
+            one to watch it work, or send it a message to change what it is
+            doing.
+          </p>
+        </div>
+        <Button onClick={() => setStartOpen(true)}>
+          <Plus className="h-4 w-4" /> Start a runner
+        </Button>
       </div>
+
+      <StartRunnerDialog
+        open={startOpen}
+        onOpenChange={setStartOpen}
+        onStarted={(runnerId) => router.push(`/runners/${runnerId}`)}
+      />
 
       {isLoading && <p className="text-muted-foreground">Loading...</p>}
 
       {!isLoading && (runners?.length ?? 0) === 0 && (
         <Card className="p-6 text-muted-foreground">
-          No runners yet. An agent with runner configuration can start one — ask
-          it to, or use the API.
+          No runners yet. Start one from an agent that has runner configuration,
+          or ask an agent to start one for you.
         </Card>
       )}
 

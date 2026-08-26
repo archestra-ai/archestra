@@ -129,7 +129,7 @@ describe("chat composer typing performance", () => {
         onModelChange={vi.fn()}
         agentId="agent-1"
         conversationId="conv-1"
-        isPlaywrightSetupVisible={false}
+        isPlaywrightSetupRequired={false}
       />,
     );
 

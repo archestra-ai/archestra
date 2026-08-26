@@ -202,8 +202,13 @@ export interface ArchestraPromptInputProps
   isContextCompacting?: boolean;
   /** Manually compact the active conversation */
   onCompactConversation?: () => Promise<void> | void;
-  /** Whether Playwright setup overlay is visible (for showing Playwright install dialog) */
-  isPlaywrightSetupVisible: boolean;
+  /**
+   * The current user is known to need a browser instance before this agent's
+   * tools can run. It replaces the message input with the install card, so it
+   * must mean *known*, never "still checking" — a check that is merely in
+   * flight has to leave the input alone (see `sendDisabled` for that state).
+   */
+  isPlaywrightSetupRequired: boolean;
   /**
    * One-shot composer prefill (e.g. a skill slash command from a deep link).
    * Applied to the controller-owned input, then acknowledged via
@@ -260,7 +265,7 @@ const PromptInputContent = ({
   subscriptionConnectRequired = false,
   isContextCompacting = false,
   onCompactConversation,
-  isPlaywrightSetupVisible = false,
+  isPlaywrightSetupRequired = false,
   selectorAgentId,
   onAgentChange,
   modelSource,
@@ -1022,7 +1027,7 @@ const PromptInputContent = ({
           {(attachment) => <PromptInputAttachment data={attachment} />}
         </PromptInputAttachments>
         <PromptInputBody>
-          {isPlaywrightSetupVisible && conversationId ? (
+          {isPlaywrightSetupRequired && conversationId ? (
             <PlaywrightInstallInline
               agentId={agentId ?? undefined}
               conversationId={conversationId}
@@ -1177,7 +1182,7 @@ const ArchestraPromptInput = ({
   subscriptionConnectRequired,
   isContextCompacting,
   onCompactConversation,
-  isPlaywrightSetupVisible,
+  isPlaywrightSetupRequired,
   selectorAgentId,
   onAgentChange,
   modelSource,
@@ -1292,7 +1297,7 @@ const ArchestraPromptInput = ({
           subscriptionProvider={subscriptionProvider}
           isContextCompacting={isContextCompacting}
           onCompactConversation={onCompactConversation}
-          isPlaywrightSetupVisible={isPlaywrightSetupVisible}
+          isPlaywrightSetupRequired={isPlaywrightSetupRequired}
           selectorAgentId={selectorAgentId}
           onAgentChange={onAgentChange}
           modelSource={modelSource}

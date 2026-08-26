@@ -37,6 +37,7 @@ import {
   activeShareLinkSeed,
   makeShareLinkCreateResult,
   shareableSkillIds,
+  skillMarketplaceSeed,
 } from "./data/skill-share";
 import {
   skillUsageStatisticsEmptySeed,
@@ -217,7 +218,6 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/agents/:id/tools", []),
   ...getJson("/api/agents/:id/delegations", []),
   ...getJson("/api/agents/default-mcp-gateway", null),
-  ...getJson("/api/agents/default-llm-proxy", null),
   // The agents list asks which of the caller's agents is their personal
   // default; unmocked, it reaches the real backend and trips the leak guard.
   ...getJson("/api/members/default-agent", { defaultAgentId: null }),
@@ -259,8 +259,19 @@ export const handlers: HttpHandler[] = [
   ...patchJson("/api/llm-provider-api-keys/:id", makeLlmProviderApiKey()),
   ...deleteJson("/api/llm-provider-api-keys/:id"),
 
-  // LLM OAuth clients — used by the LLM keys delete dialog as a blocking-deps probe.
-  ...getJson("/api/llm-oauth-clients", []),
+  // LLM OAuth clients (paginated envelope) — used by the OAuth Clients tab and
+  // the LLM keys delete dialog as a blocking-deps probe.
+  ...getJson("/api/llm-oauth-clients", {
+    data: [],
+    pagination: {
+      currentPage: 1,
+      limit: 20,
+      total: 0,
+      totalPages: 0,
+      hasNext: false,
+      hasPrev: false,
+    },
+  }),
 
   // Virtual API keys (paginated envelope)
   ...getJson("/api/llm-virtual-keys", virtualKeysSeed),
@@ -346,9 +357,12 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/interactions", paginated([])),
   ...getJson("/api/interactions/:interactionId", makeInteraction()),
 
-  // /connection probes the org's default gateway/proxy to preselect them
+  // /connection probes the org's default gateway + the single LLM Proxy
   ...getJson("/api/mcp-gateways/default", makeAgent()),
-  ...getJson("/api/llm-proxy/default", makeAgent()),
+  ...getJson("/api/llm-proxy", makeAgent()),
+
+  // The static marketplace (the primary install path in the /connection step).
+  ...getJson("/api/skill-marketplace", skillMarketplaceSeed),
 
   // Skill share links (the marketplace step on /connection). The create and
   // rotate handlers are conditional on the request payload for the same

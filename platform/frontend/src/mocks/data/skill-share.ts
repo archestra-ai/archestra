@@ -99,6 +99,14 @@ export const staleShareLinkSeed: ShareLink = {
   skills: activeShareLinkSeed.skills.slice(0, 1),
 };
 
+/** The deployment's static marketplace, as GET /api/skill-marketplace answers. */
+export const skillMarketplaceSeed: archestraApiTypes.GetSkillMarketplaceResponses["200"] =
+  {
+    cloneUrl: "https://app.example.test/skills/marketplace.git",
+    marketplaceName: "archestra-test-org-skills",
+    requiresAuthentication: true,
+  };
+
 export function makeShareLinkCreateResult(
   token: string,
 ): CreateShareLinkResult {

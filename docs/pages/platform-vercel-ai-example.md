@@ -2,7 +2,7 @@
 title: Secure Agent with Vercel AI
 category: Examples
 order: 7
-lastUpdated: 2026-07-03
+lastUpdated: 2026-08-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -100,19 +100,6 @@ const result = streamText({
   messages: conversationHistory,
 });
 ```
-
-### Optional: Use a specific profile
-
-If you want to use a specific profile instead of the default one, you can include the profile ID in the URL:
-
-```ts
-const customOpenAI = createOpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  baseURL: 'http://localhost:9000/v1/openai/{profile-id}', // Use your profile ID
-}).chat;
-```
-
-You can create and manage profiles in the Archestra Platform UI at [http://localhost:3000/profiles](http://localhost:3000/profiles).
 
 Feel free to use our official [Node.js](https://nodejs.org/) (Express) CLI chat example:
 

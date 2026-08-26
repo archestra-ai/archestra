@@ -155,7 +155,7 @@ export const MAX_PROJECT_UPLOAD_BYTES = 25 * 1024 * 1024;
 /** {@link MAX_PROJECT_UPLOAD_BYTES} expressed in whole MB, for user-facing copy. */
 export const MAX_PROJECT_UPLOAD_MB = MAX_PROJECT_UPLOAD_BYTES / (1024 * 1024);
 
-export const DEFAULT_LLM_PROXY_NAME = "Default LLM Proxy";
+export const DEFAULT_LLM_PROXY_NAME = "LLM Proxy";
 /** @deprecated Default Team is no longer auto-created/auto-assigned. Kept for backward compat with E2E tests. */
 export const DEFAULT_TEAM_NAME = "Default Team";
 

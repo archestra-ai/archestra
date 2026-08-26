@@ -82,7 +82,11 @@ export async function resolveProxyModelsApiKey(params: {
 
   await virtualKeyRateLimiter.check({ ip: request.ip, credential: token });
   try {
-    const resolved = await validateVirtualApiKey(token, provider);
+    const resolved = await validateVirtualApiKey({
+      tokenValue: token,
+      expectedProvider: provider,
+      expectedOrganizationId: null,
+    });
     if (!resolved.apiKey) {
       throw new ApiError(401, `Could not resolve an API key for ${provider}.`);
     }

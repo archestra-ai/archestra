@@ -118,61 +118,54 @@ test.describe("LLM Logs - Slack (ChatOps) source", {
     request,
     adminPage,
     goToAdminPage,
-    createLlmProxy,
-    deleteAgent,
+    getLlmProxy,
   }) => {
-    const proxyResponse = await createLlmProxy(
-      request,
-      `Slack ChatOps Logs ${Date.now()}`,
-      "personal",
-    );
+    // The organization's singleton LLM Proxy (created on first use); its id
+    // in the proxy URL collapses to the singleton.
+    const proxyResponse = await getLlmProxy(request);
     const proxy = await proxyResponse.json();
     const proxyId = proxy.id;
 
-    try {
-      const { prompt } = await runSlackChatOpsCompletion(request, proxyId);
-      // The Session column renders the run's prompt, so the nonce in it is what
-      // identifies this run's row.
-      const rowFor = () =>
-        adminPage.locator("tbody tr").filter({ hasText: prompt });
+    const { prompt } = await runSlackChatOpsCompletion(request, proxyId);
+    // The Session column renders the run's prompt, so the nonce in it is what
+    // identifies this run's row.
+    const rowFor = () =>
+      adminPage.locator("tbody tr").filter({ hasText: prompt });
 
-      // 1. Unfiltered log page — the view the bug report screenshotted.
-      await goToAdminPage(LOGS_PATH);
-      await adminPage.waitForLoadState("domcontentloaded");
+    // 1. Unfiltered log page — the view the bug report screenshotted.
+    await goToAdminPage(LOGS_PATH);
+    await adminPage.waitForLoadState("domcontentloaded");
 
-      const row = rowFor();
-      await expect(
-        row,
-        "The Slack ChatOps run is missing from the unfiltered LLM Proxy logs",
-      ).toBeVisible({ timeout: 20_000 });
+    const row = rowFor();
+    await expect(
+      row,
+      "The Slack ChatOps run is missing from the unfiltered LLM Proxy logs",
+    ).toBeVisible({ timeout: 20_000 });
 
-      // 2. The Source column identifies it as Slack.
-      await expect(
-        row.getByText(SLACK_SOURCE_LABEL, { exact: true }),
-        "The Slack ChatOps run is not labelled with the Slack source",
-      ).toBeVisible();
+    // 2. The Source column identifies it as Slack.
+    await expect(
+      row.getByText(SLACK_SOURCE_LABEL, { exact: true }),
+      "The Slack ChatOps run is not labelled with the Slack source",
+    ).toBeVisible();
 
-      // 3. The Source filter is URL-driven (page.client.tsx reads ?source=),
-      //    so this exercises the same path the "Slack" dropdown entry takes.
-      await goToAdminPage(
-        `${LOGS_PATH}?source=${encodeURIComponent(SLACK_SOURCE)}`,
-      );
-      await adminPage.waitForLoadState("domcontentloaded");
-      await expect(
-        rowFor(),
-        `The Slack ChatOps run disappeared under the "${SLACK_SOURCE_LABEL}" source filter`,
-      ).toBeVisible({ timeout: 20_000 });
+    // 3. The Source filter is URL-driven (page.client.tsx reads ?source=),
+    //    so this exercises the same path the "Slack" dropdown entry takes.
+    await goToAdminPage(
+      `${LOGS_PATH}?source=${encodeURIComponent(SLACK_SOURCE)}`,
+    );
+    await adminPage.waitForLoadState("domcontentloaded");
+    await expect(
+      rowFor(),
+      `The Slack ChatOps run disappeared under the "${SLACK_SOURCE_LABEL}" source filter`,
+    ).toBeVisible({ timeout: 20_000 });
 
-      // 4. ...and the filter genuinely filters: under a different source the
-      //    same run must be gone, otherwise step 3 proves nothing.
-      await goToAdminPage(`${LOGS_PATH}?source=chat`);
-      await adminPage.waitForLoadState("domcontentloaded");
-      await expect(
-        rowFor(),
-        "The Slack ChatOps run is still listed under a non-Slack source filter",
-      ).toHaveCount(0, { timeout: 20_000 });
-    } finally {
-      await deleteAgent(request, proxyId);
-    }
+    // 4. ...and the filter genuinely filters: under a different source the
+    //    same run must be gone, otherwise step 3 proves nothing.
+    await goToAdminPage(`${LOGS_PATH}?source=chat`);
+    await adminPage.waitForLoadState("domcontentloaded");
+    await expect(
+      rowFor(),
+      "The Slack ChatOps run is still listed under a non-Slack source filter",
+    ).toHaveCount(0, { timeout: 20_000 });
   });
 });

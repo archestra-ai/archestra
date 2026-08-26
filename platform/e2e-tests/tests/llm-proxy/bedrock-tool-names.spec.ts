@@ -21,63 +21,54 @@ const PROVIDER_TOOL_NAME = "weather_get_current_v2";
 test.describe("LLM Proxy - Bedrock tool name encoding", () => {
   test("sanitizes tool names Bedrock rejects and restores the client's name", async ({
     request,
-    createLlmProxy,
-    deleteAgent,
+    getLlmProxy,
   }) => {
-    const proxyResponse = await createLlmProxy(
-      request,
-      `Bedrock Tool Names ${Date.now()}`,
-      "personal",
-    );
+    // The organization's singleton LLM Proxy; its id in the URL exercises the
+    // legacy-style per-proxy path, which collapses to the singleton.
+    const proxyResponse = await getLlmProxy(request);
     const proxy = await proxyResponse.json();
     const proxyId = proxy.id;
 
-    try {
-      const response = await request.post(
-        `${API_BASE_URL}/v1/bedrock/${proxyId}/converse`,
-        {
-          headers: {
-            Authorization: "Bearer bedrock-tool-name-sanitization",
-            "Content-Type": "application/json",
-          },
-          data: {
-            modelId: "anthropic.claude-3-sonnet-20240229-v1:0",
-            messages: [{ role: "user", content: [{ text: "weather?" }] }],
-            toolConfig: {
-              tools: [
-                {
-                  toolSpec: {
-                    name: CLIENT_TOOL_NAME,
-                    description: "gets weather",
-                    inputSchema: {
-                      json: {
-                        type: "object",
-                        properties: { city: { type: "string" } },
-                      },
+    const response = await request.post(
+      `${API_BASE_URL}/v1/bedrock/${proxyId}/converse`,
+      {
+        headers: {
+          Authorization: "Bearer bedrock-tool-name-sanitization",
+          "Content-Type": "application/json",
+        },
+        data: {
+          modelId: "anthropic.claude-3-sonnet-20240229-v1:0",
+          messages: [{ role: "user", content: [{ text: "weather?" }] }],
+          toolConfig: {
+            tools: [
+              {
+                toolSpec: {
+                  name: CLIENT_TOOL_NAME,
+                  description: "gets weather",
+                  inputSchema: {
+                    json: {
+                      type: "object",
+                      properties: { city: { type: "string" } },
                     },
                   },
                 },
-              ],
-              toolChoice: { tool: { name: CLIENT_TOOL_NAME } },
-            },
+              },
+            ],
+            toolChoice: { tool: { name: CLIENT_TOOL_NAME } },
           },
         },
-      );
+      },
+    );
 
-      // Read the body FIRST so we can include it in the assertion error message.
-      const body = await response.json();
-      expect(
-        response.status(),
-        `Expected 200 but got ${response.status()}. A 404 means WireMock matched no stub — ` +
-          `the proxy sent a tool name other than "${PROVIDER_TOOL_NAME}". Response body: ${JSON.stringify(body)}`,
-      ).toBe(200);
+    // Read the body FIRST so we can include it in the assertion error message.
+    const body = await response.json();
+    expect(
+      response.status(),
+      `Expected 200 but got ${response.status()}. A 404 means WireMock matched no stub — ` +
+        `the proxy sent a tool name other than "${PROVIDER_TOOL_NAME}". Response body: ${JSON.stringify(body)}`,
+    ).toBe(200);
 
-      // The client gets back the name it sent, not the provider-facing one.
-      expect(body.output.message.content[0].toolUse.name).toBe(
-        CLIENT_TOOL_NAME,
-      );
-    } finally {
-      await deleteAgent(request, proxyId);
-    }
+    // The client gets back the name it sent, not the provider-facing one.
+    expect(body.output.message.content[0].toolUse.name).toBe(CLIENT_TOOL_NAME);
   });
 });

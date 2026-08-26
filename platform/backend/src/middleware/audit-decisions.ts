@@ -566,7 +566,18 @@ export const AUDIT_DECISIONS = {
   },
   skillShareLinkRevisionsTable: {
     audited: false,
-    reason: "child of skillShareLinks; revision history",
+    reason:
+      "child of skillShareLinks / skillMarketplaceRepos; revision history",
+  },
+  skillMarketplaceCredentialsTable: {
+    audited: false,
+    reason:
+      "read-only marketplace credential with no CRUD route to snapshot; issued implicitly by the audited connection-setup script route and dropped on membership removal, which writes member.deleted",
+  },
+  skillMarketplaceReposTable: {
+    audited: false,
+    reason:
+      "derived per-viewer marketplace repo; created implicitly on clone, carries no user-authored state",
   },
   skillSandboxesTable: {
     audited: false,

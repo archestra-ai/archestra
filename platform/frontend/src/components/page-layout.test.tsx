@@ -177,6 +177,39 @@ describe("PageLayout tabs", () => {
   });
 
   /**
+   * A filter deep-link (`?keyType=passthrough`) used to defeat the exact-path
+   * match, and the URL then prefix-matched the parent tab instead — the page
+   * rendered with the wrong tab underlined.
+   */
+  it("keeps the path's own tab active when the URL carries a query string", () => {
+    vi.mocked(usePathname).mockReturnValue("/llm/proxy/virtual-keys");
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("keyType=passthrough") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+
+    render(
+      <PageLayout
+        title="Virtual Keys"
+        tabs={[
+          { label: "LLM Proxy", href: "/llm/proxy" },
+          { label: "Virtual Keys", href: "/llm/proxy/virtual-keys" },
+          { label: "OAuth Clients", href: "/llm/proxy/oauth-clients" },
+        ]}
+      >
+        <div />
+      </PageLayout>,
+    );
+
+    const current = [...document.querySelectorAll('[aria-current="page"]')];
+    expect(current.length).toBeGreaterThan(0);
+    expect(new Set(current.map((el) => el.getAttribute("href")))).toEqual(
+      new Set(["/llm/proxy/virtual-keys"]),
+    );
+  });
+
+  /**
    * Below `md` the tab row shows the first `mobileVisibleCount` tabs and folds
    * the rest into a popover. Both rows are in the DOM at once, so a tab past
    * the cut appears exactly once (the desktop row) until the popover is opened.

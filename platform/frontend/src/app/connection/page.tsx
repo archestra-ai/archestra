@@ -1,6 +1,7 @@
 "use client";
 
-import { useDefaultLlmProxy, useDefaultMcpGateway } from "@/lib/agent.query";
+import { useDefaultMcpGateway } from "@/lib/agent.query";
+import { useLlmProxy } from "@/lib/llm-proxy.query";
 import { useOrganization } from "@/lib/organization.query";
 import { ConnectionFlow } from "./connection-flow";
 import { getConnectableProviders } from "./connection-flow.utils";
@@ -8,13 +9,11 @@ import { ConnectionHero } from "./connection-hero";
 
 export default function ConnectionPage() {
   const { data: defaultMcpGateway } = useDefaultMcpGateway();
-  const { data: defaultLlmProxy } = useDefaultLlmProxy();
+  const { data: llmProxy } = useLlmProxy();
   const { data: organization } = useOrganization();
 
   const adminDefaultMcpGatewayId =
     organization?.connectionDefaultMcpGatewayId ?? null;
-  const adminDefaultLlmProxyId =
-    organization?.connectionDefaultLlmProxyId ?? null;
   const adminDefaultClientId = organization?.connectionDefaultClientId ?? null;
 
   return (
@@ -26,9 +25,8 @@ export default function ConnectionPage() {
 
         <ConnectionFlow
           defaultMcpGatewayId={defaultMcpGateway?.id}
-          defaultLlmProxyId={defaultLlmProxy?.id}
+          llmProxyId={llmProxy?.id}
           adminDefaultMcpGatewayId={adminDefaultMcpGatewayId}
-          adminDefaultLlmProxyId={adminDefaultLlmProxyId}
           adminDefaultClientId={adminDefaultClientId}
           shownClientIds={organization?.connectionShownClientIds ?? null}
           shownProviders={getConnectableProviders(organization)}

@@ -25,6 +25,11 @@ const CATALOG_OPTION_LABELS = {
   disabled: "Disabled",
 } as const;
 
+const MARKETPLACE_ACCESS_LABELS = {
+  authenticated: "Require a token",
+  anonymous: "Allow anonymous clones",
+} as const;
+
 export default function SkillsSettingsPage() {
   const { data: organization, isPending } = useOrganization();
   const updateSkillsSettingsMutation = useUpdateSkillsSettings(
@@ -33,22 +38,34 @@ export default function SkillsSettingsPage() {
   );
 
   const serverCatalogEnabled = organization?.onlineSkillCatalogEnabled ?? true;
+  const serverAnonymousAccess =
+    organization?.skillMarketplaceAnonymousAccess ?? false;
   const [catalogEnabled, setCatalogEnabled] = useState(serverCatalogEnabled);
+  const [anonymousAccess, setAnonymousAccess] = useState(serverAnonymousAccess);
 
   useEffect(() => {
-    if (organization) setCatalogEnabled(organization.onlineSkillCatalogEnabled);
+    if (!organization) return;
+    setCatalogEnabled(organization.onlineSkillCatalogEnabled);
+    setAnonymousAccess(organization.skillMarketplaceAnonymousAccess);
   }, [organization]);
 
-  const hasChanges = !isPending && catalogEnabled !== serverCatalogEnabled;
+  const hasChanges =
+    !isPending &&
+    (catalogEnabled !== serverCatalogEnabled ||
+      anonymousAccess !== serverAnonymousAccess);
 
   const handleSave = async () => {
     if (!hasChanges) return;
     await updateSkillsSettingsMutation.mutateAsync({
       onlineSkillCatalogEnabled: catalogEnabled,
+      skillMarketplaceAnonymousAccess: anonymousAccess,
     });
   };
 
-  const handleCancel = () => setCatalogEnabled(serverCatalogEnabled);
+  const handleCancel = () => {
+    setCatalogEnabled(serverCatalogEnabled);
+    setAnonymousAccess(serverAnonymousAccess);
+  };
 
   if (isPending) {
     return <LoadingState variant="page" />;
@@ -79,6 +96,41 @@ export default function SkillsSettingsPage() {
                 </SelectTrigger>
                 <SelectContent>
                   {Object.entries(CATALOG_OPTION_LABELS).map(
+                    ([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ),
+                  )}
+                </SelectContent>
+              </Select>
+            )}
+          </WithPermissions>
+        }
+      />
+      <SettingsBlock
+        title="Skills marketplace access"
+        description="How clients authenticate against the shared marketplace URL on the Connect page. With a token, each person clones as themselves and installs the skills they can see. Anonymous clones need no credential at all and expose the organization-wide skills to anyone who can reach this deployment; personal and team skills are never included."
+        control={
+          <WithPermissions
+            permissions={{ skillsSettings: ["update"] }}
+            noPermissionHandle="tooltip"
+          >
+            {({ hasPermission }) => (
+              <Select
+                value={anonymousAccess ? "anonymous" : "authenticated"}
+                onValueChange={(value) =>
+                  setAnonymousAccess(value === "anonymous")
+                }
+                disabled={
+                  updateSkillsSettingsMutation.isPending || !hasPermission
+                }
+              >
+                <SelectTrigger className="w-48">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(MARKETPLACE_ACCESS_LABELS).map(
                     ([value, label]) => (
                       <SelectItem key={value} value={value}>
                         {label}

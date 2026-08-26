@@ -26,7 +26,6 @@ describe("LlmOauthClientModel", () => {
       organizationId: organization.id,
       authorId: crypto.randomUUID(),
       name: "Backend Service",
-      allowedLlmProxyIds: [crypto.randomUUID()],
       providerApiKeys: [
         {
           provider: "anthropic",
@@ -39,7 +38,6 @@ describe("LlmOauthClientModel", () => {
     expect(result.oauthClient.clientId).toMatch(/^llm_oauth_/);
     expect(result.oauthClient.name).toBe("Backend Service");
     expect(result.oauthClient.organizationId).toBe(organization.id);
-    expect(result.oauthClient.allowedLlmProxyIds).toHaveLength(1);
     expect(result.oauthClient.providerApiKeys).toEqual([
       {
         provider: "anthropic",
@@ -62,7 +60,6 @@ describe("LlmOauthClientModel", () => {
       organizationId: organization.id,
       authorId: crypto.randomUUID(),
       name: "Worker",
-      allowedLlmProxyIds: [],
       providerApiKeys: [],
     });
 
@@ -84,13 +81,10 @@ describe("LlmOauthClientModel", () => {
   }) => {
     const organization = await makeOrganization();
     const otherOrganization = await makeOrganization();
-    const firstProxyId = crypto.randomUUID();
-    const secondProxyId = crypto.randomUUID();
     const { oauthClient, clientSecret } = await LlmOauthClientModel.create({
       organizationId: organization.id,
       authorId: crypto.randomUUID(),
       name: "Original",
-      allowedLlmProxyIds: [firstProxyId],
       providerApiKeys: [],
     });
 
@@ -106,7 +100,6 @@ describe("LlmOauthClientModel", () => {
         id: oauthClient.id,
         organizationId: otherOrganization.id,
         name: "Wrong Org",
-        allowedLlmProxyIds: [],
         providerApiKeys: [],
       }),
     ).toBeNull();
@@ -115,11 +108,9 @@ describe("LlmOauthClientModel", () => {
       id: oauthClient.id,
       organizationId: organization.id,
       name: "Updated",
-      allowedLlmProxyIds: [secondProxyId],
       providerApiKeys: [],
     });
     expect(updated?.name).toBe("Updated");
-    expect(updated?.allowedLlmProxyIds).toEqual([secondProxyId]);
 
     const rotated = await LlmOauthClientModel.rotateSecret({
       id: oauthClient.id,
@@ -168,7 +159,6 @@ describe("LlmOauthClientModel", () => {
       organizationId: organization.id,
       authorId: crypto.randomUUID(),
       name: "Service With Tokens",
-      allowedLlmProxyIds: [crypto.randomUUID()],
       providerApiKeys: [],
     });
     const accessToken = "llm-client-delete-cascade-token";
@@ -203,7 +193,6 @@ describe("LlmOauthClientModel", () => {
       organizationId: organization.id,
       authorId: crypto.randomUUID(),
       name: "LLM OAuth Client",
-      allowedLlmProxyIds: [],
       providerApiKeys: [],
     });
 
@@ -223,21 +212,18 @@ describe("LlmOauthClientModel", () => {
       organizationId: organization.id,
       authorId: crypto.randomUUID(),
       name: "Client with % literal",
-      allowedLlmProxyIds: [],
       providerApiKeys: [],
     });
     await LlmOauthClientModel.create({
       organizationId: organization.id,
       authorId: crypto.randomUUID(),
       name: "Client with _ literal",
-      allowedLlmProxyIds: [],
       providerApiKeys: [],
     });
     await LlmOauthClientModel.create({
       organizationId: organization.id,
       authorId: crypto.randomUUID(),
       name: "Client with alpha literal",
-      allowedLlmProxyIds: [],
       providerApiKeys: [],
     });
 
@@ -281,7 +267,6 @@ describe("LlmOauthClientModel", () => {
       organizationId: organization.id,
       authorId: crypto.randomUUID(),
       name: "First Client",
-      allowedLlmProxyIds: [],
       providerApiKeys: [
         {
           provider: "openai",
@@ -293,7 +278,6 @@ describe("LlmOauthClientModel", () => {
       organizationId: organization.id,
       authorId: crypto.randomUUID(),
       name: "Second Client",
-      allowedLlmProxyIds: [],
       providerApiKeys: [
         {
           provider: "anthropic",
@@ -325,7 +309,6 @@ describe("LlmOauthClientModel", () => {
       organizationId: organization.id,
       authorId: crypto.randomUUID(),
       name: "Shape Check",
-      allowedLlmProxyIds: [],
       providerApiKeys: [],
     });
 
@@ -342,7 +325,6 @@ describe("LlmOauthClientModel", () => {
       id: oauthClient.id,
       name: "Shape Check",
       organizationId: organization.id,
-      allowedLlmProxyIds: [],
       providerApiKeys: [],
       disabled: false,
     });

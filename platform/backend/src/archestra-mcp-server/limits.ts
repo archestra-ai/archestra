@@ -9,7 +9,7 @@ import {
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import logger from "@/logging";
-import { LimitModel } from "@/models";
+import { AgentModel, LimitModel } from "@/models";
 import {
   LimitCleanupIntervalSchema,
   LimitEntityTypeSchema,
@@ -20,6 +20,7 @@ import {
   catchError,
   defineArchestraTool,
   defineArchestraTools,
+  EmptyToolArgsSchema,
   errorResult,
   structuredSuccessResult,
 } from "./helpers";
@@ -352,37 +353,49 @@ const registry = defineArchestraTools([
       totalTokens: z.number(),
     }),
     async handler({ args, context }) {
-      return handleGetTokenUsage({
-        args,
-        context,
-        tokenUsageType: "agent",
-      });
+      return handleGetTokenUsage({ args, context });
     },
   }),
   defineArchestraTool({
     shortName: TOOL_GET_LLM_PROXY_TOKEN_USAGE_SHORT_NAME,
     title: "Get LLM Proxy Token Usage",
     description:
-      "Get the total token usage (input and output) for a specific LLM proxy. If no id is provided, returns usage for the current agent.",
-    schema: z
-      .object({
-        id: UuidIdSchema.optional().describe(
-          "Optional LLM proxy ID. Defaults to the current agent.",
-        ),
-      })
-      .strict(),
+      "Get the total token usage (input and output) for the LLM Proxy.",
+    schema: EmptyToolArgsSchema,
     outputSchema: z.object({
       id: z.string(),
       totalInputTokens: z.number(),
       totalOutputTokens: z.number(),
       totalTokens: z.number(),
     }),
-    async handler({ args, context }) {
-      return handleGetTokenUsage({
-        args,
-        context,
-        tokenUsageType: "llm_proxy",
-      });
+    async handler({ context }) {
+      const { organizationId } = context;
+
+      logger.info(
+        { agentId: context.agent.id },
+        "get_llm_proxy_token_usage tool called",
+      );
+
+      if (!organizationId) {
+        return errorResult("organization context not available.");
+      }
+
+      try {
+        const llmProxy = await AgentModel.getOrgLlmProxy(organizationId);
+        const usage = await LimitModel.getAgentTokenUsage(llmProxy.id);
+
+        return structuredSuccessResult(
+          {
+            id: llmProxy.id,
+            totalInputTokens: usage.totalInputTokens,
+            totalOutputTokens: usage.totalOutputTokens,
+            totalTokens: usage.totalTokens,
+          },
+          `Token usage for the LLM Proxy:\n\nTotal Input Tokens: ${usage.totalInputTokens.toLocaleString()}\nTotal Output Tokens: ${usage.totalOutputTokens.toLocaleString()}\nTotal Tokens: ${usage.totalTokens.toLocaleString()}`,
+        );
+      } catch (error) {
+        return catchError(error, "getting LLM proxy token usage");
+      }
     },
   }),
 ] as const);
@@ -396,19 +409,13 @@ export const tools = registry.tools;
 async function handleGetTokenUsage(params: {
   args: { id?: string };
   context: ArchestraContext;
-  tokenUsageType: "agent" | "llm_proxy";
 }): Promise<CallToolResult> {
-  const { args, context, tokenUsageType } = params;
+  const { args, context } = params;
   const { agent: contextAgent } = context;
-  const tokenUsageLabel = tokenUsageType.replace("_", " ");
 
   logger.info(
-    {
-      agentId: contextAgent.id,
-      getTokenUsageArgs: args,
-      type: tokenUsageType,
-    },
-    `get_${tokenUsageType}_token_usage tool called`,
+    { agentId: contextAgent.id, getTokenUsageArgs: args },
+    "get_agent_token_usage tool called",
   );
 
   try {
@@ -422,9 +429,9 @@ async function handleGetTokenUsage(params: {
         totalOutputTokens: usage.totalOutputTokens,
         totalTokens: usage.totalTokens,
       },
-      `Token usage for ${tokenUsageLabel} ${targetId}:\n\nTotal Input Tokens: ${usage.totalInputTokens.toLocaleString()}\nTotal Output Tokens: ${usage.totalOutputTokens.toLocaleString()}\nTotal Tokens: ${usage.totalTokens.toLocaleString()}`,
+      `Token usage for agent ${targetId}:\n\nTotal Input Tokens: ${usage.totalInputTokens.toLocaleString()}\nTotal Output Tokens: ${usage.totalOutputTokens.toLocaleString()}\nTotal Tokens: ${usage.totalTokens.toLocaleString()}`,
     );
   } catch (error) {
-    return catchError(error, `getting ${tokenUsageLabel} token usage`);
+    return catchError(error, "getting agent token usage");
   }
 }

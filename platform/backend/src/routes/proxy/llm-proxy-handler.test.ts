@@ -336,8 +336,10 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
 
     test("passthrough virtual key attributes the interaction to its owner", async ({
       makeUser,
+      makeMember,
     }) => {
       const owner = await makeUser();
+      await makeMember(owner.id, testAgent.organizationId);
       const { value: passthroughToken, virtualKey } =
         await VirtualApiKeyModel.create({
           organizationId: testAgent.organizationId,
@@ -2359,13 +2361,13 @@ describe("LLM Proxy Handler — CHAT_API_KEY_ID_HEADER fallback", () => {
   });
 
   test("loopback chat forward of a VALID local virtual key still resolves it locally", async ({
-    makeOrganization,
     makeSecret,
   }) => {
-    const org = await makeOrganization();
     const secret = await makeSecret({ secret: { apiKey: "sk-resolved-real" } });
+    // Same organization as the proxy agent: a key from another organization
+    // is rejected by the proxy's organization guard.
     const providerKey = await LlmProviderApiKeyModel.create({
-      organizationId: org.id,
+      organizationId: testAgent.organizationId,
       secretId: secret.id,
       name: "Local OpenAI key behind a virtual key",
       provider: "openai",
@@ -2374,6 +2376,7 @@ describe("LLM Proxy Handler — CHAT_API_KEY_ID_HEADER fallback", () => {
       teamId: null,
     });
     const { value: localVirtualKey } = await VirtualApiKeyModel.create({
+      organizationId: testAgent.organizationId,
       name: "local-vk",
       providerApiKeys: [
         { provider: "openai", providerApiKeyId: providerKey.id },

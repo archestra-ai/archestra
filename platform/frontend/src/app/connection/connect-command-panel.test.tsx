@@ -14,10 +14,16 @@ import { useOrganization } from "@/lib/organization.query";
 import { CONNECT_CLIENTS } from "./clients";
 import { ConnectCommandPanel } from "./connect-command-panel";
 
-const { createSetupMock, allSkillsMock, pluginsMock } = vi.hoisted(() => ({
+const {
+  createSetupMock,
+  allSkillsMock,
+  pluginsMock,
+  skillsMarketplaceVisibleMock,
+} = vi.hoisted(() => ({
   createSetupMock: vi.fn(),
   allSkillsMock: vi.fn(),
   pluginsMock: vi.fn(),
+  skillsMarketplaceVisibleMock: vi.fn(() => true),
 }));
 
 vi.mock("@/lib/connection-setup.query", () => ({
@@ -29,6 +35,10 @@ vi.mock("@/lib/connection-setup.query", () => ({
 
 vi.mock("./skills-marketplace-step", () => ({
   useAllSkills: (params?: { enabled?: boolean }) => allSkillsMock(params),
+  // The marketplace step has its own test file; here it only matters whether
+  // the panel renders it as a step.
+  useSkillsMarketplaceVisible: () => skillsMarketplaceVisibleMock(),
+  SkillsMarketplaceStep: () => <div data-testid="skills-marketplace-step" />,
 }));
 
 vi.mock("@/lib/plugins/plugin.query", () => ({
@@ -111,9 +121,7 @@ function renderPanelProps(
     mcpGateways: [{ id: "g1", name: "My Gateway", agentType: "mcp_gateway" }],
     mcpGatewayId: "g1",
     onMcpGatewaySelect: vi.fn(),
-    llmProxies: [{ id: "p1", name: "My Proxy", agentType: "llm_proxy" }],
     llmProxyId: "p1",
-    onLlmProxySelect: vi.fn(),
     urlProvider: null,
     onProviderSelect: vi.fn(),
     baseUrl: "http://localhost:9000/v1",
@@ -222,7 +230,7 @@ describe("ConnectCommandPanel", () => {
 
     // the summary reflects the defaults without any clicks
     expect(screen.getByText(/My Gateway/)).toBeInTheDocument();
-    expect(screen.getByText(/My Proxy/)).toBeInTheDocument();
+    expect(screen.getByText(/LLM Proxy/)).toBeInTheDocument();
     expect(
       screen.getByText(
         (_, el) =>
@@ -242,7 +250,6 @@ describe("ConnectCommandPanel", () => {
     renderPanel({
       mcpGateways: [],
       mcpGatewayId: null,
-      llmProxies: [],
       llmProxyId: null,
     });
 
@@ -298,7 +305,6 @@ describe("ConnectCommandPanel", () => {
     renderPanel({
       mcpGateways: [],
       mcpGatewayId: null,
-      llmProxies: [],
       llmProxyId: null,
     });
 
@@ -370,7 +376,6 @@ describe("ConnectCommandPanel", () => {
     const noOtherResources = {
       mcpGateways: [],
       mcpGatewayId: null,
-      llmProxies: [],
       llmProxyId: null,
     };
     const { rerender } = renderPanel(noOtherResources);
@@ -465,7 +470,6 @@ describe("ConnectCommandPanel", () => {
       renderPanel({
         mcpGateways: [],
         mcpGatewayId: null,
-        llmProxies: [],
         llmProxyId: null,
       });
       await waitFor(() =>
@@ -487,9 +491,8 @@ describe("ConnectCommandPanel", () => {
       );
 
       await user.click(screen.getByTestId("connect-change-platform"));
-      const platformSelect = screen.getByTestId("connect-platform-select");
-      platformSelect.focus();
-      await user.keyboard("{Enter}{ArrowUp}{Enter}");
+      expect(screen.getByTestId("connect-platform-select")).toBeInTheDocument();
+      await user.click(screen.getByRole("tab", { name: /macOS \/ Linux/ }));
 
       await waitFor(() =>
         expect(createSetupMock).toHaveBeenLastCalledWith(
@@ -665,7 +668,6 @@ describe("ConnectCommandPanel", () => {
       renderPanel({
         mcpGateways: [],
         mcpGatewayId: null,
-        llmProxies: [],
         llmProxyId: null,
       });
       await waitFor(() =>
@@ -761,7 +763,7 @@ describe("ConnectCommandPanel", () => {
     expect(screen.getByText("Shared skills not installed")).toBeInTheDocument();
   });
 
-  it("names the skills it installs and regenerates when one is deselected", async () => {
+  it("names the skills it installs, and turning them off regenerates without them", async () => {
     const user = userEvent.setup();
     renderPanel();
     await screen.findByText(COMMAND);
@@ -771,22 +773,20 @@ describe("ConnectCommandPanel", () => {
       screen.getByText(/warehouse-postgres, billing-pipeline/),
     ).toBeInTheDocument();
 
+    // Skills are all-or-nothing here: the command registers the shared
+    // marketplace URL, which always serves everything the caller may read, so
+    // there is deliberately no per-skill choice to offer.
     await user.click(screen.getByTestId("connect-change-skills"));
-    // The picker preselects skills an admin can see, including other people's
-    // personal ones, so each row must say whose it is before it is installed.
-    expect(screen.getByText("Dana")).toBeInTheDocument();
     await user.click(
-      screen.getByRole("checkbox", { name: /billing-pipeline/ }),
+      screen.getByRole("checkbox", { name: /install shared skills/i }),
     );
 
     await waitFor(() =>
       expect(createSetupMock).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          skills: { skillIds: ["s1"], ttlDays: null },
-        }),
+        expect.objectContaining({ skills: undefined }),
       ),
     );
-    expect(screen.getByText(/1 of 2 shared skills/)).toBeInTheDocument();
+    expect(screen.getByText(/Shared skills not installed/)).toBeInTheDocument();
   });
 
   it("truncates the skill names line past six skills", async () => {
@@ -915,7 +915,7 @@ describe("ConnectCommandPanel", () => {
     );
   });
 
-  it("skips skills entirely for non-admin users", async () => {
+  it("skips skills entirely for callers who cannot read them", async () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: false,
     } as ReturnType<typeof useHasPermissions>);
@@ -926,11 +926,44 @@ describe("ConnectCommandPanel", () => {
         expect.objectContaining({ skills: undefined }),
       ),
     );
-    // the skill list isn't even fetched for callers who can't share skills
+    // the skill list isn't even fetched for callers who can't install skills,
+    // and the wizard grows no extra step: the script is the whole flow
     expect(allSkillsMock).toHaveBeenLastCalledWith({
       enabled: false,
       forAgentId: "p1",
     });
+    expect(
+      screen.queryByTestId("skills-marketplace-step"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("still offers the marketplace step when there is nothing to put in a command", async () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+    } as ReturnType<typeof useHasPermissions>);
+    renderPanel({
+      mcpGateways: null,
+      mcpGatewayId: null,
+      llmProxyId: null,
+    });
+
+    expect(
+      await screen.findByTestId("skills-marketplace-step"),
+    ).toBeInTheDocument();
+    expect(createSetupMock).not.toHaveBeenCalled();
+  });
+
+  it("drops the marketplace step when the script already installs the skills", async () => {
+    renderPanel();
+
+    await waitFor(() =>
+      expect(createSetupMock).toHaveBeenCalledWith(
+        expect.objectContaining({ skills: expect.anything() }),
+      ),
+    );
+    expect(
+      screen.queryByTestId("skills-marketplace-step"),
+    ).not.toBeInTheDocument();
   });
 
   describe("Copilot CLI model choice", () => {

@@ -15,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { OsLogos } from "./os-logos";
 import {
@@ -68,6 +69,41 @@ export function ConnectionPlatformSelect({
         ))}
       </SelectContent>
     </Select>
+  );
+}
+
+/**
+ * Segmented two-option OS toggle for inline review editors, matching the
+ * segmented controls used elsewhere in the connect flow. The dropdown variant
+ * above stays for surfaces that need a compact closed control.
+ */
+export function ConnectionPlatformToggle({
+  value,
+  onValueChange,
+  options = CONNECT_PLATFORM_OPTIONS,
+  ariaLabel = "Select a platform",
+  dataTestId,
+}: {
+  value: ConnectPlatformOption;
+  onValueChange: (value: ConnectPlatformOption) => void;
+  options?: readonly ConnectPlatformOption[];
+  ariaLabel?: string;
+  dataTestId?: string;
+}) {
+  return (
+    <Tabs
+      value={value}
+      onValueChange={(next) => onValueChange(next as ConnectPlatformOption)}
+    >
+      <TabsList aria-label={ariaLabel} data-testid={dataTestId}>
+        {options.map((platform) => (
+          <TabsTrigger key={platform} value={platform}>
+            <OsLogos platform={platform} />
+            <span>{platformLabels[platform]}</span>
+          </TabsTrigger>
+        ))}
+      </TabsList>
+    </Tabs>
   );
 }
 

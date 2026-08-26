@@ -25,7 +25,7 @@ import {
  */
 async function createViaWizard(
   page: Page,
-  listPath: "/agents" | "/llm/proxies" | "/mcp/gateways",
+  listPath: "/agents" | "/mcp/gateways",
   name: string,
 ): Promise<string> {
   const createButton = page.getByTestId(E2eTestId.CreateAgentButton);
@@ -203,37 +203,6 @@ test(
 
     // Wait for deletion to complete
     await expect(agentLocator).not.toBeVisible({ timeout: 10000 });
-  },
-);
-
-test(
-  "can create and delete an LLM proxy",
-  {
-    tag: ["@firefox", "@webkit"],
-  },
-  async ({ page, makeRandomString, goToPage }, testInfo) => {
-    test.skip(testInfo.project.name === "webkit", "flaky on webkit");
-    test.setTimeout(120_000);
-
-    const PROXY_NAME = makeRandomString(10, "Test LLM Proxy");
-    await goToPage(page, "/llm/proxies");
-
-    await page.waitForLoadState("domcontentloaded");
-
-    const proxyId = await createViaWizard(page, "/llm/proxies", PROXY_NAME);
-
-    // The create lands on the proxy's Connect section (endpoint + auth).
-    await expect(page).toHaveURL(new RegExp(`/llm/proxies/${proxyId}#connect`));
-    await expect(page.getByRole("tab", { name: "Virtual keys" })).toBeVisible({
-      timeout: 15_000,
-    });
-
-    // Delete created LLM proxy from the table
-    await goToPage(page, "/llm/proxies");
-    await deleteFromList(page, {
-      name: PROXY_NAME,
-      confirmLabel: "Delete LLM Proxy",
-    });
   },
 );
 

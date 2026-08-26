@@ -37,6 +37,8 @@ Combined, these endpoints expose metrics including:
 
 > **Note:** `agent_id` and `agent_name` are the internal Archestra agent identifier and name. The external agent ID passed via the [`X-Archestra-Agent-Id`](/docs/platform-llm-proxy#custom-headers) header is not a metric label (client-supplied values would create unbounded label cardinality); it is recorded on interactions and available in [trace attributes](#distributed-tracing) as `archestra.external_agent_id`. `agent_type` indicates the type of agent: `agent`, `llm_proxy`, `mcp_gateway`, or `profile`. Knowledge Base operations (embeddings, reranking) emit the same LLM metrics with `agent_name="Knowledge Base"` and empty `agent_id`.
 
+> **Note:** Requests to the [LLM Proxy](platform-llm-proxy) all carry its own agent row, so proxy traffic reports `agent_name="LLM Proxy"`. Chat and app traffic keeps its own agent attribution. To tell proxy callers apart, use `source`, the interaction records, or the `archestra.external_agent_id` and `archestra.app.name` trace attributes. Every LLM metric also carries `organization_id` — the owning organization — so aggregations stay separable on instances that host more than one organization.
+
 ### MCP Metrics
 
 - `mcp_tool_calls_total` - Total MCP tool calls by agent_id, agent_name, agent_type, mcp_server_name, tool_name, and status (success/error)
@@ -195,14 +197,17 @@ Each LLM API call produces a span with `SpanKind.CLIENT` (indicating an outbound
 - `gen_ai.request.streaming` - Whether the request was streaming (`true`/`false`)
 - `server.address` - Base URL of the LLM provider API
 - `gen_ai.agent.id` - Internal Archestra agent ID
-- `gen_ai.agent.name` - Internal Archestra agent name
+- `gen_ai.agent.name` - Internal Archestra agent name (`LLM Proxy` for LLM Proxy requests)
 - `gen_ai.conversation.id` - Session ID for grouping related LLM calls (from [`X-Archestra-Session-Id`](/docs/platform-llm-proxy#custom-headers) header)
 - `archestra.agent.type` - Agent type (`agent`, `llm_proxy`, `mcp_gateway`, `profile`)
 - `archestra.execution.id` - Execution ID (from [`X-Archestra-Execution-Id`](/docs/platform-llm-proxy#custom-headers) header)
 - `archestra.external_agent_id` - Client-provided agent ID (from [`X-Archestra-Agent-Id`](/docs/platform-llm-proxy#custom-headers) header)
+- `archestra.auth.method` - How the request authenticated: `provider_key`, `virtual_key`, `passthrough_virtual_key`, `jwks`, `oauth_client_credentials`, `oauth_user`, or `internal`
+- `archestra.app.id` - ID of the [app](platform-apps) that made the call, when an app authenticated the request
+- `archestra.app.name` - Name of that app. With `archestra.external_agent_id`, these are the attributes that tell LLM Proxy callers apart.
 - `archestra.trigger.source` - The source that triggered the LLM call (e.g., `knowledge:embedding`, `knowledge:reranker`, `model_router`, `api`, `chat`). Useful for filtering traces by origin.
-- `archestra.agent.label.<key>` - Custom agent labels (e.g., `archestra.agent.label.environment=production`)
-- `archestra.agent.team.ids` - IDs of the teams the agent belongs to (array-valued; an agent can belong to multiple teams)
+- `archestra.agent.label.<key>` - Custom agent labels (e.g., `archestra.agent.label.environment=production`). The LLM Proxy carries no labels, so these are empty on proxy requests; use the `archestra.user.team.*` attributes to slice proxy traffic.
+- `archestra.agent.team.ids` - IDs of the teams the agent belongs to (array-valued; an agent can belong to multiple teams). The LLM Proxy belongs to no teams, so empty on proxy requests.
 - `archestra.agent.team.names` - Names of the teams the agent belongs to (array-valued)
 - `archestra.agent.team.label.<key>` - Custom agent-team labels (array-valued). Values are merged per key across all of the agent's teams, e.g., `archestra.agent.team.label.environment=["production","staging"]`
 - `archestra.user.team.ids` - IDs of the teams the requesting user belongs to (array-valued)

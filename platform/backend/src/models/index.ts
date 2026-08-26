@@ -114,6 +114,8 @@ export { default as SessionModel } from "./session";
 export { default as SkillModel } from "./skill";
 export { default as SkillEnvironmentModel } from "./skill-environment";
 export { default as SkillFileModel } from "./skill-file";
+export { default as SkillMarketplaceCredentialModel } from "./skill-marketplace-credential";
+export { default as SkillMarketplaceRepoModel } from "./skill-marketplace-repo";
 export {
   default as SkillSandboxModel,
   SkillInvalidFilePathError,

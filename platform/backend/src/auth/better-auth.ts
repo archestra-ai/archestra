@@ -45,6 +45,7 @@ import MemberModel from "@/models/member";
 import OrganizationRoleModel from "@/models/organization-role";
 import SessionModel from "@/models/session";
 import SkillModel from "@/models/skill";
+import SkillMarketplaceCredentialModel from "@/models/skill-marketplace-credential";
 import UserModel from "@/models/user";
 import { reportAuditWriteFailure } from "@/observability/metrics/audit";
 import { purgePersonalAppsForUser } from "@/services/apps/app-mcp-backing";
@@ -405,14 +406,6 @@ export const auth = betterAuth({
             logger.error(
               { err: error, userId: user.id },
               "[databaseHooks:user] Failed to delete personal MCP gateways",
-            );
-          }
-          try {
-            await AgentModel.deletePersonalLlmProxiesForUser(user.id);
-          } catch (error) {
-            logger.error(
-              { err: error, userId: user.id },
-              "[databaseHooks:user] Failed to delete personal LLM proxies",
             );
           }
           // Personal skills must not outlive their author either: author_id
@@ -2214,17 +2207,6 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
             "Failed to ensure personal MCP gateway on sign-in",
           );
         }
-        try {
-          await AgentModel.ensurePersonalLlmProxy({
-            userId,
-            organizationId: orgId,
-          });
-        } catch (error) {
-          logger.error(
-            { err: error },
-            "Failed to ensure personal LLM proxy on sign-in",
-          );
-        }
       }
 
       // SPDX-SnippetBegin
@@ -2375,6 +2357,13 @@ async function cleanupAfterMembershipRemoval(params: {
       userId,
       organizationId,
     );
+    // Marketplace credentials outlive a membership otherwise: their FKs only
+    // cascade when the user or the organization is deleted, and a removed
+    // member is neither.
+    await SkillMarketplaceCredentialModel.deleteForMember({
+      userId,
+      organizationId,
+    });
     // Known micro-race, accepted: a membership created between this check and
     // the delete would be cascaded away. The window is a few milliseconds, the
     // failure mode is bounded and recoverable (re-invite the user), and

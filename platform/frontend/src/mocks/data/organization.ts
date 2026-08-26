@@ -22,6 +22,7 @@ export function makeOrganization(
     onlineMcpCatalogEnabled: true,
     mcpIdleHibernationEnabled: false,
     onlineSkillCatalogEnabled: true,
+    skillMarketplaceAnonymousAccess: false,
     skillToolsEnabled: false,
     appsHackathonRecorderEnabled: true,
     newAppsDisabledByDefault: false,

@@ -70,17 +70,21 @@ describe("Virtual API Keys - LLM Proxy", () => {
   });
 
   test("virtual key authenticates an external proxy request", async ({
-    makeOrganization,
     makeSecret,
     makeLlmProviderApiKey,
   }) => {
-    const org = await makeOrganization();
     const secret = await makeSecret({
       secret: { apiKey: "sk-e2e-test-key" },
     });
-    const chatApiKey = await makeLlmProviderApiKey(org.id, secret.id, {
-      provider: "openai",
-    });
+    // Same organization as the proxy: a key from another organization is
+    // rejected by the proxy's organization guard.
+    const chatApiKey = await makeLlmProviderApiKey(
+      proxy.organizationId,
+      secret.id,
+      {
+        provider: "openai",
+      },
+    );
 
     const { value: virtualKey } = await VirtualApiKeyModel.create({
       name: "test-vk",

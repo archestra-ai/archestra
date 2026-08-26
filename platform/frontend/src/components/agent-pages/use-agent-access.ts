@@ -58,8 +58,8 @@ export function useAgentAccess(
   kind: AgentPageKind,
 ) {
   // The backend authorizes against the STORED type, so the route family is
-  // only a stand-in until the record arrives: a profile opened under
-  // `/llm/proxies/` is checked against `agent`, not `llmProxy`.
+  // only a stand-in until the record arrives: a profile opened under the
+  // gateway routes is checked against `agent`, not `mcpGateway`.
   const resource = agent?.agentType
     ? getResourceForAgentType(agent.agentType)
     : AGENT_PAGE_CONFIGS[kind].resource;

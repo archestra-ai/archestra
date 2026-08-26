@@ -206,6 +206,7 @@ class FakeK8sCluster {
         },
         status: {
           phase: running ? "Running" : "Pending",
+          conditions: [{ type: "Ready", status: running ? "True" : "False" }],
           containerStatuses: [
             {
               name: "mcp-server",

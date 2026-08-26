@@ -16,7 +16,6 @@ import { CreditWarningNotice } from "@/components/connection/credit-warning-noti
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { GithubCopilotSignIn } from "@/components/github-copilot-sign-in";
 import { ProviderIcon } from "@/components/provider-icon";
-import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -58,10 +57,15 @@ import {
   platformLabels,
   toPlatformOption,
 } from "./platform.utils";
-import { ConnectionPlatformSelect } from "./platform-select";
+import { ConnectionPlatformToggle } from "./platform-select";
 import { SetupCommandLine } from "./setup-command-line";
 import { SetupSummaryRow } from "./setup-summary-row";
-import { type ConnectSkill, useAllSkills } from "./skills-marketplace-step";
+import {
+  type ConnectSkill,
+  SkillsMarketplaceStep,
+  useAllSkills,
+  useSkillsMarketplaceVisible,
+} from "./skills-marketplace-step";
 import { TerminalBlock } from "./terminal-block";
 
 type ScriptClientId = CreateConnectionSetupBody["clientId"];
@@ -90,24 +94,31 @@ export function isScriptClient(
 }
 
 /**
- * Whether skills can ride along in the setup command: caller is a skill admin,
- * and there is at least one skill to share. Also surfaces the full skill list
- * so the review step can name (and let the user deselect) exactly what the
- * command installs.
+ * Whether skills can ride along in the setup command: the caller can read
+ * skills, and there is at least one to install. Reading is the bar because the
+ * command registers the deployment's shared marketplace URL, which serves each
+ * person exactly the skills they may already read — so a member installs with
+ * the same one command an admin gets.
+ *
+ * The list is surfaced so the review step can name what will be installed. It
+ * is deliberately not a per-skill choice: the shared URL stays current and
+ * carries everything shared with you, so a checkbox per skill would claim
+ * control the install does not have. Sharing a fixed subset is what a snapshot
+ * link is for.
  */
 function useConnectSkills(llmProxyId: string | null): {
   eligible: boolean;
   skills: ConnectSkill[];
 } {
-  const { data: canAdminSkills } = useHasPermissions({ skill: ["admin"] });
+  const { data: canReadSkills } = useHasPermissions({ skill: ["read"] });
   // Skills are environment-scoped: with a proxy selected, only skills in that
   // proxy's environment are connectable.
   const { data: skills } = useAllSkills({
-    enabled: canAdminSkills === true,
+    enabled: canReadSkills === true,
     forAgentId: llmProxyId,
   });
   return {
-    eligible: canAdminSkills === true && (skills ?? []).length > 0,
+    eligible: canReadSkills === true && (skills ?? []).length > 0,
     skills: skills ?? [],
   };
 }
@@ -118,10 +129,8 @@ interface ConnectCommandPanelProps {
   mcpGateways: AgentSelectorAgent[] | null;
   mcpGatewayId: string | null;
   onMcpGatewaySelect: (id: string) => void;
-  /** null when the user can't read LLM proxies. */
-  llmProxies: AgentSelectorAgent[] | null;
+  /** The org's single LLM Proxy id; null when the user can't read it (or it hasn't loaded). */
   llmProxyId: string | null;
-  onLlmProxySelect: (id: string) => void;
   /** When null/undefined: all providers allowed. Otherwise: only these. */
   shownProviders?: readonly SupportedProvider[] | null;
   /** Provider pinned in the URL (bookmarkable); falls back to the first supported. */
@@ -136,7 +145,7 @@ interface ConnectCommandPanelProps {
 /**
  * The whole "step 2" of the wizard: a terminal block whose one-time setup
  * command regenerates itself whenever a selection changes — no explicit
- * generate click. Defaults cover everything (default gateway, default proxy,
+ * generate click. Defaults cover everything (default gateway, the LLM Proxy,
  * first supported provider, skills included); the rare overrides live behind
  * the Options disclosure.
  */
@@ -145,9 +154,7 @@ export function ConnectCommandPanel({
   mcpGateways,
   mcpGatewayId,
   onMcpGatewaySelect,
-  llmProxies,
   llmProxyId,
-  onLlmProxySelect,
   shownProviders,
   urlProvider,
   onProviderSelect,
@@ -163,7 +170,6 @@ export function ConnectCommandPanel({
   const providerCatalog = useModelProviderCatalog();
   // The skill picker labels each row's owner, so it needs the viewer's id.
   const { data: session } = useSession();
-  const currentUserId = session?.user?.id;
   // Skill selection: `null` means "all skills" (the default, and it keeps
   // including skills created later). Once the user touches any checkbox it
   // becomes an explicit snapshot of chosen ids — so an opt-out (empty set)
@@ -219,17 +225,6 @@ export function ConnectCommandPanel({
 
   // Toggle one skill, snapshotting the current selection into an explicit set
   // on first interaction (null → all ids, then add/remove the toggled one).
-  const toggleSkill = useCallback(
-    (skillId: string, checked: boolean) =>
-      setSelectedSkillIds((cur) => {
-        const next = new Set(cur ?? allSkills.map((s) => s.id));
-        if (checked) next.add(skillId);
-        else next.delete(skillId);
-        return next;
-      }),
-    [allSkills],
-  );
-
   const [proxyAuth, setProxyAuth] = useState<ConnectProxyAuth>("provider-key");
   // Target OS for the generated command. Auto-detected from the browser after
   // mount (kept off the initial render to avoid an SSR/hydration mismatch); the
@@ -318,18 +313,18 @@ export function ConnectCommandPanel({
     : proxyAuth;
 
   const gateway = mcpGateways?.find((g) => g.id === mcpGatewayId) ?? null;
-  // The selected proxy may exist without a usable provider (e.g. virtual-key
+  // The LLM Proxy may be available without a usable provider (e.g. virtual-key
   // mode with no configured providers); keep it for the row/editor, but it
   // only joins the command when a provider is also resolved.
-  const proxy = (llmProxies ?? []).find((p) => p.id === llmProxyId) ?? null;
-  const proxyActive = !!(proxy && provider);
+  const hasProxy = llmProxyId !== null;
+  const proxyActive = !!(llmProxyId && provider);
   // Virtual-key auth was chosen, but nothing can back it: the client routes only
   // providers with no configured key (and none are per-user), so no virtual key
   // can be minted. Emitting the script anyway would silently drop the inference
   // proxy, so — like the per-user connect gate — step 3 gates on adding a key
   // instead of shipping a half-configured command.
   const virtualKeyUnbacked =
-    !!proxy && !provider && proxyAuth === "virtual-key";
+    hasProxy && !provider && proxyAuth === "virtual-key";
   const requiredPluginPlatform = platform === "windows" ? "windows" : "posix";
   // The selection follows the client across OS changes. Compatibility is a
   // filter, not permission to re-add something the user explicitly removed.
@@ -369,6 +364,11 @@ export function ConnectCommandPanel({
   // thing being authorized, so the step is gateway-gated.
   const showOAuthStep =
     client.id === "claude-code" && !!gateway && !virtualKeyUnbacked;
+  // The script installs skills itself for everyone who can read them, so the
+  // wizard never grows an extra step here. The marketplace step appears only
+  // when there is no script to carry them: nothing to connect at all (below),
+  // or a client without a generated command.
+  const skillsStepAvailable = useSkillsMarketplaceVisible(client);
   const appName = useAppName();
   // The exact name the script registers the gateway under — referenced in the
   // OAuth step so the user can find it in the `claude /mcp` list.
@@ -377,7 +377,7 @@ export function ConnectCommandPanel({
     appName,
   });
 
-  // Passthrough setups also get a personal passthrough key wired into the
+  // Passthrough setups also get a personal passthrough virtual key wired into the
   // command (best-effort: only when the user can mint one) so requests are
   // attributed to the user. Applies to Claude Code (Anthropic subscription or
   // the user's own Bedrock credentials) and Codex (the user's own OpenAI key).
@@ -417,7 +417,7 @@ export function ConnectCommandPanel({
     platform,
     baseUrl,
     gatewayId: gateway?.id ?? null,
-    proxyId: proxyActive ? proxy.id : null,
+    proxyId: proxyActive ? llmProxyId : null,
     provider: proxyActive ? provider : null,
     proxyAuth: proxyActive ? effectiveProxyAuth : null,
     model: proxyActive ? effectiveModel : null,
@@ -445,9 +445,10 @@ export function ConnectCommandPanel({
 
       let skills: CreateConnectionSetupBody["skills"];
       if (inputs.skillIds && inputs.skillIds.length > 0) {
-        // The marketplace link the client clones from must outlive the one-time
-        // setup token, so it never expires — admins revoke it from the Skills
-        // page when needed.
+        // ttlDays is null because the marketplace the client clones from must
+        // outlive the one-time setup token. It only applies on the snapshot
+        // path (a setup that also delivers plugins); the shared marketplace URL
+        // this normally renders has no expiry to set.
         skills = { skillIds: inputs.skillIds, ttlDays: null };
       }
       if (
@@ -545,10 +546,10 @@ export function ConnectCommandPanel({
 
   const platformEditor = (
     <EditorField label="Platform">
-      <ConnectionPlatformSelect
+      <ConnectionPlatformToggle
         value={platform}
         onValueChange={setPlatform}
-        ariaLabel="Select a client"
+        ariaLabel="Select a platform"
         dataTestId="connect-platform-select"
       />
     </EditorField>
@@ -596,22 +597,8 @@ export function ConnectCommandPanel({
     }
   };
 
-  const proxyEditor = proxy ? (
+  const proxyEditor = hasProxy ? (
     <div className="grid gap-3">
-      {llmProxies && llmProxies.length > 1 && (
-        <EditorField label="Proxy">
-          <AgentSelector
-            mode="single"
-            flat
-            className="w-full"
-            agents={llmProxies}
-            value={proxy.id}
-            onValueChange={onLlmProxySelect}
-            placeholder="Select proxy"
-            searchPlaceholder="Search proxies…"
-          />
-        </EditorField>
-      )}
       <EditorField label="Auth">
         <div className="grid gap-1.5">
           {/* The toggle stays visible even for a per-user provider (GitHub
@@ -632,16 +619,14 @@ export function ConnectCommandPanel({
             {effectiveProxyAuth === "provider-key" ? (
               passthroughAttributes ? (
                 <span>
-                  Passthrough — the command only rewires the base URL, so you
-                  reuse your own API key or existing subscription (e.g. Claude
-                  or ChatGPT plan). Your personal auth key is created for you
-                  and wired into the command via ANTHROPIC_CUSTOM_HEADERS.
+                  Only the base URL changes: requests keep using your own API
+                  key or subscription, and a personal passthrough virtual key in
+                  the command attributes them to you.
                 </span>
               ) : (
                 <span>
-                  Passthrough — the command only rewires the base URL, so you
-                  reuse your own API key or existing subscription (e.g. Claude
-                  or ChatGPT plan).
+                  Only the base URL changes: requests keep using your own API
+                  key or subscription (e.g. a Claude or ChatGPT plan).
                 </span>
               )
             ) : providerIsPerUser && provider ? (
@@ -721,17 +706,9 @@ export function ConnectCommandPanel({
       >
         <Checkbox
           id="connect-include-skills"
-          // Derived from the current skill list (not a raw id-set size), so a
-          // stale id can never pin the master box at "indeterminate" while
-          // every visible skill is checked. Checking it resets to "all"
-          // (null); unchecking sets an explicit empty selection that sticks.
-          checked={
-            selectedSkills.length === allSkills.length
-              ? true
-              : selectedSkills.length === 0
-                ? false
-                : "indeterminate"
-          }
+          // All or nothing: the shared marketplace URL has no per-skill knob,
+          // so "all" (null) and "none" (empty set) are the only honest states.
+          checked={selectedSkills.length > 0}
           onCheckedChange={(checked) =>
             setSelectedSkillIds(checked === true ? null : new Set())
           }
@@ -740,39 +717,13 @@ export function ConnectCommandPanel({
       </label>
       {llmProxyId !== null && (
         <p className="pl-6 text-xs text-muted-foreground">
-          Only skills in the selected LLM proxy's environment are listed.
+          Only skills in the LLM Proxy's environment are listed.
         </p>
       )}
-      <ul className="grid max-h-56 gap-1.5 overflow-y-auto pl-6">
-        {allSkills.map((skill) => (
-          <li key={skill.id}>
-            <label
-              className="flex items-center gap-2 text-sm"
-              htmlFor={`connect-skill-${skill.id}`}
-            >
-              <Checkbox
-                id={`connect-skill-${skill.id}`}
-                checked={
-                  selectedSkillIds === null || selectedSkillIds.has(skill.id)
-                }
-                onCheckedChange={(checked) =>
-                  toggleSkill(skill.id, checked === true)
-                }
-              />
-              <span>{skill.name}</span>
-              <ResourceVisibilityBadge
-                scope={skill.scope}
-                teams={skill.teams}
-                users={skill.users}
-                authorId={skill.authorId}
-                authorName={skill.authorName}
-                currentUserId={currentUserId}
-                showSelfAsMe
-              />
-            </label>
-          </li>
-        ))}
-      </ul>
+      <p className="pl-6 text-xs text-muted-foreground">
+        Everything shared with you is installed, and stays current as skills are
+        added or removed. To share a fixed subset instead, use a snapshot link.
+      </p>
     </div>
   );
 
@@ -851,10 +802,19 @@ export function ConnectCommandPanel({
               : "No setup command selected";
 
   if (!hasAnything) {
+    // Nothing to put in a setup command — but skills install from their own
+    // marketplace URL, so a caller who can read them still has something to do.
     return (
-      <WizardStep n={2} title="Review the setup" last>
-        <NothingToConnectPanel />
-      </WizardStep>
+      <>
+        <WizardStep n={2} title="Review the setup" last={!skillsStepAvailable}>
+          <NothingToConnectPanel />
+        </WizardStep>
+        {skillsStepAvailable && (
+          <WizardStep n={3} title="Install shared skills" last>
+            <SkillsMarketplaceStep client={client} />
+          </WizardStep>
+        )}
+      </>
     );
   }
 
@@ -876,7 +836,7 @@ export function ConnectCommandPanel({
               for tools
             </SetupSummaryRow>
           )}
-          {proxy && (
+          {hasProxy && (
             <SetupSummaryRow
               done={proxyActive}
               editable
@@ -894,7 +854,7 @@ export function ConnectCommandPanel({
                     {providerCatalog.label(provider)}
                   </span>{" "}
                   through{" "}
-                  <ResourceLink href="/llm/proxies">{proxy.name}</ResourceLink>{" "}
+                  <ResourceLink href="/llm/proxy">the LLM Proxy</ResourceLink>{" "}
                   using{" "}
                   <span className="font-medium text-foreground">
                     a virtual key
@@ -907,7 +867,7 @@ export function ConnectCommandPanel({
                     {providerCatalog.label(provider)}
                   </span>{" "}
                   through{" "}
-                  <ResourceLink href="/llm/proxies">{proxy.name}</ResourceLink>{" "}
+                  <ResourceLink href="/llm/proxy">the LLM Proxy</ResourceLink>{" "}
                   using{" "}
                   <span className="font-medium text-foreground">
                     your provider key
@@ -952,14 +912,10 @@ export function ConnectCommandPanel({
                 <>
                   <span>Install </span>
                   <ResourceLink href="/skills">
-                    {selectedSkills.length === allSkills.length ? (
-                      <span>
-                        <span>{allSkills.length} shared skill</span>
-                        {allSkills.length === 1 ? null : <span>s</span>}
-                      </span>
-                    ) : (
-                      <span>{`${selectedSkills.length} of ${allSkills.length} shared skills`}</span>
-                    )}
+                    <span>
+                      <span>{allSkills.length} shared skill</span>
+                      {allSkills.length === 1 ? null : <span>s</span>}
+                    </span>
                   </ResourceLink>
                 </>
               ) : (
@@ -1348,7 +1304,7 @@ function indefiniteArticle(word: string): string {
   return /^[aeiou]/i.test(word) ? "an" : "a";
 }
 
-/** label + control row inside an inline editor. */
+/** Label stacked above its control inside an inline editor. */
 function EditorField({
   label,
   children,
@@ -1357,7 +1313,7 @@ function EditorField({
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid items-center gap-2 sm:grid-cols-[88px_1fr]">
+    <div className="grid gap-1.5">
       <div className="text-xs font-medium text-muted-foreground">{label}</div>
       <div className="min-w-0">{children}</div>
     </div>
@@ -1409,9 +1365,9 @@ function NothingToConnectPanel() {
       <Link href="/mcp/gateways" className="underline hover:text-foreground">
         MCP gateway
       </Link>{" "}
-      or an{" "}
-      <Link href="/llm/proxies" className="underline hover:text-foreground">
-        LLM proxy
+      or set up the{" "}
+      <Link href="/llm/proxy" className="underline hover:text-foreground">
+        LLM Proxy
       </Link>{" "}
       first.
     </div>

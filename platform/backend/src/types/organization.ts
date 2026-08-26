@@ -471,6 +471,7 @@ export const UpdateMcpSettingsSchema = z.object({
 
 export const UpdateSkillsSettingsSchema = z.object({
   onlineSkillCatalogEnabled: z.boolean().optional(),
+  skillMarketplaceAnonymousAccess: z.boolean().optional(),
 });
 
 export const UpdateAgentSettingsSchema = z.object({
@@ -561,7 +562,6 @@ export const UpdateConnectionSettingsSchema = z.object({
   connectionDefaultMcpGatewayId: z.string().uuid().nullable().optional(),
   connectionDefaultProviderKeys:
     ConnectionDefaultProviderKeysSchema.nullable().optional(),
-  connectionDefaultLlmProxyId: z.string().uuid().nullable().optional(),
   connectionDefaultClientId: z.string().max(64).nullable().optional(),
   connectionShownClientIds: z
     .array(z.string().max(64))

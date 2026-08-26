@@ -68,7 +68,6 @@ function renderInstructions() {
     <ProxyClientInstructions
       client={genericClient()}
       profileId="profile-123"
-      profileName="Main Proxy"
       baseUrl="http://localhost:9000/v1"
     />,
   );
@@ -100,9 +99,9 @@ describe("ProxyClientInstructions — Any Client step 4", () => {
   it("renders the Model Router as the first tab of the endpoint card", () => {
     renderInstructions();
 
-    // A selected provider keeps its per-provider URL…
+    // A selected provider keeps its per-provider URL (id-less)…
     expect(
-      screen.getByText("http://localhost:9000/v1/anthropic/profile-123"),
+      screen.getByText("http://localhost:9000/v1/anthropic"),
     ).toBeInTheDocument();
 
     // …while the router is the first tab of the toggler, ahead of providers.
@@ -126,10 +125,10 @@ describe("ProxyClientInstructions — Any Client step 4", () => {
 
     // The unified model-router endpoint replaces the per-provider URL.
     expect(
-      screen.getByText("http://localhost:9000/v1/model-router/profile-123"),
+      screen.getByText("http://localhost:9000/v1/model-router"),
     ).toBeInTheDocument();
     expect(
-      screen.queryByText("http://localhost:9000/v1/anthropic/profile-123"),
+      screen.queryByText("http://localhost:9000/v1/anthropic"),
     ).not.toBeInTheDocument();
     expect(screen.getByText("https://api.openai.com/v1/")).toBeInTheDocument();
 
@@ -200,7 +199,6 @@ describe("ProxyClientInstructions — Claude Desktop attribution header", () => 
       <ProxyClientInstructions
         client={client}
         profileId="profile-123"
-        profileName="Main Proxy"
         baseUrl="http://localhost:9000/v1"
       />,
     );
@@ -243,7 +241,7 @@ describe("ProxyClientInstructions — Claude Desktop attribution header", () => 
     ).toBeGreaterThan(0);
   });
 
-  it("points to LLM Proxies when the user can't mint a key", () => {
+  it("points to the LLM Proxy page when the user can't mint a key", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: false,
     } as ReturnType<typeof useHasPermissions>);
@@ -251,7 +249,7 @@ describe("ProxyClientInstructions — Claude Desktop attribution header", () => 
 
     expect(passthroughProvisionMock).not.toHaveBeenCalled();
     expect(
-      screen.getByRole("link", { name: /LLM Proxies/i }),
+      screen.getByRole("link", { name: /LLM Proxy/i }),
     ).toBeInTheDocument();
   });
 

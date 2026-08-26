@@ -437,4 +437,53 @@ describe("GET /api/llm-virtual-keys", () => {
     expect(stdData[0].name).toBe("std-key");
     expect(stdData[0].keyType).toBe("standard");
   });
+
+  test("GET /api/llm-virtual-keys filters by scope", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    mockUserHasPermission.mockResolvedValue(true);
+
+    const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
+    const parentKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
+    });
+
+    await VirtualApiKeyModel.create({
+      organizationId,
+      name: "org-scoped-key",
+      scope: "org",
+      authorId: user.id,
+      providerApiKeys: [
+        { provider: parentKey.provider, providerApiKeyId: parentKey.id },
+      ],
+    });
+    await VirtualApiKeyModel.create({
+      organizationId,
+      name: "personal-scoped-key",
+      scope: "personal",
+      authorId: user.id,
+      providerApiKeys: [
+        { provider: parentKey.provider, providerApiKeyId: parentKey.id },
+      ],
+    });
+
+    const orgOnly = await app.inject({
+      method: "GET",
+      url: "/api/llm-virtual-keys?scope=org",
+    });
+    expect(orgOnly.statusCode).toBe(200);
+    expect(
+      orgOnly.json().data.map((key: { name: string }) => key.name),
+    ).toEqual(["org-scoped-key"]);
+
+    const personalOnly = await app.inject({
+      method: "GET",
+      url: "/api/llm-virtual-keys?scope=personal",
+    });
+    expect(personalOnly.statusCode).toBe(200);
+    expect(
+      personalOnly.json().data.map((key: { name: string }) => key.name),
+    ).toEqual(["personal-scoped-key"]);
+  });
 });

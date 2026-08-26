@@ -36,10 +36,10 @@ function makeSkill(
 
 function makeRequest(
   linkId: string,
-  overrides: Partial<Omit<MaterializeRequest, "linkId">> = {},
+  overrides: Partial<Omit<MaterializeRequest, "ref">> = {},
 ): MaterializeRequest {
   return {
-    linkId,
+    ref: { kind: "link", id: linkId },
     marketplaceName: "org-abcd1234-skills",
     ownerName: "Acme Corp",
     displayName: "Acme Skills",
@@ -203,9 +203,9 @@ describe("MarketplaceMaterializer", () => {
       expect(result.reused).toBe(true);
       expect(result.commitHash).toMatch(/^[0-9a-f]{40}$/);
       // only the one revision the "winner" wrote exists — no duplicate sequence
-      expect(await SkillShareLinkRevisionModel.listByLink(linkId)).toHaveLength(
-        1,
-      );
+      expect(
+        await SkillShareLinkRevisionModel.list({ kind: "link", id: linkId }),
+      ).toHaveLength(1);
     } finally {
       // the global test setup clears mocks but does not restore originals
       spy.mockRestore();
@@ -227,9 +227,9 @@ describe("MarketplaceMaterializer", () => {
       await expect(
         materializer.materialize(makeRequest(linkId)),
       ).rejects.toBeInstanceOf(MarketplaceMaterializationConflictError);
-      expect(await SkillShareLinkRevisionModel.listByLink(linkId)).toHaveLength(
-        1,
-      );
+      expect(
+        await SkillShareLinkRevisionModel.list({ kind: "link", id: linkId }),
+      ).toHaveLength(1);
     } finally {
       spy.mockRestore();
     }
@@ -495,7 +495,10 @@ describe("MarketplaceMaterializer", () => {
     expect(second.contentHash).toBe(first.contentHash);
 
     // and only one revision was persisted
-    const revs = await SkillShareLinkRevisionModel.listByLink(linkId);
+    const revs = await SkillShareLinkRevisionModel.list({
+      kind: "link",
+      id: linkId,
+    });
     expect(revs).toHaveLength(1);
     expect(readMarketplaceVersion(revs[0].payload.files)).toBe("0.1.0");
   });
@@ -518,7 +521,10 @@ describe("MarketplaceMaterializer", () => {
     expect(parent).toBe(first.commitHash);
 
     // both revisions persisted with parent chain
-    const revs = await SkillShareLinkRevisionModel.listByLink(linkId);
+    const revs = await SkillShareLinkRevisionModel.list({
+      kind: "link",
+      id: linkId,
+    });
     expect(revs).toHaveLength(2);
     expect(revs[0].parentSha).toBeNull();
     expect(revs[1].parentSha).toBe(revs[0].commitSha);
@@ -545,7 +551,7 @@ describe("MarketplaceMaterializer", () => {
     const result = await materializer.materialize(req);
     await expect(fs.access(result.repoPath)).resolves.toBeUndefined();
 
-    await materializer.revoke(linkId);
+    await materializer.revoke({ kind: "link", id: linkId });
     await expect(fs.access(result.repoPath)).rejects.toThrow();
   });
 
@@ -597,7 +603,7 @@ describe("MarketplaceMaterializer", () => {
     );
 
     // simulate a cache wipe (server reboot, container restart, etc.)
-    await fs.rm(materializer.repoPathFor(linkId), {
+    await fs.rm(materializer.repoPathFor({ kind: "link", id: linkId }), {
       recursive: true,
       force: true,
     });
@@ -617,9 +623,9 @@ describe("MarketplaceMaterializer", () => {
     expect(await readParent(replayed.repoPath)).toBe(first.commitHash);
 
     // store still holds exactly two revisions
-    expect(await SkillShareLinkRevisionModel.listByLink(linkId)).toHaveLength(
-      2,
-    );
+    expect(
+      await SkillShareLinkRevisionModel.list({ kind: "link", id: linkId }),
+    ).toHaveLength(2);
   });
 
   test("same content materialized twice produces the same commit SHA across instances", async () => {
@@ -641,9 +647,9 @@ describe("MarketplaceMaterializer", () => {
       expect(replayed.reused).toBe(true);
       expect(replayed.commitHash).toBe(firstResult.commitHash);
       expect(await diskHead(replayed.repoPath)).toBe(firstResult.commitHash);
-      expect(await SkillShareLinkRevisionModel.listByLink(linkId)).toHaveLength(
-        1,
-      );
+      expect(
+        await SkillShareLinkRevisionModel.list({ kind: "link", id: linkId }),
+      ).toHaveLength(1);
     } finally {
       await fs.rm(cacheDir2, { recursive: true, force: true });
     }

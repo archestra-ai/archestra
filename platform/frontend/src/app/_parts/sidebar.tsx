@@ -336,14 +336,20 @@ const contentNavGroups: NavGroup[] = [
     ],
   },
   {
-    label: "LLM Proxies",
+    label: "LLM Proxy",
     items: [
       {
-        title: "LLM Proxies",
-        url: "/llm/proxies",
+        title: "LLM Proxy",
+        url: "/llm/proxy",
         icon: Network,
-        customIsActive: (pathname: string) =>
-          pathname.startsWith("/llm/proxies"),
+        customIsActive: (pathname: string) => pathname.startsWith("/llm/proxy"),
+        // A role may grant only the Virtual Keys or OAuth Clients tab; any of
+        // the three pages keeps the entry visible.
+        permissionUrls: [
+          "/llm/proxy",
+          "/llm/proxy/virtual-keys",
+          "/llm/proxy/oauth-clients",
+        ],
       },
       {
         title: "Model Providers",

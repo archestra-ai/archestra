@@ -3,7 +3,7 @@ title: Model Router Client Credentials
 category: Examples
 order: 2
 description: Build a service app that calls the OpenAI-compatible Model Router with OAuth client credentials
-lastUpdated: 2026-07-27
+lastUpdated: 2026-08-24
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -18,15 +18,15 @@ The full example is available at [github.com/archestra-ai/examples/tree/main/mod
 
 ## What the App Does
 
-1. Uses an OAuth client created from an LLM Proxy's **Connect** dialog
+1. Uses an OAuth client created on the LLM Proxy page
 2. Exchanges `client_id` and `client_secret` for an access token
-3. Sends the access token to `/v1/model-router/{proxyId}/chat/completions`
+3. Sends the access token to `/v1/model-router/chat/completions`
 
 OAuth client credentials do not use a browser consent screen and do not inherit a user's Model Provider keys. Provider access comes from the OAuth client's provider key mappings.
 
 ## Run the Example
 
-Open the LLM Proxy's **Connect** dialog and create an OAuth client. Select the proxies it can access, map the provider keys it can use, and copy the generated secret.
+Go to **LLM Proxy**, open the **OAuth Clients** tab, and create an OAuth client. Map the provider keys it can use, and copy the generated secret.
 
 Then run:
 
@@ -39,7 +39,6 @@ cp .env.example .env
 Set these values in `.env`:
 
 ```text
-LLM_PROXY_ID=<your LLM proxy id>
 OAUTH_CLIENT_ID=<client id>
 OAUTH_CLIENT_SECRET=<client secret>
 MODEL=openai:gpt-4o-mini
@@ -75,7 +74,7 @@ scope=llm:proxy
 After token exchange, the app calls the OpenAI-compatible Model Router:
 
 ```bash
-curl -X POST "http://localhost:9000/v1/model-router/{proxyId}/chat/completions" \
+curl -X POST "http://localhost:9000/v1/model-router/chat/completions" \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{

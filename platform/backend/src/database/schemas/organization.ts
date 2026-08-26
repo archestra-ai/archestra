@@ -72,6 +72,16 @@ const organizationsTable = pgTable("organization", {
     .notNull()
     .default(true),
   /**
+   * Whether the static skills marketplace URL serves unauthenticated clones.
+   * Off by default: the marketplace normally identifies the caller by their own
+   * Archestra token and serves the skills that caller may read, while anonymous
+   * access publishes the org-scoped skills to anyone who can reach the
+   * deployment.
+   */
+  skillMarketplaceAnonymousAccess: boolean("skill_marketplace_anonymous_access")
+    .notNull()
+    .default(false),
+  /**
    * @deprecated The "security engine on/off" toggle (permissive/restrictive) was
    * removed — the security engine is always enabled now. This column is inert:
    * no code reads or writes it, and it is omitted from the API schemas. Retained
@@ -312,8 +322,10 @@ const organizationsTable = pgTable("organization", {
   connectionDefaultMcpGatewayId: uuid("connection_default_mcp_gateway_id"),
 
   /**
-   * Admin-selected LLM proxy pre-filled on /connection.
-   * FK to agents(id) ON DELETE SET NULL — enforced by migration only.
+   * No longer read or written at runtime — the LLM Proxy needs no selection.
+   * The column stays for the rolling-deploy window (older pods still select
+   * it) and as migration input.
+   * TODO(phase-2): drop the column once no release reads it.
    */
   connectionDefaultLlmProxyId: uuid("connection_default_llm_proxy_id"),
 

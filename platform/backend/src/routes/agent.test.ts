@@ -61,10 +61,10 @@ describe("agent routes", () => {
   });
 
   async function expectAgentTypeSoftDelete(
-    agentType: "mcp_gateway" | "llm_proxy",
+    agentType: "mcp_gateway",
     makeAgent: (overrides: {
       name: string;
-      agentType: "mcp_gateway" | "llm_proxy";
+      agentType: "mcp_gateway";
       organizationId: string;
       scope: "org";
       authorId: string;
@@ -253,6 +253,22 @@ describe("agent routes", () => {
       const agent = response.json();
       expect(agent.teams.map((t: { id: string }) => t.id)).toEqual([team.id]);
     });
+
+    test("rejects creating an llm_proxy agent", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/agents",
+        payload: {
+          name: `Proxy Create ${crypto.randomUUID().slice(0, 8)}`,
+          agentType: "llm_proxy",
+          scope: "org",
+          teams: [],
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain("LLM Proxy page");
+    });
   });
 
   describe("advisor delegation default", () => {
@@ -324,17 +340,6 @@ describe("agent routes", () => {
       const agent = await createAgent({ accessAllSubagents: false });
 
       expect(await getExclusions(agent.id)).toEqual([]);
-    });
-
-    test("excludes nothing for an LLM proxy, which cannot delegate", async () => {
-      await seedAdvisor();
-
-      const proxy = await createAgent({
-        agentType: "llm_proxy",
-        accessAllSubagents: true,
-      });
-
-      expect(await getExclusions(proxy.id)).toEqual([]);
     });
 
     test("creates normally when the organization has no advisor", async () => {
@@ -825,10 +830,20 @@ describe("agent routes", () => {
       await expectAgentTypeSoftDelete("mcp_gateway", makeAgent);
     });
 
-    test("soft-deletes llm_proxy rows and hides them from type-filtered routes", async ({
-      makeAgent,
-    }) => {
-      await expectAgentTypeSoftDelete("llm_proxy", makeAgent);
+    test("rejects deleting the org LLM Proxy through the generic agent route", async () => {
+      const { default: AgentModel } = await import("@/models/agent");
+      const proxy = await AgentModel.getOrgLlmProxy(organizationId);
+
+      const deleteResponse = await app.inject({
+        method: "DELETE",
+        url: `/api/agents/${proxy.id}`,
+      });
+
+      expect(deleteResponse.statusCode).toBe(400);
+      expect(deleteResponse.json().error.message).toContain("LLM Proxy page");
+
+      const stillThere = await AgentModel.getOrgLlmProxy(organizationId);
+      expect(stillThere.id).toBe(proxy.id);
     });
 
     test("returns 403 when deleting a personal MCP gateway and the row remains", async () => {
@@ -1031,9 +1046,10 @@ describe("agent routes", () => {
       expect(restoreResponse.json().agentType).toBe("mcp_gateway");
     });
 
-    test("restores LLM proxy rows through the shared agent restore route", async ({
+    test("rejects restoring an llm_proxy row through the generic agent route", async ({
       makeAgent,
     }) => {
+      const { default: AgentModel } = await import("@/models/agent");
       const suffix = crypto.randomUUID().slice(0, 8);
       const created = await makeAgent({
         name: `Restore Proxy ${suffix}`,
@@ -1041,22 +1057,15 @@ describe("agent routes", () => {
         organizationId,
         scope: "org",
       });
-
-      expect(
-        (
-          await app.inject({
-            method: "DELETE",
-            url: `/api/agents/${created.id}`,
-          })
-        ).statusCode,
-      ).toBe(200);
+      await AgentModel.delete(created.id);
 
       const restoreResponse = await app.inject({
         method: "POST",
         url: `/api/agents/${created.id}/restore`,
       });
-      expect(restoreResponse.statusCode).toBe(200);
-      expect(restoreResponse.json().agentType).toBe("llm_proxy");
+
+      expect(restoreResponse.statusCode).toBe(400);
+      expect(restoreResponse.json().error.message).toContain("LLM Proxy page");
     });
 
     test("returns 409 when restoring would create a duplicate active name", async () => {
@@ -1088,28 +1097,6 @@ describe("agent routes", () => {
       expect(restoreResponse.statusCode).toBe(409);
       expect(restoreResponse.json().error.message).toContain(
         "another active MCP gateway is already using this name",
-      );
-    });
-
-    test("returns 409 when restoring an old default LLM proxy would create two defaults", async () => {
-      const { default: AgentModel } = await import("@/models/agent");
-      const original =
-        await AgentModel.getLLMProxyOrCreateDefault(organizationId);
-      await AgentModel.delete(original.id);
-
-      // Recreate the org default proxy so a restore would collide with it.
-      const replacement =
-        await AgentModel.getLLMProxyOrCreateDefault(organizationId);
-      expect(replacement.id).not.toBe(original.id);
-
-      const restoreResponse = await app.inject({
-        method: "POST",
-        url: `/api/agents/${original.id}/restore`,
-      });
-
-      expect(restoreResponse.statusCode).toBe(409);
-      expect(restoreResponse.json().error.message).toContain(
-        "another active default LLM proxy",
       );
     });
 
@@ -1331,6 +1318,43 @@ describe("agent routes", () => {
       expect(returned.tools[0]).not.toHaveProperty("meta");
     });
 
+    test("leaves the tools off when the caller asks for the roster alone", async ({
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+    }) => {
+      // Even as slim refs the tools carry a name and a description each, which
+      // on a real organization is the great majority of this response — and the
+      // new-chat screen, whose first paint waits on this list, draws none of
+      // them. Callers opt out; every other caller keeps today's response.
+      const agent = await makeAgent({
+        name: `Roster Only Agent ${crypto.randomUUID().slice(0, 8)}`,
+        organizationId,
+        scope: "org",
+        authorId: user.id,
+      });
+      const tool = await makeTool({});
+      await makeAgentTool(agent.id, tool.id);
+
+      const findAgent = async (query: string) => {
+        const response = await app.inject({
+          method: "GET",
+          url: `/api/agents/all?excludeBuiltIn=true${query}`,
+        });
+        expect(response.statusCode).toBe(200);
+        return response.json().find((a: { id: string }) => a.id === agent.id);
+      };
+
+      const withoutTools = await findAgent("&includeTools=false");
+      expect(withoutTools).toBeDefined();
+      expect(withoutTools.name).toBe(agent.name);
+      expect(withoutTools.tools).toEqual([]);
+
+      // Opting out is the only thing that drops them.
+      expect((await findAgent("")).tools).toHaveLength(1);
+      expect((await findAgent("&includeTools=true")).tools).toHaveLength(1);
+    });
+
     test("should exclude built-in agents when excludeBuiltIn=true", async ({
       makeAgent,
       seedAndAssignArchestraTools,
@@ -1509,34 +1533,72 @@ describe("agent routes", () => {
     });
   });
 
-  describe("GET /api/llm-proxy/default", () => {
-    test("returns the caller's personal LLM proxy, creating it on first call", async () => {
+  describe("llm_proxy rows through generic agent CRUD", () => {
+    test("PUT /api/agents/:id rejects updates to the org LLM Proxy", async () => {
       const { default: AgentModel } = await import("@/models/agent");
+      const proxy = await AgentModel.getOrgLlmProxy(organizationId);
 
       const response = await app.inject({
-        method: "GET",
-        url: "/api/llm-proxy/default",
+        method: "PUT",
+        url: `/api/agents/${proxy.id}`,
+        payload: { name: "Renamed Proxy" },
       });
 
-      expect(response.statusCode).toBe(200);
-      const proxy = response.json();
-      expect(proxy.agentType).toBe("llm_proxy");
-      expect(proxy.isPersonalProxy).toBe(true);
-      expect(proxy.scope).toBe("personal");
-      expect(proxy.authorId).toBe(user.id);
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain("LLM Proxy page");
+    });
 
-      // idempotent: a second call returns the same personal proxy
-      const again = await app.inject({
-        method: "GET",
-        url: "/api/llm-proxy/default",
-      });
-      expect(again.json().id).toBe(proxy.id);
-
-      const personal = await AgentModel.getPersonalLlmProxy(
-        user.id,
+    test("PUT /api/agents/:id rejects turning another agent into an llm_proxy", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({
+        name: `Type Flip ${crypto.randomUUID().slice(0, 8)}`,
+        agentType: "mcp_gateway",
         organizationId,
+        scope: "org",
+      });
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/agents/${agent.id}`,
+        payload: { agentType: "llm_proxy", isDefault: true },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain("LLM Proxy page");
+    });
+
+    test("POST /api/agents/:id/clone rejects cloning the org LLM Proxy", async () => {
+      const { default: AgentModel } = await import("@/models/agent");
+      const proxy = await AgentModel.getOrgLlmProxy(organizationId);
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/agents/${proxy.id}/clone`,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain("LLM Proxy page");
+    });
+
+    test("list endpoints never return llm_proxy rows, even without a type filter", async () => {
+      const { default: AgentModel } = await import("@/models/agent");
+      const proxy = await AgentModel.getOrgLlmProxy(organizationId);
+
+      const paginated = await app.inject({
+        method: "GET",
+        url: "/api/agents?limit=100&offset=0",
+      });
+      expect(paginated.statusCode).toBe(200);
+      expect(
+        paginated.json().data.some((a: { id: string }) => a.id === proxy.id),
+      ).toBe(false);
+
+      const all = await app.inject({ method: "GET", url: "/api/agents/all" });
+      expect(all.statusCode).toBe(200);
+      expect(all.json().some((a: { id: string }) => a.id === proxy.id)).toBe(
+        false,
       );
-      expect(personal?.id).toBe(proxy.id);
     });
   });
 

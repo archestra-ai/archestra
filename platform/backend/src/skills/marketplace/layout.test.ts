@@ -4,6 +4,7 @@ import type { SkillFile } from "@/types";
 import {
   computeLayout,
   type MaterializePluginInput,
+  type MaterializeRequest,
   type MaterializeSkillInput,
 } from "./layout";
 
@@ -44,7 +45,7 @@ function makeSkill(
 describe("computeLayout", () => {
   test("drops resource files whose path collides only by case", () => {
     const files = computeTestLayout({
-      linkId: "aaaaaaaa-1111-2222-3333-444444444444",
+      ref: { kind: "link", id: "aaaaaaaa-1111-2222-3333-444444444444" },
       marketplaceName: "org-abcd1234-skills",
       ownerName: "Acme Corp",
       displayName: "Acme Skills",
@@ -70,7 +71,7 @@ describe("computeLayout", () => {
 
   test("keeps files whose names merely contain dots but are not `..` segments", () => {
     const files = computeTestLayout({
-      linkId: "aaaaaaaa-1111-2222-3333-444444444444",
+      ref: { kind: "link", id: "aaaaaaaa-1111-2222-3333-444444444444" },
       marketplaceName: "org-abcd1234-skills",
       ownerName: "Acme Corp",
       displayName: "Acme Skills",
@@ -89,7 +90,7 @@ describe("computeLayout", () => {
 
   test("drops resource files that traverse out of the skill root", () => {
     const files = computeTestLayout({
-      linkId: "aaaaaaaa-1111-2222-3333-444444444444",
+      ref: { kind: "link", id: "aaaaaaaa-1111-2222-3333-444444444444" },
       marketplaceName: "org-abcd1234-skills",
       ownerName: "Acme Corp",
       displayName: "Acme Skills",
@@ -107,7 +108,7 @@ describe("computeLayout", () => {
 
   test("drops Windows-style backslash traversal segments", () => {
     const files = computeTestLayout({
-      linkId: "aaaaaaaa-1111-2222-3333-444444444444",
+      ref: { kind: "link", id: "aaaaaaaa-1111-2222-3333-444444444444" },
       marketplaceName: "org-abcd1234-skills",
       ownerName: "Acme Corp",
       displayName: "Acme Skills",
@@ -121,7 +122,7 @@ describe("computeLayout", () => {
 
   test("preserves the display name in metadata, letting an author-provided displayName win", () => {
     const files = computeTestLayout({
-      linkId: "aaaaaaaa-1111-2222-3333-444444444444",
+      ref: { kind: "link", id: "aaaaaaaa-1111-2222-3333-444444444444" },
       marketplaceName: "org-abcd1234-skills",
       ownerName: "Acme Corp",
       displayName: "Acme Skills",
@@ -146,7 +147,7 @@ describe("computeLayout", () => {
 
   test("every SKILL.md frontmatter name equals its directory, matches the Agent Skills spec, and is unique", () => {
     const files = computeTestLayout({
-      linkId: "aaaaaaaa-1111-2222-3333-444444444444",
+      ref: { kind: "link", id: "aaaaaaaa-1111-2222-3333-444444444444" },
       marketplaceName: "org-abcd1234-skills",
       ownerName: "Acme Corp",
       displayName: "Acme Skills",
@@ -186,7 +187,7 @@ describe("computeLayout", () => {
   test("stamps every client manifest with the supplied revision version", () => {
     const files = computeLayout(
       {
-        linkId: "aaaaaaaa-1111-2222-3333-444444444444",
+        ref: { kind: "link", id: "aaaaaaaa-1111-2222-3333-444444444444" },
         marketplaceName: "org-abcd1234-skills",
         ownerName: "Acme Corp",
         displayName: "Acme Skills",
@@ -205,8 +206,8 @@ describe("computeLayout", () => {
   });
 
   test("zero plugins leaves the legacy tree byte-identical", () => {
-    const req = {
-      linkId: "aaaaaaaa-1111-2222-3333-444444444444",
+    const req: MaterializeRequest = {
+      ref: { kind: "link", id: "aaaaaaaa-1111-2222-3333-444444444444" },
       marketplaceName: "org-abcd1234-skills",
       ownerName: "Acme Corp",
       displayName: "Acme Skills",
@@ -226,7 +227,7 @@ describe("computeLayout", () => {
     ];
     const files = computeLayout(
       {
-        linkId: "aaaaaaaa-1111-2222-3333-444444444444",
+        ref: { kind: "link", id: "aaaaaaaa-1111-2222-3333-444444444444" },
         marketplaceName: "org-abcd1234-skills",
         ownerName: "Acme Corp",
         displayName: "Acme Skills",

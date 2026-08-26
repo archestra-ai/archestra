@@ -177,25 +177,6 @@ export default function ApiKeysPage() {
   });
   const { data: organization } = useOrganization();
   const providerCatalog = useModelProviderCatalog();
-  const providerSettingsItems = useMemo(
-    () =>
-      Object.entries(PROVIDER_CONFIG)
-        .map(([provider, config]) => ({
-          id: provider as LlmProviderApiKeyResponse["provider"],
-          label: config.name,
-          icon: (
-            <Image
-              src={config.icon}
-              alt=""
-              width={18}
-              height={18}
-              className="rounded dark:invert"
-            />
-          ),
-        }))
-        .sort((a, b) => a.label.localeCompare(b.label)),
-    [],
-  );
   // Read defensively: suites that render this page mock the auth query module
   // wholesale, and the Access column should fall back to the scope label
   // rather than crash the table (same convention as `user-share-field.tsx`).
@@ -237,11 +218,14 @@ export default function ApiKeysPage() {
       offset: 0,
       enabled: !!selectedApiKeyId && isDeleteDialogOpen,
     });
-  const { data: blockingOauthClients = [], isPending: isLoadingOauthClients } =
+  const { data: blockingOauthClientsData, isPending: isLoadingOauthClients } =
     useLlmOauthClients({
       providerApiKeyId: selectedApiKeyId ?? undefined,
+      limit: 100,
+      offset: 0,
       enabled: !!selectedApiKeyId && isDeleteDialogOpen,
     });
+  const blockingOauthClients = blockingOauthClientsData?.data ?? [];
 
   const getKeyUsage = useCallback(
     (keyId: string): string | null => {
@@ -360,7 +344,7 @@ export default function ApiKeysPage() {
     if (!selectedApiKey) return;
     const hasBlockingAssociations =
       (blockingVirtualKeys?.pagination.total ?? 0) > 0 ||
-      blockingOauthClients.length > 0;
+      (blockingOauthClientsData?.pagination.total ?? 0) > 0;
     if (hasBlockingAssociations) return;
     try {
       await deleteMutation.mutateAsync(selectedApiKey.id);
@@ -372,7 +356,7 @@ export default function ApiKeysPage() {
   }, [
     selectedApiKey,
     blockingVirtualKeys,
-    blockingOauthClients,
+    blockingOauthClientsData,
     deleteMutation,
   ]);
 
@@ -886,6 +870,9 @@ export default function ApiKeysPage() {
               virtualKeys={blockingVirtualKeys?.data ?? []}
               totalVirtualKeys={blockingVirtualKeys?.pagination.total ?? 0}
               oauthClients={blockingOauthClients}
+              totalOauthClients={
+                blockingOauthClientsData?.pagination.total ?? 0
+              }
               isLoading={isLoadingVirtualKeys || isLoadingOauthClients}
             />
           }
@@ -895,7 +882,7 @@ export default function ApiKeysPage() {
             isLoadingVirtualKeys ||
             isLoadingOauthClients ||
             (blockingVirtualKeys?.pagination.total ?? 0) > 0 ||
-            blockingOauthClients.length > 0
+            (blockingOauthClientsData?.pagination.total ?? 0) > 0
           }
           confirmLabel="Delete API Key"
           pendingLabel="Deleting..."
@@ -910,20 +897,21 @@ function DeleteApiKeyDescription({
   virtualKeys,
   totalVirtualKeys,
   oauthClients,
+  totalOauthClients,
   isLoading,
 }: {
   apiKey: LlmProviderApiKeyResponse | null;
   virtualKeys: archestraApiTypes.GetAllVirtualApiKeysResponses["200"]["data"];
   totalVirtualKeys: number;
-  oauthClients: archestraApiTypes.GetLlmOauthClientsResponses["200"];
+  oauthClients: archestraApiTypes.GetLlmOauthClientsResponses["200"]["data"];
+  totalOauthClients: number;
   isLoading: boolean;
 }) {
   if (!apiKey) {
     return null;
   }
 
-  const hasBlockingAssociations =
-    totalVirtualKeys > 0 || oauthClients.length > 0;
+  const hasBlockingAssociations = totalVirtualKeys > 0 || totalOauthClients > 0;
 
   if (!hasBlockingAssociations) {
     return (
@@ -951,7 +939,7 @@ function DeleteApiKeyDescription({
             <p className="font-medium">Virtual API keys</p>
             <Link
               className="text-primary underline-offset-4 hover:underline"
-              href="/llm/proxies"
+              href="/llm/proxy/virtual-keys"
             >
               View all
             </Link>
@@ -989,7 +977,7 @@ function DeleteApiKeyDescription({
             <p className="font-medium">OAuth clients</p>
             <Link
               className="text-primary underline-offset-4 hover:underline"
-              href="/llm/proxies"
+              href="/llm/proxy/oauth-clients"
             >
               View all
             </Link>
@@ -1007,10 +995,10 @@ function DeleteApiKeyDescription({
               </li>
             ))}
           </ul>
-          {oauthClients.length > 5 && (
+          {totalOauthClients > 5 && (
             <p className="text-muted-foreground">
-              <span>{oauthClients.length - 5} more OAuth client</span>
-              {oauthClients.length - 5 === 1 ? null : <span>s</span>}
+              <span>{totalOauthClients - 5} more OAuth client</span>
+              {totalOauthClients - 5 === 1 ? null : <span>s</span>}
               <span> matched.</span>
             </p>
           )}

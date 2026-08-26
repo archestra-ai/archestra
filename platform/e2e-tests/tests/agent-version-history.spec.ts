@@ -8,10 +8,9 @@ import {
 } from "../utils";
 import { expect, test } from "./api-fixtures";
 
-// One shared dialog (AgentVersionHistoryDialog) serves agents, MCP gateways,
-// and LLM proxies, so the deep flow — browse, compare, restore — runs once
-// through the agents page, and the gateway/proxy tests pin only their own
-// entry-point wiring. Versions are minted server-side on create (v1) and on
+// One shared dialog (AgentVersionHistoryDialog) serves both agents and MCP
+// gateways, so the deep flow — browse, compare, restore — runs once through
+// the agents page, and the gateway test pins only its own entry-point wiring. Versions are minted server-side on create (v1) and on
 // every config change, so one API update gives a two-version history.
 //
 // Chromium only, unlike the `agents.spec.ts` these share a page with: what is
@@ -169,53 +168,5 @@ test("opens an MCP gateway's version history from its row button", async ({
     await expect(dialog.getByRole("button", { name: /^v1\b/ })).toBeVisible();
   } finally {
     await deleteAgent(request, gateway.id);
-  }
-});
-
-test("opens an LLM proxy's version history from its row button", async ({
-  page,
-  request,
-  createLlmProxy,
-  deleteAgent,
-  makeApiRequest,
-}) => {
-  test.setTimeout(120_000);
-
-  const PROXY_NAME = `Version History Proxy E2E ${Date.now()}`;
-  const proxyResponse = await createLlmProxy(request, PROXY_NAME, "personal");
-  const proxy = await proxyResponse.json();
-
-  try {
-    await makeApiRequest({
-      request,
-      method: "put",
-      urlSuffix: `/api/agents/${proxy.id}`,
-      data: { description: "second revision" },
-    });
-
-    await goToPage(page, "/llm/proxies");
-    await selectAgentTableView(page);
-
-    // Version history sits in the row's "More actions" menu on every entity
-    // list, so the row has to arrive before the menu can be opened.
-    const nameCell = page
-      .getByTestId(E2eTestId.AgentsTable)
-      .getByTitle(PROXY_NAME, { exact: true });
-    await waitForElementWithReload(page, nameCell, {
-      timeout: 30_000,
-      intervals: [2000, 3000, 5000],
-      checkEnabled: false,
-    });
-    await openAgentRowMenu(page, PROXY_NAME);
-    await page
-      .getByTestId(`${E2eTestId.AgentVersionHistoryButton}-${PROXY_NAME}`)
-      .click();
-
-    const dialog = versionHistoryDialog(page);
-    await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole("button", { name: /^v2\b/ })).toBeVisible();
-    await expect(dialog.getByRole("button", { name: /^v1\b/ })).toBeVisible();
-  } finally {
-    await deleteAgent(request, proxy.id);
   }
 });

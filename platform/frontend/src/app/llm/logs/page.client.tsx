@@ -231,7 +231,7 @@ function SessionsTable() {
   });
 
   const { data: agents } = useProfiles({
-    filters: { agentTypes: ["agent", "llm_proxy"] },
+    filters: { agentTypes: ["agent"] },
   });
 
   const { data: uniqueUsers } = useUniqueUserIds();
@@ -507,7 +507,7 @@ function SessionsTable() {
           )}
         </div>
 
-        {/* Two people's personal proxies can both be called "My Proxy", so the
+        {/* Two people's personal agents can both be called "My Agent", so the
             picker carries each one's scope and owner email rather than a bare
             name. */}
         <AgentSelector
@@ -519,14 +519,14 @@ function SessionsTable() {
           onValueChange={handleProfileFilterChange}
           sentinelOption={{
             value: "all",
-            label: "All Agents & LLM Proxies",
+            label: "All Agents",
           }}
           // Only reached when the URL pins an id that no longer resolves to an
           // agent (e.g. a bookmarked filter whose target was deleted); the
           // sentinel label covers the ordinary unfiltered state.
           placeholder="Filter by Agent"
-          searchPlaceholder="Search agents and LLM proxies…"
-          emptyMessage="No agents or LLM proxies found."
+          searchPlaceholder="Search agents…"
+          emptyMessage="No agents found."
           className={filterControlClass({ active: profileFilter !== "all" })}
         />
 

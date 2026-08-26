@@ -7,6 +7,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
 
 export type { SupportedProvider };
@@ -72,6 +73,13 @@ export function useLlmProviderApiKeys(params?: LlmProviderApiKeysQueryParams) {
       return data ?? [];
     },
     enabled: params?.enabled,
+    // Restored on refresh: this list is what the new-chat screen branches on
+    // to choose between the composer and the connect-a-provider prompt, so
+    // without it a reload of the app's landing page sits behind a spinner. The
+    // rows are the ones already listed in settings — a key's secret is held in
+    // the secrets table and referenced here only by id, so no credential is
+    // written to the snapshot.
+    meta: PERSISTED_QUERY_META,
   });
 }
 

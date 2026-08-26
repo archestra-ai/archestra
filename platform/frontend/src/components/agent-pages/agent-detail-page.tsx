@@ -331,12 +331,11 @@ function AgentDetails({
             type={isBuiltIn ? "builtIn" : agent.scope}
             className="font-normal"
           />
-          {(kind === "llm_proxy" || kind === "mcp_gateway") &&
-            environmentName && (
-              <Badge variant="outline" className="font-normal">
-                {environmentName}
-              </Badge>
-            )}
+          {kind === "mcp_gateway" && environmentName && (
+            <Badge variant="outline" className="font-normal">
+              {environmentName}
+            </Badge>
+          )}
         </div>
       }
       documentTitle={agent.name}
@@ -443,13 +442,12 @@ function AgentDetails({
         40px there against 16px between every card below it.
       */}
       <div className="space-y-4">
-        {kind !== "llm_proxy" && (
-          <OverviewSummary
-            headingId="agent-overview-heading"
-            facts={overviewFacts}
-            configHref={canEdit ? agentActionHref(editAction) : undefined}
-          />
-        )}
+        <OverviewSummary
+          headingId="agent-overview-heading"
+          facts={overviewFacts}
+          configHref={canEdit ? agentActionHref(editAction) : undefined}
+        />
+
         {showConnect && (
           // No heading of its own: the cards inside are already titled
           // "Endpoint" and "Authentication", and a "Connect" band above them

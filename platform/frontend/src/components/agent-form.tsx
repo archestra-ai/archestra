@@ -536,10 +536,6 @@ function getSuccessMessage(agentType: AgentType, isUpdate: boolean): string {
       create: "MCP Gateway created successfully",
       update: "MCP Gateway updated successfully",
     },
-    llm_proxy: {
-      create: "LLM Proxy created successfully",
-      update: "LLM Proxy updated successfully",
-    },
     agent: {
       create: "Agent created successfully",
       update: "Agent updated successfully",
@@ -558,7 +554,6 @@ const KNOWLEDGE_PREVIEW_LIMIT = 12;
 export const agentTypeDisplayName: Record<string, string> = {
   agent: "agent",
   mcp_gateway: "MCP Gateway",
-  llm_proxy: "LLM Proxy",
   profile: "profile",
 };
 
@@ -650,7 +645,6 @@ export function AccessLevelSelector({
   const resourceMap: Record<string, string> = {
     agent: "agent",
     mcp_gateway: "mcpGateway",
-    llm_proxy: "llmProxy",
     profile: "agent",
   };
   const resourceName = resourceMap[agentType] || "agent";
@@ -882,9 +876,7 @@ export function AgentForm({
     activeSection === undefined || activeSection === group;
   const supportsSubagents = agentType === "agent";
   const shouldLoadIdentityProviders =
-    agentType === "mcp_gateway" ||
-    agentType === "llm_proxy" ||
-    agentType === "agent";
+    agentType === "mcp_gateway" || agentType === "agent";
   const shouldLoadKnowledgeSources = true;
   const shouldLoadLlmConfiguration = agentType === "agent";
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
@@ -912,9 +904,8 @@ export function AgentForm({
   } = useAgentSubagentExclusions(supportsSubagents ? agent?.id : undefined);
   // Which skills this gateway publishes over `skill://` (SEP-2640). Offered on
   // exactly the agent types that serve MCP resources — the same set that gets
-  // the tool control, so LLM proxies have neither — and only where the
-  // deployment has enabled the draft extension. The API enforces the same
-  // split, so a proxy cannot be given a published set out of band.
+  // the tool control — and only where the deployment has enabled the draft
+  // extension. The API enforces the same split.
   const mcpGatewaySkillsEnabled = useFeature("mcpGatewaySkillsEnabled");
   // `skill:read` is the API's floor on these endpoints — publishing a skill
   // hands its body to every holder of the gateway's token, so it is not
@@ -1170,18 +1161,15 @@ export function AgentForm({
 
   // Determine type-specific visibility based on agentType prop
   const isInternalAgent = agentType === "agent";
-  // Agents, LLM proxies, and MCP gateways can all be assigned a deployment
-  // environment. For agents it binds the code sandbox runtime; for LLM proxies
-  // / MCP gateways it is an attribution label so their
-  // inference/usage falls under environment-scoped cost limits.
-  const supportsEnvironment =
-    isInternalAgent || agentType === "llm_proxy" || agentType === "mcp_gateway";
+  // Agents and MCP gateways can be assigned a deployment environment. For
+  // agents it binds the code sandbox runtime; for MCP gateways it is an
+  // attribution label so their usage falls under environment-scoped cost
+  // limits.
+  const supportsEnvironment = isInternalAgent || agentType === "mcp_gateway";
   const environmentHelpText =
-    agentType === "llm_proxy"
-      ? "The environment this proxy's inference is attributed to, so its usage counts against that environment's cost limits."
-      : agentType === "mcp_gateway"
-        ? "The environment this gateway belongs to, controlling which tools and knowledge it can expose to consumers."
-        : "The environment for this agent's code sandbox (runtime and network egress) and the tools and knowledge sources it can use.";
+    agentType === "mcp_gateway"
+      ? "The environment this gateway belongs to, controlling which tools and knowledge it can expose to consumers."
+      : "The environment for this agent's code sandbox (runtime and network egress) and the tools and knowledge sources it can use.";
   const isBuiltIn = !!agent?.builtIn;
   const agentHooksEnabled = useFeature("agentHooksEnabled");
   // "Auto" (implicit access to all tools) is the default for new agents; admins
@@ -1209,14 +1197,9 @@ export function AgentForm({
   // The Advisor is org-wide by design — every environment consults the one
   // instance — so it is the one agent kind with no environment of its own.
   const showsEnvironmentSelector =
-    (isInternalAgent ||
-      agentType === "llm_proxy" ||
-      agentType === "mcp_gateway") &&
-    !isAdvisorBuiltIn;
+    (isInternalAgent || agentType === "mcp_gateway") && !isAdvisorBuiltIn;
   const supportsIdentityProvider =
-    agentType === "mcp_gateway" ||
-    agentType === "llm_proxy" ||
-    agentType === "agent";
+    agentType === "mcp_gateway" || agentType === "agent";
   const mcpAuthDocsUrl = getFrontendDocsUrl(DocsPage.McpAuthentication);
   // The agents page documents this setting for gateways too.
   const toolConnectionsDocsUrl = getDocsUrl(
@@ -1256,11 +1239,10 @@ export function AgentForm({
     !agent?.id ||
     !supportsSubagents ||
     (delegationsLoaded && subagentExclusionsLoaded);
-  const showSecurity =
-    !isBuiltIn && (agentType === "llm_proxy" || agentType === "agent");
+  const showSecurity = !isBuiltIn && agentType === "agent";
   const showsHooks = agentHooksEnabled && isInternalAgent && !isBuiltIn;
-  // The tools panel is mounted only when it has a section to show: an LLM
-  // proxy reaches no tools, and an empty bordered panel would read as broken.
+  // The tools panel is mounted only when it has a section to show: an empty
+  // bordered panel would read as broken.
   const toolsPanelHasContent = showTools || showSkills || showsHooks;
   // What the Advanced step holds for this record, named in its description.
   const advancedSettingsSummary = [
@@ -1498,7 +1480,7 @@ export function AgentForm({
   // on the same condition that renders the selector, so the form never
   // submits an environment it did not show.
   useDefaultEnvironmentSeed({
-    resource: getResourceForAgentType(agentType),
+    resource: agentType === "mcp_gateway" ? "mcpGateway" : "agent",
     enabled: !agent && showsEnvironmentSelector,
     apply: setEnvironmentId,
   });
@@ -1932,17 +1914,15 @@ export function AgentForm({
                   passthroughHeaders.length > 0 ? passthroughHeaders : null,
               }),
             }),
-            // The tools group: what the agent may reach, and how. An LLM proxy
-            // reaches none of it and has no such controls to send.
-            ...(showToolsSections &&
-              agentType !== "llm_proxy" && {
-                knowledgeBaseIds: knowledgeBaseIds,
-                connectorIds: connectorIds,
-                toolExposureMode,
-                missingCredentialBehavior,
-                accessAllTools,
-                ...(supportsSubagents && { accessAllSubagents }),
-              }),
+            // The tools group: what the agent may reach, and how.
+            ...(showToolsSections && {
+              knowledgeBaseIds: knowledgeBaseIds,
+              connectorIds: connectorIds,
+              toolExposureMode,
+              missingCredentialBehavior,
+              accessAllTools,
+              ...(supportsSubagents && { accessAllSubagents }),
+            }),
           },
         });
         savedAgentId = updated?.id ?? agent.id;
@@ -1978,14 +1958,12 @@ export function AgentForm({
           ...(supportsIdentityProvider && {
             identityProviderId: identityProviderId || null,
           }),
-          ...(agentType !== "llm_proxy" && {
-            knowledgeBaseIds: knowledgeBaseIds,
-            connectorIds: connectorIds,
-            toolExposureMode,
-            missingCredentialBehavior,
-            accessAllTools,
-            ...(supportsSubagents && { accessAllSubagents }),
-          }),
+          knowledgeBaseIds: knowledgeBaseIds,
+          connectorIds: connectorIds,
+          toolExposureMode,
+          missingCredentialBehavior,
+          accessAllTools,
+          ...(supportsSubagents && { accessAllSubagents }),
           teams: assignedTeamIds,
           users: assignedUserIds,
           labels: updatedLabels,
@@ -3856,16 +3834,14 @@ export function AgentForm({
                 {supportsIdentityProvider && identityProviders.length > 0 && (
                   <div className="space-y-2">
                     <Label>
-                      {agentType === "llm_proxy" || agentType === "agent"
+                      {agentType === "agent"
                         ? "Identity Provider (JWKS)"
                         : "Identity Provider (Enterprise/JWKS)"}
                     </Label>
                     <p className="text-sm text-muted-foreground">
-                      {agentType === "llm_proxy"
-                        ? `Select the OIDC identity provider this LLM Proxy should trust for JWKS JWT authentication. Leave this unset to keep using provider API keys and virtual keys without IdP JWT validation.`
-                        : agentType === "agent"
-                          ? `Select the OIDC identity provider this agent should trust for direct JWKS JWT authentication over A2A (Webhook). Leave this unset to keep authenticating A2A requests with ${appName} platform tokens.`
-                          : `Select the OIDC identity provider this MCP Gateway should trust for ID-JAG and direct JWKS JWT authentication. The same provider is also used when ${appName} needs to resolve enterprise-managed downstream credentials for tool calls. Leave this unset to keep using the other supported MCP Gateway authentication methods without IdP JWT validation.`}
+                      {agentType === "agent"
+                        ? `Select the OIDC identity provider this agent should trust for direct JWKS JWT authentication over A2A (Webhook). Leave this unset to keep authenticating A2A requests with ${appName} platform tokens.`
+                        : `Select the OIDC identity provider this MCP Gateway should trust for ID-JAG and direct JWKS JWT authentication. The same provider is also used when ${appName} needs to resolve enterprise-managed downstream credentials for tool calls. Leave this unset to keep using the other supported MCP Gateway authentication methods without IdP JWT validation.`}
                       {mcpAuthDocsUrl ? (
                         <>
                           {" "}

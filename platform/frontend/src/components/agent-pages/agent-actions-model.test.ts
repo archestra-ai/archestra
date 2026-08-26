@@ -4,13 +4,13 @@ import { agentAction, getAgentActionModel } from "./agent-actions-model";
 describe("getAgentActionModel", () => {
   it("uses the stored legacy resource while keeping the current route family", () => {
     const model = getAgentActionModel({
-      kind: "llm_proxy",
+      kind: "mcp_gateway",
       agent: { id: "legacy", agentType: "profile", builtIn: false },
     });
 
     expect(agentAction(model, "connect")).toMatchObject({
       label: "Connect",
-      href: "/llm/proxies/legacy#connect",
+      href: "/mcp/gateways/legacy#connect",
       permissions: { agent: ["read"] },
       visible: true,
     });

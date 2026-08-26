@@ -3031,8 +3031,27 @@ export function ChatPageContent({
     );
   }
 
-  // Show loading spinner while essential data is loading
-  if (isLoadingApiKeyCheck || isLoadingAgents || isPlaywrightCheckLoading) {
+  // Hold the screen for one thing only: whether a provider key exists at all.
+  // That decides between two entirely different screens — the composer and the
+  // connect-a-provider prompt — so guessing it and correcting shows the user a
+  // screen that was never true. It is also cheap to wait for: a handful of rows
+  // that the refresh snapshot restores, so on a reload this is already resolved.
+  //
+  // Everything else the composer needs now fills in around it rather than in
+  // front of it:
+  //
+  // - The agent roster. It is the largest thing the page fetches, and on a big
+  //   organization it is over the refresh snapshot's per-query budget, so it is
+  //   the one gate a reload could not skip. Until it lands the agent chip reads
+  //   "Select agent" and submit is disabled — a toolbar that fills in, rather
+  //   than a spinner where the page should be.
+  // - The browser-tooling check, which cannot even start until the roster has
+  //   resolved an agent and then costs a round trip for that agent's tools and
+  //   delegations plus one per enabled sub-agent. `isPlaywrightSetupVisible`
+  //   already carries its loading state and `isPlaywrightSetupRequired` stays
+  //   false until the answer is known, so the setup card appears when it
+  //   resolves rather than flashing.
+  if (isLoadingApiKeyCheck) {
     return (
       <div className="flex items-center justify-center h-full">
         <LoadingState />
@@ -3066,8 +3085,12 @@ export function ChatPageContent({
     return <NoApiKeySetup onKeyAdded={handleFirstKeyAdded} />;
   }
 
-  // If no agents exist and we're not viewing a conversation with a deleted agent, show empty state
-  if (internalAgents.length === 0 && !isAgentDeleted) {
+  // If no agents exist and we're not viewing a conversation with a deleted agent, show empty state.
+  // `!isLoadingAgents` matters now that the roster no longer gates the screen:
+  // an empty list means "none" only once it has actually loaded. Without it, an
+  // organization with hundreds of agents would be told it has none for as long
+  // as the roster takes to arrive.
+  if (internalAgents.length === 0 && !isLoadingAgents && !isAgentDeleted) {
     return (
       <Empty className="h-full">
         <EmptyHeader>
@@ -3554,217 +3577,240 @@ export function ChatPageContent({
                  before we navigate to /chat/<id>. */
                 <div className="flex-1 min-h-0" />
               ) : (
-                /* No active chat: centered prompt input */
-                newChatAgentId && (
-                  /* The exit fade covers the splash decoration (logo,
+                /* No active chat: centered prompt input.
+                   Rendered before `newChatAgentId` resolves, not after: the
+                   roster it comes from is the biggest thing this page fetches,
+                   and gating the composer on it is what put a spinner where the
+                   landing page should be. The composer's chrome does not depend
+                   on the agent — the chip reads "Select agent" until it lands
+                   and the caller holds submit disabled — so it draws now and
+                   fills in. */
+
+                /* The exit fade covers the splash decoration (logo,
                      suggestions) when a conversation takes over; the composer
                      below is excluded — it carries its own shared name and
                      morphs to the bottom-anchored composer instead. */
-                  <ViewTransition exit="chat-splash-exit" default="none">
-                    {/* biome-ignore lint/a11y/noStaticElementInteractions: click-to-focus container */}
-                    {/* biome-ignore lint/a11y/useKeyWithClickEvents: click-to-focus container */}
-                    <div
-                      className="relative flex-1 flex flex-col min-h-0"
-                      onClick={(e) => {
-                        // Focus textarea when clicking empty space outside interactive elements
-                        if (
-                          e.target === e.currentTarget ||
-                          !(e.target as HTMLElement).closest(
-                            "button, a, input, textarea, [role=combobox], [data-slot=input-group]",
-                          )
-                        ) {
-                          textareaRef.current?.focus();
-                        }
-                      }}
-                    >
-                      {/* On mobile the splash buttons would overlap the logo,
+                <ViewTransition exit="chat-splash-exit" default="none">
+                  {/* biome-ignore lint/a11y/noStaticElementInteractions: click-to-focus container */}
+                  {/* biome-ignore lint/a11y/useKeyWithClickEvents: click-to-focus container */}
+                  <div
+                    className="relative flex-1 flex flex-col min-h-0"
+                    onClick={(e) => {
+                      // Focus textarea when clicking empty space outside interactive elements
+                      if (
+                        e.target === e.currentTarget ||
+                        !(e.target as HTMLElement).closest(
+                          "button, a, input, textarea, [role=combobox], [data-slot=input-group]",
+                        )
+                      ) {
+                        textareaRef.current?.focus();
+                      }
+                    }}
+                  >
+                    {/* On mobile the splash buttons would overlap the logo,
                           so the links move into the app shell's header bar. */}
-                      <MobileHeaderChatLinks
-                        links={organization?.chatLinks ?? []}
+                    <MobileHeaderChatLinks
+                      links={organization?.chatLinks ?? []}
+                    />
+                    {((organization?.chatLinks?.length ?? 0) > 0 ||
+                      organization?.onboardingWizard) && (
+                      <div className="absolute top-4 right-4 z-10 flex flex-wrap justify-end gap-2 max-w-[min(100%,36rem)]">
+                        {organization?.chatLinks?.map((link) => (
+                          <ChatLinkButton
+                            key={`link-${link.label}-${link.url}`}
+                            url={link.url}
+                            label={link.label}
+                            className="hidden md:inline-flex"
+                          />
+                        ))}
+                        {organization?.onboardingWizard && (
+                          <OnboardingWizardButton
+                            wizard={organization.onboardingWizard}
+                          />
+                        )}
+                      </div>
+                    )}
+                    {isPlaywrightSetupRequired && canUpdateAgent && (
+                      <PlaywrightInstallDialog
+                        agentId={playwrightSetupAgentId}
+                        conversationId={conversationId}
                       />
-                      {((organization?.chatLinks?.length ?? 0) > 0 ||
-                        organization?.onboardingWizard) && (
-                        <div className="absolute top-4 right-4 z-10 flex flex-wrap justify-end gap-2 max-w-[min(100%,36rem)]">
-                          {organization?.chatLinks?.map((link) => (
-                            <ChatLinkButton
-                              key={`link-${link.label}-${link.url}`}
-                              url={link.url}
-                              label={link.label}
-                              className="hidden md:inline-flex"
-                            />
-                          ))}
-                          {organization?.onboardingWizard && (
-                            <OnboardingWizardButton
-                              wizard={organization.onboardingWizard}
-                            />
-                          )}
-                        </div>
-                      )}
-                      {isPlaywrightSetupRequired && canUpdateAgent && (
-                        <PlaywrightInstallDialog
-                          agentId={playwrightSetupAgentId}
-                          conversationId={conversationId}
-                        />
-                      )}
-                      <div className="flex-1 flex flex-col items-center justify-center p-4 gap-8">
-                        <div className="scale-150">
-                          <AppLogo />
-                        </div>
-                        {(() => {
-                          const currentAgent = internalAgents.find(
-                            (a) => a.id === initialAgentId,
-                          );
-                          const prompts = currentAgent?.suggestedPrompts;
-                          if (!prompts || prompts.length === 0) return null;
-                          return (
-                            <div className="flex flex-wrap items-center justify-center gap-2 max-w-2xl">
-                              {prompts.map((sp) => (
-                                <Suggestion
-                                  key={`${sp.summaryTitle}-${sp.prompt}`}
-                                  suggestion={sp.summaryTitle}
-                                  disabled={
-                                    isAgentSubscriptionMetadataPending ||
-                                    (initialPerUserConnect.needsConnect &&
-                                      Boolean(initialPerUserConnect.provider))
-                                  }
-                                  onClick={() => {
-                                    trackEvent("prompt_selected", {
-                                      agentId: initialAgentId ?? undefined,
-                                      promptLength: sp.prompt.length,
-                                    });
-                                    submitInitialMessage({
-                                      text: sp.prompt,
-                                      files: [],
-                                    });
-                                  }}
-                                />
-                              ))}
-                            </div>
-                          );
-                        })()}
-                        <div className="w-full max-w-4xl space-y-3">
-                          {/* Shared-element pair with the conversation composer —
+                    )}
+                    <div className="flex-1 flex flex-col items-center justify-center p-4 gap-8">
+                      <div className="scale-150">
+                        <AppLogo />
+                      </div>
+                      {(() => {
+                        const currentAgent = internalAgents.find(
+                          (a) => a.id === initialAgentId,
+                        );
+                        const prompts = currentAgent?.suggestedPrompts;
+                        if (!prompts || prompts.length === 0) return null;
+                        return (
+                          <div className="flex flex-wrap items-center justify-center gap-2 max-w-2xl">
+                            {prompts.map((sp) => (
+                              <Suggestion
+                                key={`${sp.summaryTitle}-${sp.prompt}`}
+                                suggestion={sp.summaryTitle}
+                                disabled={
+                                  isAgentSubscriptionMetadataPending ||
+                                  (initialPerUserConnect.needsConnect &&
+                                    Boolean(initialPerUserConnect.provider))
+                                }
+                                onClick={() => {
+                                  trackEvent("prompt_selected", {
+                                    agentId: initialAgentId ?? undefined,
+                                    promptLength: sp.prompt.length,
+                                  });
+                                  submitInitialMessage({
+                                    text: sp.prompt,
+                                    files: [],
+                                  });
+                                }}
+                              />
+                            ))}
+                          </div>
+                        );
+                      })()}
+                      <div className="w-full max-w-4xl space-y-3">
+                        {/* Shared-element pair with the conversation composer —
                             see the bottom-anchored ViewTransition above. */}
-                          <ViewTransition
-                            name="chat-composer"
-                            share="chat-composer-morph"
-                            default="none"
-                          >
-                            <div className="w-full">
-                              {!hasAnyApiKey ? (
-                                /* Review deep link reached the splash without a key
+                        <ViewTransition
+                          name="chat-composer"
+                          share="chat-composer-morph"
+                          default="none"
+                        >
+                          <div className="w-full">
+                            {!hasAnyApiKey ? (
+                              /* Review deep link reached the splash without a key
                                    (only review chats get here — non-review no-key
                                    chats short-circuit above). Prompt for a key
                                    rather than the model-dependent composer. */
-                                <ReviewChatNoKeyNotice
-                                  onKeyAdded={handleFirstKeyAdded}
+                              <ReviewChatNoKeyNotice
+                                onKeyAdded={handleFirstKeyAdded}
+                              />
+                            ) : (
+                              <>
+                                {newChatAgentId && (
+                                  <div className="mb-3">
+                                    <AgentConnectionNotice
+                                      agentId={newChatAgentId}
+                                    />
+                                  </div>
+                                )}
+                                <ArchestraPromptInput
+                                  onSubmit={handleInitialSubmit}
+                                  toolsUnavailable={initialToolsUnavailable}
+                                  notRecommendedForAgents={
+                                    initialNotRecommended
+                                  }
+                                  status={
+                                    createConversationMutation.isPending
+                                      ? "submitted"
+                                      : "ready"
+                                  }
+                                  selectedModel={initialModel}
+                                  onModelChange={handleInitialModelChange}
+                                  agentId={newChatAgentId}
+                                  currentProvider={initialProvider}
+                                  textareaRef={textareaRef}
+                                  initialApiKeyId={initialApiKeyId}
+                                  onApiKeyChange={setInitialApiKeyId}
+                                  onProviderChange={handleInitialProviderChange}
+                                  allowFileUploads={
+                                    organization?.allowChatFileUploads ?? false
+                                  }
+                                  isModelsLoading={isModelsLoading}
+                                  inputModalities={selectedModelInputModalities}
+                                  agentLlmApiKeyId={
+                                    (
+                                      internalAgents.find(
+                                        (a) => a.id === initialAgentId,
+                                      ) as Record<string, unknown> | undefined
+                                    )?.llmApiKeyId as string | null
+                                  }
+                                  // Locks the whole composer, so it carries
+                                  // only the state that truly means "do not
+                                  // use this": the install dialog is up. The
+                                  // browser-tooling *check* must not lock it —
+                                  // its loading state holds for exactly as
+                                  // long as the tools and delegations fetches
+                                  // the first paint no longer waits on, which
+                                  // on a reload would hand the spinner's wait
+                                  // to a disabled textarea.
+                                  submitDisabled={
+                                    !!canUpdateAgent &&
+                                    isPlaywrightSetupRequired
+                                  }
+                                  // Still resolving which agent this chat
+                                  // starts on, or what tooling and credentials
+                                  // it brings. The draft is welcome — start
+                                  // typing straight away — it just has
+                                  // nowhere to go yet, and the submit handler
+                                  // refuses in this window anyway, so show
+                                  // that rather than letting a click land on
+                                  // nothing.
+                                  sendDisabled={
+                                    !initialAgentId ||
+                                    isPlaywrightSetupVisible ||
+                                    isAgentSubscriptionMetadataPending
+                                  }
+                                  subscriptionConnectRequired={
+                                    initialPerUserConnect.needsConnect
+                                  }
+                                  subscriptionProvider={
+                                    initialPerUserConnect.provider
+                                  }
+                                  isPlaywrightSetupVisible={
+                                    isPlaywrightSetupVisible
+                                  }
+                                  selectorAgentId={initialAgentId}
+                                  onAgentChange={handleInitialAgentChange}
+                                  lockedChat={isLockedChatDraft}
+                                  onLockedChatChange={setIsLockedChatDraft}
+                                  modelSource={initialModelSource}
+                                  onResetModelOverride={
+                                    handleResetModelOverride
+                                  }
+                                  thinkingEffort={initialThinkingEffort}
+                                  onThinkingEffortChange={
+                                    setInitialThinkingEffort
+                                  }
+                                  agentRequiresPerUserConnect={
+                                    isAgentSubscriptionMetadataPending ||
+                                    initialModelSource === "agent" ||
+                                    initialPerUserConnect.needsConnect
+                                  }
+                                  agentModelDisplayName={
+                                    initialPerUserConnect.needsConnect
+                                      ? initialPerUserConnect.modelName
+                                      : undefined
+                                  }
+                                  prefillText={composerPrefill}
+                                  onPrefillApplied={
+                                    handleComposerPrefillApplied
+                                  }
+                                  externalMcpSkillAttachment={
+                                    externalMcpSkillAttachment
+                                  }
+                                  onRemoveExternalMcpSkillAttachment={
+                                    handleRemoveExternalMcpSkillAttachment
+                                  }
+                                  onRestoreExternalMcpSkillAttachment={
+                                    setExternalMcpSkillAttachment
+                                  }
                                 />
-                              ) : (
-                                <>
-                                  {newChatAgentId && (
-                                    <div className="mb-3">
-                                      <AgentConnectionNotice
-                                        agentId={newChatAgentId}
-                                      />
-                                    </div>
-                                  )}
-                                  <ArchestraPromptInput
-                                    onSubmit={handleInitialSubmit}
-                                    toolsUnavailable={initialToolsUnavailable}
-                                    notRecommendedForAgents={
-                                      initialNotRecommended
-                                    }
-                                    status={
-                                      createConversationMutation.isPending
-                                        ? "submitted"
-                                        : "ready"
-                                    }
-                                    selectedModel={initialModel}
-                                    onModelChange={handleInitialModelChange}
-                                    agentId={newChatAgentId}
-                                    currentProvider={initialProvider}
-                                    textareaRef={textareaRef}
-                                    initialApiKeyId={initialApiKeyId}
-                                    onApiKeyChange={setInitialApiKeyId}
-                                    onProviderChange={
-                                      handleInitialProviderChange
-                                    }
-                                    allowFileUploads={
-                                      organization?.allowChatFileUploads ??
-                                      false
-                                    }
-                                    isModelsLoading={isModelsLoading}
-                                    inputModalities={
-                                      selectedModelInputModalities
-                                    }
-                                    agentLlmApiKeyId={
-                                      (
-                                        internalAgents.find(
-                                          (a) => a.id === initialAgentId,
-                                        ) as Record<string, unknown> | undefined
-                                      )?.llmApiKeyId as string | null
-                                    }
-                                    submitDisabled={
-                                      isPlaywrightSetupVisible ||
-                                      isAgentSubscriptionMetadataPending
-                                    }
-                                    subscriptionConnectRequired={
-                                      initialPerUserConnect.needsConnect
-                                    }
-                                    subscriptionProvider={
-                                      initialPerUserConnect.provider
-                                    }
-                                    isPlaywrightSetupVisible={
-                                      isPlaywrightSetupVisible
-                                    }
-                                    selectorAgentId={initialAgentId}
-                                    onAgentChange={handleInitialAgentChange}
-                                    lockedChat={isLockedChatDraft}
-                                    onLockedChatChange={setIsLockedChatDraft}
-                                    modelSource={initialModelSource}
-                                    onResetModelOverride={
-                                      handleResetModelOverride
-                                    }
-                                    thinkingEffort={initialThinkingEffort}
-                                    onThinkingEffortChange={
-                                      setInitialThinkingEffort
-                                    }
-                                    agentRequiresPerUserConnect={
-                                      isAgentSubscriptionMetadataPending ||
-                                      initialModelSource === "agent" ||
-                                      initialPerUserConnect.needsConnect
-                                    }
-                                    agentModelDisplayName={
-                                      initialPerUserConnect.needsConnect
-                                        ? initialPerUserConnect.modelName
-                                        : undefined
-                                    }
-                                    prefillText={composerPrefill}
-                                    onPrefillApplied={
-                                      handleComposerPrefillApplied
-                                    }
-                                    externalMcpSkillAttachment={
-                                      externalMcpSkillAttachment
-                                    }
-                                    onRemoveExternalMcpSkillAttachment={
-                                      handleRemoveExternalMcpSkillAttachment
-                                    }
-                                    onRestoreExternalMcpSkillAttachment={
-                                      setExternalMcpSkillAttachment
-                                    }
-                                  />
-                                </>
-                              )}
-                            </div>
-                          </ViewTransition>
-                        </div>
-                      </div>
-                      <div className="p-4 text-center">
-                        <Version inline />
+                              </>
+                            )}
+                          </div>
+                        </ViewTransition>
                       </div>
                     </div>
-                  </ViewTransition>
-                )
+                    <div className="p-4 text-center">
+                      <Version inline />
+                    </div>
+                  </div>
+                </ViewTransition>
               )}
             </div>
           </div>

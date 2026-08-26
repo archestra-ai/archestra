@@ -175,6 +175,7 @@ describe("LLM Proxy tool-invocation policy (OpenAI)", () => {
       name: "Tool Invocation Block Agent",
       organizationId: organization.id,
       agentType: "llm_proxy",
+      isDefault: true,
       considerContextUntrusted: true,
     });
 
@@ -251,6 +252,7 @@ describe("LLM Proxy tool-invocation policy (OpenAI)", () => {
       name: "Tool Call Block Marker Agent",
       organizationId: organization.id,
       agentType: "llm_proxy",
+      isDefault: true,
       considerContextUntrusted: true,
     });
 
@@ -303,6 +305,7 @@ describe("LLM Proxy tool-invocation policy (OpenAI)", () => {
     const agent = await makeAgent({
       name: "Unblocked Marker Agent",
       agentType: "llm_proxy",
+      isDefault: true,
     });
 
     stubToolCalls = [];
@@ -341,6 +344,7 @@ describe("LLM Proxy tool-invocation policy (OpenAI)", () => {
     const agent = await makeAgent({
       name: "Tool Invocation Allow Agent",
       agentType: "llm_proxy",
+      isDefault: true,
     });
 
     stubToolCalls = [
@@ -392,6 +396,7 @@ describe("LLM Proxy tool-invocation policy (OpenAI)", () => {
     const agent = await makeAgent({
       name: "Dispatch Mode Agent",
       agentType: "llm_proxy",
+      isDefault: true,
     });
 
     stubToolCalls = [
@@ -450,6 +455,7 @@ describe("LLM Proxy tool-invocation policy (OpenAI)", () => {
     const agent = await makeAgent({
       name: "Full Exposure Agent",
       agentType: "llm_proxy",
+      isDefault: true,
     });
 
     stubToolCalls = [
@@ -500,6 +506,7 @@ describe("LLM Proxy tool-invocation policy (OpenAI)", () => {
       name: "Dispatch Mode Policy Agent",
       organizationId: organization.id,
       agentType: "llm_proxy",
+      isDefault: true,
       considerContextUntrusted: true,
     });
 

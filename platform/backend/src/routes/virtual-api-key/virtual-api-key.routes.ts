@@ -28,6 +28,11 @@ import {
   VirtualApiKeyWithParentInfoSchema,
   VirtualApiKeyWithValueSchema,
 } from "@/types";
+import {
+  BulkDeleteBodySchema,
+  BulkOutcomeSchema,
+  runBulk,
+} from "../bulk-route";
 
 const UpdateVirtualApiKeyResponseSchema = VirtualApiKeyWithValueSchema.omit({
   value: true,
@@ -110,6 +115,7 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
           search: z.string().trim().min(1).optional(),
           providerApiKeyId: z.string().uuid().optional(),
           keyType: VirtualApiKeyTypeSchema.optional(),
+          scope: ResourceVisibilityScopeSchema.optional(),
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(VirtualApiKeyWithParentInfoSchema),
@@ -118,7 +124,7 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (
       {
-        query: { limit, offset, search, providerApiKeyId, keyType },
+        query: { limit, offset, search, providerApiKeyId, keyType, scope },
         organizationId,
         user,
       },
@@ -138,6 +144,7 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         search,
         providerApiKeyId,
         keyType,
+        scope,
       });
       return reply.send(result);
     },
@@ -282,6 +289,81 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         user,
       });
       return reply.send(response);
+    },
+  );
+
+  fastify.delete(
+    "/api/llm-virtual-keys/bulk",
+    {
+      schema: {
+        operationId: RouteId.BulkDeleteVirtualApiKeys,
+        description:
+          "Delete several virtual API keys in one request. Each id is " +
+          "authorized exactly as the single-key delete authorizes its own, " +
+          "so a key the caller cannot see or manage is reported in `failed` " +
+          "while the rest of the batch still applies.",
+        tags: ["Virtual API Keys"],
+        body: BulkDeleteBodySchema,
+        response: constructResponseSchema(BulkOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const { organizationId, user, body } = request;
+      const [userTeamIds, isVirtualKeyAdmin] = await Promise.all([
+        TeamModel.getUserTeamIds(user.id),
+        userHasPermission(user.id, organizationId, "llmVirtualKey", "admin"),
+      ]);
+
+      const snapshot = async (ids: string[]) => {
+        const keys = await VirtualApiKeyModel.findForBulk({
+          organizationId,
+          ids,
+        });
+        return {
+          virtualApiKeys: keys
+            .map(({ id, name }) => ({ id, name }))
+            .sort((a, b) => a.id.localeCompare(b.id)),
+        };
+      };
+
+      const outcome = await runBulk({
+        ids: body.ids,
+        logLabel: "virtual API keys bulk delete",
+        notFoundMessage: "Virtual API key not found",
+        unexpectedMessage: "Could not delete this virtual API key",
+        load: async (ids) =>
+          new Map(
+            (
+              await VirtualApiKeyModel.findForBulk({
+                organizationId,
+                ids,
+                viewer: {
+                  userId: user.id,
+                  userTeamIds,
+                  isAdmin: isVirtualKeyAdmin,
+                },
+              })
+            ).map((key) => [key.id, key]),
+          ),
+        describe: (key) => key.name,
+        authorize: async (key) => {
+          await requireVirtualKeyModifyPermission({
+            virtualKey: key,
+            userId: user.id,
+            organizationId,
+            userTeamIds,
+          });
+        },
+        applyEach: async (_key, id) => {
+          const deleted = await VirtualApiKeyModel.delete(id);
+          if (!deleted) {
+            throw new ApiError(404, "Virtual API key not found");
+          }
+        },
+        audit: { target: request, snapshot },
+      });
+
+      return reply.send(outcome);
     },
   );
 };

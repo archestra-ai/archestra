@@ -479,8 +479,8 @@ function McpGateways({
                       </Badge>
                     </TooltipTrigger>
                     <TooltipContent>
-                      This is a legacy entity that works both as MCP Gateway and
-                      LLM Proxy
+                      This is a legacy profile entity that behaves as an MCP
+                      Gateway
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>

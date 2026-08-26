@@ -854,6 +854,15 @@ class AgentModel {
        * it from loading an organization's whole agent roster to discard it.
        */
       onlyEnforcingMissingCredentials?: boolean;
+      /**
+       * Attach each agent's assigned tools. Defaults to true. The refs carry
+       * every tool's name and description, so on an organization of any size
+       * they are the great majority of the result's size — callers that only
+       * need the roster (which agents exist, what they are called, which model
+       * they run) should turn this off and get `tools: []`, which here means
+       * "not requested" rather than "none assigned".
+       */
+      includeTools?: boolean;
     },
   ): Promise<Agent[]> {
     // Tools are attached afterwards as slim refs via one batched query:
@@ -950,7 +959,7 @@ class AgentModel {
     // Populate tools, teams, and labels for all agents with bulk queries to
     // avoid N+1
     const [toolRows, teamsMap, usersMap, labelsMap] = await Promise.all([
-      agentIds.length > 0
+      agentIds.length > 0 && options?.includeTools !== false
         ? db
             .select({
               agentId: schema.agentToolsTable.agentId,
@@ -2390,33 +2399,115 @@ class AgentModel {
   }
 
   /**
-   * Lean counterpart of {@link getDefaultProfile} for the LLM proxy hot path:
-   * the raw agents row plus labels, like {@link findGatewayAgentById}. The
-   * proxy resolves the default profile on every request that omits an agent id
-   * in the URL, and it only reads scalar config (org, agent type,
-   * considerContextUntrusted, identity provider) and trace/metric labels — the
-   * tools join and team/knowledge/connector hydration of the full method are
-   * unused there.
+   * The organization's LLM Proxy — the single `llm_proxy` row every proxy
+   * request in the organization resolves to. Lean shape for the proxy hot
+   * path (raw row plus labels, like {@link findGatewayAgentById}). Creates
+   * the row on first use; creation is race-safe via the partial unique index
+   * `agents_org_default_llm_proxy_idx`.
    */
-  static async getDefaultGatewayProfile(): Promise<GatewayAgent | null> {
-    const [agent] = await db
+  static async getOrgLlmProxy(organizationId: string): Promise<GatewayAgent> {
+    const existing = await AgentModel.findOrgLlmProxyRow(organizationId);
+    if (existing) {
+      const labels = await AgentLabelModel.getLabelsForAgent(existing.id);
+      return { ...existing, labels };
+    }
+
+    await db
+      .insert(schema.agentsTable)
+      .values({
+        organizationId,
+        name: DEFAULT_LLM_PROXY_NAME,
+        agentType: "llm_proxy",
+        isDefault: true,
+        scope: "org",
+      })
+      .onConflictDoNothing({
+        target: [schema.agentsTable.organizationId],
+        where: sql`${schema.agentsTable.agentType} = 'llm_proxy' AND ${schema.agentsTable.isDefault} = true AND ${schema.agentsTable.deletedAt} IS NULL`,
+      });
+
+    const row = await AgentModel.findOrgLlmProxyRow(organizationId);
+    if (!row) {
+      throw new Error(
+        `Failed to ensure the LLM Proxy for organization ${organizationId}`,
+      );
+    }
+    const labels = await AgentLabelModel.getLabelsForAgent(row.id);
+    return { ...row, labels };
+  }
+
+  private static async findOrgLlmProxyRow(organizationId: string) {
+    const [row] = await db
       .select()
       .from(schema.agentsTable)
       .where(
         and(
+          eq(schema.agentsTable.organizationId, organizationId),
+          eq(schema.agentsTable.agentType, "llm_proxy"),
           eq(schema.agentsTable.isDefault, true),
-          eq(schema.agentsTable.agentType, "profile"),
           notDeleted(schema.agentsTable),
         ),
       )
       .limit(1);
+    return row ?? null;
+  }
 
-    if (!agent) {
+  /**
+   * The deployment's LLM Proxy for proxy requests that carry no organization
+   * context (an id-less proxy URL): the first organization's proxy. Null only
+   * when no organization exists yet.
+   */
+  static async getDeploymentLlmProxy(): Promise<GatewayAgent | null> {
+    const [firstOrg] = await db
+      .select({ id: schema.organizationsTable.id })
+      .from(schema.organizationsTable)
+      // Deterministic "first organization": the oldest one. Without an order
+      // the planner may return different rows across calls.
+      .orderBy(asc(schema.organizationsTable.createdAt))
+      .limit(1);
+    if (!firstOrg) {
       return null;
     }
+    return AgentModel.getOrgLlmProxy(firstOrg.id);
+  }
 
-    const labels = await AgentLabelModel.getLabelsForAgent(agent.id);
-    return { ...agent, labels };
+  /** Ensures every organization has its LLM Proxy row. Runs at startup. */
+  static async ensureLlmProxiesForAllOrganizations(): Promise<void> {
+    const orgs = await db
+      .select({ id: schema.organizationsTable.id })
+      .from(schema.organizationsTable);
+    for (const org of orgs) {
+      await AgentModel.getOrgLlmProxy(org.id);
+    }
+  }
+
+  /**
+   * Updates the LLM Proxy's identity provider (JWT/JWKS authentication for
+   * proxy requests). Returns the updated proxy.
+   */
+  static async setOrgLlmProxyIdentityProvider(params: {
+    organizationId: string;
+    identityProviderId: string | null;
+  }): Promise<GatewayAgent> {
+    const proxy = await AgentModel.getOrgLlmProxy(params.organizationId);
+    await db
+      .update(schema.agentsTable)
+      .set({ identityProviderId: params.identityProviderId })
+      .where(eq(schema.agentsTable.id, proxy.id));
+    return { ...proxy, identityProviderId: params.identityProviderId };
+  }
+
+  /**
+   * Audit snapshot of the LLM Proxy. Keyed by organization: the audit
+   * registry resolves the `/api/llm-proxy` route through organization
+   * context, not a route param.
+   */
+  static async findOrgLlmProxyForAudit(
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const row = await AgentModel.findOrgLlmProxyRow(organizationId);
+    if (!row) return null;
+    return { id: row.id, identityProviderId: row.identityProviderId };
   }
 
   /**
@@ -2515,71 +2606,6 @@ class AgentModel {
     return result;
   }
 
-  static async getLLMProxyOrCreateDefault(
-    organizationId?: string,
-  ): Promise<Agent> {
-    return AgentModel.getOrCreateDefaultByType(
-      "llm_proxy",
-      DEFAULT_LLM_PROXY_NAME,
-      organizationId,
-    );
-  }
-
-  /**
-   * Get the default profile (agentType: "profile" with isDefault: true).
-   * Returns null if no default profile exists.
-   * It's needed for backward compatibility with default profile which allowed llm proxy on without a uuid specified in the url.
-   */
-  static async getDefaultProfile(): Promise<Agent | null> {
-    const rows = await db
-      .select()
-      .from(schema.agentsTable)
-      .leftJoin(
-        schema.agentToolsTable,
-        eq(schema.agentsTable.id, schema.agentToolsTable.agentId),
-      )
-      .leftJoin(
-        schema.toolsTable,
-        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-      )
-      .where(
-        and(
-          eq(schema.agentsTable.isDefault, true),
-          eq(schema.agentsTable.agentType, "profile"),
-          notDeleted(schema.agentsTable),
-        ),
-      );
-
-    if (rows.length === 0) {
-      return null;
-    }
-
-    const agent = rows[0].agents;
-    const tools = rows
-      .map((row) => row.tools)
-      .filter((tool): tool is NonNullable<typeof tool> => tool !== null);
-
-    const result: Agent = {
-      ...agent,
-      tools,
-      teams: await AgentTeamModel.getTeamDetailsForAgent(agent.id),
-      users: await AgentUserModel.getUserDetailsForAgents([agent.id]).then(
-        (map) => map.get(agent.id) ?? [],
-      ),
-      labels: await AgentLabelModel.getLabelsForAgent(agent.id),
-      knowledgeBaseIds: await AgentKnowledgeBaseModel.getKnowledgeBaseIds(
-        agent.id,
-      ),
-      connectorIds: await AgentConnectorAssignmentModel.getConnectorIds(
-        agent.id,
-      ),
-      suggestedPrompts: [],
-    };
-    AgentModel.filterUnavailableKnowledgeTools([result]);
-
-    return result;
-  }
-
   /**
    * The org's default agent of a given type (`isDefault = true`), if one exists.
    * Used as the implicit fallback when a caller cannot pick an agent — e.g. a
@@ -2638,78 +2664,6 @@ class AgentModel {
       )
       .limit(1);
     return row ?? null;
-  }
-
-  private static async getOrCreateDefaultByType(
-    agentType: "llm_proxy",
-    defaultName: string,
-    organizationId?: string,
-  ): Promise<Agent> {
-    // First, try to find an agent with isDefault=true and matching agentType
-    const rows = await db
-      .select()
-      .from(schema.agentsTable)
-      .leftJoin(
-        schema.agentToolsTable,
-        eq(schema.agentsTable.id, schema.agentToolsTable.agentId),
-      )
-      .leftJoin(
-        schema.toolsTable,
-        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-      )
-      .where(
-        and(
-          eq(schema.agentsTable.isDefault, true),
-          eq(schema.agentsTable.agentType, agentType),
-          notDeleted(schema.agentsTable),
-        ),
-      );
-
-    if (rows.length > 0) {
-      // Default agent exists, return it
-      const agent = rows[0].agents;
-      const tools = rows
-        .map((row) => row.tools)
-        .filter((tool): tool is NonNullable<typeof tool> => tool !== null);
-
-      return {
-        ...agent,
-        tools,
-        teams: await AgentTeamModel.getTeamDetailsForAgent(agent.id),
-        users: await AgentUserModel.getUserDetailsForAgents([agent.id]).then(
-          (map) => map.get(agent.id) ?? [],
-        ),
-        labels: await AgentLabelModel.getLabelsForAgent(agent.id),
-        knowledgeBaseIds: await AgentKnowledgeBaseModel.getKnowledgeBaseIds(
-          agent.id,
-        ),
-        connectorIds: await AgentConnectorAssignmentModel.getConnectorIds(
-          agent.id,
-        ),
-        suggestedPrompts: [],
-      };
-    }
-
-    // No default agent exists, create one
-    // If organizationId not provided, use first organization
-    let orgId = organizationId;
-    if (!orgId) {
-      const [firstOrg] = await db
-        .select({ id: schema.organizationsTable.id })
-        .from(schema.organizationsTable)
-        .limit(1);
-      orgId = firstOrg?.id;
-    }
-
-    return AgentModel.create({
-      name: defaultName,
-      agentType,
-      isDefault: true,
-      organizationId: orgId || "",
-      scope: "org",
-      teams: [],
-      labels: [],
-    });
   }
 
   static async update(
@@ -3495,166 +3449,6 @@ class AgentModel {
   }
 
   /**
-   * Returns the user's personal LLM proxy for the given organization, or null
-   * if none exists.
-   */
-  static async getPersonalLlmProxy(
-    userId: string,
-    organizationId: string,
-  ): Promise<Agent | null> {
-    const [row] = await db
-      .select()
-      .from(schema.agentsTable)
-      .where(
-        and(
-          eq(schema.agentsTable.organizationId, organizationId),
-          eq(schema.agentsTable.authorId, userId),
-          eq(schema.agentsTable.agentType, "llm_proxy"),
-          eq(schema.agentsTable.isPersonalProxy, true),
-          notDeleted(schema.agentsTable),
-        ),
-      )
-      .limit(1);
-
-    if (!row) return null;
-    return (await AgentModel.findById(row.id, userId, true)) ?? null;
-  }
-
-  /**
-   * Ensures the user has a personal LLM proxy for the given organization.
-   * Idempotent: returns the existing one if present, otherwise creates one.
-   * Mirrors {@link AgentModel.ensurePersonalMcpGateway}.
-   */
-  static async ensurePersonalLlmProxy(params: {
-    userId: string;
-    organizationId: string;
-  }): Promise<Agent> {
-    const { userId, organizationId } = params;
-
-    const existing = await AgentModel.getPersonalLlmProxy(
-      userId,
-      organizationId,
-    );
-    if (existing) return existing;
-
-    try {
-      const proxy = await AgentModel.create(
-        {
-          organizationId,
-          name: PERSONAL_LLM_PROXY_NAME,
-          agentType: "llm_proxy",
-          scope: "personal",
-          description: PERSONAL_LLM_PROXY_DESCRIPTION,
-          isPersonalProxy: true,
-        },
-        userId,
-      );
-
-      logger.info(
-        { userId, organizationId, agentId: proxy.id },
-        "Created personal LLM proxy",
-      );
-
-      return proxy;
-    } catch (error) {
-      // Lost a race against a concurrent caller — re-fetch the row that won.
-      if (
-        !isUniqueConstraintError(error) ||
-        !errorMentions(error, "agents_personal_proxy_per_member_idx")
-      ) {
-        throw error;
-      }
-
-      const winner = await AgentModel.getPersonalLlmProxy(
-        userId,
-        organizationId,
-      );
-      if (!winner) throw error;
-      return winner;
-    }
-  }
-
-  /**
-   * Bulk-creates personal LLM proxies for every member that lacks one. Mirrors
-   * {@link AgentModel.bulkBackfillPersonalMcpGateways}. Returns the number of
-   * rows actually inserted.
-   */
-  static async bulkBackfillPersonalLlmProxies(): Promise<number> {
-    const missing = await db
-      .select({
-        userId: schema.membersTable.userId,
-        organizationId: schema.membersTable.organizationId,
-      })
-      .from(schema.membersTable)
-      .leftJoin(
-        schema.agentsTable,
-        and(
-          eq(schema.agentsTable.authorId, schema.membersTable.userId),
-          eq(
-            schema.agentsTable.organizationId,
-            schema.membersTable.organizationId,
-          ),
-          eq(schema.agentsTable.agentType, "llm_proxy"),
-          eq(schema.agentsTable.isPersonalProxy, true),
-        ),
-      )
-      .where(isNull(schema.agentsTable.id));
-
-    if (missing.length === 0) return 0;
-
-    const rows = missing.map((m) => ({
-      organizationId: m.organizationId,
-      authorId: m.userId,
-      name: PERSONAL_LLM_PROXY_NAME,
-      description: PERSONAL_LLM_PROXY_DESCRIPTION,
-      agentType: "llm_proxy" as const,
-      scope: "personal" as const,
-      isPersonalProxy: true,
-    }));
-
-    const inserted = await db
-      .insert(schema.agentsTable)
-      .values(rows)
-      .onConflictDoNothing({
-        target: [
-          schema.agentsTable.organizationId,
-          schema.agentsTable.authorId,
-        ],
-        where: sql`${schema.agentsTable.agentType} = 'llm_proxy' AND ${schema.agentsTable.isPersonalProxy} = true AND ${schema.agentsTable.deletedAt} IS NULL`,
-      })
-      .returning({ id: schema.agentsTable.id });
-
-    if (inserted.length < missing.length) {
-      logger.warn(
-        { missing: missing.length, inserted: inserted.length },
-        "bulkBackfillPersonalLlmProxies inserted fewer rows than expected",
-      );
-    }
-
-    return inserted.length;
-  }
-
-  /**
-   * Deletes every personal LLM proxy authored by the given user across all
-   * organizations. Called from the better-auth user.delete hook, mirroring
-   * {@link AgentModel.deletePersonalMcpGatewaysForUser}.
-   */
-  static async deletePersonalLlmProxiesForUser(
-    userId: string,
-    tx?: Transaction,
-  ): Promise<void> {
-    await softDelete(
-      tx ?? db,
-      schema.agentsTable,
-      and(
-        eq(schema.agentsTable.authorId, userId),
-        eq(schema.agentsTable.agentType, "llm_proxy"),
-        eq(schema.agentsTable.isPersonalProxy, true),
-      ),
-    );
-  }
-
-  /**
    * Resolve a UUID or slug to an agent ID.
    * Checks both the id and slug columns in a single query.
    */
@@ -4064,10 +3858,6 @@ class AgentModel {
 const PERSONAL_MCP_GATEWAY_NAME = "My Gateway";
 const PERSONAL_MCP_GATEWAY_DESCRIPTION =
   "All MCP servers you install are automatically connected to this gateway.";
-
-const PERSONAL_LLM_PROXY_NAME = "My Proxy";
-const PERSONAL_LLM_PROXY_DESCRIPTION =
-  "Your personal LLM proxy — route a client's model traffic through it for security policies and observability.";
 
 type AgentRecordStatus = "active" | "deleted";
 

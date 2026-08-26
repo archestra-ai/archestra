@@ -539,10 +539,11 @@ export async function handleLLMProxy<
       credential: rawApiKey,
     });
     try {
-      const virtualResult = await validateVirtualApiKey(
-        rawApiKey,
-        providerName,
-      );
+      const virtualResult = await validateVirtualApiKey({
+        tokenValue: rawApiKey,
+        expectedProvider: providerName,
+        expectedOrganizationId: resolvedAgent.organizationId,
+      });
       await virtualKeyRateLimiter.recordSuccess({ credential: rawApiKey });
       apiKey = virtualResult.apiKey;
       perKeyBaseUrl = virtualResult.baseUrl;

@@ -244,16 +244,39 @@ describe("hasAnyAgentTypeReadPermission", () => {
     const user = await makeUser();
     const org = await makeOrganization();
     await makeCustomRole(org.id, {
-      role: "proxy_reader",
-      permission: { llmProxy: ["read"] },
+      role: "gw_reader",
+      permission: { mcpGateway: ["read"] },
     });
-    await makeMember(user.id, org.id, { role: "proxy_reader" });
+    await makeMember(user.id, org.id, { role: "gw_reader" });
 
     const result = await hasAnyAgentTypeReadPermission({
       userId: user.id,
       organizationId: org.id,
     });
     expect(result).toBe(true);
+  });
+
+  test("llmProxy read alone does not count as agent-type read", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    // The LLM Proxy has its own management routes; llmProxy permissions grant
+    // nothing on the generic agent surface.
+    await makeCustomRole(org.id, {
+      role: "llm_only",
+      permission: { llmProxy: ["read"] },
+    });
+    await makeMember(user.id, org.id, { role: "llm_only" });
+
+    const result = await hasAnyAgentTypeReadPermission({
+      userId: user.id,
+      organizationId: org.id,
+    });
+    expect(result).toBe(false);
   });
 
   test("returns false when user has no read on any agent-type resource", async ({
@@ -411,7 +434,7 @@ describe("getAgentTypePermissionChecker", () => {
       permission: {
         agent: ["read", "admin"],
         mcpGateway: ["read"],
-        llmProxy: ["read", "admin"],
+        llmProxy: ["read"],
       },
     });
     await makeMember(user.id, org.id, { role: "partial_admin" });
@@ -424,7 +447,8 @@ describe("getAgentTypePermissionChecker", () => {
     expect(checker.isAdmin("agent")).toBe(true);
     expect(checker.isAdmin("profile")).toBe(true); // alias for agent
     expect(checker.isAdmin("mcp_gateway")).toBe(false);
-    expect(checker.isAdmin("llm_proxy")).toBe(true);
+    // llmProxy has no admin action, so nothing resolves as llm_proxy admin
+    expect(checker.isAdmin("llm_proxy")).toBe(false);
   });
 
   test("hasAnyReadPermission() returns true when at least one resource has read", async ({
@@ -436,10 +460,10 @@ describe("getAgentTypePermissionChecker", () => {
     const user = await makeUser();
     const org = await makeOrganization();
     await makeCustomRole(org.id, {
-      role: "proxy_only",
-      permission: { llmProxy: ["read"] },
+      role: "gw_only",
+      permission: { mcpGateway: ["read"] },
     });
-    await makeMember(user.id, org.id, { role: "proxy_only" });
+    await makeMember(user.id, org.id, { role: "gw_only" });
 
     const checker = await getAgentTypePermissionChecker({
       userId: user.id,
@@ -532,7 +556,7 @@ describe("getAgentTypePermissionChecker", () => {
       permission: {
         agent: ["read", "team-admin"],
         mcpGateway: ["read"],
-        llmProxy: ["read", "team-admin"],
+        llmProxy: ["read"],
       },
     });
     await makeMember(user.id, org.id, { role: "partial_team_admin" });
@@ -545,7 +569,7 @@ describe("getAgentTypePermissionChecker", () => {
     expect(checker.isTeamAdmin("agent")).toBe(true);
     expect(checker.isTeamAdmin("profile")).toBe(true); // alias for agent
     expect(checker.isTeamAdmin("mcp_gateway")).toBe(false);
-    expect(checker.isTeamAdmin("llm_proxy")).toBe(true);
+    expect(checker.isTeamAdmin("llm_proxy")).toBe(false);
   });
 
   test("editor role has team-admin permission", async ({
@@ -564,7 +588,7 @@ describe("getAgentTypePermissionChecker", () => {
 
     expect(checker.isTeamAdmin("agent")).toBe(true);
     expect(checker.isTeamAdmin("mcp_gateway")).toBe(true);
-    expect(checker.isTeamAdmin("llm_proxy")).toBe(true);
+    expect(checker.isTeamAdmin("llm_proxy")).toBe(false);
     expect(checker.isAdmin("agent")).toBe(false);
   });
 

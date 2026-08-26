@@ -7,7 +7,8 @@ export const RouteId = {
   CloneAgent: "cloneAgent",
   GetAgent: "getAgent",
   GetDefaultMcpGateway: "getDefaultMcpGateway",
-  GetDefaultLlmProxy: "getDefaultLlmProxy",
+  GetLlmProxy: "getLlmProxy",
+  UpdateLlmProxy: "updateLlmProxy",
   UpdateAgent: "updateAgent",
   DeleteAgent: "deleteAgent",
   BulkUpdateAgents: "bulkUpdateAgents",
@@ -452,6 +453,7 @@ export const RouteId = {
   CreateVirtualApiKey: "createVirtualApiKey",
   UpdateVirtualApiKey: "updateVirtualApiKey",
   DeleteVirtualApiKey: "deleteVirtualApiKey",
+  BulkDeleteVirtualApiKeys: "bulkDeleteVirtualApiKeys",
 
   // LLM OAuth Client Routes
   GetLlmOauthClients: "getLlmOauthClients",
@@ -459,6 +461,7 @@ export const RouteId = {
   UpdateLlmOauthClient: "updateLlmOauthClient",
   RotateLlmOauthClientSecret: "rotateLlmOauthClientSecret",
   DeleteLlmOauthClient: "deleteLlmOauthClient",
+  BulkDeleteLlmOauthClients: "bulkDeleteLlmOauthClients",
 
   // MCP OAuth Client Routes
   GetMcpOauthClients: "getMcpOauthClients",
@@ -780,6 +783,9 @@ export const RouteId = {
   CreateHook: "createHook",
   UpdateHook: "updateHook",
   DeleteHook: "deleteHook",
+
+  // Skill Marketplace Routes
+  GetSkillMarketplace: "getSkillMarketplace",
 
   // Skill Share Link Routes
   GetSkillShareLinks: "getSkillShareLinks",

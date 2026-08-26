@@ -265,19 +265,19 @@ const HTTP_METHODS = new Set<HttpMethod>([
 
 const DYNAMIC_ROUTE_PERMISSION_NOTES = {
   [RouteId.GetAgents]:
-    "Checked dynamically based on agent type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`; `llm_proxy` requires `llmProxy:read`. If no type filter is provided, the user must have read access to at least one agent type.",
+    "Checked dynamically based on agent type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`. If no type filter is provided, the user must have read access to at least one agent type.",
   [RouteId.GetAllAgents]:
-    "Checked dynamically based on agent type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`; `llm_proxy` requires `llmProxy:read`. If no type filter is provided, the user must have read access to at least one agent type.",
+    "Checked dynamically based on agent type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`. If no type filter is provided, the user must have read access to at least one agent type.",
   [RouteId.GetAgent]:
-    "Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`; `llm_proxy` requires `llmProxy:read`.",
+    "Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`.",
   [RouteId.CreateAgent]:
-    "Checked dynamically based on the agent type being created. `profile` and `agent` require `agent:create`; `mcp_gateway` requires `mcpGateway:create`; `llm_proxy` requires `llmProxy:create`. Additional scope and team-admin checks may apply.",
+    "Checked dynamically based on the agent type being created. `profile` and `agent` require `agent:create`; `mcp_gateway` requires `mcpGateway:create`. Additional scope and team-admin checks may apply.",
   [RouteId.UpdateAgent]:
-    "Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:update`; `mcp_gateway` requires `mcpGateway:update`; `llm_proxy` requires `llmProxy:update`. Additional scope and team-admin checks may apply.",
+    "Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:update`; `mcp_gateway` requires `mcpGateway:update`. Additional scope and team-admin checks may apply.",
   [RouteId.DeleteAgent]:
-    "Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:delete`; `mcp_gateway` requires `mcpGateway:delete`; `llm_proxy` requires `llmProxy:delete`. Additional scope checks may apply.",
+    "Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:delete`; `mcp_gateway` requires `mcpGateway:delete`. Additional scope checks may apply.",
   [RouteId.RestoreAgent]:
-    "Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:delete`; `mcp_gateway` requires `mcpGateway:delete`; `llm_proxy` requires `llmProxy:delete`. Additional scope checks may apply.",
+    "Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:delete`; `mcp_gateway` requires `mcpGateway:delete`. Additional scope checks may apply.",
   // The three purge routes are gated by role, not by permission: the caller
   // must hold a built-in admin role. Recorded here because the static
   // permission alone would advertise `delete` as sufficient, and the handler's

@@ -104,14 +104,14 @@ describe("useAgentAccess", () => {
 
     grantPermissions({ agent: ["update"] });
     expect(
-      renderHook(() => useAgentAccess(profile, "llm_proxy")).result.current
+      renderHook(() => useAgentAccess(profile, "mcp_gateway")).result.current
         .canEdit,
     ).toBe(true);
 
-    // The route family alone would have asked `llmProxy` and got it wrong.
-    grantPermissions({ llmProxy: ["update", "admin"] });
+    // The route family alone would have asked `mcpGateway` and got it wrong.
+    grantPermissions({ mcpGateway: ["update", "admin"] });
     expect(
-      renderHook(() => useAgentAccess(profile, "llm_proxy")).result.current
+      renderHook(() => useAgentAccess(profile, "mcp_gateway")).result.current
         .canEdit,
     ).toBe(false);
   });

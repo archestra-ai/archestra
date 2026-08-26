@@ -3,7 +3,6 @@
  * see https://vitest.dev/guide/test-context.html#extend-test-context
  */
 
-import type { SupportedProvider } from "@archestra/shared";
 import { type APIRequestContext, test as base } from "@playwright/test";
 import {
   ADMIN_EMAIL,
@@ -35,7 +34,7 @@ export {
 export interface TestFixtures {
   makeApiRequest: typeof makeApiRequest;
   createAgent: typeof createAgent;
-  createLlmProxy: typeof createLlmProxy;
+  getLlmProxy: typeof getLlmProxy;
   createMcpGateway: typeof createMcpGateway;
   deleteAgent: typeof deleteAgent;
   createApiKey: typeof createApiKey;
@@ -219,24 +218,15 @@ const createAgent = async (
   });
 
 /**
- * Create an LLM Proxy
+ * Get the organization's singleton LLM Proxy (created on first use).
+ * Response shape: { id, identityProviderId }.
  * (authnz is handled by the authenticated session)
  */
-const createLlmProxy = async (
-  request: APIRequestContext,
-  name: string,
-  scope: "personal" | "team" | "org",
-) =>
+const getLlmProxy = async (request: APIRequestContext) =>
   makeApiRequest({
     request,
-    method: "post",
-    urlSuffix: "/api/agents",
-    data: {
-      name,
-      teams: [],
-      agentType: "llm_proxy",
-      scope,
-    },
+    method: "get",
+    urlSuffix: "/api/llm-proxy",
   });
 
 /**
@@ -1223,8 +1213,8 @@ export const test = base.extend<TestFixtures>({
   createAgent: async ({}, use) => {
     await use(createAgent);
   },
-  createLlmProxy: async ({}, use) => {
-    await use(createLlmProxy);
+  getLlmProxy: async ({}, use) => {
+    await use(getLlmProxy);
   },
   createMcpGateway: async ({}, use) => {
     await use(createMcpGateway);

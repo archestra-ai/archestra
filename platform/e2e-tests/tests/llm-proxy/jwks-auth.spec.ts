@@ -1,21 +1,36 @@
 /**
  * E2E tests for LLM Proxy authentication via external IdP JWKS.
  *
+ * The LLM Proxy is an organization-wide singleton (GET /api/llm-proxy,
+ * created on first use). JWT (JWKS) authentication is configured by binding
+ * an identity provider to it via PATCH /api/llm-proxy — there is no
+ * per-proxy IdP config anymore.
+ *
  * Tests the flow:
  * 1. Create identity provider with OIDC config (Keycloak)
- * 2. Create LLM Proxy profile linked to the IdP
+ * 2. Bind it to the LLM Proxy (PATCH /api/llm-proxy)
  * 3. Obtain JWT from Keycloak (direct grant)
- * 4. Authenticate to LLM Proxy using the JWT
+ * 4. Authenticate to the LLM Proxy using the JWT
  * 5. Verify the proxy returns a model response (via WireMock)
+ *
+ * IMPORTANT: the IdP binding is org-wide shared state, so every test that
+ * sets it resets identityProviderId to null in its finally block. Specs in
+ * other files are unaffected even mid-test: bearer tokens that are not
+ * JWT-shaped (raw provider API keys) skip JWKS auth entirely
+ * (attemptJwksAuth's isJwtLike gate).
  */
 import { API_BASE_URL } from "../../consts";
 import { getKeycloakJwt } from "../../utils";
 import { expect, test } from "../api-fixtures";
 
+// The suite is fullyParallel, but these tests mutate the singleton proxy's
+// IdP binding — keep them ordered in one worker so the no-IdP test cannot
+// observe a sibling's binding.
+test.describe.configure({ mode: "default" });
+
 test.describe("LLM Proxy - External IdP JWKS Authentication", () => {
   test("should authenticate with external IdP JWT and get model response", async ({
     request,
-    deleteAgent,
     createIdentityProvider,
     deleteIdentityProvider,
     makeApiRequest,
@@ -34,38 +49,23 @@ test.describe("LLM Proxy - External IdP JWKS Authentication", () => {
       providerName,
     );
 
-    let proxyId: string | undefined;
     try {
-      // STEP 3: Create an LLM Proxy profile with IdP linked directly
-      const proxyResponse = await makeApiRequest({
+      // STEP 3: Bind the IdP to the org's singleton LLM Proxy
+      const patchResponse = await makeApiRequest({
         request,
-        method: "post",
-        urlSuffix: "/api/agents",
-        data: {
-          name: `JWKS LLM Proxy E2E ${Date.now()}`,
-          teams: [],
-          agentType: "llm_proxy",
-          identityProviderId,
-          scope: "personal",
-        },
+        method: "patch",
+        urlSuffix: "/api/llm-proxy",
+        data: { identityProviderId },
       });
-      const proxy = (await proxyResponse.json()) as { id: string };
-      proxyId = proxy.id;
-
-      // STEP 4: Verify the agent has identityProviderId set
-      const agentResp = await makeApiRequest({
-        request,
-        method: "get",
-        urlSuffix: `/api/agents/${proxyId}`,
-      });
-      const agentData = (await agentResp.json()) as {
+      const proxy = (await patchResponse.json()) as {
+        id: string;
         identityProviderId: string | null;
       };
-      expect(agentData.identityProviderId).toBe(identityProviderId);
+      expect(proxy.identityProviderId).toBe(identityProviderId);
 
-      // STEP 5: Call the OpenAI proxy endpoint with the JWT as Bearer token
+      // STEP 4: Call the id-less OpenAI proxy endpoint with the JWT as Bearer
       const response = await request.post(
-        `${API_BASE_URL}/v1/openai/${proxyId}/chat/completions`,
+        `${API_BASE_URL}/v1/openai/chat/completions`,
         {
           headers: {
             Authorization: `Bearer ${jwt}`,
@@ -87,48 +87,41 @@ test.describe("LLM Proxy - External IdP JWKS Authentication", () => {
       expect(body.choices).toBeDefined();
       expect(body.choices.length).toBeGreaterThan(0);
     } finally {
-      if (proxyId) {
-        await deleteAgent(request, proxyId);
-      }
+      // The singleton proxy is shared state — unbind the IdP for other specs.
+      await makeApiRequest({
+        request,
+        method: "patch",
+        urlSuffix: "/api/llm-proxy",
+        data: { identityProviderId: null },
+      });
       await deleteIdentityProvider(request, identityProviderId);
     }
   });
 
   test("should reject invalid JWT with 401", async ({
     request,
-    deleteAgent,
     createIdentityProvider,
     deleteIdentityProvider,
     makeApiRequest,
   }) => {
-    // Create identity provider and LLM Proxy profile
+    // Create an identity provider and bind it to the singleton LLM Proxy
     const providerName = `LlmProxyJwksReject${Date.now()}`;
     const identityProviderId = await createIdentityProvider(
       request,
       providerName,
     );
 
-    let proxyId: string | undefined;
     try {
-      // Create LLM Proxy with IdP linked directly (avoids separate PUT)
-      const proxyResponse = await makeApiRequest({
+      await makeApiRequest({
         request,
-        method: "post",
-        urlSuffix: "/api/agents",
-        data: {
-          name: `JWKS Reject LLM Proxy ${Date.now()}`,
-          teams: [],
-          agentType: "llm_proxy",
-          identityProviderId,
-          scope: "personal",
-        },
+        method: "patch",
+        urlSuffix: "/api/llm-proxy",
+        data: { identityProviderId },
       });
-      const proxy = (await proxyResponse.json()) as { id: string };
-      proxyId = proxy.id;
 
-      // Call with an invalid JWT
+      // Call with an invalid (but JWT-shaped) token
       const response = await request.post(
-        `${API_BASE_URL}/v1/openai/${proxyId}/chat/completions`,
+        `${API_BASE_URL}/v1/openai/chat/completions`,
         {
           headers: {
             Authorization: "Bearer invalid.jwt.token",
@@ -148,52 +141,51 @@ test.describe("LLM Proxy - External IdP JWKS Authentication", () => {
         `Expected 401 but got ${response.status()}. Response body: ${JSON.stringify(body)}`,
       ).toBe(401);
     } finally {
-      if (proxyId) {
-        await deleteAgent(request, proxyId);
-      }
+      await makeApiRequest({
+        request,
+        method: "patch",
+        urlSuffix: "/api/llm-proxy",
+        data: { identityProviderId: null },
+      });
       await deleteIdentityProvider(request, identityProviderId);
     }
   });
 
-  test("should fall through to provider API key when profile has no IdP", async ({
+  test("should fall through to provider API key when no IdP is bound", async ({
     request,
-    createLlmProxy,
-    deleteAgent,
+    getLlmProxy,
   }) => {
-    // Create LLM Proxy profile WITHOUT an IdP linked
-    const proxyResponse = await createLlmProxy(
-      request,
-      `No IdP LLM Proxy ${Date.now()}`,
-      "personal",
-    );
-    const proxy = await proxyResponse.json();
-    const proxyId = proxy.id;
+    // The preceding tests reset the binding in their finally blocks, so the
+    // singleton has no IdP here. Its id in the URL exercises the
+    // legacy-style per-proxy path, which collapses to the singleton.
+    const proxyResponse = await getLlmProxy(request);
+    const proxy = (await proxyResponse.json()) as {
+      id: string;
+      identityProviderId: string | null;
+    };
+    expect(proxy.identityProviderId).toBeNull();
 
-    try {
-      // Call with a raw provider API key — no IdP means standard auth flow
-      const response = await request.post(
-        `${API_BASE_URL}/v1/openai/${proxyId}/chat/completions`,
-        {
-          headers: {
-            Authorization: "Bearer openai-jwks-fallback-test",
-            "Content-Type": "application/json",
-          },
-          data: {
-            model: "gpt-4",
-            messages: [{ role: "user", content: "Hello" }],
-          },
+    // Call with a raw provider API key — no IdP means standard auth flow
+    const response = await request.post(
+      `${API_BASE_URL}/v1/openai/${proxy.id}/chat/completions`,
+      {
+        headers: {
+          Authorization: "Bearer openai-jwks-fallback-test",
+          "Content-Type": "application/json",
         },
-      );
+        data: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Hello" }],
+        },
+      },
+    );
 
-      // WireMock accepts any API key and returns a mocked response
-      const body = await response.json();
-      expect(
-        response.status(),
-        `Expected 200 but got ${response.status()}. Response body: ${JSON.stringify(body)}`,
-      ).toBe(200);
-      expect(body.choices).toBeDefined();
-    } finally {
-      await deleteAgent(request, proxyId);
-    }
+    // WireMock accepts any API key and returns a mocked response
+    const body = await response.json();
+    expect(
+      response.status(),
+      `Expected 200 but got ${response.status()}. Response body: ${JSON.stringify(body)}`,
+    ).toBe(200);
+    expect(body.choices).toBeDefined();
   });
 });

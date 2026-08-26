@@ -59,15 +59,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   scheduledTask: ["read", "create", "update", "delete", "admin"],
 
   // LLM
-  llmProxy: [
-    "read",
-    "create",
-    "update",
-    "delete",
-    "team-admin",
-    "admin",
-    "deploy-to-restricted",
-  ],
+  llmProxy: ["read", "update"],
   llmProviderApiKey: ["read", "create", "update", "delete", "admin"],
   llmVirtualKey: ["read", "create", "update", "delete", "admin"],
   llmOauthClient: ["read", "create", "update", "delete", "team-admin", "admin"],
@@ -201,14 +193,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   scheduledTask: ["read", "create", "update", "delete"],
 
   // LLM
-  llmProxy: [
-    "read",
-    "create",
-    "update",
-    "delete",
-    "team-admin",
-    "deploy-to-restricted",
-  ],
+  llmProxy: ["read", "update"],
   llmProviderApiKey: ["read", "create", "update", "delete"],
   llmVirtualKey: ["read", "create", "update", "delete"],
   llmOauthClient: ["read", "create", "update", "delete", "team-admin"],
@@ -299,12 +284,12 @@ export const memberPermissions: Record<Resource, Action[]> = {
   scheduledTask: ["read", "create", "update", "delete"],
 
   // LLM
-  llmProxy: ["read", "create", "update", "delete"],
+  llmProxy: ["read"],
   llmProviderApiKey: ["read"],
-  // Members can create LLM proxies and need to mint personal virtual keys to
-  // route through them (e.g. the /connection auto-provisioning flow). Granting
-  // "create" only enables personal-scope keys; org-scoped keys still require
-  // llmVirtualKey:admin (enforced in the virtual-api-key create route).
+  // Members mint personal virtual keys to route through the LLM Proxy (e.g.
+  // the /connection auto-provisioning flow). Granting "create" only enables
+  // personal-scope keys; org-scoped keys still require llmVirtualKey:admin
+  // (enforced in the virtual-api-key create route).
   llmVirtualKey: ["read", "create"],
   llmOauthClient: ["read"],
   llmModel: ["read"],
@@ -542,15 +527,8 @@ export const permissionDescriptions: Record<string, string> = {
   "githubAppConfig:delete": "Delete GitHub App configurations",
 
   // LLM
-  "llmProxy:read": "View and list LLM proxies",
-  "llmProxy:create": "Create new LLM proxies",
-  "llmProxy:update": "Modify LLM proxy configuration",
-  "llmProxy:delete": "Delete LLM proxies",
-  "llmProxy:team-admin": "Manage team assignments for LLM proxies",
-  "llmProxy:admin":
-    "Full administrative control over all LLM proxies, bypassing team restrictions",
-  "llmProxy:deploy-to-restricted":
-    "Assign LLM proxies to restricted deployment environments",
+  "llmProxy:read": "View the LLM Proxy and its connection details",
+  "llmProxy:update": "Modify LLM Proxy configuration",
   "llmProviderApiKey:read": "View LLM provider API keys",
   "llmProviderApiKey:create": "Add new LLM provider API keys",
   "llmProviderApiKey:update":
@@ -766,8 +744,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetDefaultMcpGateway]: {
     mcpGateway: ["read"],
   },
-  [RouteId.GetDefaultLlmProxy]: {
+  [RouteId.GetLlmProxy]: {
     llmProxy: ["read"],
+  },
+  [RouteId.UpdateLlmProxy]: {
+    llmProxy: ["update"],
   },
   // Agent-tool routes: agent-type and scope checks are handled dynamically in the route handlers
   [RouteId.GetAgentTools]: {},
@@ -1306,6 +1287,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteVirtualApiKey]: {
     llmVirtualKey: ["delete"],
   },
+  [RouteId.BulkDeleteVirtualApiKeys]: {
+    llmVirtualKey: ["delete"],
+  },
   [RouteId.GetLlmOauthClients]: {
     llmOauthClient: ["read"],
   },
@@ -1319,6 +1303,9 @@ export const requiredEndpointPermissionsMap: Partial<
     llmOauthClient: ["update"],
   },
   [RouteId.DeleteLlmOauthClient]: {
+    llmOauthClient: ["delete"],
+  },
+  [RouteId.BulkDeleteLlmOauthClients]: {
     llmOauthClient: ["delete"],
   },
   [RouteId.GetMcpOauthClients]: {
@@ -1894,6 +1881,10 @@ export const requiredEndpointPermissionsMap: Partial<
   // Skill Share Link Routes - admin-only. Per-skill org-isolation enforced in handlers.
   // The public marketplace git endpoint stays outside this map; it is allowlisted in
   // the auth middleware (`SKILL_MARKETPLACE_PREFIX`), mirroring `MCP_GATEWAY_PREFIX`.
+  // The static marketplace's clone URL and name — what any user needs to
+  // install the skills they can already read. Gated on the same permission as
+  // listing skills, not on skill:admin.
+  [RouteId.GetSkillMarketplace]: { skill: ["read"] },
   [RouteId.GetSkillShareLinks]: { skill: ["admin"] },
   [RouteId.CreateSkillShareLink]: { skill: ["admin"] },
   [RouteId.RevokeSkillShareLink]: { skill: ["admin"] },
@@ -2077,8 +2068,9 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/apps/server/[mcpServerId]/run": { app: ["read"] },
 
   // LLM
-  "/llm/proxies": { llmProxy: ["read"] },
-  "/llm/proxies/new": { llmProxy: ["create"] },
+  "/llm/proxy": { llmProxy: ["read"] },
+  "/llm/proxy/virtual-keys": { llmVirtualKey: ["read"] },
+  "/llm/proxy/oauth-clients": { llmOauthClient: ["read"] },
   "/llm/model-providers": { llmProviderApiKey: ["read"] },
   "/llm/models": { llmModel: ["read"] },
   // Intentionally ungated: this page is fixed to the caller's own usage.

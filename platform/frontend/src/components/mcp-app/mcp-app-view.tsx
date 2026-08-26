@@ -22,6 +22,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AppSessionRecorderRuntimeHooks } from "@/components/app-session-recording/use-app-session-recorder";
 import { INITIAL_INLINE_HEIGHT } from "@/components/mcp-app/app-height";
 import { McpAppAuthBanner } from "@/components/mcp-app/mcp-app-auth-banner";
+import { Button } from "@/components/ui/button";
 import {
   getAppDiagnostics,
   parseForwardedDiagnostic,
@@ -104,7 +105,7 @@ export const McpAppRuntime = function McpAppRuntime({
   containerDimensions,
   reloadNonce,
   inlineInitialHeight,
-  degradeResourceLoadError,
+  onReload,
   recorder,
   filesRevision,
   onModelContextUpdate,
@@ -121,7 +122,7 @@ export const McpAppRuntime = function McpAppRuntime({
   onSendMessage?: (text: string) => void;
   /** HTML pre-fetched by the backend — skips the in-browser HTTP fetch to avoid SSE deadlock */
   preloadedResource?: AppResourceMeta;
-  onResourceStateChange: (state: "renderable" | "empty") => void;
+  onResourceStateChange: (state: "renderable" | "empty" | "error") => void;
   /** Owned-app version this render shows — keys the render-loop diagnostics. */
   appVersion?: number | null;
   /** Container size hint forwarded to the guest (SEP-1865 `containerDimensions`).
@@ -134,18 +135,8 @@ export const McpAppRuntime = function McpAppRuntime({
   /** Last measured inline height; seeds the iframe + loading box so a fresh
    * mount (e.g. returning from the panel) doesn't collapse before the app loads. */
   inlineInitialHeight?: number;
-  /**
-   * Degrade silently instead of showing a "Failed to load app" card when the
-   * UI resource can't be read. Set for incidental chat renders of third-party
-   * apps: a tool advertises a `ui://` resource its upstream server may not
-   * actually serve (e.g. a server that added MCP-UI hints without implementing
-   * `resources/read`, which fails with -32601 Method not found), and the tool
-   * result is shown regardless — so a failed app load falls back to that plain
-   * result rather than a scary error. Left false where the app was opened
-   * deliberately (run pages) or is Archestra-authored (an authoring bug the
-   * author must see), so failures stay visible there.
-   */
-  degradeResourceLoadError?: boolean;
+  /** Retry the resource load by rebuilding the runtime. */
+  onReload?: () => void;
   /**
    * Session-recorder hooks from {@link useAppSessionRecorder}: the runtime
    * reports its proxied MCP exchanges, the served HTML it renders, the live
@@ -211,8 +202,6 @@ export const McpAppRuntime = function McpAppRuntime({
   onModelContextUpdateRef.current = onModelContextUpdate;
   const onResourceStateChangeRef = useRef(onResourceStateChange);
   onResourceStateChangeRef.current = onResourceStateChange;
-  const degradeResourceLoadErrorRef = useRef(degradeResourceLoadError);
-  degradeResourceLoadErrorRef.current = degradeResourceLoadError;
   // Ref to the latest bridge for teardown — avoids capturing a stale closure
   const latestBridgeRef = useRef<AppBridge | null>(null);
   // Monotonic counter for JSON-RPC IDs to avoid collisions from Date.now() in rapid calls.
@@ -335,6 +324,7 @@ export const McpAppRuntime = function McpAppRuntime({
   useEffect(() => {
     let cancelled = false;
     fetchCancelledRef.current = false;
+    setLoadError(null);
 
     const appBridge = new AppBridge(
       null,
@@ -705,19 +695,9 @@ export const McpAppRuntime = function McpAppRuntime({
       } catch (err) {
         if (!cancelled && !fetchCancelledRef.current) {
           const error = err instanceof Error ? err : new Error(String(err));
-          if (degradeResourceLoadErrorRef.current) {
-            // Incidental third-party app whose upstream couldn't serve the UI
-            // resource: fall back to the plain tool result (state "empty" folds
-            // the app away) rather than a "Failed to load app" card. The tool
-            // output itself is shown independently, so nothing is lost.
-            // biome-ignore lint/suspicious/noConsole: intentional — helps support diagnose a silently-skipped app
-            console.debug("[MCP App] resource unavailable, degrading", error);
-            onResourceStateChangeRef.current("empty");
-          } else {
-            setLoadError(error.message);
-            onResourceStateChangeRef.current("renderable");
-            onErrorRef.current?.(error);
-          }
+          setLoadError(error.message);
+          onResourceStateChangeRef.current("error");
+          onErrorRef.current?.(error);
         }
       }
     })();
@@ -847,6 +827,16 @@ export const McpAppRuntime = function McpAppRuntime({
               Failed to load app
             </span>
             <span className="text-xs text-muted-foreground">{loadError}</span>
+            {onReload && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onReload}
+              >
+                Retry
+              </Button>
+            )}
           </div>
         </div>
       )}

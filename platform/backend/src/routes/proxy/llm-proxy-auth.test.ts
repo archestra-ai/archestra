@@ -23,8 +23,10 @@ import {
 // =========================================================================
 
 describe("resolveAgent", () => {
-  test("returns agent when found by ID", async ({ makeAgent }) => {
-    const agent = await makeAgent({ name: "test-agent" });
+  test("returns a non-proxy agent unchanged (chat/app attribution)", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "test-agent", agentType: "agent" });
 
     const result = await resolveAgent(agent.id);
     expect(result.id).toBe(agent.id);
@@ -38,27 +40,49 @@ describe("resolveAgent", () => {
     );
   });
 
-  test("falls back to default profile when no agentId provided", async ({
+  test("collapses an llm_proxy id to the organization's LLM Proxy", async ({
     makeOrganization,
     makeAgent,
   }) => {
     const org = await makeOrganization();
-    await makeAgent({
+    const proxy = await AgentModel.getOrgLlmProxy(org.id);
+    const legacy = await makeAgent({
       organizationId: org.id,
-      name: "default-profile",
+      agentType: "llm_proxy",
+      name: "old-proxy",
+    });
+
+    const result = await resolveAgent(legacy.id);
+    expect(result.id).toBe(proxy.id);
+    expect(result.agentType).toBe("llm_proxy");
+  });
+
+  test("collapses a legacy profile id to the organization's LLM Proxy", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const profile = await makeAgent({
+      organizationId: org.id,
       agentType: "profile",
       isDefault: true,
     });
 
-    const result = await resolveAgent(undefined);
-    expect(result.name).toBe("default-profile");
+    const result = await resolveAgent(profile.id);
+    expect(result.agentType).toBe("llm_proxy");
+    expect(result.organizationId).toBe(org.id);
     expect(result.isDefault).toBe(true);
   });
 
-  test("throws 400 when no agentId and no default profile", async () => {
-    await expect(resolveAgent(undefined)).rejects.toThrow(
-      "Please specify an LLMProxy ID in the URL path.",
-    );
+  test("no agent id resolves THE LLM Proxy, creating it on demand", async ({
+    makeOrganization,
+  }) => {
+    await makeOrganization();
+
+    const result = await resolveAgent(undefined);
+    expect(result.agentType).toBe("llm_proxy");
+    expect(result.isDefault).toBe(true);
+    expect(result.name).toBe("LLM Proxy");
   });
 
   // The proxy resolves a lean GatewayAgent (agents row + labels): labels feed
@@ -74,23 +98,6 @@ describe("resolveAgent", () => {
       expect.objectContaining({ key: "environment", value: "production" }),
     ]);
   });
-
-  test("does not resolve a soft-deleted default profile", async ({
-    makeOrganization,
-    makeAgent,
-  }) => {
-    const org = await makeOrganization();
-    const profile = await makeAgent({
-      organizationId: org.id,
-      agentType: "profile",
-      isDefault: true,
-    });
-    await AgentModel.delete(profile.id);
-
-    await expect(resolveAgent(undefined)).rejects.toThrow(
-      "Please specify an LLMProxy ID in the URL path.",
-    );
-  });
 });
 
 // =========================================================================
@@ -100,10 +107,11 @@ describe("resolveAgent", () => {
 describe("validateVirtualApiKey", () => {
   test("throws 401 for invalid/non-existent token", async () => {
     await expect(
-      validateVirtualApiKey(
-        `${LEGACY_ARCHESTRA_TOKEN_PREFIXES[0]}nonexistent`,
-        "openai",
-      ),
+      validateVirtualApiKey({
+        tokenValue: `${LEGACY_ARCHESTRA_TOKEN_PREFIXES[0]}nonexistent`,
+        expectedProvider: "openai",
+        expectedOrganizationId: null,
+      }),
     ).rejects.toThrow("Invalid virtual API key");
   });
 
@@ -121,7 +129,13 @@ describe("validateVirtualApiKey", () => {
       authorId: owner.id,
     });
 
-    await expect(validateVirtualApiKey(value, "openai")).rejects.toMatchObject({
+    await expect(
+      validateVirtualApiKey({
+        tokenValue: value,
+        expectedProvider: "openai",
+        expectedOrganizationId: null,
+      }),
+    ).rejects.toMatchObject({
       statusCode: 400,
     });
   });
@@ -147,9 +161,13 @@ describe("validateVirtualApiKey", () => {
       expiresAt: new Date("2020-01-01"),
     });
 
-    await expect(validateVirtualApiKey(value, "openai")).rejects.toThrow(
-      "Virtual API key expired",
-    );
+    await expect(
+      validateVirtualApiKey({
+        tokenValue: value,
+        expectedProvider: "openai",
+        expectedOrganizationId: null,
+      }),
+    ).rejects.toThrow("Virtual API key expired");
   });
 
   test("throws 400 for provider mismatch", async ({
@@ -172,9 +190,13 @@ describe("validateVirtualApiKey", () => {
       name: "openai-key",
     });
 
-    await expect(validateVirtualApiKey(value, "anthropic")).rejects.toThrow(
-      'Virtual API key is not mapped to provider "anthropic".',
-    );
+    await expect(
+      validateVirtualApiKey({
+        tokenValue: value,
+        expectedProvider: "anthropic",
+        expectedOrganizationId: null,
+      }),
+    ).rejects.toThrow('Virtual API key is not mapped to provider "anthropic".');
   });
 
   test("rejects a foreign subscription marker immediately after virtual-key resolution", async ({
@@ -199,7 +221,13 @@ describe("validateVirtualApiKey", () => {
       name: "out-of-band-swapped-marker",
     });
 
-    await expect(validateVirtualApiKey(value, "openai")).rejects.toMatchObject({
+    await expect(
+      validateVirtualApiKey({
+        tokenValue: value,
+        expectedProvider: "openai",
+        expectedOrganizationId: null,
+      }),
+    ).rejects.toMatchObject({
       statusCode: 401,
     });
   });
@@ -233,7 +261,13 @@ describe("validateVirtualApiKey", () => {
       authorId: owner.id,
     });
 
-    await expect(validateVirtualApiKey(value, "xai")).rejects.toMatchObject({
+    await expect(
+      validateVirtualApiKey({
+        tokenValue: value,
+        expectedProvider: "xai",
+        expectedOrganizationId: null,
+      }),
+    ).rejects.toMatchObject({
       statusCode: 403,
     });
   });
@@ -258,7 +292,11 @@ describe("validateVirtualApiKey", () => {
       name: "valid-key",
     });
 
-    const result = await validateVirtualApiKey(value, "openai");
+    const result = await validateVirtualApiKey({
+      tokenValue: value,
+      expectedProvider: "openai",
+      expectedOrganizationId: null,
+    });
     expect(result.apiKey).toBe("sk-real-provider-key");
     expect(result.baseUrl).toBeUndefined();
   });
@@ -288,7 +326,11 @@ describe("validateVirtualApiKey", () => {
       ],
     });
 
-    const result = await validateVirtualApiKey(value, "github-copilot");
+    const result = await validateVirtualApiKey({
+      tokenValue: value,
+      expectedProvider: "github-copilot",
+      expectedOrganizationId: null,
+    });
     expect(result.apiKey).toBe("gho_owner");
   });
 
@@ -320,7 +362,11 @@ describe("validateVirtualApiKey", () => {
     });
 
     await expect(
-      validateVirtualApiKey(value, "github-copilot"),
+      validateVirtualApiKey({
+        tokenValue: value,
+        expectedProvider: "github-copilot",
+        expectedOrganizationId: null,
+      }),
     ).rejects.toThrow(/per-user/);
   });
 
@@ -350,7 +396,11 @@ describe("validateVirtualApiKey", () => {
       name: "key-with-base-url",
     });
 
-    const result = await validateVirtualApiKey(value, "openai");
+    const result = await validateVirtualApiKey({
+      tokenValue: value,
+      expectedProvider: "openai",
+      expectedOrganizationId: null,
+    });
     expect(result.apiKey).toBe("sk-real-key");
     expect(result.baseUrl).toBe("https://custom-openai.example.com/v1");
   });
@@ -372,7 +422,11 @@ describe("validateVirtualApiKey", () => {
       name: "virtual-for-system-openai-key",
     });
 
-    const result = await validateVirtualApiKey(value, "openai");
+    const result = await validateVirtualApiKey({
+      tokenValue: value,
+      expectedProvider: "openai",
+      expectedOrganizationId: null,
+    });
     expect(result.apiKey).toBeUndefined();
     expect(result.baseUrl).toBeUndefined();
   });
@@ -396,9 +450,41 @@ describe("validateVirtualApiKey", () => {
       name: "virtual-for-system-key",
     });
 
-    const result = await validateVirtualApiKey(value, "gemini");
+    const result = await validateVirtualApiKey({
+      tokenValue: value,
+      expectedProvider: "gemini",
+      expectedOrganizationId: null,
+    });
     expect(result.apiKey).toBeUndefined();
     expect(result.baseUrl).toBeUndefined();
+  });
+
+  test("throws 403 when the key belongs to another organization", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const keyOrg = await makeOrganization();
+    const otherOrg = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "sk-org-guard" } });
+    const chatApiKey = await makeLlmProviderApiKey(keyOrg.id, secret.id, {
+      provider: "openai",
+    });
+    const { value } = await VirtualApiKeyModel.create({
+      organizationId: keyOrg.id,
+      name: "org-guard-vk",
+      providerApiKeys: [
+        { provider: chatApiKey.provider, providerApiKeyId: chatApiKey.id },
+      ],
+    });
+
+    await expect(
+      validateVirtualApiKey({
+        tokenValue: value,
+        expectedProvider: "openai",
+        expectedOrganizationId: otherOrg.id,
+      }),
+    ).rejects.toMatchObject({ statusCode: 403 });
   });
 });
 
@@ -1068,10 +1154,12 @@ describe("validatePassthroughVirtualKey", () => {
   test("returns owner + key id when the owner can access the proxy", async ({
     makeOrganization,
     makeUser,
+    makeMember,
     makeAgent,
   }) => {
     const org = await makeOrganization();
     const owner = await makeUser();
+    await makeMember(owner.id, org.id, { role: "member" });
     const proxy = await makeAgent({
       organizationId: org.id,
       agentType: "llm_proxy",

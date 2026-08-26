@@ -2,6 +2,7 @@
 
 import {
   type ChatProvider,
+  DEFAULT_LLM_PROXY_NAME,
   EXTERNAL_AGENT_ID_HEADER,
   isModelRouterSupportedProvider,
   isSupportedProvider,
@@ -115,7 +116,7 @@ const PROVIDER_ORIGINAL_URLS: Record<ChatProvider, string> = {
   zhipuai: "https://open.bigmodel.cn/api/",
   "github-copilot": "https://api.githubcopilot.com/",
   "microsoft-365-copilot": "https://graph.microsoft.com/beta/",
-  archestra: "https://<archestra-host>/v1/model-router/<llm-proxy-id>/",
+  archestra: "https://<archestra-host>/v1/model-router/",
 };
 
 /** Matches a provider by the name it renders under, or by one of its aliases. */
@@ -131,9 +132,8 @@ function providerMatchesSearch(
 
 interface ProxyClientInstructionsProps {
   client: ConnectClient;
+  /** The LLM Proxy id — used in connection-setup POST payloads, not URLs. */
   profileId: string;
-  /** Display name of the LLM proxy (profile) — used as a provider id in client configs. */
-  profileName: string;
   /** When null/undefined: show all providers. Otherwise: only these. */
   shownProviders?: readonly SupportedProvider[] | null;
   /** Connection base URL chosen at the page level (see ConnectionUrlStep). */
@@ -171,7 +171,6 @@ function toProxyProviderSlug(name: string): string {
 export function ProxyClientInstructions({
   client,
   profileId,
-  profileName,
   shownProviders,
   baseUrl,
 }: ProxyClientInstructionsProps) {
@@ -254,9 +253,7 @@ export function ProxyClientInstructions({
   const providerLabel = selectedProvider
     ? providerCatalog.label(selectedProvider)
     : null;
-  const url = selectedProvider
-    ? `${baseUrl}/${selectedProvider}/${profileId}`
-    : null;
+  const url = selectedProvider ? `${baseUrl}/${selectedProvider}` : null;
   const isCompatible =
     !!selectedProvider && supportedProviders.includes(selectedProvider);
 
@@ -268,17 +265,10 @@ export function ProxyClientInstructions({
       providerLabel,
       url,
       tokenPlaceholder: `<your-${selectedProvider}-api-key>`,
-      proxyName: toProxyProviderSlug(profileName),
+      proxyName: toProxyProviderSlug(DEFAULT_LLM_PROXY_NAME),
       appName,
     });
-  }, [
-    client.proxy,
-    selectedProvider,
-    providerLabel,
-    url,
-    profileName,
-    appName,
-  ]);
+  }, [client.proxy, selectedProvider, providerLabel, url, appName]);
 
   if (client.proxy.kind === "unsupported") {
     return <UnsupportedPanel reason={client.proxy.reason} />;
@@ -301,7 +291,6 @@ export function ProxyClientInstructions({
       {routerAvailable ? (
         <GenericEndpointCard
           baseUrl={baseUrl}
-          profileId={profileId}
           providers={visibleAllProviders}
           routerSelected={routerSelected}
           selectedProvider={selectedProvider}
@@ -513,8 +502,7 @@ function GenericProxyInstructions({
                 />
                 <p className="text-[11px] text-muted-foreground">
                   Use this as your API key. Revoke it any time by deleting the
-                  &quot;{virtualKey.name}&quot; key on the Virtual API Keys
-                  page.
+                  &quot;{virtualKey.name}&quot; key on the Virtual Keys page.
                 </p>
                 <CreditWarningNotice warning={virtualKey.creditWarning} />
               </div>
@@ -696,8 +684,7 @@ function ModelRouterInstructions() {
                   />
                   <p className="text-[11px] text-muted-foreground">
                     Use this as your API key. Revoke it any time by deleting the
-                    &quot;{virtualKey.name}&quot; key on the Virtual API Keys
-                    page.
+                    &quot;{virtualKey.name}&quot; key on the Virtual Keys page.
                   </p>
                   <CreditWarningNotice warning={virtualKey.creditWarning} />
                 </div>
@@ -733,9 +720,8 @@ function endpointTabClass(active: boolean) {
  * the proxy URL for the active tab renders below. Also used by the admin
  * connect dialog on the proxies table (with a custom caption).
  */
-export function GenericEndpointCard({
+function GenericEndpointCard({
   baseUrl,
-  profileId,
   providers,
   routerSelected,
   selectedProvider,
@@ -744,7 +730,6 @@ export function GenericEndpointCard({
   caption,
 }: {
   baseUrl: string;
-  profileId: string;
   providers: ChatProvider[];
   routerSelected: boolean;
   selectedProvider: ChatProvider | null;
@@ -787,8 +772,8 @@ export function GenericEndpointCard({
       ? PROVIDER_ORIGINAL_URLS[selectedProvider]
       : "";
   const url = routerSelected
-    ? `${baseUrl}/model-router/${profileId}`
-    : `${baseUrl}/${selectedProvider}/${profileId}`;
+    ? `${baseUrl}/model-router`
+    : `${baseUrl}/${selectedProvider}`;
 
   // Bedrock exposes two endpoints; both live in the same card as labeled rows.
   const rows =
@@ -796,11 +781,11 @@ export function GenericEndpointCard({
       ? [
           {
             comment: "Bedrock Converse API",
-            code: `${baseUrl}/bedrock/${profileId}`,
+            code: `${baseUrl}/bedrock`,
           },
           {
             comment: "OpenAI Completions API compatible clients",
-            code: `${baseUrl}/bedrock/openai/${profileId}`,
+            code: `${baseUrl}/bedrock/openai`,
           },
         ]
       : undefined;
@@ -973,7 +958,7 @@ function StepList({
  * Inline reveal for the manual attribution step: auto-provisions the caller's
  * personal passthrough virtual key (scoped to this proxy) and shows the header
  * name + copyable value to paste into the client's custom-headers field. Gated
- * on llmVirtualKey:create; otherwise points to the LLM Proxies page.
+ * on llmVirtualKey:create; otherwise points to the LLM Proxy page.
  */
 type PassthroughKeyState =
   | { status: "loading" }
@@ -1026,12 +1011,12 @@ function PassthroughKeyField({
   if (canCreate === false) {
     return (
       <p className="text-[12.5px] leading-snug text-muted-foreground">
-        Open an LLM Proxy&apos;s Connect dialog from the{" "}
+        Open the Connect dialog on the{" "}
         <Link
-          href="/llm/proxies"
+          href="/llm/proxy"
           className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
         >
-          LLM Proxies
+          LLM Proxy
         </Link>{" "}
         page and create a passthrough key. Then add a header named{" "}
         <code className="rounded bg-muted px-1 py-0.5 text-[11px]">
@@ -1053,12 +1038,12 @@ function PassthroughKeyField({
         >
           Retry
         </button>{" "}
-        or open an LLM Proxy&apos;s Connect dialog from the{" "}
+        or open the Connect dialog on the{" "}
         <Link
-          href="/llm/proxies"
+          href="/llm/proxy"
           className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
         >
-          LLM Proxies
+          LLM Proxy
         </Link>{" "}
         page.
       </p>

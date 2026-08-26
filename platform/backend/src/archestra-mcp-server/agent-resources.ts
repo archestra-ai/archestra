@@ -1,7 +1,4 @@
-import {
-  getResourceForAgentType,
-  TOOL_LIST_AGENTS_SHORT_NAME,
-} from "@archestra/shared";
+import { TOOL_LIST_AGENTS_SHORT_NAME } from "@archestra/shared";
 import { z } from "zod";
 import {
   assertAgentTeams,
@@ -215,22 +212,18 @@ export const KnowledgeSourceOutputSchema = z.object({
 /**
  * Where a record's edit page lives, per family. Every family used to be linked
  * as `/agents?edit=<id>`: a link only the internal-agent list could resolve, so
- * an LLM proxy or MCP gateway sent the reader to a page that does not know the
+ * an MCP gateway sent the reader to a page that does not know the
  * id. Each family now has its own routed edit page.
  */
 const EDIT_PATH_BUILDERS: Record<
-  "agent" | "llm_proxy" | "mcp_gateway",
+  "agent" | "mcp_gateway",
   (id: string) => string
 > = {
   agent: (id) => `/agents/${id}/edit`,
-  llm_proxy: (id) => `/llm/proxies/${id}/edit`,
   mcp_gateway: (id) => `/mcp/gateways/${id}/edit`,
 };
 
-function buildEditLink(
-  agentType: "agent" | "llm_proxy" | "mcp_gateway",
-  id: string,
-): string {
+function buildEditLink(agentType: "agent" | "mcp_gateway", id: string): string {
   return `${config.frontendBaseUrl}${EDIT_PATH_BUILDERS[agentType](id)}`;
 }
 
@@ -255,7 +248,7 @@ export async function handleCreateResource<
 >(params: {
   args: TArgs;
   context: ArchestraContext;
-  targetAgentType: "agent" | "llm_proxy" | "mcp_gateway";
+  targetAgentType: "agent" | "mcp_gateway";
 }) {
   const { args, context, targetAgentType } = params;
   const toolLabel = targetAgentType.replace("_", " ");
@@ -355,7 +348,6 @@ export async function handleCreateResource<
           organizationId: context.organizationId,
           knowledgeBaseIds: args.knowledgeBaseIds,
           connectorIds: args.connectorIds,
-          targetAgentType,
         });
       }
       if (args.knowledgeBaseIds) {
@@ -417,7 +409,7 @@ export async function handleGetResource<
 >(params: {
   args: TArgs;
   context: ArchestraContext;
-  expectedType: "agent" | "llm_proxy" | "mcp_gateway";
+  expectedType: "agent" | "mcp_gateway";
   getLabel: string;
 }) {
   const { args, context, expectedType, getLabel } = params;
@@ -525,7 +517,7 @@ export async function handleEditResource<
 >(params: {
   args: TArgs;
   context: ArchestraContext;
-  expectedType: "agent" | "llm_proxy" | "mcp_gateway";
+  expectedType: "agent" | "mcp_gateway";
 }) {
   const { args, context, expectedType } = params;
   const toolLabel = expectedType.replace("_", " ");
@@ -652,7 +644,6 @@ export async function handleEditResource<
           organizationId: context.organizationId,
           knowledgeBaseIds: args.knowledgeBaseIds,
           connectorIds: args.connectorIds,
-          targetAgentType: expectedType,
         });
       }
       if (args.knowledgeBaseIds !== undefined) {
@@ -708,13 +699,13 @@ export async function handleEditResource<
  */
 async function resolveNewAgentEnvironmentId(params: {
   context: ArchestraContext;
-  agentType: "agent" | "llm_proxy" | "mcp_gateway";
+  agentType: "agent" | "mcp_gateway";
 }): Promise<string | null> {
   const { context, agentType } = params;
   const { userId, organizationId } = context;
   if (!userId || !organizationId) return null;
 
-  const resource = getResourceForAgentType(agentType);
+  const resource = agentType === "mcp_gateway" ? "mcpGateway" : "agent";
   return resolveDefaultEnvironmentForNewResource({
     organizationId,
     resource,
@@ -731,30 +722,13 @@ async function validateKnowledgeAssignments(params: {
   organizationId?: string;
   knowledgeBaseIds?: string[];
   connectorIds?: string[];
-  targetAgentType: "agent" | "llm_proxy" | "mcp_gateway";
 }) {
-  const { organizationId, knowledgeBaseIds, connectorIds, targetAgentType } =
-    params;
+  const { organizationId, knowledgeBaseIds, connectorIds } = params;
 
   if (!organizationId) {
     throw new Error(
       "organization context not available for knowledge validation",
     );
-  }
-
-  if (targetAgentType === "llm_proxy") {
-    if ((knowledgeBaseIds?.length ?? 0) > 0) {
-      throw createValidationError(
-        ["knowledgeBaseIds"],
-        "Knowledge bases cannot be assigned to LLM proxy resources.",
-      );
-    }
-    if ((connectorIds?.length ?? 0) > 0) {
-      throw createValidationError(
-        ["connectorIds"],
-        "Knowledge connectors cannot be assigned to LLM proxy resources.",
-      );
-    }
   }
 
   if (knowledgeBaseIds) {

@@ -13,7 +13,6 @@ import {
 describe("buildClaudeDesktopConfigProfile", () => {
   const base = {
     baseUrl: "https://example.com/v1",
-    llmProxyId: "81a0379d-03f8-4319-93e3-27de2c82d4c9",
     passthroughKey: "arch_passthrough",
     virtualKey: "arch_virtual",
   };
@@ -23,10 +22,8 @@ describe("buildClaudeDesktopConfigProfile", () => {
 
     expect(profile.$schemaVersion).toBe(2);
     expect(profile.inference.provider).toBe("gateway");
-    // proxy id (not slug) in the inference base URL
-    expect(profile.inference.baseUrl).toBe(
-      "https://example.com/v1/anthropic/81a0379d-03f8-4319-93e3-27de2c82d4c9",
-    );
+    // id-less Anthropic proxy route in the inference base URL
+    expect(profile.inference.baseUrl).toBe("https://example.com/v1/anthropic");
     // passthrough key → custom header
     expect(profile.inference.customHeaders[VIRTUAL_KEY_HEADER]).toBe(
       "arch_passthrough",
@@ -91,7 +88,6 @@ describe("maskConfigSecrets", () => {
     const profile = buildClaudeDesktopConfigProfile({
       ...{
         baseUrl: "https://example.com/v1",
-        llmProxyId: "proxy-id",
         passthroughKey: "arch_passthrough",
         virtualKey: "arch_virtual",
       },
@@ -117,7 +113,6 @@ describe("maskConfigSecrets", () => {
   it("masks the token-bearing marketplace URL but keeps its name", () => {
     const profile = buildClaudeDesktopConfigProfile({
       baseUrl: "https://example.com/v1",
-      llmProxyId: "proxy-id",
       passthroughKey: "arch_passthrough",
       virtualKey: "arch_virtual",
       skillMarketplace: {

@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { toBulkOutcome } from "@/lib/bulk-action";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
 
 type AllVirtualApiKeysQuery = NonNullable<
@@ -18,6 +19,7 @@ const {
   createVirtualApiKey,
   updateVirtualApiKey,
   deleteVirtualApiKey,
+  bulkDeleteVirtualApiKeys,
 } = archestraApiSdk;
 
 /**
@@ -148,6 +150,7 @@ export function useAllVirtualApiKeys(params?: AllVirtualApiKeysParams) {
   const search = params?.search;
   const providerApiKeyId = params?.providerApiKeyId;
   const keyType = params?.keyType;
+  const scope = params?.scope;
   const toastOnError = params?.toastOnError;
   return useQuery({
     queryKey: [
@@ -157,6 +160,7 @@ export function useAllVirtualApiKeys(params?: AllVirtualApiKeysParams) {
       search,
       providerApiKeyId,
       keyType,
+      scope,
     ],
     queryFn: async () => {
       const { data, error } = await getAllVirtualApiKeys({
@@ -166,6 +170,7 @@ export function useAllVirtualApiKeys(params?: AllVirtualApiKeysParams) {
           search: search || undefined,
           providerApiKeyId: providerApiKeyId || undefined,
           keyType: keyType || undefined,
+          scope: scope || undefined,
         },
       });
       throwOnApiError(error, { toastOnError });
@@ -184,6 +189,28 @@ export function useAllVirtualApiKeys(params?: AllVirtualApiKeysParams) {
       );
     },
     enabled: params?.enabled,
+  });
+}
+
+/**
+ * Deletes a selection of virtual keys in one request. The caller reports the
+ * batch once via `reportBulkOutcome` rather than a toast per row.
+ */
+export function useBulkDeleteVirtualApiKeys() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (keys: readonly { id: string }[]) =>
+      bulkDeleteVirtualApiKeys({
+        body: { ids: keys.map((key) => key.id) },
+      }).then(({ data, error }) => {
+        throwOnApiError(error, { toastOnError: false });
+        return toBulkOutcome(data ?? { succeeded: [], failed: [] });
+      }),
+    // Settled rather than success: a partly applied batch still moved rows.
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["all-virtual-api-keys"] });
+      queryClient.invalidateQueries({ queryKey: ["virtual-api-keys"] });
+    },
   });
 }
 

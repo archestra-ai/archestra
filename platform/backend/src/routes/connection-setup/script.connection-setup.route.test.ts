@@ -140,20 +140,89 @@ describe("GET /api/connection-setups/script/:token", () => {
       "claude mcp add --scope user --transport http 'prod_gateway'",
     );
     expect(script).toContain(`/v1/mcp/${gateway.slug ?? gateway.id}`);
-    expect(script).toContain(`/v1/anthropic/${proxy.id}`);
+    expect(script).toContain("/v1/anthropic");
+    expect(script).not.toContain("/v1/anthropic/");
     // the real virtual key value is injected, no placeholders
     expect(script).toMatch(/arch_[0-9a-f]{64}/);
     expect(script).not.toMatch(/<your-[a-z-]+>/);
-    // skill share link was lazily created and embedded as a clone URL
-    expect(script).toContain("/skills/m/archestra_skl_");
+    // A skills-only setup registers the shared marketplace URL with a
+    // credential minted for this user — no snapshot link, so the install stays
+    // current and a member gets the same one command an admin does.
+    expect(script).toContain("/skills/marketplace.git");
+    expect(script).toContain("archestra_mkt_");
+    expect(script).not.toContain("/skills/m/archestra_skl_");
     const links = await SkillShareLinkModel.listByOrganization({
       organizationId,
     });
-    expect(links).toHaveLength(1);
+    expect(links).toHaveLength(0);
 
     // one-time: the second fetch is refused
     const second = await fetchScript(rawToken);
     expect(second.statusCode).toBe(410);
+  });
+
+  test("a member who cannot administer skills still gets a working one-command install", async ({
+    makeAgent,
+  }) => {
+    // The headline of the shared marketplace URL: reading skills is enough to
+    // install them. Before, the script refused (410) for anyone without
+    // skill:admin, leaving members no path to shared skills at all.
+    mockUserHasPermission.mockImplementation(
+      async (_userId, _orgId, resource, action) =>
+        !(resource === "skill" && action === "admin"),
+    );
+
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+      name: "Prod Gateway",
+    });
+    const skill = await seedSkill({ organizationId, name: "alpha" });
+
+    const { rawToken } = await createSetup({
+      clientId: "claude-code",
+      baseUrl: "http://localhost:9000/v1",
+      mcpGatewayId: gateway.id,
+      skills: { skillIds: [skill.id], ttlDays: null },
+    });
+
+    const response = await fetchScript(rawToken);
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain("/skills/marketplace.git");
+    expect(response.body).toContain("archestra_mkt_");
+    // no snapshot published on their behalf — that stays admin-only
+    expect(
+      await SkillShareLinkModel.listByOrganization({ organizationId }),
+    ).toHaveLength(0);
+  });
+
+  test("a caller who cannot read skills at all is refused up front", async ({
+    makeAgent,
+  }) => {
+    mockUserHasPermission.mockImplementation(
+      async (_userId, _orgId, resource) => resource !== "skill",
+    );
+
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+      name: "Prod Gateway",
+    });
+    const skill = await seedSkill({ organizationId, name: "alpha" });
+
+    // Refused when the setup is created, rather than 410ing later at fetch
+    // time: the caller finds out while they are still on the page.
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "claude-code",
+        baseUrl: "http://localhost:9000/v1",
+        mcpGatewayId: gateway.id,
+        skills: { skillIds: [skill.id], ttlDays: null },
+      },
+    });
+    expect(response.statusCode).toBe(403);
   });
 
   test("windows platform yields an irm|iex command and a PowerShell script", async ({
@@ -222,7 +291,8 @@ describe("GET /api/connection-setups/script/:token", () => {
     const response = await fetchScript(rawToken);
     expect(response.statusCode).toBe(200);
     const script = response.body;
-    expect(script).toContain(`/v1/anthropic/${proxy.id}`);
+    expect(script).toContain("/v1/anthropic");
+    expect(script).not.toContain("/v1/anthropic/");
     expect(script).toContain("ANTHROPIC_BASE_URL");
     // passthrough, attribution off: no injected virtual key, no auth token — but
     // the client-app agent-id header always rides along, so the header block is
@@ -319,7 +389,8 @@ describe("GET /api/connection-setups/script/:token", () => {
     expect(response.statusCode).toBe(200);
     const script = response.body;
     expect(script).toContain("CLAUDE_CODE_USE_BEDROCK");
-    expect(script).toContain(`/v1/bedrock/${proxy.id}`);
+    expect(script).toContain("/v1/bedrock");
+    expect(script).not.toContain("/v1/bedrock/");
     // The provisioned passthrough key rides in the attribution header alongside
     // the agent-id line, exactly like the Anthropic passthrough; the user's own
     // AWS credentials keep passing through (no bearer token is printed).
@@ -387,7 +458,8 @@ describe("GET /api/connection-setups/script/:token", () => {
     const response = await fetchScript(rawToken);
     expect(response.statusCode).toBe(200);
     const script = response.body;
-    expect(script).toContain(`/v1/github-copilot/${proxy.id}`);
+    expect(script).toContain("/v1/github-copilot");
+    expect(script).not.toContain("/v1/github-copilot/");
     // device-flow endpoints come from backend config
     expect(script).toContain("/login/device/code");
     expect(script).toContain("copilot_internal/v2/token");

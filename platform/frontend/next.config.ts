@@ -100,6 +100,13 @@ const nextConfig: NextConfig = {
         destination: "/llm/models",
         permanent: true,
       },
+      // The LLM Proxy surface lives at /llm/proxy; old list and per-proxy
+      // detail links land on the proxy page.
+      {
+        source: "/llm/proxies/:path*",
+        destination: "/llm/proxy",
+        permanent: true,
+      },
       // The external app standalone surface moved under the chrome-less /a
       // namespace (next to the owned /a/[appId]). Run links are meant to be
       // shared (mcp-apps.md FR-31), so the old URL keeps working; the
@@ -169,6 +176,10 @@ const nextConfig: NextConfig = {
       {
         source: "/skills/m/:path*",
         destination: `${backendUrl}/skills/m/:path*`,
+      },
+      {
+        source: "/skills/marketplace.git/:path*",
+        destination: `${backendUrl}/skills/marketplace.git/:path*`,
       },
       {
         source: "/ws",

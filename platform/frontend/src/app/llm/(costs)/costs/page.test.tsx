@@ -553,7 +553,7 @@ describe("OrganizationCostsPage", () => {
       container.querySelectorAll(".max-h-\\[280px\\]"),
     );
 
-    // Teams, Agents, LLM Proxies, Models, People, Apps, Skills
+    // Teams, Agents, LLM Proxy, Models, People, Apps, Skills
     expect(tablePanels).toHaveLength(7);
     for (const tablePanel of tablePanels) {
       expect(tablePanel.className).toContain("max-h-[280px]");

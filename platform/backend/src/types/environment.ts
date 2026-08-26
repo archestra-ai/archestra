@@ -156,7 +156,6 @@ export const EnvironmentResourceDefaultsSchema = z.object({
   app: z.string().uuid().nullable(),
   agent: z.string().uuid().nullable(),
   mcpGateway: z.string().uuid().nullable(),
-  llmProxy: z.string().uuid().nullable(),
   knowledgeSource: z.string().uuid().nullable(),
 } satisfies Record<EnvironmentDefaultableResource, z.ZodTypeAny>);
 

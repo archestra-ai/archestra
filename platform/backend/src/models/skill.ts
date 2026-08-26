@@ -1569,7 +1569,15 @@ function buildOrderBy(sorting?: {
     name: schema.skillsTable.name,
     createdAt: schema.skillsTable.createdAt,
   }[sorting?.sortBy ?? "usageCount"];
-  return [direction(column), desc(schema.skillsTable.createdAt)];
+  // `id` closes the ordering: rows created in one transaction share a
+  // `createdAt` (Postgres `now()` is transaction time), so without it a page
+  // boundary — or the marketplace's skill cap — could fall differently on
+  // each query for the same data.
+  return [
+    direction(column),
+    desc(schema.skillsTable.createdAt),
+    asc(schema.skillsTable.id),
+  ];
 }
 
 function buildOrgFilters(params: {

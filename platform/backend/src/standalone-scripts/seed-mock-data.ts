@@ -149,8 +149,8 @@ async function seedMockData() {
   // Step 3: Create agents, MCP gateways, and LLM proxies with ownership patterns
   logger.info("\nCreating agents, gateways, and proxies...");
 
-  // Always recreate default agents
-  await AgentModel.getLLMProxyOrCreateDefault();
+  // Always ensure the LLM Proxy exists
+  await AgentModel.ensureLlmProxiesForAllOrganizations();
 
   const sharedUsers = [
     { id: editorUser.id, name: "editor" },
@@ -193,33 +193,16 @@ async function seedMockData() {
     orgCount: 35,
   });
 
-  // LLM Proxies: 10 editor-personal, 15 admin-personal, 20 TeamA, 25 TeamB, 30 org
-  const mockProxies = generateMockAgents({
-    organizationId: org.id,
-    agentType: "llm_proxy",
-    namePrefix: "proxy",
-    users: sharedUsers.map((u) => ({
-      ...u,
-      personalCount: u.name === "editor" ? 10 : 15,
-    })),
-    teamConfig: [
-      { ...sharedTeamConfig[0], count: 20 },
-      { ...sharedTeamConfig[1], count: 25 },
-    ],
-    orgCount: 30,
-  });
-
   const allMockEntities: MockAgentWithTeams[] = [
     ...mockAgents,
     ...mockGateways,
-    ...mockProxies,
   ];
 
   // Insert all (without teamIds field which isn't a DB column)
   const allRows = allMockEntities.map(({ teamIds: _, ...row }) => row);
   await db.insert(schema.agentsTable).values(allRows);
   logger.info(
-    `✅ Created ${mockAgents.length} agents, ${mockGateways.length} gateways, ${mockProxies.length} proxies`,
+    `✅ Created ${mockAgents.length} agents and ${mockGateways.length} gateways`,
   );
 
   // Assign teams to team-scoped entries

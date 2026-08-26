@@ -41,12 +41,12 @@ export function useAgentOverviewFacts({
 }): OverviewFact[] {
   const isBuiltIn = !!agent.builtIn;
   // The model is a chat agent's business — built-in ones included, as on the
-  // form; proxies and gateways answer with whatever the caller sends.
+  // form; gateways answer with whatever the caller sends.
   const showsModel = kind === "agent";
-  // Proxies and gateways carry their environment as a header badge, so
-  // repeating it here would be the same value twice on one screen.
+  // Gateways carry their environment as a header badge, so repeating it here
+  // would be the same value twice on one screen.
   const showsEnvironment = kind === "agent" && !isBuiltIn;
-  const showsTools = kind !== "llm_proxy" && !isBuiltIn;
+  const showsTools = !isBuiltIn;
 
   const model = useModelFact({ agent, enabled: showsModel });
   const environment = useEnvironmentFact({ agent, enabled: showsEnvironment });

@@ -712,6 +712,13 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) => UserTokenModel.findByIdForAudit(id, orgId),
   },
 
+  // The LLM Proxy (organization-scoped singleton; no id in the route)
+  "/api/llm-proxy": {
+    resourceType: "llmProxy",
+    resourceIdSource: "organizationContext",
+    fetchById: (orgId) => AgentModel.findOrgLlmProxyForAudit(orgId),
+  },
+
   // LLM virtual keys & OAuth clients
   "/api/llm-virtual-keys": {
     resourceType: "virtualApiKey",
@@ -1117,6 +1124,16 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "mcpServer",
     resourceIdSource: "organizationContext",
     actionByMethod: { DELETE: "mcpServer.bulk_deleted" },
+  },
+  "/api/llm-virtual-keys/bulk": {
+    resourceType: "virtualApiKey",
+    resourceIdSource: "organizationContext",
+    actionByMethod: { DELETE: "virtualApiKey.bulk_deleted" },
+  },
+  "/api/llm-oauth-clients/bulk": {
+    resourceType: "llmOauthClient",
+    resourceIdSource: "organizationContext",
+    actionByMethod: { DELETE: "llmOauthClient.bulk_deleted" },
   },
   "/api/llm-models/bulk": {
     resourceType: "llmModel",

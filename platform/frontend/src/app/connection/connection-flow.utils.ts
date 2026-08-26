@@ -2,9 +2,7 @@ import {
   type archestraApiTypes,
   type ChatProvider,
   isIntegrationHidden,
-  isSupportedProvider,
   providerSupportsChat,
-  type SupportedProvider,
   SupportedProviders,
 } from "@archestra/shared";
 

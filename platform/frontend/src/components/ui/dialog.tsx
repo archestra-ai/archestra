@@ -196,8 +196,27 @@ function DialogStickyFooter({
       data-slot="dialog-footer"
       className={cn(
         // Counteract DialogContent padding and keep the footer's inner spacing
-        // consistent on all sides. The pseudo-element masks the scrollbar gutter.
-        "relative mt-4 sticky bottom-0 z-10 rounded-b-lg border-t bg-background px-4 py-3 shadow-[0_-1px_0_0_hsl(var(--border)),0_-12px_24px_-24px_hsl(var(--foreground)/0.3)] [&>*]:relative [&>*]:z-10 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end",
+        // consistent on all sides.
+        "sticky bottom-0 z-10 mt-4 rounded-b-lg border-t px-4 py-3 shadow-[0_-1px_0_0_hsl(var(--border)),0_-12px_24px_-24px_hsl(var(--foreground)/0.3)] flex flex-col-reverse gap-2 sm:flex-row sm:justify-end",
+        // Two stacked layers under the content, because a sticky footer has to
+        // stay opaque over whatever scrolls beneath it:
+        //
+        //  ::before  the opaque backdrop. It lives here rather than on the
+        //            element's own `bg-*` because `cn()` is tailwind-merge — a
+        //            caller passing any plain `bg-…` (a warning tint, say)
+        //            drops `bg-background` from the merged result, and the bar
+        //            then renders semi-transparent with the content behind it
+        //            reading straight through its own text. `before:bg-…` is
+        //            its own merge group, so no caller class can strip it.
+        //  ::after   an empty tint slot above that backdrop. Callers colour it
+        //            with `after:bg-…` and cannot replace the backdrop by
+        //            accident; left alone it is transparent and inert.
+        //
+        // Children clear both via the `relative z-10` below, so they stay
+        // legible and clickable through the overlays.
+        "before:absolute before:inset-0 before:rounded-b-lg before:bg-background before:content-['']",
+        "after:absolute after:inset-0 after:rounded-b-lg after:content-['']",
+        "[&>*]:relative [&>*]:z-10",
         className,
       )}
       {...props}

@@ -149,7 +149,11 @@ export function ReinstallConfirmBar({
   return (
     <DialogStickyFooter
       ref={barRef}
-      className="flex-col items-stretch gap-3 border-t-2 border-amber-500/40 bg-amber-50/40 dark:bg-amber-950/20 sm:flex-col"
+      // The amber wash colours DialogStickyFooter's tint slot, which sits
+      // above its opaque backdrop. A plain `bg-amber-…/40` here would be
+      // merged *in place of* that backdrop instead, leaving the bar
+      // translucent and its warning unreadable against the form underneath.
+      className="flex-col items-stretch gap-3 border-t-2 border-amber-500/40 after:bg-amber-100/60 sm:flex-col dark:after:bg-amber-950/40"
     >
       <div className="flex items-start gap-3 pr-2 text-sm">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-500" />

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SearchInput } from "./search-input";
@@ -48,5 +48,55 @@ describe("SearchInput", () => {
     expect(screen.getByPlaceholderText("Search knowledge bases")).toHaveClass(
       "pl-9",
     );
+  });
+  /**
+   * Typing used to produce no feedback at all: the debounce, the commit and the
+   * request the commit triggers all passed under a static magnifier, which is
+   * what made a search feel like it had not registered.
+   */
+  describe("search in flight", () => {
+    it("marks itself busy from the keystroke, before anything is requested", () => {
+      render(<SearchInput placeholder="Search skills" />);
+
+      const input = screen.getByPlaceholderText("Search skills");
+      expect(input).toHaveAttribute("aria-busy", "false");
+
+      fireEvent.change(input, { target: { value: "not" } });
+
+      expect(input).toHaveAttribute("aria-busy", "true");
+    });
+
+    it("stays busy while the list it filters is fetching", () => {
+      const { rerender } = render(
+        <SearchInput placeholder="Search skills" isLoading />,
+      );
+
+      // Nothing has been typed in this render, so only the caller's flag can
+      // be holding the indicator on — the half that covers the request.
+      expect(screen.getByPlaceholderText("Search skills")).toHaveAttribute(
+        "aria-busy",
+        "true",
+      );
+
+      rerender(<SearchInput placeholder="Search skills" isLoading={false} />);
+
+      expect(screen.getByPlaceholderText("Search skills")).toHaveAttribute(
+        "aria-busy",
+        "false",
+      );
+    });
+
+    /**
+     * The spinner is the only animation in the field, and a search box is at
+     * most one debounce away from spinning. It has to stop for readers who ask
+     * motion to stop (WCAG 2.3.3).
+     */
+    it("keeps the spinner still under prefers-reduced-motion", () => {
+      const { container } = render(<SearchInput placeholder="Search skills" />);
+
+      expect(
+        container.querySelector(".animate-spin.motion-reduce\\:animate-none"),
+      ).toBeInTheDocument();
+    });
   });
 });

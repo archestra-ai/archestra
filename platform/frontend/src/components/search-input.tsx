@@ -2,7 +2,7 @@
 
 import { Search } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { forwardRef, useCallback } from "react";
+import { forwardRef, useCallback, useState } from "react";
 import { cn } from "@/lib/utils";
 import { DebouncedInput } from "./debounced-input";
 
@@ -17,6 +17,15 @@ type SearchInputProps = {
   onSearchChange?: (value: string) => void;
   value?: string;
   syncQueryParams?: boolean;
+  /**
+   * Whether the list this box filters is currently fetching.
+   *
+   * The box already lights up on its own for the debounce and the commit that
+   * follows it; this extends the same indicator across the request the commit
+   * triggers, so one continuous signal covers keystroke to results. Pass the
+   * query's `isFetching` — the same flag the table gets as `isLoading`.
+   */
+  isLoading?: boolean;
 };
 
 export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
@@ -32,18 +41,24 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
       onSearchChange,
       value,
       syncQueryParams = true,
+      isLoading = false,
     }: SearchInputProps,
     ref,
   ) {
     const router = useRouter();
     const searchParams = useSearchParams();
     const pathname = usePathname();
+    const [isCommitPending, setIsCommitPending] = useState(false);
 
     const searchValue = value ?? searchParams.get(paramName) ?? "";
     const computedPlaceholder =
       objectNamePlural && searchFields?.length
         ? `Search ${objectNamePlural} by ${formatSearchFields(searchFields)}`
         : placeholder;
+
+    // Typing was the part with no feedback at all: the debounce, the commit and
+    // the request that follows it all used to pass under a static magnifier.
+    const isBusy = isCommitPending || isLoading;
 
     const handleChange = useCallback(
       (value: string) => {
@@ -81,11 +96,39 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
           className ?? "w-full sm:w-[320px] sm:max-w-[320px]",
         )}
       >
-        <Search className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        {/* The spinner takes the magnifier's exact place rather than sitting
+            beside it, so a search in flight reads as the icon changing state
+            and nothing in the field moves. Both are always mounted and cross
+            fade; swapping the elements instead made the icon flicker on every
+            keystroke, and the box is at most one debounce away from busy. */}
+        <span className="pointer-events-none absolute left-3 top-1/2 z-10 block size-4 -translate-y-1/2">
+          <Search
+            aria-hidden
+            className={cn(
+              "absolute inset-0 size-4 text-muted-foreground transition-opacity duration-150",
+              isBusy && "opacity-0",
+            )}
+          />
+          <span
+            aria-hidden
+            className={cn(
+              "absolute inset-0 transition-opacity duration-150",
+              isBusy ? "opacity-100" : "opacity-0",
+            )}
+          >
+            <span className="absolute inset-0 rounded-full border-2 border-muted-foreground/25" />
+            <span className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-t-foreground motion-reduce:animate-none" />
+          </span>
+        </span>
         <DebouncedInput
           ref={ref}
           initialValue={searchValue}
           onChange={handleChange}
+          onPendingChange={setIsCommitPending}
+          // The spinner is decorative; the field carries the state itself so
+          // assistive tech hears it without a live region announcing every
+          // keystroke's pause.
+          aria-busy={isBusy}
           placeholder={computedPlaceholder}
           className={cn("pl-9", inputClassName ?? "w-full")}
           debounceMs={debounceMs}

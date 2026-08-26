@@ -3,6 +3,7 @@
 import { Search } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { forwardRef, useCallback, useState } from "react";
+import { useReportSearchInFlight } from "@/lib/hooks/use-is-app-loading";
 import { cn } from "@/lib/utils";
 import { DebouncedInput } from "./debounced-input";
 
@@ -59,6 +60,11 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
     // Typing was the part with no feedback at all: the debounce, the commit and
     // the request that follows it all used to pass under a static magnifier.
     const isBusy = isCommitPending || isLoading;
+
+    // The sidebar toggle's spinner reports that the app itself is loading. This
+    // wait is already reported twice over, right where the user is looking, so
+    // it sits this one out.
+    useReportSearchInFlight(isBusy);
 
     const handleChange = useCallback(
       (value: string) => {

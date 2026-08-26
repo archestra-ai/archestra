@@ -146,7 +146,16 @@ RUN apk add --no-cache \
    # No 1.25.x release carries the CVE-2026-46600 fix (the line ends at 1.25.13
    # upstream), so this moves to the same 1.26.6 toolchain the platform image's
    # go-builder stage already uses.
-   apk upgrade --no-cache nodejs bind openssl zlib expat curl libcurl sqlite-libs
+   apk upgrade --no-cache nodejs bind openssl zlib expat curl libcurl sqlite-libs && \
+   # CVE-2026-63076, CVE-2026-63075, CVE-2026-63072, CVE-2026-54874, CVE-2026-18798,
+   # CVE-2026-14457, CVE-2026-14456: OpenSSL vulnerabilities (HIGH) fixed in 3.5.8-r0.
+   # `openssl` is already in the bare `apk upgrade` list above, but that cannot express a
+   # version floor and this RUN layer is Docker-cached on its instruction text, so it never
+   # re-ran against the newer index and the image stayed on 3.5.7-r0. Explicit floors on all
+   # four installed openssl-origin packages both guarantee the fixed version and bust the
+   # stale cache.
+   apk add --no-cache --upgrade "openssl>=3.5.8-r0" "openssl-dev>=3.5.8-r0" \
+       "libcrypto3>=3.5.8-r0" "libssl3>=3.5.8-r0"
 
 # Go toolchain sourced from upstream Alpine-based image (Alpine apk currently ships go-1.25.9-r0)
 COPY --from=go-bin /usr/local/go /usr/local/go

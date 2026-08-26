@@ -204,6 +204,9 @@ export default function AuthSettingsPage() {
                     id="defaultMemberRole"
                     value={field.value}
                     onValueChange={field.onChange}
+                    // The block's title is a heading, not a label, so the
+                    // combobox has no name of its own to announce.
+                    ariaLabel="Default role for new users"
                     data-testid="default-member-role-select"
                     className="w-40"
                   />

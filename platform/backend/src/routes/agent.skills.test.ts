@@ -417,30 +417,34 @@ describe("agent skills routes", () => {
     expect(badNameResponse.json().error.message).toMatch(/Agent Skills/);
   });
 
-  test("PUT rejects an LLM proxy, which has no MCP surface to publish on", async ({
-    makeAgent,
-  }) => {
-    // Skills are published as `skill://` resources over the gateway, so the
-    // section exists for MCP gateways and agents only — the same split tools
-    // and knowledge sources already follow.
-    const proxy = await makeAgent({ organizationId, agentType: "llm_proxy" });
-    const skill = await makeSkill();
+  // Skills are published as `skill://` resources to the client holding a
+  // gateway's token, so MCP gateways are the only publishing surface: an LLM
+  // proxy has no MCP surface at all, and an internal agent reaches skills
+  // through `load_skill` in its own runtime. Rejected rather than stored, so
+  // the editor and the API agree on where the section exists.
+  for (const agentType of ["llm_proxy", "agent"] as const) {
+    test(`PUT rejects a ${agentType}, which is not a publishing surface`, async ({
+      makeAgent,
+    }) => {
+      const nonGateway = await makeAgent({ organizationId, agentType });
+      const skill = await makeSkill();
 
-    const assignments = await app.inject({
-      method: "PUT",
-      url: `/api/agents/${proxy.id}/skills`,
-      payload: { accessAllSkills: false, skillIds: [skill.id] },
-    });
-    expect(assignments.statusCode).toBe(400);
-    expect(assignments.json().error.message).toMatch(/LLM Proxy/i);
+      const assignments = await app.inject({
+        method: "PUT",
+        url: `/api/agents/${nonGateway.id}/skills`,
+        payload: { accessAllSkills: false, skillIds: [skill.id] },
+      });
+      expect(assignments.statusCode).toBe(400);
+      expect(assignments.json().error.message).toMatch(/MCP gateways only/i);
 
-    const exclusions = await app.inject({
-      method: "PUT",
-      url: `/api/agents/${proxy.id}/skill-exclusions`,
-      payload: { excludedSkillIds: [skill.id] },
+      const exclusions = await app.inject({
+        method: "PUT",
+        url: `/api/agents/${nonGateway.id}/skill-exclusions`,
+        payload: { excludedSkillIds: [skill.id] },
+      });
+      expect(exclusions.statusCode).toBe(400);
     });
-    expect(exclusions.statusCode).toBe(400);
-  });
+  }
 
   test("GET omits soft-deleted skills, so its result always round-trips through PUT", async ({
     makeAgent,

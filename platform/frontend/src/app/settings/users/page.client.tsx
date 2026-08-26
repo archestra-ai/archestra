@@ -861,6 +861,7 @@ function ChangeRoleDialog({
         <RoleSelect
           value={selectedRole}
           onValueChange={setSelectedRole}
+          ariaLabel="Role"
           className="w-full"
         />
       </DialogBody>

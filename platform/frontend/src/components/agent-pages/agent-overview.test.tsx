@@ -191,7 +191,7 @@ describe("useAgentOverviewFacts", () => {
     vi.mocked(useFeature).mockReturnValue(
       true as unknown as ReturnType<typeof useFeature>,
     );
-    renderOverview("agent");
+    renderOverview("mcp_gateway");
 
     expect(labels()).not.toContain("Published skills");
   });
@@ -203,9 +203,25 @@ describe("useAgentOverviewFacts", () => {
     vi.mocked(useAgentSkills).mockReturnValue({
       data: { accessAllSkills: false, skills: [{ id: "s1" }, { id: "s2" }] },
     } as unknown as ReturnType<typeof useAgentSkills>);
-    renderOverview("agent");
+    renderOverview("mcp_gateway");
 
     expect(fact("Published skills").getByText("2")).toBeVisible();
+  });
+
+  it("says nothing about published skills on an agent, and reads nothing", () => {
+    // Publishing over `skill://` is a gateway surface, so the fact belongs on
+    // the gateway pages only — even with a published set sitting in the cache.
+    vi.mocked(useFeature).mockReturnValue(
+      true as unknown as ReturnType<typeof useFeature>,
+    );
+    vi.mocked(useAgentSkills).mockReturnValue({
+      data: { accessAllSkills: false, skills: [{ id: "s1" }] },
+    } as unknown as ReturnType<typeof useAgentSkills>);
+    renderOverview("agent");
+
+    expect(labels()).not.toContain("Published skills");
+    expect(useAgentSkills).toHaveBeenCalledWith(undefined);
+    expect(useAgentSkillExclusions).toHaveBeenCalledWith(undefined);
   });
 
   it("leaves a gateway's environment to the page header", () => {

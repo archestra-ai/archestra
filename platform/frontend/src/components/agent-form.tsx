@@ -902,10 +902,12 @@ export function AgentForm({
     data: currentSubagentExclusions,
     isSuccess: subagentExclusionsLoaded,
   } = useAgentSubagentExclusions(supportsSubagents ? agent?.id : undefined);
-  // Which skills this gateway publishes over `skill://` (SEP-2640). Offered on
-  // exactly the agent types that serve MCP resources — the same set that gets
-  // the tool control — and only where the deployment has enabled the draft
-  // extension. The API enforces the same split.
+  // Which skills this gateway publishes over `skill://` (SEP-2640). A gateway
+  // surface only: publishing is what an MCP gateway is for, while an agent
+  // reaches skills through `load_skill` in its own runtime and has no client
+  // to serve `skill://` resources to. Legacy `profile` rows are gateways under
+  // an older name, so they keep the control. Shown only where the deployment
+  // has enabled the draft extension; the API enforces the same split.
   const mcpGatewaySkillsEnabled = useFeature("mcpGatewaySkillsEnabled");
   // `skill:read` is the API's floor on these endpoints — publishing a skill
   // hands its body to every holder of the gateway's token, so it is not
@@ -917,9 +919,7 @@ export function AgentForm({
     mcpGatewaySkillsEnabled === true &&
     !!canReadSkills &&
     !agent?.builtIn &&
-    (agentType === "mcp_gateway" ||
-      agentType === "agent" ||
-      agentType === "profile");
+    (agentType === "mcp_gateway" || agentType === "profile");
   const loadSkills = showSkills;
   const syncSkills = useUpdateAgentSkills();
   const syncSkillExclusions = useUpdateAgentSkillExclusions();
@@ -3586,8 +3586,8 @@ export function AgentForm({
                 </div>
               )}
 
-              {/* Section 5: Skills published over MCP (SEP-2640). Behind the
-                  draft-extension feature flag. */}
+              {/* Section 5: Skills published over MCP (SEP-2640). Gateways
+                  only, behind the draft-extension feature flag. */}
               {showSkills && (
                 <div className="space-y-4 p-4">
                   <h3 className="text-base font-semibold">Published skills</h3>

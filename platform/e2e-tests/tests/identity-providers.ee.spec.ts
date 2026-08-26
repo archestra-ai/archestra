@@ -15,6 +15,7 @@ import {
   type APIResponse,
   type Browser,
   expect,
+  type Locator,
   type Page,
   test,
 } from "../fixtures";
@@ -368,6 +369,38 @@ async function handTeamOverAndLeave(
 
 function getRoleMappingRuleRow(page: Page, index: number) {
   return page.getByTestId(getIdpRoleMappingRuleRowTestId(index));
+}
+
+/**
+ * Pick a role out of the `SearchableSelect` behind `trigger`.
+ *
+ * Its options are plain `<button>`s in a portalled popover, and the popover
+ * animates out rather than unmounting the instant a selection lands. A
+ * page-wide `getByRole("button")` therefore races the *previous* picker off
+ * the screen: choose a rule's role and then open the default-role picker, and
+ * both popovers are briefly mounted at once, so an option name they share
+ * ("Member" is listed in every role picker) resolves to two elements and
+ * Playwright's strict mode fails the click instead of making it.
+ *
+ * Radix points a trigger at its own content through `aria-controls`, so
+ * scoping the option to that id keeps each pick unambiguous no matter what is
+ * still on its way off screen.
+ */
+async function selectRoleOption(
+  page: Page,
+  trigger: Locator,
+  roleName: string,
+): Promise<void> {
+  await trigger.click();
+  const popoverId = await trigger.getAttribute("aria-controls");
+  expect(
+    popoverId,
+    "role picker trigger should point at its popover via aria-controls",
+  ).toBeTruthy();
+  await page
+    .locator(`[id="${popoverId}"]`)
+    .getByRole("button", { name: roleName, exact: true })
+    .click();
 }
 
 async function openIdentityProviderDialogSection(
@@ -1013,28 +1046,33 @@ test.describe("Identity Provider Role Mapping E2E", () => {
     await getRoleMappingRuleRow(page, 0)
       .getByTestId(E2eTestId.IdpRoleMappingRuleTemplate)
       .fill('{{#includes groups "non-existent-group"}}true{{/includes}}');
-    await getRoleMappingRuleRow(page, 0)
-      .getByTestId(E2eTestId.IdpRoleMappingRuleRole)
-      .click();
-    await page.getByRole("option", { name: "Editor" }).click();
+    await selectRoleOption(
+      page,
+      getRoleMappingRuleRow(page, 0).getByTestId(
+        E2eTestId.IdpRoleMappingRuleRole,
+      ),
+      "Editor",
+    );
 
     // Add SECOND rule - WILL match (archestra-admins group -> admin role)
     await addRuleButton.click();
     await getRoleMappingRuleRow(page, 1)
       .getByTestId(E2eTestId.IdpRoleMappingRuleTemplate)
       .fill('{{#includes groups "archestra-admins"}}true{{/includes}}');
-    await getRoleMappingRuleRow(page, 1)
-      .getByTestId(E2eTestId.IdpRoleMappingRuleRole)
-      .click();
-    await page.getByRole("option", { name: "Admin", exact: true }).click();
+    await selectRoleOption(
+      page,
+      getRoleMappingRuleRow(page, 1).getByTestId(
+        E2eTestId.IdpRoleMappingRuleRole,
+      ),
+      "Admin",
+    );
 
     // Set default role to member (so we can verify role mapping works, not just fallback)
     const defaultRoleSelect = page.getByTestId(
       E2eTestId.IdpRoleMappingDefaultRole,
     );
     if (await defaultRoleSelect.isVisible()) {
-      await defaultRoleSelect.click();
-      await page.getByRole("option", { name: "Member" }).click();
+      await selectRoleOption(page, defaultRoleSelect, "Member");
     }
 
     // Submit the changes and wait for the role mapping to be persisted before
@@ -1095,16 +1133,14 @@ test.describe("Identity Provider Role Mapping E2E", () => {
 
     // Select admin role using data-testid
     const roleSelect = page.getByTestId(E2eTestId.IdpRoleMappingRuleRole);
-    await roleSelect.click();
-    await page.getByRole("option", { name: "Admin", exact: true }).click();
+    await selectRoleOption(page, roleSelect, "Admin");
 
     // Set default role to member (so we can verify role mapping works)
     const defaultRoleSelect = page.getByTestId(
       E2eTestId.IdpRoleMappingDefaultRole,
     );
     if (await defaultRoleSelect.isVisible()) {
-      await defaultRoleSelect.click();
-      await page.getByRole("option", { name: "Member" }).click();
+      await selectRoleOption(page, defaultRoleSelect, "Member");
     }
 
     // Submit the changes and wait for the role mapping to be persisted before

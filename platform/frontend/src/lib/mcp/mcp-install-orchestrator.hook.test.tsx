@@ -145,11 +145,14 @@ describe("useMcpInstallOrchestrator", () => {
       });
     });
 
-    // New behavior: first-time installs remember where they started so the
-    // callback can return the user there (e.g. a chat conversation) instead of
-    // the registry. This is not a re-auth flow.
+    // First-time installs remember where they started so the callback can
+    // return the user there (e.g. a chat conversation) instead of the
+    // registry. This is not a re-auth flow, and it says so explicitly: any
+    // server ID left behind by an earlier re-authentication in this tab has to
+    // be cleared, or the callback would route this install down the re-auth
+    // path and never install anything.
     expect(setOAuthReturnUrlMock).toHaveBeenCalledWith(window.location.href);
-    expect(setOAuthMcpServerIdMock).not.toHaveBeenCalled();
+    expect(setOAuthMcpServerIdMock).toHaveBeenCalledWith(null);
     expect(redirectBrowserToUrlMock).toHaveBeenCalledWith(
       "https://posthog.example.com/oauth/authorize",
     );

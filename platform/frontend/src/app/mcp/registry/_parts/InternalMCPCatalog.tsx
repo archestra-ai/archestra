@@ -430,6 +430,10 @@ export function InternalMCPCatalog({
         setOAuthMcpServerId(reauthServerId);
         setOAuthReturnUrl(window.location.href);
         setReauthServerId(null);
+      } else {
+        // A fresh install must state that it is not a re-authentication, so a
+        // stale ID from an earlier re-auth in this tab cannot divert it.
+        setOAuthMcpServerId(null);
       }
 
       window.location.href = authorizationUrl;

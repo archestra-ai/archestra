@@ -63,12 +63,25 @@ export function RunnerAttachTerminal({
           ),
         ];
 
-        websocketService.send({
-          type: "subscribe_runner_attach",
-          payload: { runnerId },
-        });
+        const openSession = () => {
+          websocketService.send({
+            type: "subscribe_runner_attach",
+            payload: { runnerId },
+          });
+        };
+
+        // The server drops every subscription with the socket it was made on,
+        // so a reconnect has to re-open the session rather than leave a
+        // terminal that looks live and receives nothing.
+        const unsubscribeConnection = websocketService.onConnectionChange(
+          (connected) => {
+            if (connected) openSession();
+          },
+        );
+        openSession();
 
         return () => {
+          unsubscribeConnection();
           for (const unsubscribe of unsubscribes) unsubscribe();
           websocketService.send({
             type: "unsubscribe_runner_attach",

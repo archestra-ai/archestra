@@ -1098,8 +1098,7 @@ export default function StatisticsPage() {
         <CardHeader>
           <CardTitle>LLM Proxy</CardTitle>
           <CardDescription>
-            Every request the organization's LLM Proxy served, including those
-            that arrived on a proxy URL it has since absorbed.
+            Requests served by your organization's LLM Proxy.
           </CardDescription>
         </CardHeader>
         <CardContent>

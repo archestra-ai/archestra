@@ -17,7 +17,7 @@ The **Costs** tab at `/llm/costs` is the organization-wide rollup for LLM traffi
 - which models are responsible for the largest share of cost
 - whether TOON compression and prompt caching are reducing spend over time
 
-The **LLM Proxy** section reports one total rather than a list. An organization has a single LLM Proxy, and every request it serves counts toward that total — including requests sent to a proxy URL it has absorbed.
+The **LLM Proxy** section reports one total rather than a list. An organization has a single LLM Proxy, so all of its traffic counts toward that one figure.
 
 For a fuller cost view outside the Archestra UI, use Archestra's exported [metrics](platform-observability#metrics) and the prebuilt [Grafana dashboards](platform-observability#grafana-dashboards). Those surfaces are better suited for long-term monitoring, alerting, and cross-system cost analysis.
 

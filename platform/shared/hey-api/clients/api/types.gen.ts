@@ -12970,6 +12970,32 @@ export type GetAgentsResponses = {
             modelId: string | null;
             identityProviderId: string | null;
             environmentId: string | null;
+            runnerConfig: {
+                image?: string;
+                command?: Array<string>;
+                steerMode?: 'pipe' | 'tmux_keys';
+                privileged?: boolean;
+                resources?: {
+                    cpuRequest?: string;
+                    memoryRequest?: string;
+                    cpuLimit?: string;
+                    memoryLimit?: string;
+                };
+                ttlHours?: number;
+                idleTimeoutMinutes?: number;
+                credentials?: Array<{
+                    key: string;
+                    scope: 'shared' | 'per_user';
+                    label: string;
+                    description?: string;
+                    required: boolean;
+                }>;
+                environment?: Array<{
+                    key: string;
+                    value: string;
+                }>;
+            } | null;
+            runnerSecretId: string | null;
             passthroughHeaders: Array<string> | null;
             toolExposureMode: 'full' | 'search_and_run_only';
             missingCredentialBehavior: 'allow' | 'warn' | 'block';
@@ -13069,6 +13095,32 @@ export type CreateAgentData = {
         modelId?: string | null;
         identityProviderId?: string | null;
         environmentId?: string | null;
+        runnerConfig?: {
+            image?: string;
+            command?: Array<string>;
+            steerMode?: 'pipe' | 'tmux_keys';
+            privileged?: boolean;
+            resources?: {
+                cpuRequest?: string;
+                memoryRequest?: string;
+                cpuLimit?: string;
+                memoryLimit?: string;
+            };
+            ttlHours?: number;
+            idleTimeoutMinutes?: number;
+            credentials?: Array<{
+                key: string;
+                scope: 'shared' | 'per_user';
+                label: string;
+                description?: string;
+                required: boolean;
+            }>;
+            environment?: Array<{
+                key: string;
+                value: string;
+            }>;
+        } | null;
+        runnerSecretId?: string | null;
         passthroughHeaders?: Array<string> | null;
         toolExposureMode?: 'full' | 'search_and_run_only';
         missingCredentialBehavior?: 'allow' | 'warn' | 'block';
@@ -13204,6 +13256,32 @@ export type CreateAgentResponses = {
         modelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        runnerConfig: {
+            image?: string;
+            command?: Array<string>;
+            steerMode?: 'pipe' | 'tmux_keys';
+            privileged?: boolean;
+            resources?: {
+                cpuRequest?: string;
+                memoryRequest?: string;
+                cpuLimit?: string;
+                memoryLimit?: string;
+            };
+            ttlHours?: number;
+            idleTimeoutMinutes?: number;
+            credentials?: Array<{
+                key: string;
+                scope: 'shared' | 'per_user';
+                label: string;
+                description?: string;
+                required: boolean;
+            }>;
+            environment?: Array<{
+                key: string;
+                value: string;
+            }>;
+        } | null;
+        runnerSecretId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
@@ -13406,6 +13484,32 @@ export type GetAllAgentsResponses = {
         modelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        runnerConfig: {
+            image?: string;
+            command?: Array<string>;
+            steerMode?: 'pipe' | 'tmux_keys';
+            privileged?: boolean;
+            resources?: {
+                cpuRequest?: string;
+                memoryRequest?: string;
+                cpuLimit?: string;
+                memoryLimit?: string;
+            };
+            ttlHours?: number;
+            idleTimeoutMinutes?: number;
+            credentials?: Array<{
+                key: string;
+                scope: 'shared' | 'per_user';
+                label: string;
+                description?: string;
+                required: boolean;
+            }>;
+            environment?: Array<{
+                key: string;
+                value: string;
+            }>;
+        } | null;
+        runnerSecretId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
@@ -13663,6 +13767,32 @@ export type GetDefaultMcpGatewayResponses = {
         modelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        runnerConfig: {
+            image?: string;
+            command?: Array<string>;
+            steerMode?: 'pipe' | 'tmux_keys';
+            privileged?: boolean;
+            resources?: {
+                cpuRequest?: string;
+                memoryRequest?: string;
+                cpuLimit?: string;
+                memoryLimit?: string;
+            };
+            ttlHours?: number;
+            idleTimeoutMinutes?: number;
+            credentials?: Array<{
+                key: string;
+                scope: 'shared' | 'per_user';
+                label: string;
+                description?: string;
+                required: boolean;
+            }>;
+            environment?: Array<{
+                key: string;
+                value: string;
+            }>;
+        } | null;
+        runnerSecretId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
@@ -13912,6 +14042,32 @@ export type ImportAgentResponses = {
             modelId: string | null;
             identityProviderId: string | null;
             environmentId: string | null;
+            runnerConfig: {
+                image?: string;
+                command?: Array<string>;
+                steerMode?: 'pipe' | 'tmux_keys';
+                privileged?: boolean;
+                resources?: {
+                    cpuRequest?: string;
+                    memoryRequest?: string;
+                    cpuLimit?: string;
+                    memoryLimit?: string;
+                };
+                ttlHours?: number;
+                idleTimeoutMinutes?: number;
+                credentials?: Array<{
+                    key: string;
+                    scope: 'shared' | 'per_user';
+                    label: string;
+                    description?: string;
+                    required: boolean;
+                }>;
+                environment?: Array<{
+                    key: string;
+                    value: string;
+                }>;
+            } | null;
+            runnerSecretId: string | null;
             passthroughHeaders: Array<string> | null;
             toolExposureMode: 'full' | 'search_and_run_only';
             missingCredentialBehavior: 'allow' | 'warn' | 'block';
@@ -14174,6 +14330,32 @@ export type GetAgentResponses = {
         modelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        runnerConfig: {
+            image?: string;
+            command?: Array<string>;
+            steerMode?: 'pipe' | 'tmux_keys';
+            privileged?: boolean;
+            resources?: {
+                cpuRequest?: string;
+                memoryRequest?: string;
+                cpuLimit?: string;
+                memoryLimit?: string;
+            };
+            ttlHours?: number;
+            idleTimeoutMinutes?: number;
+            credentials?: Array<{
+                key: string;
+                scope: 'shared' | 'per_user';
+                label: string;
+                description?: string;
+                required: boolean;
+            }>;
+            environment?: Array<{
+                key: string;
+                value: string;
+            }>;
+        } | null;
+        runnerSecretId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
@@ -14264,6 +14446,32 @@ export type UpdateAgentData = {
         modelId?: string | null;
         identityProviderId?: string | null;
         environmentId?: string | null;
+        runnerConfig?: {
+            image?: string;
+            command?: Array<string>;
+            steerMode?: 'pipe' | 'tmux_keys';
+            privileged?: boolean;
+            resources?: {
+                cpuRequest?: string;
+                memoryRequest?: string;
+                cpuLimit?: string;
+                memoryLimit?: string;
+            };
+            ttlHours?: number;
+            idleTimeoutMinutes?: number;
+            credentials?: Array<{
+                key: string;
+                scope: 'shared' | 'per_user';
+                label: string;
+                description?: string;
+                required: boolean;
+            }>;
+            environment?: Array<{
+                key: string;
+                value: string;
+            }>;
+        } | null;
+        runnerSecretId?: string | null;
         passthroughHeaders?: Array<string> | null;
         toolExposureMode?: 'full' | 'search_and_run_only';
         missingCredentialBehavior?: 'allow' | 'warn' | 'block';
@@ -14401,6 +14609,32 @@ export type UpdateAgentResponses = {
         modelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        runnerConfig: {
+            image?: string;
+            command?: Array<string>;
+            steerMode?: 'pipe' | 'tmux_keys';
+            privileged?: boolean;
+            resources?: {
+                cpuRequest?: string;
+                memoryRequest?: string;
+                cpuLimit?: string;
+                memoryLimit?: string;
+            };
+            ttlHours?: number;
+            idleTimeoutMinutes?: number;
+            credentials?: Array<{
+                key: string;
+                scope: 'shared' | 'per_user';
+                label: string;
+                description?: string;
+                required: boolean;
+            }>;
+            environment?: Array<{
+                key: string;
+                value: string;
+            }>;
+        } | null;
+        runnerSecretId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
@@ -14832,6 +15066,32 @@ export type RestoreAgentVersionResponses = {
         modelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        runnerConfig: {
+            image?: string;
+            command?: Array<string>;
+            steerMode?: 'pipe' | 'tmux_keys';
+            privileged?: boolean;
+            resources?: {
+                cpuRequest?: string;
+                memoryRequest?: string;
+                cpuLimit?: string;
+                memoryLimit?: string;
+            };
+            ttlHours?: number;
+            idleTimeoutMinutes?: number;
+            credentials?: Array<{
+                key: string;
+                scope: 'shared' | 'per_user';
+                label: string;
+                description?: string;
+                required: boolean;
+            }>;
+            environment?: Array<{
+                key: string;
+                value: string;
+            }>;
+        } | null;
+        runnerSecretId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
@@ -15012,6 +15272,32 @@ export type CloneAgentResponses = {
         modelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        runnerConfig: {
+            image?: string;
+            command?: Array<string>;
+            steerMode?: 'pipe' | 'tmux_keys';
+            privileged?: boolean;
+            resources?: {
+                cpuRequest?: string;
+                memoryRequest?: string;
+                cpuLimit?: string;
+                memoryLimit?: string;
+            };
+            ttlHours?: number;
+            idleTimeoutMinutes?: number;
+            credentials?: Array<{
+                key: string;
+                scope: 'shared' | 'per_user';
+                label: string;
+                description?: string;
+                required: boolean;
+            }>;
+            environment?: Array<{
+                key: string;
+                value: string;
+            }>;
+        } | null;
+        runnerSecretId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
@@ -16519,6 +16805,32 @@ export type RestoreAgentResponses = {
         modelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
+        runnerConfig: {
+            image?: string;
+            command?: Array<string>;
+            steerMode?: 'pipe' | 'tmux_keys';
+            privileged?: boolean;
+            resources?: {
+                cpuRequest?: string;
+                memoryRequest?: string;
+                cpuLimit?: string;
+                memoryLimit?: string;
+            };
+            ttlHours?: number;
+            idleTimeoutMinutes?: number;
+            credentials?: Array<{
+                key: string;
+                scope: 'shared' | 'per_user';
+                label: string;
+                description?: string;
+                required: boolean;
+            }>;
+            environment?: Array<{
+                key: string;
+                value: string;
+            }>;
+        } | null;
+        runnerSecretId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
@@ -34652,6 +34964,7 @@ export type GetConfigResponses = {
             mcpIdleHibernationBetaEnabled: boolean;
             mcpServerAlertingEnabled: boolean;
             sandbox: boolean;
+            runners: boolean;
             plugins: boolean;
             sandboxArtifactBytesLimit: number;
             chatAttachmentStorageBytesLimit: number;
@@ -84196,6 +84509,831 @@ export type PinProjectResponses = {
 
 export type PinProjectResponse = PinProjectResponses[keyof PinProjectResponses];
 
+export type GetAllRunnersData = {
+    body?: never;
+    path?: never;
+    query?: {
+        agentId?: string;
+        state?: 'pending' | 'provisioning' | 'running' | 'stopping' | 'stopped' | 'failed';
+        mine?: boolean;
+    };
+    url: '/api/runners';
+};
+
+export type GetAllRunnersErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAllRunnersError = GetAllRunnersErrors[keyof GetAllRunnersErrors];
+
+export type GetAllRunnersResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        organizationId: string;
+        agentId: string;
+        createdByUserId: string;
+        name: string;
+        state: 'pending' | 'provisioning' | 'running' | 'stopping' | 'stopped' | 'failed';
+        statusReason: string | null;
+        environmentId: string | null;
+        image: string;
+        command: Array<string> | null;
+        task: string | null;
+        steerMode: 'pipe' | 'tmux_keys';
+        privileged: boolean;
+        resources: {
+            cpuRequest?: string;
+            memoryRequest?: string;
+            cpuLimit?: string;
+            memoryLimit?: string;
+        } | null;
+        deploymentName: string | null;
+        namespace: string | null;
+        secretName: string | null;
+        virtualApiKeyId: string | null;
+        ttlHours: number | null;
+        idleTimeoutMinutes: number | null;
+        lastActivityAt: string | null;
+        startedAt: string | null;
+        stoppedAt: string | null;
+        nextEventSequence: number;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetAllRunnersResponse = GetAllRunnersResponses[keyof GetAllRunnersResponses];
+
+export type CreateRunnerData = {
+    body: {
+        agentId: string;
+        name: string;
+        task?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/runners';
+};
+
+export type CreateRunnerErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateRunnerError = CreateRunnerErrors[keyof CreateRunnerErrors];
+
+export type CreateRunnerResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        agentId: string;
+        createdByUserId: string;
+        name: string;
+        state: 'pending' | 'provisioning' | 'running' | 'stopping' | 'stopped' | 'failed';
+        statusReason: string | null;
+        environmentId: string | null;
+        image: string;
+        command: Array<string> | null;
+        task: string | null;
+        steerMode: 'pipe' | 'tmux_keys';
+        privileged: boolean;
+        resources: {
+            cpuRequest?: string;
+            memoryRequest?: string;
+            cpuLimit?: string;
+            memoryLimit?: string;
+        } | null;
+        deploymentName: string | null;
+        namespace: string | null;
+        secretName: string | null;
+        virtualApiKeyId: string | null;
+        ttlHours: number | null;
+        idleTimeoutMinutes: number | null;
+        lastActivityAt: string | null;
+        startedAt: string | null;
+        stoppedAt: string | null;
+        nextEventSequence: number;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateRunnerResponse = CreateRunnerResponses[keyof CreateRunnerResponses];
+
+export type DeleteRunnerData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/runners/{id}';
+};
+
+export type DeleteRunnerErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteRunnerError = DeleteRunnerErrors[keyof DeleteRunnerErrors];
+
+export type DeleteRunnerResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        deleted: boolean;
+    };
+};
+
+export type DeleteRunnerResponse = DeleteRunnerResponses[keyof DeleteRunnerResponses];
+
+export type GetRunnerData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/runners/{id}';
+};
+
+export type GetRunnerErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetRunnerError = GetRunnerErrors[keyof GetRunnerErrors];
+
+export type GetRunnerResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        agentId: string;
+        createdByUserId: string;
+        name: string;
+        state: 'pending' | 'provisioning' | 'running' | 'stopping' | 'stopped' | 'failed';
+        statusReason: string | null;
+        environmentId: string | null;
+        image: string;
+        command: Array<string> | null;
+        task: string | null;
+        steerMode: 'pipe' | 'tmux_keys';
+        privileged: boolean;
+        resources: {
+            cpuRequest?: string;
+            memoryRequest?: string;
+            cpuLimit?: string;
+            memoryLimit?: string;
+        } | null;
+        deploymentName: string | null;
+        namespace: string | null;
+        secretName: string | null;
+        virtualApiKeyId: string | null;
+        ttlHours: number | null;
+        idleTimeoutMinutes: number | null;
+        lastActivityAt: string | null;
+        startedAt: string | null;
+        stoppedAt: string | null;
+        nextEventSequence: number;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetRunnerResponse = GetRunnerResponses[keyof GetRunnerResponses];
+
+export type GetRunnerEventsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/runners/{id}/events';
+};
+
+export type GetRunnerEventsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetRunnerEventsError = GetRunnerEventsErrors[keyof GetRunnerEventsErrors];
+
+export type GetRunnerEventsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        runnerId: string;
+        sequence: number;
+        kind: 'state_changed' | 'steer' | 'attached' | 'system';
+        message: string | null;
+        payload: {
+            [key: string]: unknown;
+        } | null;
+        actorUserId: string | null;
+        createdAt: string;
+    }>;
+};
+
+export type GetRunnerEventsResponse = GetRunnerEventsResponses[keyof GetRunnerEventsResponses];
+
+export type GetRunnerPreflightData = {
+    body?: never;
+    path?: never;
+    query: {
+        agentId: string;
+    };
+    url: '/api/runners/preflight';
+};
+
+export type GetRunnerPreflightErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetRunnerPreflightError = GetRunnerPreflightErrors[keyof GetRunnerPreflightErrors];
+
+export type GetRunnerPreflightResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        canStart: boolean;
+        missing: Array<{
+            key: string;
+            label: string;
+            description?: string;
+        }>;
+        misconfigured: Array<{
+            key: string;
+            label: string;
+            description?: string;
+        }>;
+    };
+};
+
+export type GetRunnerPreflightResponse = GetRunnerPreflightResponses[keyof GetRunnerPreflightResponses];
+
+export type SteerRunnerData = {
+    body: {
+        message: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/runners/{id}/steer';
+};
+
+export type SteerRunnerErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type SteerRunnerError = SteerRunnerErrors[keyof SteerRunnerErrors];
+
+export type SteerRunnerResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        delivered: boolean;
+    };
+};
+
+export type SteerRunnerResponse = SteerRunnerResponses[keyof SteerRunnerResponses];
+
+export type StopRunnerData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/runners/{id}/stop';
+};
+
+export type StopRunnerErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type StopRunnerError = StopRunnerErrors[keyof StopRunnerErrors];
+
+export type StopRunnerResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        agentId: string;
+        createdByUserId: string;
+        name: string;
+        state: 'pending' | 'provisioning' | 'running' | 'stopping' | 'stopped' | 'failed';
+        statusReason: string | null;
+        environmentId: string | null;
+        image: string;
+        command: Array<string> | null;
+        task: string | null;
+        steerMode: 'pipe' | 'tmux_keys';
+        privileged: boolean;
+        resources: {
+            cpuRequest?: string;
+            memoryRequest?: string;
+            cpuLimit?: string;
+            memoryLimit?: string;
+        } | null;
+        deploymentName: string | null;
+        namespace: string | null;
+        secretName: string | null;
+        virtualApiKeyId: string | null;
+        ttlHours: number | null;
+        idleTimeoutMinutes: number | null;
+        lastActivityAt: string | null;
+        startedAt: string | null;
+        stoppedAt: string | null;
+        nextEventSequence: number;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type StopRunnerResponse = StopRunnerResponses[keyof StopRunnerResponses];
+
 export type GetScheduleTriggersData = {
     body?: never;
     path?: never;
@@ -93942,6 +95080,265 @@ export type GetToolResponses = {
 };
 
 export type GetToolResponse = GetToolResponses[keyof GetToolResponses];
+
+export type GetAllUserCredentialsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/account/credentials';
+};
+
+export type GetAllUserCredentialsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAllUserCredentialsError = GetAllUserCredentialsErrors[keyof GetAllUserCredentialsErrors];
+
+export type GetAllUserCredentialsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        key: string;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetAllUserCredentialsResponse = GetAllUserCredentialsResponses[keyof GetAllUserCredentialsResponses];
+
+export type DeleteUserCredentialData = {
+    body?: never;
+    path: {
+        key: string;
+    };
+    query?: never;
+    url: '/api/account/credentials/{key}';
+};
+
+export type DeleteUserCredentialErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteUserCredentialError = DeleteUserCredentialErrors[keyof DeleteUserCredentialErrors];
+
+export type DeleteUserCredentialResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        deleted: boolean;
+    };
+};
+
+export type DeleteUserCredentialResponse = DeleteUserCredentialResponses[keyof DeleteUserCredentialResponses];
+
+export type UpsertUserCredentialData = {
+    body: {
+        value: string;
+    };
+    path: {
+        key: string;
+    };
+    query?: never;
+    url: '/api/account/credentials/{key}';
+};
+
+export type UpsertUserCredentialErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpsertUserCredentialError = UpsertUserCredentialErrors[keyof UpsertUserCredentialErrors];
+
+export type UpsertUserCredentialResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        key: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpsertUserCredentialResponse = UpsertUserCredentialResponses[keyof UpsertUserCredentialResponses];
 
 export type GetUserPermissionsData = {
     body?: never;

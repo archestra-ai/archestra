@@ -5,18 +5,13 @@ import { userHasPermission } from "@/auth";
 import config from "@/config";
 import { runnerRuntimeManager } from "@/k8s/runner-runtime";
 import logger from "@/logging";
-import {
-  AgentModel,
-  EnvironmentModel,
-  OrganizationModel,
-  RunnerEventModel,
-  RunnerModel,
-} from "@/models";
+import { RunnerEventModel, RunnerModel } from "@/models";
 import { preflightRunnerCredentials } from "@/services/runners/credentials";
+import { RunnerCredentialsRequiredError } from "@/services/runners/launch-spec";
 import {
-  buildRunnerLaunchSpec,
-  RunnerCredentialsRequiredError,
-} from "@/services/runners/launch-spec";
+  requireRunnableAgent,
+  startRunner,
+} from "@/services/runners/start-runner";
 import {
   ApiError,
   constructResponseSchema,
@@ -155,67 +150,21 @@ const runnerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ body, organizationId, user }, reply) => {
       assertRunnersEnabled();
-      const agent = await requireRunnableAgent(body.agentId, organizationId);
-      const runnerConfig = agent.runnerConfig;
-
-      const namespace = await resolveNamespace({
-        organizationId,
-        environmentId: agent.environmentId,
-      });
-
-      // `deploymentName` is deliberately not set here: the frozen name is
-      // derived from the runner's own id, which only exists after the insert.
-      // buildRunnerLaunchSpec derives it, and launch() records it.
-      const runner = await RunnerModel.create({
-        organizationId,
-        agentId: agent.id,
-        createdByUserId: user.id,
-        name: body.name,
-        task: body.task ?? null,
-        image: runnerConfig?.image ?? config.runners.defaultImage,
-        command: runnerConfig?.command ?? null,
-        steerMode: runnerConfig?.steerMode ?? "pipe",
-        privileged: runnerConfig?.privileged ?? false,
-        resources: runnerConfig?.resources ?? null,
-        environmentId: agent.environmentId,
-        namespace,
-        ttlHours: runnerConfig?.ttlHours ?? config.runners.defaultTtlHours,
-        idleTimeoutMinutes:
-          runnerConfig?.idleTimeoutMinutes ??
-          config.runners.defaultIdleTimeoutMinutes,
-      });
-
       try {
-        const { spec, virtualApiKeyId } = await buildRunnerLaunchSpec({
-          runner,
-          agent,
-          namespace,
-        });
-        await RunnerModel.update(runner.id, organizationId, {
-          virtualApiKeyId,
-        });
-        await runnerRuntimeManager.launch({ runner, spec });
+        return reply.send(
+          await startRunner({
+            agentId: body.agentId,
+            organizationId,
+            userId: user.id,
+            name: body.name,
+            task: body.task,
+          }),
+        );
       } catch (error) {
-        // The row exists but nothing was scheduled; record why so the failure
-        // is visible in the timeline instead of only in the response body.
-        const reason =
-          error instanceof Error ? error.message : "Failed to start the runner";
-        await RunnerModel.transition({
-          id: runner.id,
-          organizationId,
-          to: "failed",
-          statusReason: reason,
-        });
-        await RunnerEventModel.append({
-          runnerId: runner.id,
-          kind: "state_changed",
-          message: reason,
-          payload: { state: "failed" },
-        });
         if (error instanceof RunnerCredentialsRequiredError) {
-          // The code is what a client keys the "connect your credentials"
-          // step off; it then reads the field list from
-          // GET /api/runners/preflight, which returns exactly that shape.
+          // The code is what a client keys the "connect your credentials" step
+          // off; it then reads the field list from GET /api/runners/preflight,
+          // which returns exactly that shape.
           throw new ApiError(
             409,
             error.message,
@@ -224,9 +173,6 @@ const runnerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
         throw error;
       }
-
-      const started = await RunnerModel.findById(runner.id, organizationId);
-      return reply.send(started ?? runner);
     },
   );
 
@@ -334,21 +280,6 @@ async function requireRunner(
   return runner;
 }
 
-async function requireRunnableAgent(agentId: string, organizationId: string) {
-  const agent = await AgentModel.findById(agentId);
-  // findById is not organization-scoped, so the tenant check is explicit.
-  if (!agent || agent.organizationId !== organizationId) {
-    throw new ApiError(404, "Agent not found");
-  }
-  if (!agent.runnerConfig) {
-    throw new ApiError(
-      400,
-      "This agent has no runner configuration, so it cannot be started as a runner",
-    );
-  }
-  return agent;
-}
-
 /**
  * Attaching to or steering a runner reaches a shell running under the
  * creator's own credentials, so it is deliberately narrower than the
@@ -375,29 +306,4 @@ async function assertMaySteer(params: {
       "Only the person who started this runner can steer or stop it",
     );
   }
-}
-
-/**
- * Namespace the runner's pod lands in: the environment's own when the agent is
- * bound to one, otherwise the organization's default. Never creates a
- * namespace — an unknown one is an operator's decision to make.
- */
-async function resolveNamespace(params: {
-  organizationId: string;
-  environmentId: string | null;
-}): Promise<string> {
-  if (params.environmentId) {
-    const environment = await EnvironmentModel.findByIdForOrganization(
-      params.environmentId,
-      params.organizationId,
-    );
-    if (environment?.namespace) {
-      return environment.namespace;
-    }
-  }
-  const organization = await OrganizationModel.getById(params.organizationId);
-  return (
-    organization?.defaultEnvironmentNamespace ??
-    config.orchestrator.kubernetes.namespace
-  );
 }

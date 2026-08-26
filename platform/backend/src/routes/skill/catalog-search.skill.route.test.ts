@@ -1,3 +1,4 @@
+import { OrganizationModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -48,6 +49,19 @@ describe("GET /api/skills/catalog/search", () => {
     expect(response.statusCode).toBe(200);
     const body = response.json();
     expect(body.results.length).toBeLessThanOrEqual(5);
+  });
+
+  test("403s when the org has disabled the online skill catalog", async () => {
+    await OrganizationModel.patch(organizationId, {
+      onlineSkillCatalogEnabled: false,
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/skills/catalog/search?q=pdf",
+    });
+
+    expect(response.statusCode).toBe(403);
   });
 
   test("rejects a limit outside the allowed range", async () => {

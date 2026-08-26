@@ -3,7 +3,7 @@ title: Skills
 category: Agents
 order: 3
 description: Reusable SKILL.md instruction sets that agents load on demand
-lastUpdated: 2026-08-24
+lastUpdated: 2026-08-25
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -104,6 +104,14 @@ A few behaviors worth knowing:
 
 - **One snapshot per session.** The repo tree is cached for five minutes, so what you previewed is what you import even if upstream moves in between.
 - **Per-file 10 MB cap, 500 files per skill.** Binary assets are preserved (base64-encoded), so images and fonts round-trip.
+
+### Turning the Online Catalog Off
+
+**Settings → Skills → Online skill catalog** controls whether people can reach the public catalog at all. Turning it off removes the source step from the add-skill wizard, so **Add new skill** opens the blank editor directly.
+
+The setting is enforced on the server, not just in the wizard. Catalog search and the GitHub discover, preview, and import endpoints all refuse the request, so a script or an agent calling the API directly gets the same answer as the UI.
+
+Writing skills by hand stays available — in the editor, and through the `create_skill` and `update_skill` tools. Skills imported before the setting was turned off keep their content and keep syncing from their repository; stop a skill's sync in its editor to break that link.
 
 ## Skills from MCP servers
 

@@ -2,13 +2,21 @@ import { ADMIN_ROLE_NAME, EDITOR_ROLE_NAME } from "@archestra/shared";
 import { vi } from "vitest";
 import {
   GithubAppConfigModel,
+  OrganizationModel,
   SkillFileModel,
   SkillModel,
   SkillVersionModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
 import { createGithubPat } from "@/services/github-pat";
-import { afterEach, describe, expect, test, useRouteTestApp } from "@/test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+  useRouteTestApp,
+} from "@/test";
 import {
   STUB_COMMIT_SHA,
   stubGithub,
@@ -467,5 +475,101 @@ describe("import with a stored PAT", () => {
       },
     });
     expect(response.statusCode).toBe(400);
+  });
+});
+
+describe("online skill catalog disabled for the organization", () => {
+  const ctx = useRouteTestApp(skillRoutes);
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  beforeEach(async () => {
+    await OrganizationModel.patch(ctx.organizationId, {
+      onlineSkillCatalogEnabled: false,
+    });
+  });
+
+  test("discover is refused", async () => {
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills/github/discover",
+      payload: { repoUrl: "catalog-off/skills" },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.message).toContain(
+      "online skill catalog is disabled",
+    );
+  });
+
+  test("preview is refused", async () => {
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills/github/preview",
+      payload: { repoUrl: "catalog-off/skills", skillPath: "pdf" },
+    });
+
+    expect(response.statusCode).toBe(403);
+  });
+
+  test("import is refused, and no skill is persisted", async () => {
+    stubGithub([
+      {
+        owner: "catalog-off",
+        repo: "skills",
+        files: { "pdf/SKILL.md": stubSkillManifest("catalog-off-skill") },
+      },
+    ]);
+
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills/github/import",
+      payload: { repoUrl: "catalog-off/skills", skillPaths: ["pdf"] },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(
+      await SkillModel.findAllByName(ctx.organizationId, "catalog-off-skill"),
+    ).toEqual([]);
+  });
+
+  test("an org admin gets no exemption — the setting is not a permission", async ({
+    makeMember,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
+
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills/github/discover",
+      payload: { repoUrl: "catalog-off/skills" },
+    });
+
+    expect(response.statusCode).toBe(403);
+  });
+
+  test("re-enabling the setting restores the import path", async () => {
+    stubGithub([
+      {
+        owner: "catalog-back-on",
+        repo: "skills",
+        files: { "pdf/SKILL.md": stubSkillManifest("catalog-back-on-skill") },
+      },
+    ]);
+    await OrganizationModel.patch(ctx.organizationId, {
+      onlineSkillCatalogEnabled: true,
+    });
+
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills/github/import",
+      payload: { repoUrl: "catalog-back-on/skills", skillPaths: ["pdf"] },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().created).toHaveLength(1);
   });
 });

@@ -437,19 +437,34 @@ export const parseBodyLimit = (
  * unparsable value falls back to the default rather than silently producing a
  * different timeout than the operator asked for.
  *
+ * Number() (not parseInt) for the same reason as `parseOutputTokenCeiling`, and
+ * it matters more here: parseInt stops at the first non-digit, so a plausible
+ * typo — "620_000", "620s", "1.5" — would yield a sub-second keep-alive rather
+ * than the default. That is not a mildly wrong value; it is two orders of
+ * magnitude below Node's own 5s default, so a typo would make the very failure
+ * this setting exists to prevent dramatically worse, silently. Invalid input is
+ * logged rather than swallowed, because the symptom (an occasional dropped
+ * request) gives an operator nothing to trace back to the typo.
+ *
  * @public — exported for testability
  */
 export const parseKeepAliveTimeoutMs = (
   envValue: string | undefined,
   defaultValue: number,
 ): number => {
-  if (!envValue) {
+  const value = envValue?.trim();
+  if (!value) {
     return defaultValue;
   }
-  const parsed = Number.parseInt(envValue.trim(), 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    logger.warn(
+      `Invalid ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS value "${value}", using default ${defaultValue}ms`,
+    );
     return defaultValue;
   }
+
   return parsed;
 };
 

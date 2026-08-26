@@ -758,7 +758,7 @@ The following environment variables can be used to configure Archestra Platform.
 
 - **`ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS`** - How long each HTTP server holds an idle keep-alive connection open before closing it. Applies to the API and the frontend server.
   - Default: `620000` (620 seconds)
-  - Value: a positive number of milliseconds. Anything else falls back to the default.
+  - Value: a positive whole number of milliseconds. Anything else — a decimal, a unit suffix, a digit separator — falls back to the default and logs a warning, rather than being truncated to the digits it starts with.
   - Keep it above the keep-alive timeout of every proxy and load balancer in front of Archestra. A proxy that outlives the server can reuse a connection while the server closes it, which drops the request. See [Keep-Alive Timeouts](#keep-alive-timeouts).
   - Lower it only when nothing pools connections to Archestra.
 

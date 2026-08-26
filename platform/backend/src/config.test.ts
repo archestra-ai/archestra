@@ -718,6 +718,21 @@ describe("parseKeepAliveTimeoutMs", () => {
   ])("falls back to the default for unparsable input %s", (value) => {
     expect(parseKeepAliveTimeoutMs(value, DEFAULT_VALUE)).toBe(DEFAULT_VALUE);
   });
+
+  // parseInt would stop at the first non-digit and hand back the leading
+  // prefix: "620_000" -> 620ms, "620s" -> 620ms, "1.5" -> 1ms. A sub-second
+  // keep-alive is two orders of magnitude BELOW Node's own 5s default, so a
+  // typo would silently make the dropped-request failure this setting exists
+  // to prevent far worse than doing nothing at all.
+  test.each([
+    ["620_000"],
+    ["620s"],
+    ["1.5"],
+    ["6.2e5"],
+    ["620000abc"],
+  ])("refuses to truncate malformed input %s to a sub-second timeout", (value) => {
+    expect(parseKeepAliveTimeoutMs(value, DEFAULT_VALUE)).toBe(DEFAULT_VALUE);
+  });
 });
 
 describe("getOtelExporterOtlpEndpoint", () => {

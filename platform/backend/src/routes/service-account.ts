@@ -1,5 +1,6 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { z } from "zod";
 import { getPermissionsForUserContext } from "@/auth/utils";
 import OrganizationRoleModel from "@/models/organization-role";
 import ServiceAccountModel from "@/models/service-account";
@@ -18,7 +19,12 @@ import {
   UpdateServiceAccountBodySchema,
   UpdateServiceAccountTokenBodySchema,
 } from "@/types";
-import { BulkDeleteBodySchema, BulkOutcomeSchema, runBulk } from "./bulk-route";
+import {
+  BulkDeleteBodySchema,
+  BulkIdsSchema,
+  BulkOutcomeSchema,
+  runBulk,
+} from "./bulk-route";
 
 const serviceAccountRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -121,6 +127,79 @@ const serviceAccountRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send(serviceAccount);
+    },
+  );
+
+  fastify.patch(
+    "/api/service-accounts/bulk",
+    {
+      schema: {
+        operationId: RouteId.BulkSetServiceAccountsDisabled,
+        description:
+          "Enable or disable several service accounts in one request. A " +
+          "disabled account authenticates with none of its keys, so this is " +
+          "the reversible way to stop an automation without destroying the " +
+          "keys it would need to start again. Ids outside the caller's " +
+          "organization are reported in `failed` as not found and leave the " +
+          "rest of the batch applied. An account already in the requested " +
+          "state is reported as succeeded without being rewritten.",
+        tags: ["Service Accounts"],
+        body: z.object({ ids: BulkIdsSchema, disabled: z.boolean() }).strict(),
+        response: constructResponseSchema(BulkOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const { organizationId } = request;
+      const { disabled } = request.body;
+
+      const outcome = await runBulk({
+        ids: request.body.ids,
+        logLabel: `service accounts bulk ${disabled ? "disable" : "enable"}`,
+        notFoundMessage: "Service account not found",
+        unexpectedMessage: `Could not ${disabled ? "disable" : "enable"} this service account`,
+        load: async (ids) => {
+          const wanted = new Set(ids);
+          const accounts =
+            await ServiceAccountModel.listByOrganizationId(organizationId);
+          return new Map(
+            accounts
+              .filter((account) => wanted.has(account.id))
+              .map((account) => [account.id, account]),
+          );
+        },
+        describe: (account) => account.name,
+        applyEach: async (account, id) => {
+          if (account.disabled === disabled) return;
+          const updated = await ServiceAccountModel.update(id, organizationId, {
+            disabled,
+          });
+          if (!updated) {
+            throw new ApiError(404, "Service account not found");
+          }
+        },
+        audit: {
+          target: request,
+          snapshot: async (ids) => {
+            const wanted = new Set(ids);
+            const accounts =
+              await ServiceAccountModel.listByOrganizationId(organizationId);
+            return {
+              serviceAccounts: accounts
+                .filter((account) => wanted.has(account.id))
+                .map(({ id, name, disabled: isDisabled }) => ({
+                  id,
+                  name,
+                  disabled: isDisabled,
+                }))
+                // Sorted so an unchanged batch snapshots identically on both
+                // sides and the audit diff stays empty.
+                .sort((a, b) => a.id.localeCompare(b.id)),
+            };
+          },
+        },
+      });
+
+      return reply.send(outcome);
     },
   );
 

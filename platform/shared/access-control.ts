@@ -1259,6 +1259,7 @@ export const requiredEndpointPermissionsMap: Partial<
     serviceAccount: ["update"],
   },
   [RouteId.BulkDeleteServiceAccounts]: { serviceAccount: ["delete"] },
+  [RouteId.BulkSetServiceAccountsDisabled]: { serviceAccount: ["update"] },
   [RouteId.DeleteServiceAccount]: {
     serviceAccount: ["delete"],
   },

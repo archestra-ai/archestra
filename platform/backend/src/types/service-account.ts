@@ -31,6 +31,20 @@ export const ServiceAccountResponseSchema = z.object({
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
   tokenCount: z.number().int().nonnegative(),
+  /**
+   * Keys that would actually pass authentication right now: not disabled and
+   * not past their expiry. `tokenCount` alone cannot distinguish a working
+   * automation from one whose only key expired last week.
+   */
+  activeTokenCount: z.number().int().nonnegative(),
+  /** Most recent use across all of this account's keys; null if never used. */
+  lastUsedAt: z.coerce.date().nullable(),
+  /**
+   * Earliest expiry among the keys that still work, so the list can warn
+   * before a key lapses instead of after. Null when nothing is expiring:
+   * either no key works, or every working key is open-ended.
+   */
+  soonestExpiryAt: z.coerce.date().nullable(),
 });
 
 export const ServiceAccountDetailResponseSchema =

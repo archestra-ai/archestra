@@ -85009,6 +85009,9 @@ export type GetServiceAccountsResponses = {
         createdAt: string;
         updatedAt: string;
         tokenCount: number;
+        activeTokenCount: number;
+        lastUsedAt: string | null;
+        soonestExpiryAt: string | null;
     }>;
 };
 
@@ -85102,6 +85105,9 @@ export type CreateServiceAccountResponses = {
         createdAt: string;
         updatedAt: string;
         tokenCount: number;
+        activeTokenCount: number;
+        lastUsedAt: string | null;
+        soonestExpiryAt: string | null;
         tokens: Array<{
             id: string;
             name: string;
@@ -85288,6 +85294,9 @@ export type GetServiceAccountResponses = {
         createdAt: string;
         updatedAt: string;
         tokenCount: number;
+        activeTokenCount: number;
+        lastUsedAt: string | null;
+        soonestExpiryAt: string | null;
         tokens: Array<{
             id: string;
             name: string;
@@ -85393,6 +85402,9 @@ export type UpdateServiceAccountResponses = {
         createdAt: string;
         updatedAt: string;
         tokenCount: number;
+        activeTokenCount: number;
+        lastUsedAt: string | null;
+        soonestExpiryAt: string | null;
         tokens: Array<{
             id: string;
             name: string;
@@ -85503,6 +85515,104 @@ export type BulkDeleteServiceAccountsResponses = {
 };
 
 export type BulkDeleteServiceAccountsResponse = BulkDeleteServiceAccountsResponses[keyof BulkDeleteServiceAccountsResponses];
+
+export type BulkSetServiceAccountsDisabledData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+        disabled: boolean;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/service-accounts/bulk';
+};
+
+export type BulkSetServiceAccountsDisabledErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkSetServiceAccountsDisabledError = BulkSetServiceAccountsDisabledErrors[keyof BulkSetServiceAccountsDisabledErrors];
+
+export type BulkSetServiceAccountsDisabledResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkSetServiceAccountsDisabledResponse = BulkSetServiceAccountsDisabledResponses[keyof BulkSetServiceAccountsDisabledResponses];
 
 export type CreateServiceAccountTokenData = {
     body: {

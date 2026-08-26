@@ -7,6 +7,7 @@ export * as fileStorage from "./file-storage";
 export * as llm from "./llm";
 export * as mcp from "./mcp";
 export * as rag from "./rag";
+export * as runner from "./runner";
 export * as sandbox from "./sandbox";
 export * as scheduleTrigger from "./schedule-trigger";
 export * as skill from "./skill";

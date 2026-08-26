@@ -14,6 +14,13 @@ import { RunnerEventModel, RunnerModel } from "@/models";
 import McpDeploymentLeaseModel, {
   ClusterLeaseHeldError,
 } from "@/models/mcp-deployment-lease";
+import {
+  reportRunnerProvisioned,
+  reportRunnerStarted,
+  reportRunnerStates,
+  reportRunnerSteer,
+  reportRunnerTerminated,
+} from "@/observability/metrics/runner";
 import type { Runner } from "@/types";
 import {
   buildRunnerJob,
@@ -132,6 +139,7 @@ class RunnerRuntimeManager {
       );
     });
 
+    reportRunnerStarted();
     await RunnerEventModel.append({
       runnerId: runner.id,
       kind: "system",
@@ -169,6 +177,7 @@ class RunnerRuntimeManager {
           ];
 
     await this.execInPod({ runner, podName, command });
+    reportRunnerSteer(runner.steerMode);
     await RunnerModel.touchActivity(runner.id);
   }
 
@@ -248,7 +257,21 @@ class RunnerRuntimeManager {
   async reconcileAll(): Promise<void> {
     if (!this.isEnabled) return;
 
-    for (const runner of await RunnerModel.listLive()) {
+    const live = await RunnerModel.listLive();
+    // Report every non-terminal state each pass, including the ones now at
+    // zero, so a state that empties clears instead of holding its last sample.
+    const counts: Record<string, number> = {
+      pending: 0,
+      provisioning: 0,
+      running: 0,
+      stopping: 0,
+    };
+    for (const runner of live) {
+      counts[runner.state] = (counts[runner.state] ?? 0) + 1;
+    }
+    reportRunnerStates(counts);
+
+    for (const runner of live) {
       await this.reconcileOne(runner).catch((error) => {
         logger.warn(
           { error, runnerId: runner.id },
@@ -258,7 +281,8 @@ class RunnerRuntimeManager {
     }
 
     for (const runner of await RunnerModel.listExpired(new Date())) {
-      await this.stop(runner, expiryReason(runner)).catch((error) => {
+      const expiry = describeExpiry(runner);
+      await this.stop(runner, expiry.reason, expiry.outcome).catch((error) => {
         logger.warn(
           { error, runnerId: runner.id },
           "Failed to stop an expired runner",
@@ -271,7 +295,14 @@ class RunnerRuntimeManager {
    * Stop a runner and record why. The transition is claimed first, so two
    * replicas reconciling at once cannot both tear the same session down.
    */
-  async stop(runner: Runner, reason: string): Promise<void> {
+  async stop(
+    runner: Runner,
+    reason: string,
+    outcome:
+      | "stopped_by_user"
+      | "expired_ttl"
+      | "expired_idle" = "stopped_by_user",
+  ): Promise<void> {
     const claimed = await RunnerModel.transition({
       id: runner.id,
       organizationId: runner.organizationId,
@@ -291,6 +322,7 @@ class RunnerRuntimeManager {
       to: "stopped",
       statusReason: reason,
     });
+    reportRunnerTerminated(outcome);
     await RunnerEventModel.append({
       runnerId: runner.id,
       kind: "state_changed",
@@ -372,6 +404,9 @@ class RunnerRuntimeManager {
         from: ["pending", "provisioning"],
       });
       if (started) {
+        reportRunnerProvisioned(
+          (Date.now() - runner.createdAt.getTime()) / 1000,
+        );
         await RunnerEventModel.append({
           runnerId: runner.id,
           kind: "state_changed",
@@ -398,6 +433,7 @@ class RunnerRuntimeManager {
       to: "stopped",
       statusReason: reason,
     });
+    reportRunnerTerminated("completed");
     await RunnerEventModel.append({
       runnerId: runner.id,
       kind: "state_changed",
@@ -416,6 +452,7 @@ class RunnerRuntimeManager {
     });
     if (!claimed) return;
     await this.teardown(runner);
+    reportRunnerTerminated("failed");
     await RunnerEventModel.append({
       runnerId: runner.id,
       kind: "state_changed",
@@ -509,10 +546,30 @@ export { RUNNER_MANAGED_SELECTOR };
 
 // ===================== helpers =====================
 
-function expiryReason(runner: Runner): string {
-  return runner.idleTimeoutMinutes && runner.lastActivityAt
-    ? `Stopped after ${runner.idleTimeoutMinutes} minutes without activity`
-    : `Stopped after reaching its ${runner.ttlHours}-hour lifetime`;
+/**
+ * Which clock fired. Both can be configured, so the idle one is only reported
+ * when it has actually elapsed — otherwise a runner with both set would always
+ * be described as idle, even when it simply ran out of lifetime.
+ */
+function describeExpiry(runner: Runner): {
+  reason: string;
+  outcome: "expired_ttl" | "expired_idle";
+} {
+  const idleElapsed =
+    runner.idleTimeoutMinutes &&
+    runner.lastActivityAt &&
+    Date.now() - runner.lastActivityAt.getTime() >=
+      runner.idleTimeoutMinutes * 60 * 1000;
+  if (idleElapsed) {
+    return {
+      reason: `Stopped after ${runner.idleTimeoutMinutes} minutes without activity`,
+      outcome: "expired_idle",
+    };
+  }
+  return {
+    reason: `Stopped after reaching its ${runner.ttlHours}-hour lifetime`,
+    outcome: "expired_ttl",
+  };
 }
 
 function describeJobFailure(job: k8s.V1Job): string {

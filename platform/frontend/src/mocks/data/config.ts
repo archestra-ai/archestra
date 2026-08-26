@@ -35,6 +35,7 @@ export function makeConfig(
       mcpIdleHibernationBetaEnabled: false,
       mcpServerAlertingEnabled: false,
       sandbox: false,
+      runners: false,
       plugins: false,
       sandboxArtifactBytesLimit: DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
       chatAttachmentStorageBytesLimit: DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,

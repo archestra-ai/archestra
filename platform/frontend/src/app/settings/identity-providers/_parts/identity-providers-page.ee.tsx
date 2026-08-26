@@ -42,6 +42,8 @@ interface IdpConfig {
   defaultOidcConfig?: {
     issuer: string;
     discoveryEndpoint: string;
+    /** Register without OIDC discovery (for providers that publish no discovery document) */
+    skipDiscovery?: boolean;
     authorizationEndpoint?: string;
     tokenEndpoint?: string;
     userInfoEndpoint?: string;
@@ -142,8 +144,14 @@ const IDP_CONFIGS: IdpConfig[] = [
        * GitHub OAuth doesn't have a standard OIDC discovery endpoint
        * https://stackoverflow.com/a/52164558
        * https://docs.github.com/en/actions/concepts/security/openid-connect
+       *
+       * Registration therefore has to skip discovery outright and rely on the
+       * endpoints below; without this the backend fetches
+       * `${issuer}/.well-known/openid-configuration`, GitHub answers 404, and
+       * creating the provider fails.
        */
       discoveryEndpoint: "",
+      skipDiscovery: true,
       authorizationEndpoint: "https://github.com/login/oauth/authorize",
       tokenEndpoint: "https://github.com/login/oauth/access_token",
       userInfoEndpoint: "https://api.github.com/user",

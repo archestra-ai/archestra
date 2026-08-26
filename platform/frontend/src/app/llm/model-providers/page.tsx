@@ -939,7 +939,7 @@ function DeleteApiKeyDescription({
             <p className="font-medium">Virtual API keys</p>
             <Link
               className="text-primary underline-offset-4 hover:underline"
-              href="/llm/proxy/virtual-keys"
+              href={`/llm/proxy/virtual-keys?providerApiKeyId=${apiKey.id}`}
             >
               View all
             </Link>
@@ -977,7 +977,7 @@ function DeleteApiKeyDescription({
             <p className="font-medium">OAuth clients</p>
             <Link
               className="text-primary underline-offset-4 hover:underline"
-              href="/llm/proxy/oauth-clients"
+              href={`/llm/proxy/oauth-clients?providerApiKeyId=${apiKey.id}`}
             >
               View all
             </Link>

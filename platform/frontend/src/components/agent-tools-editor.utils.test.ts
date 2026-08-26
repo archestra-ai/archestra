@@ -15,7 +15,6 @@ import {
   computeMcpEnvConflicts,
   filterDefaultArchestraToolIds,
   getCatalogAssignmentGate,
-  getDefaultArchestraToolIds,
   isCatalogInAppEnvironment,
   isCatalogInEnvironment,
   setsEqual,
@@ -25,8 +24,6 @@ import {
   summarizeBulkFailure,
 } from "./agent-tools-editor.utils";
 import { DYNAMIC_CREDENTIAL_VALUE } from "./token-select";
-
-const OTHER_CATALOG_ID = "other-catalog-id";
 
 describe("getCatalogAssignmentGate", () => {
   // Install state does not gate assignment: a catalog item with discovered
@@ -160,10 +157,6 @@ describe("shouldResetCredentialPin", () => {
   });
 });
 
-function makeCatalog(id: string, name: string) {
-  return { id, name };
-}
-
 function makeTool(id: string, name: string) {
   return { id, name };
 }
@@ -197,6 +190,40 @@ describe("filterDefaultArchestraToolIds", () => {
     expect(filterDefaultArchestraToolIds([])).toEqual(new Set());
   });
 
+  it("matches branded default tool names under white-labeling", () => {
+    const brandedDefaultTools = DEFAULT_ARCHESTRA_TOOL_NAMES.map((name, i) =>
+      makeTool(`branded-tool-${i}`, name.replace("archestra__", "sparky__")),
+    );
+
+    expect(filterDefaultArchestraToolIds(brandedDefaultTools)).toEqual(
+      new Set(brandedDefaultTools.map((tool) => tool.id)),
+    );
+  });
+
+  it("adds only the skill tools when skillsEnabled alone is set", () => {
+    const tools = [
+      ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+      ...SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
+      ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
+      ...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
+      ...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
+    ].map((shortName) =>
+      makeTool(`tool-${shortName}`, `archestra__${shortName}`),
+    );
+
+    expect(
+      filterDefaultArchestraToolIds(tools, { skillsEnabled: true }),
+    ).toEqual(
+      new Set(
+        [
+          ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+          ...SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
+          ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
+        ].map((shortName) => `tool-${shortName}`),
+      ),
+    );
+  });
+
   it("composes the set from the feature flags", () => {
     const groupShortNames = [
       ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
@@ -219,192 +246,6 @@ describe("filterDefaultArchestraToolIds", () => {
         ),
       ),
     );
-  });
-});
-
-describe("getDefaultArchestraToolIds", () => {
-  const defaultTools = DEFAULT_ARCHESTRA_TOOL_NAMES.map((name, i) =>
-    makeTool(`tool-${i}`, name),
-  );
-
-  it("returns correct tool IDs when Archestra catalog and default tools are present", () => {
-    const catalogs = [
-      makeCatalog(OTHER_CATALOG_ID, "Other"),
-      makeCatalog(ARCHESTRA_MCP_CATALOG_ID, "Archestra"),
-    ];
-    const toolsByCatalog = [[makeTool("x", "some_tool")], defaultTools];
-
-    const result = getDefaultArchestraToolIds(catalogs, toolsByCatalog);
-
-    expect(result).not.toBeNull();
-    expect(result?.toolIds).toEqual(new Set(defaultTools.map((t) => t.id)));
-  });
-
-  it("returns correct catalogIndex", () => {
-    const catalogs = [
-      makeCatalog(OTHER_CATALOG_ID, "Other"),
-      makeCatalog(ARCHESTRA_MCP_CATALOG_ID, "Archestra"),
-    ];
-    const toolsByCatalog = [undefined, defaultTools];
-
-    const result = getDefaultArchestraToolIds(catalogs, toolsByCatalog);
-
-    expect(result).not.toBeNull();
-    expect(result?.catalogIndex).toBe(1);
-  });
-
-  it("returns null when Archestra catalog is not in the list", () => {
-    const catalogs = [makeCatalog(OTHER_CATALOG_ID, "Other")];
-    const toolsByCatalog = [[makeTool("x", "some_tool")]];
-
-    expect(getDefaultArchestraToolIds(catalogs, toolsByCatalog)).toBeNull();
-  });
-
-  it("returns null when tools array for Archestra catalog is undefined", () => {
-    const catalogs = [makeCatalog(ARCHESTRA_MCP_CATALOG_ID, "Archestra")];
-    const toolsByCatalog = [undefined];
-
-    expect(getDefaultArchestraToolIds(catalogs, toolsByCatalog)).toBeNull();
-  });
-
-  it("returns null when tools array is empty", () => {
-    const catalogs = [makeCatalog(ARCHESTRA_MCP_CATALOG_ID, "Archestra")];
-    const toolsByCatalog: { id: string; name: string }[][] = [[]];
-
-    expect(getDefaultArchestraToolIds(catalogs, toolsByCatalog)).toBeNull();
-  });
-
-  it("returns null when no tools match DEFAULT_ARCHESTRA_TOOL_NAMES", () => {
-    const catalogs = [makeCatalog(ARCHESTRA_MCP_CATALOG_ID, "Archestra")];
-    const toolsByCatalog = [
-      [makeTool("a", "unrelated_tool"), makeTool("b", "another_tool")],
-    ];
-
-    expect(getDefaultArchestraToolIds(catalogs, toolsByCatalog)).toBeNull();
-  });
-
-  it("ignores non-default tools and only returns matching ones", () => {
-    const catalogs = [makeCatalog(ARCHESTRA_MCP_CATALOG_ID, "Archestra")];
-    const extraTool = makeTool("extra", "unrelated_tool");
-    const toolsByCatalog = [[...defaultTools, extraTool]];
-
-    const result = getDefaultArchestraToolIds(catalogs, toolsByCatalog);
-
-    expect(result).not.toBeNull();
-    expect(result?.toolIds.has("extra")).toBe(false);
-    expect(result?.toolIds.size).toBe(defaultTools.length);
-  });
-
-  it("matches branded default tool names under white-labeling", () => {
-    const catalogs = [makeCatalog(ARCHESTRA_MCP_CATALOG_ID, "Sparky")];
-    const brandedDefaultTools = DEFAULT_ARCHESTRA_TOOL_NAMES.map((name, i) => {
-      const toolName = name.replace("archestra__", "sparky__");
-      return makeTool(`branded-tool-${i}`, toolName);
-    });
-
-    const result = getDefaultArchestraToolIds(catalogs, [brandedDefaultTools]);
-
-    expect(result).not.toBeNull();
-    expect(result?.toolIds).toEqual(
-      new Set(brandedDefaultTools.map((tool) => tool.id)),
-    );
-  });
-
-  describe("feature-flag composition (shared composer)", () => {
-    const catalogs = [makeCatalog(ARCHESTRA_MCP_CATALOG_ID, "Archestra")];
-    // One catalog tool per short name across every composable group, so the
-    // expected pre-selection can be derived from the composer output.
-    const groupShortNames = [
-      ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
-      ...SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
-      ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
-      ...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
-      ...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
-    ];
-    const allGroupTools = groupShortNames.map((shortName) =>
-      makeTool(`tool-${shortName}`, `archestra__${shortName}`),
-    );
-
-    function idsForShortNames(shortNames: readonly string[]): Set<string> {
-      return new Set(shortNames.map((shortName) => `tool-${shortName}`));
-    }
-
-    it("pre-selects the defaults and app tools when every flag is off", () => {
-      const result = getDefaultArchestraToolIds(catalogs, [allGroupTools], {});
-
-      expect(result?.toolIds).toEqual(
-        idsForShortNames([
-          ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
-          ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
-        ]),
-      );
-    });
-
-    it("adds the skill tools when skillsEnabled", () => {
-      const result = getDefaultArchestraToolIds(catalogs, [allGroupTools], {
-        skillsEnabled: true,
-      });
-
-      expect(result?.toolIds).toEqual(
-        idsForShortNames([
-          ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
-          ...SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
-          ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
-        ]),
-      );
-    });
-
-    it("adds the sandbox runtime and persistent-files tools when sandboxEnabled", () => {
-      const result = getDefaultArchestraToolIds(catalogs, [allGroupTools], {
-        sandboxEnabled: true,
-      });
-
-      expect(result?.toolIds).toEqual(
-        idsForShortNames([
-          ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
-          ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
-          ...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
-          ...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
-        ]),
-      );
-    });
-
-    it("pre-selects exactly the shared composer output with every flag on", () => {
-      const flags = {
-        skillsEnabled: true,
-        sandboxEnabled: true,
-      };
-
-      const result = getDefaultArchestraToolIds(
-        catalogs,
-        [allGroupTools],
-        flags,
-      );
-
-      expect(result?.toolIds).toEqual(
-        idsForShortNames(getCreationDefaultArchestraToolShortNames(flags)),
-      );
-    });
-
-    it("matches branded group tool names under white-labeling", () => {
-      const brandedTools = groupShortNames.map((shortName) =>
-        makeTool(`tool-${shortName}`, `sparky__${shortName}`),
-      );
-
-      const result = getDefaultArchestraToolIds(
-        [makeCatalog(ARCHESTRA_MCP_CATALOG_ID, "Sparky")],
-        [brandedTools],
-        { skillsEnabled: true },
-      );
-
-      expect(result?.toolIds).toEqual(
-        idsForShortNames([
-          ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
-          ...SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
-          ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
-        ]),
-      );
-    });
   });
 });
 

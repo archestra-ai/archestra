@@ -10,7 +10,7 @@ import {
   isPlaywrightCatalogItem,
   parseFullToolName,
 } from "@archestra/shared";
-import { useQueries } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, Loader2, Search } from "lucide-react";
 import {
   forwardRef,
@@ -21,6 +21,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { QueryLoadError } from "@/components/query-load-error";
 import {
   AssignmentCombobox,
   type AssignmentComboboxItem,
@@ -36,7 +37,6 @@ import { useProfileToolsWithIds } from "@/lib/chat/chat.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import {
-  fetchCatalogTools,
   useCatalogTools,
   useInternalMcpCatalog,
 } from "@/lib/mcp/internal-mcp-catalog.query";
@@ -49,7 +49,6 @@ import {
   credentialSourceOfAssignments,
   filterDefaultArchestraToolIds,
   getCatalogAssignmentGate,
-  getDefaultArchestraToolIds,
   isCatalogInEnvironment,
   setsEqual,
   shouldResetCredentialPin,
@@ -222,12 +221,18 @@ const AgentToolsEditorContent = forwardRef<
   ref,
 ) {
   const { catalogName } = useArchestraMcpIdentity();
+  const queryClient = useQueryClient();
   const invalidateAllQueries = useInvalidateToolAssignmentQueries();
   const bulkUpdateTools = useBulkUpdateAgentTools();
 
   // Fetch catalog items (MCP servers in registry; the gateway dialog also opts
   // in to assignable App backings via includeAppCatalogs).
-  const { data: catalogItems = [], isPending } = useInternalMcpCatalog({
+  const {
+    data: catalogItems = [],
+    isPending,
+    isLoadingError: catalogFailed,
+    refetch: refetchCatalog,
+  } = useInternalMcpCatalog({
     includeApps: includeAppCatalogs,
   });
 
@@ -236,27 +241,19 @@ const AgentToolsEditorContent = forwardRef<
     assignmentScope,
     assignmentTeamIds,
   });
-  // Fetch tool counts for all catalog items to enable sorting
-  const toolCountQueries = useQueries({
-    queries: catalogItems.map((catalog) => ({
-      queryKey: ["mcp-catalog", catalog.id, "tools"] as const,
-      queryFn: () => fetchCatalogTools(catalog.id),
-    })),
-  });
-
-  // Create a map of catalog ID to tool count
+  // Tool counts come from the catalog list itself (`toolCount`, one grouped
+  // COUNT server-side over exactly the rows a picker lists). This used to be a
+  // per-catalog `useQueries` fan-out — one request per catalog item, each
+  // returning full tool rows with their assigned-agent lists, purely to read
+  // `.length` — which on a real registry queued behind itself in the browser's
+  // connection pool and held this component on "Loading tools...".
   const toolCountByCatalog = useMemo(() => {
     const map = new Map<string, number>();
-    for (let i = 0; i < catalogItems.length; i++) {
-      const query = toolCountQueries[i];
-      const catalog = catalogItems[i];
-      if (catalog) {
-        const tools = query?.data as CatalogTool[] | undefined;
-        map.set(catalog.id, tools?.length ?? 0);
-      }
+    for (const catalog of catalogItems) {
+      map.set(catalog.id, catalog.toolCount ?? 0);
     }
     return map;
-  }, [catalogItems, toolCountQueries]);
+  }, [catalogItems]);
 
   // Fetch assigned tools for this resource (only when editing an existing one).
   // Use the resource-scoped endpoint so MCP gateway members do not need the
@@ -327,6 +324,14 @@ const AgentToolsEditorContent = forwardRef<
   const skillToolsEnabled = organization?.skillToolsEnabled === true;
   const sandboxEnabled = useFeature("sandbox") === true;
 
+  // The built-in catalog's tools, fetched only while creating an agent — the
+  // one place this component still needs a tool list rather than a count, to
+  // pre-select the creation defaults. Every other catalog's list stays lazy,
+  // loaded by a pill when its popover opens.
+  const { data: builtInCatalogTools } = useCatalogTools(
+    agentId ? null : ARCHESTRA_MCP_CATALOG_ID,
+  );
+
   // The creation-default built-in set, composed by the shared
   // getCreationDefaultArchestraToolShortNames from the same org/deployment
   // flags AgentModel.create reads server-side. Null while editing an existing
@@ -334,20 +339,13 @@ const AgentToolsEditorContent = forwardRef<
   // saveChanges baseline for the built-in catalog right after create.
   const creationDefaultTools = useMemo(() => {
     if (agentId) return null; // Only for new agent creation
-    const toolsByCatalogIndex = toolCountQueries.map(
-      (q) => (q?.data as CatalogTool[] | undefined) ?? undefined,
-    );
-    return getDefaultArchestraToolIds(catalogItems, toolsByCatalogIndex, {
+    if (!builtInCatalogTools?.length) return null;
+    const toolIds = filterDefaultArchestraToolIds(builtInCatalogTools, {
       skillsEnabled: skillToolsEnabled,
       sandboxEnabled,
     });
-  }, [
-    agentId,
-    catalogItems,
-    toolCountQueries,
-    skillToolsEnabled,
-    sandboxEnabled,
-  ]);
+    return toolIds.size > 0 ? toolIds : null;
+  }, [agentId, builtInCatalogTools, skillToolsEnabled, sandboxEnabled]);
 
   // Pre-select the creation-default Archestra tools when creating a new agent
   // (no agentId), so the form shows exactly what AgentModel.create will assign
@@ -356,17 +354,19 @@ const AgentToolsEditorContent = forwardRef<
     if (defaultToolsInitializedRef.current) return; // Only initialize once
     if (!creationDefaultTools) return;
 
-    const archestraCatalog = catalogItems[creationDefaultTools.catalogIndex];
+    const archestraCatalog = catalogItems.find(
+      (catalog) => catalog.id === ARCHESTRA_MCP_CATALOG_ID,
+    );
     if (!archestraCatalog) return;
 
     defaultToolsInitializedRef.current = true;
     pendingChangesRef.current.set(ARCHESTRA_MCP_CATALOG_ID, {
-      selectedToolIds: creationDefaultTools.toolIds,
+      selectedToolIds: creationDefaultTools,
       credentialSourceId: null,
       catalogItem: archestraCatalog,
       selectAll: false,
     });
-    onSelectedCountChange?.(creationDefaultTools.toolIds.size);
+    onSelectedCountChange?.(creationDefaultTools.size);
     setPendingVersion((v) => v + 1);
   }, [creationDefaultTools, catalogItems, onSelectedCountChange]);
 
@@ -442,7 +442,7 @@ const AgentToolsEditorContent = forwardRef<
         pendingChanges: pendingChangesRef.current,
         assignedToolsByCatalog,
         isNewAgent: !agentId,
-        creationDefaultToolIds: creationDefaultTools?.toolIds,
+        creationDefaultToolIds: creationDefaultTools ?? undefined,
       }).hasChanges,
     [agentId, assignedToolsByCatalog, creationDefaultTools, pendingVersion],
   );
@@ -466,7 +466,7 @@ const AgentToolsEditorContent = forwardRef<
         pendingChanges: pendingChangesRef.current,
         assignedToolsByCatalog,
         isNewAgent: !agentId,
-        creationDefaultToolIds: creationDefaultTools?.toolIds,
+        creationDefaultToolIds: creationDefaultTools ?? undefined,
       });
 
       // `failed` is the only part of the response that is an error — see
@@ -586,10 +586,14 @@ const AgentToolsEditorContent = forwardRef<
           isActive: false,
         });
       } else {
-        // Toggle ON: pre-select the catalog's tools using cached data.
-        const toolIdx = catalogItems.findIndex((c) => c.id === catalogId);
-        const toolQuery = toolCountQueries[toolIdx];
-        const tools = (toolQuery?.data as CatalogTool[] | undefined) ?? [];
+        // Toggle ON: pre-select the catalog's tools using cached data — a pill
+        // that has already been opened leaves its list in the query cache.
+        const tools =
+          queryClient.getQueryData<CatalogTool[]>([
+            "mcp-catalog",
+            catalogId,
+            "tools",
+          ]) ?? [];
         const allToolIds = new Set(tools.map((t) => t.id));
 
         // The built-in Archestra catalog re-adds to its creation-default subset
@@ -623,7 +627,7 @@ const AgentToolsEditorContent = forwardRef<
     [
       catalogItems,
       assignedToolsByCatalog,
-      toolCountQueries,
+      queryClient,
       registerPendingChanges,
       skillToolsEnabled,
       sandboxEnabled,
@@ -699,6 +703,30 @@ const AgentToolsEditorContent = forwardRef<
         <Loader2 className="h-3 w-3 animate-spin" />
         <span>Loading tools...</span>
       </div>
+    );
+  }
+
+  // The catalog list is the one request this picker cannot render without, and
+  // a failed one leaves `catalogItems` empty — which the gate below reports as
+  // "No MCP servers available in the catalog.", indistinguishable from an
+  // organization that genuinely has none. That reads as "your registry is
+  // empty" rather than "we couldn't reach it", and the query is silent
+  // (`toastOnError: false`), so nothing else on screen says otherwise.
+  //
+  // Now that tool counts come from this list, it carries the whole picker: the
+  // per-catalog fan-out that used to fill in around it is gone, so there is no
+  // second request left to hint that anything was attempted.
+  if (catalogFailed) {
+    return (
+      <QueryLoadError
+        className="py-6"
+        title="Couldn't load the MCP server catalog"
+        description="The list of servers whose tools can be assigned failed to load."
+        onRetry={() => {
+          void refetchCatalog();
+        }}
+        retryTestId="retry-tools-catalog"
+      />
     );
   }
 

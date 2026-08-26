@@ -34,6 +34,7 @@ import {
   isNull,
   ne,
   notExists,
+  notInArray,
   or,
   type SQL,
   sql,
@@ -2632,6 +2633,74 @@ class ToolModel {
       .where(eq(schema.toolsTable.catalogId, catalogId));
   }
 
+  /**
+   * Rows a catalog's tool picker lists: discovered (not a pending clone),
+   * active, and without the meta/knowledge dispatch tools the pickers never
+   * show. Shared by {@link findByCatalogId}, {@link findListableByCatalogIds}
+   * and the catalog list's per-catalog `toolCount`, so a "N tools" badge can
+   * never disagree with the list it labels.
+   *
+   * Branding-aware: the hidden names are resolved through the MCP branding
+   * singleton, so a white-labeled prefix (e.g. `acme__run_tool`) is hidden too.
+   */
+  static listableCatalogToolPredicate(): SQL {
+    const brandedKnowledgeToolName = archestraMcpBranding.getToolName(
+      TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+    );
+    const builtInOnlyHiddenNames = [
+      archestraMcpBranding.getToolName(TOOL_SEARCH_TOOLS_SHORT_NAME),
+      archestraMcpBranding.getToolName(TOOL_RUN_TOOL_SHORT_NAME),
+    ];
+    return and(
+      eq(schema.toolsTable.clonedPendingDiscovery, false),
+      // Active tools only — a soft-deleted catalog's tools stop listing
+      // (defense-in-depth; the catalog pre-check also blocks the caller).
+      notDeleted(schema.toolsTable),
+      ne(schema.toolsTable.name, brandedKnowledgeToolName),
+      // search_tools / run_tool only exist on the built-in catalog, and are
+      // hidden only there. The isNull arm keeps agent-scoped tools (NULL
+      // catalog_id) from being dropped by a NULL comparison.
+      or(
+        isNull(schema.toolsTable.catalogId),
+        ne(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
+        notInArray(schema.toolsTable.name, builtInOnlyHiddenNames),
+      ),
+    ) as SQL;
+  }
+
+  /**
+   * Tool id/name/catalog for every listable tool across many catalogs, in one
+   * query. Backs the batched catalog-tools route, which replaced a per-catalog
+   * request fan-out from the tool pickers.
+   */
+  static async findListableByCatalogIds(
+    catalogIds: string[],
+  ): Promise<Array<{ id: string; name: string; catalogId: string }>> {
+    if (catalogIds.length === 0) {
+      return [];
+    }
+
+    const tools = await db
+      .select({
+        id: schema.toolsTable.id,
+        name: schema.toolsTable.name,
+        catalogId: schema.toolsTable.catalogId,
+      })
+      .from(schema.toolsTable)
+      .where(
+        and(
+          inArray(schema.toolsTable.catalogId, catalogIds),
+          ToolModel.listableCatalogToolPredicate(),
+        ),
+      )
+      .orderBy(desc(schema.toolsTable.createdAt));
+
+    return tools.filter(
+      (tool): tool is { id: string; name: string; catalogId: string } =>
+        tool.catalogId !== null,
+    );
+  }
+
   static async findByCatalogId(catalogId: string): Promise<
     Array<{
       id: string;
@@ -2649,17 +2718,6 @@ class ToolModel {
       assignedAgents: Array<{ id: string; name: string }>;
     }>
   > {
-    const brandedKnowledgeToolName = archestraMcpBranding.getToolName(
-      TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
-    );
-    const hiddenToolNames =
-      catalogId === ARCHESTRA_MCP_CATALOG_ID
-        ? [
-            brandedKnowledgeToolName,
-            archestraMcpBranding.getToolName(TOOL_SEARCH_TOOLS_SHORT_NAME),
-            archestraMcpBranding.getToolName(TOOL_RUN_TOOL_SHORT_NAME),
-          ]
-        : [brandedKnowledgeToolName];
     const allTools = await db
       .select({
         id: schema.toolsTable.id,
@@ -2672,13 +2730,7 @@ class ToolModel {
       .where(
         and(
           eq(schema.toolsTable.catalogId, catalogId),
-          eq(schema.toolsTable.clonedPendingDiscovery, false),
-          // Active tools only — a soft-deleted catalog's tools stop listing
-          // (defense-in-depth; the catalog pre-check also blocks the caller).
-          notDeleted(schema.toolsTable),
-          ...hiddenToolNames.map((toolName) =>
-            ne(schema.toolsTable.name, toolName),
-          ),
+          ToolModel.listableCatalogToolPredicate(),
         ),
       )
       .orderBy(desc(schema.toolsTable.createdAt));

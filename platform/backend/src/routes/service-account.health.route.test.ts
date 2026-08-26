@@ -61,9 +61,7 @@ describe("service account key health", () => {
     (await app.inject({ method: "GET", url: "/api/service-accounts" })).json();
 
   const findInList = async (id: string) =>
-    (await listAccounts()).find(
-      (account: { id: string }) => account.id === id,
-    );
+    (await listAccounts()).find((account: { id: string }) => account.id === id);
 
   /** Pushes a key's expiry into the past, which the create route will not do. */
   const expireKey = async (tokenId: string) =>

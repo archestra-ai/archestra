@@ -52,9 +52,10 @@ class ServiceAccountModel {
         // hands back a bare `timestamp without time zone` string that
         // `new Date(...)` reads as local time, shifting every expiry by the
         // server's UTC offset and disagreeing with the detail route.
-        soonestExpiryAt: sql<Date | null>`min(${tokens.expiresAt}) filter (where ${tokens.disabled} = false and ${tokens.expiresAt} > ${now})`.mapWith(
-          tokens.expiresAt,
-        ),
+        soonestExpiryAt:
+          sql<Date | null>`min(${tokens.expiresAt}) filter (where ${tokens.disabled} = false and ${tokens.expiresAt} > ${now})`.mapWith(
+            tokens.expiresAt,
+          ),
       })
       .from(schema.serviceAccountsTable)
       .leftJoin(

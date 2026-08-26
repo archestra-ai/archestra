@@ -94,7 +94,15 @@ function UsersPageContent() {
   const router = useRouter();
   const pathname = usePathname();
 
-  const activeTab = searchParams.get("tab") || "users";
+  const invitationsEnabled = useInvitationsEnabled();
+  // A deployment with invitations turned off has no invitations tab to select,
+  // so a `?tab=invitations` link (a bookmark, or one shared before the flag was
+  // flipped) resolves to the users tab rather than an unreachable panel.
+  const tabFromUrl = searchParams.get("tab") || "users";
+  const activeTab =
+    tabFromUrl === "invitations" && invitationsEnabled
+      ? "invitations"
+      : "users";
 
   const setActiveTab = useCallback(
     (tab: string) => {
@@ -116,17 +124,23 @@ function UsersPageContent() {
     return () => setActionButton(null);
   }, [activeOrg, setActionButton]);
 
+  // With invitations off there is only one thing to show, so no tablist is
+  // rendered — and a tabpanel whose aria-labelledby points at a tab button that
+  // does not exist is worse than a plain container.
+  const tabPanelProps = invitationsEnabled
+    ? ({
+        // Single always-mounted panel keeps each tab's aria-controls
+        // pointing at an element that exists (the panel's content swaps).
+        role: "tabpanel",
+        id: USERS_TABPANEL_ID,
+        "aria-labelledby": `${activeTab}-tab`,
+      } as const)
+    : {};
+
   return (
     <LoadingWrapper isPending={isOrgPending} loadingFallback={<LoadingState />}>
       {activeOrg ? (
-        <div
-          className="space-y-6"
-          // Single always-mounted panel keeps each tab's aria-controls
-          // pointing at an element that exists (the panel's content swaps).
-          role="tabpanel"
-          id={USERS_TABPANEL_ID}
-          aria-labelledby={`${activeTab}-tab`}
-        >
+        <div className="space-y-6" {...tabPanelProps}>
           {activeTab === "users" ? (
             <MembersTab activeTab={activeTab} onTabChange={setActiveTab} />
           ) : (
@@ -150,6 +164,21 @@ const USER_TABS = [
   { id: "invitations", label: "Invitations" },
 ] as const;
 
+/**
+ * Whether this deployment can invite anyone at all.
+ *
+ * Invitations are a deployment-level switch
+ * (`ARCHESTRA_AUTH_DISABLE_INVITATIONS`), not a permission: with them off the
+ * invite endpoints refuse, so every invitation affordance — the invite button
+ * and the invitations tab — stays hidden rather than leading somewhere that
+ * cannot work. `undefined` means the public config is still in flight; treat
+ * that as off so the affordance never flashes in and then disappears.
+ */
+function useInvitationsEnabled() {
+  const disableInvitations = useDisableInvitations();
+  return disableInvitations === undefined ? false : !disableInvitations;
+}
+
 function TabButtons({
   activeTab,
   onTabChange,
@@ -157,6 +186,11 @@ function TabButtons({
   activeTab: string;
   onTabChange: (tab: string) => void;
 }) {
+  const invitationsEnabled = useInvitationsEnabled();
+  const tabs = USER_TABS.filter(
+    (tab) => tab.id !== "invitations" || invitationsEnabled,
+  );
+
   // Switching tabs swaps the whole MembersTab/InvitationsTab subtree —
   // including this component — so the newly active tab button must be
   // re-focused after the replacement mounts or keyboard focus drops to <body>.
@@ -167,6 +201,9 @@ function TabButtons({
     });
   };
 
+  // A switcher with a single destination is a label, not a control.
+  if (tabs.length < 2) return null;
+
   return (
     <div
       role="tablist"
@@ -175,7 +212,7 @@ function TabButtons({
       // the stock `p-1` around size-sm buttons stands 8px taller than the row.
       className="flex h-8 items-center gap-1 rounded-lg bg-muted p-0.5"
     >
-      {USER_TABS.map((tab) => {
+      {tabs.map((tab) => {
         const isActive = activeTab === tab.id;
         return (
           <Button
@@ -207,9 +244,7 @@ function TabButtons({
 function InviteUserButton({ organizationId }: { organizationId: string }) {
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const { data: canInvite } = useHasPermissions({ invitation: ["create"] });
-  const disableInvitations = useDisableInvitations();
-  const invitationsEnabled =
-    disableInvitations === undefined ? false : !disableInvitations;
+  const invitationsEnabled = useInvitationsEnabled();
 
   if (!invitationsEnabled || !canInvite) return null;
 

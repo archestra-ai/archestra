@@ -87,17 +87,19 @@ function renderPage({
   members,
   total,
   pendingSignupMembers = [],
+  disableInvitations = false,
   searchParams = "",
 }: {
   members: Member[];
   total: number;
   pendingSignupMembers?: ReturnType<typeof pendingSignupFor>[];
+  disableInvitations?: boolean;
   searchParams?: string;
 }) {
   vi.mocked(useSearchParams).mockReturnValue(
     new URLSearchParams(searchParams) as ReturnType<typeof useSearchParams>,
   );
-  vi.mocked(useDisableInvitations).mockReturnValue(false);
+  vi.mocked(useDisableInvitations).mockReturnValue(disableInvitations);
   vi.mocked(useMembersPaginated).mockReturnValue({
     data: {
       data: members,
@@ -184,5 +186,36 @@ describe("Users settings — members table", () => {
       within(row as HTMLElement).getByText("Pending (auto-provisioned)"),
     ).toBeInTheDocument();
     expect(screen.getAllByText("Pending (auto-provisioned)")).toHaveLength(1);
+  });
+});
+
+describe("Users settings — invitations tab", () => {
+  const members = [makeMember(1)];
+
+  it("offers the invitations tab when the deployment allows invitations", () => {
+    renderPage({ members, total: 1 });
+
+    expect(
+      screen.getByRole("tab", { name: "Invitations" }),
+    ).toBeInTheDocument();
+  });
+
+  it("hides the tab switcher entirely when invitations are disabled", () => {
+    renderPage({ members, total: 1, disableInvitations: true });
+
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+  });
+
+  it("falls back to the users tab for a ?tab=invitations link when invitations are disabled", () => {
+    renderPage({
+      members,
+      total: 1,
+      disableInvitations: true,
+      searchParams: "tab=invitations",
+    });
+
+    expect(screen.getByText(members[0].email)).toBeInTheDocument();
+    expect(screen.queryByText("No invitations")).not.toBeInTheDocument();
   });
 });

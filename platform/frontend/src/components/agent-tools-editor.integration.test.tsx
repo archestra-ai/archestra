@@ -97,6 +97,40 @@ function renderEditor() {
 }
 
 describe("AgentToolsEditor", () => {
+  it("surfaces a failed catalog list instead of reporting an empty registry", async () => {
+    // The catalog list is the only thing this picker cannot render without,
+    // and a failed one leaves it empty — which the emptiness gate reports as
+    // "no MCP servers", indistinguishable from an organization that genuinely
+    // has none. The query is silent by design (`toastOnError: false`), so
+    // nothing else on screen contradicts it.
+    let catalogRequests = 0;
+    server.use(
+      http.get(`${API_ORIGIN}/api/internal_mcp_catalog`, () => {
+        catalogRequests += 1;
+        return catalogRequests === 1
+          ? HttpResponse.json({ error: { message: "boom" } }, { status: 500 })
+          : HttpResponse.json([catalogItem]);
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderEditor();
+
+    expect(
+      await screen.findByText(/couldn't load the MCP server catalog/i),
+    ).toBeTruthy();
+    expect(screen.queryByText(/No MCP servers available/i)).toBeNull();
+
+    // Recoverable without reloading the page.
+    await user.click(await screen.findByTestId("retry-tools-catalog"));
+
+    expect(screen.queryByTestId("retry-tools-catalog")).toBeNull();
+    await user.click(await screen.findByRole("button", { name: /add/i }));
+    expect(
+      await screen.findByRole("menuitemcheckbox", { name: /example-server/ }),
+    ).toBeTruthy();
+  });
+
   it("offers each server with its tool count while no tool list has loaded", async () => {
     // Tool lists that never answer — the shape of the bug this guards. The
     // picker used to fetch every catalog's full tool list on mount just to

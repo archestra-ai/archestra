@@ -21,6 +21,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { QueryLoadError } from "@/components/query-load-error";
 import {
   AssignmentCombobox,
   type AssignmentComboboxItem,
@@ -226,7 +227,12 @@ const AgentToolsEditorContent = forwardRef<
 
   // Fetch catalog items (MCP servers in registry; the gateway dialog also opts
   // in to assignable App backings via includeAppCatalogs).
-  const { data: catalogItems = [], isPending } = useInternalMcpCatalog({
+  const {
+    data: catalogItems = [],
+    isPending,
+    isLoadingError: catalogFailed,
+    refetch: refetchCatalog,
+  } = useInternalMcpCatalog({
     includeApps: includeAppCatalogs,
   });
 
@@ -697,6 +703,30 @@ const AgentToolsEditorContent = forwardRef<
         <Loader2 className="h-3 w-3 animate-spin" />
         <span>Loading tools...</span>
       </div>
+    );
+  }
+
+  // The catalog list is the one request this picker cannot render without, and
+  // a failed one leaves `catalogItems` empty — which the gate below reports as
+  // "No MCP servers available in the catalog.", indistinguishable from an
+  // organization that genuinely has none. That reads as "your registry is
+  // empty" rather than "we couldn't reach it", and the query is silent
+  // (`toastOnError: false`), so nothing else on screen says otherwise.
+  //
+  // Now that tool counts come from this list, it carries the whole picker: the
+  // per-catalog fan-out that used to fill in around it is gone, so there is no
+  // second request left to hint that anything was attempted.
+  if (catalogFailed) {
+    return (
+      <QueryLoadError
+        className="py-6"
+        title="Couldn't load the MCP server catalog"
+        description="The list of servers whose tools can be assigned failed to load."
+        onRetry={() => {
+          void refetchCatalog();
+        }}
+        retryTestId="retry-tools-catalog"
+      />
     );
   }
 

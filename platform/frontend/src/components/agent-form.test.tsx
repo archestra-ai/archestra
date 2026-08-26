@@ -1098,7 +1098,7 @@ describe("AgentForm delegation state", () => {
       isSuccess: true,
     });
 
-    render(<AgentForm agentType="agent" agent={baseAgent} />);
+    render(<AgentForm agentType="mcp_gateway" agent={baseAgent} />);
 
     expect(await screen.findByText("off-page-skill")).toBeInTheDocument();
     expect(
@@ -1137,7 +1137,7 @@ describe("AgentForm delegation state", () => {
       isSuccess: true,
     });
 
-    render(<AgentForm agentType="agent" agent={baseAgent} />);
+    render(<AgentForm agentType="mcp_gateway" agent={baseAgent} />);
 
     expect(await screen.findByText("regraded-skill")).toBeInTheDocument();
     expect(
@@ -1414,7 +1414,9 @@ describe("AgentForm published skills", () => {
     });
     const onSaved = vi.fn();
 
-    render(<AgentForm onSaved={onSaved} agentType="agent" agent={baseAgent} />);
+    render(
+      <AgentForm onSaved={onSaved} agentType="mcp_gateway" agent={baseAgent} />,
+    );
 
     expect(
       await screen.findByText(/could not load the published skills/i),
@@ -1438,11 +1440,24 @@ describe("AgentForm published skills", () => {
       return { data: !("skill" in permissions) };
     }) as unknown as typeof useHasPermissions);
 
+    render(<AgentForm agentType="mcp_gateway" agent={baseAgent} />);
+
+    await screen.findByRole("button", { name: /update/i });
+    expect(screen.queryByText(/published skills/i)).not.toBeInTheDocument();
+    expect(useAgentSkillsMock).toHaveBeenCalledWith(undefined);
+  });
+
+  it("shows no section on a chat agent, and reads nothing for one", async () => {
+    // Publishing over `skill://` is a gateway surface: a chat agent has no MCP
+    // client to serve resources to, and reaches skills through `load_skill`
+    // instead. The section was offered on agents too, which put a control on a
+    // screen where nothing consumed what it wrote.
     render(<AgentForm agentType="agent" agent={baseAgent} />);
 
     await screen.findByRole("button", { name: /update/i });
     expect(screen.queryByText(/published skills/i)).not.toBeInTheDocument();
     expect(useAgentSkillsMock).toHaveBeenCalledWith(undefined);
+    expect(useAgentSkillExclusionsMock).toHaveBeenCalledWith(undefined);
   });
 
   it("keeps the chip for a skill picked from a search once the query moves on", async () => {
@@ -1461,7 +1476,7 @@ describe("AgentForm published skills", () => {
         : { data: { data: [] }, isFetching: false },
     );
 
-    render(<AgentForm agentType="agent" agent={baseAgent} />);
+    render(<AgentForm agentType="mcp_gateway" agent={baseAgent} />);
 
     const search = await screen.findByLabelText("Search skills...");
     await user.type(search, "far-away");
@@ -1505,7 +1520,9 @@ describe("AgentForm published skills", () => {
     });
     const onSaved = vi.fn();
 
-    render(<AgentForm onSaved={onSaved} agentType="agent" agent={baseAgent} />);
+    render(
+      <AgentForm onSaved={onSaved} agentType="mcp_gateway" agent={baseAgent} />,
+    );
 
     await screen.findByText("Skills (1)");
     await user.click(screen.getByRole("button", { name: /update/i }));
@@ -1525,7 +1542,7 @@ describe("AgentForm published skills", () => {
       isSuccess: true,
     });
 
-    render(<AgentForm agentType="agent" agent={baseAgent} />);
+    render(<AgentForm agentType="mcp_gateway" agent={baseAgent} />);
 
     await screen.findByText(/Excluded skills \(0\)/);
     await user.click(skillsModeTab("Custom"));
@@ -1553,7 +1570,9 @@ describe("AgentForm published skills", () => {
       isSuccess: true,
     });
 
-    render(<AgentForm onSaved={onSaved} agentType="agent" agent={baseAgent} />);
+    render(
+      <AgentForm onSaved={onSaved} agentType="mcp_gateway" agent={baseAgent} />,
+    );
 
     await screen.findByText(/Excluded skills \(0\)/);
     await user.click(skillsModeTab("Custom"));

@@ -1135,8 +1135,13 @@ export function AgentForm({
   const [missingCredentialBehavior, setMissingCredentialBehavior] =
     useState<MissingCredentialBehavior>("allow");
   // New agents default to Auto mode (implicit access to all tools); editing an
-  // existing agent overwrites this from its stored value.
-  const [accessAllTools, setAccessAllTools] = useState(true);
+  // existing agent starts from its stored value. Seeded here rather than only
+  // in the reset effect below, which runs after the first commit: an existing
+  // Custom agent would otherwise render one frame with the Auto tab selected,
+  // and the Auto tab's editor would begin loading data it does not need.
+  const [accessAllTools, setAccessAllTools] = useState(
+    agent ? (agent.accessAllTools ?? false) : true,
+  );
   // Auto subagent mode: new agents default to Auto (may delegate to any agent
   // the caller can access); editing overwrites this from the stored value.
   const [accessAllSubagents, setAccessAllSubagents] = useState(true);
@@ -3011,6 +3016,7 @@ export function AgentForm({
                       <AgentToolExclusionsEditor
                         ref={agentToolExclusionsEditorRef}
                         agentId={agent?.id}
+                        active={autoToolsMode}
                         seedDefaultExclusions={seedDefaultExclusions}
                         pendingAssignedToolIds={pendingSelectedToolIds}
                         onStateChange={setExclusionsState}

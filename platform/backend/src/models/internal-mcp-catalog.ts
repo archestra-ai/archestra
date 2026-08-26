@@ -10,6 +10,7 @@ import {
   ne,
   notExists,
   or,
+  type SQL,
   sql,
 } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
@@ -168,6 +169,53 @@ class InternalMcpCatalogModel {
     return InternalMcpCatalogModel.listAll(options, true);
   }
 
+  /**
+   * Ids of the catalogs {@link findAll} would return for this viewer, without
+   * the per-item metadata a list read attaches (labels, teams, tool stats,
+   * expanded secrets, author names). Backs the batched catalog-tools route, so
+   * that route is scoped to exactly the catalogs the caller can already list.
+   */
+  static async findAccessibleIds(
+    options?: CatalogListOptions,
+  ): Promise<string[]> {
+    const { userId, isAdmin, organizationId } = options ?? {};
+
+    if (userId && !isAdmin && !organizationId) {
+      return [];
+    }
+
+    const baseListCondition = InternalMcpCatalogModel.buildListCondition(
+      options,
+      false,
+    );
+
+    if (userId && organizationId) {
+      const accessibleIds =
+        await McpCatalogTeamModel.getUserAccessibleCatalogIds(
+          userId,
+          !!isAdmin,
+          organizationId,
+        );
+      if (accessibleIds.length === 0) return [];
+      const rows = await db
+        .select({ id: schema.internalMcpCatalogTable.id })
+        .from(schema.internalMcpCatalogTable)
+        .where(
+          and(
+            inArray(schema.internalMcpCatalogTable.id, accessibleIds),
+            baseListCondition,
+          ),
+        );
+      return rows.map((row) => row.id);
+    }
+
+    const rows = await db
+      .select({ id: schema.internalMcpCatalogTable.id })
+      .from(schema.internalMcpCatalogTable)
+      .where(baseListCondition);
+    return rows.map((row) => row.id);
+  }
+
   private static async listAll(
     options: CatalogListOptions | undefined,
     includeApps: boolean,
@@ -177,60 +225,14 @@ class InternalMcpCatalogModel {
       userId,
       isAdmin,
       organizationId,
-      environmentId,
     } = options ?? {};
 
     let dbItems: Array<typeof schema.internalMcpCatalogTable.$inferSelect>;
 
-    const listConditions = [
-      // Legacy preset rows (non-NULL parentCatalogItemId) are never surfaced.
-      isNull(schema.internalMcpCatalogTable.parentCatalogItemId),
-      // Hide soft-deleted catalog items from the registry.
-      notDeleted(schema.internalMcpCatalogTable),
-    ];
-    if (environmentId !== undefined) {
-      listConditions.push(catalogInEnvironmentPredicate(environmentId));
-    }
-    if (!includeApps) {
-      // App backing catalogs are managed on the Apps page, never surfaced in the
-      // MCP registry (UI list or the agent-callable registry search).
-      listConditions.push(ne(schema.internalMcpCatalogTable.serverType, "app"));
-    } else {
-      // A disabled app's backing catalog is author-only — never surface
-      // someone else's disabled app in the capability picker, even to a
-      // registry admin (this overrides the catalog-access admin bypass,
-      // matching the Apps-page rule).
-      listConditions.push(
-        notExists(
-          db
-            .select({ one: sql`1` })
-            .from(schema.appsTable)
-            .innerJoin(
-              schema.mcpServersTable,
-              eq(schema.appsTable.mcpServerId, schema.mcpServersTable.id),
-            )
-            .where(
-              and(
-                eq(
-                  schema.mcpServersTable.catalogId,
-                  schema.internalMcpCatalogTable.id,
-                ),
-                eq(schema.appsTable.enabled, false),
-                notDeleted(schema.appsTable),
-                // Keep the caller's own disabled apps (shown greyed as
-                // "Disabled"); with no viewer, hide every disabled app.
-                userId
-                  ? or(
-                      ne(schema.appsTable.authorId, userId),
-                      isNull(schema.appsTable.authorId),
-                    )
-                  : undefined,
-              ),
-            ),
-        ),
-      );
-    }
-    const baseListCondition = and(...listConditions);
+    const baseListCondition = InternalMcpCatalogModel.buildListCondition(
+      options,
+      includeApps,
+    );
 
     if (userId && !isAdmin && !organizationId) {
       return [];
@@ -1539,11 +1541,76 @@ class InternalMcpCatalogModel {
     }));
   }
 
+  private static buildListCondition(
+    options: CatalogListOptions | undefined,
+    includeApps: boolean,
+  ): SQL | undefined {
+    const { userId, environmentId } = options ?? {};
+
+    const listConditions = [
+      // Legacy preset rows (non-NULL parentCatalogItemId) are never surfaced.
+      isNull(schema.internalMcpCatalogTable.parentCatalogItemId),
+      // Hide soft-deleted catalog items from the registry.
+      notDeleted(schema.internalMcpCatalogTable),
+    ];
+    if (environmentId !== undefined) {
+      listConditions.push(catalogInEnvironmentPredicate(environmentId));
+    }
+    if (!includeApps) {
+      // App backing catalogs are managed on the Apps page, never surfaced in the
+      // MCP registry (UI list or the agent-callable registry search).
+      listConditions.push(ne(schema.internalMcpCatalogTable.serverType, "app"));
+    } else {
+      // A disabled app's backing catalog is author-only — never surface
+      // someone else's disabled app in the capability picker, even to a
+      // registry admin (this overrides the catalog-access admin bypass,
+      // matching the Apps-page rule).
+      listConditions.push(
+        notExists(
+          db
+            .select({ one: sql`1` })
+            .from(schema.appsTable)
+            .innerJoin(
+              schema.mcpServersTable,
+              eq(schema.appsTable.mcpServerId, schema.mcpServersTable.id),
+            )
+            .where(
+              and(
+                eq(
+                  schema.mcpServersTable.catalogId,
+                  schema.internalMcpCatalogTable.id,
+                ),
+                eq(schema.appsTable.enabled, false),
+                notDeleted(schema.appsTable),
+                // Keep the caller's own disabled apps (shown greyed as
+                // "Disabled"); with no viewer, hide every disabled app.
+                userId
+                  ? or(
+                      ne(schema.appsTable.authorId, userId),
+                      isNull(schema.appsTable.authorId),
+                    )
+                  : undefined,
+              ),
+            ),
+        ),
+      );
+    }
+    return and(...listConditions);
+  }
+
   /**
    * Per-catalog tool stats in a single grouped scan: the tool count and whether
    * any tool exposes a `ui://` MCP App resource (`providesUi`). Runs on every
    * catalog list load via {@link attachListMetadata}, so `providesUi` is folded
    * into this existing scan rather than added as a separate query.
+   *
+   * `toolCount` counts exactly the rows a catalog's tool picker lists
+   * (ToolModel.listableCatalogToolPredicate) rather than every active row, so
+   * the "N tools" badge always matches the list behind it — the built-in
+   * catalog's meta dispatch tools and undiscovered clones are not offerable
+   * and were previously inflating the count. `providesUi` deliberately stays
+   * over all active tools: a UI resource on a hidden tool still means the
+   * server provides UI.
    */
   private static async getToolStats(
     catalogIds: string[],
@@ -1555,7 +1622,9 @@ class InternalMcpCatalogModel {
     const rows = await db
       .select({
         catalogId: schema.toolsTable.catalogId,
-        toolCount: count(schema.toolsTable.id),
+        // `::int` because a bare COUNT comes back from pg as a bigint string,
+        // which the route's `z.number()` response schema rejects.
+        toolCount: sql<number>`count(*) filter (where ${ToolModel.listableCatalogToolPredicate()})::int`,
         providesUi: sql<boolean>`bool_or(${toolUiResourceUriSql()} is not null)`,
       })
       .from(schema.toolsTable)

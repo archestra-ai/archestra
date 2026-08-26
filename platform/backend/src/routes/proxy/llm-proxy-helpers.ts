@@ -10,6 +10,7 @@ import {
   ArchestraInternalErrorCode,
   type BillingMode,
   type InteractionSource,
+  isAlwaysExposedArchestraToolShortName,
   type SupportedProvider,
   type SupportedProviderDiscriminator,
   TOOL_RUN_TOOL_SHORT_NAME,
@@ -144,10 +145,11 @@ export interface AccumulatedToolCall {
  * Rewrite a dispatch-mode agent's *direct* tool calls into `run_tool` calls.
  *
  * In `search_and_run_only` exposure (which Auto tool mode implies) every
- * third-party tool is reachable through `run_tool` but deliberately absent from
- * the request's tool list. When the model calls one directly — which it does
- * routinely, because it learned the exact name from `search_tools`, a skill
- * body, or its own earlier turn — the name is not in `enabledToolNames` and the
+ * third-party tool — and the app-authoring built-ins along with them — is
+ * reachable through `run_tool` but deliberately absent from the request's tool
+ * list. When the model calls one directly — which it does routinely, because it
+ * learned the exact name from `search_tools`, a skill body, the system prompt,
+ * or its own earlier turn — the name is not in `enabledToolNames` and the
  * guardrail drops the whole batch, ending the turn with a steer the user reads
  * as an assistant message. The tool was never unreachable; only the calling
  * convention was wrong.
@@ -182,11 +184,11 @@ export function planDispatchModeToolCallRewrites(params: {
   const rewritten = toolCalls.map((toolCall) => {
     const canonicalName = canonicalizeToolName(toolCall.name);
 
-    // Already callable, or one of the built-ins that bypass the enabled-tools
-    // filter entirely (`run_tool` itself included — a genuine dispatch must not
+    // Already callable, or one of the built-ins that stay top-level in every
+    // exposure mode (`run_tool` itself included — a genuine dispatch must not
     // be wrapped a second time).
     if (
-      archestraMcpBranding.isToolName(canonicalName) ||
+      isAlwaysDirectlyCallableBuiltIn(canonicalName) ||
       enabledToolNames.has(canonicalName)
     ) {
       return toolCall;
@@ -255,6 +257,34 @@ function hasSearchToolsName(declaredToolNames: Set<string>): boolean {
     }
   }
   return false;
+}
+
+/**
+ * True for the built-ins that `filterExposedTools` keeps top-level whatever the
+ * agent's exposure mode — the search_tools/run_tool pair and the always-exposed
+ * skill/sandbox/persistent-file surface.
+ *
+ * Deliberately narrower than `archestraMcpBranding.isToolName`. Not every
+ * built-in is directly callable: under `search_and_run_only` the app-authoring
+ * surface (`read_app`, `edit_app`, `render_app`, `list_apps`, …) is hidden from
+ * the tool list on purpose and reached through `run_tool`, exactly like a
+ * third-party tool. Exempting *every* built-in from the repair therefore
+ * skipped the one group that most needs it: a direct call to a hidden app tool
+ * was neither rewritten here nor refused by the guardrail (which applies the
+ * same built-in exemption), so it reached the caller as a name the caller never
+ * declared and died there as an unknown-tool error the model had to recover
+ * from on its own.
+ */
+function isAlwaysDirectlyCallableBuiltIn(toolName: string): boolean {
+  const shortName = archestraMcpBranding.getToolShortName(toolName);
+  if (shortName === null) {
+    return false;
+  }
+  return (
+    shortName === TOOL_SEARCH_TOOLS_SHORT_NAME ||
+    shortName === TOOL_RUN_TOOL_SHORT_NAME ||
+    isAlwaysExposedArchestraToolShortName(shortName)
+  );
 }
 
 /**

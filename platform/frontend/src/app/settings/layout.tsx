@@ -121,16 +121,40 @@ function UsersDescription() {
     : "Manage users and their roles.";
 }
 
+export type SettingsPageHeader = {
+  title: React.ReactNode;
+  /** Browser tab title, when `title` is composed markup rather than a string. */
+  documentTitle?: string;
+  description?: React.ReactNode;
+  backLink?: React.ReactNode;
+  status?: React.ReactNode;
+};
+
 type SettingsLayoutContextType = {
-  setActionButton: (button: React.ReactNode) => void;
+  setActionButton: (node: React.ReactNode) => void;
+  setPageHeader: (header: SettingsPageHeader | null) => void;
 };
 
 const SettingsLayoutContext = createContext<SettingsLayoutContextType>({
   setActionButton: () => {},
+  setPageHeader: () => {},
 });
 
 export function useSetSettingsAction() {
   return useContext(SettingsLayoutContext).setActionButton;
+}
+
+/**
+ * Lets a settings page replace the header this layout would otherwise derive
+ * from the pathname. A record page needs to say *which* record you are on, and
+ * `PAGE_CONFIG` is keyed by route, so without this the detail pages under
+ * `/settings/*` inherit their list's title and never name their subject.
+ *
+ * Call it from an effect and clear it on unmount, the way `setActionButton` is
+ * used, so the header does not outlive the page that set it.
+ */
+export function useSetSettingsPageHeader() {
+  return useContext(SettingsLayoutContext).setPageHeader;
 }
 
 export default function SettingsLayout({
@@ -141,7 +165,11 @@ export default function SettingsLayout({
   const pathname = usePathname();
   const tabs = useSettingsTabs();
   const [actionButton, setActionButton] = useState<React.ReactNode>(null);
+  const [pageHeader, setPageHeader] = useState<SettingsPageHeader | null>(null);
 
+  // Route-derived default. A record page overrides it via `setPageHeader` once
+  // it knows its subject; until then the prefix match keeps a detail page
+  // under a section reading as that section rather than as bare "Settings".
   const config = pathname.startsWith("/settings/service-accounts/")
     ? PAGE_CONFIG["/settings/service-accounts"]
     : (PAGE_CONFIG[pathname] ?? {
@@ -149,13 +177,16 @@ export default function SettingsLayout({
         description: "Configure your platform, teams, and integrations.",
       });
 
-  const contextValue = useMemo(() => ({ setActionButton }), []);
+  const contextValue = useMemo(() => ({ setActionButton, setPageHeader }), []);
 
   return (
     <SettingsLayoutContext.Provider value={contextValue}>
       <PageLayout
-        title={config.title}
-        description={config.description}
+        title={pageHeader?.title ?? config.title}
+        documentTitle={pageHeader?.documentTitle}
+        description={pageHeader ? pageHeader.description : config.description}
+        backLink={pageHeader?.backLink}
+        status={pageHeader?.status}
         actionButton={actionButton}
       >
         {/* The section list sits beside the content rather than as a tab row

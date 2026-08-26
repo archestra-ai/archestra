@@ -2,7 +2,7 @@ import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { toBulkOutcome } from "@/lib/bulk-action";
+import { runBulkAction, toBulkOutcome } from "@/lib/bulk-action";
 import { handleApiError, throwOnApiError, toApiError } from "./utils";
 
 export type ServiceAccount =
@@ -13,6 +13,7 @@ export type ServiceAccountToken = ServiceAccountDetail["tokens"][number];
 
 const {
   bulkDeleteServiceAccounts,
+  bulkSetServiceAccountsDisabled,
   createServiceAccount,
   createServiceAccountToken,
   deleteServiceAccount,
@@ -187,6 +188,34 @@ export function useBulkDeleteServiceAccounts() {
   });
 }
 
+/**
+ * Enables or disables a selection of service accounts in one request. Disabling
+ * is the reversible way to stop an automation: the keys survive, so turning it
+ * back on does not mean reissuing credentials to whatever was using them.
+ */
+export function useBulkSetServiceAccountsDisabled() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      accounts,
+      disabled,
+    }: {
+      accounts: readonly { id: string; name: string }[];
+      disabled: boolean;
+    }) =>
+      bulkSetServiceAccountsDisabled({
+        body: { ids: accounts.map((account) => account.id), disabled },
+      }).then(({ data, error }) => {
+        throwOnApiError(error, { toastOnError: false });
+        return toBulkOutcome(data ?? { succeeded: [], failed: [] });
+      }),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["service-accounts"] });
+      queryClient.invalidateQueries({ queryKey: ["service-account"] });
+    },
+  });
+}
+
 export function useDeleteServiceAccountToken() {
   const queryClient = useQueryClient();
 
@@ -205,6 +234,52 @@ export function useDeleteServiceAccountToken() {
     onSuccess: (data, variables) => {
       if (!data) return;
       toast.success("API key deleted successfully");
+      queryClient.invalidateQueries({ queryKey: ["service-accounts"] });
+      queryClient.invalidateQueries({
+        queryKey: ["service-account", variables.id],
+      });
+    },
+  });
+}
+
+/**
+ * Applies one action to a selection of this account's keys.
+ *
+ * There is no bulk key endpoint, so this fans out over the per-key routes with
+ * the shared client-side runner. It deliberately calls the SDK rather than the
+ * single-key hooks above: those toast per call, which for a ten-key revoke
+ * would stack ten toasts instead of the one summary `reportBulkOutcome` gives.
+ */
+export function useBulkServiceAccountTokenAction() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      tokens,
+      action,
+    }: {
+      id: string;
+      tokens: readonly ServiceAccountToken[];
+      action: { type: "delete" } | { type: "setDisabled"; disabled: boolean };
+    }) =>
+      runBulkAction({
+        items: tokens,
+        describe: (token) => token.name,
+        run: async (token) => {
+          const { error } =
+            action.type === "delete"
+              ? await deleteServiceAccountToken({
+                  path: { id, tokenId: token.id },
+                })
+              : await updateServiceAccountToken({
+                  path: { id, tokenId: token.id },
+                  body: { disabled: action.disabled },
+                });
+          throwOnApiError(error, { toastOnError: false });
+        },
+      }),
+    onSettled: (_data, _error, variables) => {
       queryClient.invalidateQueries({ queryKey: ["service-accounts"] });
       queryClient.invalidateQueries({
         queryKey: ["service-account", variables.id],

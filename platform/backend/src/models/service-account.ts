@@ -43,9 +43,10 @@ class ServiceAccountModel {
         // cannot disagree with what the gateway will actually accept. The
         // `id is not null` guard keeps the all-null row a LEFT JOIN produces
         // for a keyless account out of the tally.
-        activeTokenCount: sql<number>`count(*) filter (where ${tokens.id} is not null and ${tokens.disabled} = false and (${tokens.expiresAt} is null or ${tokens.expiresAt} > ${now}))`.mapWith(
-          Number,
-        ),
+        activeTokenCount:
+          sql<number>`count(*) filter (where ${tokens.id} is not null and ${tokens.disabled} = false and (${tokens.expiresAt} is null or ${tokens.expiresAt} > ${now}))`.mapWith(
+            Number,
+          ),
         lastUsedAt: max(tokens.lastUsedAt),
         soonestExpiryAt: sql<
           string | null

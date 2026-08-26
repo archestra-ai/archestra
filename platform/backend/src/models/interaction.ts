@@ -1137,6 +1137,47 @@ class InteractionModel {
    * The previous approach used ARRAY_AGG with FILTER on request::text which was O(n) on JSON size
    * and caused 17+ second queries due to scanning megabytes of JSON per session.
    */
+  /**
+   * Billed vs subscription cost split across an explicit set of LLM proxy
+   * sessions (an eval run's agent + judge sessions). `cost` is always the
+   * list-price estimate; billed spend only counts `billing_mode = 'metered'`
+   * rows, matching the sessions UI semantics.
+   */
+  static async getCostBySessionIds(params: {
+    organizationId: string;
+    sessionIds: string[];
+  }): Promise<{ billedCost: number; subscriptionCost: number }> {
+    if (params.sessionIds.length === 0) {
+      return { billedCost: 0, subscriptionCost: 0 };
+    }
+    const [row] = await db
+      .select({
+        billedCost: sql<
+          number | null
+        >`SUM(${schema.interactionsTable.cost}) FILTER (WHERE ${schema.interactionsTable.billingMode} = 'metered')`,
+        subscriptionCost: sql<
+          number | null
+        >`SUM(${schema.interactionsTable.cost}) FILTER (WHERE ${schema.interactionsTable.billingMode} = 'subscription')`,
+      })
+      .from(schema.interactionsTable)
+      // Interactions carry no organization column; scope through the owning
+      // agent (profileId) like the other org-scoped interaction reads.
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.interactionsTable.profileId, schema.agentsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, params.organizationId),
+          inArray(schema.interactionsTable.sessionId, params.sessionIds),
+        ),
+      );
+    return {
+      billedCost: Number(row?.billedCost ?? 0),
+      subscriptionCost: Number(row?.subscriptionCost ?? 0),
+    };
+  }
+
   static async getSessions(
     pagination: PaginationQuery,
     requestingUserId?: string,

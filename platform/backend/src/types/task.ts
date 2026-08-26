@@ -38,6 +38,7 @@ export const TaskTypeSchema = z.enum([
   "skill_publication_backfill",
   "p4_shim_reconcile",
   "kb_bm25_stats_refresh",
+  "eval_run_execute",
 ]);
 export type TaskType = z.infer<typeof TaskTypeSchema>;
 
@@ -54,6 +55,9 @@ export type PermissionSyncPayload = {
 };
 export type SkillGithubSyncPayload = {
   skillId: string;
+};
+export type EvalRunExecutePayload = {
+  runId: string;
 };
 export type PluginGithubSyncPayload = {
   pluginId: string;
@@ -88,6 +92,10 @@ export const TASK_LANES = {
     "p4_shim_reconcile",
     "kb_bm25_stats_refresh",
   ],
+  // Eval runs execute real agents (LLM calls, MCP tools) and can be long;
+  // their own low-concurrency lane keeps them from starving system tasks and
+  // bounds parallel LLM spend. One task = one whole run.
+  eval: ["eval_run_execute"],
 } as const satisfies Record<string, TaskType[]>;
 
 export type TaskLane = keyof typeof TASK_LANES;

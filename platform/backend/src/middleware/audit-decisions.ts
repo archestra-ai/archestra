@@ -8,6 +8,7 @@ import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
 import EnvironmentResourceDefaultModel from "@/models/environment-resource-default";
+import EvalSuiteModel from "@/models/eval-suite";
 import GithubAppConfigModel from "@/models/github-app-config";
 import GithubPatModel from "@/models/github-pat";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
@@ -100,6 +101,14 @@ export const AUDIT_DECISIONS = {
   environmentResourceDefaultsTable: {
     audited: true,
     model: EnvironmentResourceDefaultModel,
+  },
+  evalSuitesTable: { audited: true, model: EvalSuiteModel },
+  // Case CRUD is audited as evalSuite.updated on the parent suite; the suite
+  // audit snapshot includes the case list, so diffs carry the change.
+  evalCasesTable: {
+    audited: false,
+    reason:
+      "child rows of eval_suites; case CRUD is audited as evalSuite.updated on the parent, whose snapshot includes the case list",
   },
   githubAppConfigsTable: { audited: true, model: GithubAppConfigModel },
   githubPatsTable: { audited: true, model: GithubPatModel },
@@ -691,6 +700,15 @@ export const AUDIT_DECISIONS = {
   connectorRunsTable: {
     audited: false,
     reason: "connector run execution log",
+  },
+  evalRunsTable: {
+    audited: false,
+    reason:
+      "eval run execution log; creation/cancellation are audited at the route level as evalRun.created/evalRun.canceled",
+  },
+  evalRunResultsTable: {
+    audited: false,
+    reason: "per-case eval execution results; runtime data, not config",
   },
   scheduleTriggerRunsTable: {
     audited: false,

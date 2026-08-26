@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-08-24
+lastUpdated: 2026-08-26
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -51,6 +51,7 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | Code Sandbox | `execute` |
 | Agent Triggers | `read`, `create`, `update`, `delete` |
 | Scheduled Tasks | `read`, `create`, `update`, `delete` |
+| Evals | `read`, `create`, `update`, `delete`, `execute` |
 | LLM Proxy | `read`, `update` |
 | LLM Provider API Keys | `read`, `create`, `update`, `delete` |
 | LLM Virtual Keys | `read`, `create`, `update`, `delete` |
@@ -98,6 +99,7 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | Apps | `read`, `create`, `update`, `delete` |
 | Code Sandbox | `execute` |
 | Scheduled Tasks | `read`, `create`, `update`, `delete` |
+| Evals | `read` |
 | LLM Proxy | `read` |
 | LLM Provider API Keys | `read` |
 | LLM Virtual Keys | `read`, `create` |
@@ -184,6 +186,11 @@ The following table lists all available permissions that can be assigned to cust
 | `environment:create` | Create deployment environments |
 | `environment:update` | Modify deployment environments, including the org default environment |
 | `environment:delete` | Delete deployment environments |
+| `eval:read` | View eval suites, cases, runs and their results |
+| `eval:create` | Create eval suites |
+| `eval:update` | Modify eval suites and their cases |
+| `eval:delete` | Delete eval suites |
+| `eval:execute` | Run eval suites against agents and cancel runs |
 | `file:manage` | List, read, write, and delete files in chats and projects |
 | `githubAppConfig:read` | View GitHub App configurations |
 | `githubAppConfig:create` | Create GitHub App configurations |

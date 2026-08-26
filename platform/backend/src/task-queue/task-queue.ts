@@ -17,6 +17,7 @@ export class TaskQueueService {
     content: 0,
     permission: 0,
     system: 0,
+    eval: 0,
   };
   private taskLane = new Map<string, TaskLane>();
   private stopping = false;
@@ -139,6 +140,7 @@ export class TaskQueueService {
         permissionLaneMaxConcurrent:
           config.kb.permissionSyncWorkerMaxConcurrent,
         systemLaneMaxConcurrent: SYSTEM_LANE_MAX_CONCURRENT,
+        evalLaneMaxConcurrent: config.evals.runWorkerMaxConcurrent,
       },
       "[TaskQueue] Worker started",
     );
@@ -293,6 +295,8 @@ export class TaskQueueService {
         return config.kb.permissionSyncWorkerMaxConcurrent;
       case "system":
         return SYSTEM_LANE_MAX_CONCURRENT;
+      case "eval":
+        return config.evals.runWorkerMaxConcurrent;
     }
   }
 

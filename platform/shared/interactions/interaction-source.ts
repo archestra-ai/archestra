@@ -27,6 +27,8 @@ export const InteractionSourceSchema = z.enum([
   "knowledge:ocr",
   "app:llm_complete",
   "app:recording_enhancement",
+  "eval:run",
+  "eval:judge",
 ]);
 
 export type InteractionSource = z.infer<typeof InteractionSourceSchema>;
@@ -64,6 +66,8 @@ export const INTERACTION_SOURCE_DISPLAY: Record<
   "knowledge:ocr": { label: "Knowledge - OCR" },
   "app:llm_complete": { label: "App LLM Completion" },
   "app:recording_enhancement": { label: "App Recording Enhancement" },
+  "eval:run": { label: "Eval Run" },
+  "eval:judge": { label: "Eval Judge" },
 };
 
 /**

@@ -58,5 +58,6 @@ export {
   setUserAttributes,
 } from "./attributes";
 export { startActiveChatSpan } from "./chat";
+export { startActiveEvalCaseSpan } from "./evals";
 export { startActiveLlmSpan } from "./llm";
 export { recordBlockedToolSpans, startActiveMcpSpan } from "./mcp";

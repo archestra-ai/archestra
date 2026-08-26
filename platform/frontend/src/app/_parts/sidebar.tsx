@@ -17,6 +17,7 @@ import {
   Cable,
   CircleDollarSign,
   Database,
+  FlaskConical,
   FolderKanban,
   Github,
   Inbox,
@@ -181,6 +182,7 @@ function routeSidebarMode(pathname: string): SidebarMode | null {
   }
   const studioPrefixes = [
     "/agents",
+    "/evals",
     ...SKILLS_SECTION_PREFIXES,
     "/mcp",
     "/llm",
@@ -303,6 +305,14 @@ const contentNavGroups: NavGroup[] = [
         icon: Inbox,
         customIsActive: (pathname: string) =>
           pathname.startsWith("/messaging-channels"),
+      },
+      {
+        title: "Evals",
+        url: "/evals",
+        icon: FlaskConical,
+        customIsActive: (pathname: string) => pathname.startsWith("/evals"),
+        beta: true,
+        badgeLabel: "Beta",
       },
     ],
   },

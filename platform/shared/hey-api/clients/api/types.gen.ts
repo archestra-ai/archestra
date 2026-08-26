@@ -22925,7 +22925,7 @@ export type GetAuditLogsData = {
         /**
          * Filter by action type (dotted name, e.g. agent.created)
          */
-        action?: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
+        action?: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'evalSuite.created' | 'evalSuite.updated' | 'evalSuite.deleted' | 'evalSuite.bulk_deleted' | 'evalRun.created' | 'evalRun.canceled' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
         /**
          * Filter by outcome (success, failure, or denied)
          */
@@ -23034,7 +23034,7 @@ export type GetAuditLogsResponses = {
             actorName: string | null;
             actorEmail: string | null;
             impersonatedBy: string | null;
-            action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
+            action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'evalSuite.created' | 'evalSuite.updated' | 'evalSuite.deleted' | 'evalSuite.bulk_deleted' | 'evalRun.created' | 'evalRun.canceled' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
             outcome: 'success' | 'failure' | 'denied';
             resourceType: string | null;
             resourceId: string | null;
@@ -23156,7 +23156,7 @@ export type GetAuditLogResponses = {
         actorName: string | null;
         actorEmail: string | null;
         impersonatedBy: string | null;
-        action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
+        action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'evalSuite.created' | 'evalSuite.updated' | 'evalSuite.deleted' | 'evalSuite.bulk_deleted' | 'evalRun.created' | 'evalRun.canceled' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
         outcome: 'success' | 'failure' | 'denied';
         resourceType: string | null;
         resourceId: string | null;
@@ -36030,6 +36030,1773 @@ export type BulkDeleteEnvironmentsResponses = {
 
 export type BulkDeleteEnvironmentsResponse = BulkDeleteEnvironmentsResponses[keyof BulkDeleteEnvironmentsResponses];
 
+export type GetEvalSuitesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+        name?: string;
+    };
+    url: '/api/eval-suites';
+};
+
+export type GetEvalSuitesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetEvalSuitesError = GetEvalSuitesErrors[keyof GetEvalSuitesErrors];
+
+export type GetEvalSuitesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            organizationId: string;
+            name: string;
+            description: string | null;
+            createdBy: string | null;
+            createdAt: string;
+            updatedAt: string;
+            deletedAt: string | null;
+            caseCount: number;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetEvalSuitesResponse = GetEvalSuitesResponses[keyof GetEvalSuitesResponses];
+
+export type CreateEvalSuiteData = {
+    body: {
+        name: string;
+        description?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/eval-suites';
+};
+
+export type CreateEvalSuiteErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateEvalSuiteError = CreateEvalSuiteErrors[keyof CreateEvalSuiteErrors];
+
+export type CreateEvalSuiteResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        description: string | null;
+        createdBy: string | null;
+        createdAt: string;
+        updatedAt: string;
+        deletedAt: string | null;
+    };
+};
+
+export type CreateEvalSuiteResponse = CreateEvalSuiteResponses[keyof CreateEvalSuiteResponses];
+
+export type DeleteEvalSuiteData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/eval-suites/{id}';
+};
+
+export type DeleteEvalSuiteErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteEvalSuiteError = DeleteEvalSuiteErrors[keyof DeleteEvalSuiteErrors];
+
+export type DeleteEvalSuiteResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteEvalSuiteResponse = DeleteEvalSuiteResponses[keyof DeleteEvalSuiteResponses];
+
+export type GetEvalSuiteData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/eval-suites/{id}';
+};
+
+export type GetEvalSuiteErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetEvalSuiteError = GetEvalSuiteErrors[keyof GetEvalSuiteErrors];
+
+export type GetEvalSuiteResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        description: string | null;
+        createdBy: string | null;
+        createdAt: string;
+        updatedAt: string;
+        deletedAt: string | null;
+    };
+};
+
+export type GetEvalSuiteResponse = GetEvalSuiteResponses[keyof GetEvalSuiteResponses];
+
+export type UpdateEvalSuiteData = {
+    body: {
+        name?: string;
+        description?: string | null;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/eval-suites/{id}';
+};
+
+export type UpdateEvalSuiteErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateEvalSuiteError = UpdateEvalSuiteErrors[keyof UpdateEvalSuiteErrors];
+
+export type UpdateEvalSuiteResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        description: string | null;
+        createdBy: string | null;
+        createdAt: string;
+        updatedAt: string;
+        deletedAt: string | null;
+    };
+};
+
+export type UpdateEvalSuiteResponse = UpdateEvalSuiteResponses[keyof UpdateEvalSuiteResponses];
+
+export type BulkDeleteEvalSuitesData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/eval-suites/bulk';
+};
+
+export type BulkDeleteEvalSuitesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteEvalSuitesError = BulkDeleteEvalSuitesErrors[keyof BulkDeleteEvalSuitesErrors];
+
+export type BulkDeleteEvalSuitesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteEvalSuitesResponse = BulkDeleteEvalSuitesResponses[keyof BulkDeleteEvalSuitesResponses];
+
+export type GetEvalSuiteCasesData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/eval-suites/{id}/cases';
+};
+
+export type GetEvalSuiteCasesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetEvalSuiteCasesError = GetEvalSuiteCasesErrors[keyof GetEvalSuiteCasesErrors];
+
+export type GetEvalSuiteCasesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        suiteId: string;
+        name: string;
+        messages: Array<string>;
+        assertions: Array<{
+            type: 'exact_match';
+            expected: string;
+            caseSensitive: boolean;
+            trim: boolean;
+        } | {
+            type: 'contains';
+            values: Array<string>;
+            mode: 'all' | 'any';
+            caseSensitive: boolean;
+        } | {
+            type: 'not_contains';
+            values: Array<string>;
+            caseSensitive: boolean;
+        } | {
+            type: 'regex';
+            pattern: string;
+            flags?: string;
+        } | {
+            type: 'tool_called';
+            toolNames: Array<string>;
+        } | {
+            type: 'tool_not_called';
+            toolNames: Array<string>;
+        } | {
+            type: 'llm_judge';
+            criteria: string;
+            expected?: string;
+        }>;
+        position: number;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetEvalSuiteCasesResponse = GetEvalSuiteCasesResponses[keyof GetEvalSuiteCasesResponses];
+
+export type CreateEvalSuiteCaseData = {
+    body: {
+        name: string;
+        messages: Array<string>;
+        assertions: Array<{
+            type: 'exact_match';
+            expected: string;
+            caseSensitive?: boolean;
+            trim?: boolean;
+        } | {
+            type: 'contains';
+            values: Array<string>;
+            mode?: 'all' | 'any';
+            caseSensitive?: boolean;
+        } | {
+            type: 'not_contains';
+            values: Array<string>;
+            caseSensitive?: boolean;
+        } | {
+            type: 'regex';
+            pattern: string;
+            flags?: string;
+        } | {
+            type: 'tool_called';
+            toolNames: Array<string>;
+        } | {
+            type: 'tool_not_called';
+            toolNames: Array<string>;
+        } | {
+            type: 'llm_judge';
+            criteria: string;
+            expected?: string;
+        }>;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/eval-suites/{id}/cases';
+};
+
+export type CreateEvalSuiteCaseErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateEvalSuiteCaseError = CreateEvalSuiteCaseErrors[keyof CreateEvalSuiteCaseErrors];
+
+export type CreateEvalSuiteCaseResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        suiteId: string;
+        name: string;
+        messages: Array<string>;
+        assertions: Array<{
+            type: 'exact_match';
+            expected: string;
+            caseSensitive: boolean;
+            trim: boolean;
+        } | {
+            type: 'contains';
+            values: Array<string>;
+            mode: 'all' | 'any';
+            caseSensitive: boolean;
+        } | {
+            type: 'not_contains';
+            values: Array<string>;
+            caseSensitive: boolean;
+        } | {
+            type: 'regex';
+            pattern: string;
+            flags?: string;
+        } | {
+            type: 'tool_called';
+            toolNames: Array<string>;
+        } | {
+            type: 'tool_not_called';
+            toolNames: Array<string>;
+        } | {
+            type: 'llm_judge';
+            criteria: string;
+            expected?: string;
+        }>;
+        position: number;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateEvalSuiteCaseResponse = CreateEvalSuiteCaseResponses[keyof CreateEvalSuiteCaseResponses];
+
+export type BulkDeleteEvalCasesData = {
+    body: {
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/eval-suites/{id}/cases/bulk';
+};
+
+export type BulkDeleteEvalCasesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BulkDeleteEvalCasesError = BulkDeleteEvalCasesErrors[keyof BulkDeleteEvalCasesErrors];
+
+export type BulkDeleteEvalCasesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
+    };
+};
+
+export type BulkDeleteEvalCasesResponse = BulkDeleteEvalCasesResponses[keyof BulkDeleteEvalCasesResponses];
+
+export type DeleteEvalCaseData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/eval-cases/{id}';
+};
+
+export type DeleteEvalCaseErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteEvalCaseError = DeleteEvalCaseErrors[keyof DeleteEvalCaseErrors];
+
+export type DeleteEvalCaseResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteEvalCaseResponse = DeleteEvalCaseResponses[keyof DeleteEvalCaseResponses];
+
+export type UpdateEvalCaseData = {
+    body: {
+        name?: string;
+        messages?: Array<string>;
+        assertions?: Array<{
+            type: 'exact_match';
+            expected: string;
+            caseSensitive?: boolean;
+            trim?: boolean;
+        } | {
+            type: 'contains';
+            values: Array<string>;
+            mode?: 'all' | 'any';
+            caseSensitive?: boolean;
+        } | {
+            type: 'not_contains';
+            values: Array<string>;
+            caseSensitive?: boolean;
+        } | {
+            type: 'regex';
+            pattern: string;
+            flags?: string;
+        } | {
+            type: 'tool_called';
+            toolNames: Array<string>;
+        } | {
+            type: 'tool_not_called';
+            toolNames: Array<string>;
+        } | {
+            type: 'llm_judge';
+            criteria: string;
+            expected?: string;
+        }>;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/eval-cases/{id}';
+};
+
+export type UpdateEvalCaseErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateEvalCaseError = UpdateEvalCaseErrors[keyof UpdateEvalCaseErrors];
+
+export type UpdateEvalCaseResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        suiteId: string;
+        name: string;
+        messages: Array<string>;
+        assertions: Array<{
+            type: 'exact_match';
+            expected: string;
+            caseSensitive: boolean;
+            trim: boolean;
+        } | {
+            type: 'contains';
+            values: Array<string>;
+            mode: 'all' | 'any';
+            caseSensitive: boolean;
+        } | {
+            type: 'not_contains';
+            values: Array<string>;
+            caseSensitive: boolean;
+        } | {
+            type: 'regex';
+            pattern: string;
+            flags?: string;
+        } | {
+            type: 'tool_called';
+            toolNames: Array<string>;
+        } | {
+            type: 'tool_not_called';
+            toolNames: Array<string>;
+        } | {
+            type: 'llm_judge';
+            criteria: string;
+            expected?: string;
+        }>;
+        position: number;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateEvalCaseResponse = UpdateEvalCaseResponses[keyof UpdateEvalCaseResponses];
+
+export type CreateEvalRunData = {
+    body: {
+        agentIds: Array<string>;
+        name?: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/eval-suites/{id}/runs';
+};
+
+export type CreateEvalRunErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateEvalRunError = CreateEvalRunErrors[keyof CreateEvalRunErrors];
+
+export type CreateEvalRunResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        organizationId: string;
+        suiteId: string;
+        agentId: string;
+        groupId: string;
+        name: string | null;
+        createdBy: string | null;
+        status: 'pending' | 'running' | 'completed' | 'failed' | 'canceled';
+        error: string | null;
+        agentNameSnapshot: string;
+        modelSnapshot: string | null;
+        totalCases: number;
+        passedCases: number;
+        failedCases: number;
+        erroredCases: number;
+        canceledCases: number;
+        startedAt: string | null;
+        completedAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type CreateEvalRunResponse = CreateEvalRunResponses[keyof CreateEvalRunResponses];
+
+export type GetEvalRunsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+        suiteId?: string;
+        agentId?: string;
+        status?: 'pending' | 'running' | 'completed' | 'failed' | 'canceled';
+        groupId?: string;
+        search?: string;
+    };
+    url: '/api/eval-runs';
+};
+
+export type GetEvalRunsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetEvalRunsError = GetEvalRunsErrors[keyof GetEvalRunsErrors];
+
+export type GetEvalRunsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            organizationId: string;
+            suiteId: string;
+            agentId: string;
+            groupId: string;
+            name: string | null;
+            createdBy: string | null;
+            status: 'pending' | 'running' | 'completed' | 'failed' | 'canceled';
+            error: string | null;
+            agentNameSnapshot: string;
+            modelSnapshot: string | null;
+            totalCases: number;
+            passedCases: number;
+            failedCases: number;
+            erroredCases: number;
+            canceledCases: number;
+            startedAt: string | null;
+            completedAt: string | null;
+            createdAt: string;
+            updatedAt: string;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetEvalRunsResponse = GetEvalRunsResponses[keyof GetEvalRunsResponses];
+
+export type GetEvalRunData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/eval-runs/{id}';
+};
+
+export type GetEvalRunErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetEvalRunError = GetEvalRunErrors[keyof GetEvalRunErrors];
+
+export type GetEvalRunResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        suiteId: string;
+        agentId: string;
+        groupId: string;
+        name: string | null;
+        createdBy: string | null;
+        status: 'pending' | 'running' | 'completed' | 'failed' | 'canceled';
+        error: string | null;
+        agentNameSnapshot: string;
+        modelSnapshot: string | null;
+        totalCases: number;
+        passedCases: number;
+        failedCases: number;
+        erroredCases: number;
+        canceledCases: number;
+        startedAt: string | null;
+        completedAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+        billedCost: number;
+        subscriptionCost: number;
+        inputTokens: number;
+        outputTokens: number;
+        totalTokens: number;
+    };
+};
+
+export type GetEvalRunResponse = GetEvalRunResponses[keyof GetEvalRunResponses];
+
+export type GetEvalRunResultsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: {
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/eval-runs/{id}/results';
+};
+
+export type GetEvalRunResultsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetEvalRunResultsError = GetEvalRunResultsErrors[keyof GetEvalRunResultsErrors];
+
+export type GetEvalRunResultsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            runId: string;
+            caseId: string | null;
+            caseName: string;
+            messages: Array<string>;
+            assertions: Array<{
+                type: 'exact_match';
+                expected: string;
+                caseSensitive: boolean;
+                trim: boolean;
+            } | {
+                type: 'contains';
+                values: Array<string>;
+                mode: 'all' | 'any';
+                caseSensitive: boolean;
+            } | {
+                type: 'not_contains';
+                values: Array<string>;
+                caseSensitive: boolean;
+            } | {
+                type: 'regex';
+                pattern: string;
+                flags?: string;
+            } | {
+                type: 'tool_called';
+                toolNames: Array<string>;
+            } | {
+                type: 'tool_not_called';
+                toolNames: Array<string>;
+            } | {
+                type: 'llm_judge';
+                criteria: string;
+                expected?: string;
+            }>;
+            position: number;
+            status: 'pending' | 'running' | 'passed' | 'failed' | 'error' | 'canceled';
+            outputText: string | null;
+            finishReason: string | null;
+            toolCalls: Array<string> | null;
+            assertionResults: Array<{
+                type: 'exact_match' | 'contains' | 'not_contains' | 'regex' | 'tool_called' | 'tool_not_called' | 'llm_judge';
+                passed: boolean;
+                reason: string;
+            }> | null;
+            error: string | null;
+            sessionId: string | null;
+            judgeSessionId: string | null;
+            inputTokens: number | null;
+            outputTokens: number | null;
+            totalTokens: number | null;
+            durationMs: number | null;
+            startedAt: string | null;
+            completedAt: string | null;
+            createdAt: string;
+            updatedAt: string;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetEvalRunResultsResponse = GetEvalRunResultsResponses[keyof GetEvalRunResultsResponses];
+
+export type CancelEvalRunData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/eval-runs/{id}/cancel';
+};
+
+export type CancelEvalRunErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CancelEvalRunError = CancelEvalRunErrors[keyof CancelEvalRunErrors];
+
+export type CancelEvalRunResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        suiteId: string;
+        agentId: string;
+        groupId: string;
+        name: string | null;
+        createdBy: string | null;
+        status: 'pending' | 'running' | 'completed' | 'failed' | 'canceled';
+        error: string | null;
+        agentNameSnapshot: string;
+        modelSnapshot: string | null;
+        totalCases: number;
+        passedCases: number;
+        failedCases: number;
+        erroredCases: number;
+        canceledCases: number;
+        startedAt: string | null;
+        completedAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CancelEvalRunResponse = CancelEvalRunResponses[keyof CancelEvalRunResponses];
+
 export type GetExternalMcpSkillsData = {
     body?: never;
     path?: never;
@@ -40637,7 +42404,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -40736,7 +42503,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -40942,7 +42709,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -41062,7 +42829,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -41182,7 +42949,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -41302,7 +43069,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -41422,7 +43189,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -41521,7 +43288,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -41620,7 +43387,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -42160,7 +43927,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -42733,7 +44500,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -42832,7 +44599,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -42931,7 +44698,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -43030,7 +44797,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -43129,7 +44896,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -43228,7 +44995,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -43327,7 +45094,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -43424,7 +45191,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -43521,7 +45288,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -43618,7 +45385,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -43717,7 +45484,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -43816,7 +45583,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -43915,7 +45682,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -44728,7 +46495,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -45541,7 +47308,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -46354,7 +48121,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -46453,7 +48220,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -46620,7 +48387,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -46826,7 +48593,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -47032,7 +48799,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -47254,7 +49021,7 @@ export type GetInteractionSessionsData = {
         /**
          * Filter by interaction source
          */
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
         /**
          * Filter by client app (queries external_agent_id; e.g. claude)
          */
@@ -47350,8 +49117,8 @@ export type GetInteractionSessionsResponses = {
         data: Array<{
             sessionId: string | null;
             sessionSource: string | null;
-            source: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
-            sources: Array<'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement'>;
+            source: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
+            sources: Array<'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge'>;
             interactionId: string | null;
             requestCount: number;
             totalInputTokens: number;
@@ -47662,7 +49429,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -47761,7 +49528,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -47967,7 +49734,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -48087,7 +49854,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -48207,7 +49974,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -48327,7 +50094,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -48447,7 +50214,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -48546,7 +50313,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -48645,7 +50412,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -49185,7 +50952,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -49758,7 +51525,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -49857,7 +51624,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -49956,7 +51723,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -50055,7 +51822,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -50154,7 +51921,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -50253,7 +52020,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -50352,7 +52119,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -50449,7 +52216,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -50546,7 +52313,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -50643,7 +52410,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -50742,7 +52509,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -50841,7 +52608,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -50940,7 +52707,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -51753,7 +53520,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -52566,7 +54333,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -53379,7 +55146,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -53478,7 +55245,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -53645,7 +55412,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -53851,7 +55618,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -54057,7 +55824,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement' | 'eval:run' | 'eval:judge';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;

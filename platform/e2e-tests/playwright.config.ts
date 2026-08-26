@@ -60,6 +60,7 @@ const uiTestMatch = [
   "**/context-window.spec.ts",
   "**/credentials-with-vault.ee.spec.ts",
   "**/dynamic-credentials.spec.ts",
+  "**/evals.spec.ts",
   "**/identity-providers.ee.spec.ts",
   "**/invitation.spec.ts",
   "**/llm-logs-slack-source.spec.ts",

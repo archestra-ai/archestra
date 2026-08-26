@@ -550,12 +550,15 @@ export function ChannelsSection({
                       />
                     </Button>
                   </TableHead>
+                  {/* `table-fixed` splits the leftover width evenly, so the
+                      narrow columns are pinned to keep it for the two that
+                      carry long names. */}
                   <TableHead>Default Agent</TableHead>
-                  <TableHead>Instructions</TableHead>
+                  <TableHead className="w-[110px]">Instructions</TableHead>
                   {providerConfig.supportsAnswerAll && (
-                    <TableHead>Replies to</TableHead>
+                    <TableHead className="w-[150px]">Replies to</TableHead>
                   )}
-                  <TableHead>Status</TableHead>
+                  <TableHead className="w-[110px]">Status</TableHead>
                   <TableHead className="w-[80px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -1144,7 +1147,10 @@ function AgentPicker({
           <Button
             variant="outline"
             size="sm"
-            className="h-7 gap-1.5 text-xs min-w-[180px]"
+            // max-w-full so a long agent name truncates inside its cell
+            // instead of widening the button over the next column — the table
+            // is `table-fixed`, so the cell will not grow to fit it.
+            className="h-7 gap-1.5 text-xs min-w-[180px] max-w-full"
             disabled={isUpdating}
           >
             <Bot className="h-3.5 w-3.5 shrink-0" />

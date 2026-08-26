@@ -3,7 +3,7 @@ title: MCP Apps
 category: Apps
 order: 1
 description: User-authored MCP Apps — sandboxed HTML interfaces with their own data store and tools
-lastUpdated: 2026-08-25
+lastUpdated: 2026-08-26
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -37,6 +37,14 @@ Disabling an app (in App settings) pulls it back without deleting it. It leaves 
 The `/apps` gallery lists everything the viewer can reach in two sections: apps you own, and the interactive apps exposed by your installed external [MCP servers](./platform-mcp). Each `ui://` resource is its own card, titled by the server's display name (*Task Tracker*); when one server exposes several UIs, the title carries the tool — *Task Tracker / show_board*. A card opens the app in a new chat. That chat stays out of your conversation list until you write into it. An owned card carries **Open in new tab** and **Delete** in its overflow menu; an external card carries **Open in new tab** (the standalone runtime) and a link to the backing **MCP server** page (where the server — and its uninstall — lives).
 
 While the feature is enabled, newly created agents get the full app tool set assigned by default — the staged flow (`refine_app`, `scaffold_app`, `read_app`, `edit_app`, `validate_app`, `publish_app`) plus the supporting `preview_app_tool`, `get_app_diagnostics`, `render_app`, `list_apps`, and `delete_app` — so "build me an app" works in chat without per-agent setup. The tools can be unassigned per agent like any other; agents created before the feature was enabled need them assigned manually.
+
+## Fullscreen
+
+An app can fill the page instead of sitting next to the conversation. The control is on every surface that frames an app — the hover bar over an inline app, and the top bar of the right panel. Press it again, or Escape, to go back.
+
+Fullscreen covers the page, not the whole window. The sidebar stays where it is; collapse it yourself if you want the extra width.
+
+Set **Opens in** to *Fullscreen* in App settings and the app arrives that way every time — for a dashboard you open to read, not to talk to. It is a starting point, not a lock: leaving fullscreen keeps you out of it for the rest of that view.
 
 ## Locking an App
 

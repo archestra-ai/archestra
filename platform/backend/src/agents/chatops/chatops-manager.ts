@@ -796,7 +796,20 @@ export class ChatOpsManager {
     // the "AgentName >" prefix is stripped from what the LLM sees
     const providerLabel = CHATOPS_PROVIDER_LABELS[provider.providerId];
     const threadRootTs = message.threadId ?? message.messageId;
-    let systemPrefix = `(${providerLabel} conversation, thread id: ${threadRootTs})`;
+    // The channel's NAME, not just its id. Agent instructions are routinely
+    // scoped by name — "in #task-feed, hand the task to the Crab Env
+    // subagent" — and the framing used to carry only the opaque channel id, so
+    // a rule like that was unverifiable: the model had to guess which channel
+    // it was standing in. It guesses wrong, and confidently, telling people in
+    // #task-feed to take their request to #task-feed. The binding already
+    // carries the name (it is what the channels table renders); it just never
+    // reached the model.
+    const channelLabel = binding.isDm
+      ? null
+      : (binding.channelName?.trim() ?? null) || null;
+    let systemPrefix = channelLabel
+      ? `(${providerLabel} conversation in "${channelLabel}", thread id: ${threadRootTs})`
+      : `(${providerLabel} conversation, thread id: ${threadRootTs})`;
     if (provider.providerId === "slack") {
       // Link to the message that actually triggered this run rather than the
       // thread root: Slack builds a reply's permalink with ?thread_ts=<root>,
@@ -814,6 +827,13 @@ export class ChatOpsManager {
       // then anchored to the thread opener instead of the triggering message.
       const contextLines = [
         `Slack conversation context:`,
+        // Name first: it is the one line here a human-written instruction is
+        // likely to key on, and the only one the model cannot derive.
+        ...(channelLabel
+          ? [`- Channel: #${channelLabel}`]
+          : binding.isDm
+            ? [`- Channel: a direct message`]
+            : []),
         `- Channel ID: ${message.channelId}`,
       ];
       if (message.messageId) {

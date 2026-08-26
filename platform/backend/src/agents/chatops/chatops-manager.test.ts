@@ -4129,6 +4129,70 @@ describe("ChatOpsManager Slack conversation context", () => {
     };
   }
 
+  test("names the channel, so an instruction scoped to one can be checked", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    // Agent instructions are routinely written as "in #some-channel, do X".
+    // With only the opaque channel id in the framing, that precondition is
+    // unverifiable and the model guesses — and it guesses wrong confidently,
+    // refusing the channel's own rule on the grounds that it must be somewhere
+    // else. The binding already knows the name; it just has to be said.
+    const executorSpy = vi
+      .spyOn(a2aExecutor, "executeA2AMessage")
+      .mockResolvedValue({
+        text: "Done",
+        messageId: "msg-ctx-name",
+        finishReason: "stop",
+        responseUiMessage: {
+          id: "msg-ctx-name",
+          role: "assistant",
+          parts: [{ type: "text", text: "Done" }],
+        },
+      });
+
+    const user = await makeUser({ email: "slack-ctx-name@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "slack",
+      channelId: "C_CTX_NAME",
+      workspaceId: "T_CTX",
+      channelName: "task-feed",
+      agentId: agent.id,
+    });
+
+    await new ChatOpsManager().processMessage({
+      message: slackMessage({
+        messageId: "1786399123.900100",
+        channelId: "C_CTX_NAME",
+        metadata: {
+          eventType: "message",
+          channelType: "channel",
+          conversationType: "channel",
+        },
+      }),
+      provider: createSlackProvider({
+        getUserEmail: async () => "slack-ctx-name@example.com",
+      }),
+    });
+
+    const sent = executorSpy.mock.calls[0][0].message;
+    expect(sent).toContain("#task-feed");
+    // The id stays — tools are handed a channel+ts pair and need it.
+    expect(sent).toContain("C_CTX_NAME");
+  });
+
   test("hands the model the triggering message ts, not only the thread root", async ({
     makeUser,
     makeOrganization,

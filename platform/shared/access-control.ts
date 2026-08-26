@@ -433,6 +433,12 @@ export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
  */
 export const permissionDescriptions: Record<string, string> = {
   // Agents
+  "runner:read": "View and list runners and their session timelines",
+  "runner:create": "Start runners — long-running agent sessions in a container",
+  "runner:update": "Steer and stop runners you started",
+  "runner:delete": "Delete runners and their session history",
+  "runner:admin":
+    "Steer, stop and delete any runner in the organization, including sessions started by other people",
   "agent:read": "View and list agents",
   "agent:create": "Create new agents",
   "agent:update": "Modify agent configuration and settings",

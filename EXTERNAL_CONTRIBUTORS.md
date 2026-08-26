@@ -741,3 +741,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @matthewgregor
 - @rohanmalhotracodes
 - @fatih-hevesli
+- @bferanmi806-sketch

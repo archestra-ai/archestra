@@ -45,10 +45,10 @@ import MemberModel from "@/models/member";
 import OrganizationRoleModel from "@/models/organization-role";
 import SessionModel from "@/models/session";
 import SkillModel from "@/models/skill";
-import SkillMarketplaceCredentialModel from "@/models/skill-marketplace-credential";
 import UserModel from "@/models/user";
 import { reportAuditWriteFailure } from "@/observability/metrics/audit";
 import { purgePersonalAppsForUser } from "@/services/apps/app-mcp-backing";
+import { cleanupAfterMembershipRemoval } from "@/services/member-removal";
 import type { AuditEventName } from "@/types/audit-log";
 import { devAutoLoginPlugin } from "./dev-auto-login";
 // SPDX-SnippetBegin
@@ -2346,52 +2346,6 @@ async function membershipStillExists(params: {
     (await MemberModel.getByUserId(params.userId, params.organizationId)) !=
     null
   );
-}
-
-/**
- * Resource cleanup after a membership was removed (`remove-member` or
- * `leave`) — the removal itself already succeeded, so everything here is
- * best-effort. Personal apps go first (their backing catalog and launch tool
- * come down with them), then the remaining personal installs for the
- * organization's catalogs. When that was the user's LAST membership, the
- * account itself is unreachable residue — no organization can ever list or
- * restore it — so it is deleted outright, which also sweeps any cross-org
- * leftovers (installs on org-less catalogs, personal gateways/proxies) and
- * cascades sessions and accounts.
- */
-async function cleanupAfterMembershipRemoval(params: {
-  userId: string;
-  organizationId: string;
-}): Promise<void> {
-  const { userId, organizationId } = params;
-  try {
-    await purgePersonalAppsForUser({ userId, organizationId });
-    await McpServerModel.purgePersonalServersForUserInOrganization(
-      userId,
-      organizationId,
-    );
-    // Marketplace credentials outlive a membership otherwise: their FKs only
-    // cascade when the user or the organization is deleted, and a removed
-    // member is neither.
-    await SkillMarketplaceCredentialModel.deleteForMember({
-      userId,
-      organizationId,
-    });
-    // Known micro-race, accepted: a membership created between this check and
-    // the delete would be cascaded away. The window is a few milliseconds, the
-    // failure mode is bounded and recoverable (re-invite the user), and
-    // closing it would force the transaction-scoped purge variant, which
-    // cannot tear down K8s deployments or Vault-backed secrets — a worse
-    // everyday trade than the race.
-    if (!(await MemberModel.hasAnyMembership(userId))) {
-      await UserModel.delete(userId);
-    }
-  } catch (err) {
-    logger.error(
-      { err, userId, organizationId },
-      "[auth] failed to clean up personal resources after membership removal",
-    );
-  }
 }
 
 async function cleanupRejectedSsoLogin(params: {

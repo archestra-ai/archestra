@@ -162,6 +162,7 @@ class LlmProviderApiKeyModel {
     filters?: {
       search?: string;
       provider?: SupportedProvider;
+      ids?: string[];
     },
     options?: { includeSubscriptionInfo?: boolean },
   ): Promise<LlmProviderApiKeyWithScopeInfo[]> {
@@ -228,6 +229,11 @@ class LlmProviderApiKeyModel {
       conditions.push(
         eq(schema.llmProviderApiKeysTable.provider, filters.provider),
       );
+    }
+
+    if (filters?.ids) {
+      if (filters.ids.length === 0) return [];
+      conditions.push(inArray(schema.llmProviderApiKeysTable.id, filters.ids));
     }
 
     // Query with team, user, and secrets table joins.

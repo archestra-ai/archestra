@@ -1,5 +1,14 @@
 import type { AnyRoleName } from "@archestra/shared";
-import { and, count, eq, inArray, or } from "drizzle-orm";
+import {
+  and,
+  count,
+  eq,
+  exists,
+  inArray,
+  notExists,
+  or,
+  sql,
+} from "drizzle-orm";
 import { syncSystemRoleWithOrgPermissions } from "@/auth/system-role-sync";
 import db, { schema, type Transaction } from "@/database";
 import { createPaginatedResult } from "@/database/utils/pagination";
@@ -425,6 +434,61 @@ class MemberModel {
       "MemberModel.deleteByMemberOrUserId: completed",
     );
     return deleted[0];
+  }
+
+  static async findByIdInOrganization(
+    memberId: string,
+    organizationId: string,
+  ) {
+    const [member] = await db
+      .select()
+      .from(schema.membersTable)
+      .where(
+        and(
+          eq(schema.membersTable.id, memberId),
+          eq(schema.membersTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+    return member;
+  }
+
+  static async deleteByIdInOrganization(
+    memberId: string,
+    organizationId: string,
+  ) {
+    const [deleted] = await db
+      .delete(schema.membersTable)
+      .where(
+        and(
+          eq(schema.membersTable.id, memberId),
+          eq(schema.membersTable.organizationId, organizationId),
+        ),
+      )
+      .returning();
+    return deleted;
+  }
+
+  /** Deletes only while the member still has the expected signup state. */
+  static async deleteClassifiedByUserInOrganization(params: {
+    userId: string;
+    organizationId: string;
+    accepted: boolean;
+  }) {
+    const accountQuery = db
+      .select({ one: sql`1` })
+      .from(schema.accountsTable)
+      .where(eq(schema.accountsTable.userId, schema.membersTable.userId));
+    return db
+      .delete(schema.membersTable)
+      .where(
+        and(
+          eq(schema.membersTable.userId, params.userId),
+          eq(schema.membersTable.organizationId, params.organizationId),
+          params.accepted ? exists(accountQuery) : notExists(accountQuery),
+        ),
+      )
+      .returning();
   }
   /**
    * Set the default agent for a member

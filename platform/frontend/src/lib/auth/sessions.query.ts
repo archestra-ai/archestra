@@ -1,7 +1,8 @@
+import { archestraApiSdk } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { authQueryKeys } from "@/lib/auth/auth.query";
-import { runBulkAction } from "@/lib/bulk-action";
+import { toBulkOutcome } from "@/lib/bulk-action";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { throwOnApiError } from "@/lib/utils";
 
@@ -69,9 +70,8 @@ export function useRevokeSessionMutation() {
 }
 
 /**
- * Revokes a selection of sessions. Fans out over the single-session route,
- * bypassing `useRevokeSessionMutation` so a batch reports once rather than
- * once per session.
+ * Revokes selected sessions in one bounded backend request. The current session
+ * remains excluded in the UI and is also rejected per item by the endpoint.
  *
  * The current session is never part of a selection — signing yourself out is
  * the row's own action, and doing it inside a batch would kill the request
@@ -81,15 +81,13 @@ export function useBulkRevokeSessions() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (sessions: readonly { token: string; label: string }[]) =>
-      runBulkAction({
-        items: sessions,
-        describe: (session) => session.label,
-        run: async ({ token }) => {
-          const { error } = await authClient.revokeSession({ token });
-          if (error) throw new Error(error.message ?? "Failed to revoke");
-        },
-      }),
+    mutationFn: async (sessions: readonly { id: string }[]) => {
+      const { data, error } = await archestraApiSdk.bulkRevokeSessions({
+        body: { ids: sessions.map((session) => session.id) },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return toBulkOutcome(data ?? { succeeded: [], failed: [] });
+    },
     onSettled: async () => {
       await queryClient.invalidateQueries({
         queryKey: authQueryKeys.sessions(),

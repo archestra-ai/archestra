@@ -10,10 +10,10 @@ import type { UserSelectOption } from "@/components/user-select-option";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
-import { throwOnApiError } from "@/lib/utils";
-import { useActiveOrganization } from "./organization.query";
+import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
+import { organizationKeys, useActiveOrganization } from "./organization.query";
 
-const { getMembers } = archestraApiSdk;
+const { bulkDeleteMembers, getMembers } = archestraApiSdk;
 
 /**
  * Query keys for member/invitation queries
@@ -35,6 +35,10 @@ export const invitationKeys = {
 type MembersQuery = NonNullable<archestraApiTypes.GetMembersData["query"]>;
 type MembersResponse = archestraApiTypes.GetMembersResponses["200"];
 export type Member = MembersResponse["data"][number];
+export type MemberBulkTarget =
+  archestraApiTypes.BulkDeleteMembersData["body"]["targets"][number];
+export type MemberBulkOutcome =
+  archestraApiTypes.BulkDeleteMembersResponses["200"];
 
 type InvitationsQuery = NonNullable<{ limit: number; offset: number }>;
 export type Invitation = {
@@ -258,7 +262,7 @@ export function useUpdateMemberRole() {
       return response.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: memberKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: memberKeys.all });
       toast.success("Member role updated");
     },
     onError: (error: Error) => {
@@ -288,6 +292,27 @@ export function useRemoveMember() {
     },
     onError: (error: Error) => {
       toast.error("Failed to remove member", { description: error.message });
+    },
+  });
+}
+
+/** Removes accepted and pending-signup members in one typed backend batch. */
+export function useBulkDeleteMembers() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (targets: MemberBulkTarget[]) => {
+      const response = await bulkDeleteMembers({ body: { targets } });
+      if (response.error) {
+        handleApiError(response.error);
+        throw toApiError(response.error);
+      }
+      return response.data as MemberBulkOutcome;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: memberKeys.lists() });
+      queryClient.invalidateQueries({
+        queryKey: organizationKeys.memberSignupStatus(),
+      });
     },
   });
 }

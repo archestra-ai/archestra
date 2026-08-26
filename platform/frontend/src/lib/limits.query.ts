@@ -1,10 +1,17 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { toBulkOutcome } from "@/lib/bulk-action";
 import { handleApiError, throwOnApiError } from "@/lib/utils";
 
-const { getLimits, createLimit, getLimit, updateLimit, deleteLimit } =
-  archestraApiSdk;
+const {
+  getLimits,
+  createLimit,
+  getLimit,
+  updateLimit,
+  deleteLimit,
+  bulkDeleteLimits,
+} = archestraApiSdk;
 
 type UpdateLimitParams = archestraApiTypes.UpdateLimitData["path"] &
   Partial<archestraApiTypes.UpdateLimitData["body"]>;
@@ -107,5 +114,21 @@ export function useDeleteLimit() {
       queryClient.removeQueries({ queryKey: limitKeys.detail(variables.id) });
       toast.success("Limit deleted successfully");
     },
+  });
+}
+
+/** Deletes selected limits in one capped request and preserves partial outcomes. */
+export function useBulkDeleteLimits() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (limits: readonly { id: string }[]) => {
+      const { data, error } = await bulkDeleteLimits({
+        body: { ids: limits.map((limit) => limit.id) },
+      });
+      throwOnApiError(error);
+      return toBulkOutcome(data ?? { succeeded: [], failed: [] });
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: limitKeys.all }),
   });
 }

@@ -91,6 +91,9 @@ export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
 
     const cfg = getEffectiveCfg(request);
     const outcome = deriveOutcome(reply.statusCode);
+    if (cfg?.onlyWhenChanged && (outcome !== "success" || request.auditSkip)) {
+      return;
+    }
     const action = resolveActionName(cfg, request.method);
 
     const id =
@@ -424,6 +427,10 @@ async function resolveAuditedResourceId(
 ): Promise<string | null> {
   if (cfg.resourceIdSource === "organizationContext") {
     return request.organizationId ?? null;
+  }
+
+  if (cfg.resourceIdSource === "currentUser") {
+    return request.user?.id ?? null;
   }
 
   if (cfg.resourceIdSource === "currentUserPersonalToken") {

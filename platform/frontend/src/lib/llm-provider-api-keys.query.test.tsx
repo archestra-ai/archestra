@@ -5,9 +5,11 @@ import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 
-const { mockGetLlmProviderApiKeys } = vi.hoisted(() => ({
-  mockGetLlmProviderApiKeys: vi.fn(),
-}));
+const { mockBulkDeleteLlmProviderApiKeys, mockGetLlmProviderApiKeys } =
+  vi.hoisted(() => ({
+    mockBulkDeleteLlmProviderApiKeys: vi.fn(),
+    mockGetLlmProviderApiKeys: vi.fn(),
+  }));
 
 vi.mock("@archestra/shared", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@archestra/shared")>();
@@ -15,6 +17,8 @@ vi.mock("@archestra/shared", async (importOriginal) => {
     ...actual,
     archestraApiSdk: {
       ...actual.archestraApiSdk,
+      bulkDeleteLlmProviderApiKeys: (...args: unknown[]) =>
+        mockBulkDeleteLlmProviderApiKeys(...args),
       getLlmProviderApiKeys: (...args: unknown[]) =>
         mockGetLlmProviderApiKeys(...args),
     },
@@ -26,6 +30,7 @@ vi.mock("sonner");
 vi.mock("@/lib/auth/auth.query");
 
 import {
+  useBulkDeleteLlmProviderApiKeys,
   useHasAnyApiKey,
   useLlmProviderApiKeys,
 } from "./llm-provider-api-keys.query";
@@ -126,5 +131,31 @@ describe("useHasAnyApiKey", () => {
 
     await waitFor(() => expect(result.current.hasAnyApiKey).toBe(true));
     expect(result.current.isLoadError).toBe(false);
+  });
+});
+
+describe("useBulkDeleteLlmProviderApiKeys", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("sends selected ids through the generated bulk SDK method", async () => {
+    mockBulkDeleteLlmProviderApiKeys.mockResolvedValue({
+      data: {
+        succeeded: [{ id: "key-1", name: "First" }],
+        failed: [],
+      },
+    });
+
+    const { result } = renderHook(() => useBulkDeleteLlmProviderApiKeys(), {
+      wrapper,
+    });
+
+    await expect(
+      result.current.mutateAsync([{ id: "key-1" }]),
+    ).resolves.toEqual({ succeeded: ["First"], failed: [] });
+    expect(mockBulkDeleteLlmProviderApiKeys).toHaveBeenCalledWith({
+      body: { ids: ["key-1"] },
+    });
   });
 });

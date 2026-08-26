@@ -37,6 +37,8 @@ import { WithPermissions } from "@/components/roles/with-permissions";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { BulkActions } from "@/components/ui/bulk-actions-bar";
+import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import {
@@ -64,12 +66,15 @@ import {
 import { UserSearchableSelect } from "@/components/user-searchable-select";
 import { VirtualKeySearchableSelect } from "@/components/virtual-key-searchable-select";
 import { useProfiles } from "@/lib/agent.query";
+import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useDefaultUserLimits } from "@/lib/default-user-limit.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useEnvironments } from "@/lib/environment.query";
+import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
+  useBulkDeleteLimits,
   useCreateLimit,
   useDeleteLimit,
   useLimits,
@@ -87,6 +92,8 @@ import { useAllVirtualApiKeys } from "@/lib/virtual-api-keys.query";
 type LimitData = archestraApiTypes.GetLimitsResponses["200"][number];
 type LimitEntityType = archestraApiTypes.CreateLimitData["body"]["entityType"];
 type UsageStatus = "safe" | "warning" | "danger";
+
+const canBulkDeleteLimit = (limit: LimitData) => limit.entityType !== "user";
 
 // llm_proxy is a type of agent
 // It is more convenient and clear to handle it as a separate entity on the frontend
@@ -213,12 +220,14 @@ export default function LimitsPage() {
   const createLimit = useCreateLimit();
   const updateLimit = useUpdateLimit();
   const deleteLimit = useDeleteLimit();
+  const bulkDeleteLimits = useBulkDeleteLimits();
 
   const { searchParams, updateQueryParams } = useDataTableQueryParams();
   const statusFilter = searchParams.get("status") || "all";
   const appliedToFilter = searchParams.get("appliedTo") || "all";
   const modelFilter = searchParams.get("model") || "all";
   const [limitToDelete, setLimitToDelete] = useState<LimitData | null>(null);
+  const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [formState, setFormState] =
     useState<LimitFormState>(DEFAULT_FORM_STATE);
@@ -452,8 +461,34 @@ export default function LimitsPage() {
     llmProxyId,
   ]);
 
+  const {
+    rowSelection,
+    setRowSelection,
+    onPageRowIdsChange,
+    clearSelection,
+    selected: selectedLimits,
+    selectAllMatching,
+  } = useBulkSelection({
+    rows: filteredLimits,
+    getId: (limit) => limit.id,
+    canSelect: canBulkDeleteLimit,
+    filterSignature: JSON.stringify({
+      statusFilter,
+      appliedToFilter,
+      modelFilter,
+    }),
+    matchDescription: "match the current filters",
+  });
+
   const columns = useMemo<ColumnDef<LimitData>[]>(
     () => [
+      createSelectColumn<LimitData>({
+        rowLabel: (limit) => `Select ${getEntityLabel(limit)} limit`,
+        allLabel: "Select all limits on this page",
+        canSelect: canBulkDeleteLimit,
+        disabledReason: () =>
+          "User limits must be deleted individually because they can span organizations",
+      }),
       {
         accessorKey: "status",
         header: "Status",
@@ -784,9 +819,31 @@ export default function LimitsPage() {
         isPending={(isPending || isFetching) && limits.length === 0}
         loadingFallback={<LoadingState variant="page" />}
       >
+        <BulkActions
+          count={selectedLimits.length}
+          noun="limit"
+          onClear={clearSelection}
+          busy={bulkDeleteLimits.isPending}
+          selectAllMatching={selectAllMatching}
+        >
+          <PermissionButton
+            permissions={{ llmLimit: ["delete"] }}
+            variant="destructive"
+            size="sm"
+            onClick={() => setIsBulkDeleteDialogOpen(true)}
+          >
+            <Trash2 className="h-4 w-4" />
+            <span>Delete</span>
+          </PermissionButton>
+        </BulkActions>
         <DataTable
           columns={columns}
           data={filteredLimits}
+          getRowId={(limit) => limit.id}
+          rowSelection={rowSelection}
+          onRowSelectionChange={setRowSelection}
+          onPageRowIdsChange={onPageRowIdsChange}
+          hideSelectedCount
           emptyIcon={CircleDollarSign}
           emptyMessage="No limits configured"
           hasActiveFilters={hasActiveFilters}
@@ -1063,6 +1120,31 @@ export default function LimitsPage() {
         isPending={deleteLimit.isPending}
         onConfirm={handleDelete}
         confirmLabel="Delete"
+        pendingLabel="Deleting..."
+      />
+      <DeleteConfirmDialog
+        open={isBulkDeleteDialogOpen}
+        onOpenChange={setIsBulkDeleteDialogOpen}
+        title="Delete limits"
+        description={`Delete ${selectedLimits.length} ${
+          selectedLimits.length === 1 ? "limit" : "limits"
+        }? This action cannot be undone.`}
+        isPending={bulkDeleteLimits.isPending}
+        onConfirm={() => {
+          bulkDeleteLimits.mutate(selectedLimits, {
+            onSuccess: (outcome) => {
+              reportBulkOutcome({
+                outcome,
+                verb: "Deleted",
+                failureVerb: "delete",
+                noun: "limit",
+              });
+              setIsBulkDeleteDialogOpen(false);
+              if (outcome.failed.length === 0) clearSelection();
+            },
+          });
+        }}
+        confirmLabel="Delete limits"
         pendingLabel="Deleting..."
       />
     </div>

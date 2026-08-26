@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { UAParser } from "ua-parser-js";
 import { QueryLoadError } from "@/components/query-load-error";
 import { TableRowActions } from "@/components/table-row-actions";
-import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -73,10 +73,7 @@ export function SessionsCard() {
     matchDescription: "your account is signed in to",
   });
 
-  const selectedSessions = selected.map((row) => ({
-    token: row.token,
-    label: row.ipAddress ?? describeUserAgent(row.userAgent).label,
-  }));
+  const selectedSessions = selected.map((row) => ({ id: row.id }));
 
   const columns: ColumnDef<AccountSession>[] = [
     createSelectColumn<AccountSession>({
@@ -205,13 +202,12 @@ export function SessionsCard() {
         />
       ) : (
         <>
-          <BulkActionsBar
+          <BulkActions
             count={selectedSessions.length}
             noun="session"
             onClear={clearSelection}
             selectAllMatching={selectAllMatching}
             busy={bulkRevoke.isPending}
-            className="mb-3"
           >
             <Button
               variant="destructive"
@@ -232,7 +228,7 @@ export function SessionsCard() {
             >
               <span>Revoke</span>
             </Button>
-          </BulkActionsBar>
+          </BulkActions>
 
           <DataTable
             columns={columns}

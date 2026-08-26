@@ -1,5 +1,6 @@
 import { providerDisplayNames } from "@archestra/shared";
 import { vi } from "vitest";
+import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
 import OrganizationModel from "@/models/organization";
@@ -519,6 +520,25 @@ describe("LLM Provider API Keys CRUD", () => {
       url: `/api/llm-provider-api-keys/${createdKey.id}`,
     });
     expect(getResponse.statusCode).toBe(404);
+  });
+
+  test("refuses to delete a system API key", async () => {
+    const systemKey = await LlmProviderApiKeyModel.createSystemKey({
+      organizationId,
+      name: "System Gemini",
+      provider: "gemini",
+    });
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/api/llm-provider-api-keys/${systemKey.id}`,
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toBe(
+      "System API keys cannot be deleted",
+    );
+    expect(await LlmProviderApiKeyModel.findById(systemKey.id)).not.toBeNull();
   });
 
   test("refuses to delete a key backing the organization's OCR configuration", async () => {

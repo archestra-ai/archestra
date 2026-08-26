@@ -1097,9 +1097,6 @@ export default function StatisticsPage() {
       <Card>
         <CardHeader>
           <CardTitle>LLM Proxy</CardTitle>
-          <CardDescription>
-            Requests served by your organization's LLM Proxy.
-          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
@@ -1128,7 +1125,6 @@ export default function StatisticsPage() {
                   tickFormatter={(value) => `$${value}`}
                 />
                 <ChartTooltip content={CostChartTooltip} />
-                <ChartLegend content={<ChartLegendContent />} />
                 <Line
                   dataKey="cost"
                   type="monotone"

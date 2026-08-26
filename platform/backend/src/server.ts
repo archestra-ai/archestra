@@ -511,6 +511,11 @@ export const createFastifyInstance = () =>
     disableRequestLogging: true,
     trustProxy: config.api.trustProxy,
     bodyLimit: config.api.bodyLimit,
+    // Held above the keep-alive timeout of any proxy or load balancer in front
+    // of us, so the proxy never reuses a socket we are closing at that instant
+    // (which reaches the client as an intermittent dropped request). See
+    // parseKeepAliveTimeoutMs in config.ts.
+    keepAliveTimeout: config.api.keepAliveTimeoutMs,
     // Some path params are opaque, base64url-encoded handles longer than
     // Fastify's 100-char default (e.g. skill-sandbox artifact `obj_` refs that
     // encode a scope + object key). Without this, such a request fails to match

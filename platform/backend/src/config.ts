@@ -419,9 +419,58 @@ export const parseBodyLimit = (
   return defaultValue;
 };
 
+/**
+ * Parse the idle keep-alive timeout (ms) an HTTP server holds a connection open
+ * for after finishing a response.
+ *
+ * This is a "must be longer than whatever proxies you" setting, not a tuning
+ * knob: when a reverse proxy or cloud load balancer pools connections to the
+ * origin, and the origin closes an idle one first, the proxy can dispatch a
+ * request onto a socket that is being torn down at that instant. That race
+ * surfaces to the end client as an intermittent dropped connection or 502 on a
+ * request that would otherwise have succeeded — rare enough to look like a flaky
+ * network, frequent enough to interrupt long agent sessions.
+ *
+ * Only a positive integer is honoured. Zero cannot express "never close" here
+ * (Fastify coerces a falsy `keepAliveTimeout` back to its own default, and the
+ * Next.js standalone server likewise ignores `0`), so any non-positive or
+ * unparsable value falls back to the default rather than silently producing a
+ * different timeout than the operator asked for.
+ *
+ * @public — exported for testability
+ */
+export const parseKeepAliveTimeoutMs = (
+  envValue: string | undefined,
+  defaultValue: number,
+): number => {
+  if (!envValue) {
+    return defaultValue;
+  }
+  const parsed = Number.parseInt(envValue.trim(), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return defaultValue;
+  }
+  return parsed;
+};
+
 // 70MB body limit: accommodates the 50MB user-facing file cap with
 // headroom for base64 encoding overhead (~33%) on chat attachment uploads.
 const DEFAULT_BODY_LIMIT = 70 * 1024 * 1024;
+
+/**
+ * Idle keep-alive window for every HTTP server we run (the Fastify API and, via
+ * `KEEP_ALIVE_TIMEOUT`, the Next.js server).
+ *
+ * Node's own default is 5s and Fastify's is 72s — both below the keep-alive
+ * timeout used by common load balancers, which is what makes the reuse race
+ * described on {@link parseKeepAliveTimeoutMs} reachable. The Google Cloud
+ * external Application Load Balancer is the strictest of the usual suspects: it
+ * holds backend connections for a fixed 600s and does not let you lower that, so
+ * the origin has to outlast it. 620s clears 600s with enough margin to absorb
+ * scheduling jitter, and comfortably clears the shorter windows used by AWS ALB
+ * (60s) and nginx (75s).
+ */
+const DEFAULT_KEEP_ALIVE_TIMEOUT_MS = 620_000;
 
 const DEFAULT_DATABASE_POOL_MAX = 50;
 const MAX_DATABASE_POOL_MAX = 500;
@@ -2038,6 +2087,18 @@ const config = {
       DEFAULT_BODY_LIMIT,
     ),
     trustProxy: parseTrustProxy(process.env.ARCHESTRA_TRUST_PROXY),
+    /**
+     * How long an idle keep-alive connection is held open before the server
+     * closes it. Must stay above the keep-alive timeout of anything proxying
+     * this server — see {@link parseKeepAliveTimeoutMs}. Configurable via
+     * ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS, which also drives the Next.js
+     * server (mapped to KEEP_ALIVE_TIMEOUT in the container's supervisord
+     * config) so both processes share one setting.
+     */
+    keepAliveTimeoutMs: parseKeepAliveTimeoutMs(
+      process.env.ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS,
+      DEFAULT_KEEP_ALIVE_TIMEOUT_MS,
+    ),
     /**
      * When set, a dedicated Fastify listener additionally serves the
      * publicly-exposable endpoints (currently the MS Teams incoming webhook)

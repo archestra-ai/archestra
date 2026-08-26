@@ -61,6 +61,7 @@ import config, {
   parseHelmReleaseName,
   // SPDX-SnippetEnd
   parseK8sResourceQuantity,
+  parseKeepAliveTimeoutMs,
   parseLogFormat,
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -677,6 +678,45 @@ describe("parseBodyLimit", () => {
     test("should return default value for space between number and unit", () => {
       expect(parseBodyLimit("50 MB", DEFAULT_VALUE)).toBe(DEFAULT_VALUE);
     });
+  });
+});
+
+describe("parseKeepAliveTimeoutMs", () => {
+  const DEFAULT_VALUE = 620_000;
+
+  test("uses the default when unset or empty", () => {
+    expect(parseKeepAliveTimeoutMs(undefined, DEFAULT_VALUE)).toBe(
+      DEFAULT_VALUE,
+    );
+    expect(parseKeepAliveTimeoutMs("", DEFAULT_VALUE)).toBe(DEFAULT_VALUE);
+  });
+
+  test("honours a positive millisecond value", () => {
+    expect(parseKeepAliveTimeoutMs("900000", DEFAULT_VALUE)).toBe(900_000);
+  });
+
+  test("tolerates surrounding whitespace", () => {
+    expect(parseKeepAliveTimeoutMs("  900000  ", DEFAULT_VALUE)).toBe(900_000);
+  });
+
+  // Zero cannot express "never close" downstream — Fastify coerces a falsy
+  // keepAliveTimeout back to its own 72s default and the Next.js standalone
+  // server ignores it — so honouring 0 would quietly apply a timeout the
+  // operator did not ask for. Fall back to the documented default instead.
+  test.each([
+    ["0"],
+    ["-1"],
+    ["-620000"],
+  ])("falls back to the default for non-positive input %s", (value) => {
+    expect(parseKeepAliveTimeoutMs(value, DEFAULT_VALUE)).toBe(DEFAULT_VALUE);
+  });
+
+  test.each([
+    ["abc"],
+    ["null"],
+    ["  "],
+  ])("falls back to the default for unparsable input %s", (value) => {
+    expect(parseKeepAliveTimeoutMs(value, DEFAULT_VALUE)).toBe(DEFAULT_VALUE);
   });
 });
 

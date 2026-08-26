@@ -1,3 +1,4 @@
+import { providerDisplayNames } from "@archestra/shared";
 import { vi } from "vitest";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
@@ -878,8 +879,10 @@ describe("LLM Provider API Keys CRUD", () => {
     });
 
     expect(response.statusCode).toBe(400);
+    // Derived, not hardcoded: the label is the entry's display name, which
+    // names the OpenAI-compatible path rather than any one engine.
     expect(response.json().error.message).toContain(
-      "Failed to connect to vLLM: fetch failed",
+      `Failed to connect to ${providerDisplayNames.vllm}: fetch failed`,
     );
   });
 

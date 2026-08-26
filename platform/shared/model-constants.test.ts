@@ -7,6 +7,8 @@ import {
   isProviderApiKeyOptional,
   isSelfHostedProvider,
   isSmallModel,
+  providerDisplayNames,
+  providerSearchTerms,
   requiresOpenAiResponsesApi,
   SMALL_MODEL_MAX_PARAMETERS,
   stripClaudeContextVariantSuffix,
@@ -242,5 +244,32 @@ describe("isSmallModel", () => {
     expect(isSmallModel(3_212_749_888)).toBe(true);
     expect(isSmallModel(8_030_261_248)).toBe(false);
     expect(isSmallModel(70_000_000_000)).toBe(false);
+  });
+});
+
+describe("providerSearchTerms", () => {
+  // The `vllm` entry is the generic OpenAI-compatible path, so an operator
+  // searches it by the server they run, not by the engine it is named after.
+  test.each([
+    "llama.cpp",
+    "LM Studio",
+    "SGLang",
+    "TGI",
+    "LocalAI",
+    // The old label, so nobody who already knows this entry as vLLM loses it.
+    "vLLM",
+  ])("makes the OpenAI-compatible entry reachable by %s", (term) => {
+    expect(providerSearchTerms("vllm").toLowerCase()).toContain(
+      term.toLowerCase(),
+    );
+  });
+
+  test("is empty for providers whose own name is the only way to search them", () => {
+    expect(providerSearchTerms("anthropic")).toBe("");
+    expect(providerSearchTerms("openai")).toBe("");
+  });
+
+  test("labels the vLLM entry for the path it serves, not the one engine", () => {
+    expect(providerDisplayNames.vllm).toBe("OpenAI-compatible");
   });
 });

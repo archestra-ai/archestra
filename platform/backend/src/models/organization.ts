@@ -259,6 +259,7 @@ class OrganizationModel {
     );
     await cacheManager.delete(getOrganizationSettingsCacheKey(id));
     await cacheManager.delete(getOrganizationAuthEnforcementCacheKey(id));
+    await cacheManager.delete(getOrganizationOnlineSkillCatalogCacheKey(id));
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -296,6 +297,7 @@ class OrganizationModel {
     if (rows.length > 0) {
       await cacheManager.delete(getOrganizationSettingsCacheKey(id));
       await cacheManager.delete(getOrganizationAuthEnforcementCacheKey(id));
+      await cacheManager.delete(getOrganizationOnlineSkillCatalogCacheKey(id));
     }
     return rows.length > 0;
   }
@@ -318,6 +320,7 @@ class OrganizationModel {
     for (const { id } of rows) {
       await cacheManager.delete(getOrganizationSettingsCacheKey(id));
       await cacheManager.delete(getOrganizationAuthEnforcementCacheKey(id));
+      await cacheManager.delete(getOrganizationOnlineSkillCatalogCacheKey(id));
     }
     return rows.length;
   }
@@ -503,6 +506,55 @@ class OrganizationModel {
       // have the distributed cache initialized yet.
     }
     return slimChatErrorUi;
+  }
+
+  /**
+   * Whether the organization allows discovering and importing skills from the
+   * public online catalog. Read on every online-catalog request (the skill
+   * index search and the GitHub discover/preview/import endpoints), so it goes
+   * through the shared org-settings cache rather than a query per call.
+   *
+   * Defaults to `true` when no row is found, matching the column default. That
+   * is not the frontend's fail-closed stance, and deliberately so: the client
+   * has to decide what to render while the org read is missing or in flight,
+   * whereas here the caller is already authenticated against an organization,
+   * so "no row" means the org was deleted mid-request rather than "an admin
+   * turned this off".
+   */
+  static async getOnlineSkillCatalogEnabled(id: string): Promise<boolean> {
+    const cacheKey = getOrganizationOnlineSkillCatalogCacheKey(id);
+    const cached = await cacheManager.get<boolean>(cacheKey);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const [organization] = await db
+      .select({
+        onlineSkillCatalogEnabled:
+          schema.organizationsTable.onlineSkillCatalogEnabled,
+      })
+      .from(schema.organizationsTable)
+      .where(eq(schema.organizationsTable.id, id))
+      .limit(1);
+
+    const enabled = organization?.onlineSkillCatalogEnabled ?? true;
+    try {
+      // Short TTL by design, unlike the other org-settings reads. This set can
+      // race a concurrent PATCH (select old value -> PATCH updates the row and
+      // deletes the key -> this set lands) and there is no version guard, so a
+      // stale `true` CAN be re-cached after an admin turns the catalog off.
+      // The cache's default hour is far too long a window for a setting that
+      // gates what an org can import; a minute is not.
+      await cacheManager.set(
+        cacheKey,
+        enabled,
+        ONLINE_SKILL_CATALOG_CACHE_TTL_MS,
+      );
+    } catch {
+      // Cache writes are best-effort here; tests and early startup may not
+      // have the distributed cache initialized yet.
+    }
+    return enabled;
   }
 
   /**
@@ -826,4 +878,14 @@ function getOrganizationSettingsCacheKey(organizationId: string) {
 
 function getOrganizationAuthEnforcementCacheKey(organizationId: string) {
   return `${CacheKey.OrganizationSettings}-auth-enforcement-${organizationId}` as const;
+}
+
+/**
+ * One minute. See the set() call in `getOnlineSkillCatalogEnabled` for why a
+ * stale value can land in the cache at all; this bounds how long it lives.
+ */
+const ONLINE_SKILL_CATALOG_CACHE_TTL_MS = 60_000;
+
+function getOrganizationOnlineSkillCatalogCacheKey(organizationId: string) {
+  return `${CacheKey.OrganizationSettings}-online-skill-catalog-${organizationId}` as const;
 }

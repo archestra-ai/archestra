@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-08-24
+lastUpdated: 2026-08-25
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -389,24 +389,26 @@ You can get an API key from the [Perplexity Settings](https://www.perplexity.ai/
 - **Search results**: `sonar` responses may include `search_results` and `citations` fields containing web search results used to generate the answer.
 - **Models**: Popular models include `sonar-pro` and `sonar-deep-research` for search, and `anthropic/claude-opus-5` for tool-using agents.
 
-## vLLM
+## OpenAI-Compatible Servers
 
-[vLLM](https://github.com/vllm-project/vllm) is an inference and serving engine for LLMs. Use it for self-hosted deployments to run open-source models on your own infrastructure.
+Any server that speaks the OpenAI `/v1` API connects through this provider. That covers [vLLM](https://github.com/vllm-project/vllm), llama.cpp, LM Studio, SGLang, TGI, and LocalAI. Use it for self-hosted deployments to run open-source models on your own infrastructure.
 
-### Supported vLLM APIs
+The provider is listed as **OpenAI-compatible**, and the picker's search finds it by the name of the server you run — type "LM Studio" and it comes up. Its id stays `vllm`, so existing keys, proxy routes, and environment variables are unchanged.
 
-- **Chat Completions API** (`/chat/completions`) - OpenAI-compatible
-- **Embeddings API** (`/embeddings`) - OpenAI-compatible
+### Supported APIs
 
-### vLLM Connection Details
+- **Chat Completions API** (`/chat/completions`)
+- **Embeddings API** (`/embeddings`)
+
+### Connection Details
 
 - **Base URL**: `http://localhost:9000/v1/vllm`
-- **Authentication**: API key is **optional**. Pass in `Authorization` header as `Bearer <your-api-key>` if your vLLM deployment requires auth.
+- **Authentication**: API key is **optional**. Pass it in the `Authorization` header as `Bearer <your-api-key>` if your server requires auth.
 
 ### Setup
 
-1. Go to **Model Providers** and add a new key with provider **vLLM**
-2. Set the **Base URL** to your vLLM server (e.g., `http://your-vllm-host:8000/v1`)
+1. Go to **Model Providers** and add a new key with provider **OpenAI-compatible**
+2. Set the **Base URL** to your server (e.g., `http://your-host:8000/v1`)
 3. API key can be left blank for most self-hosted deployments
 
 Every model the server lists is added, so one entry covers a server that hosts several models — a router in front of a fleet, for example.
@@ -415,22 +417,22 @@ The base URL can also be set globally via the `ARCHESTRA_VLLM_BASE_URL` environm
 
 ### Serving Several Models
 
-`vllm serve` runs one model per process. Hosting a second model means running a second server on its own URL.
+`vllm serve` runs one model per process. Hosting a second model means running a second server on its own URL. llama.cpp and LM Studio work the same way.
 
-Add each server as its own vLLM entry. The models from every server appear together under the vLLM provider, and each request goes to the server that hosts the chosen model — so an agent pinned to one server still runs a model that lives on another.
+Add each server as its own entry. The models from every server appear together under the provider, and each request goes to the server that hosts the chosen model — so an agent pinned to one server still runs a model that lives on another.
 
 ### Environment Variables
 
-| Variable                      | Required | Description                                                                    |
-| ----------------------------- | -------- | ------------------------------------------------------------------------------ |
-| `ARCHESTRA_VLLM_BASE_URL`     | Yes      | vLLM server base URL (e.g., `http://localhost:8000/v1` or your vLLM endpoint)  |
-| `ARCHESTRA_CHAT_VLLM_API_KEY` | No       | API key for vLLM server (optional, many deployments don't require auth) |
+| Variable                      | Required | Description                                                             |
+| ----------------------------- | -------- | ----------------------------------------------------------------------- |
+| `ARCHESTRA_VLLM_BASE_URL`     | Yes      | Server base URL (e.g., `http://localhost:8000/v1`)                      |
+| `ARCHESTRA_CHAT_VLLM_API_KEY` | No       | API key for the server (optional, many deployments don't require auth)  |
 
 ### Important Notes
 
-- **Configure base URL to enable vLLM**: The vLLM provider is only available when `ARCHESTRA_VLLM_BASE_URL` is set or a per-key base URL is configured in the UI. Without either, vLLM won't appear as an option.
-- **Auto-seeding needs the base URL**: Setting `ARCHESTRA_CHAT_VLLM_API_KEY` alone does not create a vLLM key at startup. `ARCHESTRA_VLLM_BASE_URL` must also be set, otherwise the provider is skipped (a key without a base URL would silently route to the public OpenAI endpoint).
-- **No API key required for most deployments**: Unlike cloud providers, self-hosted vLLM typically doesn't require authentication. When adding a vLLM key in the platform, the API key field is marked as optional.
+- **Configure base URL to enable the provider**: It is only available when `ARCHESTRA_VLLM_BASE_URL` is set or a per-key base URL is configured in the UI. Without either, it won't appear as an option.
+- **Auto-seeding needs the base URL**: Setting `ARCHESTRA_CHAT_VLLM_API_KEY` alone does not create a key at startup. `ARCHESTRA_VLLM_BASE_URL` must also be set, otherwise the provider is skipped (a key without a base URL would silently route to the public OpenAI endpoint).
+- **No API key required for most deployments**: Unlike cloud providers, a self-hosted server typically doesn't require authentication. When adding a key in the platform, the API key field is marked as optional.
 
 ## Ollama
 

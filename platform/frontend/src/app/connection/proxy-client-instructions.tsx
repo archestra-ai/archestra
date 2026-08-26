@@ -53,6 +53,7 @@ import {
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { providerSearchHaystack } from "@/lib/provider-search";
 import { cn } from "@/lib/utils";
 import type { ConnectClient, ProxyStep } from "./clients";
 import { UnsupportedPanel } from "./mcp-client-instructions";
@@ -117,6 +118,17 @@ const PROVIDER_ORIGINAL_URLS: Record<ChatProvider, string> = {
   "microsoft-365-copilot": "https://graph.microsoft.com/beta/",
   archestra: "https://<archestra-host>/v1/model-router/",
 };
+
+/** Matches a provider by the name it renders under, or by one of its aliases. */
+function providerMatchesSearch(
+  provider: ChatProvider,
+  label: string,
+  query: string,
+): boolean {
+  return providerSearchHaystack({ provider, labels: [label] })
+    .toLowerCase()
+    .includes(query.toLowerCase());
+}
 
 interface ProxyClientInstructionsProps {
   client: ConnectClient;
@@ -746,7 +758,7 @@ function GenericEndpointCard({
     ? [...primary, selectedFromRest]
     : primary;
   const searchResults = rest.filter((p) =>
-    providerCatalog.label(p).toLowerCase().includes(search.toLowerCase()),
+    providerMatchesSearch(p, providerCatalog.label(p), search),
   );
 
   const label = routerSelected
@@ -1241,7 +1253,7 @@ function ProviderPicker({
   const selectedFromRest =
     selected && rest.includes(selected) ? selected : null;
   const searchResults = providers.filter((p) =>
-    providerCatalog.label(p).toLowerCase().includes(search.toLowerCase()),
+    providerMatchesSearch(p, providerCatalog.label(p), search),
   );
 
   const pickFromSearch = (p: ChatProvider) => {

@@ -322,6 +322,34 @@ beforeEach(() => {
 });
 
 describe("KnowledgeSettingsPage", () => {
+  describe("small team tier notice", () => {
+    /**
+     * The licence gates team-scoped connector visibility and auto-sync
+     * permissions — not Knowledge as a whole. Creating knowledge bases,
+     * indexing and retrieval keep working above the threshold, so the notice
+     * must not tell an operator the feature has been switched off.
+     */
+    it("names the gated capabilities rather than declaring Knowledge disabled", () => {
+      vi.mocked(useSmallTeamTier).mockReturnValue({
+        communicate: true,
+        smallTeam: false,
+        envFlag: false,
+        userCount: 42,
+        threshold: 30,
+      } as ReturnType<typeof useSmallTeamTier>);
+      renderPage();
+
+      expect(
+        screen.getByText(
+          /Enterprise features \(RBAC, SSO, Knowledge Base with access control\) are disabled until a license is activated\./,
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText(/Knowledge is an enterprise feature/),
+      ).not.toBeInTheDocument();
+    });
+  });
+
   describe("embedding model placeholder", () => {
     it("shows placeholder text when no embedding key is configured (not the database default)", () => {
       mockOrganization = {
@@ -831,26 +859,21 @@ describe("KnowledgeSettingsPage", () => {
       });
       fireEvent.click(providerTrigger);
 
-      // Anchored, because an unanchored substring is ambiguous: "Ollama"
-      // contains no "OpenAI" but "OpenAI-compatible" did. The accessible name
-      // repeats the label (the option renders an icon whose alt text is the
-      // provider name), so an exact string will not match either.
+      // Anchored, because an unanchored substring is ambiguous: "Ollama
+      // (OpenAI-compatible)" contains "OpenAI", as does the OpenAI-compatible
+      // entry itself — hence the negative lookahead for the hyphen. The
+      // accessible name repeats the label (the option renders an icon whose alt
+      // text is the provider name), so an exact string will not match either.
       expect(
-        screen.getByRole("option", { name: /^OpenAI\b/ }),
-      ).not.toHaveAttribute("data-disabled");
+        screen.getByRole("button", { name: /^OpenAI(?!-)/ }),
+      ).toBeEnabled();
       // The two Ollama transports collapse to one "Ollama" entry. Embeddings
       // only work over `/v1`, so this entry must resolve to that transport —
       // collapsing to `ollama-native` (which reports supportsEmbeddings: false)
       // would render it disabled and leave no way to add an Ollama embedding key.
-      expect(
-        screen.getByRole("option", { name: /^Ollama\b/ }),
-      ).not.toHaveAttribute("data-disabled");
-      expect(
-        screen.getByRole("option", { name: /Anthropic/i }),
-      ).not.toHaveAttribute("data-disabled");
-      expect(
-        screen.getByRole("option", { name: /Gemini/i }),
-      ).not.toHaveAttribute("data-disabled");
+      expect(screen.getByRole("button", { name: /^Ollama\b/ })).toBeEnabled();
+      expect(screen.getByRole("button", { name: /Anthropic/i })).toBeEnabled();
+      expect(screen.getByRole("button", { name: /Gemini/i })).toBeEnabled();
     });
   });
 

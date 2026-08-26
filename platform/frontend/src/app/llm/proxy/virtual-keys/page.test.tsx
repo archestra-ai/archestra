@@ -120,7 +120,7 @@ describe("VirtualKeysPage provider-key filter", () => {
 
     // A filter that narrows the table without saying so reads as an
     // inexplicably empty page.
-    const trigger = await screen.findByRole("combobox", {
+    const trigger = await screen.findByRole("button", {
       name: "Filter by provider key",
     });
     await waitFor(() =>
@@ -136,7 +136,7 @@ describe("VirtualKeysPage provider-key filter", () => {
     await waitFor(() => expect(listRequests.length).toBeGreaterThan(0));
     expect(listRequests.at(-1)?.has("providerApiKeyId")).toBe(false);
     expect(
-      await screen.findByRole("combobox", { name: "Filter by provider key" }),
+      await screen.findByRole("button", { name: "Filter by provider key" }),
     ).toHaveTextContent("All provider keys");
   });
 });

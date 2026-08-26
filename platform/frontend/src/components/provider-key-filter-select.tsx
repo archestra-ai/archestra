@@ -1,10 +1,8 @@
 "use client";
 
-import type { SupportedProvider } from "@archestra/shared";
-import { FilterSelect } from "@/components/filter-bar";
-import { ProviderIcon } from "@/components/provider-icon";
-import { DEFAULT_FILTER_ALL } from "@/consts";
-import { useModelProviderCatalog } from "@/lib/integration-overrides";
+import { useState } from "react";
+import { filterControlClass } from "@/components/filter-bar";
+import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 
 /**
@@ -31,12 +29,17 @@ export function isProviderApiKeyId(value: string | null): value is string {
 }
 
 /**
- * The shared "Filter by provider key" dropdown used by the Virtual Keys and
- * OAuth Clients tables. `value` is an LLM provider API key id, or `undefined`
- * for "not filtered"; `onValueChange` reports `null` when the filter is
- * cleared, which is what the query-param helpers already treat as "drop it".
- * The "all" sentinel the underlying select needs stays in here — call sites
- * deal in ids and absence.
+ * The "Filter by provider key" control used by the Virtual Keys and OAuth
+ * Clients tables. `value` is an LLM provider API key id, or `undefined` for
+ * "not filtered"; `onValueChange` reports `null` when the filter is cleared,
+ * which is what the query-param helpers already treat as "drop it".
+ *
+ * The dropdown itself is the shared {@link LlmProviderApiKeyDropdown} every
+ * other provider-key picker uses, so this list stays grouped the same way
+ * (personal subscriptions apart from API keys, then by provider) and picks up
+ * changes to that grouping for free. This wrapper only supplies the pieces a
+ * filter needs: the fetch, the "all" option, and the filter-bar trigger
+ * styling.
  *
  * Deleting a provider key is blocked while virtual keys or OAuth clients still
  * map to it, and that blocking dialog links here with the key preselected — so
@@ -50,7 +53,7 @@ export function ProviderKeyFilterSelect({
   value: string | undefined;
   onValueChange: (value: string | null) => void;
 }) {
-  const providerCatalog = useModelProviderCatalog();
+  const [open, setOpen] = useState(false);
   // Errors stay silent: this is a filter next to a table that renders its own
   // load state, and a provider-key list we could not read costs the user the
   // dropdown's contents, not the page.
@@ -61,59 +64,38 @@ export function ProviderKeyFilterSelect({
   const selectedIsListed = providerApiKeys.some((key) => key.id === value);
 
   return (
-    <FilterSelect
-      value={value ?? DEFAULT_FILTER_ALL}
-      onValueChange={(next) =>
-        onValueChange(next === DEFAULT_FILTER_ALL ? null : next)
+    <LlmProviderApiKeyDropdown
+      availableKeys={providerApiKeys}
+      selectedApiKeyId={value ?? null}
+      open={open}
+      onOpenChange={setOpen}
+      onSelectKey={(keyId) => {
+        onValueChange(keyId);
+        setOpen(false);
+      }}
+      allOptionLabel="All provider keys"
+      allOptionSelected={value === undefined}
+      onSelectAllOption={() => {
+        onValueChange(null);
+        setOpen(false);
+      }}
+      // A key we cannot resolve — deleted since the link was made, or not
+      // readable by this user — still needs a name. The dropdown's own default
+      // ("Select provider key...") would claim nothing is filtered while the
+      // table quietly is. Left undefined otherwise, so the "all" label and a
+      // resolved key's own name both still win.
+      emptyTriggerLabel={
+        value !== undefined && !selectedIsListed
+          ? isPending
+            ? "Loading provider key..."
+            : "Unknown provider key"
+          : undefined
       }
-      placeholder="Filter by provider key"
+      triggerVariant="select"
+      triggerAriaLabel="Filter by provider key"
+      triggerClassName={filterControlClass({ active: value !== undefined })}
+      popoverClassName="w-80"
       searchPlaceholder="Search provider keys..."
-      emptyMessage="No provider keys found."
-      items={[
-        { value: DEFAULT_FILTER_ALL, label: "All provider keys" },
-        ...providerApiKeys.map((key) => ({
-          value: key.id,
-          label: key.name,
-          // So typing a provider ("anthropic") finds its keys, even though the
-          // option is labelled by the key's own name.
-          searchText: `${key.name} ${providerCatalog.label(key.provider)}`,
-          content: (
-            <ProviderKeyOption name={key.name} provider={key.provider} />
-          ),
-          selectedContent: (
-            <ProviderKeyOption name={key.name} provider={key.provider} />
-          ),
-        })),
-        // A key we cannot resolve — deleted since the link was made, or not
-        // readable by this user — still needs a name here. Without one the
-        // trigger falls back to rendering the raw id, and the bar would claim
-        // nothing is filtered while the table quietly is.
-        ...(value !== undefined && !selectedIsListed
-          ? [
-              {
-                value,
-                label: isPending
-                  ? "Loading provider key..."
-                  : "Unknown provider key",
-              },
-            ]
-          : []),
-      ]}
     />
-  );
-}
-
-function ProviderKeyOption({
-  name,
-  provider,
-}: {
-  name: string;
-  provider: SupportedProvider;
-}) {
-  return (
-    <span className="flex min-w-0 items-center gap-2">
-      <ProviderIcon provider={provider} />
-      <span className="truncate">{name}</span>
-    </span>
   );
 }

@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  McpAppFullscreenExitButton,
+  McpAppFullscreenButton,
   McpAppPill,
   McpAppStandaloneButton,
 } from "./mcp-app-chrome";
@@ -46,9 +46,19 @@ describe("address-pill action buttons", () => {
     ).toBeDisabled();
   });
 
-  it("fires onClick when the fullscreen-exit button is pressed", async () => {
+  it("offers the way into fullscreen while the app is inline", async () => {
     const onClick = vi.fn();
-    render(<McpAppFullscreenExitButton onClick={onClick} />);
+    render(<McpAppFullscreenButton isFullscreen={false} onClick={onClick} />);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /enter fullscreen/i }),
+    );
+    expect(onClick).toHaveBeenCalledOnce();
+  });
+
+  it("offers the way back out while the app is fullscreen", async () => {
+    const onClick = vi.fn();
+    render(<McpAppFullscreenButton isFullscreen onClick={onClick} />);
 
     await userEvent.click(
       screen.getByRole("button", { name: /exit fullscreen/i }),

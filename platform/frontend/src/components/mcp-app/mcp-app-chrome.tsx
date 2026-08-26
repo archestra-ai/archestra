@@ -1,6 +1,7 @@
 import {
   AppWindow,
   type LucideIcon,
+  Maximize2,
   Minimize2,
   RefreshCw,
   Settings,
@@ -115,17 +116,27 @@ export function McpAppSettingsButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-export function McpAppFullscreenExitButton({
+/**
+ * Enter/exit fullscreen, in one control the host offers on every app surface.
+ * Fullscreen used to be reachable only when the guest asked for it through the
+ * ext-apps SDK (`ui/request-display-mode`), which apps shipped by an MCP server
+ * commonly do and apps authored here generally do not — so the same mode was
+ * available for one kind of app and not the other. The host owns the surface, so
+ * it offers the toggle regardless of what the guest asks for.
+ */
+export function McpAppFullscreenButton({
+  isFullscreen,
   onClick,
   size = "sm",
 }: {
+  isFullscreen: boolean;
   onClick: () => void;
   size?: McpAppButtonSize;
 }) {
   return (
     <McpAppIconButton
-      icon={Minimize2}
-      label="Exit fullscreen"
+      icon={isFullscreen ? Minimize2 : Maximize2}
+      label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
       onClick={onClick}
       size={size}
     />

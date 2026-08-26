@@ -116,6 +116,93 @@ test("create an app from a template and run it standalone", async ({
   }
 });
 
+// Opens as a chat with the app already mounted, and asserts two things the app
+// itself has no say in: that the host put it in fullscreen because that is the
+// app's saved default (nothing here calls `ui/request-display-mode`), and that
+// fullscreen leaves the sidebar on screen — hiding the navigation is the
+// sidebar's own collapse control to do.
+const FULLSCREEN_PROBE_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>e2e fullscreen probe</title></head>
+<body>
+  <h1 id="status">loading…</h1>
+  <script>
+    window.archestra.ready.then(() => {
+      document.getElementById("status").textContent = "Ready.";
+    });
+  </script>
+</body>
+</html>`;
+
+test("an app whose default is fullscreen opens filling the page, with the sidebar still there", async ({
+  page,
+  request,
+  makeApiRequest,
+}) => {
+  const name = `e2e-fullscreen-app-${Date.now()}`;
+  const createRes = await makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: "/api/apps",
+    data: { name, scope: "personal" },
+  });
+  const app = (await createRes.json()) as { id: string };
+
+  try {
+    const patchRes = await makeApiRequest({
+      request,
+      method: "patch",
+      urlSuffix: `/api/apps/${app.id}`,
+      data: { html: FULLSCREEN_PROBE_HTML, openInFullscreen: true },
+    });
+    expect(patchRes.ok()).toBeTruthy();
+    expect((await patchRes.json()).openInFullscreen).toBe(true);
+
+    const openRes = await makeApiRequest({
+      request,
+      method: "post",
+      urlSuffix: `/api/apps/${app.id}/open-in-chat`,
+    });
+    const { conversationId } = (await openRes.json()) as {
+      conversationId: string;
+    };
+    await goToPage(page, `/chat/${conversationId}`);
+
+    // Fullscreen without the app asking for it: only the saved default and the
+    // host's own control can produce this.
+    const exitFullscreen = page.getByRole("button", {
+      name: "Exit fullscreen",
+    });
+    await expect(exitFullscreen).toBeVisible({ timeout: 30_000 });
+
+    // The sidebar is untouched, and the app starts where the sidebar ends
+    // rather than covering it.
+    const sidebar = page.locator('[data-slot="sidebar-container"]').first();
+    await expect(sidebar).toBeVisible();
+    const sidebarBox = await sidebar.boundingBox();
+    const appBox = await page.locator("iframe").first().boundingBox();
+    expect(sidebarBox).not.toBeNull();
+    expect(appBox).not.toBeNull();
+    expect(appBox?.x).toBeGreaterThanOrEqual(
+      (sidebarBox?.x ?? 0) + (sidebarBox?.width ?? 0),
+    );
+
+    // Leaving fullscreen is the viewer's to keep: the default must not snap it
+    // back the moment they exit.
+    await exitFullscreen.click();
+    await expect(
+      page.getByRole("button", { name: "Enter fullscreen" }),
+    ).toBeVisible();
+  } finally {
+    await makeApiRequest({
+      request,
+      method: "delete",
+      urlSuffix: `/api/apps/${app.id}`,
+      ignoreStatusCheck: true,
+    });
+  }
+});
+
 // Two `hidden` elements, both with a display override. `#reset-hides` uses an
 // ordinary rule the injected base sheet's `[hidden]` reset must still beat;
 // `#stuck-visible` fights back with `!important` and stays painted — the footgun

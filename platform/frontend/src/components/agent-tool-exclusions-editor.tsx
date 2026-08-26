@@ -169,8 +169,9 @@ export const AgentToolExclusionsEditor = forwardRef<
   // per-catalog fan-out it used to issue (one request per catalog item, each
   // carrying full tool rows). Descriptions and groups are only needed by an
   // OPEN pill checklist, which fetches its own server's tools lazily.
-  const { data: allCatalogTools, isPending: catalogToolsPending } =
-    useAllCatalogTools({ enabled: active });
+  const { data: allCatalogTools } = useAllCatalogTools({
+    enabled: active,
+  });
 
   // Excludable tools per catalog (meta dispatch tools filtered from the
   // built-in catalog).
@@ -195,7 +196,11 @@ export const AgentToolExclusionsEditor = forwardRef<
     return map;
   }, [toolsByCatalog]);
 
-  const allToolsLoaded = !catalogsPending && !catalogToolsPending;
+  // "We have the list", not "we are not fetching it". A failed request also
+  // stops being pending, and initializing off no data would resolve every
+  // saved exclusion to `unresolvedToolIds` — the ids survive a save, but the
+  // editor would render zero pills and read as "nothing is disabled here".
+  const allToolsLoaded = !catalogsPending && allCatalogTools !== undefined;
 
   const [entries, setEntries] = useState<Map<string, PendingExclusionEntry>>(
     new Map(),

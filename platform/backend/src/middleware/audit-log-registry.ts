@@ -1107,7 +1107,10 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/service-accounts/bulk": {
     resourceType: "serviceAccount",
     resourceIdSource: "organizationContext",
-    actionByMethod: { DELETE: "serviceAccount.bulk_deleted" },
+    actionByMethod: {
+      DELETE: "serviceAccount.bulk_deleted",
+      PATCH: "serviceAccount.bulk_updated",
+    },
   },
   "/api/environments/bulk": {
     resourceType: "environment",

@@ -48,9 +48,13 @@ class ServiceAccountModel {
             Number,
           ),
         lastUsedAt: max(tokens.lastUsedAt),
-        soonestExpiryAt: sql<
-          string | null
-        >`min(${tokens.expiresAt}) filter (where ${tokens.disabled} = false and ${tokens.expiresAt} > ${now})`,
+        // `.mapWith` reuses the column's own decoder. Without it the driver
+        // hands back a bare `timestamp without time zone` string that
+        // `new Date(...)` reads as local time, shifting every expiry by the
+        // server's UTC offset and disagreeing with the detail route.
+        soonestExpiryAt: sql<Date | null>`min(${tokens.expiresAt}) filter (where ${tokens.disabled} = false and ${tokens.expiresAt} > ${now})`.mapWith(
+          tokens.expiresAt,
+        ),
       })
       .from(schema.serviceAccountsTable)
       .leftJoin(
@@ -73,7 +77,7 @@ class ServiceAccountModel {
           tokenCount,
           activeTokenCount,
           lastUsedAt: lastUsedAt ? new Date(lastUsedAt) : null,
-          soonestExpiryAt: soonestExpiryAt ? new Date(soonestExpiryAt) : null,
+          soonestExpiryAt: soonestExpiryAt ?? null,
         }),
     );
   }

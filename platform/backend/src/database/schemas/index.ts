@@ -176,6 +176,8 @@ export {
   projectShareUsersTable,
 } from "./project";
 export { default as projectPinsTable } from "./project-pin";
+export { default as runnersTable } from "./runner";
+export { default as runnerEventsTable } from "./runner-event";
 export { default as scheduleTriggersTable } from "./schedule-trigger";
 export { default as scheduleTriggerRunsTable } from "./schedule-trigger-run";
 export { default as secretsTable } from "./secret";
@@ -216,6 +218,7 @@ export { default as toolObservationsTable } from "./tool-observation";
 export { default as trustedDataPoliciesTable } from "./trusted-data-policy";
 export { default as twoFactorsTable } from "./two-factor";
 export { default as usersTable } from "./user";
+export { default as userCredentialsTable } from "./user-credential";
 export { default as userOnboardingSeenItemsTable } from "./user-onboarding-seen-item";
 export { default as userTokensTable } from "./user-token";
 export { default as verificationsTable } from "./verification";

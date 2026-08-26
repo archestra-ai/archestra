@@ -30,6 +30,7 @@ export const actions = [
 
 export const resources = [
   "agent",
+  "runner",
   "skill",
   "plugin",
   "app",
@@ -135,6 +136,7 @@ export const resourceLabels: Record<Resource, string> = {
   mcpSettings: "MCP Settings",
   skillsSettings: "Skills Settings",
   agentSettings: "Agent Settings",
+  runner: "Runners",
   agentTrigger: "Agent Triggers",
   scheduledTask: "Scheduled Tasks",
   simpleView: "Simple View",
@@ -160,6 +162,8 @@ export const resourceDescriptions: Record<Resource, string> = {
   chat: "Chat conversations",
   project: "Projects — shared collections of chats with a result folder",
   file: "Files produced and used in chats and projects",
+  runner:
+    "Runners — long-running agent sessions that run in their own container",
   agentTrigger: "Agent triggers (Slack, MS Teams, incoming emails)",
   scheduledTask: "Scheduled agent tasks that run on a schedule",
   llmProviderApiKey: "LLM provider API keys and their visibility",
@@ -219,6 +223,7 @@ export const internalResources: Resource[] = ["organization"];
 export const resourceCategories: Record<string, Resource[]> = {
   Agents: [
     "agent",
+    "runner",
     "skill",
     "plugin",
     "skillsSettings",

@@ -3074,6 +3074,20 @@
       "when": 1787740782768,
       "tag": "0438_sudden_azazel",
       "breakpoints": true
+    },
+    {
+      "idx": 439,
+      "version": "7",
+      "when": 1787772121042,
+      "tag": "0439_exotic_exodus",
+      "breakpoints": true
+    },
+    {
+      "idx": 440,
+      "version": "7",
+      "when": 1787772514011,
+      "tag": "0440_magenta_master_chief",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,255 @@
+import type * as k8s from "@kubernetes/client-node";
+import type { RunnerResources } from "@/types";
+import { RUNNER_ID_LABEL, runnerLabels, runnerNames } from "./naming";
+
+/** Where the steer FIFO and the generated entrypoint live inside the pod. */
+const RUNNER_RUN_DIR = "/var/run/archestra";
+export const RUNNER_STEER_FIFO = `${RUNNER_RUN_DIR}/steer`;
+const RUNNER_TMUX_SESSION = "agent";
+
+/**
+ * Exit code the bootstrap uses when the image cannot host a runner. Distinct
+ * from any exit code the agent itself produces, so "your image is missing
+ * tmux" never reads as "your agent failed".
+ */
+const RUNNER_UNUSABLE_IMAGE_EXIT_CODE = 78;
+
+/**
+ * Everything the runtime needs to launch one runner, already resolved: no
+ * credential lookups, no config reads, no database access happen below this
+ * boundary. That keeps manifest construction a pure function of its input and
+ * testable without a cluster.
+ */
+export type RunnerLaunchSpec = {
+  runnerId: string;
+  frozenName: string;
+  namespace: string;
+  image: string;
+  /** Shell command tmux runs; null uses the default runner-agent entrypoint. */
+  command: string[] | null;
+  privileged: boolean;
+  resources: RunnerResources | null;
+  /** Non-secret environment, inlined into the pod spec. */
+  env: Record<string, string>;
+  /** Secret environment, delivered through a Kubernetes Secret via envFrom. */
+  secretEnv: Record<string, string>;
+  /** Hard lifetime cap enforced by Kubernetes in addition to the reaper. */
+  activeDeadlineSeconds: number | null;
+  imagePullSecrets: string[];
+  ownerReferences: k8s.V1OwnerReference[] | undefined;
+};
+
+/**
+ * PID 1 for every runner, whatever the image.
+ *
+ * tmux is what makes a session attachable and steerable: a human can attach
+ * from the browser and type into the same session the agent is using, and a
+ * steer can be delivered without a terminal attached at all. The FIFO is the
+ * turn-boundary channel the Archestra runner-agent reads; bring-your-own-image
+ * CLIs that own their own input loop are steered with `tmux send-keys`
+ * instead, which needs no cooperation from the process.
+ *
+ * The wrapper deliberately does not restart the agent: the Job's
+ * `restartPolicy: Never` plus `backoffLimit: 0` means a session that exits
+ * stays exited rather than silently re-running whatever side effects it had
+ * already performed.
+ */
+function buildRunnerBootstrapScript(): string {
+  return [
+    "set -eu",
+    `mkdir -p ${RUNNER_RUN_DIR}`,
+    `[ -p "${RUNNER_STEER_FIFO}" ] || mkfifo -m 600 "${RUNNER_STEER_FIFO}"`,
+    "if ! command -v tmux >/dev/null 2>&1; then",
+    '  echo "archestra: this image has no tmux, which runners require for attach and steering" >&2',
+    `  exit ${RUNNER_UNUSABLE_IMAGE_EXIT_CODE}`,
+    "fi",
+    `printf '%s\\n' "$ARCHESTRA_RUNNER_ENTRYPOINT" > ${RUNNER_RUN_DIR}/entry.sh`,
+    `tmux new-session -d -s ${RUNNER_TMUX_SESSION} "/bin/sh ${RUNNER_RUN_DIR}/entry.sh; echo; echo '[archestra] agent session exited'; sleep 10"`,
+    // Hold PID 1 for exactly as long as the session lives, so the Job
+    // completes when the agent is done rather than when tmux forks away.
+    `while tmux has-session -t ${RUNNER_TMUX_SESSION} 2>/dev/null; do sleep 5; done`,
+  ].join("\n");
+}
+
+/**
+ * A Job, not a Deployment: a runner runs to completion. A Deployment would
+ * restart a finished session forever, and restart a crashed one behind the
+ * user's back — re-executing side effects the first attempt already had.
+ */
+export function buildRunnerJob(spec: RunnerLaunchSpec): k8s.V1Job {
+  const names = runnerNames(spec.frozenName);
+  const labels = runnerLabels(spec.runnerId);
+
+  return {
+    apiVersion: "batch/v1",
+    kind: "Job",
+    metadata: {
+      name: names.job,
+      namespace: spec.namespace,
+      labels,
+      ownerReferences: spec.ownerReferences,
+    },
+    spec: {
+      // One attempt, one pod: see buildRunnerBootstrapScript.
+      backoffLimit: 0,
+      parallelism: 1,
+      completions: 1,
+      ...(spec.activeDeadlineSeconds
+        ? { activeDeadlineSeconds: spec.activeDeadlineSeconds }
+        : {}),
+      template: {
+        metadata: { labels },
+        spec: {
+          restartPolicy: "Never",
+          ...(spec.imagePullSecrets.length > 0
+            ? {
+                imagePullSecrets: spec.imagePullSecrets.map((name) => ({
+                  name,
+                })),
+              }
+            : {}),
+          // The agent authenticates to the platform with credentials mounted
+          // from a Secret; it has no business reading the cluster's API.
+          automountServiceAccountToken: false,
+          volumes: [{ name: "archestra-run", emptyDir: {} }],
+          containers: [
+            {
+              name: "runner",
+              image: spec.image,
+              command: ["/bin/sh", "-c", buildRunnerBootstrapScript()],
+              env: [
+                ...Object.entries(spec.env).map(([name, value]) => ({
+                  name,
+                  value,
+                })),
+                {
+                  name: "ARCHESTRA_RUNNER_ENTRYPOINT",
+                  value: resolveEntrypoint(spec.command),
+                },
+              ],
+              ...(Object.keys(spec.secretEnv).length > 0
+                ? {
+                    envFrom: [{ secretRef: { name: names.secret } }],
+                  }
+                : {}),
+              resources: buildResourceRequirements(spec.resources),
+              volumeMounts: [
+                { name: "archestra-run", mountPath: RUNNER_RUN_DIR },
+              ],
+              ...(spec.privileged
+                ? { securityContext: { privileged: true } }
+                : {}),
+            },
+          ],
+        },
+      },
+    },
+  };
+}
+
+export function buildRunnerSecret(spec: RunnerLaunchSpec): k8s.V1Secret {
+  const names = runnerNames(spec.frozenName);
+  return {
+    apiVersion: "v1",
+    kind: "Secret",
+    metadata: {
+      name: names.secret,
+      namespace: spec.namespace,
+      labels: runnerLabels(spec.runnerId),
+      ownerReferences: spec.ownerReferences,
+    },
+    type: "Opaque",
+    data: Object.fromEntries(
+      Object.entries(spec.secretEnv).map(([key, value]) => [
+        key,
+        Buffer.from(value, "utf8").toString("base64"),
+      ]),
+    ),
+  };
+}
+
+/**
+ * Egress to the platform's own API, as a second policy selecting only runner
+ * pods rather than an edit to the shared MCP builders.
+ *
+ * Kubernetes unions the egress rules of every policy selecting a pod, so this
+ * composes with whatever policy the runner's environment already applies
+ * without widening anything for MCP servers. A runner that cannot reach the
+ * LLM proxy and MCP gateway is useless, and a runner that reaches the wider
+ * network is the environment's decision to make, not this policy's.
+ */
+export function buildRunnerPlatformEgressPolicy(params: {
+  spec: RunnerLaunchSpec;
+  platformNamespace: string;
+  platformPodLabels: Record<string, string>;
+  platformPorts: number[];
+}): k8s.V1NetworkPolicy {
+  const names = runnerNames(params.spec.frozenName);
+  return {
+    apiVersion: "networking.k8s.io/v1",
+    kind: "NetworkPolicy",
+    metadata: {
+      name: names.networkPolicy,
+      namespace: params.spec.namespace,
+      labels: runnerLabels(params.spec.runnerId),
+      ownerReferences: params.spec.ownerReferences,
+    },
+    spec: {
+      podSelector: {
+        matchLabels: { [RUNNER_ID_LABEL]: params.spec.runnerId },
+      },
+      policyTypes: ["Egress"],
+      egress: [
+        {
+          to: [
+            {
+              namespaceSelector: {
+                matchLabels: {
+                  "kubernetes.io/metadata.name": params.platformNamespace,
+                },
+              },
+              podSelector: { matchLabels: params.platformPodLabels },
+            },
+          ],
+          ports: params.platformPorts.map((port) => ({
+            protocol: "TCP",
+            port,
+          })),
+        },
+      ],
+    },
+  };
+}
+
+// ===================== internals =====================
+
+/**
+ * With no command configured the image must provide `archestra-runner-agent`
+ * on PATH — the contract the default image satisfies and every
+ * bring-your-own-image either satisfies or overrides with its own command.
+ */
+function resolveEntrypoint(command: string[] | null): string {
+  if (!command || command.length === 0) {
+    return "archestra-runner-agent";
+  }
+  return command.map(shellQuote).join(" ");
+}
+
+function shellQuote(argument: string): string {
+  return `'${argument.replaceAll("'", `'\\''`)}'`;
+}
+
+function buildResourceRequirements(
+  resources: RunnerResources | null,
+): k8s.V1ResourceRequirements {
+  const requests: Record<string, string> = {};
+  const limits: Record<string, string> = {};
+  if (resources?.cpuRequest) requests.cpu = resources.cpuRequest;
+  if (resources?.memoryRequest) requests.memory = resources.memoryRequest;
+  if (resources?.cpuLimit) limits.cpu = resources.cpuLimit;
+  if (resources?.memoryLimit) limits.memory = resources.memoryLimit;
+  return {
+    ...(Object.keys(requests).length > 0 ? { requests } : {}),
+    ...(Object.keys(limits).length > 0 ? { limits } : {}),
+  };
+}

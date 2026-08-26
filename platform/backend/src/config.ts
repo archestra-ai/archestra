@@ -1837,6 +1837,36 @@ export const parseSandboxMemoryMaxBytes = (
   return bytes;
 };
 
+/**
+ * Parse a `key=value,key2=value2` label selector into matchLabels. A malformed
+ * entry falls back to the default rather than silently producing a selector
+ * that matches nothing — an egress policy selecting no destination would leave
+ * every runner unable to reach the platform.
+ *
+ * @public — exported for testability
+ */
+export function parseLabelSelector(
+  value: string | undefined,
+  defaultValue: Record<string, string>,
+): Record<string, string> {
+  const raw = value?.trim();
+  if (!raw) return defaultValue;
+  const parsed: Record<string, string> = {};
+  for (const pair of raw.split(",")) {
+    const [key, ...rest] = pair.split("=");
+    const label = key?.trim();
+    const labelValue = rest.join("=").trim();
+    if (!label || !labelValue) {
+      logger.error(
+        `ARCHESTRA_RUNNERS_PLATFORM_POD_SELECTOR is not a key=value list (${raw}); using the default`,
+      );
+      return defaultValue;
+    }
+    parsed[label] = labelValue;
+  }
+  return parsed;
+}
+
 const IPV4_CIDR =
   /^((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\/(3[0-2]|[12]?\d)$/;
 
@@ -2192,6 +2222,84 @@ const config = {
     cacheDir:
       process.env.ARCHESTRA_SKILL_MARKETPLACE_CACHE_DIR?.trim() ||
       path.join(homedir(), ".archestra", "skill-marketplace-cache"),
+  },
+  runners: {
+    /**
+     * Runners: long-running agentic sessions, one Kubernetes pod each,
+     * attachable and steerable while they run.
+     *
+     * Deliberately an independent switch rather than `betaFeatureEnabled`:
+     * the feature spawns compute holding a user's personal credentials, so
+     * flipping the ARCHESTRA_BETA master switch must never turn it on by
+     * implication. It also needs the Kubernetes runtime configured — without
+     * that, `orchestratorK8sRuntime` is false and Runners stay unavailable
+     * regardless of this value.
+     */
+    enabled: process.env.ARCHESTRA_RUNNERS_ENABLED === "true",
+    /**
+     * Image used when an agent declares no runner image of its own: the
+     * Archestra runner-agent, an opinionated agent loop already wired to this
+     * deployment's LLM proxy and MCP gateway.
+     */
+    defaultImage:
+      process.env.ARCHESTRA_RUNNERS_DEFAULT_IMAGE?.trim() ||
+      "ghcr.io/archestra-ai/runner-agent-base:latest",
+    /** Fallback lifetime cap for runners whose agent sets none. */
+    defaultTtlHours: parsePositiveInt(
+      process.env.ARCHESTRA_RUNNERS_DEFAULT_TTL_HOURS,
+      72,
+    ),
+    /**
+     * Fallback idle stop for runners whose agent sets none. An idle runner is
+     * stopped rather than scaled to zero: its in-memory session state cannot
+     * survive the pod, so the loss is made explicit instead of silent.
+     */
+    defaultIdleTimeoutMinutes: parsePositiveInt(
+      process.env.ARCHESTRA_RUNNERS_DEFAULT_IDLE_TIMEOUT_MINUTES,
+      180,
+    ),
+    resources: {
+      cpuRequest: process.env.ARCHESTRA_RUNNERS_CPU_REQUEST?.trim() || "500m",
+      memoryRequest:
+        process.env.ARCHESTRA_RUNNERS_MEMORY_REQUEST?.trim() || "1Gi",
+      /**
+       * No CPU limit by default, matching the MCP server runtime: throttling
+       * an agent mid-turn surfaces as confusing timeouts rather than
+       * back-pressure. Memory is limited because a runaway agent process
+       * should die rather than take the node with it.
+       */
+      memoryLimit: process.env.ARCHESTRA_RUNNERS_MEMORY_LIMIT?.trim() || "4Gi",
+    },
+    /**
+     * Base URL a runner pod uses to reach this deployment's LLM proxy and MCP
+     * gateway. Must be reachable from inside the cluster, so it defaults to
+     * the internal API URL rather than the browser-facing one.
+     *
+     * Empty means runners cannot start: crab-env's hard lesson is that a
+     * session which silently bypasses the proxy loses all observability, so a
+     * missing URL fails the spawn loudly instead of falling back to a direct
+     * provider call.
+     */
+    platformBaseUrl:
+      process.env.ARCHESTRA_RUNNERS_PLATFORM_BASE_URL?.trim() ||
+      process.env.ARCHESTRA_INTERNAL_API_BASE_URL?.trim() ||
+      "",
+    /**
+     * Selects the platform's own API-serving pods, so a runner's egress policy
+     * can allow exactly that destination and nothing else. The default is the
+     * label the Helm chart already stamps on both the platform and worker
+     * deployments; override it if your deployment labels them differently, or
+     * when the platform runs outside the cluster.
+     */
+    platformPodSelector: parseLabelSelector(
+      process.env.ARCHESTRA_RUNNERS_PLATFORM_POD_SELECTOR,
+      { "archestra.io/p4-shim-client": "true" },
+    ),
+    /** How often the reconciler syncs runner state and applies TTL/idle stops. */
+    reconcileIntervalSeconds: parsePositiveInt(
+      process.env.ARCHESTRA_RUNNERS_RECONCILE_INTERVAL_SECONDS,
+      30,
+    ),
   },
   plugins: {
     /**

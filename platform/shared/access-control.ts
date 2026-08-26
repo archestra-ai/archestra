@@ -35,6 +35,10 @@ export const allAvailableActions: Record<Resource, Action[]> = {
     "admin",
     "deploy-to-restricted",
   ],
+  // Runners inherit an agent's team access, so they carry no team-admin of
+  // their own. `admin` is what lets someone steer or stop a runner another
+  // person started — attach reaches a shell holding that person's credentials.
+  runner: ["read", "create", "update", "delete", "admin"],
   skill: [
     "read",
     "create",
@@ -171,6 +175,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
     "team-admin",
     "deploy-to-restricted",
   ],
+  runner: ["read", "create", "update", "delete"],
   skill: [
     "read",
     "create",
@@ -276,6 +281,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
 export const memberPermissions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete"],
+  runner: ["read", "create", "update", "delete"],
   skill: ["read", "create", "update", "delete"],
   plugin: [],
   app: ["read", "create", "update", "delete"],
@@ -674,6 +680,27 @@ export const requiredEndpointPermissionsMap: Partial<
    * authenticated but no specific permission.
    */
   [RouteId.GetOrganization]: {},
+
+  // Runners. Reading is a normal member capability; starting one spends money
+  // and holds the caller's own credentials, so it needs create. Steer and stop
+  // act on a live session, so they are update — the route additionally
+  // restricts them to the runner's creator or a runner admin, because attach
+  // and steer reach a shell running under that person's credentials.
+  [RouteId.GetAllRunners]: { runner: ["read"] },
+  [RouteId.GetRunner]: { runner: ["read"] },
+  [RouteId.GetRunnerEvents]: { runner: ["read"] },
+  [RouteId.GetRunnerPreflight]: { runner: ["read"] },
+  [RouteId.CreateRunner]: { runner: ["create"] },
+  [RouteId.SteerRunner]: { runner: ["update"] },
+  [RouteId.StopRunner]: { runner: ["update"] },
+  [RouteId.DeleteRunner]: { runner: ["delete"] },
+
+  // A user's own credentials: authenticated, but no resource permission —
+  // these are personal, and an administrator's runner permissions grant no
+  // access to another person's values.
+  [RouteId.GetAllUserCredentials]: {},
+  [RouteId.UpsertUserCredential]: {},
+  [RouteId.DeleteUserCredential]: {},
   // Completing onboarding flips an org-wide flag, so gate it on admin-level
   // organization-settings update, like the other org-settings routes.
   [RouteId.CompleteOnboarding]: { organizationSettings: ["update"] },

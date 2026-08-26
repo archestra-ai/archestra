@@ -232,7 +232,8 @@ export default function ServiceAccountsSettingsPage() {
   // `DataTable` sets the table's `minWidth` to the sum of these sizes, so the
   // sum has to fit the settings shell's content column (~718px at 1200px wide)
   // or trailing columns disappear behind a horizontal scroll. These add up to
-  // 700 including the 56px select column.
+  // 698 including the 56px select column, and each is wide enough for its own
+  // header to sit on one line.
   const columns: ColumnDef<ServiceAccount>[] = useMemo(() => {
     const baseColumns: ColumnDef<ServiceAccount>[] = [
       createSelectColumn<ServiceAccount>({
@@ -256,7 +257,7 @@ export default function ServiceAccountsSettingsPage() {
       {
         accessorKey: "role",
         header: "Role",
-        size: 92,
+        size: 88,
         cell: ({ row }) => (
           <Badge variant="secondary">{formatRoleName(row.original.role)}</Badge>
         ),
@@ -264,7 +265,7 @@ export default function ServiceAccountsSettingsPage() {
       {
         accessorKey: "disabled",
         header: "Status",
-        size: 124,
+        size: 112,
         cell: ({ row }) => (
           <AccountHealthBadge health={getAccountHealth(row.original)} />
         ),
@@ -272,13 +273,13 @@ export default function ServiceAccountsSettingsPage() {
       {
         accessorKey: "tokenCount",
         header: "API keys",
-        size: 72,
+        size: 90,
         cell: ({ row }) => <KeyCount account={row.original} />,
       },
       {
         accessorKey: "lastUsedAt",
         header: "Last used",
-        size: 112,
+        size: 108,
         cell: ({ row }) => <LastUsed account={row.original} />,
       },
       // "Created" is deliberately absent. The settings shell gives this table a

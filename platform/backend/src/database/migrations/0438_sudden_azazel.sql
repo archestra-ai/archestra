@@ -1,0 +1,1 @@
+ALTER TABLE "chatops_channel_binding" ADD COLUMN "channel_instructions" text;

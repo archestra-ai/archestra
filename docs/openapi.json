@@ -119404,6 +119404,10 @@
                           "answerAllMessages": {
                             "type": "boolean"
                           },
+                          "channelInstructions": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "dmOwnerEmail": {
                             "nullable": true,
                             "type": "string",
@@ -119436,6 +119440,7 @@
                           "workspaceName",
                           "isDm",
                           "answerAllMessages",
+                          "channelInstructions",
                           "dmOwnerEmail",
                           "agentId",
                           "createdAt",
@@ -119867,6 +119872,10 @@
                       "answerAllMessages": {
                         "type": "boolean"
                       },
+                      "channelInstructions": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "dmOwnerEmail": {
                         "nullable": true,
                         "type": "string",
@@ -119899,6 +119908,7 @@
                       "workspaceName",
                       "isDm",
                       "answerAllMessages",
+                      "channelInstructions",
                       "dmOwnerEmail",
                       "agentId",
                       "createdAt",
@@ -120443,6 +120453,11 @@
                   },
                   "answerAllMessages": {
                     "type": "boolean"
+                  },
+                  "channelInstructions": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 4000
                   }
                 }
               }
@@ -120510,6 +120525,10 @@
                     "answerAllMessages": {
                       "type": "boolean"
                     },
+                    "channelInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "dmOwnerEmail": {
                       "nullable": true,
                       "type": "string",
@@ -120542,6 +120561,7 @@
                     "workspaceName",
                     "isDm",
                     "answerAllMessages",
+                    "channelInstructions",
                     "dmOwnerEmail",
                     "agentId",
                     "createdAt",
@@ -120875,6 +120895,10 @@
                     "answerAllMessages": {
                       "type": "boolean"
                     },
+                    "channelInstructions": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "dmOwnerEmail": {
                       "nullable": true,
                       "type": "string",
@@ -120907,6 +120931,7 @@
                     "workspaceName",
                     "isDm",
                     "answerAllMessages",
+                    "channelInstructions",
                     "dmOwnerEmail",
                     "agentId",
                     "createdAt",

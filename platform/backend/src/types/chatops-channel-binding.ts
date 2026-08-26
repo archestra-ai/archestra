@@ -1,3 +1,4 @@
+import { CHANNEL_INSTRUCTIONS_MAX_LENGTH } from "@archestra/shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -25,11 +26,31 @@ export const InsertChatOpsChannelBindingSchema = createInsertSchema(
   updatedAt: true,
 });
 
+/**
+ * Per-channel instructions as they arrive from the API: trimmed, and normalized
+ * to `null` when blank so "cleared" is stored the same way as "never set".
+ * Optional at the outermost level, so an update that omits the field leaves the
+ * stored instructions alone rather than erasing them.
+ */
+const ChannelInstructionsSchema = z
+  .string()
+  .max(CHANNEL_INSTRUCTIONS_MAX_LENGTH)
+  .nullable()
+  .transform((value) => {
+    const trimmed = value?.trim();
+    return trimmed ? trimmed : null;
+  })
+  .optional();
+
 export const UpdateChatOpsChannelBindingSchema = createUpdateSchema(
   schema.chatopsChannelBindingsTable,
+  {
+    channelInstructions: ChannelInstructionsSchema,
+  },
 ).pick({
   agentId: true,
   answerAllMessages: true,
+  channelInstructions: true,
 });
 
 /**

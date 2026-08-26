@@ -371,12 +371,9 @@ function VirtualKeysTable() {
               ]}
             />
             <ProviderKeyFilterSelect
-              value={providerApiKeyIdFilter ?? "all"}
-              onValueChange={(value) =>
-                updateQueryParams({
-                  providerApiKeyId: value === "all" ? null : value,
-                  page: "1",
-                })
+              value={providerApiKeyIdFilter}
+              onValueChange={(providerApiKeyId) =>
+                updateQueryParams({ providerApiKeyId, page: "1" })
               }
             />
           </FilterBar>

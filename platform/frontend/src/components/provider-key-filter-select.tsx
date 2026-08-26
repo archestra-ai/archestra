@@ -32,8 +32,11 @@ export function isProviderApiKeyId(value: string | null): value is string {
 
 /**
  * The shared "Filter by provider key" dropdown used by the Virtual Keys and
- * OAuth Clients tables. `value` is an LLM provider API key id or the "all"
- * sentinel (DEFAULT_FILTER_ALL).
+ * OAuth Clients tables. `value` is an LLM provider API key id, or `undefined`
+ * for "not filtered"; `onValueChange` reports `null` when the filter is
+ * cleared, which is what the query-param helpers already treat as "drop it".
+ * The "all" sentinel the underlying select needs stays in here — call sites
+ * deal in ids and absence.
  *
  * Deleting a provider key is blocked while virtual keys or OAuth clients still
  * map to it, and that blocking dialog links here with the key preselected — so
@@ -44,8 +47,8 @@ export function ProviderKeyFilterSelect({
   value,
   onValueChange,
 }: {
-  value: string;
-  onValueChange: (value: string) => void;
+  value: string | undefined;
+  onValueChange: (value: string | null) => void;
 }) {
   const providerCatalog = useModelProviderCatalog();
   // Errors stay silent: this is a filter next to a table that renders its own
@@ -55,13 +58,14 @@ export function ProviderKeyFilterSelect({
     toastOnError: false,
   });
 
-  const isSelected = value !== DEFAULT_FILTER_ALL;
   const selectedIsListed = providerApiKeys.some((key) => key.id === value);
 
   return (
     <FilterSelect
-      value={value}
-      onValueChange={onValueChange}
+      value={value ?? DEFAULT_FILTER_ALL}
+      onValueChange={(next) =>
+        onValueChange(next === DEFAULT_FILTER_ALL ? null : next)
+      }
       placeholder="Filter by provider key"
       searchPlaceholder="Search provider keys..."
       emptyMessage="No provider keys found."
@@ -84,7 +88,7 @@ export function ProviderKeyFilterSelect({
         // readable by this user — still needs a name here. Without one the
         // trigger falls back to rendering the raw id, and the bar would claim
         // nothing is filtered while the table quietly is.
-        ...(isSelected && !selectedIsListed
+        ...(value !== undefined && !selectedIsListed
           ? [
               {
                 value,

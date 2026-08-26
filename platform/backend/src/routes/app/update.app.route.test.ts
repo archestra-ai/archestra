@@ -132,6 +132,38 @@ describe("PATCH /api/apps/:appId", () => {
     expect(rows[0].after).toMatchObject({ icon: "🚀" });
   });
 
+  test("audits an uploaded image icon as a digest, not as its bytes", async ({
+    makeApp,
+  }) => {
+    // An emoji is short enough to audit verbatim; a data URL is not. Embedding
+    // one would copy it into both sides of EVERY later app audit event, so it
+    // collapses to a digest that still changes when the image does.
+    const created = await makeApp({ organizationId, scope: "org" });
+    const dataUrl = `data:image/png;base64,${"A".repeat(4096)}`;
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/apps/${created.id}`,
+      payload: { icon: dataUrl },
+    });
+    expect(response.statusCode).toBe(200);
+    // The API still hands back the real icon — only the audit trail is summarized.
+    expect(response.json().icon).toBe(dataUrl);
+
+    const [row] = await db
+      .select({ after: schema.auditLogsTable.after })
+      .from(schema.auditLogsTable)
+      .where(
+        and(
+          eq(schema.auditLogsTable.action, "app.updated"),
+          eq(schema.auditLogsTable.organizationId, organizationId),
+        ),
+      );
+    const auditedIcon = (row.after as Record<string, unknown>).icon;
+    expect(auditedIcon).toMatch(/^image:[0-9a-f]{16}$/);
+    expect(JSON.stringify(row.after)).not.toContain("AAAA");
+  });
+
   test("an edit that leaves the icon out keeps it", async ({ makeApp }) => {
     // The settings form sends name/description on every save; an omitted icon
     // must not be read as "clear it".

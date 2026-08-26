@@ -1,5 +1,5 @@
 import { type archestraApiTypes, parseFullToolName } from "@archestra/shared";
-import { AppWindow, PanelRight } from "lucide-react";
+import { PanelRight } from "lucide-react";
 import type React from "react";
 import {
   Component,
@@ -218,9 +218,11 @@ export function McpAppEntryPill({
   const { data: ownedApp } = useApp(appId ?? null);
   const headerName = ownedApp?.name || appName || mcpToolLabel(toolName);
   // The pill identifies the APP, so it shows the app's own icon and never the
-  // serving MCP catalog's; without one it falls back to the generic app glyph.
+  // serving MCP catalog's. No `fallback` here: an app without an icon renders
+  // no element at all and McpAppPill supplies the generic app glyph, which is
+  // the one fallback every pill (owned or not) already goes through.
   const pillIcon = ownedApp?.icon ? (
-    <McpCatalogIcon icon={ownedApp.icon} size={16} fallback={AppWindow} />
+    <McpCatalogIcon icon={ownedApp.icon} size={16} />
   ) : undefined;
 
   const standalone = !toolCallId;

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { urlSlugify } from "@archestra/shared";
 import {
   and,
@@ -833,10 +834,28 @@ class AppModel {
     ]);
     return {
       ...row,
+      icon: auditIcon(row.icon),
       tools: tools.map((t) => t.name).sort(),
       labels: labels.map((label) => `${label.key}:${label.value}`).sort(),
     };
   }
+}
+
+/**
+ * The icon as an audit snapshot carries it.
+ *
+ * An emoji is a handful of bytes and reads meaningfully in a diff, so it goes
+ * verbatim. An uploaded image is a base64 data URL up to the icon cap, and
+ * embedding one would put ~1.4 MB of unreadable text into BOTH sides of every
+ * app audit event — every rename, re-scope and tool assignment, not just icon
+ * edits — for no diagnostic gain. Those collapse to a digest, which still
+ * changes when the image does, so an icon swap is auditable without the
+ * payload. `InternalMcpCatalogModel.findByIdForAudit` omits the same column
+ * outright; a digest keeps the diff non-empty instead.
+ */
+function auditIcon(icon: string | null): string | null {
+  if (icon === null || !icon.startsWith("data:")) return icon;
+  return `image:${createHash("sha256").update(icon).digest("hex").slice(0, 16)}`;
 }
 
 export default AppModel;

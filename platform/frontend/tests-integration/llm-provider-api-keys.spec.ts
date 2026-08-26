@@ -2,6 +2,9 @@ import { makeLlmProviderApiKey } from "../src/mocks/data/llm-keys";
 import { expect, test } from "./fixtures";
 
 const PROVIDER = "anthropic" as const;
+// The picker lists its options as buttons in a searchable popover, and each
+// one's accessible name repeats the provider: the icon's alt text, then the
+// label.
 const PROVIDER_OPTION_NAME = "Anthropic Anthropic";
 const API_KEY_PLACEHOLDER = "sk-ant-test-key-12345";
 
@@ -35,7 +38,9 @@ test.describe("LLM Provider API Keys", () => {
     await llmKeysPage.goto();
     await llmKeysPage.addButton.click();
     await page.getByRole("combobox", { name: "Provider" }).click();
-    await page.getByRole("option", { name: PROVIDER_OPTION_NAME }).click();
+    await page
+      .getByRole("button", { name: PROVIDER_OPTION_NAME, exact: true })
+      .click();
     await page.getByLabel(/^Name/).fill(KEY_NAME);
     await page
       .getByRole("textbox", { name: /API Key/i })
@@ -121,7 +126,9 @@ test.describe("LLM Provider API Keys", () => {
     await llmKeysPage.goto();
     await llmKeysPage.addButton.click();
     await page.getByRole("combobox", { name: "Provider" }).click();
-    await page.getByRole("option", { name: PROVIDER_OPTION_NAME }).click();
+    await page
+      .getByRole("button", { name: PROVIDER_OPTION_NAME, exact: true })
+      .click();
     await page.getByLabel(/^Name/).fill(KEY_A);
     await page
       .getByRole("textbox", { name: /API Key/i })
@@ -142,7 +149,9 @@ test.describe("LLM Provider API Keys", () => {
 
     await llmKeysPage.addButton.click();
     await page.getByRole("combobox", { name: "Provider" }).click();
-    await page.getByRole("option", { name: PROVIDER_OPTION_NAME }).click();
+    await page
+      .getByRole("button", { name: PROVIDER_OPTION_NAME, exact: true })
+      .click();
     await page.getByLabel(/^Name/).fill(KEY_B);
     await page
       .getByRole("textbox", { name: /API Key/i })
@@ -182,7 +191,9 @@ test.describe("LLM Provider API Keys", () => {
     await llmKeysPage.goto();
     await llmKeysPage.addButton.click();
     await page.getByRole("combobox", { name: "Provider" }).click();
-    await page.getByRole("option", { name: PROVIDER_OPTION_NAME }).click();
+    await page
+      .getByRole("button", { name: PROVIDER_OPTION_NAME, exact: true })
+      .click();
     await page.getByLabel(/^Name/).fill(PRIMARY);
     await page
       .getByRole("textbox", { name: /API Key/i })
@@ -213,7 +224,9 @@ test.describe("LLM Provider API Keys", () => {
     // toggle should be off and disabled.
     await llmKeysPage.addButton.click();
     await page.getByRole("combobox", { name: "Provider" }).click();
-    await page.getByRole("option", { name: PROVIDER_OPTION_NAME }).click();
+    await page
+      .getByRole("button", { name: PROVIDER_OPTION_NAME, exact: true })
+      .click();
     await page.getByLabel(/^Name/).fill(SECONDARY);
     await page
       .getByRole("textbox", { name: /API Key/i })

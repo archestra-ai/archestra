@@ -68497,6 +68497,10 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "icon": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "source": {
                                 "type": "string",
                                 "enum": [
@@ -68591,6 +68595,7 @@
                               "cspOrigin",
                               "pinnedAt",
                               "labels",
+                              "icon",
                               "source",
                               "id",
                               "slug",
@@ -68666,6 +68671,10 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "icon": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "source": {
                                 "type": "string",
                                 "enum": [
@@ -68692,10 +68701,6 @@
                               "toolName": {
                                 "type": "string"
                               },
-                              "icon": {
-                                "nullable": true,
-                                "type": "string"
-                              },
                               "requiresInput": {
                                 "type": "boolean"
                               }
@@ -68707,13 +68712,13 @@
                               "cspOrigin",
                               "pinnedAt",
                               "labels",
+                              "icon",
                               "source",
                               "catalogId",
                               "mcpServerId",
                               "scope",
                               "resourceUri",
                               "toolName",
-                              "icon",
                               "requiresInput"
                             ],
                             "additionalProperties": false
@@ -69075,6 +69080,11 @@
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
+                  "icon": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 1048576
+                  },
                   "labels": {
                     "type": "array",
                     "items": {
@@ -69243,6 +69253,10 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "labels": {
                       "type": "array",
                       "items": {
@@ -69304,6 +69318,7 @@
                     "deletedAt",
                     "scope",
                     "environmentId",
+                    "icon",
                     "labels"
                   ],
                   "additionalProperties": false
@@ -72599,6 +72614,10 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "labels": {
                       "type": "array",
                       "items": {
@@ -72703,6 +72722,7 @@
                     "deletedAt",
                     "scope",
                     "environmentId",
+                    "icon",
                     "labels",
                     "teams",
                     "users",
@@ -73019,6 +73039,11 @@
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
+                  "icon": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 1048576
+                  },
                   "labels": {
                     "type": "array",
                     "items": {
@@ -73200,6 +73225,10 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "labels": {
                       "type": "array",
                       "items": {
@@ -73256,6 +73285,7 @@
                     "deletedAt",
                     "scope",
                     "environmentId",
+                    "icon",
                     "labels"
                   ],
                   "additionalProperties": false
@@ -74598,6 +74628,10 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "labels": {
                       "type": "array",
                       "items": {
@@ -74702,6 +74736,7 @@
                     "deletedAt",
                     "scope",
                     "environmentId",
+                    "icon",
                     "labels",
                     "teams",
                     "users",
@@ -75088,6 +75123,10 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "labels": {
                       "type": "array",
                       "items": {
@@ -75192,6 +75231,7 @@
                     "deletedAt",
                     "scope",
                     "environmentId",
+                    "icon",
                     "labels",
                     "teams",
                     "users",
@@ -75578,6 +75618,10 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "labels": {
                       "type": "array",
                       "items": {
@@ -75682,6 +75726,7 @@
                     "deletedAt",
                     "scope",
                     "environmentId",
+                    "icon",
                     "labels",
                     "teams",
                     "users",
@@ -76068,6 +76113,10 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "labels": {
                       "type": "array",
                       "items": {
@@ -76172,6 +76221,7 @@
                     "deletedAt",
                     "scope",
                     "environmentId",
+                    "icon",
                     "labels",
                     "teams",
                     "users",

@@ -31,6 +31,7 @@ import {
   type McpCallToolResult,
 } from "@/components/mcp-app/mcp-app-view";
 import { useAppRuntimeControls } from "@/components/mcp-app/use-app-runtime-controls";
+import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useApp } from "@/lib/app.query";
@@ -188,7 +189,6 @@ export function McpAppEntryPill({
   appName,
   toolName,
   toolCallId,
-  icon,
   state,
   onClick,
 }: {
@@ -197,8 +197,6 @@ export function McpAppEntryPill({
   /** Full prefixed tool name — fallback label when no app name is known. */
   toolName: string;
   toolCallId?: string;
-  /** App icon (e.g. an McpCatalogIcon); falls back to the generic app glyph. */
-  icon?: React.ReactNode;
   /** Tool-call state for the status dot, matching the tool-call circles. */
   state?: "running" | "completed" | "error" | "denied";
   /** Runs on every pill click, before the app toggle (e.g. to collapse an
@@ -215,10 +213,17 @@ export function McpAppEntryPill({
     closePanel,
     portalTarget,
   } = useApps();
-  // Owned apps can be renamed from settings; read the live app so the label
-  // stays in sync after an edit (the appName prop is captured at render time).
+  // Owned apps can be renamed and re-iconed from settings; read the live app so
+  // both stay in sync after an edit (the props are captured at render time).
   const { data: ownedApp } = useApp(appId ?? null);
   const headerName = ownedApp?.name || appName || mcpToolLabel(toolName);
+  // The pill identifies the APP, so it shows the app's own icon and never the
+  // serving MCP catalog's. No `fallback` here: an app without an icon renders
+  // no element at all and McpAppPill supplies the generic app glyph, which is
+  // the one fallback every pill (owned or not) already goes through.
+  const pillIcon = ownedApp?.icon ? (
+    <McpCatalogIcon icon={ownedApp.icon} size={16} />
+  ) : undefined;
 
   const standalone = !toolCallId;
   const canonicalId = toolCallId ? canonicalToolCallId(toolCallId) : undefined;
@@ -243,7 +248,7 @@ export function McpAppEntryPill({
   return (
     <McpAppPill
       label={headerName}
-      icon={icon}
+      icon={pillIcon}
       state={state}
       pressed={pressed}
       hasError={hasRuntimeError}

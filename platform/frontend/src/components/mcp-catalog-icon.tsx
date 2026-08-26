@@ -1,6 +1,7 @@
 "use client";
 
 import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
+import type { LucideIcon } from "lucide-react";
 import { Server } from "lucide-react";
 import Image from "next/image";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
@@ -11,6 +12,12 @@ interface McpCatalogIconProps {
   catalogId?: string;
   size?: number;
   className?: string;
+  /**
+   * Glyph shown when no icon is set. Defaults to the server glyph; an Apps
+   * surface passes `AppWindow` so an app without an icon keeps reading as an
+   * app rather than as a server.
+   */
+  fallback?: LucideIcon;
 }
 
 export function McpCatalogIcon({
@@ -18,6 +25,7 @@ export function McpCatalogIcon({
   catalogId,
   size = 20,
   className,
+  fallback: Fallback = Server,
 }: McpCatalogIconProps) {
   const appIconLogo = useAppIconLogo();
 
@@ -38,7 +46,7 @@ export function McpCatalogIcon({
 
   if (!icon) {
     return (
-      <Server
+      <Fallback
         className={cn("shrink-0 text-muted-foreground", className)}
         style={{ width: size, height: size }}
       />

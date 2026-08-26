@@ -2,6 +2,7 @@
 
 import { EmojiPicker } from "@ferrucc-io/emoji-picker";
 import {
+  AppWindow,
   Bot,
   Folder,
   ImageIcon,
@@ -29,13 +30,20 @@ import { ServiceLogoPicker } from "./service-logo-picker";
 
 const MAX_IMAGE_SIZE = 512 * 1024; // 512 KB
 
+/** Entities that open a form with an icon picker, and the glyph each falls back to. */
+export type AgentIconPickerFallback =
+  | AgentIconVariant
+  | "server"
+  | "project"
+  | "app";
+
 interface AgentIconPickerProps {
   value: string | null;
   onChange: (icon: string | null) => void;
   className?: string;
   /** Show a "Logos" tab with pre-built service brand logos */
   showLogos?: boolean;
-  fallbackType?: AgentIconVariant | "server" | "project";
+  fallbackType?: AgentIconPickerFallback;
 }
 
 export function AgentIconPicker({
@@ -113,7 +121,9 @@ export function AgentIconPicker({
           ? Server
           : fallbackType === "project"
             ? Folder
-            : Bot;
+            : fallbackType === "app"
+              ? AppWindow
+              : Bot;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -131,7 +141,7 @@ export function AgentIconPicker({
             isImage ? (
               <Image
                 src={value}
-                alt="Agent icon"
+                alt=""
                 width={32}
                 height={32}
                 className="rounded-md object-contain"

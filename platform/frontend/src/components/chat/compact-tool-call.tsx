@@ -448,8 +448,9 @@ export function CompactToolGroup({
                 />
               );
             }
-            // No icon override: the pill keeps the generic app-window glyph —
-            // the app pill identifies the APP, not the serving MCP catalog.
+            // The pill resolves its own icon from the app it names — this row
+            // deliberately passes none, because the app pill identifies the
+            // APP, not the serving MCP catalog.
             return (
               <McpAppEntryPill
                 key={entry.key}

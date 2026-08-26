@@ -313,6 +313,9 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           cspOrigin: "platform-pinned" as const,
           pinnedAt: ownedPins.get(app.id) ?? null,
           labels: app.labels,
+          // The app's own icon (emoji or data URL), so a card can show what the
+          // app is instead of the same generic glyph on every row.
+          icon: app.icon,
         }))
         .filter((item) => {
           if (query.scope !== undefined && item.scope !== query.scope)
@@ -562,6 +565,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           app: created,
           scope,
           environmentId,
+          icon: body.icon ?? null,
           userId: user.id,
           organizationId,
           teamIds,
@@ -948,7 +952,10 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const patch: Partial<
-        Pick<App, "name" | "slug" | "description" | "scope" | "environmentId">
+        Pick<
+          App,
+          "name" | "slug" | "description" | "scope" | "environmentId" | "icon"
+        >
       > = {};
       if (body.name !== undefined) patch.name = body.name;
       if (body.slug !== undefined) patch.slug = body.slug;
@@ -956,6 +963,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (body.scope !== undefined) patch.scope = body.scope;
       if (body.environmentId !== undefined)
         patch.environmentId = body.environmentId;
+      if (body.icon !== undefined) patch.icon = body.icon;
 
       // Permissions ride the version envelope; an html-bearing edit inherits
       // the current head's value when the caller omits it.

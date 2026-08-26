@@ -140,12 +140,13 @@ function CardOpeningOverlay() {
   );
 }
 
-// The app's type, as the leading icon (shared by cards and table rows).
-// External apps show the backing MCP server's registry icon (emoji or image)
-// when the catalog has one; McpCatalogIcon falls back to the same generic
-// Server glyph otherwise. The label (what "owned" vs "external" means) rides
-// in the tooltip + aria-label rather than a separate badge. Lifted above the
-// full-card click button so it can be hovered.
+// The app's leading icon (shared by cards and table rows): the icon set on the
+// app itself, or — for an external app — its backing MCP server's registry one,
+// both emoji or image. Without one, the glyph says which kind of app it is: the
+// app window for an owned app, the server glyph for an external one. The label
+// (what "owned" vs "external" means) rides in the tooltip + aria-label rather
+// than a separate badge. Lifted above the full-card click button so it can be
+// hovered.
 export function AppTypeIcon({
   owned,
   icon,
@@ -162,11 +163,11 @@ export function AppTypeIcon({
           aria-label={label}
           className="relative z-10 inline-flex text-muted-foreground"
         >
-          {owned ? (
-            <AppWindow className="h-4 w-4" />
-          ) : (
-            <McpCatalogIcon icon={icon} size={16} />
-          )}
+          <McpCatalogIcon
+            icon={icon}
+            size={16}
+            fallback={owned ? AppWindow : undefined}
+          />
         </span>
       </TooltipTrigger>
       <TooltipContent>{label}</TooltipContent>
@@ -229,7 +230,7 @@ function OwnedAppCard({
             left, the scope pill / owner badge / overflow menu at the right. */}
         <div className="mb-1 flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
-            <AppTypeIcon owned />
+            <AppTypeIcon owned icon={app.icon} />
             <CardTitle className="min-w-0 truncate leading-snug">
               {app.name}
             </CardTitle>

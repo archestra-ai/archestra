@@ -60,6 +60,11 @@ vi.mock("@/lib/config/config", async (importOriginal) => ({
 
 vi.mock("@/lib/config/config.query");
 
+// The app pill renders the owned app's icon through McpCatalogIcon, which reads
+// the deployment's branding logo from a query; this suite renders without a
+// QueryClient, so use the canonical mock.
+vi.mock("@/lib/hooks/use-app-name");
+
 // Avoid pulling the real auth client / app query (and their network deps) into
 // the test; the edit pencil is covered by app-frame.test.tsx.
 vi.mock("@/lib/auth/auth.query", () => ({
@@ -1363,6 +1368,69 @@ describe("McpAppSection unavailable owned app", () => {
       screen.getByText(/Dashboard isn't available to you/i),
     ).toBeInTheDocument();
     expect(document.querySelector("iframe")).not.toBeInTheDocument();
+  });
+});
+
+describe("McpAppSection owned-app pill icon", () => {
+  const APP_ID = "947051c7-ea8e-48ed-8077-a3cc904d9d61";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("shows the app's own icon on the pill, and the generic glyph without one", async () => {
+    mockUseApp.mockReturnValue({
+      data: { id: APP_ID, name: "Dashboard", icon: "\u{1F680}", enabled: true },
+      isSuccess: true,
+    } as unknown as ReturnType<typeof useApp>);
+
+    const { unmount } = await act(async () =>
+      render(
+        <AppsProvider apps={[]}>
+          <McpAppSection
+            {...defaultProps}
+            appId={APP_ID}
+            appName="Dashboard"
+            toolCallId="tc1"
+            preloadedResource={preloadedResource}
+          />
+        </AppsProvider>,
+      ),
+    );
+
+    expect(
+      within(screen.getByRole("button", { name: "Dashboard" })).getByText(
+        "\u{1F680}",
+      ),
+    ).toBeInTheDocument();
+    unmount();
+
+    // An app with no icon keeps the generic app glyph rather than rendering an
+    // empty slot — the same fallback every other Apps surface uses.
+    mockUseApp.mockReturnValue({
+      data: { id: APP_ID, name: "Dashboard", icon: null, enabled: true },
+      isSuccess: true,
+    } as unknown as ReturnType<typeof useApp>);
+
+    await act(async () =>
+      render(
+        <AppsProvider apps={[]}>
+          <McpAppSection
+            {...defaultProps}
+            appId={APP_ID}
+            appName="Dashboard"
+            toolCallId="tc2"
+            preloadedResource={preloadedResource}
+          />
+        </AppsProvider>,
+      ),
+    );
+
+    expect(
+      within(screen.getByRole("button", { name: "Dashboard" })).queryByText(
+        "\u{1F680}",
+      ),
+    ).not.toBeInTheDocument();
   });
 });
 

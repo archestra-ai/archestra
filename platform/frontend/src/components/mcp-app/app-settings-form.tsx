@@ -14,6 +14,7 @@ import {
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
 import { EnvironmentSelector } from "@/components/environment-selector";
+import { IdentityFields } from "@/components/identity-fields";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
@@ -44,7 +45,13 @@ import { useAssignableTeams } from "@/lib/teams/team.query";
 
 type App = archestraApiTypes.GetAppResponses["200"];
 
-type FormValues = { name: string; slug: string; description: string };
+type FormValues = {
+  name: string;
+  slug: string;
+  description: string;
+  /** Emoji character or base64 image data URL; null = the generic app glyph. */
+  icon: string | null;
+};
 
 // Mirrors the backend's AppSlugSchema so a malformed URL is caught before the
 // round-trip. Uniqueness is only knowable server-side and comes back as a 409.
@@ -98,6 +105,7 @@ export function AppSettingsForm({
       name: app.name,
       slug: app.slug ?? "",
       description: app.description ?? "",
+      icon: app.icon ?? null,
     },
   });
 
@@ -313,6 +321,7 @@ export function AppSettingsForm({
     if (canUpdate) {
       body.name = values.name.trim();
       body.description = values.description.trim() || null;
+      body.icon = values.icon;
       body.environmentId = environmentId;
       // Flush a label typed into the picker but not yet committed, so a save
       // doesn't silently drop it.
@@ -382,27 +391,35 @@ export function AppSettingsForm({
       <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-4">
         {canUpdate && (
           <>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="app-settings-name">Name</Label>
-              <Input
-                id="app-settings-name"
-                aria-invalid={!!form.formState.errors.name}
-                {...form.register("name", {
-                  required: "Name is required.",
-                  maxLength: {
-                    value: 100,
-                    message: "Name must be 100 characters or fewer.",
-                  },
-                  validate: (value) =>
-                    value.trim().length > 0 || "Name is required.",
-                })}
-              />
-              {form.formState.errors.name?.message ? (
-                <p className="text-xs text-destructive">
-                  {form.formState.errors.name.message}
-                </p>
-              ) : null}
-            </div>
+            <IdentityFields
+              icon={form.watch("icon")}
+              onIconChange={(icon) =>
+                form.setValue("icon", icon, { shouldDirty: true })
+              }
+              fallbackType="app"
+            >
+              <div className="space-y-2">
+                <Label htmlFor="app-settings-name">Name *</Label>
+                <Input
+                  id="app-settings-name"
+                  aria-invalid={!!form.formState.errors.name}
+                  {...form.register("name", {
+                    required: "Name is required.",
+                    maxLength: {
+                      value: 100,
+                      message: "Name must be 100 characters or fewer.",
+                    },
+                    validate: (value) =>
+                      value.trim().length > 0 || "Name is required.",
+                  })}
+                />
+                {form.formState.errors.name?.message ? (
+                  <p className="text-xs text-destructive">
+                    {form.formState.errors.name.message}
+                  </p>
+                ) : null}
+              </div>
+            </IdentityFields>
 
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="app-settings-slug">URL</Label>

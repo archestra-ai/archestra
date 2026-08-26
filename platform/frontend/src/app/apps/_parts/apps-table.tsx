@@ -156,10 +156,7 @@ export function AppsTable({
         return (
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-2">
-              <AppTypeIcon
-                owned={app.source === "owned"}
-                icon={app.source === "external" ? app.icon : undefined}
-              />
+              <AppTypeIcon owned={app.source === "owned"} icon={app.icon} />
               <span className="truncate font-medium">{app.name}</span>
               <LabelTags labels={app.labels} />
               {isOpening && (

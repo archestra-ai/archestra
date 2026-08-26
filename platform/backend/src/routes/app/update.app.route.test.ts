@@ -1,9 +1,20 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import { and, eq } from "drizzle-orm";
+import db, { schema } from "@/database";
+import { registerAuditLogHook } from "@/middleware/audit-log-hook";
+import { InternalMcpCatalogModel, McpServerModel } from "@/models";
 import AppModel from "@/models/app";
 import EnvironmentModel from "@/models/environment";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  mustExist,
+  test,
+} from "@/test";
 import type { User } from "@/types";
 
 describe("PATCH /api/apps/:appId", () => {
@@ -27,6 +38,7 @@ describe("PATCH /api/apps/:appId", () => {
       ).organizationId = organizationId;
       (request as typeof request & { user: User }).user = user;
     });
+    registerAuditLogHook(app);
 
     const { default: appRoutes } = await import("./app.routes");
     await app.register(appRoutes);
@@ -52,6 +64,118 @@ describe("PATCH /api/apps/:appId", () => {
       description: "new desc",
       latestVersion: created.latestVersion,
     });
+  });
+
+  test("sets and clears the icon, storing it on the app's backing catalog", async ({
+    makeApp,
+  }) => {
+    const created = await makeApp({ organizationId, scope: "org" });
+    expect(created.icon).toBeNull();
+
+    const set = await app.inject({
+      method: "PATCH",
+      url: `/api/apps/${created.id}`,
+      payload: { icon: "🚀" },
+    });
+    expect(set.statusCode).toBe(200);
+    expect(set.json().icon).toBe("🚀");
+
+    // An app has no icon column of its own: the value must land on the backing
+    // catalog, which is also what the MCP registry renders for the same entity.
+    const server = await McpServerModel.findById(
+      mustExist(created.mcpServerId),
+    );
+    const catalog = await InternalMcpCatalogModel.findById(
+      mustExist(server).catalogId,
+    );
+    expect(catalog?.icon).toBe("🚀");
+
+    const cleared = await app.inject({
+      method: "PATCH",
+      url: `/api/apps/${created.id}`,
+      payload: { icon: null },
+    });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json().icon).toBeNull();
+    expect(mustExist(await AppModel.findById(created.id)).icon).toBeNull();
+  });
+
+  test("an icon-only edit is audited with a real before/after diff", async ({
+    makeApp,
+  }) => {
+    // The icon is not an `apps` column, so it reaches the audit snapshot only
+    // because that snapshot reads the catalog-joined query. Without it, setting
+    // an icon would record an audit entry showing nothing changed.
+    const created = await makeApp({ organizationId, scope: "org" });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/apps/${created.id}`,
+      payload: { icon: "🚀" },
+    });
+    expect(response.statusCode).toBe(200);
+
+    const rows = await db
+      .select({
+        before: schema.auditLogsTable.before,
+        after: schema.auditLogsTable.after,
+      })
+      .from(schema.auditLogsTable)
+      .where(
+        and(
+          eq(schema.auditLogsTable.action, "app.updated"),
+          eq(schema.auditLogsTable.organizationId, organizationId),
+        ),
+      );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].before).toMatchObject({ icon: null });
+    expect(rows[0].after).toMatchObject({ icon: "🚀" });
+  });
+
+  test("audits an uploaded image icon as a digest, not as its bytes", async ({
+    makeApp,
+  }) => {
+    // An emoji is short enough to audit verbatim; a data URL is not. Embedding
+    // one would copy it into both sides of EVERY later app audit event, so it
+    // collapses to a digest that still changes when the image does.
+    const created = await makeApp({ organizationId, scope: "org" });
+    const dataUrl = `data:image/png;base64,${"A".repeat(4096)}`;
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/apps/${created.id}`,
+      payload: { icon: dataUrl },
+    });
+    expect(response.statusCode).toBe(200);
+    // The API still hands back the real icon — only the audit trail is summarized.
+    expect(response.json().icon).toBe(dataUrl);
+
+    const [row] = await db
+      .select({ after: schema.auditLogsTable.after })
+      .from(schema.auditLogsTable)
+      .where(
+        and(
+          eq(schema.auditLogsTable.action, "app.updated"),
+          eq(schema.auditLogsTable.organizationId, organizationId),
+        ),
+      );
+    const auditedIcon = (row.after as Record<string, unknown>).icon;
+    expect(auditedIcon).toMatch(/^image:[0-9a-f]{16}$/);
+    expect(JSON.stringify(row.after)).not.toContain("AAAA");
+  });
+
+  test("an edit that leaves the icon out keeps it", async ({ makeApp }) => {
+    // The settings form sends name/description on every save; an omitted icon
+    // must not be read as "clear it".
+    const created = await makeApp({ organizationId, scope: "org", icon: "🚀" });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/apps/${created.id}`,
+      payload: { name: "Renamed" },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ name: "Renamed", icon: "🚀" });
   });
 
   test("supplying html forks a new version", async ({ makeApp }) => {

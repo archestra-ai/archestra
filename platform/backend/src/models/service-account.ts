@@ -13,7 +13,9 @@ import {
   gt,
   inArray,
   isNull,
+  max,
   or,
+  sql,
 } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
@@ -31,25 +33,53 @@ class ServiceAccountModel {
   static async listByOrganizationId(
     organizationId: string,
   ): Promise<ServiceAccountResponse[]> {
+    const now = new Date();
+    const tokens = schema.serviceAccountTokensTable;
     const rows = await db
       .select({
         serviceAccount: schema.serviceAccountsTable,
-        tokenCount: count(schema.serviceAccountTokensTable.id),
+        tokenCount: count(tokens.id),
+        // Same three conditions `findByToken` authenticates on, so the count
+        // cannot disagree with what the gateway will actually accept. The
+        // `id is not null` guard keeps the all-null row a LEFT JOIN produces
+        // for a keyless account out of the tally.
+        activeTokenCount:
+          sql<number>`count(*) filter (where ${tokens.id} is not null and ${tokens.disabled} = false and (${tokens.expiresAt} is null or ${tokens.expiresAt} > ${now}))`.mapWith(
+            Number,
+          ),
+        lastUsedAt: max(tokens.lastUsedAt),
+        // `.mapWith` reuses the column's own decoder. Without it the driver
+        // hands back a bare `timestamp without time zone` string that
+        // `new Date(...)` reads as local time, shifting every expiry by the
+        // server's UTC offset and disagreeing with the detail route.
+        soonestExpiryAt:
+          sql<Date | null>`min(${tokens.expiresAt}) filter (where ${tokens.disabled} = false and ${tokens.expiresAt} > ${now})`.mapWith(
+            tokens.expiresAt,
+          ),
       })
       .from(schema.serviceAccountsTable)
       .leftJoin(
-        schema.serviceAccountTokensTable,
-        eq(
-          schema.serviceAccountTokensTable.serviceAccountId,
-          schema.serviceAccountsTable.id,
-        ),
+        tokens,
+        eq(tokens.serviceAccountId, schema.serviceAccountsTable.id),
       )
       .where(eq(schema.serviceAccountsTable.organizationId, organizationId))
       .groupBy(schema.serviceAccountsTable.id)
       .orderBy(desc(schema.serviceAccountsTable.createdAt));
 
-    return rows.map(({ serviceAccount, tokenCount }) =>
-      normalizeServiceAccount(serviceAccount, tokenCount),
+    return rows.map(
+      ({
+        serviceAccount,
+        tokenCount,
+        activeTokenCount,
+        lastUsedAt,
+        soonestExpiryAt,
+      }) =>
+        normalizeServiceAccount(serviceAccount, {
+          tokenCount,
+          activeTokenCount,
+          lastUsedAt: lastUsedAt ? new Date(lastUsedAt) : null,
+          soonestExpiryAt: soonestExpiryAt ?? null,
+        }),
     );
   }
 
@@ -77,7 +107,7 @@ class ServiceAccountModel {
       .orderBy(desc(schema.serviceAccountTokensTable.createdAt));
 
     return {
-      ...normalizeServiceAccount(serviceAccount, tokens.length),
+      ...normalizeServiceAccount(serviceAccount, summarizeTokens(tokens)),
       tokens: tokens.map(normalizeToken),
     };
   }
@@ -144,7 +174,7 @@ class ServiceAccountModel {
       .returning();
 
     return {
-      ...normalizeServiceAccount(serviceAccount, 0),
+      ...normalizeServiceAccount(serviceAccount, summarizeTokens([])),
       tokens: [],
     };
   }
@@ -340,7 +370,7 @@ export default ServiceAccountModel;
 
 function normalizeServiceAccount(
   serviceAccount: SelectServiceAccount,
-  tokenCount: number,
+  stats: TokenStats,
 ): ServiceAccountResponse {
   return {
     id: serviceAccount.id,
@@ -350,7 +380,53 @@ function normalizeServiceAccount(
     disabled: serviceAccount.disabled,
     createdAt: serviceAccount.createdAt,
     updatedAt: serviceAccount.updatedAt,
-    tokenCount,
+    tokenCount: stats.tokenCount,
+    activeTokenCount: stats.activeTokenCount,
+    lastUsedAt: stats.lastUsedAt,
+    soonestExpiryAt: stats.soonestExpiryAt,
+  };
+}
+
+type TokenStats = {
+  tokenCount: number;
+  activeTokenCount: number;
+  lastUsedAt: Date | null;
+  soonestExpiryAt: Date | null;
+};
+
+/**
+ * Token stats for a call site that already holds the rows, so it does not pay
+ * for the aggregate `listByOrganizationId` runs in SQL. Kept beside that query
+ * on purpose: both must agree with `findByToken`'s authentication conditions.
+ */
+function summarizeTokens(
+  tokens: SelectServiceAccountToken[],
+  now = new Date(),
+): TokenStats {
+  let activeTokenCount = 0;
+  let lastUsedAt: Date | null = null;
+  let soonestExpiryAt: Date | null = null;
+  for (const token of tokens) {
+    if (!token.disabled && (!token.expiresAt || token.expiresAt > now)) {
+      activeTokenCount++;
+    }
+    if (token.lastUsedAt && (!lastUsedAt || token.lastUsedAt > lastUsedAt)) {
+      lastUsedAt = token.lastUsedAt;
+    }
+    if (
+      !token.disabled &&
+      token.expiresAt &&
+      token.expiresAt > now &&
+      (!soonestExpiryAt || token.expiresAt < soonestExpiryAt)
+    ) {
+      soonestExpiryAt = token.expiresAt;
+    }
+  }
+  return {
+    tokenCount: tokens.length,
+    activeTokenCount,
+    lastUsedAt,
+    soonestExpiryAt,
   };
 }
 

@@ -7,16 +7,7 @@ import { RoleOptionLabel } from "@/components/role-type-icon";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useAllPermissions } from "@/lib/auth/auth.query";
 import { useRoles } from "@/lib/role.query";
-
-/**
- * Converts a string to title case, splitting on hyphens, underscores, and spaces.
- */
-function toTitleCase(str: string): string {
-  return str
-    .split(/[-_\s]+/)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(" ");
-}
+import { formatRoleName } from "@/lib/utils/role";
 
 interface RoleSelectProps {
   value?: string;
@@ -97,7 +88,7 @@ export function RoleSelect({
 
   const items = roles.map((role) => {
     const missing = ungrantableFor(role.permission);
-    const label = toTitleCase(role.name);
+    const label = formatRoleName(role.name);
     return {
       value: role.role,
       label,

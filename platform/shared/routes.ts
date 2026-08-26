@@ -446,6 +446,7 @@ export const RouteId = {
   UpdateServiceAccount: "updateServiceAccount",
   DeleteServiceAccount: "deleteServiceAccount",
   BulkDeleteServiceAccounts: "bulkDeleteServiceAccounts",
+  BulkSetServiceAccountsDisabled: "bulkSetServiceAccountsDisabled",
   CreateServiceAccountToken: "createServiceAccountToken",
   UpdateServiceAccountToken: "updateServiceAccountToken",
   DeleteServiceAccountToken: "deleteServiceAccountToken",

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { z } from "zod";
 import { filterControlClass } from "@/components/filter-bar";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
@@ -15,18 +16,18 @@ import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
  * the sibling `keyType` / `scope` / `grantType` params already use: an
  * unrecognised value reads as "no filter".
  *
+ * The guard is the same `z.string().uuid()` schema the list endpoints apply
+ * server-side, so the two can never diverge on what counts as a valid id.
+ *
  * A well-formed id that matches nothing is deliberately *not* filtered out —
  * that one belongs to the server, which answers with an empty page the table
  * can explain and offer to clear.
  */
 export function isProviderApiKeyId(value: string | null): value is string {
-  return (
-    value !== null &&
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-      value,
-    )
-  );
+  return value !== null && providerApiKeyIdSchema.safeParse(value).success;
 }
+
+const providerApiKeyIdSchema = z.string().uuid();
 
 /**
  * The "Filter by provider key" control used by the Virtual Keys and OAuth

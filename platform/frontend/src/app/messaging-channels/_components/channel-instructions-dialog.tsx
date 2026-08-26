@@ -1,7 +1,7 @@
 "use client";
 
 import { CHANNEL_INSTRUCTIONS_MAX_LENGTH } from "@archestra/shared";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -36,13 +36,13 @@ export function ChannelInstructionsDialog({
   /** Receives the trimmed text, or null when the field was cleared. */
   onSave: (instructions: string | null) => void;
 }) {
+  // Seeded once per opening: the caller unmounts this component when the
+  // dialog closes, so every open starts from what is stored rather than from
+  // an abandoned edit. Deliberately NOT re-synced from the prop afterwards — a
+  // background refetch of the bindings list would otherwise overwrite what
+  // someone is in the middle of typing, silently and without the
+  // unsaved-changes guard noticing.
   const [value, setValue] = useState(instructions ?? "");
-
-  // Re-seed from the stored value each time the dialog opens, so reopening
-  // after a cancel shows what is saved rather than the abandoned edit.
-  useEffect(() => {
-    if (open) setValue(instructions ?? "");
-  }, [open, instructions]);
 
   const overLimit = value.length > CHANNEL_INSTRUCTIONS_MAX_LENGTH;
   const isDirty = value.trim() !== (instructions ?? "").trim();

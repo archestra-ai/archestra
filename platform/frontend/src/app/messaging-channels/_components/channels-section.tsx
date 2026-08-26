@@ -512,11 +512,7 @@ export function ChannelsSection({
 
           {/* Table */}
           <div className="overflow-hidden rounded-md border">
-            {/* `table-fixed` shrinks every column to fit, so on a narrow
-                viewport the cells stop being wide enough for their content and
-                it spills over the neighbouring column. A floor lets the
-                table's own horizontal scroll take over instead. */}
-            <Table className="min-w-[70rem]">
+            <Table className={CHANNEL_TABLE_MIN_WIDTH}>
               <TableHeader className="bg-muted border-b-2 border-border">
                 <TableRow>
                   <TableHead className="w-[40px]">
@@ -1234,16 +1230,21 @@ function AgentPicker({
 // Loading skeleton
 // ---------------------------------------------------------------------------
 
+/**
+ * Placeholder for the first load. Its columns and width floor mirror the loaded
+ * table's, so the page does not reflow the moment the data lands.
+ */
 function ChannelTableSkeleton() {
   return (
     <div className="overflow-hidden rounded-md border">
-      <Table>
+      <Table className={CHANNEL_TABLE_MIN_WIDTH}>
         <TableHeader className="bg-muted border-b-2 border-border">
           <TableRow>
             <TableHead className="w-[40px]" />
             <TableHead>Channel</TableHead>
             <TableHead>Default Agent</TableHead>
-            <TableHead>Status</TableHead>
+            <TableHead className="w-[110px]">Instructions</TableHead>
+            <TableHead className="w-[110px]">Status</TableHead>
             <TableHead className="w-[80px]">Actions</TableHead>
           </TableRow>
         </TableHeader>
@@ -1263,6 +1264,9 @@ function ChannelTableSkeleton() {
                 <Skeleton className="h-7 w-20 rounded" />
               </TableCell>
               <TableCell>
+                <Skeleton className="h-7 w-12 rounded" />
+              </TableCell>
+              <TableCell>
                 <Skeleton className="h-5 w-20 rounded-full" />
               </TableCell>
               <TableCell>
@@ -1275,3 +1279,10 @@ function ChannelTableSkeleton() {
     </div>
   );
 }
+
+/**
+ * `table-fixed` shrinks every column to fit, so on a narrow viewport the cells
+ * stop being wide enough for their content and it spills over the neighbouring
+ * column. A floor lets the table's own horizontal scroll take over instead.
+ */
+const CHANNEL_TABLE_MIN_WIDTH = "min-w-[70rem]";

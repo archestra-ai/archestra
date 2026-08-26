@@ -1,6 +1,6 @@
 import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -134,11 +134,14 @@ function renderTable() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <ChannelsSection providerConfig={providerConfig} />
-    </QueryClientProvider>,
-  );
+  return {
+    queryClient,
+    ...render(
+      <QueryClientProvider client={queryClient}>
+        <ChannelsSection providerConfig={providerConfig} />
+      </QueryClientProvider>,
+    ),
+  };
 }
 
 describe("channels table — per-channel instructions", () => {
@@ -192,6 +195,42 @@ describe("channels table — per-channel instructions", () => {
 
     await waitFor(() =>
       expect(patched).toEqual([{ channelInstructions: null }]),
+    );
+  });
+
+  // The editor used to re-seed itself from the binding prop, so a refetch that
+  // brought back different stored text — someone else editing the same
+  // channel, or another tab — silently replaced what was half-typed here, with
+  // the unsaved-changes guard none the wiser.
+  it("keeps an in-progress edit when the stored instructions change underneath it", async () => {
+    const user = userEvent.setup();
+    const { queryClient } = renderTable();
+
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    const textarea = await screen.findByLabelText("Channel instructions");
+    await user.clear(textarea);
+    await user.type(textarea, "Half-written policy");
+
+    // Someone else saves different instructions for this channel...
+    server.use(
+      http.get(`${API_ORIGIN}/api/chatops/bindings`, () =>
+        HttpResponse.json({
+          data: [binding({ channelInstructions: "Rewritten somewhere else." })],
+          pagination: { total: 1, limit: 20, offset: 0 },
+          counts: { configured: 1, unassigned: 0 },
+          workspaces: [{ id: "T1", name: "Workspace" }],
+          hasDmBinding: true,
+          workspacesWithUnmentionedTraffic: [],
+        }),
+      ),
+    );
+    // ...and the list refetches while the editor is still open.
+    await act(async () => {
+      await queryClient.refetchQueries({ queryKey: ["chatops", "bindings"] });
+    });
+
+    expect(await screen.findByLabelText("Channel instructions")).toHaveValue(
+      "Half-written policy",
     );
   });
 

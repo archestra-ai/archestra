@@ -25,7 +25,6 @@ import OrganizationModel from "@/models/organization";
 import OrganizationRoleModel from "@/models/organization-role";
 import PluginModel from "@/models/plugin";
 import ProjectModel from "@/models/project";
-import RunnerModel from "@/models/runner";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ServiceAccountModel from "@/models/service-account";
 import SkillModel from "@/models/skill";
@@ -35,7 +34,6 @@ import TeamTokenModel from "@/models/team-token";
 import ToolModel from "@/models/tool";
 import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
 import TrustedDataPolicyModel from "@/models/trusted-data-policy";
-import UserCredentialModel from "@/models/user-credential";
 import UserTokenModel from "@/models/user-token";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 
@@ -87,8 +85,7 @@ export const AUDIT_DECISIONS = {
   // Audited resources — mutations captured via AUDITABLE_ROUTES
   // =========================================================================
   agentsTable: { audited: true, model: AgentModel },
-  runnersTable: { audited: true, model: RunnerModel },
-  userCredentialsTable: { audited: true, model: UserCredentialModel },
+
   agentToolsTable: { audited: true, model: AgentToolModel },
   apikeysTable: { audited: true, model: ApiKeyModel },
   chatopsChannelBindingsTable: {
@@ -592,10 +589,19 @@ export const AUDIT_DECISIONS = {
     reason:
       "derived per-viewer marketplace repo; created implicitly on clone, carries no user-authored state",
   },
-  runnerEventsTable: {
+  runnersTable: {
     audited: false,
     reason:
-      "child of runner; append-only session timeline with its own read surface",
+      "session lifecycle already has a dedicated append-only surface: every start, state change, steer and stop is recorded in runner_events and served by GET /api/runners/:id/events",
+  },
+  runnerEventsTable: {
+    audited: false,
+    reason: "the runner audit surface itself; append-only, never mutated",
+  },
+  userCredentialsTable: {
+    audited: false,
+    reason:
+      "a person's own credential references, with no administrative CRUD — only the owner can add or remove one, and the value is never stored here",
   },
   skillSandboxesTable: {
     audited: false,

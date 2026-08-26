@@ -394,6 +394,11 @@ export const InsertAgentSchemaBase = createInsertSchema(
     updatedAt: true,
     authorId: true,
     isPersonalGateway: true,
+    // The shared runner credential bag is created server-side when an
+    // administrator configures it. Accepting the id here would let any caller
+    // point an agent at an arbitrary secret row and have its fields injected
+    // into a pod they chose the image for.
+    runnerSecretId: true,
     // Which skills a gateway publishes over skill:// is decided by the
     // skill-assignment routes, which carry a `skill:read` floor. Accepting the
     // flag in the generic agent body would let a caller without that
@@ -434,6 +439,11 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
     updatedAt: true,
     authorId: true,
     isPersonalGateway: true,
+    // The shared runner credential bag is created server-side when an
+    // administrator configures it. Accepting the id here would let any caller
+    // point an agent at an arbitrary secret row and have its fields injected
+    // into a pod they chose the image for.
+    runnerSecretId: true,
     // Which skills a gateway publishes over skill:// is decided by the
     // skill-assignment routes, which carry a `skill:read` floor. Accepting the
     // flag in the generic agent body would let a caller without that

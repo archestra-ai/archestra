@@ -20,9 +20,10 @@ import virtualApiKeysTable from "./virtual-api-key";
  * Kubernetes pod: an agent's configured image, started on a user's behalf,
  * kept alive across backend restarts, and steerable/attachable while it runs.
  *
- * This row is the source of truth; the pod is cattle. A pod that disappears is
- * re-derived from this row, and a pod without a row is swept as an orphan
- * (matched on the `archestra.ai/purpose=runner` label).
+ * This row is the source of truth; the pod is cattle. A pod that disappears
+ * is reported as a failed runner on the next reconcile pass rather than left
+ * looking alive. Every object the runtime creates carries the
+ * `archestra.io/purpose=runner` label, so a convergence sweep can find them.
  *
  * Deliberately unlike `skill_sandboxes`: that model replays an ordered log into
  * a fresh ephemeral Dagger container per command and keeps no live process.
@@ -86,7 +87,8 @@ const runnersTable = pgTable(
     secretName: text("secret_name"),
     /**
      * Personal-scope virtual key minted for this runner so LLM spend attributes
-     * to `created_by_user_id`. Revoked and nulled when the runner is torn down.
+     * to `created_by_user_id`. Revoked and nulled during teardown — a key that
+     * outlived its pod would keep working and keep charging its creator.
      */
     virtualApiKeyId: uuid("virtual_api_key_id").references(
       () => virtualApiKeysTable.id,

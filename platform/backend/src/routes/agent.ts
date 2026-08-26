@@ -53,6 +53,7 @@ import {
   assertCanAssignEnvironment,
   resolveDefaultEnvironmentForNewResource,
 } from "@/services/environments/environment";
+import { sanitizeRunnerConfigForWriter } from "@/services/runners/start-runner";
 import {
   type Agent,
   AgentCredentialReadinessSchema,
@@ -609,6 +610,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ...body,
         environmentId,
         builtInAgentConfig: null,
+        runnerConfig: await sanitizeRunnerConfigForWriter({
+          runnerConfig: body.runnerConfig,
+          userId: user.id,
+          organizationId,
+        }),
         ...(body.scope !== "team" && { teams: [] }),
       };
       // Whether a new record starts out able to consult the Advisor is decided
@@ -1694,6 +1700,16 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           teamIds: body.teams ?? currentTeamIds,
         },
       });
+
+      // Only when the body actually carries one: adding the key
+      // unconditionally would write an undefined into the update statement.
+      if (updateData.runnerConfig !== undefined) {
+        updateData.runnerConfig = await sanitizeRunnerConfigForWriter({
+          runnerConfig: updateData.runnerConfig,
+          userId: user.id,
+          organizationId,
+        });
+      }
 
       const agent = await AgentModel.update(id, updateData);
 

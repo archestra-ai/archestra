@@ -4,6 +4,11 @@ import { RUNNER_ID_LABEL, runnerLabels, runnerNames } from "./naming";
 
 /** Where the steer FIFO and the generated entrypoint live inside the pod. */
 const RUNNER_RUN_DIR = "/var/run/archestra";
+const DNS_PORTS = [
+  { protocol: "UDP" as const, port: 53 },
+  { protocol: "TCP" as const, port: 53 },
+];
+
 export const RUNNER_STEER_FIFO = `${RUNNER_RUN_DIR}/steer`;
 const RUNNER_TMUX_SESSION = "agent";
 
@@ -215,6 +220,27 @@ export function buildRunnerPlatformEgressPolicy(params: {
             protocol: "TCP",
             port,
           })),
+        },
+        // DNS. Once any egress policy selects a pod, its egress is clamped to
+        // the union of the selecting policies — and runner pods carry labels no
+        // other policy selects, so without this rule the session cannot resolve
+        // the platform's own hostname and fails at its first call.
+        {
+          to: [
+            {
+              namespaceSelector: {
+                matchLabels: { "kubernetes.io/metadata.name": "kube-system" },
+              },
+              podSelector: { matchLabels: { "k8s-app": "kube-dns" } },
+            },
+          ],
+          ports: DNS_PORTS,
+        },
+        // Clusters whose resolver is not the labelled kube-dns pod (a node-local
+        // cache, or a managed control plane) need the port opened by CIDR too.
+        {
+          to: [{ ipBlock: { cidr: "0.0.0.0/0" } }],
+          ports: DNS_PORTS,
         },
       ],
     },

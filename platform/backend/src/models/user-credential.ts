@@ -155,35 +155,6 @@ class UserCredentialModel {
     return { values, missing };
   }
 
-  /**
-   * Audit hook snapshot; see `AuditableModel`. Deliberately omits `secretId`:
-   * the audit log records that a credential exists and when it rotated, never
-   * a pointer into the secrets manager.
-   */
-  static async findByIdForAudit(
-    id: string,
-    orgId: string,
-  ): Promise<Record<string, unknown> | null> {
-    const [row] = await db
-      .select({
-        id: schema.userCredentialsTable.id,
-        organizationId: schema.userCredentialsTable.organizationId,
-        userId: schema.userCredentialsTable.userId,
-        key: schema.userCredentialsTable.key,
-        createdAt: schema.userCredentialsTable.createdAt,
-        updatedAt: schema.userCredentialsTable.updatedAt,
-      })
-      .from(schema.userCredentialsTable)
-      .where(
-        and(
-          eq(schema.userCredentialsTable.id, id),
-          eq(schema.userCredentialsTable.organizationId, orgId),
-        ),
-      )
-      .limit(1);
-    return row ?? null;
-  }
-
   static async delete(params: {
     organizationId: string;
     userId: string;

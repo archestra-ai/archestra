@@ -282,6 +282,53 @@ describe("planDispatchModeToolCallRewrites", () => {
       "gh__read",
     );
   });
+
+  // Regression: the app-authoring built-ins are hidden from the tool list under
+  // `search_and_run_only` exactly like a third-party tool, so a direct call to
+  // one needs the same repair. Exempting every built-in from the rewrite left
+  // these calls neither repaired nor refused — they reached the caller as a
+  // name it never declared and died there as an unknown-tool error.
+  test.each([
+    "archestra__read_app",
+    "archestra__edit_app",
+    "archestra__list_apps",
+    "archestra__render_app",
+  ])("re-addresses a direct call to %s through run_tool", (toolName) => {
+    const result = planDispatchModeToolCallRewrites({
+      toolCalls: [
+        { id: "call_1", name: toolName, arguments: '{"appId":"a1"}' },
+      ],
+      enabledToolNames: DISPATCH_PAIR,
+    });
+
+    expect(result).toEqual([
+      {
+        id: "call_1",
+        name: "archestra__run_tool",
+        arguments: JSON.stringify({
+          tool_name: toolName,
+          tool_args: { appId: "a1" },
+        }),
+      },
+    ]);
+  });
+
+  // The other half of the contract: built-ins that `filterExposedTools` keeps
+  // top-level in every exposure mode are genuinely directly callable, so
+  // wrapping them would add a pointless dispatch hop.
+  test.each([
+    "archestra__read_file",
+    "archestra__run_command",
+    "archestra__load_skill",
+    "archestra__list_skills",
+  ])("leaves the always-exposed built-in %s directly callable", (toolName) => {
+    expect(
+      planDispatchModeToolCallRewrites({
+        toolCalls: [{ id: "a", name: toolName, arguments: "{}" }],
+        enabledToolNames: DISPATCH_PAIR,
+      }),
+    ).toBeNull();
+  });
 });
 
 // --------------------------------------------------------------------------

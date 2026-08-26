@@ -55,7 +55,6 @@ import {
   type AgentHooksEditorRef,
 } from "@/components/agent-hooks-editor";
 import { AgentIcon, type AgentIconVariant } from "@/components/agent-icon";
-import { AgentIconPicker } from "@/components/agent-icon-picker";
 import {
   type ProfileLabel,
   ProfileLabels,
@@ -84,6 +83,7 @@ import { ModelSelector } from "@/components/chat/model-selector";
 import { EntityPill } from "@/components/entity-pill";
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { IdentityFields } from "@/components/identity-fields";
 import { KnowledgeSourceIcon } from "@/components/knowledge-source-icon";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import {
@@ -2372,12 +2372,11 @@ export function AgentForm({
                 <div className="space-y-4 p-4">
                   {/* Name + Icon (hidden for built-in agents, shown in dialog title) */}
                   {!isBuiltIn && (
-                    <div className="space-y-4">
-                      <AgentIconPicker
-                        value={icon}
-                        onChange={setIcon}
-                        fallbackType={defaultIconType}
-                      />
+                    <IdentityFields
+                      icon={icon}
+                      onIconChange={setIcon}
+                      fallbackType={defaultIconType}
+                    >
                       <div className="space-y-2">
                         <Label htmlFor="agentName">Name *</Label>
                         <Input
@@ -2388,7 +2387,7 @@ export function AgentForm({
                           autoFocus
                         />
                       </div>
-                    </div>
+                    </IdentityFields>
                   )}
 
                   {/* Description (hidden for built-in agents) */}

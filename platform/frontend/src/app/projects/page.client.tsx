@@ -12,12 +12,12 @@ import { Suspense, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AgentIcon } from "@/components/agent-icon";
-import { AgentIconPicker } from "@/components/agent-icon-picker";
 import { AgentSelector } from "@/components/agent-selector";
 import { ApiKeyLoadError } from "@/components/api-key-load-error";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { FilterBar, filterSearchClass } from "@/components/filter-bar";
+import { IdentityFields } from "@/components/identity-fields";
 import { LoadingState } from "@/components/loading";
 import { NoApiKeySetup } from "@/components/no-api-key-setup";
 import { PageLayout } from "@/components/page-layout";
@@ -524,54 +524,58 @@ function CreateProjectDialog({
         </>
       }
     >
-      <div className="flex items-start gap-3">
-        <AgentIconPicker
-          value={icon}
-          onChange={(next) =>
-            form.setValue("icon", next, { shouldDirty: true })
-          }
-          fallbackType="project"
-        />
-        <div className="flex-1 space-y-3 min-w-0">
-          <Input
-            autoFocus
-            aria-label="Project name"
-            placeholder="Project name"
-            maxLength={PROJECT_NAME_MAX_LENGTH}
-            aria-invalid={!!form.formState.errors.name}
-            {...form.register("name", {
-              required: "Project name is required.",
-              maxLength: {
-                value: PROJECT_NAME_MAX_LENGTH,
-                message: `Project name must be ${PROJECT_NAME_MAX_LENGTH} characters or fewer.`,
-              },
-            })}
-          />
-          {form.formState.errors.name?.message && (
-            <p className="text-xs text-destructive">
-              {form.formState.errors.name.message}
-            </p>
-          )}
-          <Textarea
-            aria-label="Project description"
-            placeholder="Description (optional)"
-            rows={3}
-            maxLength={PROJECT_DESCRIPTION_MAX_LENGTH}
-            aria-invalid={!!form.formState.errors.description}
-            {...form.register("description", {
-              maxLength: {
-                value: PROJECT_DESCRIPTION_MAX_LENGTH,
-                message: `Description must be ${PROJECT_DESCRIPTION_MAX_LENGTH} characters or fewer.`,
-              },
-            })}
-          />
-          {form.formState.errors.description?.message && (
-            <p className="text-xs text-destructive">
-              {form.formState.errors.description.message}
-            </p>
-          )}
+      <IdentityFields
+        icon={icon}
+        onIconChange={(next) =>
+          form.setValue("icon", next, { shouldDirty: true })
+        }
+        fallbackType="project"
+      >
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="new-project-name">Name *</Label>
+            <Input
+              autoFocus
+              id="new-project-name"
+              maxLength={PROJECT_NAME_MAX_LENGTH}
+              aria-invalid={!!form.formState.errors.name}
+              {...form.register("name", {
+                required: "Project name is required.",
+                maxLength: {
+                  value: PROJECT_NAME_MAX_LENGTH,
+                  message: `Project name must be ${PROJECT_NAME_MAX_LENGTH} characters or fewer.`,
+                },
+              })}
+            />
+            {form.formState.errors.name?.message && (
+              <p className="text-xs text-destructive">
+                {form.formState.errors.name.message}
+              </p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="new-project-description">Description</Label>
+            <Textarea
+              id="new-project-description"
+              placeholder="What is this project about?"
+              rows={3}
+              maxLength={PROJECT_DESCRIPTION_MAX_LENGTH}
+              aria-invalid={!!form.formState.errors.description}
+              {...form.register("description", {
+                maxLength: {
+                  value: PROJECT_DESCRIPTION_MAX_LENGTH,
+                  message: `Description must be ${PROJECT_DESCRIPTION_MAX_LENGTH} characters or fewer.`,
+                },
+              })}
+            />
+            {form.formState.errors.description?.message && (
+              <p className="text-xs text-destructive">
+                {form.formState.errors.description.message}
+              </p>
+            )}
+          </div>
         </div>
-      </div>
+      </IdentityFields>
 
       {canReadAgents === true && (
         <div className="space-y-1.5">

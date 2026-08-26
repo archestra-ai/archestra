@@ -8,13 +8,13 @@ import { Globe, User, UserRound, Users } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { AppToolsEditor } from "@/app/apps/_parts/app-tools-editor";
-import { AgentIconPicker } from "@/components/agent-icon-picker";
 import {
   type ProfileLabel,
   ProfileLabels,
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
 import { EnvironmentSelector } from "@/components/environment-selector";
+import { IdentityFields } from "@/components/identity-fields";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
@@ -391,24 +391,15 @@ export function AppSettingsForm({
       <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-4">
         {canUpdate && (
           <>
-            {/* Icon and name are one identity row, as in the MCP server form:
-                the picker is what the app looks like, the field what it is
-                called. */}
-            <div className="flex items-start gap-3">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="app-settings-icon">Icon</Label>
-                <AgentIconPicker
-                  id="app-settings-icon"
-                  value={form.watch("icon")}
-                  fallbackType="app"
-                  onChange={(icon) =>
-                    form.setValue("icon", icon, { shouldDirty: true })
-                  }
-                  className="h-9 w-9"
-                />
-              </div>
-              <div className="flex flex-1 flex-col gap-1.5">
-                <Label htmlFor="app-settings-name">Name</Label>
+            <IdentityFields
+              icon={form.watch("icon")}
+              onIconChange={(icon) =>
+                form.setValue("icon", icon, { shouldDirty: true })
+              }
+              fallbackType="app"
+            >
+              <div className="space-y-2">
+                <Label htmlFor="app-settings-name">Name *</Label>
                 <Input
                   id="app-settings-name"
                   aria-invalid={!!form.formState.errors.name}
@@ -428,7 +419,7 @@ export function AppSettingsForm({
                   </p>
                 ) : null}
               </div>
-            </div>
+            </IdentityFields>
 
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="app-settings-slug">URL</Label>

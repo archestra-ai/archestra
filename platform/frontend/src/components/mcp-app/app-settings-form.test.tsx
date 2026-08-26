@@ -183,7 +183,7 @@ describe("AppSettingsForm save", () => {
   test("saves trimmed identity fields and closes; unchanged tools fire no mutations", async () => {
     const { container, onBack } = renderForm();
 
-    fireEvent.change(screen.getByLabelText("Name"), {
+    fireEvent.change(screen.getByLabelText("Name *"), {
       target: { value: "  Budget v2  " },
     });
     submitForm(container);
@@ -230,7 +230,7 @@ describe("AppSettingsForm save", () => {
     });
     expect(getByTestId("icon-value")).toHaveTextContent("🚀");
 
-    fireEvent.change(screen.getByLabelText("Name"), {
+    fireEvent.change(screen.getByLabelText("Name *"), {
       target: { value: "Budget v2" },
     });
     submitForm(container);
@@ -382,7 +382,7 @@ describe("AppSettingsForm save", () => {
   test("an empty name blocks submit and shows a validation message", async () => {
     const { container, onBack } = renderForm();
 
-    fireEvent.change(screen.getByLabelText("Name"), {
+    fireEvent.change(screen.getByLabelText("Name *"), {
       target: { value: "   " },
     });
     submitForm(container);
@@ -426,7 +426,7 @@ describe("AppSettingsForm URL field", () => {
   test("omits an unchanged slug so a save cannot 409 against its own row", async () => {
     const { container, onBack } = renderForm({ app: SLUGGED });
 
-    fireEvent.change(screen.getByLabelText("Name"), {
+    fireEvent.change(screen.getByLabelText("Name *"), {
       target: { value: "Budget v2" },
     });
     submitForm(container);

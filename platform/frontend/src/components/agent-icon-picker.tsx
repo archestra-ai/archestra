@@ -30,15 +30,20 @@ import { ServiceLogoPicker } from "./service-logo-picker";
 
 const MAX_IMAGE_SIZE = 512 * 1024; // 512 KB
 
+/** Entities that open a form with an icon picker, and the glyph each falls back to. */
+export type AgentIconPickerFallback =
+  | AgentIconVariant
+  | "server"
+  | "project"
+  | "app";
+
 interface AgentIconPickerProps {
   value: string | null;
   onChange: (icon: string | null) => void;
   className?: string;
   /** Show a "Logos" tab with pre-built service brand logos */
   showLogos?: boolean;
-  fallbackType?: AgentIconVariant | "server" | "project" | "app";
-  /** Id for the trigger, so a visible `<Label htmlFor>` can point at it. */
-  id?: string;
+  fallbackType?: AgentIconPickerFallback;
 }
 
 export function AgentIconPicker({
@@ -47,7 +52,6 @@ export function AgentIconPicker({
   className,
   showLogos = false,
   fallbackType = "agent",
-  id,
 }: AgentIconPickerProps) {
   const [open, setOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -126,7 +130,6 @@ export function AgentIconPicker({
       <PopoverTrigger asChild>
         <button
           type="button"
-          id={id}
           aria-label={value ? "Change icon" : "Choose icon"}
           className={cn(
             "relative group flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border-2 border-dashed hover:border-primary/50 hover:bg-accent transition-colors cursor-pointer",

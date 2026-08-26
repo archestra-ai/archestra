@@ -23,7 +23,11 @@ import { useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
-import { FilterBar, filterSearchClass } from "@/components/filter-bar";
+import {
+  FilterBar,
+  FilterSelect,
+  filterSearchClass,
+} from "@/components/filter-bar";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
@@ -44,13 +48,6 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
 import { DATA_TABLE_SELECT_COLUMN_SIZE } from "@/components/ui/data-table.constants";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
@@ -703,19 +700,18 @@ function SuiteRunHistory({
             placeholder="Search label or agent…"
             className={filterSearchClass}
           />
-          <Select value={status} onValueChange={setStatus}>
-            <SelectTrigger className="w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All statuses</SelectItem>
-              {RUN_STATUS_FILTERS.map((value) => (
-                <SelectItem key={value} value={value}>
-                  {value[0].toUpperCase() + value.slice(1)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <FilterSelect
+            value={status}
+            onValueChange={setStatus}
+            placeholder="Filter by status"
+            items={[
+              { value: "all", label: "All statuses" },
+              ...RUN_STATUS_FILTERS.map((value) => ({
+                value,
+                label: value[0].toUpperCase() + value.slice(1),
+              })),
+            ]}
+          />
         </FilterBar>
 
         {runsQuery.isLoadingError ? (

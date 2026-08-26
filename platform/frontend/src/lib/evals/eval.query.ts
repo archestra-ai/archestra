@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { handleApiError, throwOnApiError, toApiError } from "../utils";
 
 const {
+  bulkDeleteEvalSuites,
   getEvalSuites,
   createEvalSuite,
   getEvalSuite,
@@ -33,7 +34,7 @@ export type EvalRunResult =
 
 export const evalKeys = {
   all: ["evals"] as const,
-  suites: (params: { limit?: number; offset?: number }) =>
+  suites: (params: { limit?: number; offset?: number; name?: string }) =>
     [...evalKeys.all, "suites", params] as const,
   suite: (suiteId: string) => [...evalKeys.all, "suite", suiteId] as const,
   cases: (suiteId: string) => [...evalKeys.all, "cases", suiteId] as const,
@@ -51,7 +52,11 @@ export const evalKeys = {
 
 // === Suites ===
 
-export function useEvalSuites(params: { limit?: number; offset?: number }) {
+export function useEvalSuites(params: {
+  limit?: number;
+  offset?: number;
+  name?: string;
+}) {
   return useQuery({
     queryKey: evalKeys.suites(params),
     queryFn: async () => {
@@ -112,6 +117,33 @@ export function useUpdateEvalSuite() {
     },
     onSuccess: () => {
       toast.success("Eval suite updated");
+      queryClient.invalidateQueries({ queryKey: evalKeys.all });
+    },
+  });
+}
+
+export function useBulkDeleteEvalSuites() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      const { data, error } = await bulkDeleteEvalSuites({ body: { ids } });
+      if (error) {
+        handleApiError(error);
+        throw toApiError(error);
+      }
+      return data;
+    },
+    onSuccess: (outcome) => {
+      if (!outcome) return;
+      if (outcome.failed.length > 0) {
+        toast.warning(
+          `Deleted ${outcome.succeeded.length}; ${outcome.failed.length} could not be deleted`,
+        );
+      } else {
+        toast.success(
+          `Deleted ${outcome.succeeded.length} eval ${outcome.succeeded.length === 1 ? "suite" : "suites"}`,
+        );
+      }
       queryClient.invalidateQueries({ queryKey: evalKeys.all });
     },
   });

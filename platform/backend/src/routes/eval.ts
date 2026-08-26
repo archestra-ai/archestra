@@ -33,6 +33,7 @@ import {
   SelectEvalRunSchema,
   SelectEvalSuiteSchema,
 } from "@/types/eval";
+import { BulkDeleteBodySchema, BulkOutcomeSchema, runBulk } from "./bulk-route";
 
 const EvalSuiteWithCaseCountSchema = SelectEvalSuiteSchema.extend({
   caseCount: z.number(),
@@ -90,16 +91,23 @@ const evalRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetEvalSuites,
         description: "List eval suites",
         tags: ["Evals"],
-        querystring: PaginationQuerySchema,
+        querystring: PaginationQuerySchema.extend({
+          name: z.string().optional(),
+        }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(EvalSuiteWithCaseCountSchema),
         ),
       },
     },
-    async ({ query: { limit, offset }, organizationId }, reply) => {
+    async ({ query: { limit, offset, name }, organizationId }, reply) => {
       const [data, total] = await Promise.all([
-        EvalSuiteModel.listByOrganization({ organizationId, limit, offset }),
-        EvalSuiteModel.countByOrganization(organizationId),
+        EvalSuiteModel.listByOrganization({
+          organizationId,
+          limit,
+          offset,
+          name,
+        }),
+        EvalSuiteModel.countByOrganization({ organizationId, name }),
       ]);
       return reply.send({
         data,
@@ -193,6 +201,59 @@ const evalRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Eval suite not found");
       }
       return reply.send({ success: true });
+    },
+  );
+
+  fastify.delete(
+    "/api/eval-suites/bulk",
+    {
+      schema: {
+        operationId: RouteId.BulkDeleteEvalSuites,
+        description:
+          "Soft-delete several eval suites in one request. An id the caller " +
+          "cannot see is reported in `failed` and the rest of the batch " +
+          "still applies.",
+        tags: ["Evals"],
+        body: BulkDeleteBodySchema,
+        response: constructResponseSchema(BulkOutcomeSchema),
+      },
+    },
+    async (request, reply) => {
+      const { organizationId } = request;
+      const snapshot = async (ids: string[]) => {
+        const suites = await EvalSuiteModel.listByIds(ids, organizationId);
+        return {
+          evalSuites: suites
+            .map(({ id, name }) => ({ id, name }))
+            .sort((a, b) => a.id.localeCompare(b.id)),
+        };
+      };
+
+      const outcome = await runBulk({
+        ids: request.body.ids,
+        logLabel: "eval suites bulk delete",
+        notFoundMessage: "Eval suite not found",
+        unexpectedMessage: "Could not delete this eval suite",
+        load: async (ids) =>
+          new Map(
+            (await EvalSuiteModel.listByIds(ids, organizationId)).map(
+              (suite) => [suite.id, suite] as const,
+            ),
+          ),
+        describe: (suite) => suite.name,
+        applyEach: async (suite) => {
+          const deleted = await EvalSuiteModel.softDelete(
+            suite.id,
+            organizationId,
+          );
+          if (!deleted) {
+            throw new ApiError(404, "Eval suite not found");
+          }
+        },
+        audit: { target: request, snapshot },
+      });
+
+      return reply.send(outcome);
     },
   );
 

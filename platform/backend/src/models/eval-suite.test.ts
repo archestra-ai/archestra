@@ -129,7 +129,9 @@ test("listByOrganization returns case counts and skips deleted suites", async ({
   );
   expect(suites.find((s) => s.id === withCases.id)?.caseCount).toBe(2);
   expect(suites.find((s) => s.id === empty.id)?.caseCount).toBe(0);
-  expect(await EvalSuiteModel.countByOrganization(org.id)).toBe(2);
+  expect(
+    await EvalSuiteModel.countByOrganization({ organizationId: org.id }),
+  ).toBe(2);
 });
 
 test("findByIdForAudit snapshots the case list", async ({

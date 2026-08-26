@@ -1,8 +1,9 @@
-import { and, count, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, ilike, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { ApiError } from "@/types";
 import type { EvalSuite, InsertEvalSuite, UpdateEvalSuite } from "@/types/eval";
+import { escapeLikePattern } from "@/utils/sql-search";
 import EvalCaseModel from "./eval-case";
 
 /** A suite row plus the number of live cases it contains. */
@@ -27,16 +28,14 @@ class EvalSuiteModel {
     }
   }
 
-  static async countByOrganization(organizationId: string): Promise<number> {
+  static async countByOrganization(params: {
+    organizationId: string;
+    name?: string;
+  }): Promise<number> {
     const [result] = await db
       .select({ count: count() })
       .from(schema.evalSuitesTable)
-      .where(
-        and(
-          eq(schema.evalSuitesTable.organizationId, organizationId),
-          notDeleted(schema.evalSuitesTable),
-        ),
-      );
+      .where(and(...listFilters(params)));
     return result?.count ?? 0;
   }
 
@@ -44,6 +43,7 @@ class EvalSuiteModel {
     organizationId: string;
     limit: number;
     offset: number;
+    name?: string;
   }): Promise<EvalSuiteWithCaseCount[]> {
     const rows = await db
       .select({
@@ -55,12 +55,7 @@ class EvalSuiteModel {
         schema.evalCasesTable,
         eq(schema.evalCasesTable.suiteId, schema.evalSuitesTable.id),
       )
-      .where(
-        and(
-          eq(schema.evalSuitesTable.organizationId, params.organizationId),
-          notDeleted(schema.evalSuitesTable),
-        ),
-      )
+      .where(and(...listFilters(params)))
       .groupBy(schema.evalSuitesTable.id)
       .orderBy(desc(schema.evalSuitesTable.createdAt))
       .limit(params.limit)
@@ -85,6 +80,24 @@ class EvalSuiteModel {
         ),
       );
     return suite ?? null;
+  }
+
+  /** The requested suites the caller may see, fenced to their organization. */
+  static async listByIds(
+    ids: string[],
+    organizationId: string,
+  ): Promise<EvalSuite[]> {
+    if (ids.length === 0) return [];
+    return await db
+      .select()
+      .from(schema.evalSuitesTable)
+      .where(
+        and(
+          inArray(schema.evalSuitesTable.id, ids),
+          eq(schema.evalSuitesTable.organizationId, organizationId),
+          notDeleted(schema.evalSuitesTable),
+        ),
+      );
   }
 
   static async update(params: {
@@ -170,4 +183,19 @@ function isUniqueViolation(error: unknown): boolean {
   const code = (error as { code?: string })?.code;
   const cause = (error as { cause?: { code?: string } })?.cause;
   return code === "23505" || cause?.code === "23505";
+}
+
+function listFilters(params: { organizationId: string; name?: string }) {
+  return [
+    eq(schema.evalSuitesTable.organizationId, params.organizationId),
+    notDeleted(schema.evalSuitesTable),
+    ...(params.name
+      ? [
+          ilike(
+            schema.evalSuitesTable.name,
+            `%${escapeLikePattern(params.name)}%`,
+          ),
+        ]
+      : []),
+  ];
 }

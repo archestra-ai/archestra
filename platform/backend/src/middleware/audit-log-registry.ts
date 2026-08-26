@@ -678,6 +678,11 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "evalSuite",
     fetchById: (id, orgId) => EvalSuiteModel.findByIdForAudit(id, orgId),
   },
+  "/api/eval-suites/bulk": {
+    resourceType: "evalSuite",
+    resourceIdSource: "organizationContext",
+    actionByMethod: { DELETE: "evalSuite.bulk_deleted" },
+  },
   "/api/eval-suites/:id": {
     resourceType: "evalSuite",
     fetchById: (id, orgId) => EvalSuiteModel.findByIdForAudit(id, orgId),

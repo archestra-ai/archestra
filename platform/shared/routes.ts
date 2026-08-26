@@ -57,6 +57,7 @@ export const RouteId = {
   GetEvalRun: "getEvalRun",
   GetEvalRunResults: "getEvalRunResults",
   CancelEvalRun: "cancelEvalRun",
+  BulkDeleteEvalSuites: "bulkDeleteEvalSuites",
 
   // Agent Tool Routes
   AssignToolToAgent: "assignToolToAgent",

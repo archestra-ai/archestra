@@ -165,6 +165,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "evalSuite.created": "Eval suite created",
   "evalSuite.updated": "Eval suite updated",
   "evalSuite.deleted": "Eval suite deleted",
+  "evalSuite.bulk_deleted": "Eval suites bulk deleted",
   "evalRun.created": "Eval run started",
   "evalRun.canceled": "Eval run canceled",
   // Schedule trigger

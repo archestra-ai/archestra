@@ -142,6 +142,7 @@ export const AuditEventNameSchema = z.enum([
   "evalSuite.created",
   "evalSuite.updated",
   "evalSuite.deleted",
+  "evalSuite.bulk_deleted",
   "evalRun.created",
   "evalRun.canceled",
   "optimizationRule.created",

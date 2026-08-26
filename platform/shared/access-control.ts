@@ -1750,6 +1750,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CancelEvalRun]: {
     eval: ["execute"],
   },
+  [RouteId.BulkDeleteEvalSuites]: {
+    eval: ["delete"],
+  },
 
   // Knowledge Base Routes
   [RouteId.GetKnowledgeBases]: { knowledgeSource: ["read"] },

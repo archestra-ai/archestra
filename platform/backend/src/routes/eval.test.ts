@@ -453,6 +453,58 @@ describe("eval routes", () => {
     ).toBe(409);
   });
 
+  test("suite list filters by name", async () => {
+    await createSuite("Checkout smoke tests");
+    await createSuite("Billing regressions");
+
+    const filtered = await app.inject({
+      method: "GET",
+      url: "/api/eval-suites?name=billing",
+    });
+    expect(filtered.statusCode).toBe(200);
+    expect(filtered.json().data.map((s: { name: string }) => s.name)).toEqual([
+      "Billing regressions",
+    ]);
+    expect(filtered.json().pagination.total).toBe(1);
+  });
+
+  test("bulk delete applies to owned suites and reports foreign ids as failed", async ({
+    makeOrganization,
+  }) => {
+    const mine = await createSuite("Mine one");
+    const mineToo = await createSuite("Mine two");
+    const foreignOrg = await makeOrganization();
+    const foreign = await EvalSuiteModel.create({
+      organizationId: foreignOrg.id,
+      name: "Theirs",
+    });
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/api/eval-suites/bulk",
+      payload: { ids: [mine.id, mineToo.id, foreign.id] },
+    });
+    expect(response.statusCode).toBe(200);
+    const outcome = response.json();
+    expect(outcome.succeeded.map((s: { id: string }) => s.id).sort()).toEqual(
+      [mine.id, mineToo.id].sort(),
+    );
+    expect(outcome.failed).toEqual([
+      { id: foreign.id, name: null, error: "Eval suite not found" },
+    ]);
+
+    // Mine are soft-deleted; the foreign suite is untouched.
+    expect(await EvalSuiteModel.findById(mine.id, organizationId)).toBeNull();
+    expect(
+      await EvalSuiteModel.findById(foreign.id, foreignOrg.id),
+    ).not.toBeNull();
+
+    // Audited once against the organization with the removed suites in `before`.
+    const rows = await auditRowsFor(organizationId, "evalSuite.bulk_deleted");
+    expect(rows[0].resourceType).toBe("evalSuite");
+    expect(JSON.stringify(rows[0].before)).toContain("Mine one");
+  });
+
   test("case cap surfaces as 422", async () => {
     const suite = await createSuite("Capped");
     const { MAX_CASES_PER_SUITE } = await import("@/models/eval-case");

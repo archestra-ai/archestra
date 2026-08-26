@@ -27,6 +27,10 @@ import {
   FilterSelect,
   filterSearchClass,
 } from "@/components/filter-bar";
+import {
+  isProviderApiKeyId,
+  ProviderKeyFilterSelect,
+} from "@/components/provider-key-filter-select";
 import { formatProviderKeySummary } from "@/components/provider-key-mappings-field";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
@@ -98,8 +102,12 @@ function VirtualKeysTable() {
   const searchFromUrl = searchParams.get("search") || "";
   const keyTypeFromUrl = searchParams.get("keyType");
   const scopeFromUrl = searchParams.get("scope");
+  const providerApiKeyIdFromUrl = searchParams.get("providerApiKeyId");
   const keyTypeFilter = isKeyType(keyTypeFromUrl) ? keyTypeFromUrl : undefined;
   const scopeFilter = isScope(scopeFromUrl) ? scopeFromUrl : undefined;
+  const providerApiKeyIdFilter = isProviderApiKeyId(providerApiKeyIdFromUrl)
+    ? providerApiKeyIdFromUrl
+    : undefined;
 
   const providerCatalog = useModelProviderCatalog();
   const { data: session } = useSession();
@@ -112,6 +120,7 @@ function VirtualKeysTable() {
     search: searchFromUrl || undefined,
     keyType: keyTypeFilter,
     scope: scopeFilter,
+    providerApiKeyId: providerApiKeyIdFilter,
     toastOnError: false,
   });
 
@@ -176,7 +185,7 @@ function VirtualKeysTable() {
   const pagination = query.data?.pagination;
   const selectedKeys = keys.filter((key) => rowSelection[key.id]);
   const hasActiveFilters = Boolean(
-    searchFromUrl || keyTypeFilter || scopeFilter,
+    searchFromUrl || keyTypeFilter || scopeFilter || providerApiKeyIdFilter,
   );
 
   const clearFilters = useCallback(() => {
@@ -184,6 +193,7 @@ function VirtualKeysTable() {
       search: null,
       keyType: null,
       scope: null,
+      providerApiKeyId: null,
       page: "1",
     });
   }, [updateQueryParams]);
@@ -359,6 +369,12 @@ function VirtualKeysTable() {
                 { value: "team", label: "Teams" },
                 { value: "personal", label: "Personal" },
               ]}
+            />
+            <ProviderKeyFilterSelect
+              value={providerApiKeyIdFilter}
+              onValueChange={(providerApiKeyId) =>
+                updateQueryParams({ providerApiKeyId, page: "1" })
+              }
             />
           </FilterBar>
         </div>

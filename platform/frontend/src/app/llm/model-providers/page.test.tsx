@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mockUseLlmProviderApiKeys = vi.fn();
 const mockUseLlmProviderApiKey = vi.fn();
 const mockLlmProviderApiKeyForm = vi.fn();
+const mockUseAllVirtualApiKeys = vi.fn();
+const mockUseLlmOauthClients = vi.fn();
 
 vi.mock("next/image", () => ({
   default: ({
@@ -55,25 +57,14 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
 }));
 
 vi.mock("@/lib/llm-oauth-clients.query", () => ({
-  useLlmOauthClients: () => ({
-    data: {
-      data: [],
-      pagination: { total: 0 },
-    },
-    isPending: false,
-  }),
+  useLlmOauthClients: (...args: unknown[]) => mockUseLlmOauthClients(...args),
 }));
 
 vi.mock("@/lib/organization.query");
 
 vi.mock("@/lib/virtual-api-keys.query", () => ({
-  useAllVirtualApiKeys: () => ({
-    data: {
-      data: [],
-      pagination: { total: 0 },
-    },
-    isPending: false,
-  }),
+  useAllVirtualApiKeys: (...args: unknown[]) =>
+    mockUseAllVirtualApiKeys(...args),
 }));
 
 vi.mock("@/lib/config/config.query");
@@ -108,7 +99,13 @@ vi.mock("@/components/create-llm-provider-api-key-dialog", () => ({
 }));
 
 vi.mock("@/components/delete-confirm-dialog", () => ({
-  DeleteConfirmDialog: () => null,
+  DeleteConfirmDialog: ({
+    open,
+    description,
+  }: {
+    open: boolean;
+    description?: React.ReactNode;
+  }) => (open ? <div data-testid="delete-dialog">{description}</div> : null),
 }));
 
 vi.mock("@/components/external-docs-link", () => ({
@@ -155,7 +152,24 @@ vi.mock("@/components/search-input", () => ({
 }));
 
 vi.mock("@/components/table-row-actions", () => ({
-  TableRowActions: () => null,
+  TableRowActions: ({
+    actions,
+    itemName,
+  }: {
+    actions: Array<{ label: string; onClick?: () => void }>;
+    itemName?: string;
+  }) => (
+    <>
+      {actions.map((action) => (
+        <button
+          key={action.label}
+          type="button"
+          onClick={action.onClick}
+          aria-label={`${action.label} ${itemName ?? ""}`.trim()}
+        />
+      ))}
+    </>
+  ),
 }));
 
 vi.mock("@/components/ui/data-table", () => ({
@@ -271,6 +285,14 @@ describe("ApiKeysPage", () => {
     });
     mockUseLlmProviderApiKey.mockReturnValue({
       data: null,
+    });
+    mockUseAllVirtualApiKeys.mockReturnValue({
+      data: { data: [], pagination: { total: 0 } },
+      isPending: false,
+    });
+    mockUseLlmOauthClients.mockReturnValue({
+      data: { data: [], pagination: { total: 0 } },
+      isPending: false,
     });
   });
 
@@ -509,6 +531,58 @@ describe("ApiKeysPage", () => {
     expect(screen.getAllByText("Me")).toHaveLength(5);
     expect(screen.getByText("Dana")).toBeInTheDocument();
     expect(screen.getByText("Organization")).toBeInTheDocument();
+  });
+
+  it("points both 'View all' links at the credentials of the key being deleted", async () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    mockUseLlmProviderApiKeys.mockReturnValue({
+      data: [
+        {
+          id: "provider-key-1",
+          name: "Shared Anthropic credential",
+          provider: "anthropic",
+          scope: "org",
+        },
+      ],
+      isPending: false,
+    });
+    mockUseAllVirtualApiKeys.mockReturnValue({
+      data: {
+        data: [
+          { id: "vk-1", name: "Payments service", tokenStart: "arch_abc" },
+        ],
+        pagination: { total: 1 },
+      },
+      isPending: false,
+    });
+    mockUseLlmOauthClients.mockReturnValue({
+      data: {
+        data: [{ id: "oc-1", name: "Nimbus Portal", clientId: "llm_oauth_1" }],
+        pagination: { total: 1 },
+      },
+      isPending: false,
+    });
+
+    render(<ApiKeysPage />);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Delete Shared Anthropic credential",
+      }),
+    );
+
+    // The whole point of these links: land on a table already narrowed to the
+    // credentials that are blocking this delete, not on the full list.
+    await waitFor(() => {
+      expect(screen.getByTestId("delete-dialog")).toBeInTheDocument();
+    });
+    const links = screen.getAllByRole("link", { name: "View all" });
+    expect(links.map((link) => link.getAttribute("href"))).toEqual([
+      "/llm/proxy/virtual-keys?providerApiKeyId=provider-key-1",
+      "/llm/proxy/oauth-clients?providerApiKeyId=provider-key-1",
+    ]);
   });
 
   it("opens Connect with provider-specific subscription defaults", () => {

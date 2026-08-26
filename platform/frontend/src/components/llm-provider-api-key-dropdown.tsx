@@ -53,6 +53,13 @@ interface LlmProviderApiKeyDropdownProps {
   currentProvider?: SupportedProvider;
   triggerVariant?: "prompt-input" | "button" | "select";
   triggerClassName?: string;
+  /**
+   * Accessible name for the trigger. The trigger otherwise takes its name from
+   * whichever key is selected, which says what it holds but not what it does —
+   * fine inside a labelled form row, not enough in a filter bar where several
+   * anonymous dropdowns sit side by side.
+   */
+  triggerAriaLabel?: string;
   popoverClassName?: string;
   popoverPortal?: boolean;
   searchPlaceholder?: string;
@@ -77,6 +84,7 @@ export function LlmProviderApiKeyDropdown({
   currentProvider,
   triggerVariant = "prompt-input",
   triggerClassName,
+  triggerAriaLabel,
   popoverClassName,
   popoverPortal = true,
   searchPlaceholder = "Search API Keys...",
@@ -130,6 +138,7 @@ export function LlmProviderApiKeyDropdown({
               triggerVariant === "select" && "justify-between",
               triggerClassName,
             )}
+            aria-label={triggerAriaLabel}
             data-testid={triggerTestId}
           >
             <span className="flex min-w-0 items-center gap-1.5">

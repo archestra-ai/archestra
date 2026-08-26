@@ -64,11 +64,18 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 /**
- * @param installState "loading" models the window where the user's Playwright
- * install has not come back yet; "installed"/"not-installed" are resolved.
+ * @param installState the three ways this hook can fail to learn whether the
+ * user has a browser — "loading" (not back yet), "error" (the lookup failed and
+ * stayed failed, silently) and "no-session" (nothing to match install owners
+ * against yet) — alongside the two resolved answers.
  */
 function setup(options: {
-  installState: "loading" | "installed" | "not-installed";
+  installState:
+    | "loading"
+    | "error"
+    | "no-session"
+    | "installed"
+    | "not-installed";
   agentTools?: Array<Record<string, unknown>>;
   isLoadingAgentTools?: boolean;
   enabledTools?: {
@@ -83,18 +90,25 @@ function setup(options: {
     enabledTools = { hasCustomSelection: false, enabledToolIds: [] },
   } = options;
 
-  mockUseSession.mockReturnValue({ data: { user: { id: USER_ID } } });
+  mockUseSession.mockReturnValue(
+    installState === "no-session"
+      ? { data: undefined }
+      : { data: { user: { id: USER_ID } } },
+  );
 
   mockUseMcpServers.mockReturnValue(
     installState === "loading"
-      ? { data: undefined, isLoading: true }
-      : {
-          data:
-            installState === "installed"
-              ? [PLAYWRIGHT_SERVER_OWNED_BY_USER]
-              : [],
-          isLoading: false,
-        },
+      ? { data: undefined, isLoading: true, isError: false }
+      : installState === "error"
+        ? { data: undefined, isLoading: false, isError: true }
+        : {
+            data:
+              installState === "installed"
+                ? [PLAYWRIGHT_SERVER_OWNED_BY_USER]
+                : [],
+            isLoading: false,
+            isError: false,
+          },
   );
 
   mockUseProfileToolsWithIds.mockReturnValue({
@@ -117,6 +131,21 @@ describe("usePlaywrightSetupRequired", () => {
 
   it("does not report setup required while the user's install state is still loading", () => {
     const { result } = setup({ installState: "loading" });
+
+    expect(result.current.isRequired).toBe(false);
+  });
+
+  it("does not report setup required when the install lookup failed", () => {
+    // It errors with no toast and does not clear itself, so reading a failed
+    // lookup as "not installed" leaves the card up indefinitely — the one
+    // wrong answer here a user cannot wait out.
+    const { result } = setup({ installState: "error" });
+
+    expect(result.current.isRequired).toBe(false);
+  });
+
+  it("does not report setup required before there is a session to attribute installs to", () => {
+    const { result } = setup({ installState: "no-session" });
 
     expect(result.current.isRequired).toBe(false);
   });

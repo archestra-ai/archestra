@@ -1,15 +1,10 @@
 "use client";
 
 import { findUngrantablePermissions } from "@archestra/shared/access-control";
-import { Loader2, ShieldAlert } from "lucide-react";
+import { ShieldAlert } from "lucide-react";
+import type * as React from "react";
 import { RoleOptionLabel } from "@/components/role-type-icon";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useAllPermissions } from "@/lib/auth/auth.query";
 import { useRoles } from "@/lib/role.query";
 
@@ -34,6 +29,15 @@ interface RoleSelectProps {
   className?: string;
   /** ID for the select trigger */
   id?: string;
+  /**
+   * Accessible name for the trigger, for pickers with no `<Label htmlFor>` of
+   * their own — `role="combobox"` takes its name from the author rather than
+   * from the trigger's contents.
+   */
+  ariaLabel?: string;
+  /** Forwarded to the trigger by a `FormControl` wrapper. */
+  "aria-describedby"?: string;
+  "aria-invalid"?: React.AriaAttributes["aria-invalid"];
   /**
    * When true (default), roles carrying permissions the current user does not
    * hold are disabled with an explanation — the server enforces the same
@@ -69,8 +73,11 @@ function UngrantableHint({ missing }: { missing: string[] }) {
 }
 
 /**
- * A reusable role selection dropdown that fetches roles from the API
- * and displays them with title-cased names.
+ * The role picker, searchable like the platform's other pickers over a list
+ * that has no fixed ceiling: an organization can define as many custom roles
+ * as it likes, and scrolling a flat list to find one stops working long before
+ * that. Search covers the role's display name and its identifier, since the
+ * identifier is what the API and the IdP mappings speak in.
  */
 export function RoleSelect({
   value,
@@ -80,89 +87,54 @@ export function RoleSelect({
   "data-testid": testId,
   className,
   id,
+  ariaLabel,
+  "aria-describedby": ariaDescribedBy,
+  "aria-invalid": ariaInvalid,
   restrictToGrantable = true,
 }: RoleSelectProps) {
   const { data: roles = [], isPending } = useRoles();
   const ungrantableFor = useUngrantablePermissions(restrictToGrantable);
 
+  const items = roles.map((role) => {
+    const missing = ungrantableFor(role.permission);
+    const label = toTitleCase(role.name);
+    return {
+      value: role.role,
+      label,
+      // The identifier is what an admin sees in the API and in IdP mappings,
+      // so a search for it should find the role even when the display name
+      // has been edited away from it.
+      searchText: `${label} ${role.name} ${role.role}`,
+      disabled: missing.length > 0,
+      content: (
+        <span className="flex flex-col items-start">
+          <RoleOptionLabel predefined={role.predefined} label={label} />
+          {missing.length > 0 ? <UngrantableHint missing={missing} /> : null}
+        </span>
+      ),
+      // The trigger shows the role alone: the hint explains why an option is
+      // unpickable, which a picked role by definition wasn't.
+      selectedContent: (
+        <RoleOptionLabel predefined={role.predefined} label={label} />
+      ),
+    };
+  });
+
   return (
-    <Select
-      value={value}
-      onValueChange={onValueChange}
+    <SearchableSelect
+      value={value ?? ""}
+      onValueChange={(role) => onValueChange?.(role)}
+      id={id}
+      ariaLabel={ariaLabel}
+      aria-describedby={ariaDescribedBy}
+      aria-invalid={ariaInvalid}
+      data-testid={testId}
+      className={className}
       disabled={disabled || isPending}
-    >
-      <SelectTrigger id={id} data-testid={testId} className={className}>
-        {isPending ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : (
-          <SelectValue placeholder={placeholder} />
-        )}
-      </SelectTrigger>
-      <SelectContent>
-        {roles.map((role) => {
-          const missing = ungrantableFor(role.permission);
-          return (
-            <SelectItem
-              key={role.id}
-              value={role.role}
-              disabled={missing.length > 0}
-            >
-              <span className="flex flex-col items-start">
-                <RoleOptionLabel
-                  predefined={role.predefined}
-                  label={toTitleCase(role.name)}
-                />
-                {missing.length > 0 ? (
-                  <UngrantableHint missing={missing} />
-                ) : null}
-              </span>
-            </SelectItem>
-          );
-        })}
-      </SelectContent>
-    </Select>
-  );
-}
-
-/**
- * Just the SelectContent part for roles - use when you need custom trigger handling (e.g., with FormControl)
- */
-export function RoleSelectContent({
-  restrictToGrantable = true,
-}: {
-  restrictToGrantable?: boolean;
-} = {}) {
-  const { data: roles = [], isPending } = useRoles();
-  const ungrantableFor = useUngrantablePermissions(restrictToGrantable);
-
-  return (
-    <SelectContent>
-      {isPending ? (
-        <div className="flex items-center justify-center py-2">
-          <Loader2 className="h-4 w-4 animate-spin" />
-        </div>
-      ) : (
-        roles.map((role) => {
-          const missing = ungrantableFor(role.permission);
-          return (
-            <SelectItem
-              key={role.id}
-              value={role.role}
-              disabled={missing.length > 0}
-            >
-              <span className="flex flex-col items-start">
-                <RoleOptionLabel
-                  predefined={role.predefined}
-                  label={toTitleCase(role.name)}
-                />
-                {missing.length > 0 ? (
-                  <UngrantableHint missing={missing} />
-                ) : null}
-              </span>
-            </SelectItem>
-          );
-        })
-      )}
-    </SelectContent>
+      placeholder={isPending ? "Loading roles…" : placeholder}
+      searchPlaceholder="Search roles..."
+      emptyMessage="No matching roles found."
+      items={items}
+    />
   );
 }

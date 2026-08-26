@@ -5,7 +5,6 @@ import {
   type archestraApiTypes,
   getCreationDefaultArchestraToolShortNames,
 } from "@archestra/shared";
-import { useQueries } from "@tanstack/react-query";
 import { Loader2, Pencil, X } from "lucide-react";
 import {
   forwardRef,
@@ -35,7 +34,10 @@ import { useProfileToolsWithIds } from "@/lib/chat/chat.query";
 import { useConfig, useFeature } from "@/lib/config/config.query";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import {
-  fetchCatalogTools,
+  type CatalogToolReference,
+  groupCatalogTools,
+  useAllCatalogTools,
+  useCatalogTools,
   useInternalMcpCatalog,
 } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useOrganization } from "@/lib/organization.query";
@@ -54,8 +56,6 @@ import { McpCatalogIcon } from "./mcp-catalog-icon";
 
 type InternalMcpCatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
-type CatalogTool =
-  archestraApiTypes.GetInternalMcpCatalogToolsResponses["200"][number];
 
 export interface AgentToolExclusionsEditorRef {
   /**
@@ -101,6 +101,15 @@ interface AgentToolExclusionsEditorProps {
       current: AgentToolExclusions;
     } | null,
   ) => void;
+  /**
+   * Whether the Auto tab this editor lives on is the selected one. The form
+   * keeps the editor mounted while Custom is selected so pending edits survive
+   * a tab flip, but nothing here is visible then — so its registry-wide tool
+   * list (the one request that scales with the number of tools in the org)
+   * waits until Auto is actually showing. Cached data survives a flip back to
+   * Custom, so an editor that has already loaded stays initialized.
+   */
+  active?: boolean;
 }
 
 /**
@@ -121,6 +130,7 @@ export const AgentToolExclusionsEditor = forwardRef<
     seedDefaultExclusions = false,
     pendingAssignedToolIds,
     onStateChange,
+    active = true,
   },
   ref,
 ) {
@@ -153,28 +163,26 @@ export const AgentToolExclusionsEditor = forwardRef<
     !seedDefaultExclusions ||
     (agentId ? assignedToolsFetched : !organizationPending && !configPending);
 
-  // Tool lists for every catalog (shared query keys with the tools editor, so
-  // this piggybacks on its cache when both are mounted).
-  const toolQueries = useQueries({
-    queries: catalogItems.map((catalog) => ({
-      queryKey: ["mcp-catalog", catalog.id, "tools"] as const,
-      queryFn: () => fetchCatalogTools(catalog.id),
-    })),
-  });
+  // Every catalog's tool ids/names in ONE request. Grouping saved exclusions
+  // into per-server pills needs a tool -> server map for the whole registry,
+  // but only ids and names — so this reads the batched route rather than the
+  // per-catalog fan-out it used to issue (one request per catalog item, each
+  // carrying full tool rows). Descriptions and groups are only needed by an
+  // OPEN pill checklist, which fetches its own server's tools lazily.
+  const { data: allCatalogTools, isPending: catalogToolsPending } =
+    useAllCatalogTools({ enabled: active });
 
   // Excludable tools per catalog (meta dispatch tools filtered from the
   // built-in catalog).
   const toolsByCatalog = useMemo(() => {
-    const map = new Map<string, CatalogTool[]>();
-    for (let i = 0; i < catalogItems.length; i++) {
-      const catalog = catalogItems[i];
-      const tools = toolQueries[i]?.data as CatalogTool[] | undefined;
-      if (catalog && tools) {
-        map.set(catalog.id, filterExcludableTools(catalog.id, tools));
-      }
+    const map = new Map<string, CatalogToolReference[]>();
+    const grouped = groupCatalogTools(allCatalogTools);
+    for (const catalog of catalogItems) {
+      const tools = grouped.get(catalog.id);
+      if (tools) map.set(catalog.id, filterExcludableTools(catalog.id, tools));
     }
     return map;
-  }, [catalogItems, toolQueries]);
+  }, [catalogItems, allCatalogTools]);
 
   const toolIdsByCatalog = useMemo(() => {
     const map = new Map<string, string[]>();
@@ -187,8 +195,7 @@ export const AgentToolExclusionsEditor = forwardRef<
     return map;
   }, [toolsByCatalog]);
 
-  const allToolsLoaded =
-    !catalogsPending && toolQueries.every((q) => q.data !== undefined);
+  const allToolsLoaded = !catalogsPending && !catalogToolsPending;
 
   const [entries, setEntries] = useState<Map<string, PendingExclusionEntry>>(
     new Map(),
@@ -412,7 +419,6 @@ export const AgentToolExclusionsEditor = forwardRef<
       {excludedCatalogs.map((catalog) => {
         const entry = entries.get(catalog.id);
         if (!entry) return null;
-        const tools = toolsByCatalog.get(catalog.id) ?? [];
         const checkedToolIds = entry.selectedToolIds;
         return (
           <ExclusionPill
@@ -423,7 +429,7 @@ export const AgentToolExclusionsEditor = forwardRef<
                 ? catalogName
                 : catalog.name
             }
-            tools={tools}
+            totalToolCount={toolIdsByCatalog.get(catalog.id)?.length ?? 0}
             checkedToolIds={checkedToolIds}
             onSelectionChange={handleSelectionChange}
             onRemove={handleCatalogToggle}
@@ -450,7 +456,11 @@ export const AgentToolExclusionsEditor = forwardRef<
 interface ExclusionPillProps {
   catalogItem: InternalMcpCatalogItem;
   displayName: string;
-  tools: CatalogTool[];
+  /**
+   * Excludable tool count from the batched list, so the closed pill can label
+   * itself without waiting on this server's full tool rows.
+   */
+  totalToolCount: number;
   checkedToolIds: Set<string>;
   onSelectionChange: (catalogId: string, selectedToolIds: Set<string>) => void;
   onRemove: (catalogId: string) => void;
@@ -461,7 +471,7 @@ interface ExclusionPillProps {
 function ExclusionPill({
   catalogItem,
   displayName,
-  tools,
+  totalToolCount,
   checkedToolIds,
   onSelectionChange,
   onRemove,
@@ -477,6 +487,16 @@ function ExclusionPill({
       onAutoOpened?.();
     }
   }, [autoOpen, onAutoOpened]);
+
+  // The checklist groups tools and shows their descriptions, which the batched
+  // id/name list deliberately omits — so this server's full rows are fetched
+  // here, once its pill exists, rather than for every catalog up front.
+  const { data: catalogTools = [], isLoading: isLoadingTools } =
+    useCatalogTools(catalogItem.id);
+  const tools = useMemo(
+    () => filterExcludableTools(catalogItem.id, catalogTools),
+    [catalogItem.id, catalogTools],
+  );
 
   return (
     <Popover open={open} onOpenChange={setOpen} modal>
@@ -494,7 +514,7 @@ function ExclusionPill({
             />
             <span className="font-medium">{displayName}</span>
             <span className="text-muted-foreground">
-              {checkedToolIds.size}/{tools.length} disabled
+              {checkedToolIds.size}/{totalToolCount} disabled
             </span>
             <Pencil className="h-3 w-3 shrink-0 text-muted-foreground" />
           </Button>
@@ -534,7 +554,12 @@ function ExclusionPill({
             <X className="h-4 w-4" />
           </Button>
         </div>
-        {tools.length === 0 ? (
+        {isLoadingTools ? (
+          <div className="p-4 flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span>Loading tools...</span>
+          </div>
+        ) : tools.length === 0 ? (
           <div className="p-4 text-sm text-muted-foreground">
             <span>No tools available for this server.</span>
           </div>

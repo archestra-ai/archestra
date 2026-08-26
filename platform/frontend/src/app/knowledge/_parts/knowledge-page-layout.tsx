@@ -40,7 +40,7 @@ export function KnowledgePageLayout({
         title={
           <span className="flex items-center gap-2">
             {title}
-            <SmallTeamTierBanner compact featureName="Knowledge" />
+            <SmallTeamTierBanner compact />
           </span>
         }
         documentTitle={title}

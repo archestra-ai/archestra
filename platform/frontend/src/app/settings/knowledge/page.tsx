@@ -1778,7 +1778,7 @@ const CONNECTOR_TYPES = Object.keys(CONNECTOR_TYPE_LABELS) as ConnectorType[];
 export default function KnowledgeSettingsPage() {
   return (
     <ErrorBoundary>
-      <SmallTeamTierBanner featureName="Knowledge" />
+      <SmallTeamTierBanner />
       <KnowledgeSettingsContent />
     </ErrorBoundary>
   );

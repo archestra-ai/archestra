@@ -6,7 +6,6 @@ import { resolveRuntimeOwnerReferences } from "@/k8s/mcp-server-runtime/runtime-
 import {
   createK8sClients,
   getK8sNamespace,
-  isK8sConfigured,
   isK8sConflictError,
   isK8sNotFoundError,
   loadKubeConfig,
@@ -50,9 +49,32 @@ type K8sClients = ReturnType<typeof createK8sClients>;
 
 class RunnerRuntimeManager {
   private clients: K8sClients | null = null;
+  /** Cached: loading a kubeconfig touches the filesystem. */
+  private clusterReachable: boolean | null = null;
 
   get isEnabled(): boolean {
-    return config.runners.enabled && isK8sConfigured();
+    return config.runners.enabled && this.canReachCluster();
+  }
+
+  /**
+   * Whether a Kubernetes client can be built at all.
+   *
+   * Deliberately not `isK8sConfigured()`, which only reports whether the two
+   * orchestrator environment variables are set: the loader also falls back to
+   * the ambient `~/.kube/config`, which is how a developer machine runs MCP
+   * server pods. Gating on the env vars alone made Runners invisible on every
+   * setup where the rest of the Kubernetes runtime works.
+   */
+  private canReachCluster(): boolean {
+    if (this.clusterReachable === null) {
+      try {
+        loadKubeConfig();
+        this.clusterReachable = true;
+      } catch {
+        this.clusterReachable = false;
+      }
+    }
+    return this.clusterReachable;
   }
 
   /**

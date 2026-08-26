@@ -89,6 +89,24 @@ const McpExecResizePayloadSchema = z.object({
   rows: z.number().int().min(1),
 });
 
+// Runner attach: the same shape as the MCP exec conversation, keyed by runner.
+const RunnerIdPayloadSchema = z.object({
+  runnerId: z.string().uuid(),
+});
+const RunnerAttachInputPayloadSchema = z.object({
+  runnerId: z.string().uuid(),
+  data: z.string(),
+});
+const RunnerAttachResizePayloadSchema = z.object({
+  runnerId: z.string().uuid(),
+  cols: z.number().int().min(1),
+  rows: z.number().int().min(1),
+});
+const SubscribeRunnerLogsPayloadSchema = z.object({
+  runnerId: z.string().uuid(),
+  lines: z.number().int().min(1).max(10_000).optional(),
+});
+
 // MCP Deployment Status payloads
 const SubscribeMcpDeploymentStatusesPayloadSchema = z.object({});
 const UnsubscribeMcpDeploymentStatusesPayloadSchema = z.object({});
@@ -156,6 +174,30 @@ export const ClientWebSocketMessageSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("mcp_exec_resize"),
     payload: McpExecResizePayloadSchema,
+  }),
+  z.object({
+    type: z.literal("subscribe_runner_attach"),
+    payload: RunnerIdPayloadSchema,
+  }),
+  z.object({
+    type: z.literal("unsubscribe_runner_attach"),
+    payload: RunnerIdPayloadSchema,
+  }),
+  z.object({
+    type: z.literal("runner_attach_input"),
+    payload: RunnerAttachInputPayloadSchema,
+  }),
+  z.object({
+    type: z.literal("runner_attach_resize"),
+    payload: RunnerAttachResizePayloadSchema,
+  }),
+  z.object({
+    type: z.literal("subscribe_runner_logs"),
+    payload: SubscribeRunnerLogsPayloadSchema,
+  }),
+  z.object({
+    type: z.literal("unsubscribe_runner_logs"),
+    payload: RunnerIdPayloadSchema,
   }),
   z.object({
     type: z.literal("subscribe_mcp_deployment_statuses"),
@@ -363,6 +405,46 @@ export type McpDeploymentStatusEntry = {
   deploymentName?: string;
 };
 
+// Runner attach + logs, server -> client
+export type RunnerAttachStartedMessage = {
+  type: "runner_attach_started";
+  payload: { runnerId: string; command: string; podName: string };
+};
+
+export type RunnerAttachOutputMessage = {
+  type: "runner_attach_output";
+  payload: { runnerId: string; data: string };
+};
+
+export type RunnerAttachErrorMessage = {
+  type: "runner_attach_error";
+  payload: { runnerId: string; error: string };
+};
+
+export type RunnerAttachClosedMessage = {
+  type: "runner_attach_closed";
+  payload: {
+    runnerId: string;
+    /** Why the session ended, when the exec reported a failure status. */
+    reason?: string;
+  };
+};
+
+export type RunnerLogsMessage = {
+  type: "runner_logs";
+  payload: { runnerId: string; logs: string };
+};
+
+export type RunnerLogsErrorMessage = {
+  type: "runner_logs_error";
+  payload: { runnerId: string; error: string };
+};
+
+export type RunnerLogsEndedMessage = {
+  type: "runner_logs_ended";
+  payload: { runnerId: string };
+};
+
 export type McpDeploymentStatusesMessage = {
   type: "mcp_deployment_statuses";
   payload: {
@@ -447,6 +529,13 @@ export type ServerWebSocketMessage =
   | McpExecOutputMessage
   | McpExecErrorMessage
   | McpExecClosedMessage
+  | RunnerAttachStartedMessage
+  | RunnerAttachOutputMessage
+  | RunnerAttachErrorMessage
+  | RunnerAttachClosedMessage
+  | RunnerLogsMessage
+  | RunnerLogsErrorMessage
+  | RunnerLogsEndedMessage
   | McpDeploymentStatusesMessage
   | McpInstallationStatusMessage
   | McpServersChangedMessage

@@ -10,7 +10,11 @@ const DNS_PORTS = [
 ];
 
 export const RUNNER_STEER_FIFO = `${RUNNER_RUN_DIR}/steer`;
-const RUNNER_TMUX_SESSION = "agent";
+/** Session `tmux attach` lands in — the pane the agent itself is using. */
+export const RUNNER_TMUX_SESSION = "agent";
+
+/** Container name in the Job spec; exec and log reads both address it. */
+export const RUNNER_CONTAINER_NAME = "runner";
 
 /**
  * Exit code the bootstrap uses when the image cannot host a runner. Distinct
@@ -119,7 +123,7 @@ export function buildRunnerJob(spec: RunnerLaunchSpec): k8s.V1Job {
           volumes: [{ name: "archestra-run", emptyDir: {} }],
           containers: [
             {
-              name: "runner",
+              name: RUNNER_CONTAINER_NAME,
               image: spec.image,
               command: ["/bin/sh", "-c", buildRunnerBootstrapScript()],
               env: [

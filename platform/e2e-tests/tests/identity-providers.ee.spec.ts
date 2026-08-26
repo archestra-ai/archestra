@@ -1016,7 +1016,7 @@ test.describe("Identity Provider Role Mapping E2E", () => {
     await getRoleMappingRuleRow(page, 0)
       .getByTestId(E2eTestId.IdpRoleMappingRuleRole)
       .click();
-    await page.getByRole("button", { name: "Editor" }).click();
+    await page.getByRole("button", { name: "Editor", exact: true }).click();
 
     // Add SECOND rule - WILL match (archestra-admins group -> admin role)
     await addRuleButton.click();
@@ -1034,7 +1034,7 @@ test.describe("Identity Provider Role Mapping E2E", () => {
     );
     if (await defaultRoleSelect.isVisible()) {
       await defaultRoleSelect.click();
-      await page.getByRole("button", { name: "Member" }).click();
+      await page.getByRole("button", { name: "Member", exact: true }).click();
     }
 
     // Submit the changes and wait for the role mapping to be persisted before
@@ -1104,7 +1104,7 @@ test.describe("Identity Provider Role Mapping E2E", () => {
     );
     if (await defaultRoleSelect.isVisible()) {
       await defaultRoleSelect.click();
-      await page.getByRole("button", { name: "Member" }).click();
+      await page.getByRole("button", { name: "Member", exact: true }).click();
     }
 
     // Submit the changes and wait for the role mapping to be persisted before

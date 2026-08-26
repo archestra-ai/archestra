@@ -7,7 +7,9 @@ import {
   RunnerEventModel,
   RunnerModel,
 } from "@/models";
+import { resolveTrustedImageRegistries } from "@/services/environments/environment";
 import { type Agent, ApiError, type Runner } from "@/types";
+import { imageMatchesTrustedRegistries } from "@/utils/match-image-against-registries";
 import { buildRunnerLaunchSpec } from "./launch-spec";
 
 /**
@@ -35,6 +37,13 @@ export async function startRunner(params: {
     environmentId: agent.environmentId,
   });
 
+  const image = runnerConfig?.image ?? config.runners.defaultImage;
+  await assertImageIsTrusted({
+    image,
+    organizationId: params.organizationId,
+    environmentId: agent.environmentId,
+  });
+
   // `deploymentName` is deliberately unset here: the frozen workload name is
   // derived from the runner's own id, which only exists after the insert.
   const runner = await RunnerModel.create({
@@ -43,7 +52,7 @@ export async function startRunner(params: {
     createdByUserId: params.userId,
     name: params.name,
     task: params.task ?? null,
-    image: runnerConfig?.image ?? config.runners.defaultImage,
+    image,
     command: runnerConfig?.command ?? null,
     steerMode: runnerConfig?.steerMode ?? "pipe",
     privileged: runnerConfig?.privileged ?? false,
@@ -89,6 +98,32 @@ export async function startRunner(params: {
   return (
     (await RunnerModel.findById(runner.id, params.organizationId)) ?? runner
   );
+}
+
+/**
+ * A runner image runs arbitrary code holding the caller's credentials, so it
+ * is held to the same trusted-registry rule as an MCP server image. An
+ * environment with no configured registries places no restriction; one with a
+ * list admits only those, and the check fails closed for anything else.
+ */
+async function assertImageIsTrusted(params: {
+  image: string;
+  organizationId: string;
+  environmentId: string | null;
+}): Promise<void> {
+  const { registries, label } = await resolveTrustedImageRegistries({
+    environmentId: params.environmentId,
+    organizationId: params.organizationId,
+  });
+  if (!registries || registries.length === 0) {
+    return;
+  }
+  if (!imageMatchesTrustedRegistries(params.image, registries)) {
+    throw new ApiError(
+      400,
+      `Image ${params.image} is not in the trusted registries configured for ${label}`,
+    );
+  }
 }
 
 export async function requireRunnableAgent(

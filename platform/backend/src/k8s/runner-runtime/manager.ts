@@ -1,5 +1,6 @@
 import type * as k8s from "@kubernetes/client-node";
 import config from "@/config";
+import { resolveRuntimeOwnerReferences } from "@/k8s/mcp-server-runtime/runtime-owner";
 import {
   createK8sClients,
   getK8sNamespace,
@@ -90,7 +91,24 @@ class RunnerRuntimeManager {
     spec: RunnerLaunchSpec;
   }): Promise<void> {
     const clients = this.requireClients();
-    const { runner, spec } = params;
+    const { runner } = params;
+    // Owner references make runtime-created objects disappear with the release
+    // rather than outliving it as orphans.
+    const spec: RunnerLaunchSpec = {
+      ...params.spec,
+      ownerReferences:
+        params.spec.ownerReferences ??
+        (await resolveRuntimeOwnerReferences(
+          clients.rbacApi,
+          params.spec.namespace,
+        ).catch((error) => {
+          logger.warn(
+            { error },
+            "Could not resolve runtime owner references for a runner",
+          );
+          return undefined;
+        })),
+    };
     const names = runnerNames(spec.frozenName);
 
     await RunnerModel.update(runner.id, runner.organizationId, {

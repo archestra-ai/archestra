@@ -22,6 +22,10 @@ import {
   type CreatedCredentials,
   OAuthClientCreatedDialog,
 } from "@/components/oauth-client-created-dialog";
+import {
+  isProviderApiKeyId,
+  ProviderKeyFilterSelect,
+} from "@/components/provider-key-filter-select";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
@@ -84,6 +88,10 @@ function OauthClientsTable() {
   const grantTypeFilter = isGrantType(grantTypeFromUrl)
     ? grantTypeFromUrl
     : undefined;
+  const providerApiKeyIdFromUrl = searchParams.get("providerApiKeyId");
+  const providerApiKeyIdFilter = isProviderApiKeyId(providerApiKeyIdFromUrl)
+    ? providerApiKeyIdFromUrl
+    : undefined;
 
   const providerCatalog = useModelProviderCatalog();
   const { data: session } = useSession();
@@ -95,6 +103,7 @@ function OauthClientsTable() {
     offset,
     search: searchFromUrl || undefined,
     grantType: grantTypeFilter,
+    providerApiKeyId: providerApiKeyIdFilter,
     toastOnError: false,
   });
 
@@ -139,10 +148,17 @@ function OauthClientsTable() {
   const clients = query.data?.data ?? [];
   const pagination = query.data?.pagination;
   const selectedClients = clients.filter((client) => rowSelection[client.id]);
-  const hasActiveFilters = Boolean(searchFromUrl || grantTypeFilter);
+  const hasActiveFilters = Boolean(
+    searchFromUrl || grantTypeFilter || providerApiKeyIdFilter,
+  );
 
   const clearFilters = useCallback(() => {
-    updateQueryParams({ search: null, grantType: null, page: "1" });
+    updateQueryParams({
+      search: null,
+      grantType: null,
+      providerApiKeyId: null,
+      page: "1",
+    });
   }, [updateQueryParams]);
 
   const columns: ColumnDef<OauthClientRow>[] = [
@@ -306,6 +322,15 @@ function OauthClientsTable() {
                 { value: "client_credentials", label: "Application" },
                 { value: "authorization_code", label: "On behalf of users" },
               ]}
+            />
+            <ProviderKeyFilterSelect
+              value={providerApiKeyIdFilter ?? "all"}
+              onValueChange={(value) =>
+                updateQueryParams({
+                  providerApiKeyId: value === "all" ? null : value,
+                  page: "1",
+                })
+              }
             />
           </FilterBar>
         </div>

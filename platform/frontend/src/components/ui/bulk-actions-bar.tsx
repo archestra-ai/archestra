@@ -64,7 +64,7 @@ export interface BulkActionsBarProps {
   countTestId?: string;
   /** Omit to keep the selection confined to the current page. */
   selectAllMatching?: SelectAllMatching;
-  /** The bar carries no outer spacing of its own; place it in the caller's flow. */
+  /** Additional classes for the action rail. */
   className?: string;
   /**
    * Keeps a compact, invisible bar mounted at zero selection so showing the
@@ -78,7 +78,8 @@ export interface BulkActionsBarProps {
 /**
  * Default collection bulk actions. Unlike the low-level bar, this keeps the
  * compact action box in normal flow at zero selection so table and card
- * layouts never move when the controls appear.
+ * layouts never move when the controls appear. The slot also owns its 12px
+ * spacing before the collection immediately after it.
  */
 export function BulkActions({
   selectAllMatching,
@@ -171,12 +172,17 @@ export function BulkActionsBar({
       </span>
 
       {count === 0 && reserveSpace ? (
-        <div aria-hidden="true" className={cn("h-[42px]", className)} />
+        <div
+          aria-hidden="true"
+          data-slot="bulk-actions-bar"
+          className={cn("h-[42px] !mt-0 !mb-3 [&+*]:!mt-0", className)}
+        />
       ) : count > 0 ? (
         <div
+          data-slot="bulk-actions-bar"
           className={cn(
             "rounded-md border bg-muted/40 px-3 py-2",
-            reserveSpace && "px-2 py-1",
+            reserveSpace && "h-[42px] !mt-0 !mb-3 px-2 py-1 [&+*]:!mt-0",
             className,
           )}
         >

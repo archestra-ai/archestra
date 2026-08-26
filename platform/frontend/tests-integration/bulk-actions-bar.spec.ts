@@ -1,3 +1,4 @@
+import type { Locator } from "@playwright/test";
 import { shareableSkillsSeed } from "../src/mocks/data/skill-share";
 import { expect, test } from "./fixtures";
 
@@ -59,6 +60,68 @@ test.describe("Bulk actions bar", () => {
     ).toBeHidden();
   });
 
+  test("keeps one fixed rail and collection gap before and after selection", async ({
+    page,
+  }) => {
+    await page.goto("/skills");
+
+    const bar = page.locator('[data-slot="bulk-actions-bar"]');
+    const beforeSelection = await bulkLayoutGeometry(bar);
+    expect(beforeSelection).toMatchObject({
+      height: 42,
+      gapAbove: 12,
+      gapBelow: 12,
+    });
+
+    await page
+      .getByRole("checkbox", {
+        name: `Select ${shareableSkillsSeed.data[0].name}`,
+      })
+      .click();
+
+    const afterSelection = await bulkLayoutGeometry(bar);
+    expect(afterSelection).toMatchObject({
+      height: 42,
+      gapAbove: 12,
+      gapBelow: 12,
+    });
+    expect(afterSelection.collectionTop).toBe(beforeSelection.collectionTop);
+  });
+
+  test("scrolls crowded actions inside the fixed mobile rail", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/skills");
+    await page
+      .getByRole("checkbox", {
+        name: `Select ${shareableSkillsSeed.data[0].name}`,
+      })
+      .click();
+
+    const metrics = await page
+      .locator('[data-slot="bulk-actions-bar"]')
+      .evaluate((bar) => {
+        const rail = bar.firstElementChild as HTMLElement;
+        return {
+          height: bar.getBoundingClientRect().height,
+          overflowX: getComputedStyle(rail).overflowX,
+          clientWidth: rail.clientWidth,
+          scrollWidth: rail.scrollWidth,
+          bodyOverflow:
+            document.documentElement.scrollWidth -
+            document.documentElement.clientWidth,
+        };
+      });
+
+    expect(metrics).toMatchObject({
+      height: 42,
+      overflowX: "auto",
+      bodyOverflow: 0,
+    });
+    expect(metrics.scrollWidth).toBeGreaterThan(metrics.clientWidth);
+  });
+
   test("offers the whole matching set once the page is exhausted", async ({
     page,
     mswControl,
@@ -116,3 +179,31 @@ test.describe("Bulk actions bar", () => {
     await expect(page).toHaveURL(/\/skills(\?.*)?$/);
   });
 });
+
+async function bulkLayoutGeometry(bar: Locator): Promise<{
+  height: number;
+  gapAbove: number;
+  gapBelow: number;
+  collectionTop: number;
+}> {
+  return bar.evaluate((element) => {
+    let branch = element as HTMLElement | null;
+    let previous: HTMLElement | null = null;
+    while (branch && !previous) {
+      previous = branch.previousElementSibling as HTMLElement | null;
+      while (previous?.classList.contains("sr-only")) {
+        previous = previous.previousElementSibling as HTMLElement | null;
+      }
+      branch = branch.parentElement;
+    }
+    const collection = element.nextElementSibling as HTMLElement;
+    const barRect = element.getBoundingClientRect();
+
+    return {
+      height: barRect.height,
+      gapAbove: barRect.top - (previous?.getBoundingClientRect().bottom ?? 0),
+      gapBelow: collection.getBoundingClientRect().top - barRect.bottom,
+      collectionTop: collection.getBoundingClientRect().top,
+    };
+  });
+}

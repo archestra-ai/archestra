@@ -421,6 +421,7 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
     <>
       <div className="space-y-6">
         <FilterBar
+          className={isLoadingError ? undefined : "!mb-3"}
           onClearFilters={
             nameFilter
               ? () => updateQueryParams({ name: null, page: "1" })

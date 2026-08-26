@@ -762,7 +762,9 @@ export default function LimitsPage() {
         </Alert>
       </WithPermissions>
 
-      <div className="flex flex-wrap gap-3">
+      <div
+        className={`flex flex-wrap gap-3 ${(isPending || isFetching) && limits.length === 0 ? "" : "!mb-3"}`}
+      >
         <Select
           value={statusFilter}
           onValueChange={(value) =>

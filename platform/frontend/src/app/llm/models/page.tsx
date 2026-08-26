@@ -521,7 +521,7 @@ export default function ModelsPage() {
     >
       <div className="space-y-4">
         {models.length > 0 && (
-          <FilterBar className="mb-4">
+          <FilterBar className="!mb-3">
             <SearchInput
               objectNamePlural="models"
               searchFields={["model ID"]}

@@ -364,7 +364,7 @@ export function AppSection({
   if (apps.length === 0) return null;
 
   return (
-    <section className="space-y-[11px]">
+    <section className="space-y-3">
       <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
         {title}
       </h2>

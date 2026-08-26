@@ -296,7 +296,7 @@ export function TeamsList() {
   return (
     <>
       <div className="space-y-6">
-        <FilterBar>
+        <FilterBar className={!hasLabelFilters ? "!mb-3" : undefined}>
           <SearchInput
             objectNamePlural="teams"
             searchFields={["name"]}
@@ -310,7 +310,9 @@ export function TeamsList() {
         </FilterBar>
 
         {hasLabelFilters && (
-          <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />
+          <div className="!mb-3">
+            <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />
+          </div>
         )}
 
         <BulkActions

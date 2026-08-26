@@ -1109,6 +1109,12 @@ export function InternalMCPCatalog({
     filters.author.size > 0 ||
     filters.status.has(INSTALLED_STATUS_VALUE) ||
     filters.status.has(NOT_INSTALLED_STATUS_VALUE);
+  const hasFilterChips =
+    filters.issue.size > 0 ||
+    filters.environment.size > 0 ||
+    filters.author.size > 0 ||
+    filters.status.has(INSTALLED_STATUS_VALUE) ||
+    filters.status.has(NOT_INSTALLED_STATUS_VALUE);
   const handleClearAllFilters = useCallback(() => {
     const params = new URLSearchParams(searchParams.toString());
     params.delete("search");
@@ -1140,7 +1146,13 @@ export function InternalMCPCatalog({
   return (
     <TableCardView storageKey="archestra-mcp-registry-view" defaultMode="table">
       <div className="space-y-4">
-        <div className="space-y-3">
+        <div
+          className={
+            !hasLabelFilters && !hasFilterChips
+              ? "space-y-3 !mb-3"
+              : "space-y-3"
+          }
+        >
           <FilterBar
             onClearFilters={
               hasAppliedBarFilters ? handleClearBarFilters : undefined
@@ -1214,9 +1226,12 @@ export function InternalMCPCatalog({
           </FilterBar>
         </div>
         {hasLabelFilters && (
-          <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />
+          <div className={!hasFilterChips ? "!mb-3" : undefined}>
+            <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />
+          </div>
         )}
         <RegistryFilterChips
+          className="!mb-3"
           selected={filters}
           onRemove={removeFilter}
           onClearAll={clearAdvancedFilters}

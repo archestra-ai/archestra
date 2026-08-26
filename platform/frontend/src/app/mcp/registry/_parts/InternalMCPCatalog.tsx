@@ -7,7 +7,7 @@ import {
   MCP_CATALOG_SERVER_QUERY_PARAM,
   type McpDeploymentStatusEntry,
 } from "@archestra/shared";
-import { CheckCircle2, Download, Route, Trash2 } from "lucide-react";
+import { CheckCircle2, Route, Trash2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -1490,7 +1490,9 @@ function McpServerCatalogSection({
   showTitle: boolean;
 }) {
   const canSelect = (item: CatalogItem) =>
-    installingItemId !== item.id && !getServerInfo(item).isInstallInProgress;
+    !!getServerInfo(item).installedServer &&
+    installingItemId !== item.id &&
+    !getServerInfo(item).isInstallInProgress;
   const {
     rowSelection,
     setRowSelection,
@@ -1513,9 +1515,6 @@ function McpServerCatalogSection({
     canSelect,
   });
 
-  const selectedToInstall = selected.filter(
-    (item) => !getServerInfo(item).installedServer,
-  );
   const selectedToUninstall = selected
     .filter((item) => getServerInfo(item).installedServer)
     .map((item) => ({
@@ -1532,11 +1531,9 @@ function McpServerCatalogSection({
       )}
       <McpServerBulkActions
         selected={selected}
-        selectedToInstall={selectedToInstall}
         selectedToUninstall={selectedToUninstall}
         clearSelection={clearSelection}
         selectAllMatching={selectAllMatching}
-        onInstall={onInstall}
       />
       <TableCardViewContent
         table={
@@ -1610,18 +1607,14 @@ function McpServerCatalogSection({
 
 function McpServerBulkActions({
   selected,
-  selectedToInstall,
   selectedToUninstall,
   clearSelection,
   selectAllMatching,
-  onInstall,
 }: {
   selected: readonly CatalogItem[];
-  selectedToInstall: readonly CatalogItem[];
   selectedToUninstall: Array<{ id: string; name: string }>;
   clearSelection: () => void;
   selectAllMatching: SelectAllMatching;
-  onInstall: (item: CatalogItem) => void;
 }) {
   const [bulkUninstallOpen, setBulkUninstallOpen] = useState(false);
   const bulkUninstall = useBulkUninstallMcpServers();
@@ -1635,30 +1628,6 @@ function McpServerBulkActions({
         busy={bulkUninstall.isPending}
         selectAllMatching={selectAllMatching}
       >
-        <PermissionButton
-          permissions={{ mcpServerInstallation: ["create"] }}
-          variant="outline"
-          size="sm"
-          disabled={selectedToInstall.length !== 1}
-          tooltip={
-            selectedToInstall.length === 0
-              ? "Every selected server is already installed."
-              : selectedToInstall.length > 1
-                ? "Install servers one at a time so each configuration can be reviewed."
-                : undefined
-          }
-          onClick={() => {
-            const item = selectedToInstall[0];
-            if (!item) return;
-            onInstall(item);
-            clearSelection();
-          }}
-        >
-          <Download className="h-4 w-4" />
-          <span>
-            Install{countSuffix(selectedToInstall.length, selected.length)}
-          </span>
-        </PermissionButton>
         <PermissionButton
           permissions={{ mcpServerInstallation: ["delete"] }}
           variant="destructive"

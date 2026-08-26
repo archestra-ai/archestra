@@ -68,6 +68,14 @@ const CATALOG = [
     },
     toolCount: 22,
   }),
+  makeCatalogItem({
+    id: "cat-not-installed",
+    name: "not-installed",
+    description: "Catalog server that has not been installed.",
+    scope: "org",
+    serverType: "local",
+    toolCount: 3,
+  }),
 ];
 
 // Seven distinct connections on the crowded card: one org-wide plus six
@@ -229,5 +237,27 @@ test.describe("MCP Registry layout", () => {
     });
 
     expect(spills).toEqual([]);
+  });
+
+  test("offers only Uninstall as a table bulk action", async ({
+    mcpRegistryPage,
+    mswControl,
+    page,
+  }) => {
+    await seed(mswControl);
+    await mcpRegistryPage.goto();
+    await page.getByRole("button", { name: "View as table" }).click();
+    await expect(
+      page.getByRole("checkbox", { name: "Select not-installed" }),
+    ).toBeDisabled();
+    await page.getByRole("checkbox", { name: "Select org-crowded" }).click();
+
+    const bulkBar = page.locator('[data-slot="bulk-actions-bar"]');
+    await expect(
+      bulkBar.getByRole("button", { name: "Uninstall" }),
+    ).toBeVisible();
+    await expect(bulkBar.getByRole("button", { name: /^Install/ })).toHaveCount(
+      0,
+    );
   });
 });

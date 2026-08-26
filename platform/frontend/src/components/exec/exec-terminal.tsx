@@ -34,7 +34,14 @@ export type ExecSessionHandlers = {
  * lifecycle, fitting, or the status chrome below.
  */
 export type ExecSessionTransport = {
-  /** Open the session and return a teardown that also detaches server-side. */
+  /**
+   * Open the session and return a teardown that also detaches server-side.
+   *
+   * May be called again on the same terminal: the server forgets every
+   * subscription along with the socket it was made on, so a reconnect has to
+   * re-open rather than leave a terminal that looks connected and receives
+   * nothing.
+   */
   open: (handlers: ExecSessionHandlers) => () => void;
   sendInput: (data: string) => void;
   sendResize: (cols: number, rows: number) => void;

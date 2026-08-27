@@ -110,6 +110,8 @@ export const E2eTestId = {
   ManageMembersButton: "manage-members-button",
   // Chat Settings
   ChatApiKeysTable: "chat-api-keys-table",
+  SubscriptionProviderCards: "subscription-provider-cards",
+  SubscriptionProviderCard: "subscription-provider-card",
   AddChatApiKeyButton: "add-chat-api-key-button",
   ChatApiKeyRow: "chat-api-key-row",
   ChatApiKeyForm: "chat-api-key-form",

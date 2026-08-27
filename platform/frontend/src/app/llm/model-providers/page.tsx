@@ -5,10 +5,7 @@ import {
   E2eTestId,
   formatSecretStorageType,
   isProviderApiKeyOptional,
-  SUBSCRIPTION_CREDENTIAL_KINDS,
   SUBSCRIPTION_CREDENTIALS,
-  type SubscriptionCredentialKind,
-  subscriptionKindFromKeyMetadata,
 } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
@@ -97,37 +94,15 @@ import { cn } from "@/lib/utils";
 import { useAllVirtualApiKeys } from "@/lib/virtual-api-keys.query";
 import { MODEL_NAV_TABS } from "../model-nav-tabs";
 import {
+  buildSubscriptionOffers,
+  type SubscriptionOffer,
+  subscriptionKindOfCredential,
+} from "./_parts/subscription-offers";
+import { SubscriptionProviderCards } from "./_parts/subscription-provider-cards";
+import {
   isEditApiKeyFormValid,
   subscriptionSignInRequired,
 } from "./edit-key-form.utils";
-
-type SubscriptionProvider =
-  (typeof SUBSCRIPTION_CREDENTIALS)[SubscriptionCredentialKind]["provider"];
-
-type ModelProviderRow =
-  | (LlmProviderApiKeyResponse & { kind: "credential" })
-  | {
-      kind: "subscription";
-      subscriptionKind: SubscriptionCredentialKind;
-      id: string;
-      name: string;
-      provider: SubscriptionProvider;
-      scope: "personal";
-      isSystem: false;
-      isPrimary: false;
-      credential: LlmProviderApiKeyResponse | null;
-      defaultValues: Partial<LlmProviderApiKeyFormValues>;
-    };
-
-function persistedCredentialForRow(
-  row: ModelProviderRow,
-): LlmProviderApiKeyResponse | null {
-  return row.kind === "credential" ? row : row.credential;
-}
-
-function modelProviderRowId(row: ModelProviderRow): string {
-  return persistedCredentialForRow(row)?.id ?? row.id;
-}
 
 const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   name: "",
@@ -148,29 +123,6 @@ const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   authMethod: "api-key",
 };
 
-/**
- * The "Connect subscription" rows, derived from the shared registry so a new
- * subscription appears here without editing this page.
- */
-const SUBSCRIPTION_PROVIDERS = SUBSCRIPTION_CREDENTIAL_KINDS.map((kind) => {
-  const { provider, displayName, marker } = SUBSCRIPTION_CREDENTIALS[kind];
-  return {
-    id: `subscription-${kind}`,
-    subscriptionKind: kind,
-    name: displayName,
-    provider,
-    defaultValues: {
-      name: displayName,
-      provider,
-      scope: "personal" as const,
-      // Credential-level subscriptions share their provider with ordinary API
-      // keys, so the form has to open on the subscription tab. Provider-level
-      // ones have no tabs and ignore this.
-      ...(marker !== null ? { authMethod: "subscription" as const } : {}),
-    },
-  };
-});
-
 export default function ApiKeysPage() {
   const docsUrl = getFrontendDocsUrl("platform-supported-llm-providers");
   const { searchParams, updateQueryParams } = useDataTableQueryParams();
@@ -180,9 +132,10 @@ export default function ApiKeysPage() {
     useHasPermissions({ llmProviderApiKey: ["read"] });
   const apiKeyQueriesEnabled =
     !permissionsPending && canReadLlmProviderApiKeys === true;
-  const { data: allApiKeys = [] } = useLlmProviderApiKeys({
-    enabled: apiKeyQueriesEnabled,
-  });
+  const { data: allApiKeys = [], isPending: allApiKeysPending } =
+    useLlmProviderApiKeys({
+      enabled: apiKeyQueriesEnabled,
+    });
   const { data: queriedApiKeys = [], isFetching } = useLlmProviderApiKeys({
     search: search || undefined,
     provider:
@@ -206,10 +159,8 @@ export default function ApiKeysPage() {
 
   // Dialog states
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [subscriptionToConnect, setSubscriptionToConnect] = useState<Extract<
-    ModelProviderRow,
-    { kind: "subscription" }
-  > | null>(null);
+  const [subscriptionToConnect, setSubscriptionToConnect] =
+    useState<SubscriptionOffer | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false);
   const [selectedApiKey, setSelectedApiKey] =
@@ -244,6 +195,11 @@ export default function ApiKeysPage() {
       enabled: !!selectedApiKeyId && isDeleteDialogOpen,
     });
   const blockingOauthClients = blockingOauthClientsData?.data ?? [];
+  // A subscription is connected, not configured, so the dialog that removes it
+  // says "disconnect" rather than talking about deleting an API key.
+  const deletingSubscription =
+    selectedApiKey !== null &&
+    subscriptionKindOfCredential(selectedApiKey) !== null;
 
   const getKeyUsage = useCallback(
     (keyId: string): string | null => {
@@ -405,59 +361,42 @@ export default function ApiKeysPage() {
 
   const apiKeys = queriedApiKeys;
 
-  const rows = useMemo<ModelProviderRow[]>(() => {
-    const subscriptions = SUBSCRIPTION_PROVIDERS.map((subscription) => ({
-      kind: "subscription" as const,
-      ...subscription,
-      scope: "personal" as const,
-      isSystem: false as const,
-      isPrimary: false as const,
-      credential:
-        allApiKeys.find(
-          (credential) =>
-            credential.scope === "personal" &&
-            credential.provider === subscription.provider &&
-            // A credential-level subscription shares its provider with ordinary
-            // API keys, so match on the kind the backend read off the secret
-            // using authoritative metadata resolved from the stored secret); a
-            // provider-level one is identified by its provider alone.
-            (SUBSCRIPTION_CREDENTIALS[subscription.subscriptionKind].marker ===
-              null ||
-              subscriptionKindFromKeyMetadata(credential) ===
-                subscription.subscriptionKind),
-        ) ?? null,
-    }));
-    const connectedIds = new Set(
-      subscriptions.flatMap(({ credential }) =>
-        credential ? [credential.id] : [],
+  /**
+   * Subscription offers shown as cards above the table. A provider the admins
+   * turned off is not offered at all; a key that already connects it keeps its
+   * table row instead, so an admin can still see and delete it.
+   */
+  const subscriptionOffers = useMemo(
+    () =>
+      buildSubscriptionOffers(allApiKeys).filter(
+        ({ provider }) => !providerCatalog.isHidden(provider),
       ),
-    );
-    const normalizedSearch = search.toLowerCase();
+    [allApiKeys, providerCatalog],
+  );
 
-    return [
-      // "Connect subscription" rows are offers, not existing credentials, so a
-      // provider the admins turned off drops out of the list entirely. Keys
-      // that already exist stay listed (flagged in the Provider column) so an
-      // admin can still see and delete them.
-      ...subscriptions.filter(
-        ({ name, provider, credential }) =>
-          !providerCatalog.isHidden(provider) &&
-          (providerFilter === "all" || providerFilter === provider) &&
-          (!normalizedSearch ||
-            `${name} ${providerCatalog.label(provider)} ${credential?.name ?? ""}`
-              .toLowerCase()
-              .includes(normalizedSearch)),
+  /** Keys the cards already stand for, so the table never repeats them. */
+  const connectedSubscriptionIds = useMemo(
+    () =>
+      new Set(
+        subscriptionOffers.flatMap(({ credential }) =>
+          credential ? [credential.id] : [],
+        ),
       ),
-      ...queriedApiKeys
-        .filter(({ id }) => !connectedIds.has(id))
-        .map((credential) => ({ kind: "credential" as const, ...credential })),
-    ];
-  }, [allApiKeys, queriedApiKeys, providerFilter, search, providerCatalog]);
+    [subscriptionOffers],
+  );
 
+  const rows = useMemo(
+    () => queriedApiKeys.filter(({ id }) => !connectedSubscriptionIds.has(id)),
+    [queriedApiKeys, connectedSubscriptionIds],
+  );
+
+  // The filter narrows the table, so it offers the providers the table can
+  // actually show — a connected subscription lives on a card, not a row.
   const providerOptions = useMemo(() => {
     const seen = new Set<string>();
-    return [...SUBSCRIPTION_PROVIDERS, ...allApiKeys]
+    return allApiKeys
       .filter((apiKey) => {
+        if (connectedSubscriptionIds.has(apiKey.id)) return false;
         if (seen.has(apiKey.provider)) return false;
         seen.add(apiKey.provider);
         return true;
@@ -468,7 +407,7 @@ export default function ApiKeysPage() {
         name: providerCatalog.label(apiKey.provider),
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [allApiKeys, providerCatalog]);
+  }, [allApiKeys, connectedSubscriptionIds, providerCatalog]);
 
   const {
     rowSelection,
@@ -479,46 +418,25 @@ export default function ApiKeysPage() {
     selectAllMatching,
   } = useBulkSelection({
     rows,
-    getId: modelProviderRowId,
-    canSelect: (row) => {
-      const credential = persistedCredentialForRow(row);
-      return (
-        credential !== null &&
-        !credential.isSystem &&
-        getKeyUsage(credential.id) === null
-      );
-    },
+    getId: (row) => row.id,
+    canSelect: (row) => !row.isSystem && getKeyUsage(row.id) === null,
     filterSignature: `${search}\u0000${providerFilter}`,
     matchDescription:
       search || providerFilter !== "all"
         ? "match the current filters"
         : "are configured",
   });
-  const selectedApiKeys = selected.flatMap((row) => {
-    const credential = persistedCredentialForRow(row);
-    return credential ? [credential] : [];
-  });
+  const selectedApiKeys = selected;
 
-  const columns: ColumnDef<ModelProviderRow>[] = useMemo(
+  const columns: ColumnDef<LlmProviderApiKeyResponse>[] = useMemo(
     () => [
-      createSelectColumn<ModelProviderRow>({
+      createSelectColumn<LlmProviderApiKeyResponse>({
         rowLabel: (row) => `Select ${row.name}`,
         allLabel: "Select all deletable credentials on this page",
-        canSelect: (row) => {
-          const credential = persistedCredentialForRow(row);
-          return (
-            credential !== null &&
-            !credential.isSystem &&
-            getKeyUsage(credential.id) === null
-          );
-        },
+        canSelect: (row) => !row.isSystem && getKeyUsage(row.id) === null,
         disabledReason: (row) => {
-          const credential = persistedCredentialForRow(row);
-          if (!credential) {
-            return "Connect this subscription before it can be deleted";
-          }
-          if (credential.isSystem) return "System keys cannot be deleted";
-          const usage = getKeyUsage(credential.id);
+          if (row.isSystem) return "System keys cannot be deleted";
+          const usage = getKeyUsage(row.id);
           return usage
             ? `${usage}. Remove it from Settings > Knowledge before deleting.`
             : "Unavailable for bulk actions";
@@ -537,9 +455,6 @@ export default function ApiKeysPage() {
             <span className="min-w-0 truncate font-medium">
               {row.original.name}
             </span>
-            {row.original.kind === "subscription" && (
-              <InlineTag className="shrink-0">Subscription</InlineTag>
-            )}
             {row.original.isPrimary && (
               <InlineTag className="shrink-0 text-amber-500 bg-amber-500/15 border border-amber-500/20">
                 Primary
@@ -580,22 +495,6 @@ export default function ApiKeysPage() {
         minSize: 170,
         cell: ({ row }) => {
           const credential = row.original;
-          if (credential.kind === "subscription") {
-            // A subscription is a personal credential of whoever connected it
-            // (today the endpoint only returns the viewer's own, so this reads
-            // "Me"); the Name column's "Subscription" tag already says what
-            // kind of credential it is, so the Access cell answers only whose.
-            return (
-              <ResourceVisibilityBadge
-                scope="personal"
-                teams={undefined}
-                authorId={credential.credential?.userId ?? currentUserId}
-                authorName={credential.credential?.userName ?? null}
-                currentUserId={currentUserId}
-                showSelfAsMe
-              />
-            );
-          }
           if (credential.isSystem) {
             // Not a visibility scope: nobody in the org owns this row. It is
             // auto-provisioned because the deployment authenticates with cloud
@@ -648,9 +547,7 @@ export default function ApiKeysPage() {
         size: 120,
         minSize: 100,
         cell: ({ row }) =>
-          row.original.kind === "subscription" ? (
-            <span className="text-sm text-muted-foreground">—</span>
-          ) : row.original.isSystem ? (
+          row.original.isSystem ? (
             <span className="text-sm text-muted-foreground">
               Env Vars{" "}
               {docsUrl && (
@@ -675,26 +572,13 @@ export default function ApiKeysPage() {
         minSize: 130,
         cell: ({ row }) => (
           <div className="flex items-center gap-2 whitespace-nowrap">
-            {row.original.kind === "subscription" ? (
-              row.original.credential ? (
-                <>
-                  <CheckCircle2 className="h-4 w-4 text-green-500" />
-                  <span className="text-sm text-muted-foreground">
-                    Connected
-                  </span>
-                </>
-              ) : (
-                <span className="text-sm text-muted-foreground">
-                  Not connected
-                </span>
-              )
-            ) : row.original.isSystem ||
-              row.original.secretId ||
-              isProviderApiKeyOptional({
-                provider: row.original.provider,
-                azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
-                anthropicWifEnabled: anthropicWifEnabled === true,
-              }) ? (
+            {row.original.isSystem ||
+            row.original.secretId ||
+            isProviderApiKeyOptional({
+              provider: row.original.provider,
+              azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
+              anthropicWifEnabled: anthropicWifEnabled === true,
+            }) ? (
               <>
                 <CheckCircle2 className="h-4 w-4 text-green-500" />
                 <span className="text-sm text-muted-foreground">
@@ -715,29 +599,7 @@ export default function ApiKeysPage() {
         size: 110,
         minSize: 110,
         cell: ({ row }) => {
-          if (
-            row.original.kind === "subscription" &&
-            !row.original.credential
-          ) {
-            const subscription = row.original;
-            // Personal subscription creation is intentionally self-service on
-            // the backend, including for default members who only have key-read
-            // permission. Do not apply the admin API-key create gate here.
-            return (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setSubscriptionToConnect(subscription)}
-              >
-                Connect
-              </Button>
-            );
-          }
-          const credential =
-            row.original.kind === "subscription"
-              ? row.original.credential
-              : row.original;
-          if (!credential) return null;
+          const credential = row.original;
           const isSystem = credential.isSystem;
           const keyUsage = getKeyUsage(credential.id);
           const isInUse = !!keyUsage;
@@ -796,6 +658,33 @@ export default function ApiKeysPage() {
       actionButton={addApiKeyButton}
     >
       <div className="space-y-4">
+        <SubscriptionProviderCards
+          offers={subscriptionOffers}
+          // A viewer without key-read permission never gets a list, so their
+          // cards state the offer rather than waiting forever on a query that
+          // is disabled — connecting a personal subscription is self-service.
+          isLoading={
+            permissionsPending || (apiKeyQueriesEnabled && allApiKeysPending)
+          }
+          onConnect={setSubscriptionToConnect}
+          onManage={openEditDialog}
+          onDisconnect={openDeleteDialog}
+          disconnectBlockedReason={(credential) => {
+            const usage = getKeyUsage(credential.id);
+            return usage
+              ? `${usage}. Remove it from Settings > Knowledge before disconnecting.`
+              : null;
+          }}
+        />
+
+        <div className="space-y-1 pt-1">
+          <h2 className="text-sm font-medium">Provider API keys</h2>
+          <p className="text-sm text-muted-foreground">
+            Keys for the providers that authenticate with an API key, shared
+            across the organization or kept to a team or person.
+          </p>
+        </div>
+
         <FilterBar className="!mb-3">
           <SearchInput
             isLoading={isFetching}
@@ -862,7 +751,7 @@ export default function ApiKeysPage() {
           <DataTable
             columns={columns}
             data={rows}
-            getRowId={modelProviderRowId}
+            getRowId={(row) => row.id}
             rowSelection={rowSelection}
             onRowSelectionChange={setRowSelection}
             onPageRowIdsChange={onPageRowIdsChange}
@@ -895,12 +784,12 @@ export default function ApiKeysPage() {
               if (!open) setSubscriptionToConnect(null);
             }}
             title={
-              SUBSCRIPTION_CREDENTIALS[subscriptionToConnect.subscriptionKind]
-                .connect.signInTitle
+              SUBSCRIPTION_CREDENTIALS[subscriptionToConnect.kind].connect
+                .signInTitle
             }
             description={
-              SUBSCRIPTION_CREDENTIALS[subscriptionToConnect.subscriptionKind]
-                .connect.signInDescription
+              SUBSCRIPTION_CREDENTIALS[subscriptionToConnect.kind].connect
+                .signInDescription
             }
             defaultValues={subscriptionToConnect.defaultValues}
             allowedProviders={[subscriptionToConnect.provider]}
@@ -955,10 +844,13 @@ export default function ApiKeysPage() {
         <DeleteConfirmDialog
           open={isDeleteDialogOpen}
           onOpenChange={setIsDeleteDialogOpen}
-          title="Delete API Key"
+          title={
+            deletingSubscription ? "Disconnect subscription" : "Delete API Key"
+          }
           description={
             <DeleteApiKeyDescription
               apiKey={selectedApiKey}
+              isSubscription={deletingSubscription}
               virtualKeys={blockingVirtualKeys?.data ?? []}
               totalVirtualKeys={blockingVirtualKeys?.pagination.total ?? 0}
               oauthClients={blockingOauthClients}
@@ -976,8 +868,10 @@ export default function ApiKeysPage() {
             (blockingVirtualKeys?.pagination.total ?? 0) > 0 ||
             (blockingOauthClientsData?.pagination.total ?? 0) > 0
           }
-          confirmLabel="Delete API Key"
-          pendingLabel="Deleting..."
+          confirmLabel={deletingSubscription ? "Disconnect" : "Delete API Key"}
+          pendingLabel={
+            deletingSubscription ? "Disconnecting..." : "Deleting..."
+          }
         />
         <DeleteConfirmDialog
           open={isBulkDeleteDialogOpen}
@@ -1011,6 +905,7 @@ export default function ApiKeysPage() {
 
 function DeleteApiKeyDescription({
   apiKey,
+  isSubscription,
   virtualKeys,
   totalVirtualKeys,
   oauthClients,
@@ -1018,6 +913,7 @@ function DeleteApiKeyDescription({
   isLoading,
 }: {
   apiKey: LlmProviderApiKeyResponse | null;
+  isSubscription: boolean;
   virtualKeys: archestraApiTypes.GetAllVirtualApiKeysResponses["200"]["data"];
   totalVirtualKeys: number;
   oauthClients: archestraApiTypes.GetLlmOauthClientsResponses["200"]["data"];
@@ -1031,8 +927,16 @@ function DeleteApiKeyDescription({
   const hasBlockingAssociations = totalVirtualKeys > 0 || totalOauthClients > 0;
 
   if (!hasBlockingAssociations) {
-    return (
-      <span>
+    // Distinct keys: the two branches share a tag, so without them React would
+    // reconcile the element in place and remove its bare text nodes, which
+    // crashes a machine-translated page.
+    return isSubscription ? (
+      <span key="disconnect">
+        Disconnect "{apiKey.name}"? Anything using it stops working until you
+        sign in again.
+      </span>
+    ) : (
+      <span key="delete">
         Are you sure you want to delete "{apiKey.name}"? This action cannot be
         undone.
       </span>
@@ -1042,8 +946,8 @@ function DeleteApiKeyDescription({
   return (
     <div className="space-y-4 text-sm">
       <p>
-        "{apiKey.name}" cannot be deleted until it is removed from the
-        credentials below.
+        "{apiKey.name}" cannot be {isSubscription ? "disconnected" : "deleted"}{" "}
+        until it is removed from the credentials below.
       </p>
 
       {isLoading && (

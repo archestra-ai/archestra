@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-08-25
+lastUpdated: 2026-08-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -21,6 +21,16 @@ Most organizations only allow a few providers. Go to **Settings → LLM → Mode
 A provider added by a later release arrives switched on.
 
 Keys that already exist keep working, so turning a provider off never breaks live traffic. They are marked as turned off, and you can delete them when you are ready. A retired provider's key can no longer be edited or rotated.
+
+## Personal Subscriptions
+
+Some providers let you sign in with an account you already pay for, instead of buying a metered API key. Go to **Model Providers** and you will see them as cards above the credentials table. Click **Connect** and sign in.
+
+![Personal subscription cards on the Model Providers page](/docs/automated_screenshots/platform-supported-llm-providers_personal-subscriptions.webp)
+
+These credentials are per-user and personal-only. Each person connects their own account, and requests are billed to that subscription. An agent set up with a subscription credential always runs on the chatting user's own subscription — never someone else's. Users without a connected account get a sign-in prompt in chat.
+
+Each provider's section below covers what to turn on with the vendor first.
 
 ## Renaming a Provider
 
@@ -96,11 +106,11 @@ Model Router translation forwards inline non-text content where the provider's n
 
 ### ChatGPT Subscription (Codex)
 
-Reuse a ChatGPT/Codex subscription for chat instead of a metered API key. Add an OpenAI provider key, pick the **ChatGPT Subscription** tab, and use **Sign in with ChatGPT** to connect the account that holds your subscription.
+Reuse a ChatGPT/Codex subscription for chat instead of a metered API key. Click **Connect** on the **ChatGPT** card on **Model Providers**, then sign in with the account that holds your subscription.
 
 First turn on device code authorization for the account, in ChatGPT → Settings → Security → **Enable device code authorization for Codex**. It is off by default, and ChatGPT blocks the approval step until you enable it.
 
-These keys are per-user and personal-only: each person connects their own ChatGPT account. Requests are billed to the subscription. An agent set up with a subscription key always runs on the chatting user's own subscription — never someone else's. Users without a connected account get a sign-in prompt in chat.
+See [Personal Subscriptions](#personal-subscriptions) for how these credentials are scoped.
 
 ## Anthropic
 
@@ -564,9 +574,9 @@ You can generate an API key from the [xAI Console](https://console.x.ai/).
 
 ### X Premium (SuperGrok) Subscription
 
-Reuse an X Premium (SuperGrok) subscription for chat instead of a metered API key. Add an xAI provider key, pick the **X Premium (SuperGrok)** tab, and use **Sign in with X** to connect the account that holds your subscription.
+Reuse an X Premium (SuperGrok) subscription for chat instead of a metered API key. Click **Connect** on the **X Premium (SuperGrok)** card on **Model Providers**, then sign in with the X account that holds your subscription.
 
-These keys are per-user and personal-only: each person connects their own X account. Requests are billed to the subscription. An agent set up with a subscription key always runs on the chatting user's own subscription — never someone else's. Users without a connected account get a sign-in prompt in chat.
+See [Personal Subscriptions](#personal-subscriptions) for how these credentials are scoped.
 
 The model list and inference requests use xAI's dedicated Grok CLI session proxy, not the metered `api.x.ai` API-key surface. Session requests carry the account identity returned by the device login.
 
@@ -686,7 +696,7 @@ A GitHub Copilot provider key stores a **long-lived GitHub OAuth token** (`gho_`
 
 Obtain the token in either way:
 
-- **Sign in with GitHub**: when adding a GitHub Copilot key, use the "Sign in with GitHub" button. It runs GitHub's OAuth device flow — you approve a one-time code at `github.com/login/device`, and Archestra stores the resulting token.
+- **Sign in with GitHub**: click **Connect** on the **GitHub Copilot** card on **Model Providers**. It runs GitHub's OAuth device flow — you approve a one-time code at `github.com/login/device`, and Archestra stores the resulting token.
 - **Reuse an existing token**: the official Copilot CLI / VS Code store one in `~/.config/github-copilot/apps.json` (the `oauth_token` value); paste it into the API key field. The `/connection` setup script for the Copilot CLI reuses or obtains this token automatically.
 
 ### Environment Variables

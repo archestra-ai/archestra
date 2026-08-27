@@ -65,6 +65,7 @@ import { cn } from "@/lib/utils";
 import { useCanModifyCatalogItem } from "../_parts/catalog-edit-access";
 import { resolveCatalogEnvironmentLabel } from "../_parts/catalog-environment-label";
 import { shouldShowMcpCardChatButton } from "../_parts/chat-button-visibility";
+import { collapseMultitenantInstalls } from "../_parts/collapse-multitenant-installs";
 import { DeleteCatalogDialog } from "../_parts/delete-catalog-dialog";
 import {
   computeDeploymentStatusSummary,
@@ -289,25 +290,12 @@ function CatalogItemDetails({
     deploymentStatuses,
   );
 
-  // Multi-tenant catalogs alias one pod; pick the install whose deployment
-  // status is reported, otherwise the first row, and label by catalog.
   const debugInstalls = item.multitenant
-    ? (() => {
-        const reporting =
-          allInstalls.find((i) => deploymentStatuses[i.id]?.podName) ??
-          allInstalls[0];
-        return reporting
-          ? [
-              {
-                ...reporting,
-                name: item.name,
-                ownerEmail: null,
-                teamDetails: null,
-                scope: null,
-              },
-            ]
-          : [];
-      })()
+    ? collapseMultitenantInstalls({
+        installs: allInstalls,
+        deploymentStatuses,
+        catalogName: item.name,
+      })
     : allInstalls;
 
   const diagnosticPanels = DIAGNOSTIC_PANELS.filter(

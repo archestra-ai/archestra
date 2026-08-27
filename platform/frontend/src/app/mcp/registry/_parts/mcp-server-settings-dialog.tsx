@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/empty";
 import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { cn } from "@/lib/utils";
+import { collapseMultitenantInstalls } from "./collapse-multitenant-installs";
 import {
   computeDeploymentStatusSummary,
   DeploymentStatusDot,
@@ -458,24 +459,11 @@ export function McpServerSettingsDialog({
                       serverName={item.name}
                       installs={
                         item.multitenant
-                          ? // Multi-tenant catalogs alias one pod; pick the
-                            // install whose deployment status is reported,
-                            // otherwise the first row, and label by catalog.
-                            (() => {
-                              const reporting =
-                                installs.find(
-                                  (i) => deploymentStatuses[i.id]?.podName,
-                                ) ?? installs[0];
-                              return [
-                                {
-                                  ...reporting,
-                                  name: item.name,
-                                  ownerEmail: null,
-                                  teamDetails: null,
-                                  scope: null,
-                                },
-                              ];
-                            })()
+                          ? collapseMultitenantInstalls({
+                              installs,
+                              deploymentStatuses,
+                              catalogName: item.name,
+                            })
                           : installs
                       }
                       deploymentStatuses={deploymentStatuses}

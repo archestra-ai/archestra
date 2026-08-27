@@ -18,7 +18,7 @@ import {
   RefreshCw,
   Terminal,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { LogConsole } from "@/components/log-console";
 import { Button } from "@/components/ui/button";
@@ -66,6 +66,13 @@ interface McpLogsDialogProps {
     ownerEmail?: string | null;
     teamDetails?: { teamId: string; name: string } | null;
     scope?: ResourceVisibilityScope | null;
+    /**
+     * Whether the viewer may present this install's credential upstream — its
+     * own connection, or one shared with it. Only the Inspector cares: it
+     * authenticates as the install, so it offers no one else's connection.
+     * Optional so callers that never reach the Inspector can omit it.
+     */
+    canUseCredential?: boolean;
   }[];
   deploymentStatuses: Record<string, McpDeploymentStatusEntry>;
   /** Hide the installation dropdown selector */
@@ -176,16 +183,37 @@ export function McpLogsContent({
     }
   }, [isActive]);
 
+  // The Inspector connects to the upstream as the selected install, signed
+  // with that install's stored credential — so it only offers connections the
+  // viewer may actually use. Logs and Shell read the pod rather than
+  // authenticate as it, and keep the full list an installation admin needs.
+  const selectableInstalls = useMemo(
+    () =>
+      activeTab === "inspector"
+        ? installs.filter((i) => i.canUseCredential !== false)
+        : installs,
+    [activeTab, installs],
+  );
+
   // Default to initialServerId or first installation when dialog opens.
   useEffect(() => {
-    if (!isActive || installs.length === 0) return;
-    if (serverId && installs.some((i) => i.id === serverId)) return;
+    if (!isActive || selectableInstalls.length === 0) return;
+    if (serverId && selectableInstalls.some((i) => i.id === serverId)) return;
     const initial =
-      initialServerId && installs.some((i) => i.id === initialServerId)
+      initialServerId &&
+      selectableInstalls.some((i) => i.id === initialServerId)
         ? initialServerId
-        : installs[0].id;
+        : selectableInstalls[0].id;
     setServerId(initial);
-  }, [isActive, installs, serverId, initialServerId]);
+  }, [isActive, selectableInstalls, serverId, initialServerId]);
+
+  // Switching to the Inspector while someone else's connection is selected
+  // leaves the stale id until the effect above re-defaults; render nothing
+  // against it in the meantime.
+  const inspectorServerId =
+    serverId && selectableInstalls.some((i) => i.id === serverId)
+      ? serverId
+      : null;
 
   const currentDeploymentStatus = serverId
     ? deploymentStatuses[serverId]
@@ -450,9 +478,9 @@ export function McpLogsContent({
       )}
 
       {/* Pod selector */}
-      {!hideInstallationSelector && installs.length >= 1 && (
+      {!hideInstallationSelector && selectableInstalls.length >= 1 && (
         <InstanceSelector
-          installs={installs}
+          installs={selectableInstalls}
           deploymentStatuses={deploymentStatuses}
           serverId={serverId}
           setServerId={setServerId}
@@ -639,11 +667,29 @@ export function McpLogsContent({
         </TabsContent>
 
         <TabsContent value="inspector" className={contentTabClassName}>
-          {serverId && (
+          {inspectorServerId ? (
             <McpInspector
-              serverId={serverId}
+              serverId={inspectorServerId}
               isActive={activeTab === "inspector" && isActive}
             />
+          ) : (
+            installs.length > 0 && (
+              <div
+                className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center"
+                data-testid={E2eTestId.McpInspectorNoConnection}
+              >
+                <p className="text-sm font-medium">
+                  No connection of yours to inspect
+                </p>
+                <p className="max-w-md text-xs text-muted-foreground">
+                  The Inspector calls the server as the selected connection,
+                  with that connection's credentials — so it only offers your
+                  own connections and ones shared with you. Connect{" "}
+                  <strong>{serverName}</strong> yourself, or ask for a shared
+                  connection, to inspect it.
+                </p>
+              </div>
+            )
           )}
         </TabsContent>
 

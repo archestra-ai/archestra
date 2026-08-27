@@ -63,14 +63,37 @@ WORKDIR /home/node/workspace
 # loop as its default execution process.
 FROM background-execution-base AS crab-env
 USER root
+ENV PNPM_HOME=/usr/local/share/pnpm
+ENV PATH=$PNPM_HOME/bin:$PNPM_HOME:$PATH
 RUN apt-get update -qq \
  && apt-get install -y --no-install-recommends \
       build-essential python3 gh openssh-client \
  && rm -rf /var/lib/apt/lists/* \
- && corepack prepare pnpm@11.9.0 --activate
+ && corepack prepare pnpm@11.9.0 --activate \
+ && pnpm --config.ignore-scripts=false add --global @anthropic-ai/claude-code@2.1.247 \
+ && CLAUDE_PACKAGE_DIR=$(pnpm list --global --json @anthropic-ai/claude-code | jq -r '.[0].dependencies["@anthropic-ai/claude-code"].path') \
+ && node "$CLAUDE_PACKAGE_DIR/install.cjs" \
+ && claude --version
 USER 1000:1000
 WORKDIR /home/node/workspace
 
-# Keep the default build target as the lean platform-native image. Build the
-# local coding variant with: docker build --target crab-env -t crab-env:dev .
+# Local Codex coding variant. Keep this separate from crab-env so local testing
+# can exercise either subscription-backed coding agent without changing the
+# platform's generic background-execution contract.
+FROM background-execution-base AS lobster-env
+USER root
+ENV PNPM_HOME=/usr/local/share/pnpm
+ENV PATH=$PNPM_HOME/bin:$PNPM_HOME:$PATH
+RUN apt-get update -qq \
+ && apt-get install -y --no-install-recommends \
+      build-essential python3 gh openssh-client \
+ && rm -rf /var/lib/apt/lists/* \
+ && corepack prepare pnpm@11.9.0 --activate \
+ && pnpm add --global @openai/codex@0.149.1 \
+ && codex --version
+USER 1000:1000
+WORKDIR /home/node/workspace
+
+# Keep the default build target as the lean platform-native image. Build a
+# local coding variant by selecting its named target.
 FROM background-execution-base AS runner-agent-base

@@ -22,6 +22,12 @@ if background_execution_enabled:
     dockerfile='../runner-agent/Dockerfile',
     target='crab-env',
   )
+  docker_build(
+    'lobster-env:dev',
+    '..',
+    dockerfile='../runner-agent/Dockerfile',
+    target='lobster-env',
+  )
   # Tilt discovers image dependencies from Pod specs. This tiny sleeping
   # deployment anchors the otherwise dynamic Job image so Tilt builds and
   # loads it into Docker Desktop, OrbStack, or Kind before the backend starts.
@@ -48,6 +54,32 @@ spec:
 ''' % mcp_namespace))
   k8s_resource(
     'crab-env-image',
+    labels=['dev'],
+    pod_readiness='ignore',
+  )
+  k8s_yaml(blob('''
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lobster-env-image
+  namespace: %s
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: lobster-env-image
+  template:
+    metadata:
+      labels:
+        app: lobster-env-image
+    spec:
+      containers:
+        - name: lobster-env
+          image: lobster-env:dev
+          command: ["sleep", "infinity"]
+''' % mcp_namespace))
+  k8s_resource(
+    'lobster-env-image',
     labels=['dev'],
     pod_readiness='ignore',
   )
@@ -106,6 +138,7 @@ code_runtime_enabled = os.getenv('ARCHESTRA_CODE_RUNTIME_ENABLED') == 'true'
 backend_resource_deps = ['db-migrate']
 if background_execution_enabled:
   backend_resource_deps.append('crab-env-image')
+  backend_resource_deps.append('lobster-env-image')
 if code_runtime_enabled:
   # The backend provisions the Dagger engine in-cluster on startup (no external
   # engine or port-forward to wait on); just build the napi addon before it boots

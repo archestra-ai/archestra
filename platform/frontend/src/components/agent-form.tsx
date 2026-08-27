@@ -26,7 +26,6 @@ import {
   AlertTriangle,
   Bot,
   CheckIcon,
-  ChevronDown,
   ChevronRight,
   Globe,
   InfoIcon,
@@ -49,7 +48,6 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
-import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import {
   AgentHooksEditor,
   type AgentHooksEditorRef,
@@ -83,7 +81,10 @@ import { ModelSelector } from "@/components/chat/model-selector";
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { IdentityFields } from "@/components/identity-fields";
-import { KnowledgeSourceExclusionsEditor } from "@/components/knowledge-source-exclusions-editor";
+import {
+  type KnowledgeSourceOption,
+  KnowledgeSourcesEditor,
+} from "@/components/knowledge-sources-editor";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import {
   formatPermissionRequirement,
@@ -103,19 +104,10 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
 import { ExpandableText } from "@/components/ui/expandable-text";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
-import { OverlappedIcons } from "@/components/ui/overlapped-icons";
 import {
   Popover,
   PopoverContent,
@@ -1160,6 +1152,70 @@ export function AgentForm({
   const [disabledKnowledgeSourceIds, setDisabledKnowledgeSourceIds] = useState<
     string[]
   >([]);
+  // Both knowledge fields are one list of the same shape; the Custom one spans
+  // two tables, so its ids are namespaced by kind and unpicked apart on toggle.
+  // Auto's are connector ids as the exclusions API stores them.
+  const assignableKnowledgeSources: KnowledgeSourceOption[] = [
+    ...knowledgeBases.map((kb) => ({
+      id: `${KNOWLEDGE_BASE_ID_PREFIX}${kb.id}`,
+      name: kb.name,
+      description: kb.description,
+      badge: "Knowledge base",
+      connectorType: kb.connectors?.[0]?.connectorType ?? null,
+    })),
+    ...connectors.map((connector) => ({
+      id: `${CONNECTOR_ID_PREFIX}${connector.id}`,
+      name: connector.name,
+      description: connector.description || connector.connectorType,
+      badge: "Connector",
+      connectorType: connector.connectorType,
+      // Environment isolation: a connector in another environment can't be
+      // used by this agent, so it is offered but not selectable.
+      disabled: !isInSelectedEnvironment(connector.environmentId ?? null),
+      disabledReason: "Different environment",
+    })),
+  ];
+  const assignedKnowledgeSourceIds = [
+    ...knowledgeBaseIds.map((id) => `${KNOWLEDGE_BASE_ID_PREFIX}${id}`),
+    ...connectorIds.map((id) => `${CONNECTOR_ID_PREFIX}${id}`),
+  ];
+  const toggleAssignedKnowledgeSource = (namespacedId: string) => {
+    const toggle = (previous: string[], id: string) =>
+      previous.includes(id)
+        ? previous.filter((selected) => selected !== id)
+        : [...previous, id];
+    if (namespacedId.startsWith(KNOWLEDGE_BASE_ID_PREFIX)) {
+      const id = namespacedId.slice(KNOWLEDGE_BASE_ID_PREFIX.length);
+      setKnowledgeBaseIds((previous) => toggle(previous, id));
+      return;
+    }
+    const id = namespacedId.slice(CONNECTOR_ID_PREFIX.length);
+    setConnectorIds((previous) => toggle(previous, id));
+  };
+  const toggleDisabledKnowledgeSource = (id: string) =>
+    setDisabledKnowledgeSourceIds((previous) =>
+      previous.includes(id)
+        ? previous.filter((selected) => selected !== id)
+        : [...previous, id],
+    );
+  // Knowledge needs an embedding model before either field can do anything, so
+  // both modes say so in the same place and with the same words.
+  const knowledgeNotConfiguredNotice = (
+    <p className="text-xs text-muted-foreground">
+      Configure an embedding model to use knowledge sources.
+      {canAccessKnowledgeSettings && (
+        <>
+          {" "}
+          <Link
+            href="/settings/knowledge"
+            className="underline underline-offset-2"
+          >
+            Configure knowledge
+          </Link>
+        </>
+      )}
+    </p>
+  );
   // Skills published over `skill://`. Auto exposes every org-scoped skill in the
   // agent's environment minus exclusions; Custom publishes exactly the assigned
   // set. Both sets persist independently, so switching mode discards neither.
@@ -1194,6 +1250,12 @@ export function AgentForm({
   // is scoped to tools/knowledge visible to the user AND in the agent's
   // environment.
   const autoToolsMode = accessAllTools;
+  // Auto mode implies progressive loading whatever the record says: the
+  // backend coerces `accessAllTools` agents to `search_and_run_only` on create
+  // and on every update, so a legacy row still holding "full" is stale rather
+  // than a state the switch should report.
+  const progressiveToolLoading =
+    autoToolsMode || toolExposureMode === "search_and_run_only";
   // Seed the exclusions editor with the backend's Auto-mode pre-fill whenever
   // saving would put the agent into Auto mode from scratch: creating a new
   // agent on the Auto tab, or editing an agent whose SAVED accessAllTools is
@@ -2953,117 +3015,81 @@ export function AgentForm({
                         <TabsTrigger value="custom">Custom</TabsTrigger>
                       </TabsList>
                     </Tabs>
-                    {autoToolsMode ? (
-                      <ul className="space-y-1.5 pt-1 text-xs text-muted-foreground">
-                        <li className="flex gap-2">
-                          <CheckIcon className="mt-px size-3.5 shrink-0" />
-                          Every MCP tool and knowledge source the calling user
-                          can access, in this{" "}
-                          {agentTypeDisplayName[agentType] || "agent"}'s
-                          environment — new servers and sources included
-                          automatically
-                        </li>
-                        <li className="flex gap-2">
-                          <CheckIcon className="mt-px size-3.5 shrink-0" />
-                          Credentials resolve at call time per each server's
-                          default credential setting — on behalf of the calling
-                          user unless the server always uses one account
-                        </li>
-                        <li className="flex gap-2">
-                          <CheckIcon className="mt-px size-3.5 shrink-0" />
-                          <span>
-                            Tools are discovered on demand — the catalog never
-                            burns context tokens.{" "}
-                            <ExternalDocsLink
-                              href={toolExposureDocsUrl}
-                              className="underline"
-                              showIcon={false}
-                            >
-                              Learn more
-                            </ExternalDocsLink>
-                          </span>
-                        </li>
-                        {/* Auto mode promises knowledge in the first bullet, so
-                            it has to say when that promise cannot hold. */}
-                        {canReadKnowledgeBase && !isKnowledgeConfigured && (
-                          <li className="flex gap-2">
-                            <AlertTriangle className="mt-px size-3.5 shrink-0" />
-                            <span>
-                              Knowledge search is off — no embedding model is
-                              configured.{" "}
-                              {canAccessKnowledgeSettings && (
-                                <Link
-                                  href="/settings/knowledge"
-                                  className="underline"
-                                >
-                                  Configure knowledge
-                                </Link>
-                              )}
-                            </span>
-                          </li>
-                        )}
-                      </ul>
-                    ) : (
-                      <p className="pt-1 text-xs text-muted-foreground">
-                        Only the tools and knowledge sources you assign below
-                        are available to this{" "}
-                        {agentTypeDisplayName[agentType] || "agent"}.
-                      </p>
-                    )}
-                    {/* The knowledge half of the Auto-mode exclusions. Auto
-                        mode assigns nothing and so names no source above; this
-                        editor is the one place a source is named, and being
-                        named here means the opposite of assignment — it is
-                        what this agent's knowledge search leaves out. */}
-                    {autoToolsMode &&
-                      canReadKnowledgeBase &&
-                      isKnowledgeConfigured &&
-                      environmentConnectors.length > 0 && (
-                        <div className="space-y-2 pt-2">
-                          <p className="text-sm text-muted-foreground">
-                            Disabled knowledge sources
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            These sources stay out of this{" "}
-                            {agentTypeDisplayName[agentType] || "agent"}&apos;s
-                            knowledge search while Auto mode is on.
-                          </p>
-                          <KnowledgeSourceExclusionsEditor
-                            sources={environmentConnectors}
-                            selectedIds={disabledKnowledgeSourceIds}
-                            onSelectionChange={setDisabledKnowledgeSourceIds}
-                          />
-                        </div>
-                      )}
-                    {/* Auto-mode exclusions; kept mounted while hidden so
-                        pending edits and the save-time ref survive switching
-                        to "Custom". */}
+                    {/* Auto and Custom are the same pair of fields inversed —
+                        every tool and source minus a set, or exactly a set — so
+                        they carry the same order, the same widgets and the same
+                        counts, and differ only in what being listed means. Each
+                        stays mounted while the other shows, so pending edits and
+                        the save-time refs survive a tab flip. */}
                     <div
                       className={cn(
-                        "space-y-2 pt-2",
+                        "space-y-3 pt-1",
                         !autoToolsMode && "hidden",
                       )}
                     >
-                      <p className="text-sm text-muted-foreground">
-                        Disabled tools
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        These tools stay disabled for this{" "}
-                        {agentTypeDisplayName[agentType] || "agent"} while Auto
-                        mode is on.
-                      </p>
-                      <AgentToolExclusionsEditor
-                        ref={agentToolExclusionsEditorRef}
-                        agentId={agent?.id}
-                        active={autoToolsMode}
-                        seedDefaultExclusions={seedDefaultExclusions}
-                        pendingAssignedToolIds={pendingSelectedToolIds}
-                        onStateChange={setExclusionsState}
-                      />
+                      <div className="space-y-2">
+                        <p className="text-sm text-muted-foreground">
+                          {/* No count until the editor has loaded: it opens on
+                              a server-side pre-fill, so "(0)" would be a claim
+                              that nothing is excluded rather than "not yet
+                              known". */}
+                          All tools except
+                          {exclusionsState
+                            ? ` (${exclusionsState.current.excludedToolIds.length})`
+                            : ""}
+                        </p>
+                        <AgentToolExclusionsEditor
+                          ref={agentToolExclusionsEditorRef}
+                          agentId={agent?.id}
+                          active={autoToolsMode}
+                          seedDefaultExclusions={seedDefaultExclusions}
+                          pendingAssignedToolIds={pendingSelectedToolIds}
+                          onStateChange={setExclusionsState}
+                        />
+                      </div>
+                      {canReadKnowledgeBase && (
+                        <div className="space-y-2">
+                          <p className="text-sm text-muted-foreground">
+                            All knowledge sources except (
+                            {disabledKnowledgeSourceIds.length})
+                          </p>
+                          {isKnowledgeConfigured ? (
+                            <KnowledgeSourcesEditor
+                              sources={environmentConnectors.map(
+                                (connector) => ({
+                                  id: connector.id,
+                                  name: connector.name,
+                                  description:
+                                    connector.description ||
+                                    connector.connectorType,
+                                  connectorType: connector.connectorType,
+                                }),
+                              )}
+                              selectedIds={disabledKnowledgeSourceIds}
+                              onToggle={toggleDisabledKnowledgeSource}
+                              tone="exclude"
+                              label="Disable"
+                              createAction={KNOWLEDGE_CONNECTOR_CREATE_ACTION}
+                              testIds={{
+                                container:
+                                  E2eTestId.AgentKnowledgeSourceExclusions,
+                                pill: E2eTestId.AgentKnowledgeSourceExclusionPill,
+                                combobox:
+                                  E2eTestId.AgentKnowledgeSourceExclusionsCombobox,
+                              }}
+                            />
+                          ) : (
+                            knowledgeNotConfiguredNotice
+                          )}
+                        </div>
+                      )}
                     </div>
-                    {/* Kept mounted while hidden so pending selections and the
-                        save-time ref survive switching to "Auto". */}
-                    <div className={cn("space-y-3", autoToolsMode && "hidden")}>
+                    <div
+                      className={cn(
+                        "space-y-3 pt-1",
+                        autoToolsMode && "hidden",
+                      )}
+                    >
                       <div className="space-y-2">
                         <p className="text-sm text-muted-foreground">
                           Tools ({selectedToolsCount})
@@ -3105,303 +3131,96 @@ export function AgentForm({
                           includeAppCatalogs={shouldOfferAppCatalogs(agentType)}
                         />
                       </div>
-                      <div className="space-y-2">
-                        <p className="text-sm text-muted-foreground">
-                          Knowledge Sources
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Assigning a source gives this{" "}
-                          {agentType === "mcp_gateway" ? "gateway" : "agent"} a{" "}
-                          <code>query_knowledge_sources</code> tool to search
-                          it.
-                        </p>
-                        {!isKnowledgeConfigured ? (
-                          <>
-                            <Button
-                              variant="outline"
-                              disabled
-                              className="w-full justify-between font-normal"
-                            >
-                              Knowledge not configured
-                              <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
-                            </Button>
-                            <p className="text-xs text-muted-foreground">
-                              Configure an embedding model to use knowledge
-                              sources.
-                              {canAccessKnowledgeSettings && (
-                                <>
-                                  {" "}
-                                  <Link
-                                    href="/settings/knowledge"
-                                    className="underline underline-offset-2"
-                                  >
-                                    Configure knowledge
-                                  </Link>
-                                </>
-                              )}
-                            </p>
-                          </>
-                        ) : knowledgeBases.length === 0 &&
-                          connectors.length === 0 ? (
-                          <>
-                            <Button
-                              variant="outline"
-                              disabled
-                              className="w-full justify-between font-normal"
-                            >
-                              No knowledge sources available
-                              <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
-                            </Button>
-                            <p className="text-xs text-muted-foreground">
-                              No knowledge bases or connectors yet.{" "}
-                              <Link
-                                href="/knowledge/connectors"
-                                className="underline underline-offset-2"
-                              >
-                                Add a connector
-                              </Link>
-                              .
-                            </p>
-                          </>
-                        ) : (
-                          <Popover modal>
-                            <PopoverTrigger asChild>
-                              <Button
-                                variant="outline"
-                                className="w-full justify-between font-normal"
-                              >
-                                {(() => {
-                                  const totalSelected =
-                                    knowledgeBaseIds.length +
-                                    connectorIds.length;
-                                  return totalSelected === 0 ? (
-                                    <span>
-                                      Select connectors or knowledge bases
-                                    </span>
-                                  ) : (
-                                    <span>
-                                      {totalSelected} source
-                                      {totalSelected > 1 ? (
-                                        <span>s</span>
-                                      ) : null}{" "}
-                                      selected
-                                    </span>
-                                  );
-                                })()}
-                                <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
-                              </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-96 p-0" align="start">
-                              <Command>
-                                <CommandInput placeholder="Search knowledge sources..." />
-                                <CommandList>
-                                  <CommandEmpty>
-                                    No knowledge sources found.
-                                  </CommandEmpty>
-                                  {knowledgeBases.length > 0 && (
-                                    <CommandGroup heading="Knowledge Bases">
-                                      {knowledgeBases.map((kb) => {
-                                        const isSelected =
-                                          knowledgeBaseIds.includes(kb.id);
-                                        const connectorTypes = [
-                                          ...new Set<string>(
-                                            kb.connectors?.map(
-                                              (c) => c.connectorType,
-                                            ) ?? [],
-                                          ),
-                                        ];
-                                        return (
-                                          <CommandItem
-                                            key={kb.id}
-                                            value={kb.name}
-                                            className="data-[selected=true]:bg-transparent"
-                                            onSelect={() => {
-                                              setKnowledgeBaseIds((prev) =>
-                                                isSelected
-                                                  ? prev.filter(
-                                                      (id) => id !== kb.id,
-                                                    )
-                                                  : [...prev, kb.id],
-                                              );
-                                            }}
-                                          >
-                                            <CheckIcon
-                                              className={cn(
-                                                "mr-2 h-4 w-4 shrink-0",
-                                                isSelected
-                                                  ? "opacity-100"
-                                                  : "opacity-0",
-                                              )}
-                                            />
-                                            <div className="flex-1 min-w-0">
-                                              <div className="truncate text-sm">
-                                                {kb.name}
-                                              </div>
-                                              {kb.description && (
-                                                <div className="truncate text-xs text-muted-foreground">
-                                                  {kb.description}
-                                                </div>
-                                              )}
-                                            </div>
-                                            {connectorTypes.length > 0 && (
-                                              <OverlappedIcons
-                                                icons={connectorTypes.map(
-                                                  (type: string) => ({
-                                                    key: type,
-                                                    icon: (
-                                                      <ConnectorTypeIcon
-                                                        type={type}
-                                                        className="h-full w-full"
-                                                      />
-                                                    ),
-                                                    tooltip: type,
-                                                  }),
-                                                )}
-                                                maxVisible={3}
-                                                size="sm"
-                                                className="ml-2"
-                                              />
-                                            )}
-                                          </CommandItem>
-                                        );
-                                      })}
-                                    </CommandGroup>
-                                  )}
-                                  {connectors.length > 0 && (
-                                    <CommandGroup heading="Connectors">
-                                      {connectors.map((connector) => {
-                                        const isSelected =
-                                          connectorIds.includes(connector.id);
-                                        // Environment isolation: a connector in
-                                        // another environment can't be used by
-                                        // this agent, so it's shown disabled.
-                                        const isEnvIncompatible =
-                                          !isInSelectedEnvironment(
-                                            connector.environmentId ?? null,
-                                          );
-                                        return (
-                                          <CommandItem
-                                            key={connector.id}
-                                            value={connector.name}
-                                            disabled={isEnvIncompatible}
-                                            className="data-[selected=true]:bg-transparent"
-                                            onSelect={() => {
-                                              if (isEnvIncompatible) return;
-                                              setConnectorIds((prev) =>
-                                                isSelected
-                                                  ? prev.filter(
-                                                      (id) =>
-                                                        id !== connector.id,
-                                                    )
-                                                  : [...prev, connector.id],
-                                              );
-                                            }}
-                                          >
-                                            <CheckIcon
-                                              className={cn(
-                                                "mr-2 h-4 w-4 shrink-0",
-                                                isSelected
-                                                  ? "opacity-100"
-                                                  : "opacity-0",
-                                              )}
-                                            />
-                                            <div className="flex-1 min-w-0">
-                                              <div className="truncate text-sm">
-                                                {connector.name}
-                                              </div>
-                                              <div className="truncate text-xs text-muted-foreground">
-                                                {isEnvIncompatible ? (
-                                                  <span>
-                                                    Different environment
-                                                  </span>
-                                                ) : connector.description ? (
-                                                  <span>
-                                                    {connector.description}
-                                                  </span>
-                                                ) : (
-                                                  <span className="capitalize">
-                                                    {connector.connectorType}
-                                                  </span>
-                                                )}
-                                              </div>
-                                            </div>
-                                            <div className="ml-2 shrink-0">
-                                              <ConnectorTypeIcon
-                                                type={connector.connectorType}
-                                                className="h-4 w-4"
-                                              />
-                                            </div>
-                                          </CommandItem>
-                                        );
-                                      })}
-                                    </CommandGroup>
-                                  )}
-                                </CommandList>
-                              </Command>
-                            </PopoverContent>
-                          </Popover>
-                        )}
-                      </div>
+                      {canReadKnowledgeBase && (
+                        <div className="space-y-2">
+                          <p className="text-sm text-muted-foreground">
+                            Knowledge sources (
+                            {assignedKnowledgeSourceIds.length})
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Assigning a source gives this{" "}
+                            {agentType === "mcp_gateway" ? "gateway" : "agent"}{" "}
+                            a <code>query_knowledge_sources</code> tool to
+                            search it.
+                          </p>
+                          {isKnowledgeConfigured ? (
+                            <KnowledgeSourcesEditor
+                              sources={assignableKnowledgeSources}
+                              selectedIds={assignedKnowledgeSourceIds}
+                              onToggle={toggleAssignedKnowledgeSource}
+                              tone="assign"
+                              label="Add"
+                              createAction={KNOWLEDGE_CONNECTOR_CREATE_ACTION}
+                              testIds={{
+                                container: E2eTestId.AgentKnowledgeSources,
+                                pill: E2eTestId.AgentKnowledgeSourcePill,
+                                combobox:
+                                  E2eTestId.AgentKnowledgeSourcesCombobox,
+                              }}
+                            />
+                          ) : (
+                            knowledgeNotConfiguredNotice
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  {/* Progressive loading is only a choice for Custom mode —
-                      "Auto" requires the search/run dispatch surface. The row
-                      reads like the detail page's: the setting's icon tinted
-                      by its state, and a line on what the state means. */}
-                  {!autoToolsMode && (
-                    <div className="flex items-center gap-3">
-                      <SettingIcon
-                        tone={
-                          toolExposureMode === "search_and_run_only"
-                            ? "on"
-                            : "off"
-                        }
-                      >
-                        <PackageSearch className="size-4" />
-                      </SettingIcon>
-                      <div className="min-w-0 flex-1 space-y-0.5">
-                        <Label htmlFor="load-tools-when-needed">
-                          Progressive tool loading
-                        </Label>
-                        <p className="text-xs text-muted-foreground">
-                          {/* Word for word the detail page's "Tools loaded"
-                              row, so the setting reads the same where it is
-                              chosen and where it is reported. */}
-                          {toolExposureMode === "search_and_run_only" ? (
-                            <>
-                              The model starts with{" "}
-                              <code>{TOOL_SEARCH_TOOLS_SHORT_NAME}</code> and{" "}
-                              <code>{TOOL_RUN_TOOL_SHORT_NAME}</code> only, and
-                              reaches the rest by searching for them
-                              mid-conversation.
-                            </>
-                          ) : (
-                            <>
-                              Every assigned tool is in the model's context from
-                              the first message.
-                            </>
-                          )}{" "}
-                          <ExternalDocsLink
-                            href={toolExposureDocsUrl}
-                            className="underline"
-                            showIcon={false}
-                          >
-                            Learn more
-                          </ExternalDocsLink>
-                        </p>
-                      </div>
-                      <Switch
-                        id="load-tools-when-needed"
-                        checked={toolExposureMode === "search_and_run_only"}
-                        onCheckedChange={(checked) =>
-                          setToolExposureMode(
-                            checked ? "search_and_run_only" : "full",
-                          )
-                        }
-                      />
+                  {/* Auto mode is progressive loading — dynamic access only
+                      works through the search/run dispatch surface, and the
+                      backend coerces the mode to match on every write path. The
+                      row used to be hidden there, which left the one setting
+                      Auto decides for you invisible; it now shows in both
+                      modes, on and locked in Auto. The row reads like the
+                      detail page's: the setting's icon tinted by its state, and
+                      a line on what the state means. */}
+                  <div className="flex items-center gap-3">
+                    <SettingIcon tone={progressiveToolLoading ? "on" : "off"}>
+                      <PackageSearch className="size-4" />
+                    </SettingIcon>
+                    <div className="min-w-0 flex-1 space-y-0.5">
+                      <Label htmlFor="load-tools-when-needed">
+                        Progressive tool loading
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        {/* Word for word the detail page's "Tools loaded"
+                            row, so the setting reads the same where it is
+                            chosen and where it is reported. */}
+                        {progressiveToolLoading ? (
+                          <>
+                            The model starts with{" "}
+                            <code>{TOOL_SEARCH_TOOLS_SHORT_NAME}</code> and{" "}
+                            <code>{TOOL_RUN_TOOL_SHORT_NAME}</code> only, and
+                            reaches the rest by searching for them
+                            mid-conversation.
+                          </>
+                        ) : (
+                          <>
+                            Every assigned tool is in the model's context from
+                            the first message.
+                          </>
+                        )}{" "}
+                        {autoToolsMode && <>Auto mode always uses it. </>}
+                        <ExternalDocsLink
+                          href={toolExposureDocsUrl}
+                          className="underline"
+                          showIcon={false}
+                        >
+                          Learn more
+                        </ExternalDocsLink>
+                      </p>
                     </div>
-                  )}
+                    <Switch
+                      id="load-tools-when-needed"
+                      checked={progressiveToolLoading}
+                      disabled={autoToolsMode}
+                      onCheckedChange={(checked) =>
+                        setToolExposureMode(
+                          checked ? "search_and_run_only" : "full",
+                        )
+                      }
+                    />
+                  </div>
 
                   {/* Only meaningful for Custom mode: an Auto agent resolves
                       tools from what each caller can already reach, so no
@@ -3513,7 +3332,7 @@ export function AgentForm({
                           </ul>
                           <div className="space-y-1.5">
                             <p className="text-sm text-muted-foreground">
-                              Disabled subagents ({disabledSubagentCount})
+                              All subagents except ({disabledSubagentCount})
                             </p>
                             <SubagentsEditor
                               availableAgents={allInternalAgents}
@@ -3689,7 +3508,7 @@ export function AgentForm({
                           </ul>
                           <div className="space-y-1.5">
                             <p className="text-sm text-muted-foreground">
-                              Excluded skills ({excludedSkillIds.length})
+                              All skills except ({excludedSkillIds.length})
                             </p>
                             <AgentSkillsEditor
                               availableSkills={orgScopedSkills}
@@ -4053,3 +3872,16 @@ function buildAgentFormSnapshot(fields: AgentFormFields) {
     connectorIds: [...fields.connectorIds].sort(),
   };
 }
+
+// The Custom knowledge picker draws from two tables into one list, so an id in
+// it carries which table it came from. Ids from either are opaque to the picker
+// and only ever routed back by prefix, so the strings need only be distinct.
+const KNOWLEDGE_BASE_ID_PREFIX = "knowledge-base:";
+const CONNECTOR_ID_PREFIX = "connector:";
+
+// Both knowledge fields are empty until an org has a source, so both offer the
+// same way out of that.
+const KNOWLEDGE_CONNECTOR_CREATE_ACTION = {
+  label: "Add a connector",
+  href: "/knowledge/connectors",
+};

@@ -12,7 +12,10 @@ import {
 } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useConnectors } from "@/lib/knowledge/connector.query";
-import { useIsKnowledgeBaseConfigured } from "@/lib/knowledge/knowledge-base.query";
+import {
+  useIsKnowledgeBaseConfigured,
+  useKnowledgeBases,
+} from "@/lib/knowledge/knowledge-base.query";
 import {
   type AgentFormFooterState,
   type AgentFormProps,
@@ -269,7 +272,7 @@ vi.mock("@/lib/knowledge/connector.query", () => ({
 }));
 
 vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
-  useKnowledgeBases: () => ({ data: [] }),
+  useKnowledgeBases: vi.fn(() => ({ data: [] })),
   useIsKnowledgeBaseConfigured: vi.fn(() => true),
 }));
 
@@ -818,7 +821,7 @@ describe("AgentForm delegation state", () => {
       ).toBeInTheDocument();
     });
     expect(screen.queryByText(advisorAgent.name)).not.toBeInTheDocument();
-    expect(screen.getByText(/Disabled subagents \(0\)/)).toBeInTheDocument();
+    expect(screen.getByText(/All subagents except \(0\)/)).toBeInTheDocument();
   });
 
   it("reads as on in Auto mode only while the advisor is not disabled", async () => {
@@ -914,7 +917,7 @@ describe("AgentForm delegation state", () => {
 
     await user.click(subagentModeTab("Auto"));
 
-    expect(screen.getByText(/Disabled subagents \(0\)/)).toBeInTheDocument();
+    expect(screen.getByText(/All subagents except \(0\)/)).toBeInTheDocument();
     expect(
       screen.getByTestId(E2eTestId.ConsultAdvisorSwitch),
     ).not.toBeChecked();
@@ -1306,10 +1309,10 @@ describe("AgentForm knowledge in Auto mode", () => {
     vi.mocked(useIsKnowledgeBaseConfigured).mockReturnValue(true);
   });
 
-  it("describes discovery instead of naming the environment's sources", async () => {
+  it("says what the knowledge field leaves out rather than what it holds", async () => {
     // Auto mode does not read the assignment, and the set it searches is the
     // caller's — not the editor's — so naming sources here only ever showed
-    // the wrong list. It now reads like the MCP tools it sits beside.
+    // the wrong list. The field's own label is what states the rule now.
     vi.mocked(useConnectors).mockReturnValue({
       data: [
         {
@@ -1327,18 +1330,17 @@ describe("AgentForm knowledge in Auto mode", () => {
 
     const section = await screen.findByTestId(E2eTestId.AgentToolsSection);
     expect(
-      within(section).getByText(
-        /new servers and sources included automatically/i,
-      ),
+      within(section).getByText(/All knowledge sources except \(0\)/),
     ).toBeVisible();
-    // The preview list and its caption are gone. Two headings nearby are
-    // different strings and stay: the Custom picker's "Knowledge Sources" and
-    // the Auto-mode "Disabled knowledge sources" editor.
-    expect(within(section).queryByText("Knowledge sources")).toBeNull();
+    // The preview list and its caption are gone, and so is the prose that
+    // used to restate the field above it.
     expect(
       within(section).queryByText(
         /each conversation searches the ones its own caller may query/i,
       ),
+    ).toBeNull();
+    expect(
+      within(section).queryByText(/stay out of this agent's knowledge search/i),
     ).toBeNull();
   });
 
@@ -1464,13 +1466,111 @@ describe("AgentForm knowledge in Auto mode", () => {
   });
 
   it("says so when knowledge search has no embedding model behind it", async () => {
+    // The warning lives in the field it disables, in both modes, rather than
+    // in prose above the form — so it is where the reader is already looking.
     vi.mocked(useIsKnowledgeBaseConfigured).mockReturnValue(false);
     const autoAgent = { ...baseAgent, accessAllTools: true };
     useProfileMock.mockReturnValue({ data: autoAgent, refetch: vi.fn() });
 
     render(<AgentForm agentType="agent" agent={autoAgent} />);
 
-    expect(await screen.findByText(/Knowledge search is off/i)).toBeVisible();
+    const section = await screen.findByTestId(E2eTestId.AgentToolsSection);
+    expect(
+      within(section).getAllByText(
+        /Configure an embedding model to use knowledge sources/i,
+      ).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("puts tools before knowledge in both modes", async () => {
+    // The two modes disagreed on the order — Custom listed tools first, Auto
+    // listed knowledge first — so flipping the tab moved the field you were
+    // reading. Not incidental markup: the order is the thing being fixed.
+    vi.mocked(useConnectors).mockReturnValue({
+      data: [
+        {
+          id: "c1",
+          name: "Runbooks",
+          connectorType: "github",
+          environmentId: null,
+        },
+      ],
+    } as unknown as ReturnType<typeof useConnectors>);
+    useProfileMock.mockReturnValue({ data: baseAgent, refetch: vi.fn() });
+
+    render(<AgentForm agentType="agent" agent={baseAgent} />);
+
+    const section = await screen.findByTestId(E2eTestId.AgentToolsSection);
+    const before = (first: HTMLElement, second: HTMLElement) =>
+      Boolean(
+        first.compareDocumentPosition(second) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+
+    expect(
+      before(
+        within(section).getByText(/^All tools except/),
+        within(section).getByText(/^All knowledge sources except/),
+      ),
+    ).toBe(true);
+    expect(
+      before(
+        within(section).getByText(/^Tools \(/),
+        within(section).getByText(/^Knowledge sources \(/),
+      ),
+    ).toBe(true);
+  });
+
+  it("offers knowledge bases and connectors through one picker in Custom mode", async () => {
+    // The two tables used to be two groups behind a Popover of their own,
+    // shaped unlike every other field on the step. One list, one pill row: the
+    // kind survives as a badge, and both halves still reach their own id list.
+    const user = userEvent.setup();
+    const updateAgent = vi.fn().mockResolvedValue(baseAgent);
+    vi.mocked(useKnowledgeBases).mockReturnValue({
+      data: [{ id: "kb1", name: "Company Handbook", connectors: [] }],
+    } as unknown as ReturnType<typeof useKnowledgeBases>);
+    vi.mocked(useConnectors).mockReturnValue({
+      data: [
+        {
+          id: "c1",
+          name: "Runbooks",
+          connectorType: "github",
+          environmentId: null,
+        },
+      ],
+    } as unknown as ReturnType<typeof useConnectors>);
+    useProfileMock.mockReturnValue({ data: baseAgent, refetch: vi.fn() });
+    useUpdateProfileMock.mockReturnValue({
+      mutateAsync: updateAgent,
+      isPending: false,
+    });
+
+    render(<AgentForm agentType="agent" agent={baseAgent} />);
+
+    const section = await screen.findByTestId(E2eTestId.AgentToolsSection);
+    const picker = within(section).getByTestId(E2eTestId.AgentKnowledgeSources);
+    // One list, both tables: a knowledge base and a connector are offered side
+    // by side, and the Auto field's own list is a separate one.
+    await user.click(within(picker).getByText("Add Company Handbook"));
+    await user.click(within(picker).getByText("Add Runbooks"));
+
+    expect(
+      within(picker).getAllByTestId(E2eTestId.AgentKnowledgeSourcePill).length,
+    ).toBe(2);
+    expect(within(picker).getByText("Company Handbook")).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: /update/i }));
+    await waitFor(() =>
+      expect(updateAgent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            knowledgeBaseIds: ["kb1"],
+            connectorIds: ["c1"],
+          }),
+        }),
+      ),
+    );
   });
 
   it("keeps quiet about knowledge search once it is configured", async () => {
@@ -1479,8 +1579,78 @@ describe("AgentForm knowledge in Auto mode", () => {
 
     render(<AgentForm agentType="agent" agent={autoAgent} />);
 
-    await screen.findByTestId(E2eTestId.AgentToolsSection);
-    expect(screen.queryByText(/Knowledge search is off/i)).toBeNull();
+    const section = await screen.findByTestId(E2eTestId.AgentToolsSection);
+    expect(
+      within(section).queryByText(
+        /Configure an embedding model to use knowledge sources/i,
+      ),
+    ).toBeNull();
+  });
+});
+
+describe("AgentForm progressive tool loading", () => {
+  beforeEach(() => {
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { id: "user-1" } },
+    } as unknown as ReturnType<typeof useSession>);
+    vi.mocked(useHasPermissions).mockImplementation(
+      () => ({ data: true }) as unknown as ReturnType<typeof useHasPermissions>,
+    );
+  });
+
+  const progressiveSwitch = (section: HTMLElement) =>
+    section.querySelector<HTMLInputElement>("#load-tools-when-needed");
+
+  it("shows the setting as on and locked in Auto mode", async () => {
+    // Auto mode requires the search/run dispatch surface, and the backend
+    // coerces the record to match. The row used to be hidden here, which left
+    // the one setting Auto decides for you invisible.
+    const autoAgent = {
+      ...baseAgent,
+      accessAllTools: true,
+      toolExposureMode: "search_and_run_only" as const,
+    };
+    useProfileMock.mockReturnValue({ data: autoAgent, refetch: vi.fn() });
+
+    render(<AgentForm agentType="agent" agent={autoAgent} />);
+
+    const section = await screen.findByTestId(E2eTestId.AgentToolsSection);
+    expect(within(section).getByText("Progressive tool loading")).toBeVisible();
+    expect(progressiveSwitch(section)?.checked).toBe(true);
+    expect(progressiveSwitch(section)?.disabled).toBe(true);
+    expect(within(section).getByText(/Auto mode always uses it/)).toBeVisible();
+  });
+
+  it("reads as on for an Auto agent whose stored mode says otherwise", async () => {
+    // Rows written before the invariant existed can still hold "full". The
+    // switch reports what the agent will do, not what the stale column says.
+    const staleAutoAgent = {
+      ...baseAgent,
+      accessAllTools: true,
+      toolExposureMode: "full" as const,
+    };
+    useProfileMock.mockReturnValue({ data: staleAutoAgent, refetch: vi.fn() });
+
+    render(<AgentForm agentType="agent" agent={staleAutoAgent} />);
+
+    const section = await screen.findByTestId(E2eTestId.AgentToolsSection);
+    expect(progressiveSwitch(section)?.checked).toBe(true);
+  });
+
+  it("stays a choice in Custom mode", async () => {
+    const user = userEvent.setup();
+    useProfileMock.mockReturnValue({ data: baseAgent, refetch: vi.fn() });
+
+    render(<AgentForm agentType="agent" agent={baseAgent} />);
+
+    const section = await screen.findByTestId(E2eTestId.AgentToolsSection);
+    const toggle = progressiveSwitch(section);
+    expect(toggle?.checked).toBe(false);
+    expect(toggle?.disabled).toBe(false);
+    expect(within(section).queryByText(/Auto mode always uses it/)).toBeNull();
+
+    if (toggle) await user.click(toggle);
+    expect(progressiveSwitch(section)?.checked).toBe(true);
   });
 });
 
@@ -1693,7 +1863,7 @@ describe("AgentForm published skills", () => {
 
     render(<AgentForm agentType="mcp_gateway" agent={baseAgent} />);
 
-    await screen.findByText(/Excluded skills \(0\)/);
+    await screen.findByText(/All skills except \(0\)/);
     await user.click(skillsModeTab("Custom"));
     expect(screen.getByText("Skills (0)")).toBeInTheDocument();
 
@@ -1723,7 +1893,7 @@ describe("AgentForm published skills", () => {
       <AgentForm onSaved={onSaved} agentType="mcp_gateway" agent={baseAgent} />,
     );
 
-    await screen.findByText(/Excluded skills \(0\)/);
+    await screen.findByText(/All skills except \(0\)/);
     await user.click(skillsModeTab("Custom"));
     await user.click(screen.getByRole("button", { name: /update/i }));
 

@@ -3,7 +3,7 @@ title: Knowledge
 category: Knowledge
 order: 1
 description: Built-in RAG knowledge — Knowledge Bases, connectors, and how retrieval works
-lastUpdated: 2026-08-24
+lastUpdated: 2026-08-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -276,13 +276,13 @@ A security analyst reviews vendor documents that arrive by email.
 An agent — or an [MCP Gateway](/docs/platform-mcp-gateway) — reaches knowledge through the **Tools & Knowledge Sources** setting in its dialog, which has two modes:
 
 - **Auto** — the agent can search every Knowledge Base and connector the chatting user can access, within the agent's environment. Nothing is assigned; the reachable set follows each user's own visibility.
-- **Custom** — the agent searches only the Knowledge Bases and connectors you assign to it. Pick them under **Knowledge Sources**; the picker stays disabled until an embedding model is set (see [Configuration](#configuration)).
+- **Custom** — the agent searches only the Knowledge Bases and connectors you assign to it. Pick them under **Knowledge sources**; the picker stays disabled until an embedding model is set (see [Configuration](#configuration)).
 
 Either mode is still filtered by the chatting user's own visibility, so an agent never surfaces a source the user could not read themselves. Once the agent has at least one reachable source, it gains a `query_knowledge_sources` tool that searches across them and returns the most relevant documents.
 
 The output of `query_knowledge_sources` is treated as sensitive by default, which can impact the ability to use subsequent tools. See [Archestra MCP Server](/docs/platform-archestra-mcp-server#auth), and [AI Tool Guardrails](/docs/platform-ai-tool-guardrails), for more details.
 
-![Selecting Knowledge Bases and connectors on an agent](/docs/automated_screenshots/platform-knowledge-bases_assign-to-agent.webp)
+![Assigning Knowledge Bases and connectors to an agent in Custom mode](/docs/automated_screenshots/platform-knowledge-bases_assign-to-agent.webp)
 
 Connectors pull data from external tools into Knowledge Bases. A connector can be assigned to multiple Knowledge Bases.
 

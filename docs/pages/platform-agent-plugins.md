@@ -115,4 +115,4 @@ An authorized platform administrator selects the plugin and runs the setup comma
 
 Use a plugin when the coding client must own the behavior. Use a Skill when the model needs reusable guidance.
 
-Skills embedded at any depth in a plugin also appear under **Skills from plugins** on the Skills page. This read-only Beta category ignores the plugin's client and platform when listing `SKILL.md` files. It shares Skill resources plus readable context from README and license files, commands, agents, output styles, and MCP or LSP configuration. Hooks, manifests, settings, installers, and runtime files stay with the source plugin. Agents in any connected client can discover and load these Skills without creating standalone copies.
+Skills embedded at any depth in a plugin also appear under **Skills from plugins** on the Skills page. This read-only Beta category ignores the plugin's client and platform when listing `SKILL.md` files. Every file owned by the Skill tree is shared except hooks, hook manifests, plugin or marketplace metadata, and installation files. Agents in any connected client can discover and load these Skills without creating standalone copies.

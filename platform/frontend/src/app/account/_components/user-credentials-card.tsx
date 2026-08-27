@@ -27,11 +27,16 @@ import {
  * Values are write-only by design: they can be replaced or removed, never read
  * back, and no administrator can see them.
  */
-export function UserCredentialsCard() {
+export function UserCredentialsCard({
+  requestedKeys = [],
+}: {
+  /** Keys a refusal deep-linked here to collect; the first pre-fills the form. */
+  requestedKeys?: string[];
+} = {}) {
   const { data: credentials, isLoading } = useUserCredentials();
   const upsert = useUpsertUserCredential();
   const remove = useDeleteUserCredential();
-  const [key, setKey] = useState("");
+  const [key, setKey] = useState(requestedKeys[0] ?? "");
   const [value, setValue] = useState("");
 
   const add = async () => {

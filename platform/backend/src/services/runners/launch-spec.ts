@@ -2,7 +2,13 @@ import config from "@/config";
 import type { RunnerLaunchSpec } from "@/k8s/runner-runtime/manifests";
 import { RUNNER_STEER_FIFO } from "@/k8s/runner-runtime/manifests";
 import { constructFrozenRunnerName } from "@/k8s/runner-runtime/naming";
-import { UserTokenModel, VirtualApiKeyModel } from "@/models";
+import {
+  AgentModel,
+  LlmProviderApiKeyModel,
+  TeamModel,
+  UserTokenModel,
+  VirtualApiKeyModel,
+} from "@/models";
 import type { MissingRunnerCredential, Runner } from "@/types";
 import { ApiError, RUNNER_CREDENTIALS_REQUIRED_CODE } from "@/types";
 import { resolveRunnerCredentials } from "./credentials";
@@ -90,6 +96,27 @@ export async function buildRunnerLaunchSpec(params: {
     );
   }
 
+  // The virtual key must carry a provider mapping or the proxy refuses it:
+  // a virtual key is an indirection to a real provider credential, not a
+  // credential itself. Resolution honors the agent's configured key first,
+  // then the actor's personal -> team -> org precedence, exactly as chat does.
+  const agent = await AgentModel.findById(params.agentId);
+  const userTeamIds = await TeamModel.getUserTeamIds(params.actorUserId);
+  const providerApiKey = await LlmProviderApiKeyModel.getCurrentApiKey({
+    organizationId: params.organizationId,
+    userId: params.actorUserId,
+    userTeamIds,
+    provider: "anthropic",
+    conversationId: null,
+    agentLlmApiKeyId: agent?.llmApiKeyId ?? undefined,
+  });
+  if (!providerApiKey) {
+    throw new ApiError(
+      409,
+      "No Anthropic API key is configured for your account, teams, or organization, so a runner session has nothing to talk to the model with. Ask an admin to add one under LLM provider keys.",
+    );
+  }
+
   const virtualKey = await VirtualApiKeyModel.create({
     organizationId: params.organizationId,
     name: `runner-${params.taskId.slice(0, 8)}`,
@@ -97,9 +124,15 @@ export async function buildRunnerLaunchSpec(params: {
     // it acts as rather than to the organization at large.
     scope: "personal",
     authorId: params.actorUserId,
+    providerApiKeys: [
+      { provider: "anthropic", providerApiKeyId: providerApiKey.id },
+    ],
   });
 
-  const proxyUrl = `${platformBaseUrl}/v1/anthropic/${params.agentId}`;
+  // The singleton proxy endpoint, the same one every external client uses.
+  // Spend attribution rides the personal virtual key; an agent-scoped URL is
+  // not a thing the single-proxy design supports for chat agents.
+  const proxyUrl = `${platformBaseUrl}/v1/anthropic`;
   const nonSecretEnv: Record<string, string> = {
     // The runner's own environment goes first: the addresses below must win.
     // An entry overriding ANTHROPIC_BASE_URL would be exactly the bypass the

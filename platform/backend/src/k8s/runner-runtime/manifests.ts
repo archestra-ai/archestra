@@ -77,6 +77,10 @@ function buildRunnerBootstrapScript(): string {
     "fi",
     `printf '%s\\n' "$ARCHESTRA_RUNNER_ENTRYPOINT" > ${RUNNER_RUN_DIR}/entry.sh`,
     `tmux new-session -d -s ${RUNNER_TMUX_SESSION} "/bin/sh ${RUNNER_RUN_DIR}/entry.sh; echo; echo '[archestra] agent session exited'; sleep 10"`,
+    // Mirror the pane to the container's stdout. tmux gives the agent a pty,
+    // so without this its output exists only inside the pane: kubectl logs
+    // shows nothing, and the platform's log-follower streams an empty task.
+    `tmux pipe-pane -t ${RUNNER_TMUX_SESSION} -o 'cat >> /proc/1/fd/1'`,
     // Hold PID 1 for exactly as long as the session lives, so the Job
     // completes when the agent is done rather than when tmux forks away.
     `while tmux has-session -t ${RUNNER_TMUX_SESSION} 2>/dev/null; do sleep 5; done`,

@@ -47,7 +47,10 @@ async function main(): Promise<number> {
   steerQueue.start();
 
   const anthropic = createAnthropic({
-    baseURL: config.proxyBaseUrl,
+    // The injected base is `/v1/anthropic/{agentId}` — the shape a BYO CLI
+    // expects in ANTHROPIC_BASE_URL, appending `/v1/messages` itself. The AI
+    // SDK appends only `/messages`, so the `/v1` segment is supplied here.
+    baseURL: `${config.proxyBaseUrl}/v1`,
     apiKey: config.apiKey,
   });
 

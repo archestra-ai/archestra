@@ -83,6 +83,10 @@ import {
   toolEntries as searchToolEntries,
   tools as searchToolTools,
 } from "./search-tools";
+import {
+  toolEntries as taskToolEntries,
+  tools as taskTools,
+} from "./tasks";
 import { handleSkillDelegation } from "./skill-delegation";
 import { toolEntries as skillToolEntries, tools as skillTools } from "./skills";
 import { toolEntries as teamToolEntries, tools as teamTools } from "./teams";
@@ -158,6 +162,7 @@ function getToolEntries(): Partial<
       ...skillToolEntries,
       ...pluginToolEntries,
       ...sandboxToolEntries,
+      ...taskToolEntries,
       ...appToolEntries,
       ...appDataToolEntries,
       ...appLlmToolEntries,
@@ -193,6 +198,7 @@ function getAllTools(): (typeof identityTools)[number][] {
       ...skillTools,
       ...pluginTools,
       ...sandboxTools,
+      ...taskTools,
       ...hookTools,
       ...appTools,
       ...appDataTools,

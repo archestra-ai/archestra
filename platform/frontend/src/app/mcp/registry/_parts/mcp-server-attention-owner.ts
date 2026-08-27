@@ -1,4 +1,4 @@
-import { facetIssues, type McpServerIssue } from "@/lib/mcp/mcp-server-issues";
+import type { McpServerIssue } from "@/lib/mcp/mcp-server-issues";
 import type { InstalledServer } from "./mcp-server-card";
 
 export type McpIssueActionOwner = {
@@ -67,33 +67,3 @@ export function describeMcpIssueActionOwners({
     sentence: "Multiple people or roles need to act.",
   };
 }
-
-/**
- * The facet names one owner only when every row points to the same visible
- * identity. Mixed or hidden actors stay truthful without exposing identity.
- */
-export function waitingActionFacetLabel({
-  issuesByCatalog,
-  servers,
-}: {
-  issuesByCatalog: Map<string, McpServerIssue[]>;
-  servers: InstalledServer[];
-}): string {
-  const owners: string[] = [];
-  for (const issues of issuesByCatalog.values()) {
-    for (const issue of facetIssues(issues, "others")) {
-      const server = issue.serverId
-        ? servers.find((candidate) => candidate.id === issue.serverId)
-        : null;
-      const owner = server?.ownerEmail?.trim();
-      if (!owner) return WAITING_OTHER_USER_LABEL;
-      owners.push(owner);
-    }
-  }
-  const uniqueOwners = new Set(owners);
-  return uniqueOwners.size === 1
-    ? `Waiting action by ${owners[0]}`
-    : WAITING_OTHER_USER_LABEL;
-}
-
-const WAITING_OTHER_USER_LABEL = "Waiting action by other user";

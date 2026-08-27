@@ -19,7 +19,6 @@ import { type LucideIcon, Search } from "lucide-react";
 import React, { useState } from "react";
 
 import { EmptyState } from "@/components/empty-state";
-import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -28,6 +27,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import type { BulkRangeSelectionController } from "@/lib/bulk-range-selection";
+import {
+  registerTableRangeSelection,
+  useBulkRangeSelectionController,
+} from "@/lib/bulk-range-selection-context";
 import { cn } from "@/lib/utils";
 import { DATA_TABLE_SELECT_COLUMN_SIZE } from "./data-table.constants";
 import { DataTablePagination } from "./data-table-pagination";
@@ -55,6 +59,8 @@ interface DataTableProps<TData, TValue> {
   onRowClick?: (row: TData, event: React.MouseEvent) => void;
   rowSelection?: RowSelectionState;
   onRowSelectionChange?: (rowSelection: RowSelectionState) => void;
+  /** Shared with card mode so Shift ranges keep one anchor across layouts. */
+  rangeSelection?: BulkRangeSelectionController;
   /**
    * The ids of the rows currently on screen, whenever they change.
    *
@@ -123,6 +129,7 @@ export function DataTable<TData, TValue>({
   onRowClick,
   rowSelection,
   onRowSelectionChange,
+  rangeSelection: controlledRangeSelection,
   onPageRowIdsChange,
   hideSelectedCount,
   getRowId,
@@ -143,6 +150,8 @@ export function DataTable<TData, TValue>({
   fixedWidthColumnIds = [],
   flexibleColumnIds = [],
 }: DataTableProps<TData, TValue>) {
+  const localRangeSelection = useBulkRangeSelectionController();
+  const rangeSelection = controlledRangeSelection ?? localRangeSelection;
   const [internalSorting, setInternalSorting] = useState<SortingState>([]);
   const [expanded, setExpanded] = useState<ExpandedState>({});
   const [internalPagination, setInternalPagination] = useState({
@@ -227,6 +236,7 @@ export function DataTable<TData, TValue>({
       }
     },
   });
+  registerTableRangeSelection({ table, controller: rangeSelection });
 
   // With autoResetPageIndex disabled, a shrinking row count (e.g. a filter
   // applied while on a later page) strands the table on a nonexistent page.

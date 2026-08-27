@@ -190,6 +190,54 @@ describe("McpServerTable uninstall permission", () => {
     expect(screen.queryByText("Uninstall MCP Server")).not.toBeInTheDocument();
   });
 
+  it("moves local runtime state to an icon dot and keeps Status installation-only", async () => {
+    const user = userEvent.setup();
+    const localItem = {
+      ...item,
+      id: "cat-local",
+      serverType: "local",
+    } as CatalogItem;
+    const localInstall = {
+      ...personalInstall,
+      id: "srv-local",
+      catalogId: localItem.id,
+      serverType: "local",
+    } as InstalledServer;
+
+    renderTable(
+      <McpServerTable
+        items={[localItem]}
+        getServerInfo={() => ({ installedServer: localInstall })}
+        envLabelByCatalog={new Map()}
+        issuesByCatalog={new Map()}
+        deploymentFeedState="ready"
+        deploymentStatuses={{
+          [localInstall.id]: {
+            state: "hibernated",
+            message: "Hibernated",
+            error: null,
+          },
+        }}
+        installingItemId={null}
+        onInstall={vi.fn()}
+        onReinstall={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Installed")).toBeInTheDocument();
+    expect(screen.queryByText("Hibernated")).not.toBeInTheDocument();
+    const statusDot = screen.getByRole("img", {
+      name: "Runtime status: Hibernated",
+    });
+    await user.hover(statusDot);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Hibernated. Scaled down after being idle",
+    );
+    expect(
+      screen.getAllByRole("link", { name: /Learn more/ }),
+    ).not.toHaveLength(0);
+  });
+
   it("keeps queue actions inline and moves lower-priority actions into overflow", async () => {
     const user = userEvent.setup();
     const issue = {

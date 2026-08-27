@@ -34,6 +34,7 @@ import { TableRowActions } from "@/components/table-row-actions";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
+import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -606,9 +607,8 @@ function MembersTab({
   ];
 
   return (
-    <>
+    <BulkActionsScope className="space-y-3">
       <FilterBar
-        className={isPending ? "mb-4" : "mb-3"}
         actions={<TabButtons activeTab={activeTab} onTabChange={onTabChange} />}
       >
         <SearchInput
@@ -673,11 +673,12 @@ function MembersTab({
             params.delete("name");
             params.delete("role");
             params.set("page", "1");
-            router.push(`${pathname}?${params.toString()}`, { scroll: false });
+            router.push(`${pathname}?${params.toString()}`, {
+              scroll: false,
+            });
           }}
         />
       </LoadingWrapper>
-
       {/* Change Role Dialog */}
       {changingRole && (
         <ChangeRoleDialog
@@ -753,7 +754,7 @@ function MembersTab({
           pendingLabel="Removing..."
         />
       )}
-    </>
+    </BulkActionsScope>
   );
 }
 
@@ -998,8 +999,8 @@ function InvitationsTab({
   ];
 
   return (
-    <>
-      <div className="flex items-center gap-4 mb-4">
+    <div className="space-y-3">
+      <div className="flex items-center gap-4">
         <div className="ml-auto">
           <TabButtons activeTab={activeTab} onTabChange={onTabChange} />
         </div>
@@ -1037,7 +1038,7 @@ function InvitationsTab({
           pendingLabel="Cancelling..."
         />
       )}
-    </>
+    </div>
   );
 }
 

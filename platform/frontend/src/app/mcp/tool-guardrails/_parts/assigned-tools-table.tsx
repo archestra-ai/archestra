@@ -35,6 +35,7 @@ import { WithPermissions } from "@/components/roles/with-permissions";
 import { SearchInput } from "@/components/search-input";
 import { ToolPolicyBulkActionsBar } from "@/components/tool-policy-bulk-actions";
 import { TruncatedText } from "@/components/truncated-text";
+import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -631,8 +632,8 @@ export function AssignedToolsTable({
   );
 
   return (
-    <div className="space-y-6">
-      <FilterBar className="!mb-3">
+    <BulkActionsScope className="space-y-3">
+      <FilterBar>
         <SearchInput
           isLoading={isLoading}
           objectNamePlural="tools"
@@ -802,7 +803,7 @@ export function AssignedToolsTable({
         flexibleColumnIds={["name"]}
         fixedWidthColumnIds={["callPolicy", "toolResultTreatment"]}
       />
-    </div>
+    </BulkActionsScope>
   );
 }
 

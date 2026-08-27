@@ -55,6 +55,7 @@ export function ResourceScopeFilter({
   showBuiltIn = false,
   showLabels = false,
   showTeamSelect = true,
+  navigate,
 }: {
   /** Admin permission unlocking the owner sub-filter, e.g. `{ skill: ["admin"] }`. */
   adminPermission: Permissions;
@@ -72,6 +73,8 @@ export function ResourceScopeFilter({
    * specific teams (apps).
    */
   showTeamSelect?: boolean;
+  /** Override navigation for lists that own local URL state without an RSC round trip. */
+  navigate?: (url: string) => void;
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -128,9 +131,11 @@ export function ResourceScopeFilter({
       }
       // reset server-side pagination (a no-op on pages without a page param)
       params.delete("page");
-      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+      const navigateTo =
+        navigate ?? ((url: string) => router.push(url, { scroll: false }));
+      navigateTo(`${pathname}?${params.toString()}`);
     },
-    [searchParams, router, pathname],
+    [searchParams, router, pathname, navigate],
   );
 
   const handleScopeChange = useCallback(
@@ -329,6 +334,7 @@ export function ResourceScopeFilter({
           className={filterControlClass({
             active: selectedAuthorIds.length > 0,
           })}
+          contentClassName="w-80 max-w-[calc(100vw-2rem)]"
           showSelectedBadges={false}
           selectedSuffix={(n) => `${n === 1 ? "user" : "users"} selected`}
         />

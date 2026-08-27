@@ -66,8 +66,8 @@ test.describe("Skills bulk actions", () => {
       expect((await readSkill(page, ids[1])).scope).toBe("org");
       expect((await readSkill(page, ids[2])).scope).toBe("personal");
 
-      // Applying clears the selection, so the action bar goes away.
-      await expect(selectionCount(page)).toBeHidden();
+      // Applying clears the selection while keeping the reserved rail stable.
+      await expect(selectionCount(page)).toHaveText("0 skills selected");
     } finally {
       await Promise.all(
         ids.map((id) => page.request.delete(`${UI_BASE_URL}/api/skills/${id}`)),

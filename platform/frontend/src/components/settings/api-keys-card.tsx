@@ -20,6 +20,7 @@ import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
+import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -319,9 +320,8 @@ function ApiKeysCardContent() {
           isPending={(isPending || isFetching) && apiKeys.length === 0}
           loadingFallback={<LoadingState variant="page" />}
         >
-          <div>
+          <BulkActionsScope className="space-y-3">
             <FilterBar
-              className="mb-3"
               onClearFilters={
                 search
                   ? () => updateQueryParams({ search: null, page: "1" })
@@ -398,7 +398,7 @@ function ApiKeysCardContent() {
                 />
               </>
             )}
-          </div>
+          </BulkActionsScope>
         </LoadingWrapper>
       </section>
 

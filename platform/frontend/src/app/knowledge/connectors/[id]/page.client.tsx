@@ -740,7 +740,7 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
           />
         ) : (
           <div>
-            <FilterBar className="mb-4">
+            <FilterBar className="mb-3">
               {isAutoSync && (
                 <Select
                   value={runTypeFilter}

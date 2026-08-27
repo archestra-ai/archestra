@@ -1,11 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import {
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within,
-} from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -256,10 +250,9 @@ describe("McpCatalogItemDetailPage overview", () => {
     expect(
       screen.getByRole("heading", { name: "Installations" }),
     ).toBeVisible();
-    expect(screen.getByRole("link", { name: "Installations" })).toHaveAttribute(
-      "href",
-      "/mcp/registry/cat-1?tab=credentials",
-    );
+    expect(
+      screen.queryByRole("link", { name: "Installations" }),
+    ).not.toBeInTheDocument();
   });
 
   it("names the main page in the tab strip, so a secondary tab has a way back", () => {

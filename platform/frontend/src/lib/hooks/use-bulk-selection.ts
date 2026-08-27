@@ -1,8 +1,9 @@
 "use client";
 
 import type { OnChangeFn, RowSelectionState } from "@tanstack/react-table";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type { SelectAllMatching } from "@/components/ui/bulk-actions-bar";
+import { BulkRangeSelectionController } from "@/lib/bulk-range-selection";
 
 /**
  * Selection state for a table whose rows are all in memory — the client-side
@@ -39,6 +40,7 @@ export function useBulkSelection<T>({
     useState<RowSelectionState>({});
   const [pageRowIds, setPageRowIds] = useState<string[]>([]);
   const [escalatedFor, setEscalatedFor] = useState<string | null>(null);
+  const rangeSelection = useRef(new BulkRangeSelectionController()).current;
 
   const clearSelection = useCallback(() => {
     setStoredRowSelection({});
@@ -97,6 +99,7 @@ export function useBulkSelection<T>({
     clearSelection,
     selected,
     selectAllMatching,
+    rangeSelection,
   };
 }
 
@@ -122,6 +125,7 @@ export function useControlledRowSelection<T>({
   clearEscalation: () => void;
   canSelect?: (row: T) => boolean;
 }) {
+  const rangeSelection = useRef(new BulkRangeSelectionController()).current;
   const effectiveRowSelection = allMatchingSelected
     ? Object.fromEntries(
         rows
@@ -142,5 +146,5 @@ export function useControlledRowSelection<T>({
     [clearEscalation, effectiveRowSelection, setRowSelection],
   );
 
-  return { effectiveRowSelection, onRowSelectionChange };
+  return { effectiveRowSelection, onRowSelectionChange, rangeSelection };
 }

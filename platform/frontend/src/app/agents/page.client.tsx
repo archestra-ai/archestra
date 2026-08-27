@@ -333,7 +333,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const filterSignature = JSON.stringify(listFilters);
   const [escalatedFor, setEscalatedFor] = useState<string | null>(null);
   const allMatchingSelected = escalatedFor === filterSignature;
-  const { effectiveRowSelection, onRowSelectionChange } =
+  const { effectiveRowSelection, onRowSelectionChange, rangeSelection } =
     useControlledRowSelection({
       rowSelection,
       setRowSelection,
@@ -347,6 +347,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     getRowId: (row) => row.id,
     rowSelection: effectiveRowSelection,
     setRowSelection: onRowSelectionChange,
+    rangeSelection,
   });
   const { data: allMatching, isFetching: isFetchingAllMatching } =
     useAllMatchingProfiles(listFilters, { enabled: allMatchingSelected });
@@ -712,6 +713,12 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                         }
                         description={agent.description}
                         actions={renderAgentActions(agent)}
+                        onNavigate={
+                          isDeletedView
+                            ? undefined
+                            : () =>
+                                router.push(agentDetailHref("agent", agent.id))
+                        }
                         {...cardSelection(agent)}
                         selectionLabel={`Select ${agent.name}`}
                         footer={
@@ -745,6 +752,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                     getRowId={(row) => row.id}
                     rowSelection={effectiveRowSelection}
                     onRowSelectionChange={onRowSelectionChange}
+                    rangeSelection={rangeSelection}
                     hideSelectedCount
                     sorting={sorting}
                     onSortingChange={handleSortingChange}

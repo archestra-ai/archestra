@@ -182,7 +182,7 @@ export default function AppsPage() {
       }
     >
       <TableCardView storageKey="archestra-apps-view">
-        <FilterBar className="mb-6" actions={<TableCardViewToggle />}>
+        <FilterBar className="mb-3" actions={<TableCardViewToggle />}>
           <SearchInput
             isLoading={isFetching}
             paramName="search"
@@ -340,6 +340,7 @@ export function AppSection({
     clearSelection,
     selected,
     selectAllMatching,
+    rangeSelection,
   } = useBulkSelection({
     rows: apps,
     getId: getAppRowKey,
@@ -353,6 +354,7 @@ export function AppSection({
     rowSelection,
     setRowSelection,
     canSelect: (app) => app.source === "owned",
+    rangeSelection,
   });
   const selectedOwnedApps = selected.filter(
     (app): app is OwnedApp => app.source === "owned",
@@ -402,6 +404,7 @@ export function AppSection({
             rowSelection={rowSelection}
             setRowSelection={setRowSelection}
             onPageRowIdsChange={onPageRowIdsChange}
+            rangeSelection={rangeSelection}
           />
         }
         cards={

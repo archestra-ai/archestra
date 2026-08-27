@@ -300,7 +300,7 @@ export function ConnectorMembersTable({
   return (
     <div>
       {members.length > 0 && (
-        <FilterBar className="mb-4">
+        <FilterBar className="mb-3">
           <SearchInput
             value={search}
             syncQueryParams={false}

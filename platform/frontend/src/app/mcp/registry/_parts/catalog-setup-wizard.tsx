@@ -5,6 +5,7 @@ import {
   parseFullToolName,
 } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
+import type { RowSelectionState } from "@tanstack/react-table";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -63,6 +64,7 @@ import {
   setOAuthState,
   setOAuthTeamId,
 } from "@/lib/auth/oauth-session";
+import { BulkRangeSelectionController } from "@/lib/bulk-range-selection";
 import {
   useInstallMcpServer,
   useMcpDeploymentStatuses,
@@ -418,6 +420,7 @@ export function ToolsAndGuardrailsStep({ item }: { item: CatalogItem }) {
   const [selectedToolIds, setSelectedToolIds] = useState<ReadonlySet<string>>(
     new Set(),
   );
+  const rangeSelection = useRef(new BulkRangeSelectionController());
 
   const updatePolicy = async (
     toolId: string,
@@ -538,15 +541,25 @@ export function ToolsAndGuardrailsStep({ item }: { item: CatalogItem }) {
     });
   };
 
-  const toggleTool = (toolId: string, checked: boolean) => {
+  const toggleTool = (
+    toolId: string,
+    event: React.MouseEvent<HTMLButtonElement>,
+  ) => {
+    event.preventDefault();
     setSelectedToolIds((prev) => {
-      const next = new Set(prev);
-      if (checked) {
-        next.add(toolId);
-      } else {
-        next.delete(toolId);
-      }
-      return next;
+      const current: RowSelectionState = Object.fromEntries(
+        [...prev].map((id) => [id, true]),
+      );
+      return new Set(
+        Object.keys(
+          rangeSelection.current.update({
+            current,
+            orderedIds: visibleTools.map((tool) => tool.id),
+            targetId: toolId,
+            range: event.shiftKey,
+          }),
+        ),
+      );
     });
   };
 
@@ -610,7 +623,7 @@ export function ToolsAndGuardrailsStep({ item }: { item: CatalogItem }) {
           key={tool.id}
           tool={tool}
           selected={selectedToolIds.has(tool.id)}
-          onSelectedChange={(checked) => toggleTool(tool.id, checked)}
+          onSelectionClick={(event) => toggleTool(tool.id, event)}
           callAction={getCallPolicyActionFromPolicies(
             tool.id,
             invocationPolicies ?? { byProfileToolId: {} },
@@ -662,7 +675,7 @@ const ANNOTATION_BADGES: Array<{
 function ToolReviewCard({
   tool,
   selected,
-  onSelectedChange,
+  onSelectionClick,
   callAction,
   resultAction,
   hasCustomCallPolicy,
@@ -674,7 +687,7 @@ function ToolReviewCard({
 }: {
   tool: ToolWithAssignmentsData;
   selected: boolean;
-  onSelectedChange: (checked: boolean) => void;
+  onSelectionClick: React.MouseEventHandler<HTMLButtonElement>;
   callAction: CallPolicyAction;
   resultAction: ResultPolicyAction;
   hasCustomCallPolicy: boolean;
@@ -718,7 +731,7 @@ function ToolReviewCard({
           aria-label={`Select ${displayName}`}
           className="mt-0.5"
           checked={selected}
-          onCheckedChange={(checked) => onSelectedChange(checked === true)}
+          onClick={onSelectionClick}
         />
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex flex-wrap items-center gap-2">

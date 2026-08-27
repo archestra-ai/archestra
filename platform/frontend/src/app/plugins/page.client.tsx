@@ -303,7 +303,7 @@ function PluginsList() {
   const [bulkInstallOpen, setBulkInstallOpen] = useState(false);
   const bulkVisibility = useBulkUpdatePluginVisibility();
   const bulkDelete = useBulkDeletePlugins();
-  const bulkSelection = useBulkSelection({
+  const { rangeSelection, ...bulkSelection } = useBulkSelection({
     rows: filteredPlugins,
     getId: (plugin) => plugin.id,
     filterSignature: JSON.stringify({
@@ -320,6 +320,7 @@ function PluginsList() {
     getRowId: (plugin) => plugin.id,
     rowSelection: bulkSelection.rowSelection,
     setRowSelection: bulkSelection.setRowSelection,
+    rangeSelection,
   });
   const bulkInstall = resolvePluginInstallSelection(bulkSelection.selected);
   const [installingPlugin, setInstallingPlugin] =
@@ -817,6 +818,11 @@ function PluginsList() {
                         }
                         description={plugin.description}
                         actions={renderPluginActions(plugin)}
+                        onNavigate={
+                          canViewPluginDetails
+                            ? () => router.push(pluginDetailHref(plugin.id))
+                            : undefined
+                        }
                         {...cardSelection(plugin)}
                         selectionLabel={`Select ${plugin.displayName}`}
                         footer={
@@ -881,6 +887,7 @@ function PluginsList() {
                     rowSelection={bulkSelection.rowSelection}
                     onRowSelectionChange={bulkSelection.setRowSelection}
                     onPageRowIdsChange={bulkSelection.onPageRowIdsChange}
+                    rangeSelection={rangeSelection}
                     isLoading={isFetching}
                     fixedWidthColumnIds={[
                       "compatibility",

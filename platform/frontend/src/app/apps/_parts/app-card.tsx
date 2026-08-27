@@ -19,6 +19,7 @@ import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
 import { LabelTags } from "@/components/label-tags";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { ScopeBadge } from "@/components/scope-badge";
+import { useNavigableCard } from "@/components/table-card-view";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
@@ -105,10 +106,7 @@ function CardSelectionCheckbox({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span
-          className="relative z-10 inline-flex cursor-not-allowed"
-          title={reason}
-        >
+        <span className="inline-flex cursor-not-allowed" title={reason}>
           {checkbox}
         </span>
       </TooltipTrigger>
@@ -118,9 +116,7 @@ function CardSelectionCheckbox({
 }
 
 // Shared card chrome: the scope pill / owner badge / overflow menu cluster that
-// sits at the right of the card's header row (mirroring the project card). It's
-// raised above the full-card click target (z-10) so its own clicks don't fall
-// through to the card action.
+// sits at the right of the card's header row (mirroring the project card).
 function CardOverflowMenu({
   leading,
   children,
@@ -129,7 +125,7 @@ function CardOverflowMenu({
   children: React.ReactNode;
 }) {
   return (
-    <div className="relative z-10 flex shrink-0 items-center gap-1.5">
+    <div className="flex shrink-0 items-center gap-1.5">
       {leading}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -137,15 +133,12 @@ function CardOverflowMenu({
             variant="ghost"
             size="icon"
             className="h-7 w-7 text-muted-foreground"
-            onClick={(e) => e.stopPropagation()}
             aria-label="More actions"
           >
             <MoreHorizontal className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-          {children}
-        </DropdownMenuContent>
+        <DropdownMenuContent align="end">{children}</DropdownMenuContent>
       </DropdownMenu>
     </div>
   );
@@ -195,8 +188,7 @@ function CardOpeningOverlay() {
 // both emoji or image. Without one, the glyph says which kind of app it is: the
 // app window for an owned app, the server glyph for an external one. The label
 // (what "owned" vs "external" means) rides in the tooltip + aria-label rather
-// than a separate badge. Lifted above the full-card click button so it can be
-// hovered.
+// than a separate badge.
 export function AppTypeIcon({
   owned,
   icon,
@@ -211,7 +203,7 @@ export function AppTypeIcon({
         <span
           role="img"
           aria-label={label}
-          className="relative z-10 inline-flex text-muted-foreground"
+          className="inline-flex text-muted-foreground"
         >
           <McpCatalogIcon
             icon={icon}
@@ -225,9 +217,9 @@ export function AppTypeIcon({
   );
 }
 
-// Clicking the card opens the app in a new chat; the overlay button covers the
-// whole card. The backend seeds a conversation with the app already rendered and
-// returns its id, so we navigate straight to it (no model turn).
+// Clicking the guarded card shell opens the app in a new chat. The backend
+// seeds a conversation with the app already rendered and returns its id, so we
+// navigate straight to it (no model turn).
 function OwnedAppCard({
   app,
   onOpenSettings,
@@ -264,18 +256,19 @@ function OwnedAppCard({
       setIsOpening(false);
     }
   };
+  const navigation = useNavigableCard({
+    onNavigate: isOpening ? undefined : () => void handleOpen(),
+  });
 
   return (
     <>
-      <Card className="relative flex min-h-[180px] cursor-pointer flex-col gap-0 p-4 transition-all hover:border-primary hover:bg-muted/40 hover:shadow-md">
-        <button
-          type="button"
-          onClick={() => void handleOpen()}
-          disabled={isOpening}
-          className="absolute inset-0 rounded-xl"
-          aria-label={`Open ${app.name} in new chat`}
-        />
-
+      <Card
+        {...navigation.props}
+        className={cn(
+          "relative flex min-h-[180px] flex-col gap-0 p-4 transition-colors",
+          navigation.className,
+        )}
+      >
         {isOpening ? <CardOpeningOverlay /> : null}
 
         {/* Header row mirrors the project card: icon + title on one line at the
@@ -289,9 +282,17 @@ function OwnedAppCard({
               />
             ) : null}
             <AppTypeIcon owned icon={app.icon} />
-            <CardTitle className="min-w-0 truncate leading-snug">
-              {app.name}
-            </CardTitle>
+            <button
+              type="button"
+              className="min-w-0 text-left"
+              disabled={isOpening}
+              aria-label={`Open ${app.name} in new chat`}
+              onClick={() => void handleOpen()}
+            >
+              <CardTitle className="truncate leading-snug">
+                {app.name}
+              </CardTitle>
+            </button>
           </div>
           <CardOverflowMenu
             leading={
@@ -423,17 +424,18 @@ function ExternalAppCard({
       setIsOpening(false);
     }
   };
+  const navigation = useNavigableCard({
+    onNavigate: isOpening ? undefined : () => void handleOpen(),
+  });
 
   return (
-    <Card className="relative flex min-h-[180px] cursor-pointer flex-col gap-0 p-4 transition-all hover:border-primary hover:bg-muted/40 hover:shadow-md">
-      <button
-        type="button"
-        onClick={() => void handleOpen()}
-        disabled={isOpening}
-        className="absolute inset-0 rounded-xl"
-        aria-label={`Open ${app.name} in new chat`}
-      />
-
+    <Card
+      {...navigation.props}
+      className={cn(
+        "relative flex min-h-[180px] flex-col gap-0 p-4 transition-colors",
+        navigation.className,
+      )}
+    >
       {isOpening ? <CardOpeningOverlay /> : null}
 
       {/* Header row mirrors the project card: icon + title on one line at the
@@ -444,9 +446,15 @@ function ExternalAppCard({
             <CardSelectionCheckbox label={`Select ${app.name}`} disabled />
           ) : null}
           <AppTypeIcon owned={false} icon={app.icon} />
-          <CardTitle className="min-w-0 truncate leading-snug">
-            {app.name}
-          </CardTitle>
+          <button
+            type="button"
+            className="min-w-0 text-left"
+            disabled={isOpening}
+            aria-label={`Open ${app.name} in new chat`}
+            onClick={() => void handleOpen()}
+          >
+            <CardTitle className="truncate leading-snug">{app.name}</CardTitle>
+          </button>
         </div>
         <CardOverflowMenu
           leading={

@@ -217,6 +217,9 @@ export function useMcpInstallationStatusCacheSync(enabled = true) {
     const unsubscribeReady = websocketService.subscribe(
       "websocket_ready",
       () => {
+        const isReconnect = websocketReadySyncedClients.has(queryClient);
+        websocketReadySyncedClients.add(queryClient);
+        if (!isReconnect) return;
         void invalidateExternalMcpSkillQueries(queryClient);
         void queryClient.invalidateQueries({
           queryKey: externalMcpSkillDetailQueryKey,
@@ -1092,14 +1095,30 @@ export function useMcpDeploymentStatuses(): McpDeploymentStatusFeed {
  *
  * Mounted ONCE, by the app shell. Watching the query cache from every consumer
  * meant a cache write during one component's render pushed a store update into
- * another's, which React reports as a setState during render.
+ * another's; the driver's notifications are deferred one microtask for the
+ * same reason, which React requires before reporting a new external-store
+ * snapshot.
  */
 export function useMcpDeploymentFeedDriver(): void {
   const isK8sEnabled = useFeature("orchestratorK8sRuntime");
   const queryClient = useQueryClient();
   const subscribeToQueryCache = useCallback(
-    (onCacheChange: () => void) =>
-      queryClient.getQueryCache().subscribe(onCacheChange),
+    (onCacheChange: () => void) => {
+      let active = true;
+      let queued = false;
+      const unsubscribe = queryClient.getQueryCache().subscribe(() => {
+        if (queued) return;
+        queued = true;
+        queueMicrotask(() => {
+          queued = false;
+          if (active) onCacheChange();
+        });
+      });
+      return () => {
+        active = false;
+        unsubscribe();
+      };
+    },
     [queryClient],
   );
   const readServersSignature = useCallback(
@@ -1122,6 +1141,9 @@ export function useMcpDeploymentFeedDriver(): void {
 // analytics. Module-level so the capture happens once regardless of how many
 // components have `useMcpInstallationStatusCacheSync` mounted.
 const runtimeInstallErrorsAlreadyTracked = new Set<string>();
+// The first ready event follows the page's own fresh loads; only a reconnect
+// can have missed lifecycle events and needs a full cache resync.
+const websocketReadySyncedClients = new WeakSet<QueryClient>();
 
 function invalidateExternalMcpSkillQueries(queryClient: QueryClient) {
   return queryClient.invalidateQueries({ queryKey: externalMcpSkillsQueryKey });

@@ -1,7 +1,11 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { FilterBar, FilterSelect } from "@/components/filter-bar";
+import {
+  FilterBar,
+  FilterBarContextualActions,
+  FilterSelect,
+} from "@/components/filter-bar";
 
 const ITEMS = [
   { value: "all", label: "All actions" },
@@ -19,6 +23,52 @@ describe("FilterBar", () => {
     rerender(<FilterBar onClearFilters={onClearFilters}>filters</FilterBar>);
     await userEvent.click(screen.getByRole("button", { name: "Clear" }));
     expect(onClearFilters).toHaveBeenCalledOnce();
+  });
+
+  it("swaps selection actions into the existing toolbar slot without hiding them from assistive technology", () => {
+    render(
+      <FilterBar contextualActions={<span>2 skills selected</span>}>
+        <button type="button">Filter by action</button>
+      </FilterBar>,
+    );
+
+    expect(screen.getByText("2 skills selected")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Filter by action" }),
+    ).toBeInTheDocument();
+  });
+
+  it("accepts collection-owned contextual actions without lifting their state", () => {
+    const view = (active: boolean) => (
+      <>
+        <FilterBar contextualActionsTargetId="test-actions">
+          <button type="button">Filter by action</button>
+        </FilterBar>
+        <FilterBarContextualActions targetId="test-actions" active={active}>
+          <button type="button">Delete selected</button>
+        </FilterBarContextualActions>
+      </>
+    );
+    const { rerender } = render(view(true));
+
+    expect(
+      screen.getByRole("button", { name: "Delete selected" }),
+    ).toBeVisible();
+    expect(
+      screen
+        .getByRole("button", { name: "Filter by action", hidden: true })
+        .closest('[data-slot="filter-controls"]'),
+    ).toHaveAttribute("inert");
+
+    rerender(view(false));
+    expect(
+      screen.queryByRole("button", { name: "Delete selected" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen
+        .getByRole("button", { name: "Filter by action" })
+        .closest('[data-slot="filter-controls"]'),
+    ).not.toHaveAttribute("inert");
   });
 
   describe("moreFilters", () => {

@@ -1,10 +1,10 @@
-import type { Locator, Page } from "@playwright/test";
+import type { Locator } from "@playwright/test";
 import { shareableSkillsSeed } from "../src/mocks/data/skill-share";
 import { expect, test } from "./fixtures";
 
 /**
- * The bulk affordance every table shares: no chrome until rows are ticked,
- * then a count, a Clear, and the page's own actions. Driven through Skills
+ * The bulk affordance every table shares: an in-flow reserved rail, then a
+ * count, a Clear, and the page's own actions after rows are ticked. Driven through Skills
  * because it is the table whose actions are plain buttons; the guardrails and
  * knowledge tables render the same `BulkActionsBar` with different children.
  */
@@ -19,7 +19,7 @@ test.describe("Bulk actions bar", () => {
     });
   });
 
-  test("stays out of the page until a row is ticked, and clears back away", async ({
+  test("shows a zero count until a row is ticked, and clears back to zero", async ({
     page,
   }) => {
     await page.goto("/skills");
@@ -29,7 +29,7 @@ test.describe("Bulk actions bar", () => {
     await expect(
       page.getByRole("checkbox", { name: "Select all skills on this page" }),
     ).toBeVisible();
-    await expect(count).toBeHidden();
+    await expect(count).toHaveText("0 skills selected");
     await expect(clear).toBeHidden();
 
     const [firstRow, secondRow] = [
@@ -54,13 +54,13 @@ test.describe("Bulk actions bar", () => {
     ).toBeVisible();
 
     await clear.click();
-    await expect(count).toBeHidden();
+    await expect(count).toHaveText("0 skills selected");
     await expect(
       page.getByRole("button", { name: "Edit visibility" }),
     ).toBeHidden();
   });
 
-  test("adds the rail and its gap only once something is selected", async ({
+  test("reserves a stable in-flow rail before and after selection", async ({
     page,
   }) => {
     await page.goto("/skills");
@@ -74,22 +74,21 @@ test.describe("Bulk actions bar", () => {
     // measure against.
     await firstRow.waitFor();
 
-    // Nothing selected: no bar, and therefore no empty rail above the
-    // collection. This is the whole point of the element being absent.
-    await expect(bar).toHaveCount(0);
-    const collectionTopBefore = await collectionTop(page);
-
+    await expect(bar).toBeVisible();
+    const beforeSelection = await bulkLayoutGeometry(bar);
+    expect(beforeSelection).toMatchObject({
+      height: 42,
+      gapBelow: 12,
+    });
     await firstRow.click();
 
     const afterSelection = await bulkLayoutGeometry(bar);
     expect(afterSelection).toMatchObject({
       height: 42,
-      gapAbove: 12,
       gapBelow: 12,
     });
-    // The collection moves down by exactly the rail it made room for, so the
-    // rail is never overlapping or double-spaced.
-    expect(afterSelection.collectionTop - collectionTopBefore).toBe(42 + 12);
+    // Reserving the rail prevents table/card layout from jumping on selection.
+    expect(afterSelection.collectionTop).toBe(beforeSelection.collectionTop);
   });
 
   test("scrolls crowded actions inside the fixed mobile rail", async ({
@@ -186,54 +185,27 @@ test.describe("Bulk actions bar", () => {
 
 async function bulkLayoutGeometry(bar: Locator): Promise<{
   height: number;
-  gapAbove: number;
   gapBelow: number;
   collectionTop: number;
 }> {
   return bar.evaluate((element) => {
-    let branch = element as HTMLElement | null;
-    let previous: HTMLElement | null = null;
-    while (branch && !previous) {
-      previous = branch.previousElementSibling as HTMLElement | null;
-      while (previous?.classList.contains("sr-only")) {
-        previous = previous.previousElementSibling as HTMLElement | null;
+    let collectionBranch = element as HTMLElement | null;
+    let collection: HTMLElement | null = null;
+    while (collectionBranch && !collection) {
+      collection = collectionBranch.nextElementSibling as HTMLElement | null;
+      while (collection?.classList.contains("sr-only")) {
+        collection = collection.nextElementSibling as HTMLElement | null;
       }
-      branch = branch.parentElement;
+      collectionBranch = collectionBranch.parentElement;
     }
-    const collection = element.nextElementSibling as HTMLElement;
+    if (!collection)
+      throw new Error("no collection after the bulk actions bar");
     const barRect = element.getBoundingClientRect();
 
     return {
       height: barRect.height,
-      gapAbove: barRect.top - (previous?.getBoundingClientRect().bottom ?? 0),
       gapBelow: collection.getBoundingClientRect().top - barRect.bottom,
       collectionTop: collection.getBoundingClientRect().top,
     };
-  });
-}
-
-/**
- * Top of the collection when no bar is mounted. `bulkLayoutGeometry` walks
- * out from the bar itself, which does not exist at zero selection, so this
- * anchors on the live region the bar always renders beside instead.
- */
-async function collectionTop(page: Page): Promise<number> {
-  return page.evaluate(() => {
-    // Same upward walk `bulkLayoutGeometry` does from the bar: the live region
-    // and the collection are siblings on some pages and separated by a wrapper
-    // on others, so climb until there is a following element to measure.
-    let branch = document.querySelector(
-      'span[aria-live="polite"].sr-only',
-    ) as HTMLElement | null;
-    let next: HTMLElement | null = null;
-    while (branch && !next) {
-      next = branch.nextElementSibling as HTMLElement | null;
-      while (next?.classList.contains("sr-only")) {
-        next = next.nextElementSibling as HTMLElement | null;
-      }
-      branch = branch.parentElement;
-    }
-    if (!next) throw new Error("no collection after the bulk live region");
-    return next.getBoundingClientRect().top;
   });
 }

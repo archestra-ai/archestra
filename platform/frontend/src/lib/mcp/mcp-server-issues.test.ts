@@ -5,6 +5,7 @@ import {
 import { describe, expect, it } from "vitest";
 import {
   attentionCatalogIds,
+  attentionSortRank,
   bucketOf,
   type CatalogItemForIssues,
   canFixInstall,
@@ -449,6 +450,14 @@ describe("facets", () => {
     ]);
   });
 
+  it("ranks actionable items ahead of other issues and healthy rows", () => {
+    const issues = mixedFleet();
+
+    expect(attentionSortRank(issues.get("mine"))).toBe(0);
+    expect(attentionSortRank(issues.get("theirs"))).toBe(1);
+    expect(attentionSortRank(issues.get("healthy"))).toBe(2);
+  });
+
   /**
    * Why every surface has to be handed the live deployment feed. Runtime
    * faults exist only for a caller holding the statuses, so two callers over
@@ -516,6 +525,7 @@ describe("facets", () => {
     expect(attentionCatalogIds(issues, { audience: "you" })).toEqual([]);
     expect(attentionCatalogIds(issues, { audience: "others" })).toEqual([]);
     expect(attentionCatalogIds(issues, { audience: "muted" })).toEqual(["r"]);
+    expect(attentionSortRank(issues.get("r"))).toBe(2);
     // Still visible, still explained, and it carries the note the viewer gave
     // for it: muting hides the count, not the state or the reason for it.
     expect(facetIssues(issues.get("r") ?? [], "muted")).toEqual([

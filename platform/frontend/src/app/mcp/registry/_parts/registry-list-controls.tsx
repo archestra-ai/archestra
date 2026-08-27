@@ -25,6 +25,7 @@ import {
 import { cn } from "@/lib/utils";
 
 export type SortKey =
+  | "attention"
   | "name-asc"
   | "name-desc"
   | "newest"
@@ -33,6 +34,7 @@ export type SortKey =
   | "issue-age";
 
 export const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: "attention", label: "Action required" },
   { key: "name-asc", label: "Name (A–Z)" },
   { key: "name-desc", label: "Name (Z–A)" },
   { key: "newest", label: "Newest" },
@@ -127,11 +129,6 @@ export function withAttentionFacet(
   return next;
 }
 
-/** The registry list URL showing one facet, and nothing else. */
-export function mcpRegistryFacetHref(facet: McpServerAttentionFacet): string {
-  return `/mcp/registry?${REGISTRY_STATUS_PARAM}=${ATTENTION_FACET_STATUS_VALUES[facet]}`;
-}
-
 export const STATUS_OPTIONS: FilterOption[] = [
   { value: INSTALLED_STATUS_VALUE, label: "Installed" },
   { value: NOT_INSTALLED_STATUS_VALUE, label: "Not installed" },
@@ -154,9 +151,8 @@ const ISSUE_LABELS: Record<string, string> = Object.fromEntries(
   ISSUE_OPTIONS.map((o) => [o.value, o.label]),
 );
 
-// Facet labels are written out in full on the segmented control, so the chips
-// never need to render one; they are listed here only so a hand-edited URL
-// carrying a facet value cannot produce a chip labelled with a raw slug.
+// Facet values are view state rather than filter chips. They are listed here
+// only so a hand-edited URL carrying one cannot produce a raw-slug chip.
 const FACET_VALUES = new Set<string>(
   Object.values(ATTENTION_FACET_STATUS_VALUES),
 );
@@ -167,11 +163,13 @@ const SEARCH_THRESHOLD = 6;
 export function RegistrySortMenu({
   value,
   onChange,
+  options = SORT_OPTIONS,
 }: {
   value: SortKey;
   onChange: (key: SortKey) => void;
+  options?: { key: SortKey; label: string }[];
 }) {
-  const current = SORT_OPTIONS.find((o) => o.key === value) ?? SORT_OPTIONS[0];
+  const current = options.find((o) => o.key === value) ?? options[0];
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -184,7 +182,7 @@ export function RegistrySortMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-48">
-        {SORT_OPTIONS.map((o) => (
+        {options.map((o) => (
           <DropdownMenuItem key={o.key} onClick={() => onChange(o.key)}>
             <Check
               className={cn(
@@ -246,8 +244,8 @@ export function RegistryFilterDropdown({
   selected: Set<string>;
   onToggle: (value: string) => void;
 }) {
-  // Only what this dropdown actually offers. The attention facets live in the
-  // segmented control and are carried in the same `status` param, so counting
+  // Only what this dropdown actually offers. Attention facets are carried in
+  // the same `status` param, but this control does not offer them, so counting
   // the raw selection would claim a filter the list below does not contain.
   const offered = new Set(options.map((o) => o.value));
   const count = [...selected].filter((v) => offered.has(v)).length;
@@ -358,9 +356,8 @@ export function RegistryFilterChips({
   const entries: { group: FilterGroup; value: string; label: string }[] = [];
   (Object.keys(selected) as FilterGroup[]).forEach((group) => {
     selected[group].forEach((value) => {
-      // The facet is already spelled out, and selected, on the segmented
-      // control; a second dismissible copy of it would be two controls for one
-      // piece of state.
+      // Attention facets are view state, not applied filters; a second
+      // dismissible copy of one would be two controls for one piece of state.
       if (group === "status" && FACET_VALUES.has(value)) return;
       entries.push({
         group,

@@ -57,7 +57,9 @@ import {
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
+import { useBulkRangeSelectionController } from "@/lib/bulk-range-selection-context";
 import { copyToClipboard } from "@/lib/clipboard";
+import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import {
@@ -183,6 +185,14 @@ function VirtualKeysTable() {
 
   const keys = query.data?.data ?? [];
   const pagination = query.data?.pagination;
+  const rangeSelection = useBulkRangeSelectionController();
+  const cardSelection = useBulkCardSelection({
+    rows: keys,
+    getRowId: (key) => key.id,
+    rowSelection,
+    setRowSelection,
+    rangeSelection,
+  });
   const selectedKeys = keys.filter((key) => rowSelection[key.id]);
   const hasActiveFilters = Boolean(
     searchFromUrl || keyTypeFilter || scopeFilter || providerApiKeyIdFilter,
@@ -419,15 +429,7 @@ function VirtualKeysTable() {
                   key={key.id}
                   icon={<KeyRound className="h-5 w-5" />}
                   title={key.name}
-                  selected={!!rowSelection[key.id]}
-                  onSelectedChange={(selected) => {
-                    setRowSelection((current) => {
-                      const next = { ...current };
-                      if (selected) next[key.id] = true;
-                      else delete next[key.id];
-                      return next;
-                    });
-                  }}
+                  {...cardSelection(key)}
                   selectionLabel={`Select ${key.name}`}
                   actions={
                     <TableRowActions
@@ -509,6 +511,7 @@ function VirtualKeysTable() {
               getRowId={(row) => row.id}
               rowSelection={rowSelection}
               onRowSelectionChange={setRowSelection}
+              rangeSelection={rangeSelection}
               hideSelectedCount
               manualPagination
               pagination={{

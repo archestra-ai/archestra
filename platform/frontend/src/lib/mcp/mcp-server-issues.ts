@@ -199,6 +199,15 @@ export function attentionCatalogIds(
   return ids;
 }
 
+export function attentionSortRank(
+  issues: McpServerIssue[] | undefined,
+): number {
+  const live = (issues ?? []).filter((issue) => !issue.muted);
+  if (live.some((issue) => issue.audience === "you")) return 0;
+  if (live.length > 0) return 1;
+  return 2;
+}
+
 /**
  * Which audience an item belongs to: "you" if any of its issues is the
  * viewer's to fix, else "others". Muted issues are excluded by the caller,

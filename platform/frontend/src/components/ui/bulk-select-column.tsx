@@ -8,9 +8,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-
-/** The last plain-clicked row for each mounted table. */
-const rangeAnchorByTable = new WeakMap<object, string>();
+import { getTableRangeSelection } from "@/lib/bulk-range-selection-context";
 
 /**
  * The multiselect checkbox column, so every table that grows a bulk affordance
@@ -80,55 +78,25 @@ export function createSelectColumn<T>({
         <Checkbox
           className={!selectable ? "pointer-events-none" : undefined}
           checked={selectable && row.getIsSelected()}
-          onCheckedChange={(value) => row.toggleSelected(!!value)}
           onClick={(event) => {
             event.stopPropagation();
             if (!selectable) return;
-            if (!event.shiftKey) {
-              rangeAnchorByTable.set(table, row.id);
-              return;
-            }
-
-            const anchorId = rangeAnchorByTable.get(table);
-            const selected = !row.getIsSelected();
-            const rows = table
+            event.preventDefault();
+            const orderedIds = table
               .getRowModel()
               .rows.filter(
                 (candidate) => canSelect?.(candidate.original) ?? true,
-              );
-            const anchorIndex = rows.findIndex(
-              (candidate) => candidate.id === anchorId,
+              )
+              .map((candidate) => candidate.id);
+            const controller = getTableRangeSelection(table);
+            table.setRowSelection((current) =>
+              controller.update({
+                current,
+                orderedIds,
+                targetId: row.id,
+                range: event.shiftKey,
+              }),
             );
-            const targetIndex = rows.findIndex(
-              (candidate) => candidate.id === row.id,
-            );
-            // Match TanStack's range-selection semantics: every successful
-            // interaction advances the anchor to the clicked endpoint.
-            rangeAnchorByTable.set(table, row.id);
-
-            if (
-              anchorIndex === -1 ||
-              targetIndex === -1 ||
-              anchorIndex === targetIndex
-            ) {
-              rangeAnchorByTable.set(table, row.id);
-              return;
-            }
-
-            // Prevent Radix's composed toggle so only the range update lands.
-            event.preventDefault();
-            const [from, to] =
-              anchorIndex < targetIndex
-                ? [anchorIndex, targetIndex]
-                : [targetIndex, anchorIndex];
-            table.setRowSelection((current) => {
-              const next = { ...current };
-              for (const candidate of rows.slice(from, to + 1)) {
-                if (selected) next[candidate.id] = true;
-                else delete next[candidate.id];
-              }
-              return next;
-            });
           }}
           aria-label={rowLabel(row.original)}
           disabled={!selectable}

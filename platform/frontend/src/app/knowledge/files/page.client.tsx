@@ -28,6 +28,7 @@ import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge"
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
+import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -503,9 +504,8 @@ export default function KnowledgeFilesPage() {
       }
       isPending={isLoading && files.length === 0}
     >
-      <div className="space-y-6">
+      <BulkActionsScope className="space-y-3">
         <FilterBar
-          className="!mb-3"
           onClearFilters={
             search
               ? () => {
@@ -644,7 +644,7 @@ export default function KnowledgeFilesPage() {
             onPaginationChange={setPagination}
           />
         )}
-      </div>
+      </BulkActionsScope>
 
       <UploadFileDialog
         open={uploadOpen}

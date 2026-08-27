@@ -1756,9 +1756,9 @@ dependencies = [
 
 [[package]]
 name = "nitpicker-agent"
-version = "0.4.0"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8f2dd0f0215bfd90841b33c66ac970484eacd2f80ed403a61f3efe6081545d4"
+checksum = "f969b1dd3979f228081fe7d99e422ac8eaa0017b696479c2aac7688628752809"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -1772,6 +1772,7 @@ dependencies = [
  "rig-core",
  "serde",
  "serde_json",
+ "sha2",
  "tokio",
  "tracing",
 ]

@@ -3332,7 +3332,7 @@ export function AgentForm({
                           </ul>
                           <div className="space-y-1.5">
                             <p className="text-sm text-muted-foreground">
-                              Disabled subagents ({disabledSubagentCount})
+                              All subagents except ({disabledSubagentCount})
                             </p>
                             <SubagentsEditor
                               availableAgents={allInternalAgents}
@@ -3508,7 +3508,7 @@ export function AgentForm({
                           </ul>
                           <div className="space-y-1.5">
                             <p className="text-sm text-muted-foreground">
-                              Excluded skills ({excludedSkillIds.length})
+                              All skills except ({excludedSkillIds.length})
                             </p>
                             <AgentSkillsEditor
                               availableSkills={orgScopedSkills}

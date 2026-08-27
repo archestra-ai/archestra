@@ -821,7 +821,7 @@ describe("AgentForm delegation state", () => {
       ).toBeInTheDocument();
     });
     expect(screen.queryByText(advisorAgent.name)).not.toBeInTheDocument();
-    expect(screen.getByText(/Disabled subagents \(0\)/)).toBeInTheDocument();
+    expect(screen.getByText(/All subagents except \(0\)/)).toBeInTheDocument();
   });
 
   it("reads as on in Auto mode only while the advisor is not disabled", async () => {
@@ -917,7 +917,7 @@ describe("AgentForm delegation state", () => {
 
     await user.click(subagentModeTab("Auto"));
 
-    expect(screen.getByText(/Disabled subagents \(0\)/)).toBeInTheDocument();
+    expect(screen.getByText(/All subagents except \(0\)/)).toBeInTheDocument();
     expect(
       screen.getByTestId(E2eTestId.ConsultAdvisorSwitch),
     ).not.toBeChecked();
@@ -1863,7 +1863,7 @@ describe("AgentForm published skills", () => {
 
     render(<AgentForm agentType="mcp_gateway" agent={baseAgent} />);
 
-    await screen.findByText(/Excluded skills \(0\)/);
+    await screen.findByText(/All skills except \(0\)/);
     await user.click(skillsModeTab("Custom"));
     expect(screen.getByText("Skills (0)")).toBeInTheDocument();
 
@@ -1893,7 +1893,7 @@ describe("AgentForm published skills", () => {
       <AgentForm onSaved={onSaved} agentType="mcp_gateway" agent={baseAgent} />,
     );
 
-    await screen.findByText(/Excluded skills \(0\)/);
+    await screen.findByText(/All skills except \(0\)/);
     await user.click(skillsModeTab("Custom"));
     await user.click(screen.getByRole("button", { name: /update/i }));
 

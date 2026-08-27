@@ -163,6 +163,21 @@ function modelEmitting(...attempts: ModelStreamPart[][]): MockLanguageModelV3 {
   });
 }
 
+function modelCapturingPrompt(
+  capture: (prompt: unknown) => void,
+): MockLanguageModelV3 {
+  return new MockLanguageModelV3({
+    doStream: async (options) => {
+      capture(options.prompt);
+      return {
+        stream: simulateReadableStream({
+          chunks: textChunks("cache-aware response"),
+        }),
+      };
+    },
+  });
+}
+
 // Primes only the non-DB boundaries (LLM selection, model factory, MCP tools).
 // The agent itself is a real row created per test; findById hits real PGlite.
 function primeAgent(model: MockLanguageModelV3) {
@@ -176,6 +191,26 @@ function primeAgent(model: MockLanguageModelV3) {
     model,
     provider: "gemini",
     apiKeySource: "org",
+  });
+}
+
+function primePromptCacheAgent(params: {
+  model: MockLanguageModelV3;
+  provider: "anthropic" | "bedrock";
+  selectedModel: string;
+  anthropicNativeEndpoint: boolean;
+}) {
+  mockResolveConversationLlmSelectionForAgent.mockResolvedValue({
+    chatApiKeyId: "org-key",
+    selectedModel: params.selectedModel,
+    selectedProvider: params.provider,
+  });
+  mockGetChatMcpTools.mockResolvedValue({});
+  mockCreateLLMModelForAgent.mockResolvedValue({
+    model: params.model,
+    provider: params.provider,
+    apiKeySource: "org",
+    anthropicNativeEndpoint: params.anthropicNativeEndpoint,
   });
 }
 
@@ -239,6 +274,66 @@ describe("executeA2AMessage real stream boundary", () => {
     expect(result.responseUiMessage.role).toBe("assistant");
     expect(result.usage?.promptTokens).toBe(5);
     expect(result.usage?.completionTokens).toBe(2);
+  });
+
+  test("sends Anthropic cache control through the real A2A stream boundary", async ({
+    makeOrganization,
+    makeUser,
+    makeInternalAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    let modelPrompt: unknown;
+    primePromptCacheAgent({
+      provider: "anthropic",
+      selectedModel: "claude-opus-4-8",
+      anthropicNativeEndpoint: true,
+      model: modelCapturingPrompt((prompt) => {
+        modelPrompt = prompt;
+      }),
+    });
+
+    await executeA2AMessage({
+      agentId: agent.id,
+      message: "Handle this",
+      organizationId: org.id,
+      userId: user.id,
+    });
+
+    expect(JSON.stringify(modelPrompt)).toContain(
+      '"cacheControl":{"type":"ephemeral","ttl":"1h"}',
+    );
+  });
+
+  test("sends Bedrock cache control through the real A2A stream boundary", async ({
+    makeOrganization,
+    makeUser,
+    makeInternalAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    let modelPrompt: unknown;
+    primePromptCacheAgent({
+      provider: "bedrock",
+      selectedModel: "amazon.nova-lite-v1:0",
+      anthropicNativeEndpoint: false,
+      model: modelCapturingPrompt((prompt) => {
+        modelPrompt = prompt;
+      }),
+    });
+
+    await executeA2AMessage({
+      agentId: agent.id,
+      message: "Handle this",
+      organizationId: org.id,
+      userId: user.id,
+    });
+
+    expect(JSON.stringify(modelPrompt)).toContain(
+      '"cachePoint":{"type":"default"}',
+    );
   });
 
   test("forwards each incremental text delta to onTextDelta while still returning the buffered result", async ({

@@ -1,5 +1,9 @@
 import { userHasPermission } from "@/auth";
-import { PluginModel, PluginTeamModel } from "@/models";
+import {
+  PluginModel,
+  PluginSkillUsageEventModel,
+  PluginTeamModel,
+} from "@/models";
 import {
   deriveSkillFileKind,
   parseSkillManifest,
@@ -18,12 +22,14 @@ import type { PluginSkillDetail, PluginSkillListItem } from "@/types";
  */
 export async function listPluginSkills(params: {
   organizationId: string;
-  userId: string;
+  userId?: string;
 }): Promise<PluginSkillListItem[]> {
-  const { accessiblePluginIds } = await resolvePluginAccess(params);
+  const { accessiblePluginIds, orgScopeOnly } =
+    await resolvePluginAccess(params);
   const candidates = await PluginModel.findSkillManifestCandidates({
     organizationId: params.organizationId,
     accessiblePluginIds,
+    orgScopeOnly,
   });
   const items: PluginSkillListItem[] = [];
   for (const { plugin, manifests, filePaths } of candidates) {
@@ -38,6 +44,8 @@ export async function listPluginSkills(params: {
         pluginId: plugin.id,
         pluginName: plugin.displayName,
         pluginSlug: plugin.pluginSlug,
+        sourceRepo: plugin.sourceRepo,
+        sourceMarketplaceRepo: plugin.sourceMarketplaceRepo,
         pluginEnabled: plugin.enabled,
         scope: plugin.scope,
         clientType: plugin.clientType,
@@ -48,19 +56,33 @@ export async function listPluginSkills(params: {
         compatibility: parsed.compatibility,
         fileCount: resourcePathsOf(filePaths, manifest.path, root, roots)
           .length,
+        usageCount: 0,
+        usageUserCount: 0,
+        lastUsedAt: null,
       });
     }
   }
-  return items;
+  const usage = await PluginSkillUsageEventModel.getSummaries(
+    items.map(({ pluginId, skillPath }) => ({ pluginId, skillPath })),
+  );
+  return items.map((item) => ({
+    ...item,
+    usageCount: usage.get(item.pluginId)?.get(item.skillPath)?.usageCount ?? 0,
+    usageUserCount:
+      usage.get(item.pluginId)?.get(item.skillPath)?.usageUserCount ?? 0,
+    lastUsedAt:
+      usage.get(item.pluginId)?.get(item.skillPath)?.lastUsedAt ?? null,
+  }));
 }
 
 export async function getPluginSkill(params: {
   pluginId: string;
   skillPath: string;
   organizationId: string;
-  userId: string;
+  userId?: string;
 }): Promise<PluginSkillDetail | null> {
-  const { isAdmin, accessiblePluginIds } = await resolvePluginAccess(params);
+  const { accessiblePluginIds, orgScopeOnly } =
+    await resolvePluginAccess(params);
   if (
     accessiblePluginIds !== undefined &&
     !accessiblePluginIds.includes(params.pluginId)
@@ -71,7 +93,7 @@ export async function getPluginSkill(params: {
     id: params.pluginId,
     organizationId: params.organizationId,
   });
-  if (!plugin) return null;
+  if (!plugin || (orgScopeOnly && plugin.scope !== "org")) return null;
 
   const manifestPath =
     params.skillPath === ""
@@ -94,11 +116,17 @@ export async function getPluginSkill(params: {
   const resources = resourcePathsOf(filePaths, manifestPath, root, roots);
   const filesByPath = new Map(plugin.files.map((file) => [file.path, file]));
 
+  const usage = await PluginSkillUsageEventModel.getSummaries([
+    { pluginId: plugin.id, skillPath: root },
+  ]);
+  const summary = usage.get(plugin.id)?.get(root);
   return {
     source: "plugin",
     pluginId: plugin.id,
     pluginName: plugin.displayName,
     pluginSlug: plugin.pluginSlug,
+    sourceRepo: plugin.sourceRepo,
+    sourceMarketplaceRepo: plugin.sourceMarketplaceRepo,
     pluginEnabled: plugin.enabled,
     scope: plugin.scope,
     clientType: plugin.clientType,
@@ -108,25 +136,25 @@ export async function getPluginSkill(params: {
     description: parsed.description,
     compatibility: parsed.compatibility,
     fileCount: resources.length,
+    usageCount: summary?.usageCount ?? 0,
+    usageUserCount: summary?.usageUserCount ?? 0,
+    lastUsedAt: summary?.lastUsedAt ?? null,
     manifest: manifest.content,
     content: parsed.content,
     allowedTools: parsed.allowedTools,
-    resourcesRestricted: !isAdmin && resources.length > 0,
-    files: isAdmin
-      ? resources.flatMap((path) => {
-          const file = filesByPath.get(path);
-          if (!file) return [];
-          const relativePath = root === "" ? path : path.slice(root.length + 1);
-          return [
-            {
-              path: relativePath,
-              content: file.content,
-              encoding: file.encoding,
-              kind: deriveSkillFileKind(relativePath),
-            },
-          ];
-        })
-      : [],
+    files: resources.flatMap((path) => {
+      const file = filesByPath.get(path);
+      if (!file) return [];
+      const relativePath = root === "" ? path : path.slice(root.length + 1);
+      return [
+        {
+          path: relativePath,
+          content: file.content,
+          encoding: file.encoding,
+          kind: deriveSkillFileKind(relativePath),
+        },
+      ];
+    }),
   };
 }
 
@@ -135,8 +163,23 @@ export async function getPluginSkill(params: {
 /** undefined = plugin admin (all plugins); otherwise the visible id set. */
 async function resolvePluginAccess(params: {
   organizationId: string;
-  userId: string;
-}): Promise<{ isAdmin: boolean; accessiblePluginIds: string[] | undefined }> {
+  userId?: string;
+}): Promise<{
+  accessiblePluginIds: string[] | undefined;
+  orgScopeOnly: boolean;
+}> {
+  if (!params.userId) {
+    return { accessiblePluginIds: undefined, orgScopeOnly: true };
+  }
+  const canRead = await userHasPermission(
+    params.userId,
+    params.organizationId,
+    "plugin",
+    "read",
+  );
+  if (!canRead) {
+    return { accessiblePluginIds: [], orgScopeOnly: false };
+  }
   const isAdmin = await userHasPermission(
     params.userId,
     params.organizationId,
@@ -144,13 +187,13 @@ async function resolvePluginAccess(params: {
     "admin",
   );
   return {
-    isAdmin,
     accessiblePluginIds: isAdmin
       ? undefined
       : await PluginTeamModel.getUserAccessiblePluginIds({
           organizationId: params.organizationId,
           userId: params.userId,
         }),
+    orgScopeOnly: false,
   };
 }
 

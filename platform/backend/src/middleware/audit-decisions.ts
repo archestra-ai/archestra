@@ -540,6 +540,11 @@ export const AUDIT_DECISIONS = {
     reason:
       "append-only usage metric written by the system on every external MCP Skill activation; not a user-driven state change",
   },
+  pluginSkillUsageEventsTable: {
+    audited: false,
+    reason:
+      "append-only usage metric written by the system on every plugin Skill activation; not a user-driven state change",
+  },
   connectionSetupsTable: {
     audited: false,
     reason:

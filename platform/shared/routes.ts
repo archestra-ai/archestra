@@ -758,6 +758,7 @@ export const RouteId = {
   // Skills projected from plugin file trees
   GetPluginSkills: "getPluginSkills",
   GetPluginSkill: "getPluginSkill",
+  GetPluginSkillUsageStatistics: "getPluginSkillUsageStatistics",
   GetSkillUsageStatistics: "getSkillUsageStatistics",
   GetSkillVersions: "getSkillVersions",
   GetSkillVersion: "getSkillVersion",

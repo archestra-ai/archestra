@@ -167,6 +167,7 @@ export { default as organizationsTable } from "./organization";
 export { organizationRole as organizationRolesTable } from "./organization-role";
 export { default as pluginsTable } from "./plugin";
 export { default as pluginFilesTable } from "./plugin-file";
+export { default as pluginSkillUsageEventsTable } from "./plugin-skill-usage-event";
 export { default as pluginTeamsTable } from "./plugin-team";
 export { default as pluginUsersTable } from "./plugin-user";
 export { default as processedEmailsTable } from "./processed-email";

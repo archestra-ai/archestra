@@ -82271,6 +82271,8 @@ export type GetPluginSkillsResponses = {
         pluginId: string;
         pluginName: string;
         pluginSlug: string;
+        sourceRepo: string | null;
+        sourceMarketplaceRepo: string | null;
         pluginEnabled: boolean;
         scope: 'personal' | 'team' | 'org';
         clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
@@ -82280,10 +82282,111 @@ export type GetPluginSkillsResponses = {
         description: string;
         compatibility: string | null;
         fileCount: number;
+        usageCount: number;
+        usageUserCount: number;
+        lastUsedAt: string | null;
     }>;
 };
 
 export type GetPluginSkillsResponse = GetPluginSkillsResponses[keyof GetPluginSkillsResponses];
+
+export type GetPluginSkillUsageStatisticsData = {
+    body?: never;
+    path: {
+        pluginId: string;
+    };
+    query?: {
+        skillPath?: string;
+    };
+    url: '/api/skills/plugins/{pluginId}/usage-statistics';
+};
+
+export type GetPluginSkillUsageStatisticsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetPluginSkillUsageStatisticsError = GetPluginSkillUsageStatisticsErrors[keyof GetPluginSkillUsageStatisticsErrors];
+
+export type GetPluginSkillUsageStatisticsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        since: string;
+        users: Array<{
+            userId: string | null;
+            name: string | null;
+            kind: 'user' | 'service_account' | 'unattributed';
+            total: number;
+        }>;
+        daily: Array<{
+            date: string;
+            userId: string | null;
+            count: number;
+        }>;
+    };
+};
+
+export type GetPluginSkillUsageStatisticsResponse = GetPluginSkillUsageStatisticsResponses[keyof GetPluginSkillUsageStatisticsResponses];
 
 export type GetPluginSkillData = {
     body?: never;
@@ -82373,6 +82476,8 @@ export type GetPluginSkillResponses = {
         pluginId: string;
         pluginName: string;
         pluginSlug: string;
+        sourceRepo: string | null;
+        sourceMarketplaceRepo: string | null;
         pluginEnabled: boolean;
         scope: 'personal' | 'team' | 'org';
         clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
@@ -82382,10 +82487,12 @@ export type GetPluginSkillResponses = {
         description: string;
         compatibility: string | null;
         fileCount: number;
+        usageCount: number;
+        usageUserCount: number;
+        lastUsedAt: string | null;
         manifest: string;
         content: string;
         allowedTools: string | null;
-        resourcesRestricted: boolean;
         files: Array<{
             path: string;
             content: string;

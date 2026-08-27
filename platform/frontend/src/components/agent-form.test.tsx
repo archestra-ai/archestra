@@ -12,6 +12,7 @@ import {
 } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useConnectors } from "@/lib/knowledge/connector.query";
+import { useIsKnowledgeBaseConfigured } from "@/lib/knowledge/knowledge-base.query";
 import {
   type AgentFormFooterState,
   type AgentFormProps,
@@ -251,7 +252,7 @@ vi.mock("@/lib/knowledge/connector.query", () => ({
 
 vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
   useKnowledgeBases: () => ({ data: [] }),
-  useIsKnowledgeBaseConfigured: () => true,
+  useIsKnowledgeBaseConfigured: vi.fn(() => true),
 }));
 
 vi.mock("@/lib/llm-models.query", () => ({
@@ -1284,9 +1285,13 @@ describe("AgentForm knowledge in Auto mode", () => {
     vi.mocked(useHasPermissions).mockImplementation(
       () => ({ data: true }) as unknown as ReturnType<typeof useHasPermissions>,
     );
+    vi.mocked(useIsKnowledgeBaseConfigured).mockReturnValue(true);
   });
 
-  it("names the sources an Auto agent will search — the environment's, not the assignment", async () => {
+  it("describes discovery instead of naming the environment's sources", async () => {
+    // Auto mode does not read the assignment, and the set it searches is the
+    // caller's — not the editor's — so naming sources here only ever showed
+    // the wrong list. It now reads like the MCP tools it sits beside.
     vi.mocked(useConnectors).mockReturnValue({
       data: [
         {
@@ -1295,12 +1300,6 @@ describe("AgentForm knowledge in Auto mode", () => {
           connectorType: "notion",
           environmentId: null,
         },
-        {
-          id: "c2",
-          name: "Staging wiki",
-          connectorType: "notion",
-          environmentId: "env-2",
-        },
       ],
     } as unknown as ReturnType<typeof useConnectors>);
     const autoAgent = { ...baseAgent, accessAllTools: true };
@@ -1308,30 +1307,40 @@ describe("AgentForm knowledge in Auto mode", () => {
 
     render(<AgentForm agentType="agent" agent={autoAgent} />);
 
-    // Scoped to the Auto block: the Custom picker stays mounted (hidden) and
-    // names the same sources, so an unscoped query matches both.
-    const block = (await screen.findByText("Knowledge sources"))
-      .parentElement as HTMLElement;
-    // Auto searches this agent's environment, so a source stamped with
-    // another environment is not named.
-    expect(within(block).getByText("Handbook")).toBeVisible();
-    expect(within(block).queryByText("Staging wiki")).toBeNull();
+    const section = await screen.findByTestId(E2eTestId.AgentToolsSection);
     expect(
-      within(block).getByText(
-        /each conversation searches the ones its own caller may query/i,
+      within(section).getByText(
+        /new servers and sources included automatically/i,
       ),
     ).toBeVisible();
+    // The preview list and its caption are gone; the Custom picker below keeps
+    // its own "Knowledge Sources" heading, which is a different string.
+    expect(within(section).queryByText("Knowledge sources")).toBeNull();
+    expect(
+      within(section).queryByText(
+        /each conversation searches the ones its own caller may query/i,
+      ),
+    ).toBeNull();
   });
 
-  it("says so when the environment has no source set up yet", async () => {
+  it("says so when knowledge search has no embedding model behind it", async () => {
+    vi.mocked(useIsKnowledgeBaseConfigured).mockReturnValue(false);
     const autoAgent = { ...baseAgent, accessAllTools: true };
     useProfileMock.mockReturnValue({ data: autoAgent, refetch: vi.fn() });
 
     render(<AgentForm agentType="agent" agent={autoAgent} />);
 
-    expect(
-      await screen.findByText(/No source is set up in this agent/i),
-    ).toBeVisible();
+    expect(await screen.findByText(/Knowledge search is off/i)).toBeVisible();
+  });
+
+  it("keeps quiet about knowledge search once it is configured", async () => {
+    const autoAgent = { ...baseAgent, accessAllTools: true };
+    useProfileMock.mockReturnValue({ data: autoAgent, refetch: vi.fn() });
+
+    render(<AgentForm agentType="agent" agent={autoAgent} />);
+
+    await screen.findByTestId(E2eTestId.AgentToolsSection);
+    expect(screen.queryByText(/Knowledge search is off/i)).toBeNull();
   });
 });
 

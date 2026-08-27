@@ -80,11 +80,9 @@ import {
   type McpEnvConflict,
 } from "@/components/agent-tools-editor";
 import { ModelSelector } from "@/components/chat/model-selector";
-import { EntityPill } from "@/components/entity-pill";
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { IdentityFields } from "@/components/identity-fields";
-import { KnowledgeSourceIcon } from "@/components/knowledge-source-icon";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import {
   formatPermissionRequirement,
@@ -547,9 +545,6 @@ function getSuccessMessage(agentType: AgentType, isUpdate: boolean): string {
   };
   return isUpdate ? messages[agentType].update : messages[agentType].create;
 }
-
-/** How many knowledge chips the Auto-mode preview names before counting. */
-const KNOWLEDGE_PREVIEW_LIMIT = 12;
 
 export const agentTypeDisplayName: Record<string, string> = {
   agent: "agent",
@@ -1097,14 +1092,11 @@ export function AgentForm({
     undefined,
   );
 
-  // One definition of "in this record's environment", used by the Auto-mode
-  // preview above and by the Custom picker's disabled state below.
+  // Drives the Custom picker's disabled state: a source stamped with another
+  // environment cannot be assigned to this record.
   const isInSelectedEnvironment = (connectorEnvironmentId: string | null) =>
     !environmentScopingEnabled ||
     (connectorEnvironmentId ?? null) === (environmentId ?? null);
-  const environmentConnectors = connectors.filter((connector) =>
-    isInSelectedEnvironment(connector.environmentId ?? null),
-  );
   const agentEnvironmentName =
     environments.find((env) => env.id === environmentId)?.name ?? null;
   const [mcpEnvConflicts, setMcpEnvConflicts] = useState<McpEnvConflict[]>([]);
@@ -2892,7 +2884,8 @@ export function AgentForm({
                           Every MCP tool and knowledge source the calling user
                           can access, in this{" "}
                           {agentTypeDisplayName[agentType] || "agent"}'s
-                          environment — new servers included automatically
+                          environment — new servers and sources included
+                          automatically
                         </li>
                         <li className="flex gap-2">
                           <CheckIcon className="mt-px size-3.5 shrink-0" />
@@ -2914,6 +2907,25 @@ export function AgentForm({
                             </ExternalDocsLink>
                           </span>
                         </li>
+                        {/* Auto mode promises knowledge in the first bullet, so
+                            it has to say when that promise cannot hold. */}
+                        {canReadKnowledgeBase && !isKnowledgeConfigured && (
+                          <li className="flex gap-2">
+                            <AlertTriangle className="mt-px size-3.5 shrink-0" />
+                            <span>
+                              Knowledge search is off — no embedding model is
+                              configured.{" "}
+                              {canAccessKnowledgeSettings && (
+                                <Link
+                                  href="/settings/knowledge"
+                                  className="underline"
+                                >
+                                  Configure knowledge
+                                </Link>
+                              )}
+                            </span>
+                          </li>
+                        )}
                       </ul>
                     ) : (
                       <p className="pt-1 text-xs text-muted-foreground">
@@ -2921,80 +2933,6 @@ export function AgentForm({
                         are available to this{" "}
                         {agentTypeDisplayName[agentType] || "agent"}.
                       </p>
-                    )}
-                    {/* Which knowledge Auto mode reaches. The runtime does
-                        not read the assignment in this mode: it searches every
-                        source in the agent's environment that the caller may
-                        query, so the list is the environment's, and the note
-                        says whose view it is. */}
-                    {autoToolsMode && canReadKnowledgeBase && (
-                      <div className="space-y-2 pt-2">
-                        <p className="text-sm text-muted-foreground">
-                          Knowledge sources
-                        </p>
-                        {!isKnowledgeConfigured ? (
-                          <p className="text-xs text-muted-foreground">
-                            Knowledge search is off — no embedding model is
-                            configured.{" "}
-                            {canAccessKnowledgeSettings && (
-                              <Link
-                                href="/settings/knowledge"
-                                className="underline"
-                              >
-                                Configure knowledge
-                              </Link>
-                            )}
-                          </p>
-                        ) : environmentConnectors.length === 0 ? (
-                          <p className="text-xs text-muted-foreground">
-                            No source is set up in this{" "}
-                            {agentTypeDisplayName[agentType] || "agent"}&apos;s
-                            environment yet.
-                          </p>
-                        ) : (
-                          <>
-                            <ul className="flex flex-wrap gap-1.5">
-                              {environmentConnectors
-                                .slice(0, KNOWLEDGE_PREVIEW_LIMIT)
-                                .map((connector) => (
-                                  <li key={connector.id}>
-                                    <EntityPill
-                                      icon={
-                                        <KnowledgeSourceIcon
-                                          connectorType={
-                                            connector.connectorType
-                                          }
-                                        />
-                                      }
-                                      name={connector.name}
-                                    />
-                                  </li>
-                                ))}
-                              {environmentConnectors.length >
-                                KNOWLEDGE_PREVIEW_LIMIT && (
-                                <li>
-                                  <Badge
-                                    variant="outline"
-                                    className="font-normal"
-                                  >
-                                    +
-                                    {environmentConnectors.length -
-                                      KNOWLEDGE_PREVIEW_LIMIT}{" "}
-                                    more
-                                  </Badge>
-                                </li>
-                              )}
-                            </ul>
-                            <p className="text-xs text-muted-foreground">
-                              Sources in this{" "}
-                              {agentTypeDisplayName[agentType] || "agent"}
-                              &apos;s environment, as you can see them — each
-                              conversation searches the ones its own caller may
-                              query.
-                            </p>
-                          </>
-                        )}
-                      </div>
                     )}
                     {/* Auto-mode exclusions; kept mounted while hidden so
                         pending edits and the save-time ref survive switching

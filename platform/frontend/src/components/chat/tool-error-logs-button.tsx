@@ -40,6 +40,7 @@ export function ToolErrorLogsButton({ toolName }: ToolErrorLogsButtonProps) {
       .map((server) => ({
         id: server.id,
         name: server.name,
+        canUseCredential: server.canUseCredential,
       }));
   }, [mcpServerName, allMcpServers]);
 

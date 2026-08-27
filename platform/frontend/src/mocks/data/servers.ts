@@ -18,6 +18,7 @@ export function makeInstalledServer(
     teamId: null,
     scope: "personal",
     alertMutes: [],
+    canUseCredential: true,
     reinstallRequired: false,
     reinstallReason: "restart",
     localInstallationStatus: "success",

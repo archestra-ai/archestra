@@ -164,6 +164,7 @@ export const E2eTestId = {
   McpLogsViewButton: "mcp-logs-view-button",
   McpLogsEditConfigButton: "mcp-logs-edit-config-button",
   McpLogsTab: "mcp-logs-tab",
+  McpInspectorNoConnection: "mcp-inspector-no-connection",
   // Connectivity / offline status bar
   ConnectivityStatusBar: "connectivity-status-bar",
   ConnectivityStatusBarRetry: "connectivity-status-bar-retry",

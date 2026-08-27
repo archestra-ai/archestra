@@ -729,6 +729,13 @@ export const requiredEndpointPermissionsMap: Partial<
   // Subagent (delegation-target) exclusions: agent-type read/update permission checked dynamically in handler
   [RouteId.GetAgentSubagentExclusions]: {},
   [RouteId.UpdateAgentSubagentExclusions]: {},
+  // Knowledge-source exclusions (which knowledge connectors the agent's Auto
+  // surface may search): agent-type read/update permission checked dynamically
+  // in handler, on top of this floor. `knowledgeSource:read` is the floor
+  // rather than `{}` because these routes name knowledge connectors by id —
+  // the same disclosure the connector list endpoint gates on that permission.
+  [RouteId.GetAgentKnowledgeSourceExclusions]: { knowledgeSource: ["read"] },
+  [RouteId.UpdateAgentKnowledgeSourceExclusions]: { knowledgeSource: ["read"] },
   // Skill assignments/exclusions (what the gateway publishes over skill://):
   // agent-type read/update permission checked dynamically in handler, on top
   // of this floor. `skill:read` is the floor rather than `{}` because these

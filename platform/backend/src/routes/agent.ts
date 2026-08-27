@@ -42,6 +42,7 @@ import { initializeObservabilityMetrics } from "@/observability";
 import { getAgentCredentialReadiness } from "@/services/agent-credential-readiness";
 import { serializeAgentForExport } from "@/services/agent-export";
 import { importAgentFromPayload } from "@/services/agent-import";
+import { agentKnowledgeSourceExclusionsService } from "@/services/agent-knowledge-source-exclusions";
 import { agentSkillAssignmentService } from "@/services/agent-skill-assignment";
 import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
 import { assertNoStaticPinsBrokenByTargetChange } from "@/services/agent-tool-assignment";
@@ -56,6 +57,7 @@ import {
   type Agent,
   AgentCredentialReadinessSchema,
   AgentExportPayloadSchema,
+  AgentKnowledgeSourceExclusionsSchema,
   type AgentScope,
   AgentScopeFilterSchema,
   AgentScopeSchema,
@@ -1262,6 +1264,55 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
+    "/api/agents/:id/knowledge-source-exclusions",
+    {
+      schema: {
+        operationId: RouteId.GetAgentKnowledgeSourceExclusions,
+        description:
+          "Get the agent's Auto-mode knowledge-source exclusions: knowledge connectors removed from the surface its knowledge queries span while 'access all tools' is on",
+        tags: ["Agents"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(AgentKnowledgeSourceExclusionsSchema),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      await requireAgentReadAccess({ id, user, organizationId });
+      return reply.send(
+        await agentKnowledgeSourceExclusionsService.getExclusions(id),
+      );
+    },
+  );
+
+  fastify.put(
+    "/api/agents/:id/knowledge-source-exclusions",
+    {
+      schema: {
+        operationId: RouteId.UpdateAgentKnowledgeSourceExclusions,
+        description:
+          "Replace the agent's Auto-mode knowledge-source exclusions (full replace of the excluded knowledge-connector set)",
+        tags: ["Agents"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        body: AgentKnowledgeSourceExclusionsSchema,
+        response: constructResponseSchema(AgentKnowledgeSourceExclusionsSchema),
+      },
+    },
+    async ({ params: { id }, body, user, organizationId }, reply) => {
+      await requireAgentUpdateAccess({ id, user, organizationId });
+      return reply.send(
+        await agentKnowledgeSourceExclusionsService.replaceExclusions({
+          agentId: id,
+          organizationId,
+          excludedConnectorIds: body.excludedConnectorIds,
+        }),
+      );
+    },
+  );
+
+  fastify.get(
     "/api/agents/:id/skills",
     {
       schema: {
@@ -1276,7 +1327,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
-      await requireAgentSkillReadAccess({ id, user, organizationId });
+      await requireAgentReadAccess({ id, user, organizationId });
       return reply.send(await agentSkillAssignmentService.getAssignments(id));
     },
   );
@@ -1329,7 +1380,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
-      await requireAgentSkillReadAccess({ id, user, organizationId });
+      await requireAgentReadAccess({ id, user, organizationId });
       return reply.send(await agentSkillAssignmentService.getExclusions(id));
     },
   );
@@ -2497,7 +2548,7 @@ async function resolveNewAgentEnvironmentId(params: {
  * rather than a 403, so the response cannot be used to discover which agents
  * exist.
  */
-async function requireAgentSkillReadAccess(params: {
+async function requireAgentReadAccess(params: {
   id: string;
   user: { id: string };
   organizationId: string;
@@ -2531,36 +2582,17 @@ async function requireAgentSkillReadAccess(params: {
 }
 
 /**
- * Write-permission gate for the skill-publication endpoints, in two halves.
- *
- * The gateway half is here: editing what a gateway publishes requires the same
- * permission as editing the gateway itself, so this runs the identical
- * agent-type and scope checks `PUT /api/agents/:id` runs.
- *
- * The skill half is in two places, and both are load-bearing. The capability
- * — `skill:read` — is enforced by the middleware from
- * `requiredEndpointPermissionsMap`, so a role deliberately stripped of the
- * skill resource cannot reach these routes at all. The per-skill visibility
- * check is enforced by the assignment service, and this function only resolves
- * the `skill:admin` flag that service needs: publishing or excluding a skill
- * requires that the caller could already read it (org-scoped, their own,
- * shared with them, or assigned to one of their teams), with `skill:admin`
- * bypassing that as it does everywhere else. Neither half implies the other —
- * visibility is a property of the skill, the capability a property of the
- * role. Gateway permission alone is not sufficient for either, because
- * `mcpGateway:update` is a default member permission and publishing hands the
- * skill's full body to every holder of the gateway's token.
- *
- * Deliberately NOT re-checked at serve time: revoking a user's team membership
- * (or narrowing a skill's team assignments) does not retroactively un-publish
- * what they already published. The audit log records who published what; a
- * serve-time re-check is a known follow-up.
+ * Update-permission gate for the per-agent sub-resource endpoints (exclusion
+ * sets and the like): editing a facet of an agent's config requires the same
+ * permission as editing the agent itself, so this runs the identical
+ * agent-type and scope checks `PUT /api/agents/:id` runs. Resource-specific
+ * capability checks (see `requireAgentSkillWriteAccess`) layer on top.
  */
-async function requireAgentSkillWriteAccess(params: {
+async function requireAgentUpdateAccess(params: {
   id: string;
   user: { id: string };
   organizationId: string;
-}): Promise<{ isSkillAdmin: boolean }> {
+}): Promise<void> {
   const { id, user, organizationId } = params;
 
   const agent = await AgentModel.findById(id, user.id, true);
@@ -2591,6 +2623,42 @@ async function requireAgentSkillWriteAccess(params: {
     userTeamIds,
     userId: user.id,
   });
+}
+
+/**
+ * Write-permission gate for the skill-publication endpoints, in two halves.
+ *
+ * The gateway half is here: editing what a gateway publishes requires the same
+ * permission as editing the gateway itself, so this runs the identical
+ * agent-type and scope checks `PUT /api/agents/:id` runs.
+ *
+ * The skill half is in two places, and both are load-bearing. The capability
+ * — `skill:read` — is enforced by the middleware from
+ * `requiredEndpointPermissionsMap`, so a role deliberately stripped of the
+ * skill resource cannot reach these routes at all. The per-skill visibility
+ * check is enforced by the assignment service, and this function only resolves
+ * the `skill:admin` flag that service needs: publishing or excluding a skill
+ * requires that the caller could already read it (org-scoped, their own,
+ * shared with them, or assigned to one of their teams), with `skill:admin`
+ * bypassing that as it does everywhere else. Neither half implies the other —
+ * visibility is a property of the skill, the capability a property of the
+ * role. Gateway permission alone is not sufficient for either, because
+ * `mcpGateway:update` is a default member permission and publishing hands the
+ * skill's full body to every holder of the gateway's token.
+ *
+ * Deliberately NOT re-checked at serve time: revoking a user's team membership
+ * (or narrowing a skill's team assignments) does not retroactively un-publish
+ * what they already published. The audit log records who published what; a
+ * serve-time re-check is a known follow-up.
+ */
+async function requireAgentSkillWriteAccess(params: {
+  id: string;
+  user: { id: string };
+  organizationId: string;
+}): Promise<{ isSkillAdmin: boolean }> {
+  const { user, organizationId } = params;
+
+  await requireAgentUpdateAccess(params);
 
   // Skill permissions are a separate resource from the agent's: an mcpGateway
   // admin is not automatically a skill admin.

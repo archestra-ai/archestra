@@ -47,6 +47,7 @@ function makeSnapshot(
     hooks: [],
     knowledgeBases: [],
     connectors: [],
+    excludedConnectors: [],
     ...overrides,
   };
 }
@@ -618,6 +619,7 @@ const SNAPSHOT_KEY_HOMES: Record<
   suggestedPrompts: { section: "suggested-prompts" },
   knowledgeBases: { section: "knowledge-bases" },
   connectors: { section: "connectors" },
+  excludedConnectors: { section: "excluded-knowledge-sources" },
   hooks: { section: "hook" },
 };
 
@@ -639,6 +641,7 @@ describe("snapshot coverage", () => {
     suggestedPrompts: [{ summaryTitle: "Ideas", prompt: "Give me ideas" }],
     knowledgeBases: [{ id: "kb1", name: "Runbooks" }],
     connectors: [{ id: "c1", name: "Drive" }],
+    excludedConnectors: [{ id: "c9", name: "Legacy wiki" }],
     hooks: [
       {
         event: "session_start",

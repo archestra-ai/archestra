@@ -12,6 +12,7 @@ import {
 } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useConnectors } from "@/lib/knowledge/connector.query";
+import { useIsKnowledgeBaseConfigured } from "@/lib/knowledge/knowledge-base.query";
 import {
   type AgentFormFooterState,
   type AgentFormProps,
@@ -30,6 +31,8 @@ const {
   useAvailableLlmProviderApiKeysMock,
   useAgentDelegationsMock,
   useAgentSubagentExclusionsMock,
+  useAgentKnowledgeSourceExclusionsMock,
+  useUpdateAgentKnowledgeSourceExclusionsMock,
   useAgentSkillsMock,
   useAgentSkillExclusionsMock,
   useUpdateAgentSkillsMock,
@@ -140,6 +143,16 @@ const {
     mutateAsync: vi.fn(),
     isPending: false,
   })),
+  useAgentKnowledgeSourceExclusionsMock: vi.fn(
+    (): { data: { excludedConnectorIds: string[] }; isSuccess: boolean } => ({
+      data: { excludedConnectorIds: [] },
+      isSuccess: true,
+    }),
+  ),
+  useUpdateAgentKnowledgeSourceExclusionsMock: vi.fn(() => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  })),
   useAgentSkillsMock: vi.fn(
     (): {
       data:
@@ -226,6 +239,12 @@ vi.mock("@/lib/agent-subagent-exclusions.query", () => ({
   useUpdateAgentSubagentExclusions: useUpdateAgentSubagentExclusionsMock,
 }));
 
+vi.mock("@/lib/agent-knowledge-source-exclusions.query", () => ({
+  useAgentKnowledgeSourceExclusions: useAgentKnowledgeSourceExclusionsMock,
+  useUpdateAgentKnowledgeSourceExclusions:
+    useUpdateAgentKnowledgeSourceExclusionsMock,
+}));
+
 vi.mock("@/lib/agent-skills.query", () => ({
   useAgentSkills: useAgentSkillsMock,
   useAgentSkillExclusions: useAgentSkillExclusionsMock,
@@ -251,7 +270,7 @@ vi.mock("@/lib/knowledge/connector.query", () => ({
 
 vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
   useKnowledgeBases: () => ({ data: [] }),
-  useIsKnowledgeBaseConfigured: () => true,
+  useIsKnowledgeBaseConfigured: vi.fn(() => true),
 }));
 
 vi.mock("@/lib/llm-models.query", () => ({
@@ -1284,9 +1303,49 @@ describe("AgentForm knowledge in Auto mode", () => {
     vi.mocked(useHasPermissions).mockImplementation(
       () => ({ data: true }) as unknown as ReturnType<typeof useHasPermissions>,
     );
+    vi.mocked(useIsKnowledgeBaseConfigured).mockReturnValue(true);
   });
 
-  it("names the sources an Auto agent will search — the environment's, not the assignment", async () => {
+  it("describes discovery instead of naming the environment's sources", async () => {
+    // Auto mode does not read the assignment, and the set it searches is the
+    // caller's — not the editor's — so naming sources here only ever showed
+    // the wrong list. It now reads like the MCP tools it sits beside.
+    vi.mocked(useConnectors).mockReturnValue({
+      data: [
+        {
+          id: "c1",
+          name: "Handbook",
+          connectorType: "notion",
+          environmentId: null,
+        },
+      ],
+    } as unknown as ReturnType<typeof useConnectors>);
+    const autoAgent = { ...baseAgent, accessAllTools: true };
+    useProfileMock.mockReturnValue({ data: autoAgent, refetch: vi.fn() });
+
+    render(<AgentForm agentType="agent" agent={autoAgent} />);
+
+    const section = await screen.findByTestId(E2eTestId.AgentToolsSection);
+    expect(
+      within(section).getByText(
+        /new servers and sources included automatically/i,
+      ),
+    ).toBeVisible();
+    // The preview list and its caption are gone. Two headings nearby are
+    // different strings and stay: the Custom picker's "Knowledge Sources" and
+    // the Auto-mode "Disabled knowledge sources" editor.
+    expect(within(section).queryByText("Knowledge sources")).toBeNull();
+    expect(
+      within(section).queryByText(
+        /each conversation searches the ones its own caller may query/i,
+      ),
+    ).toBeNull();
+  });
+
+  it("names a source only where being named means it is excluded", async () => {
+    // Auto mode assigns nothing, so it names no source — except in the
+    // disabled editor, where a name means the opposite of assignment. That
+    // makes it the one list on the step that is safe to read as literal.
     vi.mocked(useConnectors).mockReturnValue({
       data: [
         {
@@ -1297,9 +1356,99 @@ describe("AgentForm knowledge in Auto mode", () => {
         },
         {
           id: "c2",
-          name: "Staging wiki",
+          name: "Legacy wiki",
+          connectorType: "confluence",
+          environmentId: null,
+        },
+      ],
+    } as unknown as ReturnType<typeof useConnectors>);
+    useAgentKnowledgeSourceExclusionsMock.mockReturnValue({
+      data: { excludedConnectorIds: ["c2"] },
+      isSuccess: true,
+    });
+    const autoAgent = { ...baseAgent, accessAllTools: true };
+    useProfileMock.mockReturnValue({ data: autoAgent, refetch: vi.fn() });
+
+    render(<AgentForm agentType="agent" agent={autoAgent} />);
+
+    const section = await screen.findByTestId(E2eTestId.AgentToolsSection);
+    const disabled = within(section).getByTestId(
+      E2eTestId.AgentKnowledgeSourceExclusions,
+    );
+    expect(within(disabled).getByText("Legacy wiki")).toBeVisible();
+    // The excluded source is named there and nowhere else, and the source the
+    // agent still reaches is not named at all.
+    // The Custom-mode editors stay mounted while Auto is on so pending edits
+    // survive a mode switch, and jsdom loads no Tailwind, so their `hidden`
+    // container is still queryable. Only what Auto shows counts here.
+    const shown = (nodes: HTMLElement[]) =>
+      nodes.filter((node) => !node.closest(".hidden"));
+
+    expect(
+      shown(within(section).getAllByText("Legacy wiki")).every((node) =>
+        disabled.contains(node),
+      ),
+    ).toBe(true);
+    expect(shown(within(section).queryAllByText("Handbook"))).toHaveLength(0);
+  });
+
+  it("saves the disabled set when a source is turned off", async () => {
+    const user = userEvent.setup();
+    const syncKnowledgeExclusions = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(useConnectors).mockReturnValue({
+      data: [
+        {
+          id: "c1",
+          name: "Handbook",
           connectorType: "notion",
-          environmentId: "env-2",
+          environmentId: null,
+        },
+      ],
+    } as unknown as ReturnType<typeof useConnectors>);
+    useAgentKnowledgeSourceExclusionsMock.mockReturnValue({
+      data: { excludedConnectorIds: [] },
+      isSuccess: true,
+    });
+    useUpdateAgentKnowledgeSourceExclusionsMock.mockReturnValue({
+      mutateAsync: syncKnowledgeExclusions,
+      isPending: false,
+    });
+    const autoAgent = { ...baseAgent, accessAllTools: true };
+    useProfileMock.mockReturnValue({ data: autoAgent, refetch: vi.fn() });
+    useUpdateProfileMock.mockReturnValue({
+      mutateAsync: vi.fn().mockResolvedValue(autoAgent),
+      isPending: false,
+    });
+
+    render(<AgentForm agentType="agent" agent={autoAgent} />);
+
+    const disabled = await screen.findByTestId(
+      E2eTestId.AgentKnowledgeSourceExclusions,
+    );
+    await user.click(
+      within(disabled).getByRole("button", { name: "Add Handbook" }),
+    );
+    await user.click(screen.getByRole("button", { name: /update/i }));
+
+    await waitFor(() => expect(syncKnowledgeExclusions).toHaveBeenCalled());
+    expect(syncKnowledgeExclusions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        exclusions: { excludedConnectorIds: ["c1"] },
+      }),
+    );
+  });
+
+  it("offers nothing to disable while knowledge search is unconfigured", async () => {
+    // The editor lists sources, so it has to follow the same caveat the
+    // bullets state: with no embedding model there is no search to narrow.
+    vi.mocked(useIsKnowledgeBaseConfigured).mockReturnValue(false);
+    vi.mocked(useConnectors).mockReturnValue({
+      data: [
+        {
+          id: "c1",
+          name: "Handbook",
+          connectorType: "notion",
+          environmentId: null,
         },
       ],
     } as unknown as ReturnType<typeof useConnectors>);
@@ -1308,30 +1457,30 @@ describe("AgentForm knowledge in Auto mode", () => {
 
     render(<AgentForm agentType="agent" agent={autoAgent} />);
 
-    // Scoped to the Auto block: the Custom picker stays mounted (hidden) and
-    // names the same sources, so an unscoped query matches both.
-    const block = (await screen.findByText("Knowledge sources"))
-      .parentElement as HTMLElement;
-    // Auto searches this agent's environment, so a source stamped with
-    // another environment is not named.
-    expect(within(block).getByText("Handbook")).toBeVisible();
-    expect(within(block).queryByText("Staging wiki")).toBeNull();
+    await screen.findByTestId(E2eTestId.AgentToolsSection);
     expect(
-      within(block).getByText(
-        /each conversation searches the ones its own caller may query/i,
-      ),
-    ).toBeVisible();
+      screen.queryByTestId(E2eTestId.AgentKnowledgeSourceExclusions),
+    ).toBeNull();
   });
 
-  it("says so when the environment has no source set up yet", async () => {
+  it("says so when knowledge search has no embedding model behind it", async () => {
+    vi.mocked(useIsKnowledgeBaseConfigured).mockReturnValue(false);
     const autoAgent = { ...baseAgent, accessAllTools: true };
     useProfileMock.mockReturnValue({ data: autoAgent, refetch: vi.fn() });
 
     render(<AgentForm agentType="agent" agent={autoAgent} />);
 
-    expect(
-      await screen.findByText(/No source is set up in this agent/i),
-    ).toBeVisible();
+    expect(await screen.findByText(/Knowledge search is off/i)).toBeVisible();
+  });
+
+  it("keeps quiet about knowledge search once it is configured", async () => {
+    const autoAgent = { ...baseAgent, accessAllTools: true };
+    useProfileMock.mockReturnValue({ data: autoAgent, refetch: vi.fn() });
+
+    render(<AgentForm agentType="agent" agent={autoAgent} />);
+
+    await screen.findByTestId(E2eTestId.AgentToolsSection);
+    expect(screen.queryByText(/Knowledge search is off/i)).toBeNull();
   });
 });
 

@@ -255,7 +255,7 @@ function suggestedPromptItems(
   }));
 }
 
-/** Assigned knowledge: knowledge bases and connectors. */
+/** Knowledge: assigned knowledge bases and connectors, plus Auto-mode exclusions. */
 function knowledgeSections(
   current: Snapshot,
   previous: Snapshot | null,
@@ -284,6 +284,20 @@ function knowledgeSections(
         detail: null,
       })),
       previous: previous?.connectors.map((connector) => ({
+        key: connector.id,
+        label: connector.name,
+        detail: null,
+      })),
+    }),
+    listSection({
+      id: "excluded-knowledge-sources",
+      label: "Excluded knowledge sources",
+      current: current.excludedConnectors.map((connector) => ({
+        key: connector.id,
+        label: connector.name,
+        detail: null,
+      })),
+      previous: previous?.excludedConnectors.map((connector) => ({
         key: connector.id,
         label: connector.name,
         detail: null,

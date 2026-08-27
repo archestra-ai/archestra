@@ -62,6 +62,7 @@ import {
 import { isUniqueConstraintError } from "@/utils/db";
 import { isUuid } from "@/utils/uuid";
 import AgentConnectorAssignmentModel from "./agent-connector-assignment";
+import AgentExcludedConnectorModel from "./agent-excluded-connector";
 import AgentExcludedSkillModel from "./agent-excluded-skill";
 import AgentExcludedSubagentModel from "./agent-excluded-subagent";
 import AgentExcludedToolModel from "./agent-excluded-tool";
@@ -3631,6 +3632,19 @@ class AgentModel {
       );
       await AgentExcludedToolModel.replaceForAgent(created.id, excludedToolIds);
 
+      // Same for Auto-mode knowledge-source exclusions: the clone copies the
+      // source's knowledge assignments verbatim above, so a source that had
+      // turned a knowledge source off would otherwise hand its copy a wider
+      // search surface than the original.
+      const excludedConnectorIds =
+        await AgentExcludedConnectorModel.findConnectorIdsByAgent(
+          sourceAgent.id,
+        );
+      await AgentExcludedConnectorModel.replaceForAgent(
+        created.id,
+        excludedConnectorIds,
+      );
+
       // Now that the verbatim exclusions exist, flip an All-tools source's
       // clone on. Skip the pre-fill: the copy above is the authoritative set,
       // and an additive pre-fill would re-add built-ins the source had
@@ -3769,6 +3783,7 @@ class AgentModel {
       labels,
       knowledgeBaseIds,
       connectorIds,
+      excludedConnectorIds,
       delegations,
       excludedSubagentIds,
       skillIds,
@@ -3784,6 +3799,7 @@ class AgentModel {
       AgentLabelModel.getLabelsForAgent(id),
       AgentKnowledgeBaseModel.getKnowledgeBaseIds(id),
       AgentConnectorAssignmentModel.getConnectorIds(id),
+      AgentExcludedConnectorModel.findConnectorIdsByAgent(id),
       AgentToolModel.getDelegationTargets(id),
       AgentExcludedSubagentModel.findTargetAgentIdsByAgent(id),
       // The skill-publication routes audit through this snapshot too, so the
@@ -3874,6 +3890,7 @@ class AgentModel {
       tools: tools.map((t) => t.name).sort(),
       knowledgeBaseIds: [...knowledgeBaseIds].sort(),
       connectorIds: [...connectorIds].sort(),
+      excludedConnectorIds: [...excludedConnectorIds].sort(),
       teams: teams.map((t) => t.name).sort(),
       labels: labels.sort(),
       delegationTargets,

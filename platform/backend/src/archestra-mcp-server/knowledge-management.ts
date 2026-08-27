@@ -45,6 +45,7 @@ import {
 import logger from "@/logging";
 import {
   AgentConnectorAssignmentModel,
+  AgentExcludedConnectorModel,
   AgentKnowledgeBaseModel,
   AgentModel,
   KbDocumentModel,
@@ -570,20 +571,31 @@ async function handleQueryKnowledgeSources(params: {
 
     let connectorIds: string[];
     if (dynamicCtx && access) {
-      const connectors = await KnowledgeBaseConnectorModel.findByOrganization({
-        organizationId,
-        canReadAll: access.canReadAll,
-        viewerTeamIds: access.teamIds,
-        // Query scope: auto-sync-permissions connectors stay searchable for
-        // everyone — their per-chunk ACLs (userAcl below) do the enforcement.
-        visibilityScope: "query",
-        environmentId: agentEnvironmentId,
-      });
-      connectorIds = connectors.map((connector) => connector.id);
+      const [connectors, excludedConnectorIds] = await Promise.all([
+        KnowledgeBaseConnectorModel.findByOrganization({
+          organizationId,
+          canReadAll: access.canReadAll,
+          viewerTeamIds: access.teamIds,
+          // Query scope: auto-sync-permissions connectors stay searchable for
+          // everyone — their per-chunk ACLs (userAcl below) do the enforcement.
+          visibilityScope: "query",
+          environmentId: agentEnvironmentId,
+        }),
+        // Per-agent knowledge-source exclusions (Auto mode): sources an
+        // operator turned off for this agent leave its search surface even
+        // though the caller could search them elsewhere.
+        AgentExcludedConnectorModel.findConnectorIdsByAgent(contextAgent.id),
+      ]);
+      const excluded = new Set(excludedConnectorIds);
+      connectorIds = connectors
+        .map((connector) => connector.id)
+        .filter((connectorId) => !excluded.has(connectorId));
 
       if (connectorIds.length === 0) {
         return errorResult(
-          "No knowledge sources are accessible to the current user. Create a knowledge connector or ask an admin for access.",
+          connectors.length > 0
+            ? "Every knowledge source reachable here is disabled for this agent. Re-enable one in the agent's Tools & Knowledge settings."
+            : "No knowledge sources are accessible to the current user. Create a knowledge connector or ask an admin for access.",
         );
       }
     } else {

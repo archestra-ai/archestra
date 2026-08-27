@@ -8,6 +8,8 @@ import {
   eq,
   inArray,
   isNotNull,
+  like,
+  or,
   sql,
 } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
@@ -404,6 +406,12 @@ class PluginModel {
       marketplacePath: string;
       marketplacePluginName: string;
     };
+    /**
+     * Compare-and-set guard for content edits: when set, the update only
+     * lands while the plugin's current content hash still matches — a
+     * concurrent write since the caller read the files fails the update.
+     */
+    expectedContentHash?: string;
   }): Promise<PluginWithFiles | null> {
     const updated = await withDbTransaction(async (tx) => {
       const existing = await findRowWithTransaction(tx, {
@@ -507,6 +515,9 @@ class PluginModel {
           and(
             eq(schema.pluginsTable.id, params.id),
             eq(schema.pluginsTable.organizationId, params.organizationId),
+            params.expectedContentHash !== undefined
+              ? eq(schema.pluginsTable.contentHash, params.expectedContentHash)
+              : undefined,
             notDeleted(schema.pluginsTable),
           ),
         )
@@ -635,6 +646,94 @@ class PluginModel {
           END)`,
         ),
       );
+  }
+
+  /**
+   * Plugins visible to the caller that carry at least one SKILL.md file,
+   * with only the manifest bytes and the file paths loaded — the list
+   * projection never pays for the full payload.
+   */
+  static async findSkillManifestCandidates(params: {
+    organizationId: string;
+    accessiblePluginIds?: string[];
+  }): Promise<
+    Array<{
+      plugin: Plugin;
+      manifests: Array<Pick<PluginFile, "path" | "content" | "encoding">>;
+      filePaths: string[];
+    }>
+  > {
+    if (params.accessiblePluginIds?.length === 0) return [];
+    const plugins = await db
+      .select()
+      .from(schema.pluginsTable)
+      .where(
+        and(
+          eq(schema.pluginsTable.organizationId, params.organizationId),
+          params.accessiblePluginIds
+            ? inArray(schema.pluginsTable.id, params.accessiblePluginIds)
+            : undefined,
+          notDeleted(schema.pluginsTable),
+        ),
+      )
+      .orderBy(asc(schema.pluginsTable.displayName));
+    if (plugins.length === 0) return [];
+    const pluginIds = plugins.map((plugin) => plugin.id);
+    const [manifests, paths] = await Promise.all([
+      db
+        .select({
+          pluginId: schema.pluginFilesTable.pluginId,
+          path: schema.pluginFilesTable.path,
+          content: schema.pluginFilesTable.content,
+          encoding: schema.pluginFilesTable.encoding,
+        })
+        .from(schema.pluginFilesTable)
+        .where(
+          and(
+            inArray(schema.pluginFilesTable.pluginId, pluginIds),
+            or(
+              eq(schema.pluginFilesTable.path, "SKILL.md"),
+              like(schema.pluginFilesTable.path, "%/SKILL.md"),
+            ),
+          ),
+        )
+        .orderBy(asc(schema.pluginFilesTable.path)),
+      db
+        .select({
+          pluginId: schema.pluginFilesTable.pluginId,
+          path: schema.pluginFilesTable.path,
+        })
+        .from(schema.pluginFilesTable)
+        .where(inArray(schema.pluginFilesTable.pluginId, pluginIds))
+        .orderBy(asc(schema.pluginFilesTable.path)),
+    ]);
+    const manifestsByPlugin = new Map<string, typeof manifests>();
+    for (const manifest of manifests) {
+      const list = manifestsByPlugin.get(manifest.pluginId) ?? [];
+      list.push(manifest);
+      manifestsByPlugin.set(manifest.pluginId, list);
+    }
+    const pathsByPlugin = new Map<string, string[]>();
+    for (const file of paths) {
+      const list = pathsByPlugin.get(file.pluginId) ?? [];
+      list.push(file.path);
+      pathsByPlugin.set(file.pluginId, list);
+    }
+    return plugins.flatMap((plugin) => {
+      const candidates = manifestsByPlugin.get(plugin.id);
+      if (!candidates || candidates.length === 0) return [];
+      return [
+        {
+          plugin,
+          manifests: candidates.map(({ path, content, encoding }) => ({
+            path,
+            content,
+            encoding,
+          })),
+          filePaths: pathsByPlugin.get(plugin.id) ?? [],
+        },
+      ];
+    });
   }
 
   static async findByIdForSync(id: string): Promise<Plugin | null> {

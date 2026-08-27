@@ -76,6 +76,7 @@ export * from "./oauth-client";
 export * from "./organization";
 export * from "./plugin";
 export * from "./plugin-marketplace";
+export * from "./plugin-skill";
 export * from "./project";
 export * from "./role";
 export * from "./schedule-trigger";

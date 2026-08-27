@@ -7,13 +7,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { userHasPermission } from "@/auth";
 import config from "@/config";
-import {
-  MemberModel,
-  PluginModel,
-  PluginTeamModel,
-  TaskModel,
-  TeamModel,
-} from "@/models";
+import { PluginModel, PluginTeamModel, TaskModel } from "@/models";
 import {
   importPluginFromGithub,
   normalizeGithubPluginRepoUrl,
@@ -27,6 +21,7 @@ import {
   GithubMarketplaceChangedError,
   prepareGithubMarketplaceImports,
 } from "@/plugins/github-marketplace-import";
+import { validatePluginVisibility } from "@/services/plugin-visibility";
 import {
   resolveGithubAppInstallationToken,
   resolveGithubPatToken,
@@ -845,43 +840,6 @@ async function requirePluginAdmin(params: {
       403,
       "You need plugin:admin permission to approve executable plugins",
     );
-  }
-}
-
-async function validatePluginVisibility(params: {
-  organizationId: string;
-  scope: "personal" | "team" | "org";
-  teamIds: string[];
-  userIds: string[];
-}): Promise<void> {
-  if (params.scope === "team") {
-    const teamIds = Array.from(new Set(params.teamIds));
-    if (teamIds.length === 0) {
-      throw new ApiError(400, "Team-visible plugins require at least one team");
-    }
-    const teams = await TeamModel.findByIds(teamIds);
-    const validIds = new Set(
-      teams
-        .filter((team) => team.organizationId === params.organizationId)
-        .map((team) => team.id),
-    );
-    const missing = teamIds.filter((id) => !validIds.has(id));
-    if (missing.length > 0) {
-      throw new ApiError(400, `Unknown team id(s): ${missing.join(", ")}`);
-    }
-  }
-  if (params.scope === "personal" && params.userIds.length > 0) {
-    const userIds = Array.from(new Set(params.userIds));
-    const validIds = new Set(
-      await MemberModel.findUserIdsInOrganization({
-        organizationId: params.organizationId,
-        userIds,
-      }),
-    );
-    const missing = userIds.filter((id) => !validIds.has(id));
-    if (missing.length > 0) {
-      throw new ApiError(400, `Unknown user id(s): ${missing.join(", ")}`);
-    }
   }
 }
 

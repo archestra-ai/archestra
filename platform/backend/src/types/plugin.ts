@@ -61,6 +61,12 @@ export const PluginFileInputSchema = z.object({
   mode: PluginFileModeSchema.default("100644"),
 });
 
+export const PluginFileSetSchema = z
+  .object({
+    files: z.array(PluginFileInputSchema).min(1).max(PLUGIN_MAX_FILES),
+  })
+  .superRefine(validateFileSet);
+
 export const CreatePluginSchema = z
   .object({
     displayName: z.string().trim().min(1).max(120),
@@ -165,7 +171,7 @@ export function isSafePluginPath(value: string): boolean {
     .some((segment) => segment === "." || segment === "..");
 }
 
-function validateFileSet(
+export function validateFileSet(
   value: { files?: PluginFileInput[] },
   ctx: z.RefinementCtx,
 ): void {

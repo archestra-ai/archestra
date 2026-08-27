@@ -1,5 +1,6 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
+  isPluginArchestraToolShortName,
   isSandboxArchestraToolShortName,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
@@ -395,11 +396,15 @@ function isExcludedFromDiscovery(
 // config, mirroring the registration/execution gates in index.ts
 // (getArchestraMcpTools + executeArchestraTool): the sandbox group (runtime +
 // persistent-files) follows the skills-sandbox flag (see
-// isSandboxToolEnabled). Everything else — including the skill, app, and
-// Projects tools, which are registered unconditionally — is always on.
+// isSandboxToolEnabled), and the plugin group follows the plugins beta flag.
+// Everything else — including the skill, app, and Projects tools, which are
+// registered unconditionally — is always on.
 function isBuiltInFeatureEnabled(shortName: string): boolean {
   if (isSandboxArchestraToolShortName(shortName)) {
     return isSandboxToolEnabled(shortName);
+  }
+  if (isPluginArchestraToolShortName(shortName)) {
+    return config.plugins.enabled;
   }
   return true;
 }

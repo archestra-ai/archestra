@@ -82182,6 +82182,213 @@ export type UpdatePluginResponses = {
 
 export type UpdatePluginResponse = UpdatePluginResponses[keyof UpdatePluginResponses];
 
+export type GetPluginSkillsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/skills/plugins';
+};
+
+export type GetPluginSkillsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetPluginSkillsError = GetPluginSkillsErrors[keyof GetPluginSkillsErrors];
+
+export type GetPluginSkillsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        source: 'plugin';
+        pluginId: string;
+        pluginName: string;
+        pluginSlug: string;
+        pluginEnabled: boolean;
+        scope: 'personal' | 'team' | 'org';
+        clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+        supportedPlatforms: Array<'posix' | 'windows'>;
+        skillPath: string;
+        name: string;
+        description: string;
+        compatibility: string | null;
+        fileCount: number;
+    }>;
+};
+
+export type GetPluginSkillsResponse = GetPluginSkillsResponses[keyof GetPluginSkillsResponses];
+
+export type GetPluginSkillData = {
+    body?: never;
+    path: {
+        pluginId: string;
+    };
+    query?: {
+        /**
+         * Parent directory of the SKILL.md inside the plugin; omit for a root-level skill.
+         */
+        skillPath?: string;
+    };
+    url: '/api/skills/plugins/{pluginId}';
+};
+
+export type GetPluginSkillErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetPluginSkillError = GetPluginSkillErrors[keyof GetPluginSkillErrors];
+
+export type GetPluginSkillResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        source: 'plugin';
+        pluginId: string;
+        pluginName: string;
+        pluginSlug: string;
+        pluginEnabled: boolean;
+        scope: 'personal' | 'team' | 'org';
+        clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+        supportedPlatforms: Array<'posix' | 'windows'>;
+        skillPath: string;
+        name: string;
+        description: string;
+        compatibility: string | null;
+        fileCount: number;
+        manifest: string;
+        content: string;
+        allowedTools: string | null;
+        resourcesRestricted: boolean;
+        files: Array<{
+            path: string;
+            content: string;
+            encoding: 'utf8' | 'base64';
+            kind: 'script' | 'reference' | 'asset';
+        }>;
+    };
+};
+
+export type GetPluginSkillResponse = GetPluginSkillResponses[keyof GetPluginSkillResponses];
+
 export type GetProjectsData = {
     body?: never;
     path?: never;

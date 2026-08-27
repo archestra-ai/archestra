@@ -203,7 +203,17 @@ async function bulkLayoutGeometry(bar: Locator): Promise<{
       }
       branch = branch.parentElement;
     }
-    const collection = element.nextElementSibling as HTMLElement;
+    let collectionBranch = element as HTMLElement | null;
+    let collection: HTMLElement | null = null;
+    while (collectionBranch && !collection) {
+      collection = collectionBranch.nextElementSibling as HTMLElement | null;
+      while (collection?.classList.contains("sr-only")) {
+        collection = collection.nextElementSibling as HTMLElement | null;
+      }
+      collectionBranch = collectionBranch.parentElement;
+    }
+    if (!collection)
+      throw new Error("no collection after the bulk actions bar");
     const barRect = element.getBoundingClientRect();
 
     return {

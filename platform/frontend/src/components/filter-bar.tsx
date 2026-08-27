@@ -51,6 +51,14 @@ export type OverflowFilter = {
  * currently narrowing the table — a hidden active filter reads as an empty
  * table with no explanation.
  * @param actions - Trailing controls (sort, view toggle) pinned to the right.
+ * @param leading - Set when the bar is the first thing under the page header.
+ * `PageLayout` insets its content 24px below the header rule, which is right
+ * for content but wrong for a control strip: the bar ended up sitting further
+ * from the header it belongs to than from the table it filters, which reads as
+ * a misalignment rather than as rhythm. This pulls it back onto the 16px the
+ * surrounding `space-y-4` stack already uses below it, so the bar is evenly
+ * spaced on both sides. Bars nested inside a tab body or a card are already
+ * spaced by their own container and must leave this alone.
  *
  * The bar carries no outer margin: the surrounding stack owns the gap between
  * it and the table. It used to default to `mb-4`, which made "let my parent
@@ -66,12 +74,14 @@ export function FilterBar({
   onClearFilters,
   moreFilters,
   actions,
+  leading = false,
 }: {
   children: ReactNode;
   className?: string;
   onClearFilters?: () => void;
   moreFilters?: OverflowFilter[];
   actions?: ReactNode;
+  leading?: boolean;
 }) {
   const appliedOverflow = moreFilters?.filter((filter) => filter.active) ?? [];
   const tuckedAway = moreFilters?.filter((filter) => !filter.active) ?? [];
@@ -85,6 +95,7 @@ export function FilterBar({
         // button), so the bar pulls them down to the compact height itself
         // rather than making every call site repeat `inputClassName="h-8"`.
         "[&_[data-slot=input]]:h-8",
+        leading && "-mt-2",
         className,
       )}
     >

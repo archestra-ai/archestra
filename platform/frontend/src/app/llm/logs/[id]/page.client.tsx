@@ -5,15 +5,16 @@ import {
   DynamicInteraction,
   isLockedChatUnavailableContent,
 } from "@archestra/shared";
-import { ArrowLeft, Database, Layers } from "lucide-react";
-import Link from "next/link";
+import { Database, Layers } from "lucide-react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { BackLink } from "@/components/agent-pages/agent-page-shell";
 import { BilledCost } from "@/components/billed-cost";
+import { type DetailFact, DetailFacts } from "@/components/detail-facts";
 import { JsonCodeBlock } from "@/components/json-code-block";
 import { LoadingState } from "@/components/loading";
 import { LockedChatContentUnavailable } from "@/components/locked-chat-content-unavailable";
 import MessageThread from "@/components/message-thread";
-import { MetadataCard, MetadataItem } from "@/components/metadata-card";
+import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SourceBadge } from "@/components/source-badge";
 import {
@@ -23,12 +24,12 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { describeKey } from "@/components/virtual-key-badge";
 import { useProfiles } from "@/lib/agent.query";
+import { typeRole } from "@/lib/design/type-scale";
 import { useInteraction } from "@/lib/interactions/interaction.query";
-import { formatDate } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 
 export function ChatPage({
   initialData,
@@ -40,11 +41,9 @@ export function ChatPage({
   id: string;
 }) {
   return (
-    <div className="w-full h-full overflow-y-auto">
-      <ErrorBoundary>
-        <LogDetail initialData={initialData} id={id} />
-      </ErrorBoundary>
-    </div>
+    <ErrorBoundary>
+      <LogDetail initialData={initialData} id={id} />
+    </ErrorBoundary>
   );
 }
 
@@ -69,22 +68,33 @@ function LogDetail({
 
   const { data: agents } = useProfiles();
 
+  // Header first, content second: this page owns its own chrome now, so the
+  // loading and failure states keep the title and the way back rather than
+  // dropping the reader onto a bare spinner.
   if (isPending) {
-    return <LoadingState label="Loading interaction…" variant="viewport" />;
+    return (
+      <InteractionShell>
+        <LoadingState label="Loading interaction…" />
+      </InteractionShell>
+    );
   }
 
   if (isLoadingError) {
     return (
-      <QueryLoadError
-        title="Couldn't load this interaction"
-        onRetry={() => refetch()}
-      />
+      <InteractionShell>
+        <QueryLoadError
+          title="Couldn't load this interaction"
+          onRetry={() => refetch()}
+        />
+      </InteractionShell>
     );
   }
 
   if (!dynamicInteraction) {
     return (
-      <div className="text-muted-foreground p-8">Interaction not found</div>
+      <InteractionShell>
+        <div className="text-muted-foreground">Interaction not found</div>
+      </InteractionShell>
     );
   }
 
@@ -114,202 +124,225 @@ function LogDetail({
     dynamicInteraction.virtualKey,
   ].filter((key) => key != null);
 
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="sm" asChild>
-          {dynamicInteraction.sessionId ? (
-            <Link
-              href={`/llm/logs/session/${encodeURIComponent(dynamicInteraction.sessionId)}`}
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Session
-            </Link>
-          ) : (
-            <Link href="/llm/logs">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Sessions
-            </Link>
-          )}
-        </Button>
-      </div>
+  const backHref = dynamicInteraction.sessionId
+    ? `/llm/logs/session/${encodeURIComponent(dynamicInteraction.sessionId)}`
+    : "/llm/logs";
+  const backLabel = dynamicInteraction.sessionId
+    ? "Back to Session"
+    : "Back to Sessions";
 
-      <div>
-        <div className="mb-8">
-          <MetadataCard
-            title="Metadata"
-            badges={
-              <>
-                <SourceBadge source={dynamicInteraction.source} />
-                <Badge variant="secondary" className="text-xs">
-                  {dynamicInteraction.source?.startsWith("knowledge:") ? (
-                    <>
-                      <Database className="h-3 w-3 mr-1" />
-                      Knowledge Base
-                    </>
-                  ) : (
-                    <>
-                      <Layers className="h-3 w-3 mr-1" />
-                      {agent?.name ??
-                        (interaction.profileId === null
-                          ? "Deleted LLM Proxy"
-                          : "Unknown")}
-                    </>
-                  )}
-                </Badge>
-              </>
-            }
-          >
-            <MetadataItem label="Tokens">
-              <div className="font-mono">
-                {(dynamicInteraction.inputTokens ?? 0).toLocaleString()} in /{" "}
-                {(dynamicInteraction.outputTokens ?? 0).toLocaleString()} out
-              </div>
-              {((dynamicInteraction.cacheReadTokens ?? 0) > 0 ||
-                (dynamicInteraction.cacheWriteTokens ?? 0) > 0) && (
-                <div className="font-mono text-muted-foreground">
-                  {(dynamicInteraction.cacheReadTokens ?? 0).toLocaleString()}{" "}
-                  cache read /{" "}
-                  {(dynamicInteraction.cacheWriteTokens ?? 0).toLocaleString()}{" "}
-                  cache write
-                </div>
-              )}
-            </MetadataItem>
-            <MetadataItem label="Cost">
-              <div className="font-mono">
-                {dynamicInteraction.cost ? (
-                  <TooltipProvider>
-                    <BilledCost
-                      cost={dynamicInteraction.cost}
-                      billingMode={dynamicInteraction.billingMode}
-                      baselineCost={
-                        dynamicInteraction.baselineCost ||
-                        dynamicInteraction.cost
-                      }
-                      toonCostSavings={dynamicInteraction.toonCostSavings}
-                      toonTokensBefore={dynamicInteraction.toonTokensBefore}
-                      toonTokensAfter={dynamicInteraction.toonTokensAfter}
-                      toonSkipReason={dynamicInteraction.toonSkipReason}
-                      format="percent"
-                      tooltip="always"
-                      variant="interaction"
-                      baselineModel={dynamicInteraction.baselineModel}
-                      actualModel={dynamicInteraction.model}
-                    />
-                  </TooltipProvider>
-                ) : (
-                  <span className="text-muted-foreground">—</span>
-                )}
-              </div>
-            </MetadataItem>
-            <MetadataItem label="Model">
-              <Badge variant="secondary" className="text-xs">
-                {interaction.provider} ({interaction.modelName})
-              </Badge>
-            </MetadataItem>
-            {dynamicInteraction.connectorId && (
-              <MetadataItem label="KB Connector">
-                <Badge variant="secondary" className="text-xs">
-                  {dynamicInteraction.connectorName ?? "Deleted connector"}
-                </Badge>
-              </MetadataItem>
-            )}
-            <MetadataItem label="Timestamp">
-              <div className="font-mono text-xs">
-                {formatDate({ date: interaction.createdAt })}
-              </div>
-            </MetadataItem>
-            {authMethod && (
-              <MetadataItem label="Auth Method">
-                <div className="font-mono text-xs">{authMethod}</div>
-              </MetadataItem>
-            )}
-            {virtualKeys.length > 0 && (
-              <MetadataItem label="Virtual API Key">
-                <div className="space-y-1.5">
-                  {virtualKeys.map((key) => (
-                    <div key={key.id} className="space-y-0.5">
-                      <div className="font-mono text-xs">{key.name}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {describeKey(key)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </MetadataItem>
-            )}
-            {dynamicInteraction.authenticatedAppName && (
-              <MetadataItem label="OAuth Client">
-                <div className="space-y-1">
-                  <div className="font-mono text-xs">
-                    {dynamicInteraction.authenticatedAppName}
-                  </div>
-                  {dynamicInteraction.authenticatedAppId && (
-                    <div className="font-mono text-xs text-muted-foreground">
-                      {dynamicInteraction.authenticatedAppId}
-                    </div>
-                  )}
-                </div>
-              </MetadataItem>
-            )}
-            {dynamicInteraction.externalAgentId && (
-              <MetadataItem label="External Agent">
-                <div className="font-mono text-xs">
-                  {dynamicInteraction.externalAgentId}
-                </div>
-              </MetadataItem>
-            )}
-            {dynamicInteraction.executionId && (
-              <MetadataItem label="Execution ID">
-                <div className="font-mono text-xs">
-                  {dynamicInteraction.executionId}
-                </div>
-              </MetadataItem>
-            )}
-            <MetadataItem label="Tools Used">
-              {toolsUsed.length > 0 ? (
-                <div className="flex flex-wrap gap-1">
-                  {toolsUsed.map((toolName) => (
-                    <Badge
-                      key={toolName}
-                      variant="secondary"
-                      className="text-xs"
-                    >
-                      {toolName}
-                    </Badge>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-muted-foreground">None</div>
-              )}
-            </MetadataItem>
-            {toolsBlocked.length > 0 && (
-              <MetadataItem label="Tools Blocked">
-                <div className="flex flex-wrap gap-1">
-                  {toolsBlocked.map((toolName) => (
-                    <Badge
-                      key={toolName}
-                      variant="destructive"
-                      className="text-xs"
-                    >
-                      {toolName}
-                    </Badge>
-                  ))}
-                </div>
-              </MetadataItem>
-            )}
-            {isDualLlmRelevant && (
-              <MetadataItem label="Dual LLM Analysis">
-                {dualLlmResult ? (
-                  <Badge className="bg-green-600">Analyzed</Badge>
-                ) : (
-                  <div className="text-muted-foreground">Not analyzed</div>
-                )}
-              </MetadataItem>
-            )}
-          </MetadataCard>
+  const facts: DetailFact[] = [
+    {
+      label: "Tokens",
+      value: (
+        <div className="space-y-0.5">
+          <div className="font-mono tabular-nums">
+            {(dynamicInteraction.inputTokens ?? 0).toLocaleString()} in /{" "}
+            {(dynamicInteraction.outputTokens ?? 0).toLocaleString()} out
+          </div>
+          {((dynamicInteraction.cacheReadTokens ?? 0) > 0 ||
+            (dynamicInteraction.cacheWriteTokens ?? 0) > 0) && (
+            <div className={cn(typeRole({ role: "meta" }), "font-mono")}>
+              {(dynamicInteraction.cacheReadTokens ?? 0).toLocaleString()} cache
+              read /{" "}
+              {(dynamicInteraction.cacheWriteTokens ?? 0).toLocaleString()}{" "}
+              cache write
+            </div>
+          )}
         </div>
+      ),
+    },
+    {
+      label: "Cost",
+      value: dynamicInteraction.cost ? (
+        <TooltipProvider>
+          <BilledCost
+            cost={dynamicInteraction.cost}
+            billingMode={dynamicInteraction.billingMode}
+            baselineCost={
+              dynamicInteraction.baselineCost || dynamicInteraction.cost
+            }
+            toonCostSavings={dynamicInteraction.toonCostSavings}
+            toonTokensBefore={dynamicInteraction.toonTokensBefore}
+            toonTokensAfter={dynamicInteraction.toonTokensAfter}
+            toonSkipReason={dynamicInteraction.toonSkipReason}
+            format="percent"
+            tooltip="always"
+            variant="interaction"
+            baselineModel={dynamicInteraction.baselineModel}
+            actualModel={dynamicInteraction.model}
+          />
+        </TooltipProvider>
+      ) : (
+        <span className="font-mono tabular-nums">-</span>
+      ),
+    },
+    { label: "Provider", value: interaction.provider },
+    ...(dynamicInteraction.connectorId
+      ? [
+          {
+            label: "KB connector",
+            value: (
+              <Badge variant="secondary" className="text-xs">
+                {dynamicInteraction.connectorName ?? "Deleted connector"}
+              </Badge>
+            ),
+          },
+        ]
+      : []),
+    {
+      label: "Timestamp",
+      value: (
+        <span className="font-mono tabular-nums">
+          {formatDate({ date: interaction.createdAt })}
+        </span>
+      ),
+    },
+    ...(authMethod
+      ? [{ label: "Auth method", value: <span>{authMethod}</span> }]
+      : []),
+    ...(virtualKeys.length > 0
+      ? [
+          {
+            label: "Virtual API key",
+            value: (
+              <div className="space-y-1.5">
+                {virtualKeys.map((key) => (
+                  <div key={key.id} className="space-y-0.5">
+                    <div className="font-mono">{key.name}</div>
+                    <div className={typeRole({ role: "meta" })}>
+                      {describeKey(key)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ),
+          },
+        ]
+      : []),
+    ...(dynamicInteraction.authenticatedAppName
+      ? [
+          {
+            label: "OAuth client",
+            value: (
+              <div className="space-y-0.5">
+                <div className="font-mono">
+                  {dynamicInteraction.authenticatedAppName}
+                </div>
+                {dynamicInteraction.authenticatedAppId && (
+                  <div className={cn(typeRole({ role: "meta" }), "font-mono")}>
+                    {dynamicInteraction.authenticatedAppId}
+                  </div>
+                )}
+              </div>
+            ),
+          },
+        ]
+      : []),
+    ...(dynamicInteraction.externalAgentId
+      ? [
+          {
+            label: "External agent",
+            value: (
+              <span className="font-mono">
+                {dynamicInteraction.externalAgentId}
+              </span>
+            ),
+          },
+        ]
+      : []),
+    ...(dynamicInteraction.executionId
+      ? [
+          {
+            label: "Execution ID",
+            value: (
+              <span className="font-mono">
+                {dynamicInteraction.executionId}
+              </span>
+            ),
+          },
+        ]
+      : []),
+    {
+      label: "Tools used",
+      value:
+        toolsUsed.length > 0 ? (
+          <div className="flex flex-wrap gap-1">
+            {toolsUsed.map((toolName) => (
+              <Badge key={toolName} variant="secondary" className="text-xs">
+                {toolName}
+              </Badge>
+            ))}
+          </div>
+        ) : (
+          <span className="text-muted-foreground">None</span>
+        ),
+    },
+    ...(toolsBlocked.length > 0
+      ? [
+          {
+            label: "Tools blocked",
+            value: (
+              <div className="flex flex-wrap gap-1">
+                {toolsBlocked.map((toolName) => (
+                  <Badge
+                    key={toolName}
+                    variant="destructive"
+                    className="text-xs"
+                  >
+                    {toolName}
+                  </Badge>
+                ))}
+              </div>
+            ),
+          },
+        ]
+      : []),
+    ...(isDualLlmRelevant
+      ? [
+          {
+            label: "Dual LLM analysis",
+            value: dualLlmResult ? (
+              <Badge className="bg-green-600">Analyzed</Badge>
+            ) : (
+              <span className="text-muted-foreground">Not analyzed</span>
+            ),
+          },
+        ]
+      : []),
+  ];
+
+  return (
+    <PageLayout
+      title={<span className="font-mono">{interaction.modelName}</span>}
+      documentTitle={interaction.modelName}
+      backLink={<BackLink href={backHref}>{backLabel}</BackLink>}
+      description={
+        <div className="flex flex-wrap items-center gap-2">
+          <SourceBadge source={dynamicInteraction.source} />
+          <Badge variant="secondary" className="text-xs">
+            {dynamicInteraction.source?.startsWith("knowledge:") ? (
+              <>
+                <Database className="h-3 w-3 mr-1" />
+                <span>Knowledge Base</span>
+              </>
+            ) : (
+              <>
+                <Layers className="h-3 w-3 mr-1" />
+                <span>
+                  {agent?.name ??
+                    (interaction.profileId === null
+                      ? "Deleted LLM Proxy"
+                      : "Unknown")}
+                </span>
+              </>
+            )}
+          </Badge>
+        </div>
+      }
+    >
+      <div className="space-y-8">
+        <DetailFacts facts={facts} className="border-b pb-6" />
 
         {requestMessages.length > 0 && (
           <div className="mb-8">
@@ -400,7 +433,7 @@ function LogDetail({
           </Accordion>
         </div>
       </div>
-    </div>
+    </PageLayout>
   );
 }
 
@@ -427,4 +460,20 @@ function formatAuthMethod(authMethod: InteractionAuthMethod) {
     default:
       return authMethod;
   }
+}
+
+/**
+ * The page's header while there is no interaction to name it with. The back
+ * link goes to the session list rather than to a session: which session this
+ * request belongs to is a field of the record that has not loaded.
+ */
+function InteractionShell({ children }: { children: React.ReactNode }) {
+  return (
+    <PageLayout
+      title="Request"
+      backLink={<BackLink href="/llm/logs">Back to Sessions</BackLink>}
+    >
+      {children}
+    </PageLayout>
+  );
 }

@@ -7,7 +7,6 @@ import {
 } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
-  ArrowLeft,
   Database,
   Logs,
   MoreHorizontal,
@@ -20,7 +19,6 @@ import {
   Square,
   X,
 } from "lucide-react";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Fragment, useCallback, useMemo, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
@@ -40,15 +38,16 @@ import {
   WORKSPACE_ROSTER_NOUN,
 } from "@/app/knowledge/connectors/_parts/roster-noun";
 import { formatRunDuration } from "@/app/knowledge/connectors/_parts/run-duration";
-import { ConnectorStatusDot } from "@/app/knowledge/knowledge-bases/_parts/connector-enabled-dot";
+import { ConnectorStatusPill } from "@/app/knowledge/knowledge-bases/_parts/connector-enabled-dot";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { EditConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/edit-connector-dialog";
+import { BackLink } from "@/components/agent-pages/agent-page-shell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { type DetailFact, DetailFacts } from "@/components/detail-facts";
 import { FilterBar, filterControlClass } from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
 import { LoadingState, LoadingWrapper } from "@/components/loading";
-import { MetadataItem } from "@/components/metadata-card";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RelativeTime } from "@/components/relative-time";
@@ -479,38 +478,111 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
     );
   }
 
+  const facts: DetailFact[] = [
+    {
+      label: "Last documents sync",
+      value: connector.lastSyncAt
+        ? formatDate({ date: connector.lastSyncAt })
+        : "Never",
+    },
+    {
+      label: "Documents sync schedule",
+      value: formatCronSchedule(connector.schedule),
+    },
+    {
+      label: "Documents",
+      value: (
+        <span className="font-mono tabular-nums">
+          {connector.totalDocsIngested.toLocaleString()}
+        </span>
+      ),
+    },
+    {
+      label: "Knowledge bases",
+      value: <KnowledgeBasesValue connectorId={connectorId} />,
+    },
+    ...(isAutoSync
+      ? [
+          {
+            label: "Last permissions sync",
+            value: permissionSyncRunning
+              ? "Syncing now…"
+              : connector.lastPermissionSyncAt
+                ? formatDate({ date: connector.lastPermissionSyncAt })
+                : "Never",
+          },
+          {
+            label: "Permissions sync frequency",
+            value: formatSyncFrequency(connector.permissionSyncIntervalSeconds),
+          },
+          // Exception-only: full coverage is the unremarkable steady state
+          // (the system self-heals transient gaps), so the fact exists only
+          // while documents are actually unreachable.
+          ...(coverage && coverage.failClosedDocuments > 0
+            ? [
+                {
+                  label: "Permissions coverage",
+                  value: (
+                    <span
+                      className="text-amber-600"
+                      title={`Their source permissions grant only accounts ${appName} hasn't matched to a user, so no one can read them yet. Map those accounts in the Users tab — they also resolve automatically once the source exposes their emails. Re-running a permission sync alone won't change this.`}
+                    >
+                      <span>
+                        {coverage.failClosedDocuments.toLocaleString()} document
+                      </span>
+                      {coverage.failClosedDocuments === 1 ? null : (
+                        <span>s</span>
+                      )}
+                      <span> with no resolvable readers</span>
+                    </span>
+                  ),
+                },
+              ]
+            : []),
+        ]
+      : []),
+  ];
+
   return (
     <PageLayout
+      // The source's own mark, then the name. The status used to be a bare
+      // coloured dot in this slot and the type a badge nested inside the <h1>
+      // — which put a <p> inside a heading, folded the whole description into
+      // the heading's accessible name, and hid the connector's type entirely
+      // whenever it happened to have a description.
       title={
-        <div className="flex items-center gap-2.5">
-          <ConnectorStatusDot
-            enabled={connector.enabled}
-            lastSyncStatus={connector.lastSyncStatus}
-          />
-          <div>
-            <span>{connector.name}</span>
-            {connector.description ? (
-              <p className="text-sm font-normal text-muted-foreground mt-1 line-clamp-2 max-w-2xl">
-                {connector.description.length > 300
-                  ? `${connector.description.slice(0, 300)}…`
-                  : connector.description}
-              </p>
-            ) : (
-              <div>
-                <Badge variant="secondary" className="gap-1.5 mt-1">
-                  <ConnectorTypeIcon
-                    type={connector.connectorType}
-                    className="h-3.5 w-3.5"
-                  />
-                  {CONNECTOR_TYPE_LABELS[connector.connectorType] ??
-                    connector.connectorType}
-                </Badge>
-              </div>
-            )}
-          </div>
-        </div>
+        <span className="flex min-w-0 items-center gap-2.5">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-card">
+            <ConnectorTypeIcon
+              type={connector.connectorType}
+              className="h-4 w-4"
+            />
+          </span>
+          <span className="min-w-0 truncate">{connector.name}</span>
+        </span>
       }
-      description=""
+      documentTitle={connector.name}
+      status={
+        <ConnectorStatusPill
+          enabled={connector.enabled}
+          lastSyncStatus={connector.lastSyncStatus}
+        />
+      }
+      backLink={<BackLink href={backHref}>{backLabel}</BackLink>}
+      description={
+        connector.description ? (
+          <span className="line-clamp-2 max-w-2xl">
+            {connector.description.length > 300
+              ? `${connector.description.slice(0, 300)}…`
+              : connector.description}
+          </span>
+        ) : (
+          <span>
+            {CONNECTOR_TYPE_LABELS[connector.connectorType] ??
+              connector.connectorType}
+          </span>
+        )
+      }
       tabs={tabs}
       actionButton={
         <div className="flex flex-wrap items-center gap-2">
@@ -631,76 +703,12 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
       }
     >
       <div className="space-y-6">
-        <Button variant="ghost" size="sm" asChild>
-          <Link href={backHref}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            {backLabel}
-          </Link>
-        </Button>
-
         <GoogleDriveConnectionCard connector={connector} />
 
-        <div className="rounded-lg border p-4">
-          {/* Two symmetric rows on wide screens: the documents family (Last
-              Documents Sync / Documents Sync Schedule) sits directly above
-              its permissions counterpart (Last Permissions Sync / Permissions
-              Sync Frequency). */}
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-sm">
-            <MetadataItem label="Last Documents Sync">
-              <div>
-                {connector.lastSyncAt
-                  ? formatDate({ date: connector.lastSyncAt })
-                  : "Never"}
-              </div>
-            </MetadataItem>
-            <MetadataItem label="Documents Sync Schedule">
-              <div>{formatCronSchedule(connector.schedule)}</div>
-            </MetadataItem>
-            <MetadataItem label="Documents">
-              <div>{connector.totalDocsIngested.toLocaleString()}</div>
-            </MetadataItem>
-            <KnowledgeBasesMetadataItem connectorId={connectorId} />
-            {isAutoSync && (
-              <>
-                <MetadataItem label="Last Permissions Sync">
-                  <div>
-                    {permissionSyncRunning
-                      ? "Syncing now…"
-                      : connector.lastPermissionSyncAt
-                        ? formatDate({ date: connector.lastPermissionSyncAt })
-                        : "Never"}
-                  </div>
-                </MetadataItem>
-                <MetadataItem label="Permissions Sync Frequency">
-                  <div>
-                    {formatSyncFrequency(
-                      connector.permissionSyncIntervalSeconds,
-                    )}
-                  </div>
-                </MetadataItem>
-                {/* Exception-only: full coverage is the unremarkable steady
-                    state (the system self-heals transient gaps), so the item
-                    exists only while documents are actually unreachable. */}
-                {coverage && coverage.failClosedDocuments > 0 && (
-                  <MetadataItem label="Permissions Coverage">
-                    <div
-                      className="text-amber-600"
-                      title={`Their source permissions grant only accounts ${appName} hasn't matched to a user, so no one can read them yet. Map those accounts in the Users tab — they also resolve automatically once the source exposes their emails. Re-running a permission sync alone won't change this.`}
-                    >
-                      <span>
-                        {coverage.failClosedDocuments.toLocaleString()} document
-                      </span>
-                      {coverage.failClosedDocuments === 1 ? null : (
-                        <span>s</span>
-                      )}
-                      <span> with no resolvable readers</span>
-                    </div>
-                  </MetadataItem>
-                )}
-              </>
-            )}
-          </div>
-        </div>
+        {/* The connector's own facts, reading as a continuation of the header
+            band rather than as a bordered box of "metadata" below it. The
+            documents family comes first, then its permissions counterpart. */}
+        <DetailFacts facts={facts} className="border-b pb-6" />
 
         <ConnectorEmbeddingModelNotice
           connectorType={connector.connectorType}
@@ -1163,7 +1171,7 @@ function formatSyncFrequency(intervalSeconds: number): string {
   return `Every ${hours} hour${hours === 1 ? "" : "s"}`;
 }
 
-function KnowledgeBasesMetadataItem({ connectorId }: { connectorId: string }) {
+function KnowledgeBasesValue({ connectorId }: { connectorId: string }) {
   const { data: assignedKbs, isPending } =
     useConnectorKnowledgeBases(connectorId);
   const { data: allKbs } = useKnowledgeBases();
@@ -1197,7 +1205,7 @@ function KnowledgeBasesMetadataItem({ connectorId }: { connectorId: string }) {
   const kbItems = assignedKbs?.data ?? [];
 
   return (
-    <MetadataItem label="Knowledge Bases">
+    <>
       {isPending ? (
         <LoadingState label="Loading knowledge bases…" variant="inline" />
       ) : kbItems.length === 0 ? (
@@ -1285,6 +1293,6 @@ function KnowledgeBasesMetadataItem({ connectorId }: { connectorId: string }) {
           </DialogForm>
         </DialogContent>
       </Dialog>
-    </MetadataItem>
+    </>
   );
 }

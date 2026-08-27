@@ -492,10 +492,7 @@ function SessionsTable() {
 
   return (
     <div className="space-y-4">
-      <FilterBar
-        className="mb-4"
-        onClearFilters={hasFilters ? clearFilters : undefined}
-      >
+      <FilterBar leading onClearFilters={hasFilters ? clearFilters : undefined}>
         {/* Anchor the "not a session ID" hint as a floating overlay under the
             input so toggling it never reflows the filter bar or the table. */}
         <div className={filterSearchClass}>

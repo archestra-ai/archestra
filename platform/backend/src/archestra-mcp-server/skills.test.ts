@@ -384,6 +384,18 @@ describe("skill tool execution", () => {
           encoding: "utf8",
           mode: "100644",
         },
+        {
+          path: "skills/release/hooks/hooks.json",
+          content: '{"hooks":{}}\n',
+          encoding: "utf8",
+          mode: "100644",
+        },
+        {
+          path: "skills/release/.mcp.json",
+          content: "{}\n",
+          encoding: "utf8",
+          mode: "100644",
+        },
       ],
     };
     const plugin = await PluginModel.create({
@@ -414,6 +426,8 @@ describe("skill tool execution", () => {
     );
     expect(textOf(activation)).toContain("Ship carefully.");
     expect(textOf(activation)).toContain("references/checklist.md");
+    expect(textOf(activation)).toContain(".mcp.json");
+    expect(textOf(activation)).not.toContain("hooks/hooks.json");
     await drainBackgroundWork();
     let usage = await PluginSkillUsageEventModel.getSummaries([
       { pluginId: plugin.id, skillPath: "skills/release" },
@@ -426,6 +440,20 @@ describe("skill tool execution", () => {
       context,
     );
     expect(textOf(file)).toContain("# Checklist");
+    const mcpConfig = await executeArchestraTool(
+      TOOL_LOAD_SKILL_FULL_NAME,
+      { name: loadName, path: ".mcp.json" },
+      context,
+    );
+    expect(mcpConfig.isError).toBe(false);
+    expect(textOf(mcpConfig)).toContain("{}\n");
+    const hookArtifact = await executeArchestraTool(
+      TOOL_LOAD_SKILL_FULL_NAME,
+      { name: loadName, path: "hooks/hooks.json" },
+      context,
+    );
+    expect(hookArtifact.isError).toBe(true);
+    expect(textOf(hookArtifact)).toContain("has no file");
     await drainBackgroundWork();
     usage = await PluginSkillUsageEventModel.getSummaries([
       { pluginId: plugin.id, skillPath: "skills/release" },

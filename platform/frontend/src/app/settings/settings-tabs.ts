@@ -11,6 +11,7 @@ import {
   Library,
   Lock,
   MessageSquare,
+  MessagesSquare,
   Palette,
   Plug,
   PlugZap,
@@ -54,6 +55,15 @@ export function useSettingsTabs() {
       : []),
     ...(permissionMap?.["/settings/agents"]
       ? [{ label: "Agents", href: "/settings/agents", Icon: MessageSquare }]
+      : []),
+    ...(permissionMap?.["/settings/messaging-channels"]
+      ? [
+          {
+            label: "Messaging Channels",
+            href: "/settings/messaging-channels",
+            Icon: MessagesSquare,
+          },
+        ]
       : []),
     ...(permissionMap?.["/settings/llm"]
       ? [{ label: "LLM", href: "/settings/llm", Icon: Brain }]

@@ -3,19 +3,19 @@ title: Incoming Email
 category: Agents
 order: 9
 description: Invoke agents by sending emails to auto-generated addresses
-lastUpdated: 2026-07-03
+lastUpdated: 2026-08-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 Incoming Email lets users invoke agents by sending mail to agent-specific aliases. Archestra watches a shared mailbox, extracts the target agent from the alias, and turns the email body into the agent's first message.
 
-Use **Agent Triggers** → **Email** to:
+Use **Settings** → **Messaging Channels** → **Email** to:
 
 - run the setup wizard for the webhook subscription
 - reconfigure or renew the Microsoft Graph subscription
-- enable or edit email invocation settings for individual agents
-- review which agents currently have an active email alias
+
+Open an individual agent's **Email Invocation** section to enable or edit its email settings and copy its active alias.
 
 When an email arrives:
 
@@ -69,9 +69,9 @@ ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_MAILBOX_ADDRESS=agents@yourcompany.com
 Archestra needs a public webhook URL so Microsoft Graph can notify it about new mail.
 
 - **Automatic**: set `ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL` and Archestra creates the subscription on startup
-- **Manual**: open **Agent Triggers** → **Email** and run the setup wizard
+- **Manual**: open **Settings** → **Messaging Channels** → **Email** and run the setup wizard
 
-Microsoft Graph subscriptions expire after 3 days. Archestra automatically renews them before expiration, and the Email trigger page also lets you renew or replace the subscription manually.
+Microsoft Graph subscriptions expire after 3 days. Archestra automatically renews them before expiration, and the Email settings page also lets you renew or replace the subscription manually.
 
 ## Email Address Format
 
@@ -87,7 +87,7 @@ For example, if your mailbox is `agents@company.com` and your agent ID is `abc12
 agents+agent-abc123456789...@company.com
 ```
 
-will invoke that specific agent. You can copy the exact alias for any enabled agent from **Agent Triggers** → **Email**.
+will invoke that specific agent. You can copy the exact alias from the enabled agent's **Email Invocation** section.
 
 ## Security Modes
 

@@ -72,6 +72,7 @@ export function useTriggerStatuses() {
   )
     .filter(({ id, available }) => available && !channelCatalog.isHidden(id))
     .map(({ id, active }) => ({
+      id,
       active,
       href: `/messaging-channels/${id}`,
     }));
@@ -79,6 +80,11 @@ export function useTriggerStatuses() {
   // index route stays put and renders the empty state instead.
   const firstActiveHref =
     triggers.find((t) => t.active)?.href ?? triggers[0]?.href ?? null;
+  const providerTriggers = triggers.filter(({ id }) => id !== "a2a");
+  const firstProviderHref =
+    providerTriggers.find((trigger) => trigger.active)?.href ??
+    providerTriggers[0]?.href ??
+    null;
 
   return {
     msTeams: msTeamsActive,
@@ -88,6 +94,7 @@ export function useTriggerStatuses() {
     email: emailActive,
     a2a: a2aActive,
     firstActiveHref,
+    firstProviderHref,
     isLoading:
       chatOpsLoading ||
       featuresLoading ||

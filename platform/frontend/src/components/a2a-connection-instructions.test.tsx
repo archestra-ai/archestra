@@ -30,6 +30,17 @@ vi.mock("@/lib/user-token.query", () => ({
 vi.mock("@/components/mcp-oauth-management", () => ({
   McpOauthManagement: () => null,
 }));
+vi.mock("@/components/agent-chat-apps", () => ({
+  AgentChatApps: () => (
+    <div className="space-y-2">
+      <h4>Chat Apps</h4>
+      <p className="text-xs text-muted-foreground">Assigned chat channels</p>
+    </div>
+  ),
+}));
+vi.mock("@/app/messaging-channels/email/agent-email-settings-dialog", () => ({
+  AgentEmailSettingsDialog: () => null,
+}));
 
 type Agent = archestraApiTypes.GetAllAgentsResponses["200"][number];
 
@@ -65,7 +76,7 @@ function renderChannels(
 /** The prose line a channel shows between its label and its copyable value. */
 function proseFor(section: HTMLElement, label: string) {
   const heading = within(section).getByText(label);
-  const channel = heading.closest("div")?.parentElement as HTMLElement;
+  const channel = heading.closest(".space-y-2") as HTMLElement;
   return channel.querySelector("p") as HTMLElement;
 }
 
@@ -122,5 +133,24 @@ describe("A2AConnectionInstructions — Other ways to reach this agent", () => {
     expect(
       within(section).getByText("support@agents.example.test"),
     ).toBeInTheDocument();
+  });
+
+  it.each([
+    [false, "Enable email"],
+    [true, "Edit settings"],
+  ])("offers agent-level email settings when invocation enabled is %s", (incomingEmailEnabled, buttonLabel) => {
+    const section = renderChannels({ incomingEmailEnabled } as Partial<Agent>);
+
+    expect(
+      within(section).getByRole("button", { name: buttonLabel }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not offer agent-level email settings until the provider is configured", () => {
+    const section = renderChannels({}, { globalEmail: false });
+
+    expect(
+      within(section).queryByRole("button", { name: "Enable email" }),
+    ).not.toBeInTheDocument();
   });
 });

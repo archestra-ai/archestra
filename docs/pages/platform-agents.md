@@ -102,7 +102,9 @@ Agents can be triggered through:
 - [MS Teams](/docs/platform-ms-teams)
 - [Telegram](/docs/platform-telegram)
 
-Trigger setup is managed from **Agent Triggers**. Slack, MS Teams, Telegram, and Incoming Email each have their own setup flow, and Incoming Email also owns the per-agent email invocation settings.
+Provider setup is managed from **Settings → Messaging Channels**. Slack, MS Teams, Telegram, and Incoming Email each have their own setup flow.
+
+Channel assignments are managed from the agent page. Under **Chat Apps**, use **Manage channels** to choose which chats use that agent by default. The same section holds per-channel instructions and reply behavior. Email invocation is configured beside it under **Email Invocation**.
 
 Go to **Settings → Agents → Available messaging channels** to remove any channel your organization does not allow. A channel you remove disappears from the pickers and stops listening — a connected Slack bot stops answering, and email stops reaching agents.
 

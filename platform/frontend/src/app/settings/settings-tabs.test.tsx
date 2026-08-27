@@ -111,6 +111,20 @@ describe("useSettingsTabs", () => {
     });
   });
 
+  it("shows Messaging Channels when the user can read agent triggers", async () => {
+    mockPermissions = {
+      agentTrigger: ["read"],
+    };
+
+    const { result } = renderHook(() => useSettingsTabs(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(getTabLabels(result.current)).toEqual(["Messaging Channels"]);
+    });
+  });
+
   it("shows Service Accounts tab when user has serviceAccount:read permission", async () => {
     mockPermissions = {
       serviceAccount: ["read"],

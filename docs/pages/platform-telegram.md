@@ -3,7 +3,7 @@ title: Telegram
 category: Agents
 order: 7
 description: Connect Archestra agents to Telegram chats and groups
-lastUpdated: 2026-08-26
+lastUpdated: 2026-08-27
 ---
 
 Archestra connects to Telegram through a bot. Messages sent to the bot — in direct messages or group chats — are routed to the configured agent, and responses appear back in the chat.
@@ -15,7 +15,7 @@ Telegram uses long polling: Archestra makes outbound requests to the Telegram AP
 ## Setup
 
 1. In Telegram, message [@BotFather](https://t.me/BotFather), send `/newbot`, and pick a display name and username. BotFather replies with a bot token.
-2. Paste the token into the Telegram setup on the Messaging Channels page (or set it via environment variables, see [Deployment](/docs/platform-deployment#telegram)).
+2. Open **Settings** → **Messaging Channels** → **Telegram** and paste the token into the setup dialog (or set it via environment variables, see [Deployment](/docs/platform-deployment#telegram)).
 
 ![The Telegram setup dialog asking for the bot token](/docs/automated_screenshots/platform-telegram_setup-dialog.webp)
 
@@ -51,13 +51,11 @@ To disable Group Privacy: in BotFather, `/mybots` → your bot → Bot Settings 
 
 In supergroups with Topics enabled, each forum topic is a separate conversation for the agent.
 
-Each chat shows up on the channel page, where you assign the agent that answers there. Groups appear the moment the bot is added; DMs appear when the account is linked.
-
-![DM and group chats with their default agents on the Telegram channel page](/docs/automated_screenshots/platform-telegram_channels.webp)
+Each chat becomes available for assignment after Archestra discovers it. Groups appear when the bot is added; DMs appear when the account is linked. To assign a chat, open the agent that should answer it and use **Chat Apps** → **Manage channels**.
 
 ### Channel Instructions
 
-Each chat can carry its own instructions for the agent — free text you write on the **Messaging Channels** → **Telegram** page, next to the agent assignment. Archestra sends them to the agent with every message in that chat, alongside the agent's own instructions. Where the two disagree, the chat's instructions win, so one agent can behave differently in each chat it answers in.
+Each chat can carry its own instructions for the agent — free text you write from **Chat Apps** on the assigned agent's page. Archestra sends them to the agent with every message in that chat, alongside the agent's own instructions. Where the two disagree, the chat's instructions win, so one agent can behave differently in each chat it answers in.
 
 Chat instructions add to what the agent does. They never take an ability away. Anything they don't mention, the agent handles as usual.
 

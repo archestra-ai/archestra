@@ -3,7 +3,6 @@
 import { MESSAGING_CHANNEL_LABELS } from "@archestra/shared";
 import { Globe, Info, Waypoints } from "lucide-react";
 import { useState } from "react";
-import Divider from "@/components/divider";
 import { MsTeamsSetupDialog } from "@/components/ms-teams-setup-dialog";
 import { NgrokSetupDialog } from "@/components/ngrok-setup-dialog";
 import { useChatOpsStatus } from "@/lib/chatops/chatops.query";
@@ -11,42 +10,14 @@ import config from "@/lib/config/config";
 import { useConfig, usePublicBaseUrl } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { ChannelsSection } from "../_components/channels-section";
 import { CollapsibleSetupSection } from "../_components/collapsible-setup-section";
 import { CredentialField } from "../_components/credential-field";
 import { LlmKeySetupStep } from "../_components/llm-key-setup-step";
 import { ModeTile } from "../_components/mode-tile";
 import { NgrokStatus } from "../_components/ngrok-status";
 import { SetupStep } from "../_components/setup-step";
-import type { ProviderConfig } from "../_components/types";
 import { useReachabilityMode } from "../_components/use-reachability-mode";
 import { useTriggerStatuses } from "../_components/use-trigger-statuses";
-
-const msTeamsProviderConfig: ProviderConfig = {
-  provider: "ms-teams",
-  providerLabel: MESSAGING_CHANNEL_LABELS["ms-teams"],
-  providerIcon: "/icons/ms-teams.png",
-  webhookPath: "/api/webhooks/chatops/ms-teams",
-  supportsAnswerAll: true,
-  answerAllNeedsConsent: true,
-  docsUrl: getFrontendDocsUrl("platform-ms-teams"),
-  slashCommand: "/select-agent",
-  buildDeepLink: (binding) => {
-    const channelName = encodeURIComponent(
-      binding.channelName ?? binding.channelId,
-    );
-    const base = `https://teams.microsoft.com/l/channel/${encodeURIComponent(binding.channelId)}/${channelName}`;
-    if (binding.workspaceId) {
-      return `${base}?groupId=${encodeURIComponent(binding.workspaceId)}`;
-    }
-    return base;
-  },
-  getDmDeepLink: (providerStatus) => {
-    const appId = providerStatus.dmInfo?.appId;
-    if (!appId) return null;
-    return `https://teams.microsoft.com/l/chat/0/0?users=28:${appId}`;
-  },
-};
 
 export default function MsTeamsPage() {
   const configuredAppName = useAppName();
@@ -164,18 +135,6 @@ export default function MsTeamsPage() {
           </div>
         </SetupStep>
       </CollapsibleSetupSection>
-
-      {allStepsCompleted && (
-        <>
-          <Divider />
-          <ChannelsSection
-            providerConfig={{
-              ...msTeamsProviderConfig,
-              providerLabel: channelLabel,
-            }}
-          />
-        </>
-      )}
 
       <MsTeamsSetupDialog
         open={msTeamsSetupOpen}

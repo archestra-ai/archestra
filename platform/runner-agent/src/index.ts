@@ -32,7 +32,7 @@ async function main(): Promise<number> {
     throw error;
   }
 
-  write(`Archestra background run for ${config.agentName} (${config.agentId})`);
+  write(`Background execution run for ${config.agentName} (${config.agentId})`);
   write(
     `Model ${config.model} via the Archestra proxy. Tools from the MCP gateway.`,
   );

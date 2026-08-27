@@ -35,4 +35,21 @@ describe("buildChatOpsTaskNotification", () => {
       }),
     ).toBe("🦀 Task `task-1` failed. The deployment could not start.");
   });
+
+  test("removes runtime boilerplate from a completed task", () => {
+    expect(
+      buildChatOpsTaskNotification({
+        taskId: "task-1",
+        state: "TASK_STATE_COMPLETED",
+        statusReason: null,
+        output: [
+          "Background execution run for Coding Agent (agent-1)",
+          "Model example-model via the proxy.",
+          "4 tools available.",
+          "Finished the requested work.",
+          "[waiting for direction]",
+        ].join("\n"),
+      }),
+    ).toBe("🦀 Task `task-1` finished.\n\nFinished the requested work.");
+  });
 });

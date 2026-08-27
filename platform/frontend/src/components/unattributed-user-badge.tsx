@@ -44,10 +44,12 @@ export function UnattributedUserBadge({
         <TooltipTrigger asChild>
           <Badge
             variant="outline"
-            className="text-xs text-muted-foreground border-dashed"
+            className="min-w-0 max-w-full text-xs text-muted-foreground border-dashed"
           >
-            <UserX className="h-3 w-3 mr-1" />
-            <span>{label}</span>
+            <UserX className="h-3 w-3 mr-1 shrink-0" />
+            {/* The badge is `w-fit shrink-0`, so without a cap it spills out of
+                a narrow table cell into the next column. */}
+            <span className="truncate">{label}</span>
           </Badge>
         </TooltipTrigger>
         <TooltipContent className="max-w-xs">

@@ -123,6 +123,103 @@ describe("LogDetail knowledge base connector", () => {
   });
 });
 
+describe("LogDetail virtual key", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  function renderWith(overrides: Record<string, unknown>) {
+    vi.mocked(useInteraction).mockReturnValue({
+      data: { ...KB_EMBEDDING, ...overrides },
+      isPending: false,
+      isLoadingError: false,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useInteraction>);
+
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <ChatPage id="test-interaction-id" />
+      </QueryClientProvider>,
+    );
+  }
+
+  it("names the key behind a virtual-key request and who it stands for", async () => {
+    renderWith({
+      authMethod: "virtual_key",
+      virtualKey: {
+        id: "6b2f1a08-5c9d-4e31-a7b4-2d8e0f5c1a93",
+        name: "demo-admin-laptop",
+        scope: "personal",
+        keyType: "standard",
+        tokenStart: "archestra_ab",
+        ownerUserId: "u-1",
+        ownerUserName: "Demo Admin",
+      },
+      passthroughVirtualKey: null,
+    });
+
+    expect(await screen.findByText("Virtual API Key")).toBeVisible();
+    expect(screen.getByText("demo-admin-laptop")).toBeVisible();
+    expect(screen.getByText("Virtual key · Demo Admin")).toBeVisible();
+  });
+
+  it("says a shared key stands for nobody rather than leaving it blank", async () => {
+    renderWith({
+      authMethod: "virtual_key",
+      virtualKey: {
+        id: "0f3c7e15-9a2b-4d68-8c31-5e7a9b0d2f46",
+        name: "ci-runners",
+        scope: "org",
+        keyType: "standard",
+        tokenStart: "archestra_cd",
+        ownerUserId: null,
+        ownerUserName: null,
+      },
+      passthroughVirtualKey: null,
+    });
+
+    expect(await screen.findByText("ci-runners")).toBeVisible();
+    expect(screen.getByText("Virtual key · shared, no owner")).toBeVisible();
+  });
+
+  it("lists the passthrough key first when a request carries both", async () => {
+    renderWith({
+      authMethod: "passthrough_virtual_key",
+      virtualKey: {
+        id: "0f3c7e15-9a2b-4d68-8c31-5e7a9b0d2f46",
+        name: "team-provider-credential",
+        scope: "org",
+        keyType: "standard",
+        tokenStart: "archestra_cd",
+        ownerUserId: null,
+        ownerUserName: null,
+      },
+      passthroughVirtualKey: {
+        id: "6b2f1a08-5c9d-4e31-a7b4-2d8e0f5c1a93",
+        name: "demo-admin-identity",
+        scope: "personal",
+        keyType: "passthrough",
+        tokenStart: "archestra_ef",
+        ownerUserId: "u-1",
+        ownerUserName: "Demo Admin",
+      },
+    });
+
+    const row = (await screen.findByText("Virtual API Key")).parentElement;
+    expect(row?.textContent).toMatch(
+      /demo-admin-identity[\s\S]*team-provider-credential/,
+    );
+    expect(screen.getByText("Passthrough key · Demo Admin")).toBeVisible();
+  });
+
+  it("omits the row when no virtual key was used", async () => {
+    renderWith({ authMethod: "provider_key" });
+
+    expect(await screen.findByText("Auth Method")).toBeVisible();
+    expect(screen.queryByText("Virtual API Key")).not.toBeInTheDocument();
+  });
+});
+
 function createQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: 60_000 } },

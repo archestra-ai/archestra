@@ -34,6 +34,7 @@ import {
   ClientFilterSelect,
   UserFilterSelect,
 } from "@/components/user-client-filter-selects";
+import { VirtualKeyBadge } from "@/components/virtual-key-badge";
 import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
@@ -325,9 +326,12 @@ function SessionsTable() {
       },
       {
         id: "agent",
+        // Wider than the other identity columns: this cell stacks the agent,
+        // the acting user (or why there is none), and the virtual key's name,
+        // and the first two truncate to noise below about this width.
         header: "Agent",
-        size: 190,
-        minSize: 155,
+        size: 215,
+        minSize: 175,
         cell: ({ row }) => {
           const session = row.original;
           const agent = agents?.find((a) => a.id === session.profileId);
@@ -349,7 +353,7 @@ function SessionsTable() {
                   <Layers className="size-3.5" />
                 )}
               </span>
-              <div className="min-w-0">
+              <div className="min-w-0 space-y-0.5">
                 <div className="truncate text-sm font-medium">{agentName}</div>
                 {session.userNames.length > 0 ? (
                   <div className="truncate text-xs text-muted-foreground">
@@ -358,6 +362,7 @@ function SessionsTable() {
                 ) : (
                   <UnattributedUserBadge reason={session.unattributedReason} />
                 )}
+                <VirtualKeyBadge virtualKeys={session.virtualKeys} />
               </div>
             </div>
           );

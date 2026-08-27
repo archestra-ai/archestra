@@ -67,6 +67,7 @@ export function makeSessionSummary(
     userNames: [],
     userIds: [],
     unattributedReason: null,
+    virtualKeys: [],
     lastUserMessagePreview: null,
     lastInteractionType: null,
     conversationTitle: null,

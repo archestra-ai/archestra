@@ -3316,35 +3316,19 @@ export function AgentForm({
                         </TabsList>
                       </Tabs>
                       {accessAllSubagents ? (
-                        <div className="space-y-2">
-                          <ul className="space-y-1.5 pt-1 text-xs text-muted-foreground">
-                            <li className="flex gap-2">
-                              <CheckIcon className="mt-px size-3.5 shrink-0" />
-                              Can delegate to any agent the calling user can
-                              access, in this{" "}
-                              {agentTypeDisplayName[agentType] || "agent"}'s
-                              environment — new agents included automatically
-                            </li>
-                            <li className="flex gap-2">
-                              <CheckIcon className="mt-px size-3.5 shrink-0" />
-                              Disable specific agents below to keep them off the
-                              delegation surface
-                            </li>
-                          </ul>
-                          <div className="space-y-1.5">
-                            <p className="text-sm text-muted-foreground">
-                              All subagents except ({disabledSubagentCount})
-                            </p>
-                            <SubagentsEditor
-                              availableAgents={allInternalAgents}
-                              selectedAgentIds={disabledSubagentIds}
-                              onSelectionChange={setDisabledSubagentIds}
-                              currentAgentId={agent?.id}
-                              placeholder="Search agents to disable..."
-                              showCreateAction={false}
-                              tone="exclude"
-                            />
-                          </div>
+                        <div className="space-y-1.5">
+                          <p className="text-sm text-muted-foreground">
+                            All subagents except ({disabledSubagentCount})
+                          </p>
+                          <SubagentsEditor
+                            availableAgents={allInternalAgents}
+                            selectedAgentIds={disabledSubagentIds}
+                            onSelectionChange={setDisabledSubagentIds}
+                            currentAgentId={agent?.id}
+                            placeholder="Search agents to disable..."
+                            showCreateAction={false}
+                            tone="exclude"
+                          />
                         </div>
                       ) : (
                         <div className="space-y-1.5">

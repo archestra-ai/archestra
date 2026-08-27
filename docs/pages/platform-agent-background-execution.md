@@ -31,6 +31,8 @@ To configure an Agent:
 
 The Agent's [environment](/docs/platform-environments) also applies to its Background execution deployment, including network egress policy. Use a purpose-built image for the work the Agent performs. For example, a coding Agent's image can include Git, a language toolchain, and repository tooling.
 
+The deployment uses the same Agent system prompt and tool access as foreground execution. Keep the Agent's instructions focused on the specialist role you want it to perform in either mode.
+
 ### Credentials
 
 Credential declarations describe the values the deployment expects. Each declaration can be either:

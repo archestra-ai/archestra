@@ -39,6 +39,17 @@ describe("readConfig", () => {
     ).toBeNull();
   });
 
+  it("carries the Agent system prompt into Background execution", () => {
+    expect(
+      readConfig({
+        ...COMPLETE,
+        ARCHESTRA_AGENT_BACKGROUND_EXECUTION_SYSTEM_PROMPT:
+          "Complete coding tasks with the available tools.",
+      }).systemPrompt,
+    ).toBe("Complete coding tasks with the available tools.");
+    expect(readConfig(COMPLETE).systemPrompt).toBeNull();
+  });
+
   it("falls back on a non-numeric step cap instead of disabling the limit", () => {
     expect(
       readConfig({

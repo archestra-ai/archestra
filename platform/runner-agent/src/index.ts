@@ -88,6 +88,7 @@ async function main(): Promise<number> {
 
       const result = streamText({
         model: anthropic(config.model),
+        system: config.systemPrompt ?? undefined,
         messages,
         tools,
         stopWhen: stepCountIs(config.maxSteps),

@@ -154,6 +154,12 @@ export async function buildRunnerLaunchSpec(params: {
     ),
     ARCHESTRA_AGENT_BACKGROUND_EXECUTION_AGENT_ID: params.deployment.agentId,
     ARCHESTRA_AGENT_BACKGROUND_EXECUTION_AGENT_NAME: agent?.name ?? "agent",
+    ...(agent?.systemPrompt
+      ? {
+          ARCHESTRA_AGENT_BACKGROUND_EXECUTION_SYSTEM_PROMPT:
+            agent.systemPrompt,
+        }
+      : {}),
     ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID: params.taskId,
     ARCHESTRA_AGENT_BACKGROUND_EXECUTION_STEER_FIFO: RUNNER_STEER_FIFO,
     // The finish contract: a session that has done its work parks this long

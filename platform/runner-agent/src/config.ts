@@ -15,6 +15,8 @@ export type BackgroundExecutionAgentConfig = {
   gatewayUrl: string;
   gatewayToken: string;
   model: string;
+  /** Agent instructions configured in the platform. */
+  systemPrompt: string | null;
   /** Initial instruction, when the session was started with one. */
   task: string | null;
   /** FIFO the control plane writes steer messages into. */
@@ -47,6 +49,8 @@ export function readConfig(
     gatewayToken: requireValue(env, "ARCHESTRA_MCP_GATEWAY_TOKEN"),
     model:
       readBackgroundExecutionValue(env, "MODEL")?.trim() || "claude-opus-5",
+    systemPrompt:
+      readBackgroundExecutionValue(env, "SYSTEM_PROMPT")?.trim() || null,
     task: readBackgroundExecutionValue(env, "TASK")?.trim() || null,
     steerFifo:
       readBackgroundExecutionValue(env, "STEER_FIFO")?.trim() ||

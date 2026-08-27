@@ -44,6 +44,12 @@ const SHUTDOWN_TASK_REASON =
  */
 class A2ATaskRunService {
   private readonly controllers = new Map<string, AbortController>();
+  /**
+   * Runs whose work is a container rather than a promise here. Held apart from
+   * `controllers` so shutdown can leave them alone without losing the ability
+   * to cancel one on request — `abortLocal` still reaches them.
+   */
+  private readonly survivesRestart = new Set<string>();
   private reapTimer: NodeJS.Timeout | null = null;
   private isShuttingDown = false;
 
@@ -67,6 +73,13 @@ class A2ATaskRunService {
     /** Built per flush: one coalesced text chunk → one stream event. */
     buildDeltaEvent: (chunk: string) => A2AProtocolStreamResponse;
     artifact: { id: string; name: string };
+    /**
+     * The work outlives this process — it is a Kubernetes Job, not a promise
+     * on this event loop. Such a run must survive shutdown untouched: failing
+     * it would lie about a container that is still working, and aborting it
+     * would tear that container down mid-task on every rolling deploy.
+     */
+    survivesRestart?: boolean;
   }): {
     signal: AbortSignal;
     onTextDelta: (delta: string) => void;
@@ -77,6 +90,9 @@ class A2ATaskRunService {
     const { taskId } = params;
     const controller = new AbortController();
     this.controllers.set(taskId, controller);
+    if (params.survivesRestart) {
+      this.survivesRestart.add(taskId);
+    }
     this.startReapLoopIfNeeded();
 
     const batcher = new A2ATaskDeltaBatcher({
@@ -134,6 +150,7 @@ class A2ATaskRunService {
         clearInterval(poller);
         batcher.dispose();
         this.controllers.delete(taskId);
+        this.survivesRestart.delete(taskId);
       },
     };
   }
@@ -159,7 +176,18 @@ class A2ATaskRunService {
       this.reapTimer = null;
     }
 
-    const ids = Array.from(this.controllers.keys());
+    // A run whose work lives in a container is left exactly as it is: still
+    // WORKING, still heartbeating from the pod, ready for another replica to
+    // follow. Its Job does not know this process existed.
+    const allIds = Array.from(this.controllers.keys());
+    const ids = allIds.filter((id) => !this.survivesRestart.has(id));
+    const surviving = allIds.length - ids.length;
+    if (surviving > 0) {
+      logger.info(
+        { surviving },
+        "Left container-backed A2A task runs running through shutdown",
+      );
+    }
     if (ids.length === 0) {
       return;
     }

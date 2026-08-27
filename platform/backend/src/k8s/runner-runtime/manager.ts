@@ -236,6 +236,81 @@ class RunnerRuntimeManager {
   }
 
   /**
+   * The pod carrying a session, in any phase — including one that has already
+   * terminated. `findPodName` deliberately only returns a Running pod (attach
+   * and steer need a live one); waiting for an outcome needs to see the
+   * Succeeded and Failed phases too, and a pod that finished before the first
+   * poll would otherwise look like a pod that never scheduled.
+   */
+  async findPodPhase(
+    session: RunnerSession,
+  ): Promise<{ name: string; phase: string } | null> {
+    const clients = this.requireClients();
+    const pods = await clients.coreApi.listNamespacedPod({
+      namespace: session.namespace,
+      labelSelector: runnerPodSelector(session.taskId),
+    });
+    const pod = pods.items.find((candidate) => candidate.metadata?.name);
+    if (!pod?.metadata?.name) return null;
+    return { name: pod.metadata.name, phase: pod.status?.phase ?? "Unknown" };
+  }
+
+  /**
+   * Wait for a session's Job to reach a terminal state.
+   *
+   * The Job, not the pod, is the authority: a pod that dies with a retryable
+   * exit code is replaced under a Job that is still running, and treating that
+   * first pod's death as the outcome would end the task early.
+   *
+   * Resolves `{ outcome: "aborted" }` rather than throwing when the caller's
+   * signal fires, so cancellation and failure stay distinguishable to the
+   * lifecycle above.
+   */
+  async waitForCompletion(params: {
+    session: RunnerSession;
+    abortSignal?: AbortSignal;
+    pollIntervalMs?: number;
+  }): Promise<{ outcome: "succeeded" | "failed" | "aborted"; reason?: string }> {
+    const clients = this.requireClients();
+    const { job: jobName } = runnerNames(params.session.deploymentName);
+    const interval = params.pollIntervalMs ?? RUNNER_COMPLETION_POLL_MS;
+
+    while (!params.abortSignal?.aborted) {
+      const job = await clients.batchApi
+        .readNamespacedJobStatus({
+          name: jobName,
+          namespace: params.session.namespace,
+        })
+        .catch(() => null);
+
+      if (!job) {
+        // The Job is gone: either torn down under us, or it never landed.
+        // Either way there is no outcome left to wait for.
+        return { outcome: "failed", reason: "The runner job no longer exists" };
+      }
+      if ((job.status?.succeeded ?? 0) > 0) {
+        return { outcome: "succeeded" };
+      }
+      if ((job.status?.failed ?? 0) > 0) {
+        const condition = job.status?.conditions?.find(
+          (entry) => entry.type === "Failed" && entry.status === "True",
+        );
+        return {
+          outcome: "failed",
+          reason:
+            condition?.message ??
+            condition?.reason ??
+            "The runner exited without completing",
+        };
+      }
+
+      await delay(interval, params.abortSignal);
+    }
+
+    return { outcome: "aborted" };
+  }
+
+  /**
    * Remove every Kubernetes object belonging to a session and revoke its key.
    * Safe to retry, including after a partial failure — an object already gone
    * is a success, and everything else is retried like the create path.
@@ -437,6 +512,27 @@ class RunnerRuntimeManager {
 export default new RunnerRuntimeManager();
 
 // ===================== helpers =====================
+
+/**
+ * How often a waiting run re-reads its Job. Long enough that a task running
+ * for hours is not a steady stream of API calls, short enough that a finished
+ * task does not sit idle before the lifecycle settles it.
+ */
+const RUNNER_COMPLETION_POLL_MS = 5_000;
+
+/** Sleep that wakes early on abort, so cancellation is not delayed a full poll. */
+function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.resolve();
+  return new Promise((resolve) => {
+    const timer = setTimeout(finish, ms);
+    function finish() {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", finish);
+      resolve();
+    }
+    signal?.addEventListener("abort", finish, { once: true });
+  });
+}
 
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`;

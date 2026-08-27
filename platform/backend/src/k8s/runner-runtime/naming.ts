@@ -7,7 +7,7 @@ import {
 export const RUNNER_TASK_LABEL = "archestra.io/runner-task-id";
 
 /** The runner definition the pod was launched from, for fleet-wide sweeps. */
-export const RUNNER_DEFINITION_LABEL = "archestra.io/runner-id";
+const RUNNER_DEFINITION_LABEL = "archestra.io/runner-id";
 
 /** Marks every object this runtime owns, for convergence sweeps and teardown. */
 const RUNNER_PURPOSE_LABEL = "archestra.io/purpose";

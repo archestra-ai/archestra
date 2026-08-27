@@ -15,6 +15,13 @@ import { AgentLabelWithDetailsSchema } from "./label";
  * `tmux_keys` — type into the tmux session (`send-keys`). The bring-your-own-image
  * path for CLIs that own their own input loop, e.g. Claude Code.
  */
+/**
+ * Execution backends a runner can name. One today; the enum is the seam other
+ * backends (a VM per task, an agent-sandbox) slot into without a schema change
+ * anywhere above it.
+ */
+export const RunnerBackendNameSchema = z.enum(["kubernetes"]);
+
 export const RunnerSteerModeSchema = z.enum(["pipe", "tmux_keys"]);
 export type RunnerSteerMode = z.infer<typeof RunnerSteerModeSchema>;
 
@@ -101,6 +108,7 @@ export type RunnerEnvironmentEntry = z.infer<
  * for a column with a default or a nullable one.
  */
 const runnerSelectRefinements = {
+  backend: RunnerBackendNameSchema,
   steerMode: RunnerSteerModeSchema,
   resources: RunnerResourcesSchema.nullable(),
   command: z.array(z.string()).nullable(),
@@ -109,6 +117,7 @@ const runnerSelectRefinements = {
 } as const;
 
 const runnerInsertRefinements = {
+  backend: RunnerBackendNameSchema.optional(),
   steerMode: RunnerSteerModeSchema.optional(),
   resources: RunnerResourcesSchema.nullish(),
   command: z.array(z.string()).nullish(),

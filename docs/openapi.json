@@ -328403,6 +328403,12 @@
                               "type": "string"
                             }
                           },
+                          "backend": {
+                            "type": "string",
+                            "enum": [
+                              "kubernetes"
+                            ]
+                          },
                           "steerMode": {
                             "type": "string",
                             "enum": [
@@ -328565,6 +328571,7 @@
                           "description",
                           "image",
                           "command",
+                          "backend",
                           "steerMode",
                           "privileged",
                           "resources",
@@ -328860,6 +328867,12 @@
                       "type": "string"
                     }
                   },
+                  "backend": {
+                    "type": "string",
+                    "enum": [
+                      "kubernetes"
+                    ]
+                  },
                   "steerMode": {
                     "type": "string",
                     "enum": [
@@ -329044,6 +329057,12 @@
                         "type": "string"
                       }
                     },
+                    "backend": {
+                      "type": "string",
+                      "enum": [
+                        "kubernetes"
+                      ]
+                    },
                     "steerMode": {
                       "type": "string",
                       "enum": [
@@ -329206,6 +329225,7 @@
                     "description",
                     "image",
                     "command",
+                    "backend",
                     "steerMode",
                     "privileged",
                     "resources",
@@ -329513,6 +329533,12 @@
                         "type": "string"
                       }
                     },
+                    "backend": {
+                      "type": "string",
+                      "enum": [
+                        "kubernetes"
+                      ]
+                    },
                     "steerMode": {
                       "type": "string",
                       "enum": [
@@ -329675,6 +329701,7 @@
                     "description",
                     "image",
                     "command",
+                    "backend",
                     "steerMode",
                     "privileged",
                     "resources",
@@ -329959,6 +329986,12 @@
                       "type": "string"
                     }
                   },
+                  "backend": {
+                    "type": "string",
+                    "enum": [
+                      "kubernetes"
+                    ]
+                  },
                   "steerMode": {
                     "type": "string",
                     "enum": [
@@ -330151,6 +330184,12 @@
                         "type": "string"
                       }
                     },
+                    "backend": {
+                      "type": "string",
+                      "enum": [
+                        "kubernetes"
+                      ]
+                    },
                     "steerMode": {
                       "type": "string",
                       "enum": [
@@ -330313,6 +330352,7 @@
                     "description",
                     "image",
                     "command",
+                    "backend",
                     "steerMode",
                     "privileged",
                     "resources",

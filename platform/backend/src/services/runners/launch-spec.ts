@@ -12,7 +12,7 @@ import { resolveRunnerCredentials } from "./credentials";
  * has not supplied credentials the runner declares. Carries the list so every
  * surface can name exactly what to add instead of reporting an opaque failure.
  */
-export class RunnerCredentialsRequiredError extends ApiError {
+class RunnerCredentialsRequiredError extends ApiError {
   readonly code = RUNNER_CREDENTIALS_REQUIRED_CODE;
   readonly missing: MissingRunnerCredential[];
 

@@ -84299,6 +84299,7 @@ export type GetAllRunnersResponses = {
             description: string | null;
             image: string;
             command: Array<string> | null;
+            backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
             resources: {
@@ -84343,6 +84344,7 @@ export type CreateRunnerData = {
         description?: string | null;
         image: string;
         command?: Array<string> | null;
+        backend?: 'kubernetes';
         steerMode?: 'pipe' | 'tmux_keys';
         privileged?: boolean;
         resources?: {
@@ -84454,6 +84456,7 @@ export type CreateRunnerResponses = {
         description: string | null;
         image: string;
         command: Array<string> | null;
+        backend: 'kubernetes';
         steerMode: 'pipe' | 'tmux_keys';
         privileged: boolean;
         resources: {
@@ -84660,6 +84663,7 @@ export type GetRunnerResponses = {
         description: string | null;
         image: string;
         command: Array<string> | null;
+        backend: 'kubernetes';
         steerMode: 'pipe' | 'tmux_keys';
         privileged: boolean;
         resources: {
@@ -84702,6 +84706,7 @@ export type UpdateRunnerData = {
         description?: string | null;
         image?: string;
         command?: Array<string> | null;
+        backend?: 'kubernetes';
         steerMode?: 'pipe' | 'tmux_keys';
         privileged?: boolean;
         resources?: {
@@ -84815,6 +84820,7 @@ export type UpdateRunnerResponses = {
         description: string | null;
         image: string;
         command: Array<string> | null;
+        backend: 'kubernetes';
         steerMode: 'pipe' | 'tmux_keys';
         privileged: boolean;
         resources: {

@@ -9,6 +9,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { RunnerBackendName } from "@/services/runners/backends";
 import type {
   RunnerCredentialDeclaration,
   RunnerEnvironmentEntry,
@@ -38,6 +39,15 @@ const runnersTable = pgTable(
     image: text("image").notNull(),
     /** Command override; null runs the image's own agent entrypoint. */
     command: jsonb("command").$type<string[] | null>(),
+    /**
+     * Where sessions on this runner actually execute. A pod today; the column
+     * exists so a VM-per-task or agent-sandbox backend is a value here rather
+     * than a fork in the execution path.
+     */
+    backend: text("backend")
+      .$type<RunnerBackendName>()
+      .notNull()
+      .default("kubernetes"),
     /**
      * How a steer message reaches the process: through the runner-agent's FIFO
      * at a turn boundary, or typed into the tmux session for a bring-your-own

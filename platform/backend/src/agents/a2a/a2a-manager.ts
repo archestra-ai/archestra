@@ -11,6 +11,10 @@ import {
 import { z } from "zod";
 import logger from "@/logging";
 import {
+  resolveRunnerForAgent,
+  runTaskInPod,
+} from "@/services/runners/pod-execution";
+import {
   A2AArtifactModel,
   A2AMessageModel,
   A2APushNotificationConfigModel,
@@ -518,9 +522,20 @@ export class A2AManager {
             })
           : [],
       ]);
+      // An agent with a runner does its work in a container instead of in this
+      // process. Resolved once per send: the decision belongs to the agent's
+      // configuration, not to the caller, so every entry point that reaches
+      // the task lifecycle inherits it without opting in.
+      const runner = await resolveRunnerForAgent({
+        runnerId: agent.runnerId ?? null,
+        organizationId: agent.organizationId,
+      });
+
       const executeRun = (runOpts: {
         abortSignal?: AbortSignal;
         onTextDelta?: (delta: string) => void;
+        /** Present only under the task lifecycle; a plain send has no task. */
+        taskId?: string;
       }) =>
         startActiveChatSpan({
           agentName: agent.name,
@@ -534,6 +549,23 @@ export class A2AManager {
             ? { id: a2aUser.id, email: a2aUser.email, name: a2aUser.name }
             : null,
           callback: async () => {
+            // Only a task run goes to the container. The association is for
+            // long-running work, so an ordinary send still answers in process
+            // and an agent gaining a runner does not change how chat behaves.
+            if (runner && runOpts.taskId) {
+              return runTaskInPod({
+                runner,
+                // The task is the pod's identity: one session per task, so a
+                // resumed task adopts its own pod rather than starting a second.
+                taskId: runOpts.taskId,
+                agentId,
+                actorUserId: actor.kind === "user" ? actor.id : "system",
+                organizationId: actor.organizationId,
+                task: executedTurnText,
+                onTextDelta: runOpts.onTextDelta,
+                abortSignal: runOpts.abortSignal,
+              });
+            }
             return executeA2AMessage({
               agentId,
               message: executedTurnText,
@@ -600,6 +632,7 @@ export class A2AManager {
             task: runTask,
             contextId: runContextId,
             executeRun,
+            survivesRestart: Boolean(runner),
           });
 
         if (params.taskRun?.detached) {
@@ -758,7 +791,10 @@ export class A2AManager {
     executeRun: (runOpts: {
       abortSignal?: AbortSignal;
       onTextDelta?: (delta: string) => void;
+      taskId?: string;
     }) => Promise<A2AExecuteResult>;
+    /** This task's work runs in a container, so it outlives this process. */
+    survivesRestart?: boolean;
   }): Promise<A2AProtocolSendMessageResponse> {
     const { contextId } = params;
     let task = params.task;
@@ -810,6 +846,7 @@ export class A2AManager {
     let isFirstChunk = true;
     const run = a2aTaskRunService.startRun({
       taskId,
+      survivesRestart: params.survivesRestart,
       artifact: { id: artifactId, name: RESPONSE_ARTIFACT_NAME },
       buildDeltaEvent: (chunk) => {
         const append = !isFirstChunk;
@@ -833,6 +870,7 @@ export class A2AManager {
       const result = await params.executeRun({
         abortSignal: run.signal,
         onTextDelta: run.onTextDelta,
+        taskId,
       });
       await run.drainDeltas();
 

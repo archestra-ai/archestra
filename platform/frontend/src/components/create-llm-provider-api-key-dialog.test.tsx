@@ -63,9 +63,9 @@ vi.mock("@/lib/organization.query");
 describe("CreateLlmProviderApiKeyDialog", () => {
   beforeEach(() => {
     mutateAsync.mockReset();
-    mutateAsync.mockResolvedValue({});
+    mutateAsync.mockResolvedValue({ id: "created-key-id" });
     reconnectMutateAsync.mockReset();
-    reconnectMutateAsync.mockResolvedValue({});
+    reconnectMutateAsync.mockResolvedValue({ id: "existing-key-id" });
     vi.mocked(useFeature).mockReturnValue(false);
     vi.mocked(useHasPermissions).mockReset();
     vi.mocked(useHasPermissions).mockReturnValue({
@@ -108,7 +108,7 @@ describe("CreateLlmProviderApiKeyDialog", () => {
       vaultSecretKey: undefined,
     });
     expect(onOpenChange).toHaveBeenCalledWith(false);
-    expect(onSuccess).toHaveBeenCalledOnce();
+    expect(onSuccess).toHaveBeenCalledWith("created-key-id");
   });
 
   it("falls back to the provider name when the name field is empty", async () => {
@@ -191,7 +191,7 @@ describe("CreateLlmProviderApiKeyDialog", () => {
         scope: "personal",
       }),
     );
-    expect(onSuccess).toHaveBeenCalledOnce();
+    expect(onSuccess).toHaveBeenCalledWith("created-key-id");
   });
 
   it("forces personal scope for a subscription sign-in even when the form holds a shared scope", async () => {
@@ -259,6 +259,6 @@ describe("CreateLlmProviderApiKeyDialog", () => {
     });
     expect(mutateAsync).not.toHaveBeenCalled();
     expect(onOpenChange).toHaveBeenCalledWith(false);
-    expect(onSuccess).toHaveBeenCalledOnce();
+    expect(onSuccess).toHaveBeenCalledWith("existing-key-id");
   });
 });

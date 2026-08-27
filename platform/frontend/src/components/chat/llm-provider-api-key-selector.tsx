@@ -160,6 +160,11 @@ export function LlmProviderApiKeySelector({
   const [reconnectKeyId, setReconnectKeyId] = useState<string | null>(null);
   const [connectedKindToSelect, setConnectedKindToSelect] =
     useState<SubscriptionCredentialKind | null>(null);
+  const [isCreateApiKeyDialogOpen, setIsCreateApiKeyDialogOpen] =
+    useState(false);
+  const [createdKeyIdToSelect, setCreatedKeyIdToSelect] = useState<
+    string | null
+  >(null);
   const handledConnectRequestRef = useRef(0);
   const handleOpenChange = (newOpen: boolean) => {
     setOpen(newOpen);
@@ -342,7 +347,16 @@ export function LlmProviderApiKeySelector({
     setConnectedKindToSelect(null);
   }, [availableKeys, applyKeyChange, connectedKindToSelect]);
 
+  useEffect(() => {
+    if (!createdKeyIdToSelect) return;
+    if (!availableKeys.some((key) => key.id === createdKeyIdToSelect)) return;
+
+    applyKeyChange(createdKeyIdToSelect);
+    setCreatedKeyIdToSelect(null);
+  }, [availableKeys, applyKeyChange, createdKeyIdToSelect]);
+
   const handleSelectKey = (keyId: string) => {
+    setCreatedKeyIdToSelect(null);
     const connectOption = subscriptionOptions.find(
       (option) => option.id === keyId,
     );
@@ -394,9 +408,25 @@ export function LlmProviderApiKeySelector({
         open={open}
         onOpenChange={handleOpenChange}
         onSelectKey={handleSelectKey}
+        onAddApiKey={() => {
+          setCreatedKeyIdToSelect(null);
+          handleOpenChange(false);
+          setIsCreateApiKeyDialogOpen(true);
+        }}
         currentProvider={currentProvider}
         searchPlaceholder="Search credentials..."
         showChatTestIds
+      />
+      <CreateLlmProviderApiKeyDialog
+        open={isCreateApiKeyDialogOpen}
+        onOpenChange={setIsCreateApiKeyDialogOpen}
+        title="Add API Key"
+        description="Add an LLM provider API key and use it in this chat"
+        credentialMode="api-key"
+        showConsoleLink
+        onSuccess={(keyId) => {
+          if (keyId) setCreatedKeyIdToSelect(keyId);
+        }}
       />
       {subscriptionToConnect && (
         <CreateLlmProviderApiKeyDialog

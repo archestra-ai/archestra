@@ -21,6 +21,7 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
 vi.mock("@/components/llm-provider-api-key-dropdown", () => ({
   LlmProviderApiKeyDropdown: ({
     availableKeys,
+    onAddApiKey,
     onSelectKey,
     selectedApiKeyId,
   }: {
@@ -30,9 +31,15 @@ vi.mock("@/components/llm-provider-api-key-dropdown", () => ({
       connectRequired?: boolean;
     }>;
     onSelectKey: (id: string) => void;
+    onAddApiKey?: () => void;
     selectedApiKeyId: string | null;
   }) => (
     <div>
+      {onAddApiKey && (
+        <button type="button" onClick={onAddApiKey}>
+          Add provider key
+        </button>
+      )}
       {availableKeys.map((key) => (
         <button key={key.id} type="button" onClick={() => onSelectKey(key.id)}>
           {key.name} {key.connectRequired ? "Connect" : "Connected"}
@@ -47,24 +54,32 @@ vi.mock("@/components/create-llm-provider-api-key-dialog", () => ({
   CreateLlmProviderApiKeyDialog: ({
     title,
     defaultValues,
+    onSuccess,
+    open,
     reconnectKeyId,
     requiresExactSubscriptionCredential,
   }: {
     title: string;
-    defaultValues: { provider?: string; authMethod?: string };
+    defaultValues?: { provider?: string; authMethod?: string };
+    onSuccess?: (keyId?: string) => void;
+    open: boolean;
     reconnectKeyId?: string;
     requiresExactSubscriptionCredential?: boolean;
-  }) => (
-    <div>
-      <span>{title}</span>
-      <span>{defaultValues.provider}</span>
-      <span>{defaultValues.authMethod}</span>
-      {reconnectKeyId && <span>{`reconnect:${reconnectKeyId}`}</span>}
-      {requiresExactSubscriptionCredential && (
-        <span>exact-subscription-required</span>
-      )}
-    </div>
-  ),
+  }) =>
+    open ? (
+      <div>
+        <span>{title}</span>
+        <span>{defaultValues?.provider}</span>
+        <span>{defaultValues?.authMethod}</span>
+        {reconnectKeyId && <span>{`reconnect:${reconnectKeyId}`}</span>}
+        {requiresExactSubscriptionCredential && (
+          <span>exact-subscription-required</span>
+        )}
+        <button type="button" onClick={() => onSuccess?.("new-key-id")}>
+          Create key
+        </button>
+      </div>
+    ) : null,
 }));
 
 import { LlmProviderApiKeySelector } from "./llm-provider-api-key-selector";
@@ -312,6 +327,113 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
     expect(screen.getByText("Sign in with ChatGPT")).toBeInTheDocument();
     expect(screen.getByText("openai")).toBeInTheDocument();
     expect(screen.getByText("subscription")).toBeInTheDocument();
+  });
+
+  it("creates a provider key in chat and selects it after the keys refetch", async () => {
+    const user = userEvent.setup();
+    const onApiKeyChange = vi.fn();
+    const onProviderChange = vi.fn();
+    const { rerender } = render(
+      <LlmProviderApiKeySelector
+        currentConversationChatApiKeyId={null}
+        currentProvider="anthropic"
+        onApiKeyChange={onApiKeyChange}
+        onProviderChange={onProviderChange}
+        suppressAutoSelect
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Add provider key" }));
+    expect(screen.getByText("Add API Key")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Create key" }));
+
+    vi.mocked(useAvailableLlmProviderApiKeys).mockReturnValue({
+      data: [
+        {
+          id: "new-key-id",
+          name: "New OpenAI key",
+          provider: "openai",
+          scope: "personal",
+          userId: "current-user",
+        } as LlmProviderApiKey,
+      ],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useAvailableLlmProviderApiKeys>);
+    rerender(
+      <LlmProviderApiKeySelector
+        currentConversationChatApiKeyId={null}
+        currentProvider="anthropic"
+        onApiKeyChange={onApiKeyChange}
+        onProviderChange={onProviderChange}
+        suppressAutoSelect
+      />,
+    );
+
+    expect(onApiKeyChange).toHaveBeenCalledWith("new-key-id");
+    expect(onProviderChange).toHaveBeenCalledWith("openai", "new-key-id");
+  });
+
+  it("does not override a manual key choice while a created key is refetching", async () => {
+    const user = userEvent.setup();
+    const onApiKeyChange = vi.fn();
+    const onProviderChange = vi.fn();
+    const existingKey = {
+      id: "existing-key-id",
+      name: "Existing Anthropic key",
+      provider: "anthropic",
+      scope: "personal",
+      userId: "current-user",
+    } as LlmProviderApiKey;
+    vi.mocked(useAvailableLlmProviderApiKeys).mockReturnValue({
+      data: [existingKey],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useAvailableLlmProviderApiKeys>);
+    const { rerender } = render(
+      <LlmProviderApiKeySelector
+        currentConversationChatApiKeyId={null}
+        currentProvider="anthropic"
+        onApiKeyChange={onApiKeyChange}
+        onProviderChange={onProviderChange}
+        suppressAutoSelect
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Add provider key" }));
+    await user.click(screen.getByRole("button", { name: "Create key" }));
+    await user.click(
+      screen.getByRole("button", { name: "Existing Anthropic key Connected" }),
+    );
+
+    vi.mocked(useAvailableLlmProviderApiKeys).mockReturnValue({
+      data: [
+        existingKey,
+        {
+          id: "new-key-id",
+          name: "New OpenAI key",
+          provider: "openai",
+          scope: "personal",
+          userId: "current-user",
+        } as LlmProviderApiKey,
+      ],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useAvailableLlmProviderApiKeys>);
+    rerender(
+      <LlmProviderApiKeySelector
+        currentConversationChatApiKeyId={null}
+        currentProvider="anthropic"
+        onApiKeyChange={onApiKeyChange}
+        onProviderChange={onProviderChange}
+        suppressAutoSelect
+      />,
+    );
+
+    expect(onApiKeyChange).toHaveBeenCalledTimes(1);
+    expect(onApiKeyChange).toHaveBeenCalledWith("existing-key-id");
+    expect(onProviderChange).toHaveBeenCalledTimes(1);
+    expect(onProviderChange).toHaveBeenCalledWith(
+      "anthropic",
+      "existing-key-id",
+    );
   });
 
   it("recognizes an X Premium key as connected without absorbing plain xAI API keys", () => {

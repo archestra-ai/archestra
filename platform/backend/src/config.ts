@@ -2244,6 +2244,10 @@ const config = {
     allowPrivileged:
       process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ALLOW_PRIVILEGED ===
       "true",
+    /** Built-in execution loop used when an Agent enables the capability. */
+    defaultImage:
+      process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_BASE_IMAGE?.trim() ||
+      "ghcr.io/archestra-ai/runner-agent-base:latest",
     /** Fallback lifetime cap for runners whose agent sets none. */
     defaultTtlHours: parsePositiveInt(
       process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_DEFAULT_TTL_HOURS,

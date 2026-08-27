@@ -182,6 +182,7 @@ describe("agent routes", () => {
         environment: [{ key: "WORK_MODE", value: "background" }],
         credentials: null,
         ttlHours: 24,
+        maxCostUsd: 25,
         idleTimeoutMinutes: 30,
       };
 

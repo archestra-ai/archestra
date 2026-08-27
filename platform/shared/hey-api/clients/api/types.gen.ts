@@ -12994,6 +12994,7 @@ export type GetAgentsResponses = {
                     required: boolean;
                 }> | null;
                 ttlHours: number | null;
+                maxCostUsd?: number | null;
                 idleTimeoutMinutes: number | null;
             } | null;
             backgroundExecutionSecretId: string | null;
@@ -13120,6 +13121,7 @@ export type CreateAgentData = {
                 required: boolean;
             }> | null;
             ttlHours: number | null;
+            maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
         } | null;
         passthroughHeaders?: Array<string> | null;
@@ -13281,6 +13283,7 @@ export type CreateAgentResponses = {
                 required: boolean;
             }> | null;
             ttlHours: number | null;
+            maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
         } | null;
         backgroundExecutionSecretId: string | null;
@@ -13510,6 +13513,7 @@ export type GetAllAgentsResponses = {
                 required: boolean;
             }> | null;
             ttlHours: number | null;
+            maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
         } | null;
         backgroundExecutionSecretId: string | null;
@@ -13794,6 +13798,7 @@ export type GetDefaultMcpGatewayResponses = {
                 required: boolean;
             }> | null;
             ttlHours: number | null;
+            maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
         } | null;
         backgroundExecutionSecretId: string | null;
@@ -14070,6 +14075,7 @@ export type ImportAgentResponses = {
                     required: boolean;
                 }> | null;
                 ttlHours: number | null;
+                maxCostUsd?: number | null;
                 idleTimeoutMinutes: number | null;
             } | null;
             backgroundExecutionSecretId: string | null;
@@ -14359,6 +14365,7 @@ export type GetAgentResponses = {
                 required: boolean;
             }> | null;
             ttlHours: number | null;
+            maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
         } | null;
         backgroundExecutionSecretId: string | null;
@@ -14476,6 +14483,7 @@ export type UpdateAgentData = {
                 required: boolean;
             }> | null;
             ttlHours: number | null;
+            maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
         } | null;
         passthroughHeaders?: Array<string> | null;
@@ -14639,6 +14647,7 @@ export type UpdateAgentResponses = {
                 required: boolean;
             }> | null;
             ttlHours: number | null;
+            maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
         } | null;
         backgroundExecutionSecretId: string | null;
@@ -15097,6 +15106,7 @@ export type RestoreAgentVersionResponses = {
                 required: boolean;
             }> | null;
             ttlHours: number | null;
+            maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
         } | null;
         backgroundExecutionSecretId: string | null;
@@ -15304,6 +15314,7 @@ export type CloneAgentResponses = {
                 required: boolean;
             }> | null;
             ttlHours: number | null;
+            maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
         } | null;
         backgroundExecutionSecretId: string | null;
@@ -16838,6 +16849,7 @@ export type RestoreAgentResponses = {
                 required: boolean;
             }> | null;
             ttlHours: number | null;
+            maxCostUsd?: number | null;
             idleTimeoutMinutes: number | null;
         } | null;
         backgroundExecutionSecretId: string | null;
@@ -34975,6 +34987,7 @@ export type GetConfigResponses = {
             mcpServerAlertingEnabled: boolean;
             sandbox: boolean;
             agentBackgroundExecution: boolean;
+            agentBackgroundExecutionBaseImage: string;
             plugins: boolean;
             sandboxArtifactBytesLimit: number;
             chatAttachmentStorageBytesLimit: number;

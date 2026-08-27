@@ -4,6 +4,7 @@ import {
 } from "@archestra/shared";
 import { describe } from "vitest";
 import { expect, test } from "@/test";
+import LimitModel from "./limit";
 import VirtualApiKeyModel from "./virtual-api-key";
 
 describe("VirtualApiKeyModel", () => {
@@ -211,12 +212,20 @@ describe("VirtualApiKeyModel", () => {
       ],
       name: "Delete Me",
     });
+    const runBudget = await LimitModel.create({
+      entityType: "virtual_key",
+      entityId: virtualKey.id,
+      limitType: "token_cost",
+      limitValue: 25,
+      model: null,
+    });
 
     const deleted = await VirtualApiKeyModel.delete(virtualKey.id);
     expect(deleted).toBe(true);
 
     const found = await VirtualApiKeyModel.findById(virtualKey.id);
     expect(found).toBeNull();
+    expect(await LimitModel.findById(runBudget.id)).toBeNull();
   });
 
   test("delete: returns false for unknown id", async () => {

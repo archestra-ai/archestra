@@ -97,6 +97,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
                * deployment nothing can schedule.
                */
               agentBackgroundExecution: z.boolean(),
+              agentBackgroundExecutionBaseImage: z.string(),
               plugins: z.boolean(),
               // Max size of a file the sandbox can stage. The chat composer caps
               // sandbox-routed uploads at this instead of guessing.
@@ -230,6 +231,8 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // The same predicate the routes gate on, so the UI can never offer
           // a feature whose endpoints answer 404.
           agentBackgroundExecution: runnerRuntimeManager.isEnabled,
+          agentBackgroundExecutionBaseImage:
+            config.agentBackgroundExecution.defaultImage,
           plugins: config.plugins.enabled,
           sandboxArtifactBytesLimit: config.skillsSandbox.artifactBytesLimit,
           chatAttachmentStorageBytesLimit:

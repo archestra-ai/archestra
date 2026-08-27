@@ -11,6 +11,47 @@ frontend_int_tests_port = os.getenv('ARCHESTRA_FRONTEND_INT_TESTS_PORT', '3010')
 # in another, and the port-forwarder watches a third.
 mcp_namespace = os.getenv('ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE', 'default')
 
+# Local coding-agent image. Dynamically-created Background execution Jobs are
+# not part of Tilt's rendered YAML, so allow the image to be intentionally
+# unreferenced while still building and loading it into the local cluster.
+background_execution_enabled = os.getenv('ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ENABLED') == 'true'
+if background_execution_enabled:
+  docker_build(
+    'crab-env:dev',
+    '..',
+    dockerfile='../runner-agent/Dockerfile',
+    target='crab-env',
+  )
+  # Tilt discovers image dependencies from Pod specs. This tiny sleeping
+  # deployment anchors the otherwise dynamic Job image so Tilt builds and
+  # loads it into Docker Desktop, OrbStack, or Kind before the backend starts.
+  k8s_yaml(blob('''
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crab-env-image
+  namespace: %s
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: crab-env-image
+  template:
+    metadata:
+      labels:
+        app: crab-env-image
+    spec:
+      containers:
+        - name: crab-env
+          image: crab-env:dev
+          command: ["sleep", "infinity"]
+''' % mcp_namespace))
+  k8s_resource(
+    'crab-env-image',
+    labels=['dev'],
+    pod_readiness='ignore',
+  )
+
 # MCP Server RBAC resources for local development
 # Render from Helm chart and filter to only RBAC resources (avoid duplication)
 k8s_yaml(local(
@@ -63,6 +104,8 @@ frontend_env_vars = get_frontend_env()
 
 code_runtime_enabled = os.getenv('ARCHESTRA_CODE_RUNTIME_ENABLED') == 'true'
 backend_resource_deps = ['db-migrate']
+if background_execution_enabled:
+  backend_resource_deps.append('crab-env-image')
 if code_runtime_enabled:
   # The backend provisions the Dagger engine in-cluster on startup (no external
   # engine or port-forward to wait on); just build the napi addon before it boots

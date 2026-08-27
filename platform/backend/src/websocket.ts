@@ -514,7 +514,8 @@ class WebSocketService {
    *
    * Authorization is narrower than being able to see the agent run: attaching
    * lands inside a shell running under the creator's own credentials, so only
-   * they or a agent administrator may do it.
+   * that creator may do it. Administrative Agent access must not become access
+   * to another person's live credentials.
    */
   private async handleSubscribeAgentRunAttach(
     ws: WebSocket,
@@ -531,7 +532,7 @@ class WebSocketService {
       });
       return;
     }
-    if (!(await this.mayControlSession(session, clientContext))) {
+    if (session.actorUserId !== clientContext.userId) {
       this.sendToClient(ws, {
         type: "agent_run_attach_error",
         payload: {
@@ -694,10 +695,7 @@ class WebSocketService {
     this.unsubscribeAgentRunLogs(ws);
   }
 
-  /**
-   * The person a session acts as, or a agent administrator. Attaching reaches a shell
-   * holding that person's own credentials, so it is deliberately narrow.
-   */
+  /** The person a session acts as, or an Agent administrator. */
   private async mayControlSession(
     session: { actorUserId: string },
     clientContext: WebSocketClientContext,

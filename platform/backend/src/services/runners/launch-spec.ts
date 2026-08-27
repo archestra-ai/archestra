@@ -4,6 +4,7 @@ import { RUNNER_STEER_FIFO } from "@/k8s/runner-runtime/manifests";
 import { constructFrozenRunnerName } from "@/k8s/runner-runtime/naming";
 import {
   AgentModel,
+  LimitModel,
   LlmProviderApiKeyModel,
   TeamModel,
   UserTokenModel,
@@ -137,6 +138,21 @@ export async function buildRunnerLaunchSpec(params: {
       { provider: "anthropic", providerApiKeyId: providerApiKey.id },
     ],
   });
+  if (params.deployment.maxCostUsd) {
+    try {
+      await LimitModel.create({
+        entityType: "virtual_key",
+        entityId: virtualKey.virtualKey.id,
+        limitType: "token_cost",
+        limitValue: params.deployment.maxCostUsd,
+        model: null,
+        cleanupInterval: "1m",
+      });
+    } catch (error) {
+      await VirtualApiKeyModel.delete(virtualKey.virtualKey.id);
+      throw error;
+    }
+  }
 
   // The singleton proxy endpoint, the same one every external client uses.
   // Spend attribution rides the personal virtual key; an agent-scoped URL is

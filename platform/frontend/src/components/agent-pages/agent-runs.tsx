@@ -31,9 +31,11 @@ import {
   type AgentRun,
   useAgentRuns,
 } from "@/lib/agent-background-execution.query";
+import { useSession } from "@/lib/auth/auth.query";
 import websocketService from "@/lib/websocket/websocket";
 
 export function AgentRuns({ agentId }: { agentId: string }) {
+  const { data: session } = useSession();
   const {
     data: runs = [],
     isPending,
@@ -98,12 +100,18 @@ export function AgentRuns({ agentId }: { agentId: string }) {
           </Button>
         ))}
       </div>
-      {selected && <RunDetails run={selected} />}
+      {selected && (
+        <RunDetails
+          key={selected.taskId}
+          run={selected}
+          canAttach={selected.actorUserId === session?.user.id}
+        />
+      )}
     </div>
   );
 }
 
-function RunDetails({ run }: { run: AgentRun }) {
+function RunDetails({ run, canAttach }: { run: AgentRun; canAttach: boolean }) {
   const [tab, setTab] = useState("logs");
   return (
     <Tabs value={tab} onValueChange={setTab} className="min-w-0">
@@ -111,16 +119,20 @@ function RunDetails({ run }: { run: AgentRun }) {
         <TabsTrigger value="logs">
           <ScrollText className="h-4 w-4" /> Logs
         </TabsTrigger>
-        <TabsTrigger value="shell" disabled={Boolean(run.endedAt)}>
-          <TerminalSquare className="h-4 w-4" /> Shell
-        </TabsTrigger>
+        {canAttach && (
+          <TabsTrigger value="shell" disabled={Boolean(run.endedAt)}>
+            <TerminalSquare className="h-4 w-4" /> Shell
+          </TabsTrigger>
+        )}
       </TabsList>
       <TabsContent value="logs" className="mt-3">
         <RunLogs taskId={run.taskId} active={!run.endedAt} />
       </TabsContent>
-      <TabsContent value="shell" className="mt-3">
-        <RunTerminal taskId={run.taskId} active={tab === "shell"} />
-      </TabsContent>
+      {canAttach && (
+        <TabsContent value="shell" className="mt-3">
+          <RunTerminal taskId={run.taskId} active={tab === "shell"} />
+        </TabsContent>
+      )}
     </Tabs>
   );
 }

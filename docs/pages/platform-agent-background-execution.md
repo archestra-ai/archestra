@@ -26,23 +26,35 @@ To configure an Agent:
 1. Open **Agents** and select the Agent.
 2. Select **Edit**, then open **Advanced**.
 3. Turn on **Background execution**.
-4. Configure the container image and, when needed, its command, environment variables, credentials, idle timeout, steering, and privileged mode.
+4. Review the container image and configure any command override, environment variables, run controls, or elevated permissions it needs.
 5. Save the Agent.
 
-The Agent's [environment](/docs/platform-environments) also applies to its Background execution deployment, including network egress policy. Use a purpose-built image for the work the Agent performs. For example, a coding Agent's image can include Git, a language toolchain, and repository tooling.
+The image field starts with the installation's default Background execution image. The Agent's [environment](/docs/platform-environments) also applies to its deployment, including network egress policy and registry access. Use a purpose-built image for the work the Agent performs. For example, a coding Agent's image can include Git, a language toolchain, and repository tooling.
+
+Leave **Command** blank to use the built-in Agent loop supplied by the default image. A custom image can override the command and arguments. Background execution images must include a POSIX shell and `tmux`, which keep the live process attachable from the Runs tab.
 
 The deployment uses the same Agent system prompt and tool access as foreground execution. Keep the Agent's instructions focused on the specialist role you want it to perform in either mode.
 
-### Credentials
+### Configuration and secrets
 
-Credential declarations describe the values the deployment expects. Each declaration can be either:
+Background execution uses the same environment-variable editor as containerized MCP servers. Use a plain-text, boolean, or number variable for non-sensitive configuration, and use **Secret** for credentials. A secret can be either:
 
 - **Per user** — each person supplies their own value before starting background work.
 - **Shared** — an Agent administrator configures one value used by every caller.
 
-After saving the Agent, its **Overview** shows whether the required credentials are ready. Secrets are stored through Archestra's configured secrets provider and are injected only into the Background execution deployment.
+After saving the Agent, its **Overview** shows whether required secrets are ready. Secret values are stored through Archestra's configured secrets provider and injected only into the Background execution deployment; they are not stored in the Agent definition.
 
 When external Vault storage is enabled, the credential control uses the same Vault secret picker as MCP server deployments. Users select a secret and key; they never paste the secret value into the Agent form.
+
+### Run controls
+
+- **Steering** controls how follow-up instructions reach a live run. **Turn boundary** safely queues them between Agent turns. **Terminal input** types into an interactive CLI and is intended for custom images such as coding-agent CLIs.
+- **Idle timeout** stops a deployment after it finishes its current work and receives no follow-up instructions for the configured period.
+- **Maximum duration** is a hard wall-clock lifetime for each run. Kubernetes enforces the limit even when the process is still active.
+- **Metered LLM budget** creates a spend ceiling for the run's short-lived virtual API key. After the ceiling is reached, further metered model calls are blocked by the LLM proxy. Subscription-backed calls have no billed spend and do not count against this ceiling.
+- **CPU and memory** override the installation defaults for this Agent. Leave them blank unless the workload needs different sizing.
+
+Each delegated task starts in a fresh pod. Task state, events, logs, and the final response remain attached to the run, but the container filesystem is not a durable workspace after the run ends. Keep durable outputs in a repository or an external artifact store.
 
 ## Delegate Work
 
@@ -64,7 +76,7 @@ An Agent with Background execution configured has a **Runs** tab on its page. Us
 - follow live container logs
 - attach to the live shell for troubleshooting or interactive work
 
-Logs and shell attachment are available while the deployment is running. Access follows the Agent's existing scope and permissions; there is no separate Background execution permission or sidebar resource.
+Logs are available while the deployment is running. Only the user whose credentials started a run can attach to its live shell; Agent administrators cannot enter another user's shell. There is no separate Background execution permission or sidebar resource.
 
 ## Example Architecture
 

@@ -43033,6 +43033,12 @@
                                 "minimum": 1,
                                 "maximum": 720
                               },
+                              "maxCostUsd": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 100000
+                              },
                               "idleTimeoutMinutes": {
                                 "nullable": true,
                                 "type": "integer",
@@ -43994,6 +44000,12 @@
                         "minimum": 1,
                         "maximum": 720
                       },
+                      "maxCostUsd": {
+                        "nullable": true,
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 100000
+                      },
                       "idleTimeoutMinutes": {
                         "nullable": true,
                         "type": "integer",
@@ -44479,6 +44491,12 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 720
+                        },
+                        "maxCostUsd": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100000
                         },
                         "idleTimeoutMinutes": {
                           "nullable": true,
@@ -45513,6 +45531,12 @@
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 720
+                          },
+                          "maxCostUsd": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100000
                           },
                           "idleTimeoutMinutes": {
                             "nullable": true,
@@ -46744,6 +46768,12 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 720
+                        },
+                        "maxCostUsd": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100000
                         },
                         "idleTimeoutMinutes": {
                           "nullable": true,
@@ -48045,6 +48075,12 @@
                               "minimum": 1,
                               "maximum": 720
                             },
+                            "maxCostUsd": {
+                              "nullable": true,
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 100000
+                            },
                             "idleTimeoutMinutes": {
                               "nullable": true,
                               "type": "integer",
@@ -49028,6 +49064,12 @@
                           "minimum": 1,
                           "maximum": 720
                         },
+                        "maxCostUsd": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100000
+                        },
                         "idleTimeoutMinutes": {
                           "nullable": true,
                           "type": "integer",
@@ -49941,6 +49983,12 @@
                         "minimum": 1,
                         "maximum": 720
                       },
+                      "maxCostUsd": {
+                        "nullable": true,
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 100000
+                      },
                       "idleTimeoutMinutes": {
                         "nullable": true,
                         "type": "integer",
@@ -50430,6 +50478,12 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 720
+                        },
+                        "maxCostUsd": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100000
                         },
                         "idleTimeoutMinutes": {
                           "nullable": true,
@@ -52670,6 +52724,12 @@
                           "minimum": 1,
                           "maximum": 720
                         },
+                        "maxCostUsd": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100000
+                        },
                         "idleTimeoutMinutes": {
                           "nullable": true,
                           "type": "integer",
@@ -53645,6 +53705,12 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 720
+                        },
+                        "maxCostUsd": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100000
                         },
                         "idleTimeoutMinutes": {
                           "nullable": true,
@@ -59046,6 +59112,12 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 720
+                        },
+                        "maxCostUsd": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100000
                         },
                         "idleTimeoutMinutes": {
                           "nullable": true,
@@ -127084,6 +127156,9 @@
                         "agentBackgroundExecution": {
                           "type": "boolean"
                         },
+                        "agentBackgroundExecutionBaseImage": {
+                          "type": "string"
+                        },
                         "plugins": {
                           "type": "boolean"
                         },
@@ -127257,6 +127332,7 @@
                         "mcpServerAlertingEnabled",
                         "sandbox",
                         "agentBackgroundExecution",
+                        "agentBackgroundExecutionBaseImage",
                         "plugins",
                         "sandboxArtifactBytesLimit",
                         "chatAttachmentStorageBytesLimit",

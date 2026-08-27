@@ -1,9 +1,9 @@
 "use client";
 
-import { Plus, Trash2 } from "lucide-react";
-import { useId, useRef } from "react";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { useId } from "react";
+import { ContainerDeploymentFields } from "@/components/container-deployment-fields";
+import { DeploymentEnvironmentVariablesEditor } from "@/components/deployment-environment-variables-editor";
+import type { EnvVarDraft } from "@/components/environment-variable-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -15,9 +15,6 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useFeature } from "@/lib/config/config.query";
-
-const BACKGROUND_EXECUTION_IMAGE_PLACEHOLDER =
-  "ghcr.io/example/background-agent:1.0.0";
 
 export type BackgroundExecutionConfig = {
   image: string;
@@ -40,12 +37,15 @@ export type BackgroundExecutionConfig = {
     required: boolean;
   }> | null;
   ttlHours: number | null;
+  maxCostUsd: number | null;
   idleTimeoutMinutes: number | null;
 };
 
-export function defaultBackgroundExecution(): BackgroundExecutionConfig {
+export function defaultBackgroundExecution(
+  defaultImage = "",
+): BackgroundExecutionConfig {
   return {
-    image: "",
+    image: defaultImage,
     command: null,
     backend: "kubernetes",
     steerMode: "pipe",
@@ -54,6 +54,7 @@ export function defaultBackgroundExecution(): BackgroundExecutionConfig {
     environment: null,
     credentials: null,
     ttlHours: null,
+    maxCostUsd: null,
     idleTimeoutMinutes: null,
   };
 }
@@ -67,9 +68,16 @@ export function AgentBackgroundExecutionFields({
 }) {
   const enabledId = useId();
   const runtimeEnabled = useFeature("agentBackgroundExecution");
-  const config = value ?? defaultBackgroundExecution();
+  const configuredDefaultImage = useFeature(
+    "agentBackgroundExecutionBaseImage",
+  );
+  const defaultImage =
+    typeof configuredDefaultImage === "string" ? configuredDefaultImage : "";
+  const config = value ?? defaultBackgroundExecution(defaultImage);
   const update = (patch: Partial<BackgroundExecutionConfig>) =>
     onChange({ ...config, ...patch });
+  const command = config.command?.[0] ?? "";
+  const argumentsValue = (config.command ?? []).slice(1).join("\n");
 
   return (
     <div className="space-y-4" data-testid="agent-background-execution">
@@ -77,8 +85,8 @@ export function AgentBackgroundExecutionFields({
         <div className="space-y-1">
           <Label htmlFor={enabledId}>Background execution</Label>
           <p className="text-sm text-muted-foreground">
-            Run delegated tasks in a dedicated deployment. Direct chat always
-            stays in the foreground.
+            Run delegated tasks in an isolated deployment. Direct chat stays in
+            the foreground.
           </p>
         </div>
         <Switch
@@ -86,7 +94,7 @@ export function AgentBackgroundExecutionFields({
           checked={value !== null}
           disabled={runtimeEnabled !== true && value === null}
           onCheckedChange={(checked) =>
-            onChange(checked ? defaultBackgroundExecution() : null)
+            onChange(checked ? defaultBackgroundExecution(defaultImage) : null)
           }
         />
       </div>
@@ -99,109 +107,181 @@ export function AgentBackgroundExecutionFields({
       )}
 
       {value && (
-        <div className="space-y-5 rounded-md border p-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="background-execution-image">
-                Container image
-              </Label>
-              <Input
-                id="background-execution-image"
-                value={config.image}
-                onChange={(event) => update({ image: event.target.value })}
-                placeholder={BACKGROUND_EXECUTION_IMAGE_PLACEHOLDER}
-              />
+        <div className="space-y-6 rounded-md border p-4">
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <h3 className="font-semibold text-base">Deployment</h3>
               <p className="text-xs text-muted-foreground">
-                The deployment uses this Agent&apos;s Environment and its
-                network egress policy.
+                The container uses this Agent&apos;s Environment, including its
+                network egress policy and image pull configuration.
               </p>
             </div>
+            <ContainerDeploymentFields
+              ids={{
+                image: "background-execution-image",
+                command: "background-execution-command",
+                arguments: "background-execution-arguments",
+              }}
+              value={{
+                image: config.image,
+                command,
+                arguments: argumentsValue,
+              }}
+              onChange={(next) =>
+                update({
+                  image: next.image,
+                  command: toCommand(next.command, next.arguments),
+                })
+              }
+              image={{ placeholder: defaultImage }}
+              command={{
+                placeholder: "Use the image's default command",
+                description: "Leave blank to use the image's default command.",
+              }}
+              arguments={{
+                placeholder: "--permission-mode\nbypassPermissions",
+              }}
+            />
+          </div>
 
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="background-execution-command">Command</Label>
-              <Input
-                id="background-execution-command"
-                value={(config.command ?? []).join(" ")}
-                onChange={(event) =>
-                  update({
-                    command: event.target.value.trim()
-                      ? event.target.value.trim().split(/\s+/)
-                      : null,
-                  })
-                }
-                placeholder="Use the image's default command"
-              />
+          <DeploymentEnvironmentVariablesEditor
+            value={toEnvironmentDrafts(config)}
+            onChange={(drafts) => update(fromEnvironmentDrafts(config, drafts))}
+            description="Add plain configuration and declare secrets in one place. Secret values are provided after the Agent is saved."
+            targetLabel="background deployment"
+            installationLabel="Per user"
+            staticLabel="Shared"
+            installationCalloutTitle="Each user provides their own value"
+            requiredDescription="Block delegated tasks until this value is configured."
+            promptedValueLabel="per-user"
+            deferStaticSecretValue
+            installationOnlyForSecrets
+            allowRequiredStaticSecret
+            normalizeKey={uppercase}
+          />
+
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <h3 className="font-semibold text-base">Run controls</h3>
+              <p className="text-xs text-muted-foreground">
+                Bound each isolated run. Blank fields use the installation
+                defaults.
+              </p>
             </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="background-execution-steering">Steering</Label>
-              <Select
-                value={config.steerMode}
-                onValueChange={(steerMode: "pipe" | "tmux_keys") =>
-                  update({ steerMode })
-                }
-              >
-                <SelectTrigger id="background-execution-steering">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="pipe">Turn boundary</SelectItem>
-                  <SelectItem value="tmux_keys">Terminal input</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="background-execution-idle-timeout">
-                Idle timeout (minutes)
-              </Label>
-              <Input
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="background-execution-steering">Steering</Label>
+                <Select
+                  value={config.steerMode}
+                  onValueChange={(steerMode: "pipe" | "tmux_keys") =>
+                    update({ steerMode })
+                  }
+                >
+                  <SelectTrigger
+                    id="background-execution-steering"
+                    className="w-full"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pipe">Turn boundary</SelectItem>
+                    <SelectItem value="tmux_keys">Terminal input</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Turn boundary delivers follow-up instructions between Agent
+                  turns. Terminal input types directly into an interactive CLI.
+                </p>
+              </div>
+              <NumberField
                 id="background-execution-idle-timeout"
-                type="number"
+                label="Idle timeout (minutes)"
+                value={config.idleTimeoutMinutes}
                 min={1}
                 max={1440}
-                value={config.idleTimeoutMinutes ?? ""}
-                onChange={(event) => {
-                  const next = event.currentTarget.valueAsNumber;
-                  update({
-                    idleTimeoutMinutes: Number.isFinite(next)
-                      ? Math.min(1440, Math.max(1, next))
-                      : null,
-                  });
-                }}
-                placeholder="Installation default"
+                onChange={(idleTimeoutMinutes) =>
+                  update({ idleTimeoutMinutes })
+                }
+                description="Stops the deployment after it finishes a task and receives no follow-up instructions for this long."
+              />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <NumberField
+                id="background-execution-max-duration"
+                label="Maximum duration (hours)"
+                value={config.ttlHours}
+                min={1}
+                max={720}
+                onChange={(ttlHours) => update({ ttlHours })}
+                description="Hard lifetime cap for a run, including active and idle time."
+              />
+              <NumberField
+                id="background-execution-cost-budget"
+                label="Metered LLM budget (USD)"
+                value={config.maxCostUsd}
+                min={1}
+                max={100000}
+                onChange={(maxCostUsd) => update({ maxCostUsd })}
+                description="Blocks further metered model calls after this run reaches the spend ceiling."
+              />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <ResourceField
+                id="background-execution-cpu-request"
+                label="CPU request"
+                placeholder="500m"
+                value={config.resources?.cpuRequest}
+                onChange={(cpuRequest) =>
+                  updateResource(config, update, { cpuRequest })
+                }
+              />
+              <ResourceField
+                id="background-execution-memory-request"
+                label="Memory request"
+                placeholder="1Gi"
+                value={config.resources?.memoryRequest}
+                onChange={(memoryRequest) =>
+                  updateResource(config, update, { memoryRequest })
+                }
+              />
+              <ResourceField
+                id="background-execution-cpu-limit"
+                label="CPU limit"
+                placeholder="No limit"
+                value={config.resources?.cpuLimit}
+                onChange={(cpuLimit) =>
+                  updateResource(config, update, { cpuLimit })
+                }
+              />
+              <ResourceField
+                id="background-execution-memory-limit"
+                label="Memory limit"
+                placeholder="4Gi"
+                value={config.resources?.memoryLimit}
+                onChange={(memoryLimit) =>
+                  updateResource(config, update, { memoryLimit })
+                }
               />
             </div>
           </div>
 
-          <EnvironmentEditor
-            value={config.environment ?? []}
-            onChange={(environment) =>
-              update({ environment: environment.length ? environment : null })
-            }
-          />
-          <CredentialsEditor
-            value={config.credentials ?? []}
-            onChange={(credentials) =>
-              update({ credentials: credentials.length ? credentials : null })
-            }
-          />
-
-          <div className="flex items-center justify-between gap-4 rounded-md border p-3">
-            <div className="space-y-0.5">
-              <Label htmlFor="background-execution-privileged">
-                Privileged container
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                Agent administrators only. Use when the image needs host-level
-                container capabilities.
-              </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="flex items-center justify-between gap-4 rounded-md border p-3">
+              <div className="space-y-0.5">
+                <Label htmlFor="background-execution-privileged">
+                  Privileged container
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Grants host-level container capabilities. Agent administrators
+                  only.
+                </p>
+              </div>
+              <Switch
+                id="background-execution-privileged"
+                checked={config.privileged}
+                onCheckedChange={(privileged) => update({ privileged })}
+              />
             </div>
-            <Switch
-              id="background-execution-privileged"
-              checked={config.privileged}
-              onCheckedChange={(privileged) => update({ privileged })}
-            />
           </div>
         </div>
       )}
@@ -209,198 +289,167 @@ export function AgentBackgroundExecutionFields({
   );
 }
 
-function EnvironmentEditor({
+function toCommand(commandValue: string, argumentsValue: string) {
+  const command = commandValue.trim();
+  if (!command) return null;
+  const args = argumentsValue
+    .split("\n")
+    .map((argument) => argument.trim())
+    .filter(Boolean);
+  return [command, ...args];
+}
+
+function toEnvironmentDrafts(config: BackgroundExecutionConfig): EnvVarDraft[] {
+  return [
+    ...(config.environment ?? []).map(
+      ({ key, value }): EnvVarDraft => ({
+        key,
+        type: "plain_text",
+        scope: "static",
+        required: false,
+        description: "",
+        value,
+      }),
+    ),
+    ...(config.credentials ?? []).map(
+      (credential): EnvVarDraft => ({
+        key: credential.key,
+        type: "secret",
+        scope: credential.scope === "per_user" ? "installation" : "static",
+        required: credential.required,
+        description: credential.description ?? "",
+        value: "",
+      }),
+    ),
+  ];
+}
+
+function fromEnvironmentDrafts(
+  current: BackgroundExecutionConfig,
+  drafts: EnvVarDraft[],
+): Pick<BackgroundExecutionConfig, "environment" | "credentials"> {
+  const environment = drafts
+    .filter((draft) => draft.type !== "secret")
+    .map((draft) => ({ key: draft.key, value: draft.value }));
+  const credentials = drafts
+    .filter((draft) => draft.type === "secret")
+    .map((draft) => ({
+      key: draft.key,
+      scope:
+        draft.scope === "installation"
+          ? ("per_user" as const)
+          : ("shared" as const),
+      label:
+        current.credentials?.find((credential) => credential.key === draft.key)
+          ?.label ?? humanizeEnvironmentKey(draft.key),
+      description: draft.description || undefined,
+      required: draft.required,
+    }));
+  return {
+    environment: environment.length > 0 ? environment : null,
+    credentials: credentials.length > 0 ? credentials : null,
+  };
+}
+
+function humanizeEnvironmentKey(key: string): string {
+  return key
+    .split("_")
+    .filter(Boolean)
+    .map(
+      (part) =>
+        ENVIRONMENT_KEY_LABELS[part] ??
+        `${part[0]?.toUpperCase()}${part.slice(1).toLowerCase()}`,
+    )
+    .join(" ");
+}
+
+function uppercase(value: string): string {
+  return value.toUpperCase();
+}
+
+function NumberField({
+  id,
+  label,
   value,
+  min,
+  max,
   onChange,
+  description,
 }: {
-  value: Array<{ key: string; value: string }>;
-  onChange: (value: Array<{ key: string; value: string }>) => void;
+  id: string;
+  label: string;
+  value: number | null;
+  min: number;
+  max: number;
+  onChange: (value: number | null) => void;
+  description: string;
 }) {
-  const rowIds = useRef(value.map(() => crypto.randomUUID()));
-  const rows = value.map((entry, index) => ({
-    entry,
-    index,
-    rowId: rowIds.current[index] ?? crypto.randomUUID(),
-  }));
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <Label>Environment variables</Label>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            rowIds.current.push(crypto.randomUUID());
-            onChange([...value, { key: "", value: "" }]);
-          }}
-        >
-          <Plus className="h-4 w-4" /> Add
-        </Button>
-      </div>
-      {rows.map(({ entry, index, rowId }) => (
-        <div key={rowId} className="flex gap-2">
-          <Input
-            aria-label="Environment variable name"
-            className="font-mono text-xs"
-            value={entry.key}
-            onChange={(event) =>
-              onChange(
-                value.map((item, itemIndex) =>
-                  itemIndex === index
-                    ? { ...item, key: event.target.value.toUpperCase() }
-                    : item,
-                ),
-              )
-            }
-            placeholder="VARIABLE_NAME"
-          />
-          <Input
-            aria-label="Environment variable value"
-            value={entry.value}
-            onChange={(event) =>
-              onChange(
-                value.map((item, itemIndex) =>
-                  itemIndex === index
-                    ? { ...item, value: event.target.value }
-                    : item,
-                ),
-              )
-            }
-            placeholder="value"
-          />
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label="Remove environment variable"
-            onClick={() => {
-              rowIds.current.splice(index, 1);
-              onChange(value.filter((_, i) => i !== index));
-            }}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
-      ))}
+      <Label htmlFor={id}>{label}</Label>
+      <Input
+        id={id}
+        type="number"
+        min={min}
+        max={max}
+        value={value ?? ""}
+        onChange={(event) => {
+          const next = event.currentTarget.valueAsNumber;
+          onChange(
+            Number.isFinite(next) ? Math.min(max, Math.max(min, next)) : null,
+          );
+        }}
+        placeholder="Installation default"
+      />
+      <p className="text-xs text-muted-foreground">{description}</p>
     </div>
   );
 }
 
-function CredentialsEditor({
+function ResourceField({
+  id,
+  label,
+  placeholder,
   value,
   onChange,
 }: {
-  value: NonNullable<BackgroundExecutionConfig["credentials"]>;
-  onChange: (
-    value: NonNullable<BackgroundExecutionConfig["credentials"]>,
-  ) => void;
+  id: string;
+  label: string;
+  placeholder: string;
+  value?: string;
+  onChange: (value: string | undefined) => void;
 }) {
-  const rowIds = useRef(value.map(() => crypto.randomUUID()));
-  const add = () => {
-    rowIds.current.push(crypto.randomUUID());
-    onChange([
-      ...value,
-      { key: "", scope: "per_user", label: "", required: true },
-    ]);
-  };
-  const rows = value.map((entry, index) => ({
-    entry,
-    index,
-    rowId: rowIds.current[index] ?? crypto.randomUUID(),
-  }));
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <div>
-          <Label>Credentials</Label>
-          <p className="text-xs text-muted-foreground">
-            Declare values the deployment needs. Users configure personal values
-            from the Agent overview; shared values use the secret manager.
-          </p>
-        </div>
-        <Button type="button" variant="outline" size="sm" onClick={add}>
-          <Plus className="h-4 w-4" /> Add
-        </Button>
-      </div>
-      {rows.map(({ entry, index, rowId }) => {
-        const update = (patch: Partial<(typeof value)[number]>) =>
-          onChange(
-            value.map((item, itemIndex) =>
-              itemIndex === index ? { ...item, ...patch } : item,
-            ),
-          );
-        return (
-          <div key={rowId} className="space-y-2 rounded-md border p-3">
-            <div className="flex gap-2">
-              <Input
-                aria-label="Credential environment variable"
-                className="font-mono text-xs"
-                value={entry.key}
-                onChange={(event) =>
-                  update({ key: event.target.value.toUpperCase() })
-                }
-                placeholder="GITHUB_TOKEN"
-              />
-              <Select
-                value={entry.scope}
-                onValueChange={(scope: "shared" | "per_user") =>
-                  update({ scope })
-                }
-              >
-                <SelectTrigger className="w-36" aria-label="Credential scope">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="per_user">Per user</SelectItem>
-                  <SelectItem value="shared">Shared</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                aria-label="Remove credential"
-                onClick={() => {
-                  rowIds.current.splice(index, 1);
-                  onChange(value.filter((_, i) => i !== index));
-                }}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-            <Input
-              aria-label="Credential label"
-              value={entry.label}
-              onChange={(event) => update({ label: event.target.value })}
-              placeholder="GitHub token"
-            />
-            <Input
-              aria-label="Credential instructions"
-              value={entry.description ?? ""}
-              onChange={(event) =>
-                update({ description: event.target.value || undefined })
-              }
-              placeholder="How to obtain this credential"
-            />
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id={`background-credential-required-${index}`}
-                checked={entry.required}
-                onCheckedChange={(checked) =>
-                  update({ required: checked === true })
-                }
-              />
-              <Label
-                htmlFor={`background-credential-required-${index}`}
-                className="text-xs font-normal text-muted-foreground"
-              >
-                Required before a delegated task can start
-              </Label>
-            </div>
-          </div>
-        );
-      })}
+      <Label htmlFor={id}>{label}</Label>
+      <Input
+        id={id}
+        value={value ?? ""}
+        onChange={(event) => onChange(event.target.value || undefined)}
+        placeholder={placeholder}
+        className="font-mono"
+      />
     </div>
   );
 }
+
+function updateResource(
+  config: BackgroundExecutionConfig,
+  update: (patch: Partial<BackgroundExecutionConfig>) => void,
+  patch: NonNullable<BackgroundExecutionConfig["resources"]>,
+) {
+  const resources = { ...(config.resources ?? {}), ...patch };
+  update({
+    resources: Object.values(resources).some(Boolean) ? resources : null,
+  });
+}
+
+const ENVIRONMENT_KEY_LABELS: Record<string, string> = {
+  API: "API",
+  AWS: "AWS",
+  GCP: "GCP",
+  GITHUB: "GitHub",
+  ID: "ID",
+  SSH: "SSH",
+  URL: "URL",
+};

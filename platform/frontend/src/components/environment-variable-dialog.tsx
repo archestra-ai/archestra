@@ -47,6 +47,15 @@ interface EnvironmentVariableDialogProps {
   useExternalSecretsManager?: boolean;
   disableInstallation?: boolean;
   disableInstallationReason?: string;
+  targetLabel?: string;
+  installationLabel?: string;
+  staticLabel?: string;
+  installationCalloutTitle?: string;
+  requiredDescription?: string;
+  deferStaticSecretValue?: boolean;
+  installationOnlyForSecrets?: boolean;
+  allowRequiredStaticSecret?: boolean;
+  normalizeKey?: (key: string) => string;
   /**
    * Optional validator for a static plain-text value (e.g. an environment's
    * allowlist regex). Returns an error message to show under the value input
@@ -57,12 +66,18 @@ interface EnvironmentVariableDialogProps {
   onConfirm: (draft: EnvVarDraft) => void;
 }
 
-function makeEmptyDraft(disableInstallation: boolean): EnvVarDraft {
+function makeEmptyDraft(
+  disableInstallation: boolean,
+  installationOnlyForSecrets: boolean,
+): EnvVarDraft {
   return {
     key: "",
     type: "plain_text",
-    scope: disableInstallation ? "static" : "installation",
-    required: !disableInstallation,
+    scope:
+      disableInstallation || installationOnlyForSecrets
+        ? "static"
+        : "installation",
+    required: !disableInstallation && !installationOnlyForSecrets,
     description: "",
     value: "",
   };
@@ -77,22 +92,34 @@ export function EnvironmentVariableDialog({
   useExternalSecretsManager = false,
   disableInstallation = false,
   disableInstallationReason,
+  targetLabel = "MCP server",
+  installationLabel = "Installation",
+  staticLabel = "Static",
+  installationCalloutTitle = "The user enters this when installing",
+  requiredDescription = "Block installation until the user supplies a value.",
+  deferStaticSecretValue = false,
+  installationOnlyForSecrets = false,
+  allowRequiredStaticSecret = false,
+  normalizeKey = identity,
   validateValue,
   onClose,
   onConfirm,
 }: EnvironmentVariableDialogProps) {
   const [draft, setDraft] = useState<EnvVarDraft>(
-    initial ?? makeEmptyDraft(disableInstallation),
+    initial ?? makeEmptyDraft(disableInstallation, installationOnlyForSecrets),
   );
   const [vaultDialogOpen, setVaultDialogOpen] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setDraft(initial ?? makeEmptyDraft(disableInstallation));
+      setDraft(
+        initial ??
+          makeEmptyDraft(disableInstallation, installationOnlyForSecrets),
+      );
     }
-  }, [open, initial, disableInstallation]);
+  }, [open, initial, disableInstallation, installationOnlyForSecrets]);
 
-  const trimmedKey = draft.key.trim();
+  const trimmedKey = normalizeKey(draft.key.trim());
   const duplicate = useMemo(
     () => existingKeys.includes(trimmedKey) && trimmedKey.length > 0,
     [existingKeys, trimmedKey],
@@ -110,7 +137,10 @@ export function EnvironmentVariableDialog({
     draft.value.length > 0;
 
   const valueRequired =
-    draft.scope === "static" && !hasStoredSecret && !(draft.type === "boolean");
+    draft.scope === "static" &&
+    !hasStoredSecret &&
+    !(draft.type === "boolean") &&
+    !(deferStaticSecretValue && draft.type === "secret");
 
   // Apply the environment's allowlist rule to free-text values only: a static,
   // plain-text value the user actually typed. Secrets and number/boolean types
@@ -134,7 +164,11 @@ export function EnvironmentVariableDialog({
       const next = { ...prev, ...patch };
       if (patch.scope === "installation") {
         next.required = true;
-      } else if (patch.scope) {
+        if (installationOnlyForSecrets) next.type = "secret";
+      } else if (
+        patch.scope &&
+        !(allowRequiredStaticSecret && next.type === "secret")
+      ) {
         next.required = false;
       }
       if (patch.scope && patch.scope !== "static") {
@@ -142,6 +176,16 @@ export function EnvironmentVariableDialog({
       }
       if (patch.type && patch.type !== prev.type) {
         next.value = patch.type === "boolean" ? "false" : "";
+        if (installationOnlyForSecrets && patch.type !== "secret") {
+          next.scope = "static";
+          next.required = false;
+        } else if (
+          allowRequiredStaticSecret &&
+          patch.type === "secret" &&
+          next.scope === "static"
+        ) {
+          next.required = true;
+        }
       }
       return next;
     });
@@ -166,7 +210,7 @@ export function EnvironmentVariableDialog({
       }
       description={
         mode === "add"
-          ? "Configure how this variable is supplied to the MCP server."
+          ? `Configure how this variable is supplied to the ${targetLabel}.`
           : undefined
       }
       footer={
@@ -186,7 +230,7 @@ export function EnvironmentVariableDialog({
           <Input
             id="env-var-key"
             value={draft.key}
-            onChange={(e) => updateDraft({ key: e.target.value })}
+            onChange={(e) => updateDraft({ key: normalizeKey(e.target.value) })}
             placeholder="API_KEY"
             className="font-mono"
             autoComplete={MCP_CONFIG_AUTOCOMPLETE}
@@ -226,13 +270,18 @@ export function EnvironmentVariableDialog({
               onChange={(scope) => updateDraft({ scope })}
               disableInstallation={disableInstallation}
               disabledReason={disableInstallationReason}
+              installationLabel={installationLabel}
+              staticLabel={staticLabel}
             />
           </div>
         </div>
 
-        {draft.scope === "installation" && (
+        {(draft.scope === "installation" ||
+          (allowRequiredStaticSecret &&
+            draft.scope === "static" &&
+            draft.type === "secret")) && (
           <ScopeCallout
-            title="The user enters this when installing"
+            title={installationCalloutTitle}
             body={
               <>
                 They&apos;ll see a field labeled{" "}
@@ -254,6 +303,7 @@ export function EnvironmentVariableDialog({
             onOpenVault={() => setVaultDialogOpen(true)}
             onClearVault={() => updateDraft({ value: "" })}
             onValueChange={(value) => updateDraft({ value })}
+            deferSecretValue={deferStaticSecretValue}
           />
         )}
 
@@ -261,6 +311,7 @@ export function EnvironmentVariableDialog({
           <RequiredToggleCard
             checked={draft.required}
             onChange={(required) => updateDraft({ required })}
+            description={requiredDescription}
           />
         )}
 
@@ -313,17 +364,17 @@ function ScopeCallout({
 function RequiredToggleCard({
   checked,
   onChange,
+  description,
 }: {
   checked: boolean;
   onChange: (value: boolean) => void;
+  description: string;
 }) {
   return (
     <div className="flex items-center justify-between gap-3 rounded-md border border-border p-3">
       <div className="space-y-0.5">
         <div className="text-sm font-medium">Required variable</div>
-        <div className="text-xs text-muted-foreground">
-          Block installation until the user supplies a value.
-        </div>
+        <div className="text-xs text-muted-foreground">{description}</div>
       </div>
       <Switch
         checked={checked}
@@ -343,6 +394,7 @@ function StaticValueEditor({
   onOpenVault,
   onClearVault,
   onValueChange,
+  deferSecretValue,
 }: {
   draft: EnvVarDraft;
   hasStoredSecret: boolean;
@@ -352,7 +404,17 @@ function StaticValueEditor({
   onOpenVault: () => void;
   onClearVault: () => void;
   onValueChange: (value: string) => void;
+  deferSecretValue: boolean;
 }) {
+  if (deferSecretValue && draft.type === "secret") {
+    return (
+      <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+        The secret value is configured after saving and is never stored in this
+        deployment definition.
+      </div>
+    );
+  }
+
   if (useExternalSecretsManager && draft.type === "secret") {
     return (
       <div className="space-y-2">
@@ -435,4 +497,8 @@ function StaticValueEditor({
       )}
     </div>
   );
+}
+
+function identity(value: string): string {
+  return value;
 }

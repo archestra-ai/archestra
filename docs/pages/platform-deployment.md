@@ -845,6 +845,9 @@ Background execution runs delegated Agent tasks in dedicated Kubernetes pods. Yo
   - Default: `false`
   - Values: `true`, `false`
 
+- **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_BASE_IMAGE`** - Container image prefilled when Background execution is enabled on an Agent. The built-in image supplies the default Agent loop; custom images can replace it and set their own command.
+  - Default: `ghcr.io/archestra-ai/runner-agent-base:latest`
+
 - **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ALLOW_PRIVILEGED`** - Allows Agent administrators to configure privileged background pods. Privileged containers have node-level access.
   - Default: `false`
   - Values: `true`, `false`

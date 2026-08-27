@@ -36,6 +36,8 @@ export function makeConfig(
       mcpServerAlertingEnabled: false,
       sandbox: false,
       agentBackgroundExecution: false,
+      agentBackgroundExecutionBaseImage:
+        "ghcr.io/archestra-ai/runner-agent-base:latest",
       plugins: false,
       sandboxArtifactBytesLimit: DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
       chatAttachmentStorageBytesLimit: DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,

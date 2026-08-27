@@ -3927,6 +3927,7 @@ class AgentModel {
               }))
               .sort((a, b) => a.key.localeCompare(b.key)),
             ttlHours: row.backgroundExecution.ttlHours,
+            maxCostUsd: row.backgroundExecution.maxCostUsd ?? null,
             idleTimeoutMinutes: row.backgroundExecution.idleTimeoutMinutes,
           }
         : null,

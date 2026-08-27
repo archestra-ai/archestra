@@ -340,6 +340,73 @@ describe("websocket Agent run authorization and cleanup", () => {
     expect(service.agentRunLogsSubscriptions.has(ws)).toBe(false);
   });
 
+  test("does not let an Agent administrator attach to another user's run", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const owner = await makeUser();
+    const administrator = await makeUser();
+    await makeMember(owner.id, organization.id, { role: "member" });
+    await makeMember(administrator.id, organization.id, { role: "admin" });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      authorId: owner.id,
+      agentType: "agent",
+      scope: "org",
+    });
+    const context = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: owner.id,
+    });
+    const task = await A2ATaskModel.create({
+      contextId: context.id,
+      agentId: agent.id,
+      state: "TASK_STATE_SUBMITTED",
+    });
+    await AgentRunModel.create({
+      organizationId: organization.id,
+      taskId: task.id,
+      agentId: agent.id,
+      actorUserId: owner.id,
+      deploymentName: `agent-run-${task.id}`,
+      namespace: "archestra-dev",
+      secretName: null,
+      virtualApiKeyId: null,
+    });
+    const ws = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+    } as unknown as WS;
+    service.clientContexts.set(ws, {
+      userId: administrator.id,
+      organizationId: organization.id,
+      userIsMcpServerAdmin: false,
+    });
+
+    await service.handleMessage(
+      {
+        type: "subscribe_agent_run_attach",
+        payload: { runId: task.id },
+      },
+      ws,
+    );
+
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        type: "agent_run_attach_error",
+        payload: {
+          runId: task.id,
+          error: "Only the person who started this run can attach to it",
+        },
+      }),
+    );
+    expect(service.agentRunAttachSubscriptions.has(ws)).toBe(false);
+  });
+
   test("destroys Agent run streams and detaches the exec socket on disconnect", () => {
     const ws = {} as WS;
     const attach = {

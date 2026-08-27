@@ -657,9 +657,21 @@ class VirtualApiKeyModel {
     const virtualKey = await VirtualApiKeyModel.findById(id);
     if (!virtualKey) return false;
 
-    await db
-      .delete(schema.virtualApiKeysTable)
-      .where(eq(schema.virtualApiKeysTable.id, id));
+    await withDbTransaction(async (tx) => {
+      // Per-run spend ceilings are attached to the ephemeral key. Limits use a
+      // polymorphic entity id rather than a foreign key, so clean them here.
+      await tx
+        .delete(schema.limitsTable)
+        .where(
+          and(
+            eq(schema.limitsTable.entityType, "virtual_key"),
+            eq(schema.limitsTable.entityId, id),
+          ),
+        );
+      await tx
+        .delete(schema.virtualApiKeysTable)
+        .where(eq(schema.virtualApiKeysTable.id, id));
+    });
 
     try {
       await secretManager().deleteSecret(virtualKey.secretId);

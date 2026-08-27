@@ -122,6 +122,8 @@ export const AgentBackgroundExecutionSchema = z.object({
     .min(1)
     .max(24 * 30)
     .nullable(),
+  /** Hard LLM spend ceiling for the short-lived virtual key backing one run. */
+  maxCostUsd: z.number().int().min(1).max(100_000).nullable().optional(),
   idleTimeoutMinutes: z
     .number()
     .int()

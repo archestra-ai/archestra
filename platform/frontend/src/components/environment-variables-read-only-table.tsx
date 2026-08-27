@@ -28,6 +28,28 @@ interface EnvironmentVariablesReadOnlyTableProps<
   onDelete: (index: number) => void;
 }
 
+export interface EnvironmentVariableTableRow {
+  id: string;
+  key: string;
+  type: string;
+  required: boolean;
+  scope: FieldScopeValue;
+  value?: string;
+  description?: string;
+  hasStoredSecret?: boolean;
+}
+
+interface EnvironmentVariablesTableProps {
+  rows: EnvironmentVariableTableRow[];
+  useExternalSecretsManager?: boolean;
+  showType?: boolean;
+  keyLabel?: string;
+  promptedValueLabel?: string;
+  removeAriaLabel?: string;
+  onEdit: (index: number) => void;
+  onDelete: (index: number) => void;
+}
+
 const TYPE_LABEL: Record<string, string> = {
   plain_text: "Plain text",
   secret: "Secret",
@@ -55,6 +77,69 @@ export function EnvironmentVariablesReadOnlyTable<
   onEdit,
   onDelete,
 }: EnvironmentVariablesReadOnlyTableProps<TFieldValues>) {
+  const rows = rowIndexes.map((index) => {
+    const field = fields[index];
+    const key = form.watch(
+      `${fieldNamePrefix}.${index}.key` as FieldPath<TFieldValues>,
+    ) as string | undefined;
+    const type = (form.watch(
+      `${fieldNamePrefix}.${index}.type` as FieldPath<TFieldValues>,
+    ) ?? "plain_text") as string;
+    const required = Boolean(
+      form.watch(
+        `${fieldNamePrefix}.${index}.required` as FieldPath<TFieldValues>,
+      ),
+    );
+    const promptOnInstallation = Boolean(
+      form.watch(
+        `${fieldNamePrefix}.${index}.promptOnInstallation` as FieldPath<TFieldValues>,
+      ),
+    );
+    const value = form.watch(
+      `${fieldNamePrefix}.${index}.value` as FieldPath<TFieldValues>,
+    ) as string | undefined;
+    const description = form.watch(
+      `${fieldNamePrefix}.${index}.description` as FieldPath<TFieldValues>,
+    ) as string | undefined;
+
+    return {
+      id: field.id,
+      key: key ?? "",
+      type,
+      required,
+      scope: promptOnInstallation ? "installation" : "static",
+      value,
+      description,
+      hasStoredSecret:
+        type === "secret" &&
+        !!key &&
+        secretKeysWithStoredValue?.has(key) === true,
+    } satisfies EnvironmentVariableTableRow;
+  });
+
+  return (
+    <EnvironmentVariablesTable
+      rows={rows}
+      useExternalSecretsManager={useExternalSecretsManager}
+      showType={showType}
+      keyLabel={keyLabel}
+      removeAriaLabel={removeAriaLabel}
+      onEdit={(rowIndex) => onEdit(rowIndexes[rowIndex])}
+      onDelete={(rowIndex) => onDelete(rowIndexes[rowIndex])}
+    />
+  );
+}
+
+export function EnvironmentVariablesTable({
+  rows,
+  useExternalSecretsManager = false,
+  showType = true,
+  keyLabel = "Key",
+  promptedValueLabel = "per-installation",
+  removeAriaLabel = "Remove variable",
+  onEdit,
+  onDelete,
+}: EnvironmentVariablesTableProps) {
   const gridClass = showType ? GRID_WITH_TYPE : GRID_WITHOUT_TYPE;
   return (
     <div>
@@ -68,98 +153,66 @@ export function EnvironmentVariablesReadOnlyTable<
         <div>Description</div>
         <div className="w-9" />
       </div>
-      {rowIndexes.map((index) => {
-        const field = fields[index];
-        const key = form.watch(
-          `${fieldNamePrefix}.${index}.key` as FieldPath<TFieldValues>,
-        ) as string | undefined;
-        const type = (form.watch(
-          `${fieldNamePrefix}.${index}.type` as FieldPath<TFieldValues>,
-        ) ?? "plain_text") as string;
-        const required = Boolean(
-          form.watch(
-            `${fieldNamePrefix}.${index}.required` as FieldPath<TFieldValues>,
-          ),
-        );
-        const promptOnInstallation = Boolean(
-          form.watch(
-            `${fieldNamePrefix}.${index}.promptOnInstallation` as FieldPath<TFieldValues>,
-          ),
-        );
-        const scope: FieldScopeValue = promptOnInstallation
-          ? "installation"
-          : "static";
-        const value = form.watch(
-          `${fieldNamePrefix}.${index}.value` as FieldPath<TFieldValues>,
-        ) as string | undefined;
-        const description = form.watch(
-          `${fieldNamePrefix}.${index}.description` as FieldPath<TFieldValues>,
-        ) as string | undefined;
-        const hasStoredSecret =
-          type === "secret" &&
-          !!key &&
-          secretKeysWithStoredValue?.has(key) === true;
-
-        return (
-          // biome-ignore lint/a11y/useSemanticElements: row contains a nested delete <button>, so <button> wrapper is invalid HTML
-          <div
-            key={field.id}
-            role="button"
-            tabIndex={0}
-            onClick={() => onEdit(index)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onEdit(index);
-              }
-            }}
-            className={`${gridClass} group items-center border-b py-3 text-xs last:border-b-0 cursor-pointer hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
-          >
-            <div className="min-w-0 truncate font-mono">
-              {key || (
-                <span className="text-muted-foreground italic">unnamed</span>
-              )}
-            </div>
-            {showType && (
-              <div className="text-muted-foreground">
-                {TYPE_LABEL[type] ?? type}
-              </div>
+      {rows.map((row, index) => (
+        // biome-ignore lint/a11y/useSemanticElements: row contains a nested delete <button>, so <button> wrapper is invalid HTML
+        <div
+          key={row.id}
+          role="button"
+          tabIndex={0}
+          onClick={() => onEdit(index)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              onEdit(index);
+            }
+          }}
+          className={`${gridClass} group items-center border-b py-3 text-xs last:border-b-0 cursor-pointer hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
+        >
+          <div className="min-w-0 truncate font-mono">
+            {row.key || (
+              <span className="text-muted-foreground italic">unnamed</span>
             )}
-            <div>
-              {scope === "installation" && required ? (
-                <Check className="h-3.5 w-3.5 text-foreground" />
-              ) : (
-                <span className="text-muted-foreground">—</span>
-              )}
-            </div>
-            <div className="min-w-0 truncate">
-              <ValueCell
-                scope={scope}
-                type={type}
-                value={value}
-                hasStoredSecret={hasStoredSecret}
-                useExternalSecretsManager={useExternalSecretsManager}
-              />
-            </div>
-            <div className="min-w-0 line-clamp-2 text-muted-foreground">
-              {description || <span className="italic">no description</span>}
-            </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="opacity-60 group-hover:opacity-100"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete(index);
-              }}
-              aria-label={removeAriaLabel}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
           </div>
-        );
-      })}
+          {showType && (
+            <div className="text-muted-foreground">
+              {TYPE_LABEL[row.type] ?? row.type}
+            </div>
+          )}
+          <div>
+            {row.required ? (
+              <Check className="h-3.5 w-3.5 text-foreground" />
+            ) : (
+              <span className="text-muted-foreground">—</span>
+            )}
+          </div>
+          <div className="min-w-0 truncate">
+            <ValueCell
+              scope={row.scope}
+              type={row.type}
+              value={row.value}
+              hasStoredSecret={row.hasStoredSecret === true}
+              useExternalSecretsManager={useExternalSecretsManager}
+              promptedValueLabel={promptedValueLabel}
+            />
+          </div>
+          <div className="min-w-0 line-clamp-2 text-muted-foreground">
+            {row.description || <span className="italic">no description</span>}
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="opacity-60 group-hover:opacity-100"
+            onClick={(event) => {
+              event.stopPropagation();
+              onDelete(index);
+            }}
+            aria-label={removeAriaLabel}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      ))}
     </div>
   );
 }
@@ -170,15 +223,17 @@ function ValueCell({
   value,
   hasStoredSecret,
   useExternalSecretsManager,
+  promptedValueLabel,
 }: {
   scope: FieldScopeValue;
   type: string;
   value: string | undefined;
   hasStoredSecret: boolean;
   useExternalSecretsManager: boolean;
+  promptedValueLabel: string;
 }) {
   if (scope === "installation") {
-    return <span className="text-muted-foreground">per-installation</span>;
+    return <span className="text-muted-foreground">{promptedValueLabel}</span>;
   }
 
   if (useExternalSecretsManager && type === "secret" && value) {

@@ -14,6 +14,7 @@ import {
   getDocsUrl,
   getResourceForAgentType,
   HEADER_NAME_REGEX,
+  HEADER_NAME_VALIDATION_MESSAGE,
   MAX_PASSTHROUGH_HEADERS,
   MAX_SUGGESTED_PROMPT_TEXT_LENGTH,
   MAX_SUGGESTED_PROMPT_TITLE_LENGTH,
@@ -3670,9 +3671,7 @@ export function AgentForm({
                             .toLowerCase();
                           if (!value) return;
                           if (!HEADER_NAME_REGEX.test(value)) {
-                            toast.error(
-                              "Header name must contain only alphanumeric characters and hyphens",
-                            );
+                            toast.error(HEADER_NAME_VALIDATION_MESSAGE);
                             return;
                           }
                           if (BLOCKED_PASSTHROUGH_HEADERS.has(value)) {

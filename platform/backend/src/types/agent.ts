@@ -2,6 +2,8 @@ import {
   BLOCKED_PASSTHROUGH_HEADERS,
   BUILT_IN_AGENT_IDS,
   DOMAIN_VALIDATION_REGEX,
+  HEADER_NAME_REGEX,
+  HEADER_NAME_VALIDATION_MESSAGE,
   IncomingEmailSecurityModeSchema,
   MAX_DOMAIN_LENGTH,
   MAX_PASSTHROUGH_HEADERS,
@@ -184,10 +186,7 @@ const PassthroughHeaderSchema = z
   .string()
   .min(1)
   .max(128)
-  .regex(
-    /^[a-zA-Z0-9-]+$/,
-    "Header name must contain only alphanumeric characters and hyphens",
-  )
+  .regex(HEADER_NAME_REGEX, HEADER_NAME_VALIDATION_MESSAGE)
   .transform((h) => h.toLowerCase())
   .refine((h) => !BLOCKED_PASSTHROUGH_HEADERS.has(h), {
     message: "This header name is not allowed (hop-by-hop or protocol-level)",

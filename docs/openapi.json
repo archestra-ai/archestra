@@ -20393,6 +20393,28 @@
           "ownerUserName": {
             "nullable": true,
             "type": "string"
+          },
+          "teams": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "name"
+              ]
+            }
+          },
+          "createdByUserName": {
+            "nullable": true,
+            "type": "string"
           }
         },
         "required": [
@@ -20402,7 +20424,9 @@
           "keyType",
           "tokenStart",
           "ownerUserId",
-          "ownerUserName"
+          "ownerUserName",
+          "teams",
+          "createdByUserName"
         ]
       },
       "TextSearchLanguage": {
@@ -41676,6 +41700,29 @@
           "ownerUserName": {
             "nullable": true,
             "type": "string"
+          },
+          "teams": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "name"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "createdByUserName": {
+            "nullable": true,
+            "type": "string"
           }
         },
         "required": [
@@ -41685,7 +41732,9 @@
           "keyType",
           "tokenStart",
           "ownerUserId",
-          "ownerUserName"
+          "ownerUserName",
+          "teams",
+          "createdByUserName"
         ],
         "additionalProperties": false
       }

@@ -154,6 +154,8 @@ describe("LogDetail virtual key", () => {
         tokenStart: "archestra_ab",
         ownerUserId: "u-1",
         ownerUserName: "Demo Admin",
+        teams: [],
+        createdByUserName: "Demo Admin",
       },
       passthroughVirtualKey: null,
     });
@@ -174,12 +176,18 @@ describe("LogDetail virtual key", () => {
         tokenStart: "archestra_cd",
         ownerUserId: null,
         ownerUserName: null,
+        teams: [],
+        createdByUserName: "Platform Lead",
       },
       passthroughVirtualKey: null,
     });
 
     expect(await screen.findByText("ci-runners")).toBeVisible();
-    expect(screen.getByText("Virtual key · shared, no owner")).toBeVisible();
+    expect(
+      screen.getByText(
+        "Virtual key · shared org-wide, created by Platform Lead",
+      ),
+    ).toBeVisible();
   });
 
   it("lists the passthrough key first when a request carries both", async () => {
@@ -188,11 +196,13 @@ describe("LogDetail virtual key", () => {
       virtualKey: {
         id: "0f3c7e15-9a2b-4d68-8c31-5e7a9b0d2f46",
         name: "team-provider-credential",
-        scope: "org",
+        scope: "team",
         keyType: "standard",
         tokenStart: "archestra_cd",
         ownerUserId: null,
         ownerUserName: null,
+        teams: [{ id: "t-1", name: "Platform" }],
+        createdByUserName: "Platform Lead",
       },
       passthroughVirtualKey: {
         id: "6b2f1a08-5c9d-4e31-a7b4-2d8e0f5c1a93",
@@ -202,6 +212,8 @@ describe("LogDetail virtual key", () => {
         tokenStart: "archestra_ef",
         ownerUserId: "u-1",
         ownerUserName: "Demo Admin",
+        teams: [],
+        createdByUserName: "Demo Admin",
       },
     });
 
@@ -210,6 +222,54 @@ describe("LogDetail virtual key", () => {
       /demo-admin-identity[\s\S]*team-provider-credential/,
     );
     expect(screen.getByText("Passthrough key · Demo Admin")).toBeVisible();
+  });
+
+  it("names the teams a team-scoped key is shared with", async () => {
+    renderWith({
+      authMethod: "virtual_key",
+      virtualKey: {
+        id: "3a1d5c92-7e04-4b18-9f26-8c0a4e7b1d35",
+        name: "platform-shared",
+        scope: "team",
+        keyType: "standard",
+        tokenStart: "archestra_gh",
+        ownerUserId: null,
+        ownerUserName: null,
+        teams: [
+          { id: "t-1", name: "Platform" },
+          { id: "t-2", name: "Security" },
+        ],
+        createdByUserName: "Platform Lead",
+      },
+      passthroughVirtualKey: null,
+    });
+
+    expect(await screen.findByText("platform-shared")).toBeVisible();
+    expect(
+      screen.getByText("Virtual key · shared with Platform, Security"),
+    ).toBeVisible();
+  });
+
+  it("says so when a team key has no team left on it", async () => {
+    renderWith({
+      authMethod: "virtual_key",
+      virtualKey: {
+        id: "9c4e2b70-1f83-4d5a-b6e9-2a7c0d38f514",
+        name: "orphaned-team-key",
+        scope: "team",
+        keyType: "standard",
+        tokenStart: "archestra_ij",
+        ownerUserId: null,
+        ownerUserName: null,
+        teams: [],
+        createdByUserName: null,
+      },
+      passthroughVirtualKey: null,
+    });
+
+    expect(
+      await screen.findByText("Virtual key · team key, no team assigned"),
+    ).toBeVisible();
   });
 
   it("omits the row when no virtual key was used", async () => {

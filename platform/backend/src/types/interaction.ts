@@ -64,9 +64,10 @@ export const InteractionAuthMethodSchema = z.enum([
  * indistinguishable from a bug, when in practice it almost always means the
  * traffic arrived on a credential that identifies no one.
  *
- * - `shared_virtual_key` — an org-scoped virtual key. Only *personal* virtual
- *   keys carry an owner, so a key shared across a team attributes to nobody.
- *   Devs connecting individually is the fix.
+ * - `shared_virtual_key` — a team- or org-scoped virtual key. Only *personal*
+ *   virtual keys carry an owner, so a shared key attributes to nobody. The key
+ *   itself is still named, in `SessionSummary.virtualKeys`; devs connecting
+ *   individually is what attributes the traffic to people.
  * - `provider_key` — the client sent its own upstream provider credential, so
  *   Archestra never saw an identity to record.
  * - `client_credentials` — an OAuth client-credentials grant: a machine, not
@@ -89,23 +90,36 @@ export type SessionUnattributedReason = z.infer<
 /**
  * The virtual API key a logged request authenticated with, resolved to
  * something a human can act on. Per-user attribution is the whole point of a
- * virtual key, so the logs have to name the key and say who it stands for
+ * virtual key, so the logs have to name the key and say who it belongs to
  * rather than only reporting `auth_method = virtual_key`.
  *
- * `ownerUserId` / `ownerUserName` describe the user the key attributes traffic
- * to, which is only ever a *personal* key's author — that is the single place
- * the proxy takes a user identity from a virtual key
- * (`llm-proxy-handler.ts`: `virtualKeyScope === "personal"`). A team- or
- * org-scoped key is shared, so it stands for nobody and both stay null; naming
- * whoever happened to create it would read as attribution it deliberately does
- * not carry.
+ * Two different questions, deliberately kept apart:
+ *
+ * - **Who does this key attribute traffic to?** `ownerUserId` /
+ *   `ownerUserName`, and only ever a *personal* key's author — that is the
+ *   single place the proxy takes a user identity from a virtual key
+ *   (`llm-proxy-handler.ts`: `virtualKeyScope === "personal"`). A shared key
+ *   attributes to nobody, so both stay null on one.
+ * - **Who is this key shared with?** `teams` for a team-scoped key,
+ *   `createdByUserName` for whoever set it up. A shared key is not
+ *   anonymous — it belongs to a team, or to the organization at somebody's
+ *   hand — and answering "which shared key, shared with whom" is most of what
+ *   makes a shared-key session actionable.
+ *
+ * Keeping them separate is what stops the second answer being read as the
+ * first: a key's creator is not the person who made the request.
  */
+const VirtualKeyTeamSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+});
+
 export const InteractionVirtualKeySchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
   /**
-   * `personal` = owned by one user; `team` and `org` are shared, so they stand
-   * for no single person.
+   * `personal` = owned by one user; `team` = shared with the teams in
+   * `teams`; `org` = shared with the whole organization.
    */
   scope: ResourceVisibilityScopeSchema,
   /**
@@ -117,6 +131,17 @@ export const InteractionVirtualKeySchema = z.object({
   tokenStart: z.string(),
   ownerUserId: z.string().nullable(),
   ownerUserName: z.string().nullable(),
+  /**
+   * Teams a team-scoped key is shared with, by name. Empty for personal and
+   * org-scoped keys, and for a team key whose assignments were all removed.
+   */
+  teams: z.array(VirtualKeyTeamSchema),
+  /**
+   * Who created the key. Present regardless of scope, and never an
+   * attribution: on a shared key this is the person who set it up, not the
+   * person whose request was logged. Null once their account is gone.
+   */
+  createdByUserName: z.string().nullable(),
 });
 
 export type InteractionVirtualKey = z.infer<typeof InteractionVirtualKeySchema>;
@@ -781,7 +806,8 @@ export const SessionSummarySchema = z.object({
    * two members sharing one collapse into a single `userNames` entry.
    *
    * Empty when no interaction in the session carried a user identity — which
-   * is the normal case for org-scoped virtual keys and raw provider keys,
+   * is the normal case for team- and org-scoped virtual keys and raw provider
+   * keys,
    * neither of which identifies a user. `unattributedReason` says which.
    */
   userIds: z.array(z.string()),

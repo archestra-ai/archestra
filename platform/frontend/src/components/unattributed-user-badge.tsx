@@ -69,9 +69,9 @@ function describe(
       return {
         label: "No user — shared key",
         explanation:
-          "This request used an organization-scoped virtual key, which belongs to no single " +
-          "person. Only personal virtual keys carry an owner, so connect each account " +
-          "individually to attribute usage to people.",
+          "This request used a team- or organization-scoped virtual key, which belongs to no " +
+          "single person. The key itself is named alongside this badge. Only personal virtual " +
+          "keys carry an owner, so connect each account individually to attribute usage to people.",
       };
     case "provider_key":
       return {

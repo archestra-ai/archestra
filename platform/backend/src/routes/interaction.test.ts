@@ -1168,14 +1168,96 @@ describe("interaction routes", () => {
           name: "ci-shared",
           scope: "org",
           keyType: "standard",
-          // A shared key stands for nobody, even though `currentUser` created
-          // it — surfacing the author as the owner would claim an attribution
-          // the proxy never makes.
+          // A shared key attributes to nobody, even though `currentUser`
+          // created it — surfacing the author as the owner would claim an
+          // attribution the proxy never makes. The creator is still reported,
+          // separately, so the key is not anonymous.
           ownerUserId: null,
           ownerUserName: null,
+          teams: [],
+          createdByUserName: currentUser.name,
         }),
       ]);
       expect(session.unattributedReason).toBe("shared_virtual_key");
+    });
+
+    test("a team-scoped key reports the teams it is shared with", async ({
+      makeAgent,
+      makeTeam,
+    }) => {
+      const agent = await makeAgent({
+        organizationId,
+        authorId: currentUser.id,
+        scope: "org",
+      });
+      const platform = await makeTeam(organizationId, currentUser.id, {
+        name: "Platform",
+      });
+      const security = await makeTeam(organizationId, currentUser.id, {
+        name: "Security",
+      });
+      const { virtualKey } = await VirtualApiKeyModel.create({
+        organizationId,
+        name: "platform-shared",
+        scope: "team",
+        authorId: currentUser.id,
+        teamIds: [platform.id, security.id],
+      });
+
+      await seedInteraction({
+        profileId: agent.id,
+        sessionId: "team-key-session",
+        virtualKeyId: virtualKey.id,
+        authMethod: "virtual_key",
+      });
+
+      const session = await fetchSession("team-key-session");
+      const [key] = session.virtualKeys;
+      // Ordered by name so the rendered list is stable between reads.
+      expect(key.teams.map((team: { name: string }) => team.name)).toEqual([
+        "Platform",
+        "Security",
+      ]);
+      // Still attributes to nobody: shared with a team is not owned by a user.
+      expect(key.ownerUserId).toBeNull();
+      expect(session.unattributedReason).toBe("shared_virtual_key");
+    });
+
+    test("a personal key reports no teams even if rows exist", async ({
+      makeAgent,
+      makeTeam,
+      makeUser,
+    }) => {
+      const agent = await makeAgent({
+        organizationId,
+        authorId: currentUser.id,
+        scope: "org",
+      });
+      const owner = await makeUser({ email: "solo@example.com" });
+      const team = await makeTeam(organizationId, currentUser.id, {
+        name: "Leftover",
+      });
+      // A key demoted from team to personal scope keeps its junction rows;
+      // `teams` describes sharing, so a personal key must report none.
+      const { virtualKey } = await VirtualApiKeyModel.create({
+        organizationId,
+        name: "demoted-key",
+        scope: "personal",
+        authorId: owner.id,
+        teamIds: [team.id],
+      });
+
+      await seedInteraction({
+        profileId: agent.id,
+        sessionId: "demoted-key-session",
+        userId: owner.id,
+        virtualKeyId: virtualKey.id,
+        authMethod: "virtual_key",
+      });
+
+      const session = await fetchSession("demoted-key-session");
+      expect(session.virtualKeys[0].teams).toEqual([]);
+      expect(session.virtualKeys[0].ownerUserId).toBe(owner.id);
     });
 
     test("a personal key carries the user it stands for", async ({

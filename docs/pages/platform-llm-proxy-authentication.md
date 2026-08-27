@@ -136,7 +136,7 @@ Every proxied request records the virtual key that authenticated it. **LLM Proxy
 
 ![LLM Proxy sessions, each naming the virtual key it ran on](/docs/automated_screenshots/platform-llm-proxy-authentication_logs-virtual-key.webp)
 
-A personal virtual key belongs to one user, so the logs attribute its requests to them. A team or organization key is shared, so it stands for no user. The logs say so instead of leaving the user blank.
+A personal virtual key belongs to one user, so the logs attribute its requests to them. A shared key attributes to no one — but it is not anonymous. A team key names the teams it is shared with, and an organization key names whoever created it. Attribution and sharing are separate facts, so a key's creator is never shown as the caller.
 
 ## LLM OAuth Clients
 

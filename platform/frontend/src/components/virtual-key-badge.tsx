@@ -67,21 +67,38 @@ export function VirtualKeyBadge({
 }
 
 /**
- * One line of prose per key: what kind it is, and who it stands for. Only a
- * personal key carries an owner — a team- or org-scoped key is shared by
- * design, so it attributes to nobody and saying so is the answer.
+ * One line of prose per key: what kind it is, and who it belongs to.
+ *
+ * A personal key belongs to its owner, and that owner is who the request is
+ * attributed to. A shared key attributes to nobody — but it is not anonymous,
+ * so it says what it *is* shared with: the named teams for a team key, the
+ * organization plus whoever set it up for an org key.
  */
 export function describeKey(key: VirtualKey): string {
   const kind =
     key.keyType === "passthrough" ? "Passthrough key" : "Virtual key";
 
-  if (key.ownerUserName) {
-    return `${kind} · ${key.ownerUserName}`;
-  }
+  return `${kind} · ${describeAssociation(key)}`;
+}
+
+function describeAssociation(key: VirtualKey): string {
   if (key.scope === "personal") {
-    // Personal, but the owner's account is gone (author_id is ON DELETE SET
-    // NULL). Saying "shared" here would be wrong.
-    return `${kind} · owner removed`;
+    // `author_id` is ON DELETE SET NULL, so a personal key can outlive its
+    // owner. Saying "shared" there would be wrong.
+    return key.ownerUserName ?? "owner removed";
   }
-  return `${kind} · shared, no owner`;
+
+  if (key.scope === "team") {
+    if (key.teams.length > 0) {
+      const names = key.teams.map((team) => team.name).join(", ");
+      return `shared with ${names}`;
+    }
+    // Team-scoped with every assignment removed: nobody reaches it, which is
+    // worth saying plainly rather than rendering as a bare "shared".
+    return "team key, no team assigned";
+  }
+
+  return key.createdByUserName
+    ? `shared org-wide, created by ${key.createdByUserName}`
+    : "shared org-wide";
 }

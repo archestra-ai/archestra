@@ -6288,6 +6288,11 @@ export type InteractionVirtualKeyInput = {
     tokenStart: string;
     ownerUserId: string | null;
     ownerUserName: string | null;
+    teams: Array<{
+        id: string;
+        name: string;
+    }>;
+    createdByUserName: string | null;
 };
 
 export type TextSearchLanguage = 'simple' | 'arabic' | 'armenian' | 'basque' | 'catalan' | 'danish' | 'dutch' | 'english' | 'finnish' | 'french' | 'german' | 'greek' | 'hindi' | 'hungarian' | 'indonesian' | 'irish' | 'italian' | 'lithuanian' | 'nepali' | 'norwegian' | 'portuguese' | 'romanian' | 'russian' | 'serbian' | 'spanish' | 'swedish' | 'tamil' | 'turkish' | 'yiddish';
@@ -12574,6 +12579,11 @@ export type InteractionVirtualKey = {
     tokenStart: string;
     ownerUserId: string | null;
     ownerUserName: string | null;
+    teams: Array<{
+        id: string;
+        name: string;
+    }>;
+    createdByUserName: string | null;
 };
 
 export type GetV1A2aByAgentIdWellKnownAgentJsonData = {

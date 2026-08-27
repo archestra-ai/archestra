@@ -755,6 +755,9 @@ export const RouteId = {
   ImportGithubPluginMarketplace: "importGithubPluginMarketplace",
   UpdatePluginGithubSync: "updatePluginGithubSync",
   TriggerPluginGithubSync: "triggerPluginGithubSync",
+  // Skills projected from plugin file trees
+  GetPluginSkills: "getPluginSkills",
+  GetPluginSkill: "getPluginSkill",
   GetSkillUsageStatistics: "getSkillUsageStatistics",
   GetSkillVersions: "getSkillVersions",
   GetSkillVersion: "getSkillVersion",

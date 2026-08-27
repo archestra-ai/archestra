@@ -28,6 +28,8 @@ const {
   getExternalMcpSkill,
   getExternalMcpSkills,
   getExternalMcpSkillUsageStatistics,
+  getPluginSkill,
+  getPluginSkills,
   getSkillSourceRepos,
   getSkillUsageStatistics,
   getSkillVersion,
@@ -68,6 +70,12 @@ export const externalMcpSkillsQueryKey = [
 export const externalMcpSkillDetailQueryKey = [
   "skills",
   "external-mcp",
+  "detail",
+] as const;
+export const pluginSkillsQueryKey = ["skills", "plugins", "list"] as const;
+export const pluginSkillDetailQueryKey = [
+  "skills",
+  "plugins",
   "detail",
 ] as const;
 
@@ -247,6 +255,36 @@ export function useExternalMcpSkill(params: {
       const { data, error } = await getExternalMcpSkill({
         path: { id: params.id as string },
         query: { mcpServerId: params.mcpServerId as string },
+      });
+      throwOnApiError(error, { allowNotFound: true, toastOnError: false });
+      return data ?? null;
+    },
+  });
+}
+
+export function usePluginSkills(params?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: pluginSkillsQueryKey,
+    enabled: params?.enabled ?? true,
+    queryFn: async () => {
+      const { data, error } = await getPluginSkills();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
+  });
+}
+
+export function usePluginSkill(params: {
+  pluginId: string | null;
+  skillPath: string | null;
+}) {
+  return useQuery({
+    queryKey: [...pluginSkillDetailQueryKey, params.pluginId, params.skillPath],
+    enabled: !!params.pluginId && params.skillPath !== null,
+    queryFn: async () => {
+      const { data, error } = await getPluginSkill({
+        path: { pluginId: params.pluginId as string },
+        query: params.skillPath ? { skillPath: params.skillPath } : {},
       });
       throwOnApiError(error, { allowNotFound: true, toastOnError: false });
       return data ?? null;

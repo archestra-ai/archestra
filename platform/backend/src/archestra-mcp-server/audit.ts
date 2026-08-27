@@ -13,6 +13,7 @@ import KnowledgeBaseModel from "@/models/knowledge-base";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import LimitModel from "@/models/limit";
 import McpServerModel from "@/models/mcp-server";
+import PluginModel from "@/models/plugin";
 import SkillModel from "@/models/skill";
 import TeamModel from "@/models/team";
 import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
@@ -362,6 +363,32 @@ const TOOL_AUDIT_SPECS: Record<string, ArchestraToolAuditSpec> = {
     action: "skill.updated",
     lookupIdBefore: (a, ctx) => skillIdByName(a.name, ctx),
     fetchById: skillFetch,
+  },
+
+  // Plugins (id-addressed; findByIdForAudit redacts file bytes to digests).
+  create_plugin: {
+    resourceType: "plugin",
+    action: "plugin.created",
+    idFromResult: (s) => str(s?.id),
+    fetchById: (id, orgId) => PluginModel.findByIdForAudit(id, orgId),
+  },
+  update_plugin: {
+    resourceType: "plugin",
+    action: "plugin.updated",
+    idFromArgs: (a) => str(a.id),
+    fetchById: (id, orgId) => PluginModel.findByIdForAudit(id, orgId),
+  },
+  edit_plugin: {
+    resourceType: "plugin",
+    action: "plugin.updated",
+    idFromArgs: (a) => str(a.id),
+    fetchById: (id, orgId) => PluginModel.findByIdForAudit(id, orgId),
+  },
+  delete_plugin: {
+    resourceType: "plugin",
+    action: "plugin.deleted",
+    idFromArgs: (a) => str(a.id),
+    fetchById: (id, orgId) => PluginModel.findByIdForAudit(id, orgId),
   },
 
   // Autonomy policies.

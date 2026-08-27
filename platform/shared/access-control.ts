@@ -1834,6 +1834,11 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.UpdatePluginGithubSync]: { plugin: ["update", "admin"] },
   [RouteId.TriggerPluginGithubSync]: { plugin: ["update", "admin"] },
+  // Skills projected from plugin file trees: a Skills surface over plugin
+  // metadata, so it needs both floors — per-plugin visibility is enforced
+  // in the handlers.
+  [RouteId.GetPluginSkills]: { skill: ["read"], plugin: ["read"] },
+  [RouteId.GetPluginSkill]: { skill: ["read"], plugin: ["read"] },
   [RouteId.DiscoverGithubSkills]: { skill: ["read"] },
   [RouteId.SearchSkillCatalog]: { skill: ["read"] },
   [RouteId.PreviewGithubSkill]: { skill: ["read"] },

@@ -67993,6 +67993,9 @@ export type GetMcpServersResponses = {
             reason: string;
             mutedAt: string;
         }>;
+        /**
+         * Whether the caller may present this install's stored credential to the upstream — their own connection, or one shared with them. False for another member's personal connection, which the listing still returns to installation admins so they can manage it.
+         */
         canUseCredential: boolean;
     }>;
 };

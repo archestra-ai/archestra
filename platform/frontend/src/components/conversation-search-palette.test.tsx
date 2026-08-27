@@ -212,6 +212,35 @@ describe("ConversationSearchPalette", () => {
     expect(screen.queryByText("Previous 30 Days")).not.toBeInTheDocument();
   });
 
+  it("drops the Chats heading when there are no chats under it", () => {
+    mockUseConversations.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isFetching: false,
+    });
+    render(<ConversationSearchPalette {...defaultProps} />);
+
+    expect(screen.queryByText("Chats")).not.toBeInTheDocument();
+    // The rest of the idle view is untouched.
+    expect(screen.getByText("Pages")).toBeInTheDocument();
+    expect(screen.getByText("New chat")).toBeInTheDocument();
+  });
+
+  it("offers New Chat once, as its own row rather than also as a page", () => {
+    mockUseConversations.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isFetching: false,
+    });
+    render(<ConversationSearchPalette {...defaultProps} />);
+
+    // The action row stays; the Pages list must not repeat it as a
+    // destination. (A bare text count would also catch the footer's
+    // keyboard-shortcut legend, which is neither.)
+    expect(screen.getByTestId("cmd-item-new-chat")).toBeInTheDocument();
+    expect(screen.queryAllByTestId(/^cmd-item-\/chat\b/)).toHaveLength(0);
+  });
+
   it("keeps the Pinned heading for pinned conversations", () => {
     mockUseConversations.mockReturnValue({
       data: [

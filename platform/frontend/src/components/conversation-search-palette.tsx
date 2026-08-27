@@ -101,7 +101,6 @@ const NAVIGATION_KEYWORDS: Record<string, string> = {
   "/connection": "connect integration api",
   "/projects": "projects workspaces",
   "/apps": "apps",
-  "/chat": "chat new conversation",
 };
 
 /**
@@ -123,7 +122,9 @@ function useNavigationDestinations() {
   return useMemo(() => {
     if (!permissionMap) return [];
     const items = [
-      ...chatsNavItems,
+      // New Chat is the palette's own first row, so listing it again here
+      // would offer the same destination twice.
+      ...chatsNavItems.filter((item) => item.url !== "/chat"),
       ...contentNavGroups.flatMap((group) => group.items),
     ];
     return items
@@ -612,7 +613,10 @@ export function ConversationSearchPalette({
               )}
             </CommandGroup>
 
-            {!recentChatsView && (
+            {/* Only when there is something under it. A reader who has never
+                started a chat was shown the heading over empty space, between
+                the New chat row and Pages. */}
+            {!recentChatsView && conversations.length > 0 && (
               <>
                 <CommandSeparator className="my-2" />
 

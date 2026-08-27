@@ -35,9 +35,14 @@ export function makeOrganization(
     // Configured, so the knowledge section renders its pages rather than the
     // "Configuration is needed" placeholder every route below /knowledge is
     // gated behind (`useIsKnowledgeBaseConfigured` reads exactly these two).
+    //
+    // The key id is deliberately one no spec creates. The Model Providers page
+    // disables Delete on any key the organization names here, so an id that
+    // collides with a key a test makes silently turns that key undeletable —
+    // which is what `llm-key-1` did to the create/update/delete spec.
     embeddingModel: "text-embedding-3-small",
     embeddingDimensions: 1536,
-    embeddingChatApiKeyId: "llm-key-1",
+    embeddingChatApiKeyId: "seeded-knowledge-embedding-key",
     rerankerChatApiKeyId: null,
     rerankerModel: null,
     ocrChatApiKeyId: null,

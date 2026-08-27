@@ -13,15 +13,18 @@ import logger from "@/logging";
 import {
   AgentModel,
   ExternalMcpSkillUsageEventModel,
+  PluginSkillUsageEventModel,
   SkillEnvironmentModel,
   SkillModel,
   SkillTeamModel,
   SkillVersionModel,
 } from "@/models";
 import { reportSkillActivation } from "@/observability/metrics/skill";
+import { getPluginSkill } from "@/plugins/plugin-skills";
 import { skillVisibleInEnvironment } from "@/services/environments/environment-isolation";
 import { getExternalMcpSkill } from "@/services/external-mcp-skills";
 import { formatExternalSkillActivation } from "@/skills/external-skill-activation";
+import { formatPluginSkillActivation } from "@/skills/plugin-skill-activation";
 import {
   buildSkillActivationPromptContext,
   escapeXmlAttr,
@@ -326,6 +329,74 @@ export async function injectExternalMcpSkillActivation({
     logger.warn(
       { error, organizationId, mcpServerId: skillRef.mcpServerId },
       "[Skills] External MCP Skill attachment could not be activated",
+    );
+    return messages;
+  }
+}
+
+export async function injectPluginSkillActivation({
+  messages,
+  organizationId,
+  userId,
+  conversationId,
+  provider,
+  model,
+}: {
+  messages: ChatMessage[];
+  organizationId: string;
+  userId: string;
+  conversationId: string | undefined;
+  provider: SupportedProvider;
+  model: string;
+}): Promise<ChatMessage[]> {
+  if (!config.plugins.enabled) return messages;
+  const lastUserIndex = messages.findLastIndex(
+    (message) => message.role === "user",
+  );
+  if (lastUserIndex === -1) return messages;
+  const userMessage = messages[lastUserIndex];
+  const metadata = ChatMessageMetadataSchema.safeParse(
+    userMessage.metadata,
+  ).data;
+  const skillRef = metadata?.pluginSkill;
+  if (!skillRef || metadata.skill || metadata.externalMcpSkill) return messages;
+  const skillChecker = await getSkillPermissionChecker({
+    userId,
+    organizationId,
+  });
+  if (!skillChecker.canRead) return messages;
+  try {
+    const live = await getPluginSkill({
+      pluginId: skillRef.pluginId,
+      skillPath: skillRef.skillPath,
+      userId,
+      organizationId,
+    });
+    if (!live || live.name !== skillRef.name) return messages;
+    const activationBlock = formatPluginSkillActivation(live);
+    const contextTokens = measureSkillContextTokens({
+      block: activationBlock,
+      provider,
+      model,
+    });
+    PluginSkillUsageEventModel.recordUsage({
+      pluginId: live.pluginId,
+      skillPath: live.skillPath,
+      userId,
+      sessionId: conversationId ?? null,
+      contextTokens,
+    });
+    reportSkillActivation({
+      activationType: "chat_attachment",
+      contextTokens,
+    });
+    const next = [...messages];
+    next[lastUserIndex] = spliceText(userMessage, activationBlock, "prepend");
+    return next;
+  } catch (error) {
+    logger.warn(
+      { error, organizationId, pluginId: skillRef.pluginId },
+      "[Skills] Plugin Skill attachment could not be activated",
     );
     return messages;
   }

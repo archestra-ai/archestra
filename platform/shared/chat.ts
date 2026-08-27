@@ -575,6 +575,22 @@ export type ChatExternalMcpSkillMetadata = z.infer<
   typeof ChatExternalMcpSkillMetadataSchema
 >;
 
+export const ChatPluginSkillMetadataSchema = z.object({
+  pluginId: z.string().uuid(),
+  skillPath: z.string().max(500),
+  name: z.string().min(1).max(200),
+  pluginName: z.string().min(1).max(200),
+  commandValue: z
+    .string()
+    .regex(/^\/[a-z0-9][a-z0-9-]*$/)
+    .max(500),
+  displayName: z.string().min(1).max(1000),
+});
+
+export type ChatPluginSkillMetadata = z.infer<
+  typeof ChatPluginSkillMetadataSchema
+>;
+
 /**
  * Render-loop diagnostics from owned MCP App renders, attached once by the
  * chat UI to the next outgoing user message. Collected inside an untrusted
@@ -634,6 +650,7 @@ export const ChatMessageMetadataSchema = z
   .object({
     skill: ChatSkillMetadataSchema.optional(),
     externalMcpSkill: ChatExternalMcpSkillMetadataSchema.optional(),
+    pluginSkill: ChatPluginSkillMetadataSchema.optional(),
     appDiagnostics: ChatAppDiagnosticsMetadataSchema.optional(),
     openedApp: ChatOpenedAppMetadataSchema.optional(),
     /**

@@ -1,7 +1,7 @@
 import { vi } from "vitest";
 import { userHasPermission } from "@/auth";
 import config from "@/config";
-import { PluginModel } from "@/models";
+import { PluginModel, PluginSkillUsageEventModel } from "@/models";
 import {
   afterEach,
   beforeEach,
@@ -11,6 +11,7 @@ import {
   useRouteTestApp,
 } from "@/test";
 import type { CreatePlugin } from "@/types";
+import { drainBackgroundWork } from "@/utils/background-work";
 import pluginSkillRoutes from "./plugin-skill.routes";
 
 vi.mock("@/auth");
@@ -86,7 +87,9 @@ describe("plugin Skill routes", () => {
     config.plugins.enabled = true;
     mockUserHasPermission.mockReset();
     // the catalog reader is not a plugin admin, so visibility is scope-based
-    mockUserHasPermission.mockResolvedValue(false);
+    mockUserHasPermission.mockImplementation(
+      async (_userId, _organizationId, _resource, action) => action === "read",
+    );
   });
 
   afterEach(() => {
@@ -122,6 +125,12 @@ describe("plugin Skill routes", () => {
 
   test("lists portable skills across plugins, skipping invalid manifests", async () => {
     const ste = await seedPlugin(stePlugin({ scope: "org" }));
+    PluginSkillUsageEventModel.recordUsage({
+      pluginId: ste.id,
+      skillPath: "skills/ste-writing",
+      userId: ctx.user.id,
+    });
+    await drainBackgroundWork();
     // a plugin without any SKILL.md contributes nothing
     await seedPlugin({
       displayName: "Hooks only",
@@ -173,6 +182,9 @@ describe("plugin Skill routes", () => {
         description: "Write without AI slop.",
         compatibility: "Requires node 20+.",
         fileCount: 2,
+        usageCount: 1,
+        usageUserCount: 1,
+        lastUsedAt: expect.any(String),
       }),
     ]);
   });
@@ -202,6 +214,13 @@ describe("plugin Skill routes", () => {
     expect(names).toContain("Org bundle");
     expect(names).not.toContain("Personal bundle");
 
+    mockUserHasPermission.mockResolvedValue(false);
+    const withoutPluginRead = await ctx.app.inject({
+      method: "GET",
+      url: "/api/skills/plugins",
+    });
+    expect(withoutPluginRead.json()).toEqual([]);
+
     // a plugin admin sees the whole org catalog
     mockUserHasPermission.mockResolvedValue(true);
     const adminResponse = await ctx.app.inject({
@@ -217,7 +236,6 @@ describe("plugin Skill routes", () => {
 
   test("detail returns the parsed manifest and relative resource files", async () => {
     const plugin = await seedPlugin(stePlugin({ scope: "org" }));
-    mockUserHasPermission.mockResolvedValue(true);
 
     const response = await ctx.app.inject({
       method: "GET",
@@ -234,7 +252,6 @@ describe("plugin Skill routes", () => {
       compatibility: "Requires node 20+.",
       allowedTools: "Bash Read",
       fileCount: 2,
-      resourcesRestricted: false,
     });
     expect(body.manifest).toBe(SKILL_MD);
     expect(body.content).toBe("# ste-writing\n\nWrite plainly.");
@@ -250,6 +267,31 @@ describe("plugin Skill routes", () => {
         kind: "script",
       }),
     ]);
+  });
+
+  test("returns usage statistics only for a visible plugin skill", async () => {
+    const plugin = await seedPlugin(stePlugin({ scope: "org" }));
+    PluginSkillUsageEventModel.recordUsage({
+      pluginId: plugin.id,
+      skillPath: "skills/ste-writing",
+      userId: ctx.user.id,
+    });
+    await drainBackgroundWork();
+
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: `/api/skills/plugins/${plugin.id}/usage-statistics?skillPath=skills/ste-writing`,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().users).toEqual([
+      expect.objectContaining({ userId: ctx.user.id, total: 1 }),
+    ]);
+
+    const missing = await ctx.app.inject({
+      method: "GET",
+      url: `/api/skills/plugins/${plugin.id}/usage-statistics?skillPath=missing`,
+    });
+    expect(missing.statusCode).toBe(404);
   });
 
   test("nested skill trees keep their own files", async () => {
@@ -312,7 +354,7 @@ describe("plugin Skill routes", () => {
     ]);
   });
 
-  test("plugin readers can reuse instructions but not bundled resource bytes", async () => {
+  test("plugin readers can reuse instructions and bundled resource bytes", async () => {
     const plugin = await seedPlugin(stePlugin({ scope: "org" }));
 
     const response = await ctx.app.inject({
@@ -325,8 +367,10 @@ describe("plugin Skill routes", () => {
       manifest: SKILL_MD,
       content: "# ste-writing\n\nWrite plainly.",
       fileCount: 2,
-      resourcesRestricted: true,
-      files: [],
+      files: [
+        expect.objectContaining({ path: "references/NOTES.md" }),
+        expect.objectContaining({ path: "scripts/ste-lint.py" }),
+      ],
     });
   });
 

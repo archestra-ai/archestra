@@ -62,12 +62,6 @@ export function PluginSkillPage({ pluginId }: { pluginId: string }) {
         </p>
       </div>
       <div className="rounded-lg border p-6">
-        {skill.resourcesRestricted && (
-          <p className="mb-4 rounded-md border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-            Bundled resource files require plugin admin permission. The portable
-            Skill instructions remain available below.
-          </p>
-        )}
         <SkillContentEditor
           manifest={skill.manifest}
           files={skill.files}

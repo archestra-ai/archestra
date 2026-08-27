@@ -20,13 +20,21 @@ import {
   EnvironmentModel,
   ExternalMcpSkillUsageEventModel,
   McpCatalogSkillModel,
+  PluginModel,
+  PluginSkillUsageEventModel,
   SkillEnvironmentModel,
   SkillFileModel,
   SkillModel,
   SkillVersionModel,
 } from "@/models";
+import { formatPluginSkillName } from "@/skills/plugin-skill-activation";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type { Agent, InsertSkill, InsertSkillFile } from "@/types";
+import type {
+  Agent,
+  CreatePlugin,
+  InsertSkill,
+  InsertSkillFile,
+} from "@/types";
 import { drainBackgroundWork } from "@/utils/background-work";
 import {
   type ArchestraContext,
@@ -353,6 +361,76 @@ describe("skill tool execution", () => {
     expect(result.isError).toBe(false);
     expect(textOf(result)).toContain("# PDF Processing");
     expect(textOf(result)).toContain("references/FORMS.md (reference)");
+  });
+
+  test("list_skills and load_skill activate a plugin skill without copying it", async () => {
+    config.plugins.enabled = true;
+    const input: CreatePlugin = {
+      displayName: "Portable bundle",
+      description: "Portable skills",
+      clientType: "claude-code",
+      supportedPlatforms: ["posix"],
+      scope: "org",
+      files: [
+        {
+          path: "skills/release/SKILL.md",
+          content: manifest("release-guide", "Ship carefully."),
+          encoding: "utf8",
+          mode: "100644",
+        },
+        {
+          path: "skills/release/references/checklist.md",
+          content: "# Checklist\n",
+          encoding: "utf8",
+          mode: "100644",
+        },
+      ],
+    };
+    const plugin = await PluginModel.create({
+      organizationId,
+      userId,
+      input,
+    });
+    if (!plugin) throw new Error("plugin seed failed");
+    const loadName = formatPluginSkillName({
+      pluginId: plugin.id,
+      pluginName: plugin.displayName,
+      scope: plugin.scope,
+      skillPath: "skills/release",
+      name: "release-guide",
+    });
+
+    const catalog = await executeArchestraTool(
+      TOOL_LIST_SKILLS_FULL_NAME,
+      {},
+      context,
+    );
+    expect(textOf(catalog)).toContain(loadName);
+
+    const activation = await executeArchestraTool(
+      TOOL_LOAD_SKILL_FULL_NAME,
+      { name: loadName },
+      context,
+    );
+    expect(textOf(activation)).toContain("Ship carefully.");
+    expect(textOf(activation)).toContain("references/checklist.md");
+    await drainBackgroundWork();
+    let usage = await PluginSkillUsageEventModel.getSummaries([
+      { pluginId: plugin.id, skillPath: "skills/release" },
+    ]);
+    expect(usage.get(plugin.id)?.get("skills/release")?.usageCount).toBe(1);
+
+    const file = await executeArchestraTool(
+      TOOL_LOAD_SKILL_FULL_NAME,
+      { name: loadName, path: "references/checklist.md" },
+      context,
+    );
+    expect(textOf(file)).toContain("# Checklist");
+    await drainBackgroundWork();
+    usage = await PluginSkillUsageEventModel.getSummaries([
+      { pluginId: plugin.id, skillPath: "skills/release" },
+    ]);
+    expect(usage.get(plugin.id)?.get("skills/release")?.usageCount).toBe(1);
   });
 
   test("load_skill with an empty-string path lists the skill, like omitting path", async () => {

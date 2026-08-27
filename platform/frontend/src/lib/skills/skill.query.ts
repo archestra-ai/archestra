@@ -30,6 +30,7 @@ const {
   getExternalMcpSkillUsageStatistics,
   getPluginSkill,
   getPluginSkills,
+  getPluginSkillUsageStatistics,
   getSkillSourceRepos,
   getSkillUsageStatistics,
   getSkillVersion,
@@ -60,7 +61,8 @@ export type SkillVersionDetail =
 
 export type SkillUsageReference =
   | { kind: "standalone"; skillId: string }
-  | { kind: "externalMcp"; mcpServerId: string; uri: string };
+  | { kind: "externalMcp"; mcpServerId: string; uri: string }
+  | { kind: "plugin"; pluginId: string; skillPath: string };
 
 export const externalMcpSkillsQueryKey = [
   "skills",
@@ -193,12 +195,19 @@ export function useSkillUsageStatistics(reference: SkillUsageReference | null) {
           ? await getSkillUsageStatistics({
               path: { id: reference.skillId },
             })
-          : await getExternalMcpSkillUsageStatistics({
-              query: {
-                mcpServerId: reference.mcpServerId,
-                uri: reference.uri,
-              },
-            });
+          : reference.kind === "externalMcp"
+            ? await getExternalMcpSkillUsageStatistics({
+                query: {
+                  mcpServerId: reference.mcpServerId,
+                  uri: reference.uri,
+                },
+              })
+            : await getPluginSkillUsageStatistics({
+                path: { pluginId: reference.pluginId },
+                query: reference.skillPath
+                  ? { skillPath: reference.skillPath }
+                  : {},
+              });
       throwOnApiError(error, { allowNotFound: true });
       return data ?? null;
     },

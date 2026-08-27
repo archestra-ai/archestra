@@ -1839,6 +1839,10 @@ export const requiredEndpointPermissionsMap: Partial<
   // in the handlers.
   [RouteId.GetPluginSkills]: { skill: ["read"], plugin: ["read"] },
   [RouteId.GetPluginSkill]: { skill: ["read"], plugin: ["read"] },
+  [RouteId.GetPluginSkillUsageStatistics]: {
+    skill: ["read"],
+    plugin: ["read"],
+  },
   [RouteId.DiscoverGithubSkills]: { skill: ["read"] },
   [RouteId.SearchSkillCatalog]: { skill: ["read"] },
   [RouteId.PreviewGithubSkill]: { skill: ["read"] },

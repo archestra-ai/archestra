@@ -55,7 +55,7 @@ export function SubscriptionProviderCards({
           for — no API key needed. Each person connects their own account.
         </p>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
         {offers.map((offer) => (
           <SubscriptionProviderCard
             key={offer.kind}
@@ -100,7 +100,9 @@ function SubscriptionProviderCard({
     >
       <div className="flex min-w-0 items-center gap-2">
         <ProviderIcon provider={offer.provider} size={20} />
-        <span className="min-w-0 truncate font-medium">{offer.name}</span>
+        <span className="min-w-0 truncate font-medium" title={offer.name}>
+          {offer.name}
+        </span>
       </div>
       <p className="text-sm text-muted-foreground">
         {credential ? copy.connectedDescription : copy.signInDescription}

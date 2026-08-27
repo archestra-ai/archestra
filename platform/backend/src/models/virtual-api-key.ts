@@ -21,6 +21,7 @@ import { createPaginatedResult } from "@/database/utils/pagination";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
 import type {
+  InteractionVirtualKey,
   ResourceVisibilityScope,
   SelectVirtualApiKey,
   VirtualApiKeyType,
@@ -362,6 +363,76 @@ class VirtualApiKeyModel {
       .limit(1);
 
     return result ?? null;
+  }
+
+  /**
+   * Resolve virtual key ids to the summary the LLM proxy logs render: the
+   * key's name and the user it stands for. Batched (one query for a whole page
+   * of sessions) because the alternative — joining `virtual_api_keys` twice
+   * into the session aggregate, once per key column — needs table aliases and
+   * widens a query that already groups over `interactions`.
+   *
+   * Ids that no longer exist are simply absent from the map: a deleted key
+   * leaves `interactions.virtual_key_id` NULL (ON DELETE SET NULL), so this
+   * only happens in the race between a read and a delete.
+   *
+   * `organizationId`, when given, restricts the lookup to that organization so
+   * a row can never surface a key name across a tenant boundary.
+   */
+  static async findSummariesByIds(params: {
+    ids: string[];
+    organizationId?: string;
+  }): Promise<Map<string, InteractionVirtualKey>> {
+    const ids = [...new Set(params.ids)];
+    if (ids.length === 0) {
+      return new Map();
+    }
+
+    const rows = await db
+      .select({
+        id: schema.virtualApiKeysTable.id,
+        name: schema.virtualApiKeysTable.name,
+        scope: schema.virtualApiKeysTable.scope,
+        keyType: schema.virtualApiKeysTable.keyType,
+        tokenStart: schema.virtualApiKeysTable.tokenStart,
+        authorId: schema.virtualApiKeysTable.authorId,
+        authorName: schema.usersTable.name,
+      })
+      .from(schema.virtualApiKeysTable)
+      .leftJoin(
+        schema.usersTable,
+        eq(schema.virtualApiKeysTable.authorId, schema.usersTable.id),
+      )
+      .where(
+        params.organizationId
+          ? and(
+              inArray(schema.virtualApiKeysTable.id, ids),
+              eq(
+                schema.virtualApiKeysTable.organizationId,
+                params.organizationId,
+              ),
+            )
+          : inArray(schema.virtualApiKeysTable.id, ids),
+      );
+
+    return new Map(
+      rows.map((row) => [
+        row.id,
+        {
+          id: row.id,
+          name: row.name,
+          scope: row.scope,
+          keyType: row.keyType,
+          tokenStart: row.tokenStart,
+          // Only a personal key stands for a user. An org key's author merely
+          // created it — surfacing them as the owner would claim attribution
+          // the proxy never made (it takes a user from a virtual key only when
+          // the scope is `personal`).
+          ownerUserId: row.scope === "personal" ? row.authorId : null,
+          ownerUserName: row.scope === "personal" ? row.authorName : null,
+        },
+      ]),
+    );
   }
 
   /**

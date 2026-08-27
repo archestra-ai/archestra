@@ -38,6 +38,8 @@ import {
   Zhipuai,
 } from "./llm-providers";
 import { ToonSkipReasonSchema } from "./tool-result-compression";
+import { VirtualApiKeyTypeSchema } from "./virtual-api-key";
+import { ResourceVisibilityScopeSchema } from "./visibility";
 
 export { InteractionSourceSchema };
 
@@ -83,6 +85,41 @@ export const SessionUnattributedReasonSchema = z.enum([
 export type SessionUnattributedReason = z.infer<
   typeof SessionUnattributedReasonSchema
 >;
+
+/**
+ * The virtual API key a logged request authenticated with, resolved to
+ * something a human can act on. Per-user attribution is the whole point of a
+ * virtual key, so the logs have to name the key and say who it stands for
+ * rather than only reporting `auth_method = virtual_key`.
+ *
+ * `ownerUserId` / `ownerUserName` describe the user the key attributes traffic
+ * to, which is only ever a *personal* key's author — that is the single place
+ * the proxy takes a user identity from a virtual key
+ * (`llm-proxy-handler.ts`: `virtualKeyScope === "personal"`). A team- or
+ * org-scoped key is shared, so it stands for nobody and both stay null; naming
+ * whoever happened to create it would read as attribution it deliberately does
+ * not carry.
+ */
+export const InteractionVirtualKeySchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  /**
+   * `personal` = owned by one user; `team` and `org` are shared, so they stand
+   * for no single person.
+   */
+  scope: ResourceVisibilityScopeSchema,
+  /**
+   * `standard` supplied the provider credential; `passthrough` carried the
+   * acting user's identity only. One request can use one of each.
+   */
+  keyType: VirtualApiKeyTypeSchema,
+  /** Displayable token prefix (`archestra_xxxx`), never the secret itself. */
+  tokenStart: z.string(),
+  ownerUserId: z.string().nullable(),
+  ownerUserName: z.string().nullable(),
+});
+
+export type InteractionVirtualKey = z.infer<typeof InteractionVirtualKeySchema>;
 
 /**
  * A failed upstream call is persisted with the provider `type` but this shape
@@ -244,6 +281,19 @@ const BaseSelectInteractionResponseSchema = BaseSelectInteractionSchema.omit({
    * that do not resolve it.
    */
   connectorName: z.string().nullable().optional(),
+  /**
+   * `virtualKeyId` resolved to its key and owner, within the caller's
+   * organization. Null when the request used no standard virtual key (or the
+   * key has since been deleted); absent on endpoints that do not resolve it.
+   */
+  virtualKey: InteractionVirtualKeySchema.nullable().optional(),
+  /**
+   * Same for `passthroughVirtualKeyId` — the key that carried the acting
+   * user's identity. Tracked separately because one request can present a
+   * standard key for the provider credential and a passthrough key for the
+   * user.
+   */
+  passthroughVirtualKey: InteractionVirtualKeySchema.nullable().optional(),
 });
 
 /**
@@ -740,6 +790,16 @@ export const SessionSummarySchema = z.object({
    * UI distinguish "this key identifies nobody" from "something is broken".
    */
   unattributedReason: z.union([SessionUnattributedReasonSchema, z.null()]),
+  /**
+   * Every virtual key the session's requests authenticated with — standard and
+   * passthrough alike, deduplicated and ordered by name. Names the key behind
+   * `authMethods`, which on its own says a virtual key was used but not which
+   * one, and carries the owner so an attributed session shows the link rather
+   * than leaving `userNames` to imply it.
+   *
+   * Empty when no request in the session used a virtual key.
+   */
+  virtualKeys: z.array(InteractionVirtualKeySchema),
   /**
    * Short preview of the session's last user message, computed server-side
    * from the reconstructed request. The raw request body is intentionally

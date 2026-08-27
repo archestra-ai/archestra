@@ -6280,6 +6280,16 @@ export type UserConfigFieldInput = {
     valuePrefix?: string;
 };
 
+export type InteractionVirtualKeyInput = {
+    id: string;
+    name: string;
+    scope: 'personal' | 'team' | 'org';
+    keyType: 'standard' | 'passthrough';
+    tokenStart: string;
+    ownerUserId: string | null;
+    ownerUserName: string | null;
+};
+
 export type TextSearchLanguage = 'simple' | 'arabic' | 'armenian' | 'basque' | 'catalan' | 'danish' | 'dutch' | 'english' | 'finnish' | 'french' | 'german' | 'greek' | 'hindi' | 'hungarian' | 'indonesian' | 'irish' | 'italian' | 'lithuanian' | 'nepali' | 'norwegian' | 'portuguese' | 'romanian' | 'russian' | 'serbian' | 'spanish' | 'swedish' | 'tamil' | 'turkish' | 'yiddish';
 
 export type ContextualRetrievalMode = 'disabled' | 'document' | 'chunk';
@@ -12554,6 +12564,16 @@ export type UserConfigField = {
     max?: number;
     headerName?: string;
     valuePrefix?: string;
+};
+
+export type InteractionVirtualKey = {
+    id: string;
+    name: string;
+    scope: 'personal' | 'team' | 'org';
+    keyType: 'standard' | 'passthrough';
+    tokenStart: string;
+    ownerUserId: string | null;
+    ownerUserName: string | null;
 };
 
 export type GetV1A2aByAgentIdWellKnownAgentJsonData = {
@@ -40726,6 +40746,8 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -40932,6 +40954,8 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -41054,6 +41078,8 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
         } | {
             id: string;
             profileId: string | null;
@@ -41174,6 +41200,8 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
         } | {
             id: string;
             profileId: string | null;
@@ -41294,6 +41322,8 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
         } | {
             id: string;
             profileId: string | null;
@@ -41414,6 +41444,8 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
         } | {
             id: string;
             profileId: string | null;
@@ -41511,6 +41543,8 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -41610,6 +41644,8 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -42150,6 +42186,8 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -42723,6 +42761,8 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -42822,6 +42862,8 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -42921,6 +42963,8 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -43020,6 +43064,8 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -43119,6 +43165,8 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -43218,6 +43266,8 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -43317,6 +43367,8 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -43416,6 +43468,8 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
         } | {
             id: string;
             profileId: string | null;
@@ -43513,6 +43567,8 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
         } | {
             id: string;
             profileId: string | null;
@@ -43610,6 +43666,8 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
         } | {
             id: string;
             profileId: string | null;
@@ -43707,6 +43765,8 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -43806,6 +43866,8 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -43905,6 +43967,8 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -44718,6 +44782,8 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -45531,6 +45597,8 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -46344,6 +46412,8 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -46443,6 +46513,8 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -46610,6 +46682,8 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -46816,6 +46890,8 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -47022,6 +47098,8 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -47228,6 +47306,8 @@ export type GetInteractionsResponses = {
                 createdAt: string;
             }>;
             connectorName?: string | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         }>;
@@ -47387,6 +47467,7 @@ export type GetInteractionSessionsResponses = {
             userNames: Array<string>;
             userIds: Array<string>;
             unattributedReason: 'shared_virtual_key' | 'provider_key' | 'client_credentials' | 'internal' | 'unknown' | null;
+            virtualKeys: Array<InteractionVirtualKey>;
             /**
              * Short preview (max 200 chars) of the session's last user message. Raw request bodies are not returned by this listing.
              */
@@ -47751,6 +47832,8 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -47957,6 +48040,8 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -48079,6 +48164,8 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
     } | {
         id: string;
         profileId: string | null;
@@ -48199,6 +48286,8 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
     } | {
         id: string;
         profileId: string | null;
@@ -48319,6 +48408,8 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
     } | {
         id: string;
         profileId: string | null;
@@ -48439,6 +48530,8 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
     } | {
         id: string;
         profileId: string | null;
@@ -48536,6 +48629,8 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -48635,6 +48730,8 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -49175,6 +49272,8 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -49748,6 +49847,8 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -49847,6 +49948,8 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -49946,6 +50049,8 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -50045,6 +50150,8 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -50144,6 +50251,8 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -50243,6 +50352,8 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -50342,6 +50453,8 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -50441,6 +50554,8 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
     } | {
         id: string;
         profileId: string | null;
@@ -50538,6 +50653,8 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
     } | {
         id: string;
         profileId: string | null;
@@ -50635,6 +50752,8 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
     } | {
         id: string;
         profileId: string | null;
@@ -50732,6 +50851,8 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -50831,6 +50952,8 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -50930,6 +51053,8 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -51743,6 +51868,8 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -52556,6 +52683,8 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -53369,6 +53498,8 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -53468,6 +53599,8 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -53635,6 +53768,8 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -53841,6 +53976,8 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -54047,6 +54184,8 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -54253,6 +54392,8 @@ export type GetInteractionResponses = {
             createdAt: string;
         }>;
         connectorName?: string | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     };

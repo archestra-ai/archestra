@@ -8,7 +8,11 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasAnyAgentTypeAdminPermission, userHasPermission } from "@/auth";
-import { InteractionModel, KnowledgeBaseConnectorModel } from "@/models";
+import {
+  InteractionModel,
+  KnowledgeBaseConnectorModel,
+  VirtualApiKeyModel,
+} from "@/models";
 import {
   ApiError,
   constructResponseSchema,
@@ -410,9 +414,28 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Interaction not found");
       }
 
+      // Name the virtual key(s) this request authenticated with. `auth_method`
+      // alone says only that *a* virtual key was used, which is the least
+      // useful half of the answer when per-user attribution is the reason the
+      // key exists. Scoped to the caller's organization so a stale id can
+      // never surface a name across a tenant boundary.
+      const virtualKeys = await VirtualApiKeyModel.findSummariesByIds({
+        ids: [
+          interaction.virtualKeyId,
+          interaction.passthroughVirtualKeyId,
+        ].filter((id): id is string => id !== null),
+        organizationId,
+      });
+
       return reply.send({
         ...interaction,
         connectorName: connector?.name ?? null,
+        virtualKey: interaction.virtualKeyId
+          ? (virtualKeys.get(interaction.virtualKeyId) ?? null)
+          : null,
+        passthroughVirtualKey: interaction.passthroughVirtualKeyId
+          ? (virtualKeys.get(interaction.passthroughVirtualKeyId) ?? null)
+          : null,
       });
     },
   );

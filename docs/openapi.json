@@ -20357,6 +20357,54 @@
           "description"
         ]
       },
+      "InteractionVirtualKeyInput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "personal",
+              "team",
+              "org"
+            ]
+          },
+          "keyType": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "passthrough"
+            ]
+          },
+          "tokenStart": {
+            "type": "string"
+          },
+          "ownerUserId": {
+            "nullable": true,
+            "type": "string"
+          },
+          "ownerUserName": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "scope",
+          "keyType",
+          "tokenStart",
+          "ownerUserId",
+          "ownerUserName"
+        ]
+      },
       "TextSearchLanguage": {
         "type": "string",
         "enum": [
@@ -41589,6 +41637,55 @@
           "type",
           "title",
           "description"
+        ],
+        "additionalProperties": false
+      },
+      "InteractionVirtualKey": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "personal",
+              "team",
+              "org"
+            ]
+          },
+          "keyType": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "passthrough"
+            ]
+          },
+          "tokenStart": {
+            "type": "string"
+          },
+          "ownerUserId": {
+            "nullable": true,
+            "type": "string"
+          },
+          "ownerUserName": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "scope",
+          "keyType",
+          "tokenStart",
+          "ownerUserId",
+          "ownerUserName"
         ],
         "additionalProperties": false
       }
@@ -145945,6 +146042,22 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -147005,6 +147118,22 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -147774,6 +147903,22 @@
                               "connectorName": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
                               }
                             },
                             "required": [
@@ -148533,6 +148678,22 @@
                               "connectorName": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
                               }
                             },
                             "required": [
@@ -149292,6 +149453,22 @@
                               "connectorName": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
                               }
                             },
                             "required": [
@@ -150051,6 +150228,22 @@
                               "connectorName": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
                               }
                             },
                             "required": [
@@ -150679,6 +150872,22 @@
                               "connectorName": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
                               },
                               "requestType": {
                                 "type": "string",
@@ -151318,6 +151527,22 @@
                               "connectorName": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
                               },
                               "requestType": {
                                 "type": "string",
@@ -154011,6 +154236,22 @@
                               "connectorName": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
                               },
                               "requestType": {
                                 "type": "string",
@@ -157345,6 +157586,22 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -157983,6 +158240,22 @@
                               "connectorName": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
                               },
                               "requestType": {
                                 "type": "string",
@@ -158623,6 +158896,22 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -159261,6 +159550,22 @@
                               "connectorName": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
                               },
                               "requestType": {
                                 "type": "string",
@@ -159901,6 +160206,22 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -160539,6 +160860,22 @@
                               "connectorName": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
                               },
                               "requestType": {
                                 "type": "string",
@@ -161179,6 +161516,22 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -161817,6 +162170,22 @@
                               "connectorName": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
                               }
                             },
                             "required": [
@@ -162445,6 +162814,22 @@
                               "connectorName": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
                               }
                             },
                             "required": [
@@ -163073,6 +163458,22 @@
                               "connectorName": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
                               }
                             },
                             "required": [
@@ -163701,6 +164102,22 @@
                               "connectorName": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
                               },
                               "requestType": {
                                 "type": "string",
@@ -164341,6 +164758,22 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -164979,6 +165412,22 @@
                               "connectorName": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
                               },
                               "requestType": {
                                 "type": "string",
@@ -168019,6 +168468,22 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -171052,6 +171517,22 @@
                               "connectorName": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
                               },
                               "requestType": {
                                 "type": "string",
@@ -174092,6 +174573,22 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -174730,6 +175227,22 @@
                               "connectorName": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
                               },
                               "requestType": {
                                 "type": "string",
@@ -175605,6 +176118,22 @@
                               "connectorName": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
                               },
                               "requestType": {
                                 "type": "string",
@@ -176666,6 +177195,22 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -177726,6 +178271,22 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -178777,6 +179338,22 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -179483,6 +180060,12 @@
                               }
                             ]
                           },
+                          "virtualKeys": {
+                            "type": "array",
+                            "items": {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          },
                           "lastUserMessagePreview": {
                             "nullable": true,
                             "description": "Short preview (max 200 chars) of the session's last user message. Raw request bodies are not returned by this listing.",
@@ -179532,6 +180115,7 @@
                           "userNames",
                           "userIds",
                           "unattributedReason",
+                          "virtualKeys",
                           "lastUserMessagePreview",
                           "lastInteractionType",
                           "conversationTitle",
@@ -180984,6 +181568,22 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -182044,6 +182644,22 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -182813,6 +183429,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         }
                       },
                       "required": [
@@ -183572,6 +184204,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         }
                       },
                       "required": [
@@ -184331,6 +184979,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         }
                       },
                       "required": [
@@ -185090,6 +185754,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         }
                       },
                       "required": [
@@ -185718,6 +186398,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         },
                         "requestType": {
                           "type": "string",
@@ -186357,6 +187053,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         },
                         "requestType": {
                           "type": "string",
@@ -189050,6 +189762,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         },
                         "requestType": {
                           "type": "string",
@@ -192384,6 +193112,22 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -193022,6 +193766,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         },
                         "requestType": {
                           "type": "string",
@@ -193662,6 +194422,22 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -194300,6 +195076,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         },
                         "requestType": {
                           "type": "string",
@@ -194940,6 +195732,22 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -195578,6 +196386,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         },
                         "requestType": {
                           "type": "string",
@@ -196218,6 +197042,22 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -196856,6 +197696,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         }
                       },
                       "required": [
@@ -197484,6 +198340,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         }
                       },
                       "required": [
@@ -198112,6 +198984,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         }
                       },
                       "required": [
@@ -198740,6 +199628,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         },
                         "requestType": {
                           "type": "string",
@@ -199380,6 +200284,22 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -200018,6 +200938,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         },
                         "requestType": {
                           "type": "string",
@@ -203058,6 +203994,22 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -206091,6 +207043,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         },
                         "requestType": {
                           "type": "string",
@@ -209131,6 +210099,22 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -209769,6 +210753,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         },
                         "requestType": {
                           "type": "string",
@@ -210644,6 +211644,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         },
                         "requestType": {
                           "type": "string",
@@ -211705,6 +212721,22 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -212765,6 +213797,22 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -213815,6 +214863,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         },
                         "requestType": {
                           "type": "string",

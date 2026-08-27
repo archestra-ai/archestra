@@ -45,6 +45,7 @@ import type {
   InsertInteraction,
   Interaction,
   InteractionAuthMethod,
+  InteractionVirtualKey,
   SessionSummary,
   SessionUnattributedReason,
   SortingQuery,
@@ -63,6 +64,7 @@ import AgentTeamModel from "./agent-team";
 import ConversationChatErrorModel from "./conversation-chat-error";
 import InteractionDeltaManager from "./interaction-delta-manager";
 import LimitModel from "./limit";
+import VirtualApiKeyModel from "./virtual-api-key";
 
 /**
  * How long a session total stays reusable across pages of the same filter set.
@@ -1392,6 +1394,15 @@ class InteractionModel {
         userIds: sql<
           string[]
         >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.usersTable.id}), NULL)`,
+        // Both virtual-key columns, aggregated as ids and resolved to names in
+        // phase 3. A request can carry one of each: a standard key for the
+        // provider credential and a passthrough key for the acting user.
+        virtualKeyIds: sql<
+          string[]
+        >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.interactionsTable.virtualKeyId}::text), NULL)`,
+        passthroughVirtualKeyIds: sql<
+          string[]
+        >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.interactionsTable.passthroughVirtualKeyId}::text), NULL)`,
         // Get conversation title if sessionId matches a conversation (for Archestra Chat sessions)
         conversationTitle: max(schema.conversationsTable.title),
       })
@@ -1437,6 +1448,15 @@ class InteractionModel {
     const agentNamesMap = await getAgentNamesById(
       extractAllAgentIdsFromExternalAgentIds(allExternalAgentIds),
     );
+
+    // Resolve every virtual key referenced by the page in one query, rather
+    // than per session.
+    const virtualKeyMap = await VirtualApiKeyModel.findSummariesByIds({
+      ids: sessionsData.flatMap((s) => [
+        ...(s.virtualKeyIds ?? []),
+        ...(s.passthroughVirtualKeyIds ?? []),
+      ]),
+    });
 
     // Transform the data to the expected format
     const sessions = sessionsData.map((s) => {
@@ -1488,6 +1508,13 @@ class InteractionModel {
         userNames: s.userNames ?? [],
         userIds,
         unattributedReason: deriveUnattributedReason(userIds, authMethods),
+        virtualKeys: [
+          ...(s.virtualKeyIds ?? []),
+          ...(s.passthroughVirtualKeyIds ?? []),
+        ]
+          .map((id) => virtualKeyMap.get(id))
+          .filter((key): key is InteractionVirtualKey => key !== undefined)
+          .sort((a, b) => a.name.localeCompare(b.name)),
         lastUserMessagePreview: lastInteraction?.lastUserMessagePreview ?? null,
         lastInteractionType: lastInteraction?.lastInteractionType ?? null,
         conversationTitle: s.conversationTitle,

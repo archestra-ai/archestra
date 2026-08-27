@@ -12,6 +12,7 @@ import {
 } from "@/models";
 import type {
   AgentDeployment,
+  EffectiveNetworkPolicy,
   MissingAgentDeploymentCredential,
 } from "@/types";
 import { AGENT_DEPLOYMENT_CREDENTIALS_REQUIRED_CODE, ApiError } from "@/types";
@@ -58,6 +59,7 @@ export async function buildRunnerLaunchSpec(params: {
   actorUserId: string;
   organizationId: string;
   namespace: string;
+  effectiveNetworkPolicy: EffectiveNetworkPolicy;
   /** The first instruction, when the task started with one. */
   task?: string | null;
   imagePullSecrets?: string[];
@@ -229,6 +231,7 @@ export async function buildRunnerLaunchSpec(params: {
         60,
       imagePullSecrets: params.imagePullSecrets ?? [],
       ownerReferences: params.ownerReferences,
+      effectiveNetworkPolicy: params.effectiveNetworkPolicy,
     },
   };
 }

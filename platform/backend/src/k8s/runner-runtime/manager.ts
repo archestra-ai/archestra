@@ -19,6 +19,7 @@ import McpDeploymentLeaseModel, {
 import { reportRunnerSteer } from "@/observability/metrics/runner";
 import type { AgentDeploymentSteerMode, AgentRun } from "@/types";
 import {
+  buildRunnerEnvironmentEgressPolicy,
   buildRunnerJob,
   buildRunnerPlatformEgressPolicy,
   buildRunnerSecret,
@@ -99,7 +100,17 @@ class RunnerRuntimeManager {
       { label: "create runner secret" },
     );
 
-    await this.applyPlatformEgressPolicy(withOwner);
+    await this.applyNetworkPolicy(
+      buildRunnerEnvironmentEgressPolicy(withOwner),
+    );
+    await this.applyNetworkPolicy(
+      buildRunnerPlatformEgressPolicy({
+        spec: withOwner,
+        platformNamespace: process.env.POD_NAMESPACE || getK8sNamespace(),
+        platformPodLabels: config.agentBackgroundExecution.platformPodSelector,
+        platformPorts: [config.api.port],
+      }),
+    );
 
     await withK8sApiRetry(
       () =>
@@ -368,6 +379,14 @@ class RunnerRuntimeManager {
             namespace,
           }),
       ],
+      [
+        "environmentNetworkPolicy",
+        () =>
+          clients.networkingApi.deleteNamespacedNetworkPolicy({
+            name: names.environmentNetworkPolicy,
+            namespace,
+          }),
+      ],
     ];
 
     for (const [kind, remove] of deletions) {
@@ -409,26 +428,23 @@ class RunnerRuntimeManager {
 
   // ===================== internals =====================
 
-  private async applyPlatformEgressPolicy(
-    spec: RunnerLaunchSpec,
-  ): Promise<void> {
+  private async applyNetworkPolicy(body: k8s.V1NetworkPolicy): Promise<void> {
     const clients = this.requireClients();
-    const body = buildRunnerPlatformEgressPolicy({
-      spec,
-      platformNamespace: process.env.POD_NAMESPACE || getK8sNamespace(),
-      platformPodLabels: config.agentBackgroundExecution.platformPodSelector,
-      platformPorts: [config.api.port],
-    });
+    const namespace = body.metadata?.namespace;
+    const name = body.metadata?.name;
+    if (!namespace || !name) {
+      throw new Error("Runner NetworkPolicy requires a name and namespace");
+    }
     try {
       await clients.networkingApi.createNamespacedNetworkPolicy({
-        namespace: spec.namespace,
+        namespace,
         body,
       });
     } catch (error) {
       if (!isK8sConflictError(error)) throw error;
       await clients.networkingApi.replaceNamespacedNetworkPolicy({
-        name: body.metadata?.name ?? "",
-        namespace: spec.namespace,
+        name,
+        namespace,
         body,
       });
     }

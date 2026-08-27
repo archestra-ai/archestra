@@ -9,6 +9,7 @@ import {
   reportRunnerStarted,
   reportRunnerTerminated,
 } from "@/observability/metrics/runner";
+import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-policy";
 import type { Agent, AgentDeployment, AgentRun } from "@/types";
 import { ApiError } from "@/types";
 import { type RunnerBackend, resolveRunnerBackend } from "./backends";
@@ -36,9 +37,22 @@ async function startPodSession(params: {
 }): Promise<AgentRun> {
   const backend = resolveRunnerBackend(params.deployment.backend);
 
-  const namespace = await resolveNamespace({
+  const environment = params.deployment.environmentId
+    ? await EnvironmentModel.findByIdForOrganization(
+        params.deployment.environmentId,
+        params.organizationId,
+      )
+    : null;
+  const organization = await OrganizationModel.getById(params.organizationId);
+  const namespace = resolveNamespace({
+    environmentNamespace: environment?.namespace,
+    organizationNamespace: organization?.defaultEnvironmentNamespace,
+  });
+  const effectiveNetworkPolicy = await resolveEffectiveNetworkPolicy({
     organizationId: params.organizationId,
     environmentId: params.deployment.environmentId,
+    environmentNetworkPolicy: environment?.networkPolicy,
+    defaultNetworkPolicy: organization?.defaultNetworkPolicy,
   });
 
   const { spec, virtualApiKeyId } = await buildRunnerLaunchSpec({
@@ -48,6 +62,7 @@ async function startPodSession(params: {
     actorUserId: params.actorUserId,
     organizationId: params.organizationId,
     namespace,
+    effectiveNetworkPolicy,
     task: params.task,
   });
 
@@ -76,7 +91,7 @@ async function startPodSession(params: {
         "Teardown after a failed runner launch did not complete",
       );
     });
-    await AgentRunModel.close(session.id).catch((error) => {
+    await AgentRunModel.close({ id: session.id }).catch((error) => {
       logger.warn(
         { error, sessionId: session.id, taskId: params.taskId },
         "Could not mark the Agent run as ended",
@@ -114,22 +129,13 @@ export function resolveAgentDeployment(
  * one, otherwise the organization's default. Never creates a namespace — an
  * unknown one is an operator's decision to make.
  */
-async function resolveNamespace(params: {
-  organizationId: string;
-  environmentId: string | null;
-}): Promise<string> {
-  if (params.environmentId) {
-    const environment = await EnvironmentModel.findByIdForOrganization(
-      params.environmentId,
-      params.organizationId,
-    );
-    if (environment?.namespace) {
-      return environment.namespace;
-    }
-  }
-  const organization = await OrganizationModel.getById(params.organizationId);
+function resolveNamespace(params: {
+  environmentNamespace?: string | null;
+  organizationNamespace?: string | null;
+}): string {
   return (
-    organization?.defaultEnvironmentNamespace ??
+    params.environmentNamespace ??
+    params.organizationNamespace ??
     config.orchestrator.kubernetes.namespace
   );
 }
@@ -159,6 +165,7 @@ export async function runTaskInPod(params: {
   const launchedAt = Date.now();
   const session = await startPodSession(params);
   const transcript: string[] = [];
+  let retainedLogs = "";
   let outcome: "succeeded" | "failed" | "aborted" = "failed";
 
   try {
@@ -181,6 +188,7 @@ export async function runTaskInPod(params: {
       abortSignal: params.abortSignal,
       onChunk: (chunk) => {
         transcript.push(chunk);
+        retainedLogs = retainLogTail(retainedLogs, chunk);
         params.onTextDelta?.(chunk);
       },
     });
@@ -234,12 +242,14 @@ export async function runTaskInPod(params: {
         "Runner session teardown did not complete",
       );
     });
-    await AgentRunModel.close(session.id).catch((error) => {
-      logger.warn(
-        { error, sessionId: session.id, taskId: params.taskId },
-        "Could not mark the Agent run as ended",
-      );
-    });
+    await AgentRunModel.close({ id: session.id, logs: retainedLogs }).catch(
+      (error) => {
+        logger.warn(
+          { error, sessionId: session.id, taskId: params.taskId },
+          "Could not mark the Agent run as ended",
+        );
+      },
+    );
   }
 }
 
@@ -294,3 +304,15 @@ function delayMs(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 const LOG_DRAIN_GRACE_MS = 2_000;
+const RETAINED_LOG_BYTES = 1024 * 1024;
+
+function retainLogTail(current: string, chunk: string): string {
+  const combined = current + chunk;
+  if (Buffer.byteLength(combined, "utf8") <= RETAINED_LOG_BYTES) {
+    return combined;
+  }
+  return Buffer.from(combined, "utf8")
+    .subarray(-RETAINED_LOG_BYTES)
+    .toString("utf8")
+    .replace(/^\uFFFD/, "");
+}

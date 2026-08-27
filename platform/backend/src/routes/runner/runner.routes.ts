@@ -19,7 +19,7 @@ import {
   ApiError,
   constructResponseSchema,
   MissingAgentDeploymentCredentialSchema,
-  SelectAgentRunSchema,
+  SelectAgentExecutionSchema,
 } from "@/types";
 
 const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
@@ -142,15 +142,15 @@ const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
   );
 
   fastify.get(
-    "/api/agents/:id/runs",
+    "/api/agents/:id/executions",
     {
       schema: {
-        operationId: RouteId.GetAgentRuns,
+        operationId: RouteId.GetAgentExecutions,
         description:
-          "List deployment runs created by delegated tasks for this Agent",
+          "List background executions created by delegated tasks for this Agent",
         tags: ["Agents"],
         params: z.object({ id: z.string().uuid() }),
-        response: constructResponseSchema(z.array(SelectAgentRunSchema)),
+        response: constructResponseSchema(z.array(SelectAgentExecutionSchema)),
       },
     },
     async (request, reply) => {

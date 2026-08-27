@@ -63,6 +63,7 @@ import {
 } from "./agent-actions-model";
 import { AgentBackgroundExecutionCard } from "./agent-background-execution-card";
 import { AgentConnectContent } from "./agent-connect-content";
+import { AgentExecutions } from "./agent-executions";
 import { useAgentOverviewFacts } from "./agent-overview";
 import {
   AGENT_PAGE_CONFIGS,
@@ -74,7 +75,6 @@ import {
   isAgentTypeAllowedOnPage,
 } from "./agent-page-config";
 import { BackLink } from "./agent-page-shell";
-import { AgentRuns } from "./agent-runs";
 import { useAgentAccess } from "./use-agent-access";
 
 /**
@@ -240,8 +240,8 @@ function AgentDetails({
   const legacyConnectRequested = searchParams.get("tab") === "connect";
   const hasBackgroundExecution =
     kind === "agent" && agent.backgroundExecution != null;
-  const showingRuns =
-    hasBackgroundExecution && searchParams.get("tab") === "runs";
+  const showingExecutions =
+    hasBackgroundExecution && searchParams.get("tab") === "executions";
   const detailHref = agentDetailHref(kind, agent.id);
 
   useEffect(() => {
@@ -354,12 +354,12 @@ function AgentDetails({
               {
                 label: "Overview",
                 href: detailHref,
-                selected: !showingRuns,
+                selected: !showingExecutions,
               },
               {
-                label: "Runs",
-                href: `${detailHref}?tab=runs`,
-                selected: showingRuns,
+                label: "Executions",
+                href: `${detailHref}?tab=executions`,
+                selected: showingExecutions,
               },
             ]
           : []
@@ -464,8 +464,8 @@ function AgentDetails({
         two titled sections now fell between the Overview card and Endpoint —
         40px there against 16px between every card below it.
       */}
-      {showingRuns ? (
-        <AgentRuns agentId={agent.id} />
+      {showingExecutions ? (
+        <AgentExecutions agentId={agent.id} />
       ) : (
         <div className="space-y-4">
           <OverviewSummary

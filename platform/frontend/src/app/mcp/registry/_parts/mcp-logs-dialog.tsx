@@ -10,7 +10,6 @@ import {
   type ResourceVisibilityScope,
 } from "@archestra/shared";
 import {
-  ArrowDown,
   Check,
   ChevronsUpDown,
   Copy,
@@ -20,7 +19,11 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { LogConsole } from "@/components/log-console";
+import {
+  DeploymentConsoleTabs,
+  DeploymentLogPanel,
+  useDeploymentLogAutoScroll,
+} from "@/components/deployment-console";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -34,12 +37,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { TabsContent } from "@/components/ui/tabs";
 import { copyToClipboard } from "@/lib/clipboard";
 import { useAnimatedDots } from "@/lib/hooks/use-animated-dots";
 import websocketService from "@/lib/websocket/websocket";
@@ -159,8 +157,13 @@ export function McpLogsContent({
   const [streamedLogs, setStreamedLogs] = useState("");
   const [streamError, setStreamError] = useState<string | null>(null);
   const [command, setCommand] = useState("");
-  const [autoScroll, setAutoScroll] = useState(true);
-  const autoScrollRef = useRef(true);
+  const {
+    scrollAreaRef,
+    showScrollToBottom,
+    scrollToBottom,
+    followNewOutput,
+    reset: resetAutoScroll,
+  } = useDeploymentLogAutoScroll();
   const [isStreaming, setIsStreaming] = useState(false);
   const [isReinstalling, setIsReinstalling] = useState(false);
   const unsubscribeLogsRef = useRef<(() => void) | null>(null);
@@ -170,7 +173,6 @@ export function McpLogsContent({
     null,
   );
   const hasReceivedMessageRef = useRef(false);
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
   const currentServerIdRef = useRef<string | null>(null);
 
   // State for selected installation
@@ -264,129 +266,120 @@ export function McpLogsContent({
     currentServerIdRef.current = null;
   }, []);
 
-  const startStreaming = useCallback((targetServerId: string) => {
-    // Clean up existing stream without resetting UI state (we set it all below)
-    if (connectionTimeoutRef.current) {
-      clearTimeout(connectionTimeoutRef.current);
-      connectionTimeoutRef.current = null;
-    }
-    if (unsubscribeLogsRef.current) {
-      unsubscribeLogsRef.current();
-      unsubscribeLogsRef.current = null;
-    }
-    if (unsubscribeErrorRef.current) {
-      unsubscribeErrorRef.current();
-      unsubscribeErrorRef.current = null;
-    }
-    if (unsubscribeEndedRef.current) {
-      unsubscribeEndedRef.current();
-      unsubscribeEndedRef.current = null;
-    }
-    if (currentServerIdRef.current) {
-      websocketService.send({
-        type: "unsubscribe_mcp_logs",
-        payload: { serverId: currentServerIdRef.current },
-      });
-    }
-
-    setStreamError(null);
-    setStreamedLogs("");
-    setCommand("");
-    setIsStreaming(true);
-    hasReceivedMessageRef.current = false;
-    currentServerIdRef.current = targetServerId;
-
-    // Connect to WebSocket if not already connected
-    websocketService.connect();
-
-    // Set up connection timeout - if no logs received within 10 seconds, show error
-    connectionTimeoutRef.current = setTimeout(() => {
-      // Only trigger timeout if we're still streaming and haven't received any logs
-      if (currentServerIdRef.current === targetServerId) {
-        const isStillWaiting =
-          !websocketService.isConnected() || !hasReceivedMessageRef.current;
-        if (!isStillWaiting) {
-          return;
-        }
-        setStreamError("Connection timeout - unable to connect to server");
-        setIsStreaming(false);
+  const startStreaming = useCallback(
+    (targetServerId: string) => {
+      // Clean up existing stream without resetting UI state (we set it all below)
+      if (connectionTimeoutRef.current) {
+        clearTimeout(connectionTimeoutRef.current);
+        connectionTimeoutRef.current = null;
       }
-    }, 10000);
+      if (unsubscribeLogsRef.current) {
+        unsubscribeLogsRef.current();
+        unsubscribeLogsRef.current = null;
+      }
+      if (unsubscribeErrorRef.current) {
+        unsubscribeErrorRef.current();
+        unsubscribeErrorRef.current = null;
+      }
+      if (unsubscribeEndedRef.current) {
+        unsubscribeEndedRef.current();
+        unsubscribeEndedRef.current = null;
+      }
+      if (currentServerIdRef.current) {
+        websocketService.send({
+          type: "unsubscribe_mcp_logs",
+          payload: { serverId: currentServerIdRef.current },
+        });
+      }
 
-    // Subscribe to log messages for this server
-    unsubscribeLogsRef.current = websocketService.subscribe(
-      "mcp_logs",
-      (message: McpLogsMessage) => {
-        if (message.payload.serverId !== targetServerId) return;
+      setStreamError(null);
+      setStreamedLogs("");
+      setCommand("");
+      setIsStreaming(true);
+      hasReceivedMessageRef.current = false;
+      currentServerIdRef.current = targetServerId;
 
-        hasReceivedMessageRef.current = true;
+      // Connect to WebSocket if not already connected
+      websocketService.connect();
 
-        // Clear connection timeout on first message
-        if (connectionTimeoutRef.current) {
-          clearTimeout(connectionTimeoutRef.current);
-          connectionTimeoutRef.current = null;
+      // Set up connection timeout - if no logs received within 10 seconds, show error
+      connectionTimeoutRef.current = setTimeout(() => {
+        // Only trigger timeout if we're still streaming and haven't received any logs
+        if (currentServerIdRef.current === targetServerId) {
+          const isStillWaiting =
+            !websocketService.isConnected() || !hasReceivedMessageRef.current;
+          if (!isStillWaiting) {
+            return;
+          }
+          setStreamError("Connection timeout - unable to connect to server");
+          setIsStreaming(false);
         }
+      }, 10000);
 
-        // Capture the command from the first message
-        if (message.payload.command) {
-          setCommand(message.payload.command);
-        }
+      // Subscribe to log messages for this server
+      unsubscribeLogsRef.current = websocketService.subscribe(
+        "mcp_logs",
+        (message: McpLogsMessage) => {
+          if (message.payload.serverId !== targetServerId) return;
 
-        setStreamedLogs((prev) => {
-          const newLogs = prev + message.payload.logs;
+          hasReceivedMessageRef.current = true;
 
-          // Auto-scroll to bottom when new logs arrive
-          if (autoScrollRef.current) {
-            setTimeout(() => {
-              if (scrollAreaRef.current) {
-                const scrollContainer = scrollAreaRef.current.querySelector(
-                  "[data-radix-scroll-area-viewport]",
-                );
-                if (scrollContainer) {
-                  scrollContainer.scrollTop = scrollContainer.scrollHeight;
-                }
-              }
-            }, 10);
+          // Clear connection timeout on first message
+          if (connectionTimeoutRef.current) {
+            clearTimeout(connectionTimeoutRef.current);
+            connectionTimeoutRef.current = null;
           }
 
-          return newLogs;
-        });
-      },
-    );
+          // Capture the command from the first message
+          if (message.payload.command) {
+            setCommand(message.payload.command);
+          }
 
-    // Subscribe to error messages for this server
-    unsubscribeErrorRef.current = websocketService.subscribe(
-      "mcp_logs_error",
-      (message: McpLogsErrorMessage) => {
-        if (message.payload.serverId !== targetServerId) return;
+          setStreamedLogs((prev) => {
+            const newLogs = prev + message.payload.logs;
 
-        // Clear connection timeout on error
-        if (connectionTimeoutRef.current) {
-          clearTimeout(connectionTimeoutRef.current);
-          connectionTimeoutRef.current = null;
-        }
+            followNewOutput();
 
-        setStreamError(message.payload.error);
-        toast.error(`Streaming failed: ${message.payload.error}`);
-        setIsStreaming(false);
-      },
-    );
+            return newLogs;
+          });
+        },
+      );
 
-    // Subscribe to stream ended messages for this server
-    unsubscribeEndedRef.current = websocketService.subscribe(
-      "mcp_logs_ended",
-      (message: McpLogsEndedMessage) => {
-        if (message.payload.serverId !== targetServerId) return;
-        setIsStreaming(false);
-      },
-    );
+      // Subscribe to error messages for this server
+      unsubscribeErrorRef.current = websocketService.subscribe(
+        "mcp_logs_error",
+        (message: McpLogsErrorMessage) => {
+          if (message.payload.serverId !== targetServerId) return;
 
-    // Send subscribe message to server
-    websocketService.send({
-      type: "subscribe_mcp_logs",
-      payload: { serverId: targetServerId, lines: MCP_DEFAULT_LOG_LINES },
-    });
-  }, []);
+          // Clear connection timeout on error
+          if (connectionTimeoutRef.current) {
+            clearTimeout(connectionTimeoutRef.current);
+            connectionTimeoutRef.current = null;
+          }
+
+          setStreamError(message.payload.error);
+          toast.error(`Streaming failed: ${message.payload.error}`);
+          setIsStreaming(false);
+        },
+      );
+
+      // Subscribe to stream ended messages for this server
+      unsubscribeEndedRef.current = websocketService.subscribe(
+        "mcp_logs_ended",
+        (message: McpLogsEndedMessage) => {
+          if (message.payload.serverId !== targetServerId) return;
+          setIsStreaming(false);
+        },
+      );
+
+      // Send subscribe message to server
+      websocketService.send({
+        type: "subscribe_mcp_logs",
+        payload: { serverId: targetServerId, lines: MCP_DEFAULT_LOG_LINES },
+      });
+    },
+    [followNewOutput],
+  );
 
   // Auto-start streaming when dialog opens or serverId changes
   useEffect(() => {
@@ -402,12 +395,11 @@ export function McpLogsContent({
       setStreamedLogs("");
       setStreamError(null);
       setCommand("");
-      autoScrollRef.current = true;
-      setAutoScroll(true);
+      resetAutoScroll();
       setServerId(null); // Reset selection so it picks first on reopen
       setInternalTab("logs");
     }
-  }, [isActive, stopStreaming]);
+  }, [isActive, resetAutoScroll, stopStreaming]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -415,25 +407,6 @@ export function McpLogsContent({
       stopStreaming();
     };
   }, [stopStreaming]);
-
-  // Auto-scroll management: detect when user scrolls up manually
-  useEffect(() => {
-    const scrollContainer = scrollAreaRef.current?.querySelector(
-      "[data-radix-scroll-area-viewport]",
-    );
-
-    if (!scrollContainer) return;
-
-    const handleScroll = () => {
-      const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
-      const isAtBottom = scrollTop + clientHeight >= scrollHeight - 10; // 10px tolerance
-      autoScrollRef.current = isAtBottom;
-      setAutoScroll(isAtBottom);
-    };
-
-    scrollContainer.addEventListener("scroll", handleScroll);
-    return () => scrollContainer.removeEventListener("scroll", handleScroll);
-  }, []);
 
   const handleCopyCommand = useCallback(async () => {
     try {
@@ -445,19 +418,6 @@ export function McpLogsContent({
       toast.error("Failed to copy command");
     }
   }, [command]);
-
-  const scrollToBottom = useCallback(() => {
-    if (scrollAreaRef.current) {
-      const scrollContainer = scrollAreaRef.current.querySelector(
-        "[data-radix-scroll-area-viewport]",
-      );
-      if (scrollContainer) {
-        scrollContainer.scrollTop = scrollContainer.scrollHeight;
-        autoScrollRef.current = true;
-        setAutoScroll(true);
-      }
-    }
-  }, []);
 
   const isDebugDisabled = currentDeploymentStatus?.state !== "running";
   const contentTabClassName = hideHeader
@@ -487,159 +447,108 @@ export function McpLogsContent({
         />
       )}
 
-      <Tabs
+      <DeploymentConsoleTabs
         value={activeTab}
-        onValueChange={(v) => setActiveTab(v as "logs" | "debug" | "inspector")}
-        className="flex flex-col flex-1 min-h-0"
+        onValueChange={(value) =>
+          setActiveTab(value as "logs" | "debug" | "inspector")
+        }
+        hideTabBar={hideTabBar}
+        tabs={[
+          {
+            value: "logs",
+            label: "Logs",
+            testId: E2eTestId.McpLogsTab,
+          },
+          {
+            value: "inspector",
+            label: "Inspector",
+            disabled: isDebugDisabled,
+            disabledReason: "Pod must be running to inspect tools",
+          },
+          {
+            value: "debug",
+            label: "Shell",
+            disabled: isDebugDisabled,
+            disabledReason: "Pod must be running to start a shell session",
+          },
+        ]}
       >
-        {!hideTabBar && (
-          <TabsList className="w-fit bg-slate-100 dark:bg-slate-800 border h-9 p-1 flex-shrink-0">
-            <TabsTrigger
-              value="logs"
-              data-testid={E2eTestId.McpLogsTab}
-              className="px-6"
-            >
-              Logs
-            </TabsTrigger>
-            {isDebugDisabled ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span>
-                    <TabsTrigger value="inspector" disabled className="px-6">
-                      Inspector
-                    </TabsTrigger>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  Pod must be running to inspect tools
-                </TooltipContent>
-              </Tooltip>
-            ) : (
-              <TabsTrigger value="inspector" className="px-6">
-                Inspector
-              </TabsTrigger>
-            )}
-            {isDebugDisabled ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span>
-                    <TabsTrigger value="debug" disabled className="px-6">
-                      Shell
-                    </TabsTrigger>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  Pod must be running to start a shell session
-                </TooltipContent>
-              </Tooltip>
-            ) : (
-              <TabsTrigger value="debug" className="px-6">
-                Shell
-              </TabsTrigger>
-            )}
-          </TabsList>
-        )}
-
         <TabsContent value="logs" className={contentTabClassName}>
           <div className="flex flex-col gap-4 flex-1 min-h-0">
-            <div className="flex flex-col gap-2 flex-1 min-h-0">
-              <div className="flex items-center justify-between flex-shrink-0">
-                <h3 className="text-sm font-semibold">
-                  Pod Logs
-                  {currentDeploymentStatus?.podName && (
-                    <span className="font-normal text-muted-foreground">
-                      {" "}
-                      for {currentDeploymentStatus.podName}
+            <DeploymentLogPanel
+              title="Pod Logs"
+              detail={currentDeploymentStatus?.podName}
+              scrollAreaRef={scrollAreaRef}
+              showScrollToBottom={showScrollToBottom}
+              onScrollToBottom={scrollToBottom}
+              actions={
+                /* The installation card above already says Failed and why;
+                   the fix sits here beside the evidence instead of in a
+                   third status panel. */
+                isDeploymentFailed && onReinstall && serverId ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isReinstalling}
+                    onClick={async () => {
+                      setIsReinstalling(true);
+                      try {
+                        await onReinstall(serverId);
+                      } finally {
+                        setIsReinstalling(false);
+                      }
+                      startStreaming(serverId);
+                    }}
+                  >
+                    <RefreshCw
+                      className={`h-3 w-3 mr-1.5 ${isReinstalling ? "animate-spin" : ""}`}
+                    />
+                    {isReinstalling ? "Reinstalling..." : "Reinstall"}
+                  </Button>
+                ) : null
+              }
+              content={isWaitingForLogs ? "" : streamedLogs}
+              contentTestId={E2eTestId.McpLogsContent}
+              errorTestId={E2eTestId.McpLogsError}
+              error={streamError ? `Error loading logs: ${streamError}` : null}
+              placeholder={
+                isWaitingForLogs ? (
+                  <div className="text-emerald-400 font-mono text-sm">
+                    {streamingText}
+                  </div>
+                ) : isDeploymentFailed && currentDeploymentStatus?.error ? (
+                  <div className="text-red-400 font-mono text-sm">
+                    <div className="mb-2">
+                      Deployment failed: {currentDeploymentStatus.error}
+                    </div>
+                    <div className="text-slate-400">
+                      No container logs available. Use the manual command below
+                      to inspect the pod.
+                    </div>
+                  </div>
+                ) : undefined
+              }
+              status={
+                /* SPDX-SnippetBegin */
+                /* SPDX-SnippetCopyrightText: 2026 Archestra Inc. */
+                /* SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */
+                noPodToStream ? (
+                  <div className="flex items-center gap-1.5 text-slate-500 text-xs font-mono">
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-slate-600" />
+                    <span>No pod</span>
+                  </div>
+                ) : // SPDX-SnippetEnd
+                isStreaming && !streamError ? (
+                  <div className="flex items-center gap-1.5 text-red-400 text-xs font-mono">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
                     </span>
-                  )}
-                </h3>
-                <div className="flex items-center gap-2">
-                  {!autoScroll && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={scrollToBottom}
-                      className="bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
-                    >
-                      <ArrowDown className="mr-2 h-3 w-3" />
-                      Scroll to Bottom
-                    </Button>
-                  )}
-                  {/* The installation card above already says Failed and why;
-                      the fix sits here beside the evidence instead of in a
-                      third status panel. */}
-                  {isDeploymentFailed && onReinstall && serverId && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={isReinstalling}
-                      onClick={async () => {
-                        setIsReinstalling(true);
-                        try {
-                          await onReinstall(serverId);
-                        } finally {
-                          setIsReinstalling(false);
-                        }
-                        startStreaming(serverId);
-                      }}
-                    >
-                      <RefreshCw
-                        className={`h-3 w-3 mr-1.5 ${isReinstalling ? "animate-spin" : ""}`}
-                      />
-                      {isReinstalling ? "Reinstalling..." : "Reinstall"}
-                    </Button>
-                  )}
-                </div>
-              </div>
-
-              <LogConsole
-                className="flex-1"
-                scrollAreaRef={scrollAreaRef}
-                content={isWaitingForLogs ? "" : streamedLogs}
-                contentTestId={E2eTestId.McpLogsContent}
-                errorTestId={E2eTestId.McpLogsError}
-                error={
-                  streamError ? `Error loading logs: ${streamError}` : null
-                }
-                placeholder={
-                  isWaitingForLogs ? (
-                    <div className="text-emerald-400 font-mono text-sm">
-                      {streamingText}
-                    </div>
-                  ) : isDeploymentFailed && currentDeploymentStatus?.error ? (
-                    <div className="text-red-400 font-mono text-sm">
-                      <div className="mb-2">
-                        Deployment failed: {currentDeploymentStatus.error}
-                      </div>
-                      <div className="text-slate-400">
-                        No container logs available. Use the manual command
-                        below to inspect the pod.
-                      </div>
-                    </div>
-                  ) : undefined
-                }
-                status={
-                  /* SPDX-SnippetBegin */
-                  /* SPDX-SnippetCopyrightText: 2026 Archestra Inc. */
-                  /* SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */
-                  noPodToStream ? (
-                    <div className="flex items-center gap-1.5 text-slate-500 text-xs font-mono">
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-slate-600" />
-                      <span>No pod</span>
-                    </div>
-                  ) : // SPDX-SnippetEnd
-                  isStreaming && !streamError ? (
-                    <div className="flex items-center gap-1.5 text-red-400 text-xs font-mono">
-                      <span className="relative flex h-2 w-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
-                      </span>
-                      <span>Streaming</span>
-                    </div>
-                  ) : null
-                }
-              />
-            </div>
+                    <span>Streaming</span>
+                  </div>
+                ) : null
+              }
+            />
 
             {command && (
               <div className="flex flex-col gap-2">
@@ -701,7 +610,7 @@ export function McpLogsContent({
             />
           )}
         </TabsContent>
-      </Tabs>
+      </DeploymentConsoleTabs>
     </>
   );
 }

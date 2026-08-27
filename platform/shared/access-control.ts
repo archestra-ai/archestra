@@ -681,7 +681,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAgentBackgroundExecutionPreflight]: { agent: ["read"] },
   [RouteId.SetAgentBackgroundExecutionCredential]: { agent: ["read"] },
   [RouteId.DeleteAgentBackgroundExecutionCredential]: { agent: ["read"] },
-  [RouteId.GetAgentRuns]: { agent: ["read"] },
+  [RouteId.GetAgentExecutions]: { agent: ["read"] },
   // Completing onboarding flips an org-wide flag, so gate it on admin-level
   // organization-settings update, like the other org-settings routes.
   [RouteId.CompleteOnboarding]: { organizationSettings: ["update"] },

@@ -31,7 +31,7 @@ To configure an Agent:
 
 The image field starts with the installation's default Background execution image. The Agent's [environment](/docs/platform-environments) also applies to its deployment, including network egress policy and registry access. Use a purpose-built image for the work the Agent performs. For example, a coding Agent's image can include Git, a language toolchain, and repository tooling.
 
-Leave **Command** blank to use the built-in Agent loop supplied by the default image. A custom image can override the command and arguments. Background execution images must include a POSIX shell and `tmux`, which keep the live process attachable from the Runs tab.
+Leave **Command** blank to use the built-in Agent loop supplied by the default image. A custom image can override the command and arguments. Background execution images must include a POSIX shell and `tmux`, which keep the live process attachable from the Executions tab.
 
 The deployment uses the same Agent system prompt and tool access as foreground execution. Keep the Agent's instructions focused on the specialist role you want it to perform in either mode.
 
@@ -54,7 +54,7 @@ When external Vault storage is enabled, the credential control uses the same Vau
 - **Metered LLM budget** creates a spend ceiling for the run's short-lived virtual API key. After the ceiling is reached, further metered model calls are blocked by the LLM proxy. Subscription-backed calls have no billed spend and do not count against this ceiling.
 - **CPU and memory** override the installation defaults for this Agent. Leave them blank unless the workload needs different sizing.
 
-Each delegated task starts in a fresh pod. Task state, events, logs, and the final response remain attached to the run, but the container filesystem is not a durable workspace after the run ends. Keep durable outputs in a repository or an external artifact store.
+Each delegated task starts in a fresh pod. Task state, events, logs, and the final response remain attached to the execution. The container filesystem is removed when the execution ends. Keep durable outputs in a repository or an external artifact store.
 
 ## Delegate Work
 
@@ -68,15 +68,15 @@ For a lightweight coding-task channel, assign a foreground coordinator Agent and
 
 Users do not need to name tools, copy Agent IDs, or describe the delegation mechanism. Messages without the marker continue through the coordinator's normal foreground conversation.
 
-## View Runs
+## View Executions
 
-An Agent with Background execution configured has a **Runs** tab on its page. Use it to:
+An Agent with Background execution configured has an **Executions** tab. Use it to:
 
-- review run state and timestamps
-- follow live container logs
+- review execution outcomes and timestamps
+- read live or retained container logs
 - attach to the live shell for troubleshooting or interactive work
 
-Logs are available while the deployment is running. Only the user whose credentials started a run can attach to its live shell; Agent administrators cannot enter another user's shell. There is no separate Background execution permission or sidebar resource.
+Archestra retains up to 1 MB of container output after the pod is removed. Only the user whose credentials started an execution can attach to its live shell. Agent administrators cannot enter another user's shell. There is no separate Background execution permission or sidebar resource.
 
 ## Example Architecture
 

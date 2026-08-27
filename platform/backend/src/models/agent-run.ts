@@ -1,6 +1,6 @@
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, isNull } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { AgentRun, InsertAgentRun } from "@/types";
+import type { AgentExecution, AgentRun, InsertAgentRun } from "@/types";
 
 /**
  * The Agent run carrying one A2A task. Holds no lifecycle state of its own — the
@@ -35,10 +35,22 @@ class AgentRunModel {
   static async listForAgent(params: {
     agentId: string;
     organizationId: string;
-  }): Promise<AgentRun[]> {
+  }): Promise<AgentExecution[]> {
+    const { logs: _logs, ...runColumns } = getTableColumns(
+      schema.agentRunsTable,
+    );
     return db
-      .select()
+      .select({
+        ...runColumns,
+        state: schema.a2aTasksTable.state,
+        statusReason: schema.a2aTasksTable.statusReason,
+        stateChangedAt: schema.a2aTasksTable.stateChangedAt,
+      })
       .from(schema.agentRunsTable)
+      .innerJoin(
+        schema.a2aTasksTable,
+        eq(schema.agentRunsTable.taskId, schema.a2aTasksTable.id),
+      )
       .where(
         and(
           eq(schema.agentRunsTable.agentId, params.agentId),
@@ -52,13 +64,13 @@ class AgentRunModel {
    * Mark a session finished. Returns false when it was already closed, so a
    * caller racing the reconciler can tell whether it owns the teardown.
    */
-  static async close(id: string): Promise<boolean> {
+  static async close(params: { id: string; logs?: string }): Promise<boolean> {
     const closed = await db
       .update(schema.agentRunsTable)
-      .set({ endedAt: new Date() })
+      .set({ endedAt: new Date(), logs: params.logs })
       .where(
         and(
-          eq(schema.agentRunsTable.id, id),
+          eq(schema.agentRunsTable.id, params.id),
           isNull(schema.agentRunsTable.endedAt),
         ),
       )

@@ -1,5 +1,9 @@
 import type * as k8s from "@kubernetes/client-node";
-import type { AgentDeploymentResources } from "@/types";
+import {
+  buildManagedNetworkPolicy,
+  buildUnrestrictedFloorPolicy,
+} from "@/k8s/mcp-server-runtime/network-policy";
+import type { AgentDeploymentResources, EffectiveNetworkPolicy } from "@/types";
 import { RUNNER_TASK_LABEL, runnerLabels, runnerNames } from "./naming";
 
 /** Where the steer FIFO and the generated entrypoint live inside the pod. */
@@ -49,6 +53,8 @@ export type RunnerLaunchSpec = {
   activeDeadlineSeconds: number | null;
   imagePullSecrets: string[];
   ownerReferences: k8s.V1OwnerReference[] | undefined;
+  /** The Agent Environment policy resolved when the task is launched. */
+  effectiveNetworkPolicy: EffectiveNetworkPolicy;
 };
 
 /**
@@ -257,6 +263,46 @@ export function buildRunnerPlatformEgressPolicy(params: {
           ports: DNS_PORTS,
         },
       ],
+    },
+  };
+}
+
+/**
+ * Apply the Agent Environment's effective egress policy to this execution.
+ *
+ * This deliberately reuses the MCP runtime's policy builders: an Agent and an
+ * MCP server assigned to the same Environment must interpret unrestricted,
+ * restricted, and disabled egress identically. The platform policy above is a
+ * second policy; Kubernetes unions both rule sets so a restricted execution
+ * can always reach Archestra without gaining arbitrary public access.
+ */
+export function buildRunnerEnvironmentEgressPolicy(
+  spec: RunnerLaunchSpec,
+): k8s.V1NetworkPolicy {
+  const names = runnerNames(spec.frozenName);
+  const labels = runnerLabels({ taskId: spec.taskId, runnerId: spec.runnerId });
+  const podSelectorLabels = { [RUNNER_TASK_LABEL]: spec.taskId };
+  const built =
+    !spec.effectiveNetworkPolicy.policy ||
+    spec.effectiveNetworkPolicy.policy.egressMode === "unrestricted"
+      ? buildUnrestrictedFloorPolicy({
+          name: names.environmentNetworkPolicy,
+          podSelectorLabels,
+          labels,
+        })
+      : buildManagedNetworkPolicy({
+          name: names.environmentNetworkPolicy,
+          podSelectorLabels,
+          effectivePolicy: spec.effectiveNetworkPolicy,
+        });
+
+  return {
+    ...built,
+    metadata: {
+      ...built.metadata,
+      namespace: spec.namespace,
+      labels,
+      ownerReferences: spec.ownerReferences,
     },
   };
 }

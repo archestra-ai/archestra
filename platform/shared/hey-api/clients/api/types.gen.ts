@@ -84802,16 +84802,16 @@ export type SetAgentBackgroundExecutionCredentialResponses = {
 
 export type SetAgentBackgroundExecutionCredentialResponse = SetAgentBackgroundExecutionCredentialResponses[keyof SetAgentBackgroundExecutionCredentialResponses];
 
-export type GetAgentRunsData = {
+export type GetAgentExecutionsData = {
     body?: never;
     path: {
         id: string;
     };
     query?: never;
-    url: '/api/agents/{id}/runs';
+    url: '/api/agents/{id}/executions';
 };
 
-export type GetAgentRunsErrors = {
+export type GetAgentExecutionsErrors = {
     /**
      * Default Response
      */
@@ -84874,9 +84874,9 @@ export type GetAgentRunsErrors = {
     };
 };
 
-export type GetAgentRunsError = GetAgentRunsErrors[keyof GetAgentRunsErrors];
+export type GetAgentExecutionsError = GetAgentExecutionsErrors[keyof GetAgentExecutionsErrors];
 
-export type GetAgentRunsResponses = {
+export type GetAgentExecutionsResponses = {
     /**
      * Default Response
      */
@@ -84892,10 +84892,13 @@ export type GetAgentRunsResponses = {
         virtualApiKeyId: string | null;
         startedAt: string;
         endedAt: string | null;
+        state: 'TASK_STATE_UNSPECIFIED' | 'TASK_STATE_SUBMITTED' | 'TASK_STATE_WORKING' | 'TASK_STATE_COMPLETED' | 'TASK_STATE_FAILED' | 'TASK_STATE_CANCELED' | 'TASK_STATE_INPUT_REQUIRED' | 'TASK_STATE_REJECTED' | 'TASK_STATE_AUTH_REQUIRED';
+        statusReason: string | null;
+        stateChangedAt: string | null;
     }>;
 };
 
-export type GetAgentRunsResponse = GetAgentRunsResponses[keyof GetAgentRunsResponses];
+export type GetAgentExecutionsResponse = GetAgentExecutionsResponses[keyof GetAgentExecutionsResponses];
 
 export type GetScheduleTriggersData = {
     body?: never;

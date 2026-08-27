@@ -44,6 +44,8 @@ const agentRunsTable = pgTable(
       () => virtualApiKeysTable.id,
       { onDelete: "set null" },
     ),
+    /** Bounded tail of container output retained after the pod is removed. */
+    logs: text("logs"),
     startedAt: timestamp("started_at", { mode: "date" }).notNull().defaultNow(),
     endedAt: timestamp("ended_at", { mode: "date" }),
   },

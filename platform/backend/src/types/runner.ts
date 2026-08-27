@@ -1,6 +1,7 @@
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { A2ATaskStateSchema } from "./a2a-task";
 
 /**
  * How a steer message reaches the running process.
@@ -148,8 +149,17 @@ export const InsertAgentRunSchema = createInsertSchema(
   schema.agentRunsTable,
 ).omit({ id: true, startedAt: true, endedAt: true });
 
+export const SelectAgentExecutionSchema = SelectAgentRunSchema.omit({
+  logs: true,
+}).extend({
+  state: A2ATaskStateSchema,
+  statusReason: z.string().nullable(),
+  stateChangedAt: z.date().nullable(),
+});
+
 export type AgentRun = z.infer<typeof SelectAgentRunSchema>;
 export type InsertAgentRun = z.infer<typeof InsertAgentRunSchema>;
+export type AgentExecution = z.infer<typeof SelectAgentExecutionSchema>;
 
 export const SelectUserCredentialSchema = createSelectSchema(
   schema.userCredentialsTable,

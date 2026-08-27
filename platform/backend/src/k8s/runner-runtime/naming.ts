@@ -35,11 +35,13 @@ export function runnerNames(frozenName: string): {
   job: string;
   secret: string;
   networkPolicy: string;
+  environmentNetworkPolicy: string;
 } {
   return {
     job: frozenName,
     secret: `${frozenName}-env`,
     networkPolicy: `${frozenName}-np`,
+    environmentNetworkPolicy: `${frozenName}-egress`,
   };
 }
 

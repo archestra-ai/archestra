@@ -5,11 +5,12 @@ import { reportApiError, throwOnApiError } from "@/lib/utils";
 const {
   deleteAgentBackgroundExecutionCredential,
   getAgentBackgroundExecutionPreflight,
-  getAgentRuns,
+  getAgentExecutions,
   setAgentBackgroundExecutionCredential,
 } = archestraApiSdk;
 
-export type AgentRun = archestraApiTypes.GetAgentRunsResponses["200"][number];
+export type AgentExecution =
+  archestraApiTypes.GetAgentExecutionsResponses["200"][number];
 
 export function useAgentBackgroundExecutionPreflight(
   agentId: string,
@@ -28,11 +29,13 @@ export function useAgentBackgroundExecutionPreflight(
   });
 }
 
-export function useAgentRuns(agentId: string, enabled = true) {
+export function useAgentExecutions(agentId: string, enabled = true) {
   return useQuery({
-    queryKey: ["agents", agentId, "runs"],
+    queryKey: ["agents", agentId, "executions"],
     queryFn: async () => {
-      const { data, error } = await getAgentRuns({ path: { id: agentId } });
+      const { data, error } = await getAgentExecutions({
+        path: { id: agentId },
+      });
       throwOnApiError(error, { toastOnError: false });
       return data ?? [];
     },

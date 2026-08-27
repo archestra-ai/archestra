@@ -33,6 +33,12 @@ vi.mock("./agent-overview", () => ({
 vi.mock("./agent-connect-content", () => ({
   AgentConnectContent: () => <div>connect content</div>,
 }));
+vi.mock("./agent-background-execution-card", () => ({
+  AgentBackgroundExecutionCard: () => <div>background execution</div>,
+}));
+vi.mock("./agent-executions", () => ({
+  AgentExecutions: () => <div>execution history</div>,
+}));
 vi.mock("@/components/clone-agent-dialog", () => ({
   CloneAgentDialog: () => null,
 }));
@@ -203,5 +209,19 @@ describe("AgentDetailPage", () => {
 
     expect(screen.queryByText("connect content")).toBeNull();
     expect(screen.getByRole("heading", { name: "Overview" })).toBeVisible();
+  });
+
+  it("names delegated task history Executions and opens it from the page header", () => {
+    mockAgent({ ...baseAgent, backgroundExecution: {} });
+    render(<AgentDetailPage kind="agent" id="a1" />);
+
+    expect(
+      screen
+        .getAllByRole("link", { name: "Executions" })
+        .every(
+          (link) => link.getAttribute("href") === "/agents/a1?tab=executions",
+        ),
+    ).toBe(true);
+    expect(screen.queryByRole("link", { name: "Runs" })).toBeNull();
   });
 });

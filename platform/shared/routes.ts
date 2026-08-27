@@ -459,7 +459,7 @@ export const RouteId = {
     "setAgentBackgroundExecutionCredential",
   DeleteAgentBackgroundExecutionCredential:
     "deleteAgentBackgroundExecutionCredential",
-  GetAgentRuns: "getAgentRuns",
+  GetAgentExecutions: "getAgentExecutions",
 
   // Virtual API Key Routes
   GetAllVirtualApiKeys: "getAllVirtualApiKeys",

@@ -1,5 +1,5 @@
 {
-  "id": "2e319d8b-9d30-47f0-bbf0-a2cf2ce0c01a",
+  "id": "8ea213d6-5613-4689-9d41-24603e3e4826",
   "prevId": "361f4d84-2b3b-47c1-b35d-15c394edd83f",
   "version": "7",
   "dialect": "postgresql",
@@ -1636,6 +1636,12 @@
         "virtual_api_key_id": {
           "name": "virtual_api_key_id",
           "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "logs": {
+          "name": "logs",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },

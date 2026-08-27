@@ -330977,13 +330977,13 @@
         }
       }
     },
-    "/api/agents/{id}/runs": {
+    "/api/agents/{id}/executions": {
       "get": {
-        "operationId": "getAgentRuns",
+        "operationId": "getAgentExecutions",
         "tags": [
           "Agents"
         ],
-        "description": "List deployment runs created by delegated tasks for this Agent\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
+        "description": "List background executions created by delegated tasks for this Agent\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
         "parameters": [
           {
             "schema": {
@@ -331051,6 +331051,29 @@
                         "nullable": true,
                         "type": "string",
                         "format": "date-time"
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "TASK_STATE_UNSPECIFIED",
+                          "TASK_STATE_SUBMITTED",
+                          "TASK_STATE_WORKING",
+                          "TASK_STATE_COMPLETED",
+                          "TASK_STATE_FAILED",
+                          "TASK_STATE_CANCELED",
+                          "TASK_STATE_INPUT_REQUIRED",
+                          "TASK_STATE_REJECTED",
+                          "TASK_STATE_AUTH_REQUIRED"
+                        ]
+                      },
+                      "statusReason": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "stateChangedAt": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "date-time"
                       }
                     },
                     "required": [
@@ -331064,7 +331087,10 @@
                       "secretName",
                       "virtualApiKeyId",
                       "startedAt",
-                      "endedAt"
+                      "endedAt",
+                      "state",
+                      "statusReason",
+                      "stateChangedAt"
                     ],
                     "additionalProperties": false
                   }

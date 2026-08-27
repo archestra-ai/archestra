@@ -1,5 +1,5 @@
 -- drizzle-migration-linter: allow-breaking
--- drizzle-migration-linter: reason=agent_runs and user_credentials are introduced empty in this migration, so their foreign keys and indexes validate without locking populated tables. The two Agent columns are nullable with no defaults, so existing rows and older writers remain valid; ON DELETE behavior deliberately removes run/credential rows with their owning Agent or user and preserves run history when a short-lived virtual key is revoked.
+-- drizzle-migration-linter: reason=agent_runs and user_credentials are introduced empty in this migration, so their foreign keys and indexes validate without locking populated tables. The two Agent columns are nullable with no defaults, so existing rows and older writers remain valid; ON DELETE behavior deliberately removes execution/credential rows with their owning Agent or user and preserves execution history when a short-lived virtual key is revoked.
 CREATE TABLE "agent_runs" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"organization_id" text NOT NULL,
@@ -10,6 +10,7 @@ CREATE TABLE "agent_runs" (
 	"namespace" text NOT NULL,
 	"secret_name" text,
 	"virtual_api_key_id" uuid,
+	"logs" text,
 	"started_at" timestamp DEFAULT now() NOT NULL,
 	"ended_at" timestamp
 );

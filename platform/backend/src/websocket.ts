@@ -645,6 +645,20 @@ class WebSocketService {
       return;
     }
 
+    if (session.endedAt) {
+      if (session.logs) {
+        this.sendToClient(ws, {
+          type: "agent_run_logs",
+          payload: { runId, logs: session.logs },
+        });
+      }
+      this.sendToClient(ws, {
+        type: "agent_run_logs_ended",
+        payload: { runId },
+      });
+      return;
+    }
+
     const abortController = new AbortController();
     const stream = new PassThrough();
     this.agentRunLogsSubscriptions.set(ws, { runId, stream, abortController });

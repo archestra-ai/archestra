@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
+import { A2AProtocolRole } from "@/agents/a2a/a2a-protocol";
 import db, { schema } from "@/database";
 import { runnerRuntimeManager } from "@/k8s/runner-runtime";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
@@ -71,7 +72,7 @@ describe("Agent Background execution routes", () => {
     await app.close();
   });
 
-  test("lists only runs belonging to the selected Agent", async ({
+  test("lists only executions belonging to the selected Agent with their task outcome", async ({
     makeAgent,
   }) => {
     const otherAgent = await makeAgent({
@@ -92,6 +93,27 @@ describe("Agent Background execution routes", () => {
       secretName: null,
       virtualApiKeyId: null,
     });
+    await A2ATaskModel.transitionStateWithEvent({
+      id: selectedTask.id,
+      to: "TASK_STATE_FAILED",
+      allowedFrom: ["TASK_STATE_SUBMITTED"],
+      statusReason: "The execution process exited with status 1",
+      eventPayload: {
+        statusUpdate: {
+          taskId: selectedTask.id,
+          contextId: selectedTask.contextId,
+          status: {
+            state: "TASK_STATE_FAILED",
+            message: {
+              messageId: crypto.randomUUID(),
+              role: A2AProtocolRole.Agent,
+              parts: [{ text: "The execution process exited with status 1" }],
+            },
+          },
+          final: true,
+        },
+      },
+    });
     await AgentRunModel.create({
       organizationId,
       taskId: otherTask.id,
@@ -105,7 +127,7 @@ describe("Agent Background execution routes", () => {
 
     const response = await app.inject({
       method: "GET",
-      url: `/api/agents/${agent.id}/runs`,
+      url: `/api/agents/${agent.id}/executions`,
     });
 
     expect(response.statusCode).toBe(200);
@@ -113,6 +135,8 @@ describe("Agent Background execution routes", () => {
       expect.objectContaining({
         taskId: selectedTask.id,
         agentId: agent.id,
+        state: "TASK_STATE_FAILED",
+        statusReason: "The execution process exited with status 1",
       }),
     ]);
   });

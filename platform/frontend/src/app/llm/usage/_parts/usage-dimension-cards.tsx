@@ -1,7 +1,10 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
+import { subHours } from "date-fns";
 import { BilledCost } from "@/components/billed-cost";
+import { RelativeTime } from "@/components/relative-time";
+import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
@@ -47,9 +50,10 @@ export function ClientUsageCard({
   return (
     <UsageDimensionCard
       title="Clients"
-      description="Where your requests came from, including connected coding clients."
+      description="Connections seen through the proxy, with their latest activity and usage."
       dimensionLabel="Client"
       emptyMessage="No client usage recorded for the selected timeframe."
+      showActivity
       rows={clients.map((client) => ({
         ...client,
         label: client.client ?? "Not reported",
@@ -68,6 +72,7 @@ type UsageRow = {
   percentage: number;
   billedCost: number;
   subscriptionCost: number;
+  lastActiveAt?: string;
 };
 
 function UsageDimensionCard({
@@ -76,12 +81,14 @@ function UsageDimensionCard({
   dimensionLabel,
   emptyMessage,
   rows,
+  showActivity = false,
 }: {
   title: string;
   description: string;
   dimensionLabel: string;
   emptyMessage: string;
   rows: UsageRow[];
+  showActivity?: boolean;
 }) {
   return (
     <Card className="min-w-0">
@@ -99,13 +106,30 @@ function UsageDimensionCard({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="bg-card sticky top-0 z-10">
+                  <TableHead
+                    className={
+                      showActivity
+                        ? "bg-card sticky top-0 z-10 w-36 min-w-36"
+                        : "bg-card sticky top-0 z-10 min-w-36"
+                    }
+                  >
                     {dimensionLabel}
                   </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10">
+                  <TableHead
+                    className={
+                      showActivity
+                        ? "bg-card sticky top-0 z-10 hidden lg:table-cell"
+                        : "bg-card sticky top-0 z-10"
+                    }
+                  >
                     Share
                   </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10 text-right">
+                  {showActivity && (
+                    <TableHead className="bg-card sticky top-0 z-10">
+                      Status
+                    </TableHead>
+                  )}
+                  <TableHead className="bg-card sticky top-0 z-10 whitespace-nowrap text-right">
                     Requests
                   </TableHead>
                   <TableHead className="bg-card sticky top-0 z-10 text-right">
@@ -119,12 +143,25 @@ function UsageDimensionCard({
               <TableBody>
                 {rows.map((row) => (
                   <TableRow key={row.label}>
-                    <TableCell className="max-w-[20ch] font-medium">
-                      <span className="block truncate" title={row.label}>
+                    <TableCell
+                      className={
+                        showActivity
+                          ? "w-36 min-w-36 whitespace-nowrap font-medium"
+                          : "max-w-[20ch] min-w-36 font-medium"
+                      }
+                    >
+                      <span
+                        className={showActivity ? undefined : "block truncate"}
+                        title={row.label}
+                      >
                         {row.label}
                       </span>
                     </TableCell>
-                    <TableCell className="min-w-28">
+                    <TableCell
+                      className={
+                        showActivity ? "hidden lg:table-cell" : "min-w-28"
+                      }
+                    >
                       <div className="flex items-center gap-2">
                         <div
                           className="bg-muted h-1.5 min-w-14 flex-1 overflow-hidden rounded-full"
@@ -143,6 +180,11 @@ function UsageDimensionCard({
                         </span>
                       </div>
                     </TableCell>
+                    {showActivity && (
+                      <TableCell className="min-w-36">
+                        <ClientActivity lastActiveAt={row.lastActiveAt} />
+                      </TableCell>
+                    )}
                     <TableCell className="text-right tabular-nums">
                       {row.requests.toLocaleString()}
                     </TableCell>
@@ -187,6 +229,30 @@ function UsageDimensionCard({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function ClientActivity({ lastActiveAt }: { lastActiveAt?: string }) {
+  if (!lastActiveAt) return null;
+
+  const lastActiveDate = new Date(lastActiveAt);
+  const isActive = lastActiveDate >= subHours(new Date(), 24);
+
+  return (
+    <div className="flex flex-col items-start gap-1.5">
+      <Badge variant="outline" className="gap-1.5 font-normal">
+        <span
+          className={
+            isActive
+              ? "size-1.5 rounded-full bg-emerald-500"
+              : "size-1.5 rounded-full bg-muted-foreground"
+          }
+          aria-hidden="true"
+        />
+        <span>{isActive ? "Active" : "Idle"}</span>
+      </Badge>
+      <RelativeTime date={lastActiveAt} className="text-xs" />
+    </div>
   );
 }
 

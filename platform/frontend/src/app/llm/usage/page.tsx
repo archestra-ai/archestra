@@ -114,10 +114,8 @@ export default function MyUsagePage() {
           </p>
         ) : (
           <>
-            <div className="grid gap-6 xl:grid-cols-2">
-              <ModelUsageCard models={statisticsQuery.data.models} />
-              <ClientUsageCard clients={breakdownQuery.data.clients} />
-            </div>
+            <ModelUsageCard models={statisticsQuery.data.models} />
+            <ClientUsageCard clients={breakdownQuery.data.clients} />
 
             <div className="grid gap-6 xl:grid-cols-2">
               <TokenMixCard mix={breakdownQuery.data.tokenMix} />

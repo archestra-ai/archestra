@@ -353537,6 +353537,9 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "lastActiveAt": {
+                            "type": "string"
+                          },
                           "requests": {
                             "type": "number"
                           },
@@ -353564,6 +353567,7 @@
                         },
                         "required": [
                           "client",
+                          "lastActiveAt",
                           "requests",
                           "inputTokens",
                           "outputTokens",

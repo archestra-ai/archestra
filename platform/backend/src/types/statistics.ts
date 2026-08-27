@@ -60,8 +60,10 @@ export const UserModelUsageSchema = z.object({
 
 /** One client application's slice of the caller's usage. */
 export const MyClientUsageSchema = z.object({
-  /** Known client-family label, raw attribution value, or null when absent. */
+  /** Known client label, raw attribution value, or null when absent. */
   client: z.string().nullable(),
+  /** Most recent request attributed to this client in the selected timeframe. */
+  lastActiveAt: z.string(),
   requests: z.number(),
   inputTokens: z.number(),
   outputTokens: z.number(),

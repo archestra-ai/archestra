@@ -1,8 +1,12 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ClientUsageCard, ModelUsageCard } from "./usage-dimension-cards";
 
 describe("usage dimension cards", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("expands model usage into shares, requests, tokens, and billed spend", () => {
     render(
       <ModelUsageCard
@@ -33,11 +37,15 @@ describe("usage dimension cards", () => {
   });
 
   it("groups client usage and keeps subscription-covered value out of spend", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-27T16:00:00.000Z"));
+
     render(
       <ClientUsageCard
         clients={[
           {
             client: "Example coding client",
+            lastActiveAt: "2026-08-27T15:00:00.000Z",
             requests: 40,
             inputTokens: 2_000,
             outputTokens: 500,
@@ -52,6 +60,8 @@ describe("usage dimension cards", () => {
     );
 
     expect(screen.getByText("Example coding client")).toBeInTheDocument();
+    expect(screen.getByText("Active")).toBeInTheDocument();
+    expect(screen.getByText("about 1 hour ago")).toBeInTheDocument();
     expect(screen.getByText("$0.00")).toBeInTheDocument();
     expect(screen.getByText("Sub")).toHaveAccessibleName(
       "Subscription-covered usage",
@@ -60,11 +70,15 @@ describe("usage dimension cards", () => {
   });
 
   it("labels requests that do not report a client", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-27T16:00:00.000Z"));
+
     render(
       <ClientUsageCard
         clients={[
           {
             client: null,
+            lastActiveAt: "2026-08-25T16:00:00.000Z",
             requests: 1,
             inputTokens: 1,
             outputTokens: 0,
@@ -79,5 +93,6 @@ describe("usage dimension cards", () => {
     );
 
     expect(screen.getByText("Not reported")).toBeInTheDocument();
+    expect(screen.getByText("Idle")).toBeInTheDocument();
   });
 });

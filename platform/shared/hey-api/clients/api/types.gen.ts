@@ -91205,6 +91205,7 @@ export type GetMyUsageBreakdownResponses = {
         };
         clients: Array<{
             client: string | null;
+            lastActiveAt: string;
             requests: number;
             inputTokens: number;
             outputTokens: number;

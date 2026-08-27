@@ -2,7 +2,7 @@
 title: Costs & Limits
 category: LLM Proxy
 order: 4
-lastUpdated: 2026-08-26
+lastUpdated: 2026-08-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -34,7 +34,7 @@ Reading organization-wide costs requires the `llmCost:read` permission. You can 
 
 ## My Usage
 
-The **My Usage** page at `/llm/usage` shows your own activity: billed spend, requests, tokens, active days, and how spend moved over the selected timeframe. It then provides separate model and client tables with each entry's token share, requests, tokens, and cost.
+The **My Usage** page at `/llm/usage` shows your own activity: billed spend, requests, tokens, active days, and how spend moved over the selected timeframe. It then provides separate model and client tables with each entry's token share, requests, tokens, and cost. The client table distinguishes known client variants and shows when each one was last active.
 
 The lower sections explain the shape of that usage:
 

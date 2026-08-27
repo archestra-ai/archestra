@@ -744,7 +744,7 @@ describe("GET /api/statistics/me/breakdown", () => {
       outputTokens: 10,
       cost: "0.5000000000",
       model: "gpt-4o",
-      externalAgentId: "anthropic_claude",
+      externalAgentId: "anthropic_claude_code",
       createdAt: start,
     });
     await makeInteraction(agent.id, {
@@ -754,7 +754,7 @@ describe("GET /api/statistics/me/breakdown", () => {
       outputTokens: 100,
       cost: "4.0000000000",
       model: "claude-opus-4",
-      externalAgentId: "anthropic_claude",
+      externalAgentId: "anthropic_claude_code",
       createdAt: start,
     });
     await makeInteraction(agent.id, {
@@ -764,7 +764,7 @@ describe("GET /api/statistics/me/breakdown", () => {
       outputTokens: 100,
       cost: "4.0000000000",
       model: "claude-opus-4",
-      externalAgentId: "anthropic_claude",
+      externalAgentId: "anthropic_claude_code",
       createdAt: new Date(start.getTime() + 30 * 60 * 1000),
     });
     // No session id: real traffic, attributable to no session.
@@ -793,20 +793,22 @@ describe("GET /api/statistics/me/breakdown", () => {
     expect(top).toMatchObject({
       requests: 2,
       model: "claude-opus-4",
-      client: "Claude",
+      client: "Claude Code",
       durationMinutes: 30,
     });
     expect(top.cost).toBeCloseTo(8, 10);
 
     expect(body.clients).toEqual([
       expect.objectContaining({
-        client: "Claude",
+        client: "Claude Code",
+        lastActiveAt: top.lastActiveAt,
         requests: 3,
         totalTokens: 420,
         percentage: expect.closeTo(95.454545, 5),
       }),
       expect.objectContaining({
         client: null,
+        lastActiveAt: expect.any(String),
         requests: 1,
         totalTokens: 20,
         percentage: expect.closeTo(4.545455, 5),
@@ -817,6 +819,45 @@ describe("GET /api/statistics/me/breakdown", () => {
     // unsessioned request, so "these sessions were N% of your usage" is honest.
     expect(body.totalCost).toBeCloseTo(9.5, 10);
     expect(body.unsessionedRequests).toBe(1);
+  });
+
+  test("keeps explicit client variants separate in the usage breakdown", async ({
+    makeAgent,
+    makeInteraction,
+  }) => {
+    const agent = await makeAgent({ organizationId, authorId: currentUser.id });
+
+    await makeInteraction(agent.id, {
+      userId: currentUser.id,
+      externalAgentId: "anthropic_claude_code",
+      inputTokens: 100,
+      outputTokens: 20,
+      cost: "1.0000000000",
+    });
+    await makeInteraction(agent.id, {
+      userId: currentUser.id,
+      externalAgentId: "anthropic_claude_desktop",
+      inputTokens: 40,
+      outputTokens: 10,
+      cost: "0.5000000000",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/statistics/me/breakdown?timeframe=24h",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().clients).toEqual([
+      expect.objectContaining({
+        client: "Claude Code",
+        totalTokens: 120,
+      }),
+      expect.objectContaining({
+        client: "Claude Desktop",
+        totalTokens: 50,
+      }),
+    ]);
   });
 
   test("resolves internal agent ids instead of exposing opaque client labels", async ({

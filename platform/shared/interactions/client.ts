@@ -7,8 +7,9 @@ import type { SupportedProvider } from "../model-constants";
  * `X-Archestra-Agent-Id` header (e.g. the connect-page setup scripts send
  * {@link CLAUDE_CODE_CLIENT_ID} / {@link CLAUDE_DESKTOP_CLIENT_ID}) or, when
  * absent, from auto-discovery of a Claude client (recorded as the generic
- * {@link CLAUDE_CLIENT_ID}). Every Claude-family id renders as a single
- * {@link CLAUDE_CLIENT_LABEL} in the UI.
+ * {@link CLAUDE_CLIENT_ID}). Family-level surfaces render every Claude id as
+ * {@link CLAUDE_CLIENT_LABEL}; usage surfaces preserve the explicit Code and
+ * Desktop variants via {@link clientUsageLabelForExternalAgentId}.
  */
 
 /**
@@ -21,7 +22,7 @@ import type { SupportedProvider } from "../model-constants";
  */
 export const CLIENT_MCP_TOOL_NAME_PREFIX = "mcp__";
 
-/** Human-readable label for every Claude client id in the UI. */
+/** Human-readable family label for Claude clients in grouped UI surfaces. */
 export const CLAUDE_CLIENT_LABEL = "Claude";
 
 /** Human-readable label for the Codex client id in the UI. */
@@ -239,6 +240,35 @@ export function isCursorClientAgentId(
     return false;
   }
   return CURSOR_CLIENT_AGENT_ID_SET.has(externalAgentId.trim().toLowerCase());
+}
+
+/**
+ * Exact client label used by personal usage analytics.
+ *
+ * Unlike the logs filter, this intentionally preserves explicit Connect-page
+ * variants. Someone who configured Claude Desktop should not see that traffic
+ * merged into Claude Code just because both belong to the Claude family.
+ */
+export function clientUsageLabelForExternalAgentId(
+  externalAgentId: string | null | undefined,
+): string | null {
+  const normalized = externalAgentId?.trim().toLowerCase();
+  switch (normalized) {
+    case CLAUDE_CLIENT_ID:
+      return CLAUDE_CLIENT_LABEL;
+    case CLAUDE_CODE_CLIENT_ID:
+      return "Claude Code";
+    case CLAUDE_DESKTOP_CLIENT_ID:
+      return "Claude Desktop";
+    case CODEX_CLIENT_ID:
+      return CODEX_CLIENT_LABEL;
+    case COPILOT_CLI_CLIENT_ID:
+      return COPILOT_CLI_CLIENT_LABEL;
+    case CURSOR_CLIENT_ID:
+      return CURSOR_CLIENT_LABEL;
+    default:
+      return null;
+  }
 }
 
 /**

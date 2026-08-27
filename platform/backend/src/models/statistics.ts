@@ -1,5 +1,5 @@
 import {
-  clientForExternalAgentIds,
+  clientUsageLabelForExternalAgentId,
   getStatisticsBucketIntervalMinutes,
   type PaginationQuery,
   parseCustomStatisticsTimeframe,
@@ -998,6 +998,7 @@ class StatisticsModel {
       db
         .select({
           client: interactions.externalAgentId,
+          lastActiveAt: sql<string>`MAX(${interactions.createdAt})`,
           requests: sql<number>`CAST(COUNT(*) AS INTEGER)`,
           inputTokens: tokenSum(interactions.inputTokens),
           outputTokens: tokenSum(interactions.outputTokens),
@@ -1065,8 +1066,10 @@ class StatisticsModel {
     const clientsByLabel = new Map<string | null, MyClientUsage>();
     for (const row of clientRows) {
       const client = formatUsageClient(row.client, clientAgentNames);
+      const lastActiveAt = new Date(row.lastActiveAt).toISOString();
       const current = clientsByLabel.get(client) ?? {
         client,
+        lastActiveAt,
         requests: 0,
         inputTokens: 0,
         outputTokens: 0,
@@ -1083,6 +1086,9 @@ class StatisticsModel {
       current.totalTokens = current.inputTokens + current.outputTokens;
       current.billedCost += Number(row.billedCost) || 0;
       current.subscriptionCost += Number(row.subscriptionCost) || 0;
+      if (lastActiveAt > current.lastActiveAt) {
+        current.lastActiveAt = lastActiveAt;
+      }
       clientsByLabel.set(client, current);
     }
     const clientTotalTokens = Array.from(clientsByLabel.values()).reduce(
@@ -2361,8 +2367,8 @@ function formatUsageClient(
 ): string | null {
   if (!externalAgentId) return null;
 
-  const family = clientForExternalAgentIds([externalAgentId]);
-  if (family) return family.label;
+  const knownClientLabel = clientUsageLabelForExternalAgentId(externalAgentId);
+  if (knownClientLabel) return knownClientLabel;
 
   const agentId = extractUsageClientAgentId(externalAgentId);
   if (agentId) {

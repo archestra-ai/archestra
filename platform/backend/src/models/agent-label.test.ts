@@ -1,6 +1,8 @@
 import { describe, expect, test } from "@/test";
 import AgentLabelModel from "./agent-label";
 import McpCatalogLabelModel from "./mcp-catalog-label";
+import RunnerModel from "./runner";
+import RunnerLabelModel from "./runner-label";
 
 describe("AgentLabelModel", () => {
   describe("getOrCreateKey", () => {
@@ -132,6 +134,32 @@ describe("AgentLabelModel", () => {
       expect(keys).not.toContain("region");
       expect(values).not.toContain("production");
       expect(values).not.toContain("us-west-2");
+    });
+
+    test("keeps a key and value only a runner uses", async ({
+      makeOrganization,
+    }) => {
+      // Regression: the prune joins every junction to decide what is orphaned,
+      // and a junction it cannot see makes its keys look unused. Missing one
+      // does not fail loudly — the key is deleted and the cascade silently
+      // takes that resource's labels with it.
+      const org = await makeOrganization();
+      const runner = await RunnerModel.create({
+        organizationId: org.id,
+        name: "claude-code",
+        image: "ghcr.io/example/runner:latest",
+      });
+      await RunnerLabelModel.syncRunnerLabels(runner.id, [
+        { key: "tier", value: "interactive", keyId: "", valueId: "" },
+      ]);
+
+      await AgentLabelModel.pruneKeysAndValues();
+
+      expect(await RunnerLabelModel.getLabelsForRunner(runner.id)).toEqual([
+        expect.objectContaining({ key: "tier", value: "interactive" }),
+      ]);
+      expect(await AgentLabelModel.getAllKeys()).toContain("tier");
+      expect(await AgentLabelModel.getAllValues()).toContain("interactive");
     });
 
     test("keeps keys and values that are still in use", async ({

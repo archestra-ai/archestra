@@ -1,9 +1,14 @@
 "use client";
 
 import type { ColumnDef } from "@tanstack/react-table";
-import { Box, Container, Pencil, Plus, Trash2 } from "lucide-react";
+import { Container, Pencil, Plus, Trash2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
+import { AgentNameCell } from "@/components/agent-name-cell";
+import {
+  openRowOnPlainClick,
+  RowClickShield,
+} from "@/components/agent-pages/row-click-shield";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
   FilterBar,
@@ -24,6 +29,7 @@ import {
 } from "@/components/table-card-view";
 import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
+import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useEnvironments } from "@/lib/environment.query";
@@ -35,7 +41,6 @@ import {
   useRunnerLabelValues,
   useRunners,
 } from "@/lib/runners.query";
-import { RunnerDialog } from "./_parts/runner-dialog";
 
 const PAGE_SIZE = 20;
 const ALL_ENVIRONMENTS = "all";
@@ -50,8 +55,6 @@ export default function RunnersPage() {
   const environmentId = searchParams.get("environmentId") ?? ALL_ENVIRONMENTS;
   const [pageIndex, setPageIndex] = useState(0);
 
-  const [editing, setEditing] = useState<Runner | null>(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
   const filters = useMemo(
@@ -111,14 +114,14 @@ export default function RunnersPage() {
     setPageIndex(0);
   }, [pathname, router]);
 
-  const openCreate = useCallback(() => {
-    setEditing(null);
-    setDialogOpen(true);
-  }, []);
-  const openEdit = useCallback((runner: Runner) => {
-    setEditing(runner);
-    setDialogOpen(true);
-  }, []);
+  const openRunner = useCallback(
+    (runner: Runner) => router.push(`/agents/runners/${runner.id}`),
+    [router],
+  );
+  const openEdit = useCallback(
+    (runner: Runner) => router.push(`/agents/runners/${runner.id}/edit`),
+    [router],
+  );
 
   const environmentName = useCallback(
     (id: string | null) => {
@@ -133,27 +136,42 @@ export default function RunnersPage() {
 
   const columns = useMemo<ColumnDef<Runner>[]>(
     () => [
+      createSelectColumn<Runner>({
+        rowLabel: (runner) => `Select ${runner.name}`,
+        allLabel: "Select all runners on this page",
+      }),
       {
-        accessorKey: "name",
-        header: "Name",
-        size: 240,
-        cell: ({ row }) => (
-          <div className="min-w-0">
-            <div className="truncate font-medium">{row.original.name}</div>
-            {row.original.description ? (
-              <div className="truncate text-xs text-muted-foreground">
-                {row.original.description}
-              </div>
-            ) : null}
+        id: "icon",
+        size: 40,
+        enableSorting: false,
+        header: "",
+        cell: () => (
+          <div className="flex items-center justify-center">
+            <Container className="h-5 w-5 text-muted-foreground" />
           </div>
         ),
       },
       {
-        accessorKey: "image",
-        header: "Image",
+        id: "name",
+        accessorKey: "name",
         size: 240,
-        // `truncate` needs a block box with a width to clip against — on a bare
-        // inline <code> the text escapes and paints over the next column.
+        header: "Name",
+        // Labels ride in the name cell, the way every other list shows them —
+        // a column of their own would be one more mostly-empty column.
+        cell: ({ row }) => (
+          <AgentNameCell
+            name={row.original.name}
+            href={`/agents/runners/${row.original.id}`}
+            description={row.original.description}
+            labels={row.original.labels}
+          />
+        ),
+      },
+      {
+        id: "image",
+        header: "Image",
+        size: 260,
+        enableSorting: false,
         cell: ({ row }) => (
           <div className="min-w-0">
             <code className="block truncate text-xs text-muted-foreground">
@@ -166,6 +184,7 @@ export default function RunnersPage() {
         id: "credentials",
         header: "Credentials",
         size: 170,
+        enableSorting: false,
         cell: ({ row }) => {
           const declared = row.original.credentials ?? [];
           if (declared.length === 0) {
@@ -185,7 +204,8 @@ export default function RunnersPage() {
       {
         id: "environment",
         header: "Environment",
-        size: 120,
+        size: 140,
+        enableSorting: false,
         cell: ({ row }) => (
           <Badge variant="outline">
             {environmentName(row.original.environmentId)}
@@ -193,24 +213,25 @@ export default function RunnersPage() {
         ),
       },
       {
-        id: "labels",
-        header: "Labels",
-        size: 80,
-        cell: ({ row }) => <LabelTags labels={row.original.labels} />,
-      },
-      {
         id: "actions",
-        header: "",
-        size: 60,
+        header: "Actions",
+        enableHiding: false,
+        size: 160,
+        // The whole cell, so a click on an action never also opens the row.
         cell: ({ row }) => (
-          <PermissionButton
-            permissions={{ runner: ["update"] }}
-            variant="ghost"
-            size="sm"
-            onClick={() => openEdit(row.original)}
-          >
-            <Pencil className="h-4 w-4" />
-          </PermissionButton>
+          <RowClickShield>
+            <div className="flex items-center gap-1">
+              <PermissionButton
+                permissions={{ runner: ["update"] }}
+                variant="ghost"
+                size="sm"
+                onClick={() => openEdit(row.original)}
+              >
+                <Pencil className="h-4 w-4" />
+                Edit
+              </PermissionButton>
+            </div>
+          </RowClickShield>
         ),
       },
     ],
@@ -231,7 +252,7 @@ export default function RunnersPage() {
       actionButton={
         <PermissionButton
           permissions={{ runner: ["create"] }}
-          onClick={openCreate}
+          onClick={() => router.push("/agents/runners/new")}
         >
           <Plus className="h-4 w-4" />
           Create Runner
@@ -310,7 +331,7 @@ export default function RunnersPage() {
                   key={runner.id}
                   title={runner.name}
                   description={runner.description ?? runner.image}
-                  icon={<Box className="h-4 w-4" />}
+                  icon={<Container className="h-4 w-4" />}
                   selected={Boolean(rowSelection[runner.id])}
                   onSelectedChange={(value) =>
                     setRowSelection({ ...rowSelection, [runner.id]: value })
@@ -326,6 +347,7 @@ export default function RunnersPage() {
                       <Pencil className="h-4 w-4" />
                     </PermissionButton>
                   }
+                  onSelectionClick={(event) => event.stopPropagation()}
                   footer={
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge variant="outline">
@@ -360,16 +382,13 @@ export default function RunnersPage() {
               hasActiveFilters={hasActiveFilters}
               filteredEmptyMessage="No runners match your filters"
               onClearFilters={clearFilters}
+              onRowClick={(runner, event) =>
+                openRowOnPlainClick(event, () => openRunner(runner))
+              }
             />
           }
         />
       </TableCardView>
-
-      <RunnerDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        runner={editing}
-      />
 
       <DeleteConfirmDialog
         open={bulkDeleteOpen}

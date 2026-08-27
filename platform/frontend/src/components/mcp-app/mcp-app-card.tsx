@@ -1,6 +1,11 @@
 import type { McpUiDisplayMode } from "@modelcontextprotocol/ext-apps";
 import type React from "react";
 import { useEffect, useState } from "react";
+import {
+  type AppShellRegion,
+  findAppShellMain,
+  readAppShellRegion,
+} from "@/lib/app-shell-region";
 import { cn } from "@/lib/utils";
 
 /**
@@ -12,8 +17,10 @@ import { cn } from "@/lib/utils";
  * discrete action buttons) — so the card itself stays free of action wiring.
  *
  * Uses a single stable tree for inline / fullscreen / fill so the iframe child
- * is never unmounted when toggling — only CSS classes change. In fullscreen,
- * uses `position: fixed` covering the viewport.
+ * is never unmounted when toggling — only CSS classes change. In fullscreen it
+ * is `position: fixed` over the app shell's main region rather than the
+ * viewport, so the sidebar stays on screen: hiding the navigation is the
+ * sidebar's own collapse control to do, not a side effect of enlarging an app.
  */
 export function McpAppCard({
   displayMode,
@@ -44,12 +51,7 @@ export function McpAppCard({
   overlay?: React.ReactNode;
 }) {
   const isFullscreen = displayMode === "fullscreen";
-  const [bounds, setBounds] = useState<{
-    top: number;
-    left: number;
-    width: number;
-    height: number;
-  } | null>(null);
+  const [bounds, setBounds] = useState<AppShellRegion | null>(null);
 
   useEffect(() => {
     if (!isFullscreen) return;
@@ -65,23 +67,30 @@ export function McpAppCard({
       setBounds(null);
       return;
     }
-    const update = () =>
-      setBounds({
-        top: 0,
-        left: 0,
-        width: window.innerWidth,
-        height: window.innerHeight,
-      });
+    const update = () => setBounds(readAppShellRegion());
     update();
+    // The main region also changes width when the sidebar is collapsed or
+    // expanded, which no window resize reports — and it animates, so observing
+    // the element keeps the app pinned to its edge for the whole transition.
+    const main = findAppShellMain();
+    const observer = main ? new ResizeObserver(update) : null;
+    observer?.observe(main as HTMLElement);
     window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", update);
+    };
   }, [isFullscreen]);
 
   return (
     <div
       className={cn(
         "will-change-auto origin-center transition-all duration-400 ease-[cubic-bezier(0.23,1,0.32,1)] relative group flex flex-col",
-        isFullscreen ? "fixed z-[100] bg-background" : "",
+        // Above the page's own content (the tallest of which is a z-20 sticky
+        // divider) but below the z-50 portal layer, so a dialog opened from the
+        // app's chrome — and the sidebar's collapse handle, which straddles the
+        // main region's left edge — still sit on top of a fullscreen app.
+        isFullscreen ? "fixed z-40 bg-background" : "",
         fillContainer && !isFullscreen ? "h-full" : "",
         !isFullscreen && !fillContainer
           ? "w-full max-w-[80%] rounded-lg border border-border/50 shadow-xs overflow-hidden"

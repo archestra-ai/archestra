@@ -1,5 +1,16 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
+
+// Radix's Select (the "Opens in" control) measures and scrolls its popover.
+global.ResizeObserver = class ResizeObserver {
+  observe = vi.fn();
+  unobserve = vi.fn();
+  disconnect = vi.fn();
+};
+Element.prototype.scrollIntoView = vi.fn();
+Element.prototype.hasPointerCapture = vi.fn();
+Element.prototype.releasePointerCapture = vi.fn();
 
 const {
   updateMutateAsync,
@@ -204,10 +215,48 @@ describe("AppSettingsForm save", () => {
         // every save — here the fixture's empty one.
         labels: [],
         icon: null,
+        openInFullscreen: false,
       },
     });
     expect(assignMutateAsync).not.toHaveBeenCalled();
     expect(unassignMutateAsync).not.toHaveBeenCalled();
+  });
+
+  test("switches the app to opening fullscreen", async () => {
+    const user = userEvent.setup();
+    const { container, onBack } = renderForm();
+
+    await user.click(screen.getByRole("combobox", { name: "Opens in" }));
+    await user.click(screen.getByRole("option", { name: /fullscreen/i }));
+    submitForm(container);
+
+    await waitFor(() => expect(onBack).toHaveBeenCalled());
+    expect(updateMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.objectContaining({ openInFullscreen: true }),
+      }),
+    );
+  });
+
+  test("seeds from the app's saved display default and re-sends it on an unrelated save", async () => {
+    const { container, onBack } = renderForm({
+      app: { ...APP, openInFullscreen: true } as typeof APP,
+    });
+    expect(
+      screen.getByRole("combobox", { name: "Opens in" }),
+    ).toHaveTextContent("Fullscreen");
+
+    fireEvent.change(screen.getByLabelText("Name *"), {
+      target: { value: "Budget v2" },
+    });
+    submitForm(container);
+
+    await waitFor(() => expect(onBack).toHaveBeenCalled());
+    expect(updateMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.objectContaining({ openInFullscreen: true }),
+      }),
+    );
   });
 
   test("sends a picked icon", async () => {

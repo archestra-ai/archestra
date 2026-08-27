@@ -117,6 +117,13 @@ import { McpAppSection } from "./mcp-app-container";
 
 const mockUseApp = vi.mocked(useApp);
 
+// `vi.clearAllMocks()` clears recorded calls but keeps a `mockReturnValue` an
+// earlier test set, so re-seed the default here: one test's owned-app fixture
+// (a name, a fullscreen-by-default flag) must not leak into the next.
+beforeEach(() => {
+  mockUseApp.mockReturnValue({ data: undefined } as ReturnType<typeof useApp>);
+});
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 const defaultProps = {
@@ -305,6 +312,77 @@ describe("McpAppSection", () => {
 
     expect(screen.getByText("Renamed Dashboard")).toBeInTheDocument();
     expect(screen.queryByText("Stale Dashboard")).not.toBeInTheDocument();
+  });
+
+  it("offers the host's own way into fullscreen, without the app asking for it", async () => {
+    // The bridge is stubbed, so nothing here ever calls
+    // `ui/request-display-mode` — which is exactly the case that used to leave
+    // an app with no way to fill the surface.
+    await act(async () => {
+      render(
+        <McpAppSection
+          {...defaultProps}
+          surface="panel"
+          preloadedResource={preloadedResource}
+        />,
+      );
+    });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Enter fullscreen" }),
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Exit fullscreen" }),
+    ).toBeInTheDocument();
+  });
+
+  it("opens an app straight into fullscreen when that is its saved default", async () => {
+    mockUseApp.mockReturnValue({
+      data: { name: "Ops Board", openInFullscreen: true },
+    } as ReturnType<typeof useApp>);
+
+    await act(async () => {
+      render(
+        <McpAppSection
+          {...defaultProps}
+          surface="panel"
+          appId="11111111-1111-1111-1111-111111111111"
+          preloadedResource={preloadedResource}
+        />,
+      );
+    });
+
+    expect(
+      screen.getByRole("button", { name: "Exit fullscreen" }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not re-enter fullscreen after the viewer leaves it", async () => {
+    mockUseApp.mockReturnValue({
+      data: { name: "Ops Board", openInFullscreen: true },
+    } as ReturnType<typeof useApp>);
+
+    await act(async () => {
+      render(
+        <McpAppSection
+          {...defaultProps}
+          surface="panel"
+          appId="11111111-1111-1111-1111-111111111111"
+          preloadedResource={preloadedResource}
+        />,
+      );
+    });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Exit fullscreen" }),
+    );
+
+    // The default seeds the first render only; re-applying it here would trap
+    // the viewer in fullscreen.
+    expect(
+      screen.getByRole("button", { name: "Enter fullscreen" }),
+    ).toBeInTheDocument();
   });
 });
 

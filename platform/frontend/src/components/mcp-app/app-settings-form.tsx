@@ -118,6 +118,9 @@ export function AppSettingsForm({
   const [lockedStatus, setLockedStatus] = useState<"unlocked" | "locked">(
     app.locked ? "locked" : "unlocked",
   );
+  const [openMode, setOpenMode] = useState<"inline" | "fullscreen">(
+    app.openInFullscreen ? "fullscreen" : "inline",
+  );
   // The form's fourth option. On the wire an app shared with named people stays
   // `personal` and carries grants, so "user" is a UI-side reading of
   // (scope, users) — see the save path below, which maps it back.
@@ -199,6 +202,24 @@ export function AppSettingsForm({
   ];
   const selectedLockedDescription = lockedOptions.find(
     (option) => option.value === lockedStatus,
+  )?.description;
+
+  const openModeOptions = [
+    {
+      value: "inline" as const,
+      label: "Inline",
+      description:
+        "Opens next to the conversation, at the size the app asks for",
+    },
+    {
+      value: "fullscreen" as const,
+      label: "Fullscreen",
+      description:
+        "Fills the page on open, for an app you look at rather than talk to",
+    },
+  ];
+  const selectedOpenModeDescription = openModeOptions.find(
+    (option) => option.value === openMode,
   )?.description;
 
   const options: VisibilityOption<AppVisibilityChoice>[] = [
@@ -323,6 +344,7 @@ export function AppSettingsForm({
       body.description = values.description.trim() || null;
       body.icon = values.icon;
       body.environmentId = environmentId;
+      body.openInFullscreen = openMode === "fullscreen";
       // Flush a label typed into the picker but not yet committed, so a save
       // doesn't silently drop it.
       const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
@@ -484,6 +506,36 @@ export function AppSettingsForm({
               {form.formState.errors.description?.message ? (
                 <p className="text-xs text-destructive">
                   {form.formState.errors.description.message}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="app-settings-open-mode">Opens in</Label>
+              <Select
+                value={openMode}
+                onValueChange={(next) =>
+                  setOpenMode(next as "inline" | "fullscreen")
+                }
+              >
+                <SelectTrigger id="app-settings-open-mode" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  {openModeOptions.map((option) => (
+                    <SelectItem
+                      key={option.value}
+                      value={option.value}
+                      description={option.description}
+                    >
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedOpenModeDescription ? (
+                <p className="text-xs text-muted-foreground">
+                  {selectedOpenModeDescription}
                 </p>
               ) : null}
             </div>

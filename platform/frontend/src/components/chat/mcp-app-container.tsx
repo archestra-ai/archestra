@@ -6,6 +6,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -17,7 +18,7 @@ import { INITIAL_INLINE_HEIGHT } from "@/components/mcp-app/app-height";
 import { AppSettingsDialog } from "@/components/mcp-app/app-settings-dialog";
 import { McpAppCard } from "@/components/mcp-app/mcp-app-card";
 import {
-  McpAppFullscreenExitButton,
+  McpAppFullscreenButton,
   McpAppPill,
   McpAppRefreshButton,
   McpAppSettingsButton,
@@ -380,10 +381,26 @@ export function McpAppEntryContent({
 
   const handleShowInPanel = () => {
     if (!toolCallId) return;
-    setDisplayMode("inline"); // panel is the app's frame — never fullscreen there
+    // Hand the app over inline: the panel instance owns its own display mode
+    // from here (including the app's fullscreen default), so leaving this one
+    // fullscreen would only strand an invisible overlay behind the panel.
+    setDisplayMode("inline");
     setPanelApp(toolCallId);
     openRightPanel();
   };
+
+  // Seed the first render at fullscreen when the app's author made that its
+  // default. Applied once, and only on a surface that is actually showing the
+  // app, so leaving fullscreen (or the app asking for inline through the SDK)
+  // is never undone underneath the viewer.
+  const showingLiveSurface = isPanelSurface || expandedInline;
+  const fullscreenDefaultApplied = useRef(false);
+  useEffect(() => {
+    if (fullscreenDefaultApplied.current) return;
+    if (!showingLiveSurface || !ownedApp?.openInFullscreen) return;
+    fullscreenDefaultApplied.current = true;
+    setDisplayMode("fullscreen");
+  }, [showingLiveSurface, ownedApp?.openInFullscreen, setDisplayMode]);
 
   const handleResourceStateChange = useCallback(
     (state: "renderable" | "empty" | "error") => {
@@ -528,25 +545,29 @@ export function McpAppEntryContent({
           {isOwnedInPanel ? (
             <McpAppSettingsButton onClick={() => setSettingsOpen(true)} />
           ) : null}
-          {/* Apps can request fullscreen from the panel too (via the SDK); the
-              bar is the only chrome there, so it must carry the way back out.
-              Escape alone doesn't cut it — focus usually sits inside the
-              iframe, where the host never sees the keydown. */}
-          {displayMode === "fullscreen" ? (
-            <McpAppFullscreenExitButton onClick={toggleFullscreen} size="bar" />
-          ) : null}
+          {/* The bar is the only chrome the panel has, so it carries the way
+              into fullscreen and the way back out. Escape alone doesn't cut it
+              for the exit — focus usually sits inside the iframe, where the
+              host never sees the keydown. */}
+          <McpAppFullscreenButton
+            isFullscreen={displayMode === "fullscreen"}
+            onClick={toggleFullscreen}
+            size="bar"
+          />
         </>
       }
     />
   );
 
   // Frameless inline (item 4): no top bar — chat context identifies the app.
-  // Only fullscreen-exit floats as a hover overlay (while fullscreen). The
+  // The fullscreen toggle floats as a hover overlay in both directions; the
   // open-in-right-panel control is a labeled button below the app instead.
-  const inlineOverlay =
-    displayMode === "fullscreen" ? (
-      <McpAppFullscreenExitButton onClick={toggleFullscreen} />
-    ) : null;
+  const inlineOverlay = (
+    <McpAppFullscreenButton
+      isFullscreen={displayMode === "fullscreen"}
+      onClick={toggleFullscreen}
+    />
+  );
 
   const liveSurface = (
     <McpAppErrorBoundary>

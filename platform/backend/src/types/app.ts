@@ -434,6 +434,9 @@ export const UpdateAppSchema = z.object({
   // Replace the app's labels with this set. Omitted leaves them unchanged; an
   // empty array clears them.
   labels: z.array(AgentLabelWithDetailsSchema).optional(),
+  // Seed the app's first render at fullscreen instead of inline. A display
+  // default only — the host's fullscreen control still toggles it per view.
+  openInFullscreen: z.boolean().optional(),
 });
 
 export type { AppSpec } from "./app-spec";

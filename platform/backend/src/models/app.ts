@@ -590,6 +590,7 @@ class AppModel {
         | "spec"
         | "environmentId"
         | "icon"
+        | "openInFullscreen"
       >
     >;
     version?: VersionPayload;
@@ -604,13 +605,18 @@ class AppModel {
     const patch = params.patch ?? {};
     // App-row columns only; scope/environmentId/icon are owned by the backing catalog.
     const appRowPatch: Partial<
-      Pick<AppRow, "name" | "slug" | "description" | "spec">
+      Pick<
+        AppRow,
+        "name" | "slug" | "description" | "spec" | "openInFullscreen"
+      >
     > = {};
     if (patch.name !== undefined) appRowPatch.name = patch.name;
     if (patch.slug !== undefined) appRowPatch.slug = patch.slug;
     if (patch.description !== undefined)
       appRowPatch.description = patch.description;
     if (patch.spec !== undefined) appRowPatch.spec = patch.spec;
+    if (patch.openInFullscreen !== undefined)
+      appRowPatch.openInFullscreen = patch.openInFullscreen;
 
     const ok = await withDbTransaction(async (tx) => {
       let app: AppRow | undefined;

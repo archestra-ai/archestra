@@ -69976,6 +69976,9 @@
                     "enabled": {
                       "type": "boolean"
                     },
+                    "openInFullscreen": {
+                      "type": "boolean"
+                    },
                     "locked": {
                       "type": "boolean"
                     },
@@ -70065,6 +70068,7 @@
                     "spec",
                     "latestVersion",
                     "enabled",
+                    "openInFullscreen",
                     "locked",
                     "createdAt",
                     "updatedAt",
@@ -73337,6 +73341,9 @@
                     "enabled": {
                       "type": "boolean"
                     },
+                    "openInFullscreen": {
+                      "type": "boolean"
+                    },
                     "locked": {
                       "type": "boolean"
                     },
@@ -73469,6 +73476,7 @@
                     "spec",
                     "latestVersion",
                     "enabled",
+                    "openInFullscreen",
                     "locked",
                     "createdAt",
                     "updatedAt",
@@ -73827,6 +73835,9 @@
                       ]
                     }
                   },
+                  "openInFullscreen": {
+                    "type": "boolean"
+                  },
                   "teamIds": {
                     "type": "array",
                     "items": {
@@ -73948,6 +73959,9 @@
                     "enabled": {
                       "type": "boolean"
                     },
+                    "openInFullscreen": {
+                      "type": "boolean"
+                    },
                     "locked": {
                       "type": "boolean"
                     },
@@ -74032,6 +74046,7 @@
                     "spec",
                     "latestVersion",
                     "enabled",
+                    "openInFullscreen",
                     "locked",
                     "createdAt",
                     "updatedAt",
@@ -75351,6 +75366,9 @@
                     "enabled": {
                       "type": "boolean"
                     },
+                    "openInFullscreen": {
+                      "type": "boolean"
+                    },
                     "locked": {
                       "type": "boolean"
                     },
@@ -75483,6 +75501,7 @@
                     "spec",
                     "latestVersion",
                     "enabled",
+                    "openInFullscreen",
                     "locked",
                     "createdAt",
                     "updatedAt",
@@ -75846,6 +75865,9 @@
                     "enabled": {
                       "type": "boolean"
                     },
+                    "openInFullscreen": {
+                      "type": "boolean"
+                    },
                     "locked": {
                       "type": "boolean"
                     },
@@ -75978,6 +76000,7 @@
                     "spec",
                     "latestVersion",
                     "enabled",
+                    "openInFullscreen",
                     "locked",
                     "createdAt",
                     "updatedAt",
@@ -76341,6 +76364,9 @@
                     "enabled": {
                       "type": "boolean"
                     },
+                    "openInFullscreen": {
+                      "type": "boolean"
+                    },
                     "locked": {
                       "type": "boolean"
                     },
@@ -76473,6 +76499,7 @@
                     "spec",
                     "latestVersion",
                     "enabled",
+                    "openInFullscreen",
                     "locked",
                     "createdAt",
                     "updatedAt",
@@ -76836,6 +76863,9 @@
                     "enabled": {
                       "type": "boolean"
                     },
+                    "openInFullscreen": {
+                      "type": "boolean"
+                    },
                     "locked": {
                       "type": "boolean"
                     },
@@ -76968,6 +76998,7 @@
                     "spec",
                     "latestVersion",
                     "enabled",
+                    "openInFullscreen",
                     "locked",
                     "createdAt",
                     "updatedAt",

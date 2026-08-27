@@ -1,0 +1,1 @@
+ALTER TABLE "apps" ADD COLUMN "open_in_fullscreen" boolean DEFAULT false NOT NULL;

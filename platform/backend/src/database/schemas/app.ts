@@ -83,6 +83,17 @@ const appsTable = softDeletablePgTable(
      */
     enabled: boolean("enabled").notNull().default(true),
     /**
+     * Whether the app opens filling its host surface rather than sitting inline
+     * next to the conversation. A display default only: the runtime's display
+     * mode stays a live, per-view toggle (the host's fullscreen control and the
+     * app's own `ui/request-display-mode`), so this seeds the first render of a
+     * surface that hosts an app alongside other content and nothing else. Apps
+     * whose UI is the whole point — a dashboard opened to be looked at, not
+     * talked to — set it so the chat around them doesn't have to be dismissed
+     * by hand on every open.
+     */
+    openInFullscreen: boolean("open_in_fullscreen").notNull().default(false),
+    /**
      * Whether the app is locked against modification. A locked app refuses
      * every agent-driven mutation (html edits, spec, tools, delete) until
      * unlocked; viewing and running are unaffected. Orthogonal to `enabled`

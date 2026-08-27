@@ -66,6 +66,41 @@ describe("PATCH /api/apps/:appId", () => {
     });
   });
 
+  test("toggles the fullscreen-by-default display preference", async ({
+    makeApp,
+  }) => {
+    const created = await makeApp({ organizationId, scope: "org" });
+    expect(created.openInFullscreen).toBe(false);
+
+    const enabled = await app.inject({
+      method: "PATCH",
+      url: `/api/apps/${created.id}`,
+      payload: { openInFullscreen: true },
+    });
+    expect(enabled.statusCode).toBe(200);
+    expect(enabled.json().openInFullscreen).toBe(true);
+    expect(
+      mustExist(await AppModel.findById(created.id)).openInFullscreen,
+    ).toBe(true);
+
+    // An unrelated edit must not silently reset the preference.
+    const renamed = await app.inject({
+      method: "PATCH",
+      url: `/api/apps/${created.id}`,
+      payload: { name: "Still fullscreen" },
+    });
+    expect(renamed.statusCode).toBe(200);
+    expect(renamed.json().openInFullscreen).toBe(true);
+
+    const disabled = await app.inject({
+      method: "PATCH",
+      url: `/api/apps/${created.id}`,
+      payload: { openInFullscreen: false },
+    });
+    expect(disabled.statusCode).toBe(200);
+    expect(disabled.json().openInFullscreen).toBe(false);
+  });
+
   test("sets and clears the icon, storing it on the app's backing catalog", async ({
     makeApp,
   }) => {

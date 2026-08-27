@@ -197,7 +197,7 @@ function getEmbeddingModelTrigger() {
 function getRerankerModelTrigger() {
   const modelTrigger = screen
     .getAllByRole("combobox")
-    .find((el) => el.textContent?.includes("Select reranking model"));
+    .find((el) => el.textContent?.includes("Select a reranking model"));
 
   if (!modelTrigger) {
     throw new Error("Reranking model trigger not found");
@@ -484,11 +484,11 @@ describe("KnowledgeSettingsPage", () => {
       await user.click(getEmbeddingModelTrigger());
 
       expect(
-        screen.getByText('No embedding models detected for "Vertex AI".'),
+        screen.getByText('No embedding models found for "Vertex AI".'),
       ).toBeInTheDocument();
       expect(
         screen.getByRole("link", {
-          name: /Sync models and configure embedding dimensions/,
+          name: /Sync models and set embedding dimensions/,
         }),
       ).toHaveAttribute("href", "/llm/models");
     });
@@ -960,7 +960,7 @@ describe("KnowledgeSettingsPage", () => {
       renderPage();
 
       expect(
-        screen.getByText("Select a reranker API key first..."),
+        screen.getByText("Select a reranking API key first..."),
       ).toBeInTheDocument();
     });
 
@@ -1209,7 +1209,7 @@ describe("KnowledgeSettingsPage", () => {
       expect(screen.getByText(/ready in 40 minutes/)).toBeInTheDocument();
       // The consequence moved to the hover detail to keep the line glanceable.
       expect(
-        screen.getByTitle(/rank with PostgreSQL's built-in ranking/),
+        screen.getByTitle(/use PostgreSQL's built-in ranking/),
       ).toBeInTheDocument();
       unmountPending();
 
@@ -1232,7 +1232,7 @@ describe("KnowledgeSettingsPage", () => {
       // A flag, never the raw database error: one rebuild covers every
       // organization, so its message can describe another tenant's corpus.
       expect(
-        screen.getByTitle(/last rebuild of the ranking statistics/i),
+        screen.getByTitle(/last ranking statistics rebuild/i),
       ).toBeInTheDocument();
     });
 
@@ -1252,7 +1252,7 @@ describe("KnowledgeSettingsPage", () => {
 
       expect(screen.getByText("No documents indexed yet")).toBeInTheDocument();
       expect(
-        screen.getByTitle(/statistics build after the first sync/i),
+        screen.getByTitle(/builds ranking statistics after the first sync/i),
       ).toBeInTheDocument();
     });
 

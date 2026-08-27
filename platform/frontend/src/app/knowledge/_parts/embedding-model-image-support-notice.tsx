@@ -100,8 +100,8 @@ export function EmbeddingModelImageSupportNotice({
             <code className="break-all">{modelKey}</code>
           </p>
           <p className="leading-relaxed">
-            Handles text only. Choose a multimodal embedding model to sync
-            supported image files.{" "}
+            This model processes text only. Use a multimodal embedding model to
+            sync supported image files.{" "}
             <a
               href={getDocsUrl(DocsPage.PlatformKnowledge, "image-embedding")}
               target="_blank"

@@ -47,7 +47,7 @@ const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
   "/settings/knowledge": {
     title: "Knowledge",
     description:
-      "Configure embedding, reranking, and knowledge system defaults.",
+      "Configure defaults for embedding, reranking, and the knowledge system.",
   },
   "/settings/connection": {
     title: "Connection",

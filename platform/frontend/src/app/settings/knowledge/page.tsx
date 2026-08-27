@@ -241,11 +241,11 @@ function AddApiKeyDialog({
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Add LLM Provider Key"
+      title="Add LLM provider key"
       description={
         forEmbedding
-          ? "Add an API key for knowledge base embeddings."
-          : "Add an LLM provider API key for knowledge base reranking."
+          ? "Add a key for knowledge base embeddings."
+          : "Add an LLM provider key for knowledge base reranking."
       }
       size="small"
     >
@@ -278,7 +278,7 @@ function AddApiKeyDialog({
             {createMutation.isPending && (
               <Loader2 className="h-4 w-4 animate-spin" />
             )}
-            <span>Test & Create</span>
+            <span>Test and create</span>
           </Button>
         </DialogStickyFooter>
       </DialogForm>
@@ -418,7 +418,7 @@ function RerankerModelSelector({
       <LlmModelSearchableSelect
         value=""
         onValueChange={() => {}}
-        placeholder="Select a reranker API key first..."
+        placeholder="Select a reranking API key first..."
         options={[]}
         className={cn("w-full")}
         disabled
@@ -446,7 +446,7 @@ function RerankerModelSelector({
       value={value ?? ""}
       onValueChange={(v) => onChange(v || null)}
       options={rerankerItems}
-      placeholder="Select reranking model..."
+      placeholder="Select a reranking model..."
       className={cn("w-full", pulse && SETUP_HIGHLIGHT_CLASS)}
       popoverContentClassName={KNOWLEDGE_MODEL_POPOVER_CLASS}
       popoverListClassName={KNOWLEDGE_MODEL_POPOVER_LIST_CLASS}
@@ -517,9 +517,9 @@ function OcrModelSelector({
         model: model.modelId,
         provider: model.provider,
       }))}
-      placeholder="Select vision model..."
+      placeholder="Select a vision model..."
       searchPlaceholder="Search vision models..."
-      emptyMessage="No vision-capable models for this key's provider. Mark your model's image or PDF input modality in LLM Providers > Models."
+      emptyMessage="No vision-capable models are available for the selected provider. Set the image or PDF input modality in LLM Providers > Models."
       className={cn("w-full")}
       popoverContentClassName={KNOWLEDGE_MODEL_POPOVER_CLASS}
       popoverListClassName={KNOWLEDGE_MODEL_POPOVER_LIST_CLASS}
@@ -569,7 +569,7 @@ function DropEmbeddingConfigDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="Drop embedding configuration?"
-      description="This deletes all embedded documents. Connectors and knowledge bases are preserved — the next sync will re-ingest everything with the new embedding model."
+      description="This deletes all embedded documents. Connectors and knowledge bases remain. The next sync re-ingests all documents with the new embedding model."
       isPending={dropMutation.isPending}
       onConfirm={handleDrop}
       confirmLabel="Drop"
@@ -640,7 +640,7 @@ function KeywordRankingStatusLine({
       <span>No documents indexed yet</span>,
       {
         title:
-          "Ranking statistics build after the first sync indexes documents.",
+          "The system builds ranking statistics after the first sync indexes documents.",
       },
     );
   }
@@ -656,7 +656,7 @@ function KeywordRankingStatusLine({
       {
         tone: "destructive",
         title:
-          "The last rebuild of the ranking statistics did not finish. Searches keep using the statistics from the last successful one; the server logs carry the error.",
+          "The last ranking statistics rebuild did not finish. Searches use statistics from the last successful rebuild. The server logs contain the error.",
       },
     );
   }
@@ -671,7 +671,7 @@ function KeywordRankingStatusLine({
       </span>,
       {
         title:
-          "Documents indexed since the last statistics update rank with PostgreSQL's built-in ranking until the next one.",
+          "Documents indexed since the last statistics update use PostgreSQL's built-in ranking until the next update.",
       },
     );
   }
@@ -717,8 +717,8 @@ function KnowledgeSettingsContent() {
     refetch: refetchApiKeys,
   } = useAvailableLlmProviderApiKeys({ toastOnError: false });
   const updateKnowledgeSettings = useUpdateKnowledgeSettings(
-    "Knowledge settings updated",
-    "Failed to update knowledge settings",
+    "Knowledge settings saved",
+    "Could not save knowledge settings",
   );
   const testConnection = useTestEmbeddingConnection();
   const { data: keywordRankingStatus } = useKeywordRankingStatus();
@@ -837,7 +837,7 @@ function KnowledgeSettingsContent() {
     selectedEmbeddingModel?.provider ??
     null;
   const embeddingEmptyMessage = selectedEmbeddingApiKey
-    ? `No embedding models detected for "${selectedEmbeddingApiKey.name}".`
+    ? `No embedding models found for "${selectedEmbeddingApiKey.name}".`
     : "Select an embedding API key first.";
   const noticeDismissalScope =
     organization?.id && session?.user.id
@@ -1146,7 +1146,7 @@ function KnowledgeSettingsContent() {
   if (!isInitialLoading && isLoadError) {
     return (
       <QueryLoadError
-        title="Couldn't load your knowledge settings"
+        title="Could not load knowledge settings"
         onRetry={() => {
           refetchApiKeys();
           refetchModelsWithApiKeys();
@@ -1166,12 +1166,11 @@ function KnowledgeSettingsContent() {
           title="Embedding Configuration"
           description={
             <>
-              The model that turns your documents into searchable meaning. It
-              decides how well a search finds passages that say what was asked
-              in different words. Pick it once — changing it later means
-              re-indexing everything. A key appears here once its embedding
-              models are synced with dimensions set (384, 768, 1024, 1536 or
-              3072).
+              Select the model that converts documents to searchable meaning. It
+              defines how well searches find passages that use different words.
+              Select it once. A later change requires you to re-index all
+              documents. A key appears after the system synchronizes embedding
+              models with dimensions of 384, 768, 1024, 1536, or 3072.
             </>
           }
         >
@@ -1234,12 +1233,12 @@ function KnowledgeSettingsContent() {
                   />
                 </CardRow>
                 <p className="text-sm text-muted-foreground sm:ml-auto sm:w-80">
-                  Don't see your model?{" "}
+                  Model not listed?{" "}
                   <Link
                     href="/llm/models"
                     className="inline-flex items-center gap-0.5 text-primary underline-offset-2 hover:underline"
                   >
-                    Sync models and configure embedding dimensions
+                    Sync models and set embedding dimensions
                     <ArrowUpRight className="h-3.5 w-3.5" />
                   </Link>
                 </p>
@@ -1266,8 +1265,8 @@ function KnowledgeSettingsContent() {
                     <p className="flex items-start gap-2 text-xs text-muted-foreground sm:ml-auto sm:w-80">
                       <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                       <span>
-                        Gemini will truncate from its native 3072 dimensions via
-                        outputDimensionality.
+                        Gemini uses outputDimensionality to truncate its native
+                        3072 dimensions.
                       </span>
                     </p>
                   )}
@@ -1304,8 +1303,8 @@ function KnowledgeSettingsContent() {
                       Embedding index locked
                     </p>
                     <p className="text-sm leading-relaxed text-muted-foreground">
-                      Drop the index to change models. All documents will need
-                      to be re-embedded afterward.
+                      Drop the index to change models. Then re-embed all
+                      documents.
                     </p>
                   </div>
                 </div>
@@ -1356,11 +1355,10 @@ function KnowledgeSettingsContent() {
           title="Search Ranking Configuration"
           description={
             <>
-              Orders the passages a search has found. Reranking reads the
-              shortlist and puts the passages that answer the question first;
-              keyword ranking scores them by the words they share with the
-              question. Changes apply to the next search — nothing is
-              re-indexed.
+              Controls the order of passages found in a search. Reranking reads
+              the shortlist and places passages that answer the question first.
+              Keyword ranking scores shared words. Changes apply to the next
+              search. No documents are re-indexed.
             </>
           }
         >
@@ -1372,10 +1370,10 @@ function KnowledgeSettingsContent() {
               <div className="space-y-1">
                 <h4 className="text-sm font-medium">Reranking</h4>
                 <p className="text-sm text-muted-foreground">
-                  Reads the shortlisted passages with a model and puts the ones
-                  that answer the question first. Works with any chat model, or
-                  a Cohere Rerank model on Cohere and Azure AI Foundry keys.
-                  Optional.{" "}
+                  A model reads shortlisted passages and places passages that
+                  answer the question first. Use any chat model, or use a Cohere
+                  Rerank model with a Cohere or Azure AI Foundry key. This is
+                  optional.{" "}
                   <ExternalDocsLink
                     href={getDocsUrl(DocsPage.PlatformKnowledge, "reranking")}
                     className="text-primary hover:underline"
@@ -1437,8 +1435,8 @@ function KnowledgeSettingsContent() {
                   )}
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Scores each passage by the words it shares with the question,
-                  using BM25 — rare, specific words count most. Always on.{" "}
+                  BM25 scores each passage by shared words. Rare, specific words
+                  have the highest weight. This is always enabled.{" "}
                   <ExternalDocsLink
                     href={getDocsUrl(
                       DocsPage.PlatformKnowledge,
@@ -1531,7 +1529,7 @@ function KnowledgeSettingsContent() {
                   Adds search-only context to passages during ingestion. The
                   document option makes one model call per document. The passage
                   option generates specific context in batches for longer
-                  documents and uses the document option for short ones.
+                  documents. It uses the document option for short documents.
                   Requires a chat reranking model.{" "}
                   <ExternalDocsLink
                     href={getDocsUrl(
@@ -1639,11 +1637,11 @@ function KnowledgeSettingsContent() {
           title="Document OCR"
           description={
             <>
-              Reads the text in scanned or image-only PDF pages — a signed
-              contract that was scanned, for example — so those documents show
-              up in search like any other. Without it, such pages are skipped.
-              Each transcribed page is one metered model call, visible in LLM
-              cost statistics. Optional.
+              Reads text from scanned or image-only PDF pages. For example, it
+              reads a scanned signed contract. This makes the pages searchable.
+              Without OCR, the system skips them. Each transcribed page uses one
+              metered model call, which appears in LLM cost statistics. This
+              feature is optional.
             </>
           }
         >
@@ -1672,12 +1670,12 @@ function KnowledgeSettingsContent() {
                   />
                 </CardRow>
                 <p className="text-sm text-muted-foreground sm:ml-auto sm:w-80">
-                  Don't see your model?{" "}
+                  Model not listed?{" "}
                   <Link
                     href="/llm/models"
                     className="inline-flex items-center gap-0.5 text-primary underline-offset-2 hover:underline"
                   >
-                    Mark its image or PDF input modality
+                    Set its image or PDF input modality
                     <ArrowUpRight className="h-3.5 w-3.5" />
                   </Link>
                 </p>
@@ -1685,8 +1683,9 @@ function KnowledgeSettingsContent() {
                   <p className="flex items-start gap-2 text-xs text-muted-foreground sm:ml-auto sm:w-80">
                     <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                     <span>
-                      Saving triggers a full re-sync of every connector so
-                      documents previously skipped as unreadable are picked up.
+                      When you save, the system starts a full re-sync for every
+                      connector. It then includes documents it skipped because
+                      it could not read them.
                     </span>
                   </p>
                 )}
@@ -1756,7 +1755,7 @@ function KnowledgeSettingsContent() {
           catalogKey="knowledgeConnectorOverrides"
           catalog={CONNECTOR_TYPES}
           title="Available connectors"
-          description="Which connector types this deployment offers. A type you remove leaves the pickers, and the API refuses to configure it. Connectors that already exist keep syncing until you delete them."
+          description="This deployment offers these connector types. If you remove a type, it disappears from the pickers, and the API does not let you configure it. Existing connectors continue to sync until you delete them."
           options={CONNECTOR_TYPES.map((type) => ({
             value: type,
             label: CONNECTOR_TYPE_LABELS[type],
@@ -1765,8 +1764,8 @@ function KnowledgeSettingsContent() {
             ),
           }))}
           placeholder="Select connector types…"
-          emptyMessage="No connector types found."
-          savedMessage="Available connectors updated"
+          emptyMessage="No connector types are available."
+          savedMessage="Available connectors saved"
         />
       </SettingsSectionStack>
     </LoadingWrapper>

@@ -679,17 +679,12 @@ class WebSocketService {
       userId: clientContext.userId,
       organizationId: clientContext.organizationId,
     });
-    const allServers = await McpServerModel.findAll(
-      clientContext.userId,
-      clientContext.userIsMcpServerAdmin,
-      clientContext.organizationId,
-      undefined,
-      userIsPredefinedAdmin,
-    );
-
-    // Filter to local servers only (remote servers don't have K8s deployments)
-    const localServers = allServers.filter((s) => s.serverType === "local");
-    const localServerIds = localServers.map((s) => s.id);
+    const localServerIds = await McpServerModel.findVisibleLocalIds({
+      userId: clientContext.userId,
+      isMcpServerAdmin: clientContext.userIsMcpServerAdmin,
+      organizationId: clientContext.organizationId,
+      isPredefinedAdmin: userIsPredefinedAdmin,
+    });
 
     // Build statuses from the runtime manager for this client
     const buildStatuses = (

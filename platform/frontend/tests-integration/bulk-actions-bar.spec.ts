@@ -3,8 +3,8 @@ import { shareableSkillsSeed } from "../src/mocks/data/skill-share";
 import { expect, test } from "./fixtures";
 
 /**
- * The bulk affordance every table shares: no chrome until rows are ticked,
- * then a count, a Clear, and the page's own actions. Driven through Skills
+ * The bulk affordance every table shares: an in-flow reserved rail, then a
+ * count, a Clear, and the page's own actions after rows are ticked. Driven through Skills
  * because it is the table whose actions are plain buttons; the guardrails and
  * knowledge tables render the same `BulkActionsBar` with different children.
  */
@@ -19,7 +19,7 @@ test.describe("Bulk actions bar", () => {
     });
   });
 
-  test("stays out of the page until a row is ticked, and clears back away", async ({
+  test("shows a zero count until a row is ticked, and clears back to zero", async ({
     page,
   }) => {
     await page.goto("/skills");
@@ -29,7 +29,7 @@ test.describe("Bulk actions bar", () => {
     await expect(
       page.getByRole("checkbox", { name: "Select all skills on this page" }),
     ).toBeVisible();
-    await expect(count).toBeHidden();
+    await expect(count).toHaveText("0 skills selected");
     await expect(clear).toBeHidden();
 
     const [firstRow, secondRow] = [
@@ -54,13 +54,13 @@ test.describe("Bulk actions bar", () => {
     ).toBeVisible();
 
     await clear.click();
-    await expect(count).toBeHidden();
+    await expect(count).toHaveText("0 skills selected");
     await expect(
       page.getByRole("button", { name: "Edit visibility" }),
     ).toBeHidden();
   });
 
-  test("adds the rail and its gap only once something is selected", async ({
+  test("reserves a stable in-flow rail before and after selection", async ({
     page,
   }) => {
     await page.goto("/skills");
@@ -74,9 +74,13 @@ test.describe("Bulk actions bar", () => {
     // measure against.
     await firstRow.waitFor();
 
-    // Nothing selected: no bar, and therefore no empty rail above the
-    // collection. This is the whole point of the element being absent.
-    await expect(bar).toHaveCount(0);
+    await expect(bar).toBeVisible();
+    const beforeSelection = await bulkLayoutGeometry(bar);
+    expect(beforeSelection).toMatchObject({
+      height: 42,
+      gapAbove: 12,
+      gapBelow: 12,
+    });
     const collectionTopBefore = await collectionTop(page);
 
     await firstRow.click();
@@ -87,9 +91,8 @@ test.describe("Bulk actions bar", () => {
       gapAbove: 12,
       gapBelow: 12,
     });
-    // The collection moves down by exactly the rail it made room for, so the
-    // rail is never overlapping or double-spaced.
-    expect(afterSelection.collectionTop - collectionTopBefore).toBe(42 + 12);
+    // Reserving the rail prevents table/card layout from jumping on selection.
+    expect(afterSelection.collectionTop).toBe(collectionTopBefore);
   });
 
   test("scrolls crowded actions inside the fixed mobile rail", async ({

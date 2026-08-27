@@ -262,22 +262,19 @@ test.describe("MCP Registry layout", () => {
     await expect(page.getByText(LONG_NAME)).toBeVisible();
   });
 
-  test("puts visibly flagged cards in Action required", async ({
+  test("keeps visibly flagged cards in the flat registry", async ({
     mcpRegistryPage,
     mswControl,
-    page,
   }) => {
     await seed(mswControl);
     await mcpRegistryPage.goto();
 
-    const firstHeading = page.locator("main h3").first();
-    await expect(firstHeading).toHaveText("Action required");
     await expect(
       mcpRegistryPage.cardForCatalogItem("needs-reauth"),
     ).toBeVisible();
   });
 
-  test("swaps table bulk actions into the toolbar without moving the table", async ({
+  test("updates table bulk actions without moving the reserved toolbar rail", async ({
     mcpRegistryPage,
     mswControl,
     page,
@@ -290,12 +287,16 @@ test.describe("MCP Registry layout", () => {
     await expect(table).toBeVisible();
     const before = await table.boundingBox();
     expect(before).not.toBeNull();
-    expect(page.locator('[data-slot="bulk-actions-bar"]')).toHaveCount(0);
+    const bulkBar = page.locator('[data-slot="bulk-actions-bar"]');
+    await expect(bulkBar).toBeVisible();
 
     await page.getByRole("checkbox", { name: "Select org-crowded" }).click();
 
-    await expect(page.getByText("1 server selected")).toBeVisible();
-    await expect(page.locator('[data-slot="bulk-actions-bar"]')).toBeVisible();
+    await expect(
+      bulkBar
+        .locator('[aria-hidden="true"]')
+        .filter({ hasText: "1 server selected" }),
+    ).toBeVisible();
     const after = await table.boundingBox();
     expect(after?.y).toBe(before?.y);
   });

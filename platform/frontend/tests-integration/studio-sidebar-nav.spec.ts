@@ -144,11 +144,11 @@ test.describe("studio sidebar navigation", () => {
     await page.goto("/agents");
     await expect(row).toHaveAttribute("href", "/llm/costs");
 
-    // Costs alone is denied, so the row that survives on the strength of
-    // Limits has to open Limits rather than the page behind the 403.
+    // The shared Costs & Limits route remains the stable destination even
+    // when one of its underlying pages is not readable.
     await setPermissions({ mswControl }, { llmCost: [] });
     await page.goto("/agents");
-    await expect(row).toHaveAttribute("href", "/llm/limits");
+    await expect(row).toHaveAttribute("href", "/llm/costs");
   });
 
   test("drops a row the reader may not open, and the group with the last of them", async ({

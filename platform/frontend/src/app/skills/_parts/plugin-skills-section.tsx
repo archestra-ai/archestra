@@ -2,22 +2,21 @@
 
 import type { archestraApiTypes } from "@archestra/shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
-import { Eye, Puzzle, Settings } from "lucide-react";
+import { ChartColumn, Puzzle } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { AgentBadge } from "@/components/agent-badge";
-import {
-  TableCard,
-  TableCardList,
-  TableCardViewContent,
-} from "@/components/table-card-view";
+import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
+import { TableCard } from "@/components/table-card-view";
 import {
   type TableRowAction,
   TableRowActions,
 } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
-import { DataTable } from "@/components/ui/data-table";
+import { useSession } from "@/lib/auth/auth.query";
+import { SkillCollection, SkillSortableHeader } from "./skill-collection";
+import { SkillUsageDialog } from "./skill-usage-dialog";
+import { SkillUsageSummary } from "./skill-usage-summary";
 
 export type PluginSkill =
   archestraApiTypes.GetPluginSkillsResponses["200"][number];
@@ -52,17 +51,20 @@ export function PluginSkillsSection({
   isLoading?: boolean;
 }) {
   const router = useRouter();
+  const { data: session } = useSession();
+  const currentUserId = session?.user?.id;
   const [sorting, setSorting] = useState<SortingState>([]);
+  const [usageSkill, setUsageSkill] = useState<PluginSkill | null>(null);
 
   const renderActions = (skill: PluginSkill) => {
     const actions: TableRowAction[] = [
       {
-        icon: <Eye className="h-4 w-4" />,
-        label: "View",
-        href: pluginSkillHref(skill),
+        icon: <ChartColumn className="h-4 w-4" />,
+        label: "Usage",
+        onClick: () => setUsageSkill(skill),
       },
       {
-        icon: <Settings className="h-4 w-4" />,
+        icon: <Puzzle className="h-4 w-4" />,
         label: "Manage plugin",
         href: `/plugins/${skill.pluginId}`,
         permissions: { plugin: ["admin"] },
@@ -75,7 +77,13 @@ export function PluginSkillsSection({
     {
       id: "pluginName",
       accessorKey: "pluginName",
-      header: "Plugin",
+      header: ({ column }) => (
+        <SkillSortableHeader
+          label="Plugin"
+          isSorted={column.getIsSorted()}
+          onToggle={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        />
+      ),
       size: 220,
       cell: ({ row }) => (
         <div className="flex min-w-0 items-center gap-2.5">
@@ -97,7 +105,13 @@ export function PluginSkillsSection({
     {
       id: "name",
       accessorKey: "name",
-      header: "Skill",
+      header: ({ column }) => (
+        <SkillSortableHeader
+          label="Skill"
+          isSorted={column.getIsSorted()}
+          onToggle={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        />
+      ),
       size: 460,
       cell: ({ row }) => (
         <div className="min-w-0">
@@ -112,15 +126,51 @@ export function PluginSkillsSection({
       id: "visibility",
       size: 130,
       header: "Visibility",
-      cell: ({ row }) => <AgentBadge type={row.original.scope} />,
+      cell: ({ row }) => (
+        <ResourceVisibilityBadge
+          scope={row.original.scope}
+          teams={undefined}
+          users={undefined}
+          authorId={currentUserId}
+          authorName={session?.user?.name}
+          currentUserId={currentUserId}
+          showSelfAsMe
+        />
+      ),
     },
     {
       id: "files",
       size: 100,
-      header: () => <div className="text-right">Resources</div>,
+      header: () => <div className="text-right">Files</div>,
       cell: ({ row }) => (
         <div className="text-right text-sm text-muted-foreground">
-          {row.original.fileCount}
+          {row.original.fileCount}{" "}
+          {row.original.fileCount === 1 ? "file" : "files"}
+        </div>
+      ),
+    },
+    {
+      id: "usageCount",
+      accessorKey: "usageCount",
+      size: 100,
+      header: ({ column }) => (
+        <div className="flex justify-end pr-4">
+          <SkillSortableHeader
+            label="Uses"
+            isSorted={column.getIsSorted()}
+            onToggle={() =>
+              column.toggleSorting(column.getIsSorted() === "asc")
+            }
+          />
+        </div>
+      ),
+      cell: ({ row }) => (
+        <div className="flex justify-end pr-4">
+          <SkillUsageSummary
+            usageCount={row.original.usageCount}
+            usageUserCount={row.original.usageUserCount}
+            lastUsedAt={row.original.lastUsedAt}
+          />
         </div>
       ),
     },
@@ -149,60 +199,73 @@ export function PluginSkillsSection({
           Beta
         </Badge>
       </div>
-      <TableCardViewContent
-        cards={
-          <TableCardList
-            itemCount={skills.length}
-            isLoading={isLoading}
-            emptyMessage="No plugin skills match the current filters."
+      <SkillCollection
+        items={skills}
+        columns={columns}
+        getRowId={(skill) => `${skill.pluginId}:${skill.skillPath}`}
+        renderCard={(skill) => (
+          <TableCard
+            key={`${skill.pluginId}:${skill.skillPath}`}
+            icon={<Puzzle className="size-4 text-muted-foreground" />}
+            title={<Link href={pluginSkillHref(skill)}>{skill.name}</Link>}
+            description={skill.description || "No description"}
+            actions={renderActions(skill)}
+            footer={
+              <div className="flex items-center justify-between gap-3">
+                <span>
+                  {skill.fileCount} {skill.fileCount === 1 ? "file" : "files"}
+                </span>
+                <span>
+                  {skill.usageCount} {skill.usageCount === 1 ? "use" : "uses"}
+                </span>
+              </div>
+            }
           >
-            {skills.map((skill) => (
-              <TableCard
-                key={`${skill.pluginId}:${skill.skillPath}`}
-                icon={<Puzzle className="size-4 text-muted-foreground" />}
-                title={<Link href={pluginSkillHref(skill)}>{skill.name}</Link>}
-                description={skill.description}
-                actions={renderActions(skill)}
-                footer={
-                  <span>
-                    {skill.fileCount}{" "}
-                    {skill.fileCount === 1 ? "resource" : "resources"}
-                  </span>
-                }
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="secondary">{skill.pluginName}</Badge>
-                  <AgentBadge type={skill.scope} />
-                  {!skill.pluginEnabled && (
-                    <Badge variant="outline">Plugin disabled</Badge>
-                  )}
-                </div>
-              </TableCard>
-            ))}
-          </TableCardList>
-        }
-        table={
-          <DataTable
-            columns={columns}
-            data={skills}
-            isLoading={isLoading}
-            getRowId={(row) => `${row.pluginId}:${row.skillPath}`}
-            emptyMessage="No plugin skills match the current filters."
-            hideSelectedCount
-            sorting={sorting}
-            onSortingChange={setSorting}
-            onRowClick={(row) => router.push(pluginSkillHref(row))}
-            tableClassName="[&_td]:py-1.5"
-            fixedWidthColumnIds={[
-              "pluginName",
-              "visibility",
-              "files",
-              "actions",
-            ]}
-            flexibleColumnIds={["name"]}
-          />
-        }
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="secondary">{skill.pluginName}</Badge>
+              <ResourceVisibilityBadge
+                scope={skill.scope}
+                teams={undefined}
+                users={undefined}
+                authorId={currentUserId}
+                authorName={session?.user?.name}
+                currentUserId={currentUserId}
+                showSelfAsMe
+              />
+              {!skill.pluginEnabled && (
+                <Badge variant="outline">Plugin disabled</Badge>
+              )}
+            </div>
+          </TableCard>
+        )}
+        isLoading={isLoading}
+        emptyMessage="No plugin skills match the current filters."
+        sorting={sorting}
+        onSortingChange={setSorting}
+        onRowClick={(skill) => router.push(pluginSkillHref(skill))}
+        fixedWidthColumnIds={[
+          "pluginName",
+          "visibility",
+          "files",
+          "usageCount",
+          "actions",
+        ]}
+        flexibleColumnIds={["name"]}
       />
+      {usageSkill && (
+        <SkillUsageDialog
+          skillRef={{
+            kind: "plugin",
+            pluginId: usageSkill.pluginId,
+            skillPath: usageSkill.skillPath,
+          }}
+          skillName={usageSkill.name}
+          open
+          onOpenChange={(open) => {
+            if (!open) setUsageSkill(null);
+          }}
+        />
+      )}
     </section>
   );
 }

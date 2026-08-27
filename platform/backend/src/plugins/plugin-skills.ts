@@ -211,10 +211,41 @@ function skillRootOf(manifestPath: string): string {
   return index === -1 ? "" : manifestPath.slice(0, index);
 }
 
-/**
- * File paths belonging to one skill tree: everything under its root except
- * the manifest itself and anything a deeper skill root owns.
- */
+const ADOPTABLE_SKILL_RESOURCE_DIRECTORIES = new Set([
+  "agents",
+  "assets",
+  "commands",
+  "licenses",
+  "lsp-config",
+  "output-styles",
+  "references",
+  "scripts",
+]);
+
+const ADOPTABLE_PLUGIN_CONFIG_PATHS = new Set([
+  ".lsp.json",
+  ".mcp.json",
+  ".cursor/mcp.json",
+  ".copilot/mcp-config.json",
+  ".github/lsp.json",
+  ".github/mcp.json",
+  ".vscode/mcp.json",
+  "lsp.json",
+  "mcp.json",
+]);
+
+const ADOPTABLE_PLUGIN_CONTEXT_PREFIXES = [
+  ".claude/agents/",
+  ".claude/commands/",
+  ".claude/output-styles/",
+  ".codex/agents/",
+  ".cursor/agents/",
+  ".cursor/commands/",
+  ".github/agents/",
+  ".github/prompts/",
+];
+
+/** Keep Skill-owned resources and explicitly adoptable plugin context. */
 function resourcePathsOf(
   filePaths: string[],
   manifestPath: string,
@@ -228,8 +259,27 @@ function resourcePathsOf(
   return filePaths.filter((path) => {
     if (path === manifestPath) return false;
     if (root !== "" && !path.startsWith(`${root}/`)) return false;
-    return !deeperRoots.some(
-      (deeper) => deeper !== "" && path.startsWith(`${deeper}/`),
+    if (
+      deeperRoots.some(
+        (deeper) => deeper !== "" && path.startsWith(`${deeper}/`),
+      )
+    ) {
+      return false;
+    }
+    const relativePath = root === "" ? path : path.slice(root.length + 1);
+    const resourceRoot = relativePath.split("/", 1)[0].toLowerCase();
+    const isRootFile = !relativePath.includes("/");
+    return (
+      ADOPTABLE_SKILL_RESOURCE_DIRECTORIES.has(resourceRoot) ||
+      ADOPTABLE_PLUGIN_CONFIG_PATHS.has(relativePath) ||
+      ADOPTABLE_PLUGIN_CONTEXT_PREFIXES.some((prefix) =>
+        relativePath.startsWith(prefix),
+      ) ||
+      (isRootFile && /^README(?:[._-].+)?$/i.test(relativePath)) ||
+      (isRootFile &&
+        /^(?:LICENSE|LICENCE|COPYING|NOTICE|COPYRIGHT)(?:[._-].+)?$/i.test(
+          relativePath,
+        ))
     );
   });
 }

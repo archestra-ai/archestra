@@ -296,7 +296,7 @@ describe("plugin Skill routes", () => {
     expect(missing.statusCode).toBe(404);
   });
 
-  test("nested skill trees keep their own files", async () => {
+  test("projects only portable resources from root and nested skill trees", async () => {
     mockUserHasPermission.mockResolvedValue(true);
     const plugin = await seedPlugin(
       stePlugin({
@@ -310,22 +310,112 @@ describe("plugin Skill routes", () => {
           },
           {
             path: "notes.md",
-            content: "root note\n",
+            content: "plugin note\n",
+            encoding: "utf8",
+            mode: "100644",
+          },
+          ...[
+            ".claude-plugin/plugin.json",
+            ".codex-plugin/plugin.json",
+            ".github/plugin/plugin.json",
+            ".cursor-plugin/plugin.json",
+            "hooks/hooks.json",
+            ".claude/settings.json",
+            ".codex/config.toml",
+            ".cursor/rules/project.mdc",
+            ".github/copilot-instructions.md",
+            "install.ps1",
+            "package.json",
+            "hooks/README.md",
+            "install/NOTICE",
+            "runtime/LICENSE",
+            "settings/.mcp.json",
+          ].map((path) => ({
+            path,
+            content: "plugin-specific\n",
+            encoding: "utf8" as const,
+            mode: "100644" as const,
+          })),
+          ...[
+            ".mcp.json",
+            ".lsp.json",
+            "LICENSE.md",
+            "LICENSE-MIT",
+            "LICENSES/Apache.txt",
+            "README.md",
+            "agents/reviewer.md",
+            "commands/release.md",
+            "output-styles/concise.md",
+            ".claude/agents/reviewer.md",
+            ".claude/commands/release.md",
+            ".claude/output-styles/concise.md",
+            ".codex/agents/reviewer.toml",
+            ".cursor/agents/reviewer.md",
+            ".cursor/commands/release.md",
+            ".github/agents/reviewer.agent.md",
+            ".github/prompts/release.prompt.md",
+            ".copilot/mcp-config.json",
+            ".cursor/mcp.json",
+            ".github/mcp.json",
+          ].map((path) => ({
+            path,
+            content: "adoptable context\n",
+            encoding: "utf8" as const,
+            mode: "100644" as const,
+          })),
+          {
+            path: "scripts/root-check.sh",
+            content: "#!/bin/sh\n",
+            encoding: "utf8",
+            mode: "100755",
+          },
+          {
+            path: "references/root-notes.md",
+            content: "root reference\n",
             encoding: "utf8",
             mode: "100644",
           },
           {
-            path: "skills/ste-writing/SKILL.md",
+            path: "assets/root-template.txt",
+            content: "root template\n",
+            encoding: "utf8",
+            mode: "100644",
+          },
+          {
+            path: "bundles/client/skills/ste-writing/SKILL.md",
             content: SKILL_MD,
             encoding: "utf8",
             mode: "100644",
           },
           {
-            path: "skills/ste-writing/scripts/ste-lint.py",
+            path: "bundles/client/skills/ste-writing/scripts/ste-lint.py",
             content: "print('lint')\n",
             encoding: "utf8",
             mode: "100755",
           },
+          {
+            path: "bundles/client/skills/ste-writing/hooks/hooks.json",
+            content: "{}\n",
+            encoding: "utf8",
+            mode: "100644",
+          },
+          {
+            path: "bundles/client/skills/ste-writing/custom/context.md",
+            content: "non-standard resource\n",
+            encoding: "utf8",
+            mode: "100644",
+          },
+          ...[
+            "bundles/client/skills/ste-writing/.mcp.json",
+            "bundles/client/skills/ste-writing/NOTICE",
+            "bundles/client/skills/ste-writing/README.md",
+            "bundles/client/skills/ste-writing/agents/editor.md",
+          ].map((path) => ({
+            path,
+            content: "nested adoptable context\n",
+            encoding: "utf8" as const,
+            mode: "100644" as const,
+          })),
         ],
       }),
     );
@@ -340,11 +430,11 @@ describe("plugin Skill routes", () => {
       (item: { skillPath: string }) => item.skillPath === "",
     );
     const nestedItem = items.find(
-      (item: { skillPath: string }) => item.skillPath === "skills/ste-writing",
+      (item: { skillPath: string }) =>
+        item.skillPath === "bundles/client/skills/ste-writing",
     );
-    // the root tree owns only its note; the nested tree owns its script
-    expect(rootItem).toMatchObject({ name: "root-guide", fileCount: 1 });
-    expect(nestedItem).toMatchObject({ name: "ste-writing", fileCount: 1 });
+    expect(rootItem).toMatchObject({ name: "root-guide", fileCount: 23 });
+    expect(nestedItem).toMatchObject({ name: "ste-writing", fileCount: 5 });
 
     const rootDetail = await ctx.app.inject({
       method: "GET",
@@ -352,7 +442,42 @@ describe("plugin Skill routes", () => {
     });
     expect(rootDetail.statusCode).toBe(200);
     expect(rootDetail.json().files).toEqual([
-      expect.objectContaining({ path: "notes.md" }),
+      expect.objectContaining({ path: ".claude/agents/reviewer.md" }),
+      expect.objectContaining({ path: ".claude/commands/release.md" }),
+      expect.objectContaining({ path: ".claude/output-styles/concise.md" }),
+      expect.objectContaining({ path: ".codex/agents/reviewer.toml" }),
+      expect.objectContaining({ path: ".copilot/mcp-config.json" }),
+      expect.objectContaining({ path: ".cursor/agents/reviewer.md" }),
+      expect.objectContaining({ path: ".cursor/commands/release.md" }),
+      expect.objectContaining({ path: ".cursor/mcp.json" }),
+      expect.objectContaining({ path: ".github/agents/reviewer.agent.md" }),
+      expect.objectContaining({ path: ".github/mcp.json" }),
+      expect.objectContaining({ path: ".github/prompts/release.prompt.md" }),
+      expect.objectContaining({ path: ".lsp.json" }),
+      expect.objectContaining({ path: ".mcp.json" }),
+      expect.objectContaining({ path: "LICENSE-MIT" }),
+      expect.objectContaining({ path: "LICENSE.md" }),
+      expect.objectContaining({ path: "LICENSES/Apache.txt" }),
+      expect.objectContaining({ path: "README.md" }),
+      expect.objectContaining({ path: "agents/reviewer.md" }),
+      expect.objectContaining({ path: "assets/root-template.txt" }),
+      expect.objectContaining({ path: "commands/release.md" }),
+      expect.objectContaining({ path: "output-styles/concise.md" }),
+      expect.objectContaining({ path: "references/root-notes.md" }),
+      expect.objectContaining({ path: "scripts/root-check.sh" }),
+    ]);
+
+    const nestedDetail = await ctx.app.inject({
+      method: "GET",
+      url: `/api/skills/plugins/${plugin.id}?skillPath=bundles/client/skills/ste-writing`,
+    });
+    expect(nestedDetail.statusCode).toBe(200);
+    expect(nestedDetail.json().files).toEqual([
+      expect.objectContaining({ path: ".mcp.json" }),
+      expect.objectContaining({ path: "NOTICE" }),
+      expect.objectContaining({ path: "README.md" }),
+      expect.objectContaining({ path: "agents/editor.md" }),
+      expect.objectContaining({ path: "scripts/ste-lint.py" }),
     ]);
   });
 

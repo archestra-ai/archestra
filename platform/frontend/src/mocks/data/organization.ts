@@ -32,9 +32,12 @@ export function makeOrganization(
     defaultDiscoveredToolResultPolicy: "mark_as_untrusted",
     allowChatFileUploads: false,
     allowToolAutoAssignment: true,
-    embeddingModel: null,
-    embeddingDimensions: null,
-    embeddingChatApiKeyId: null,
+    // Configured, so the knowledge section renders its pages rather than the
+    // "Configuration is needed" placeholder every route below /knowledge is
+    // gated behind (`useIsKnowledgeBaseConfigured` reads exactly these two).
+    embeddingModel: "text-embedding-3-small",
+    embeddingDimensions: 1536,
+    embeddingChatApiKeyId: "llm-key-1",
     rerankerChatApiKeyId: null,
     rerankerModel: null,
     ocrChatApiKeyId: null,

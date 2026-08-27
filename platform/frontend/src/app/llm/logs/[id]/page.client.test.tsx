@@ -1,8 +1,14 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
+import { usePathname, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useInteraction } from "@/lib/interactions/interaction.query";
 import { ChatPage } from "./page.client";
+
+// The page renders its own `PageLayout` header, which reads the route and the
+// white-label app name to keep the browser tab title in sync.
+vi.mock("next/navigation");
+vi.mock("@/lib/hooks/use-app-name");
 
 vi.mock("@/lib/interactions/interaction.query", () => ({
   useInteraction: vi.fn(),
@@ -25,6 +31,7 @@ const KB_EMBEDDING = {
 describe("LogDetail locked-chat content", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    stubNavigation();
   });
 
   function renderInteraction(interaction: Record<string, unknown>) {
@@ -72,6 +79,7 @@ describe("LogDetail locked-chat content", () => {
 describe("LogDetail knowledge base connector", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    stubNavigation();
   });
 
   function renderWith(overrides: {
@@ -98,7 +106,7 @@ describe("LogDetail knowledge base connector", () => {
       connectorName: "Docs Web Crawler",
     });
 
-    expect(await screen.findByText("KB Connector")).toBeVisible();
+    expect(await screen.findByText("KB connector")).toBeVisible();
     expect(screen.getByText("Docs Web Crawler")).toBeVisible();
   });
 
@@ -108,7 +116,7 @@ describe("LogDetail knowledge base connector", () => {
       connectorName: null,
     });
 
-    expect(await screen.findByText("KB Connector")).toBeVisible();
+    expect(await screen.findByText("KB connector")).toBeVisible();
     expect(screen.getByText("Deleted connector")).toBeVisible();
   });
 
@@ -117,8 +125,8 @@ describe("LogDetail knowledge base connector", () => {
 
     // Rows written before connector attribution existed, and non-KB proxy
     // traffic, must not render an empty or placeholder connector.
-    expect(await screen.findByText("Model")).toBeVisible();
-    expect(screen.queryByText("KB Connector")).not.toBeInTheDocument();
+    expect(await screen.findByText("Provider")).toBeVisible();
+    expect(screen.queryByText("KB connector")).not.toBeInTheDocument();
     expect(screen.queryByText("Deleted connector")).not.toBeInTheDocument();
   });
 });
@@ -126,6 +134,7 @@ describe("LogDetail knowledge base connector", () => {
 describe("LogDetail virtual key", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    stubNavigation();
   });
 
   function renderWith(overrides: Record<string, unknown>) {
@@ -160,7 +169,7 @@ describe("LogDetail virtual key", () => {
       passthroughVirtualKey: null,
     });
 
-    expect(await screen.findByText("Virtual API Key")).toBeVisible();
+    expect(await screen.findByText("Virtual API key")).toBeVisible();
     expect(screen.getByText("demo-admin-laptop")).toBeVisible();
     expect(screen.getByText("Virtual key · Demo Admin")).toBeVisible();
   });
@@ -217,7 +226,7 @@ describe("LogDetail virtual key", () => {
       },
     });
 
-    const row = (await screen.findByText("Virtual API Key")).parentElement;
+    const row = (await screen.findByText("Virtual API key")).parentElement;
     expect(row?.textContent).toMatch(
       /demo-admin-identity[\s\S]*team-provider-credential/,
     );
@@ -275,8 +284,8 @@ describe("LogDetail virtual key", () => {
   it("omits the row when no virtual key was used", async () => {
     renderWith({ authMethod: "provider_key" });
 
-    expect(await screen.findByText("Auth Method")).toBeVisible();
-    expect(screen.queryByText("Virtual API Key")).not.toBeInTheDocument();
+    expect(await screen.findByText("Auth method")).toBeVisible();
+    expect(screen.queryByText("Virtual API key")).not.toBeInTheDocument();
   });
 });
 
@@ -284,4 +293,11 @@ function createQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: 60_000 } },
   });
+}
+
+function stubNavigation() {
+  vi.mocked(usePathname).mockReturnValue("/llm/logs/test-interaction-id");
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
+  );
 }

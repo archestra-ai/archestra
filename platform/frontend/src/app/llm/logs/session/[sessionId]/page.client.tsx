@@ -4,15 +4,16 @@ import {
   clientForExternalAgentIds,
   DynamicInteraction,
 } from "@archestra/shared";
-import { ArrowLeft, Bot, Download, Layers, Loader2, User } from "lucide-react";
-import Link from "next/link";
+import { Bot, Download, Layers, Loader2, User } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { use } from "react";
+import { BackLink } from "@/components/agent-pages/agent-page-shell";
 import { BilledCost } from "@/components/billed-cost";
 import { ClientSourceBadge } from "@/components/client-source-badge";
+import { type DetailFact, DetailFacts } from "@/components/detail-facts";
 import { LoadingState } from "@/components/loading";
 import MessageThread from "@/components/message-thread";
-import { MetadataCard, MetadataItem } from "@/components/metadata-card";
+import { PageLayout } from "@/components/page-layout";
 import { SourceBadge } from "@/components/source-badge";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
@@ -30,13 +31,14 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { UnattributedUserBadge } from "@/components/unattributed-user-badge";
 import { VirtualKeyBadge } from "@/components/virtual-key-badge";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
+import { typeRole } from "@/lib/design/type-scale";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
   useExportSessionInteractions,
   useInteractionSessions,
   useInteractions,
 } from "@/lib/interactions/interaction.query";
-import { formatDate } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 
 export default function SessionDetailPage({
   paramsPromise,
@@ -180,16 +182,125 @@ export default function SessionDetailPage({
     : [];
   const conversationChatErrors = lastMainRequest?.chatErrors ?? [];
 
+  // The session's own numbers, as one wrapping row under the header. Labels
+  // drop the "Total" every one of them used to carry: the page is a single
+  // session, so there is nothing partial for a total to be distinguished from.
+  const facts: DetailFact[] = [
+    {
+      label: "Requests",
+      value: (
+        <span className="font-mono tabular-nums">
+          {totalRequests.toLocaleString()}
+        </span>
+      ),
+    },
+    {
+      label: "Tokens",
+      value: (
+        <div className="space-y-0.5">
+          <div className="font-mono tabular-nums">
+            {totalInputTokens.toLocaleString()} in /{" "}
+            {totalOutputTokens.toLocaleString()} out
+          </div>
+          {(totalCacheReadTokens > 0 || totalCacheWriteTokens > 0) && (
+            <div className={cn(typeRole({ role: "meta" }), "font-mono")}>
+              {totalCacheReadTokens.toLocaleString()} cache read /{" "}
+              {totalCacheWriteTokens.toLocaleString()} cache write
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      label: "Cost",
+      value:
+        totalCost && totalBaselineCost ? (
+          <TooltipProvider>
+            <BilledCost
+              cost={totalCost}
+              billedCost={totalBilledCost}
+              subscriptionCost={totalSubscriptionCost}
+              baselineCost={totalBaselineCost}
+              toonCostSavings={totalToonCostSavings}
+              format="percent"
+              tooltip="hover"
+              variant="session"
+            />
+          </TooltipProvider>
+        ) : (
+          <span className="font-mono tabular-nums">-</span>
+        ),
+    },
+    ...(models.length > 0
+      ? [
+          {
+            label: models.length === 1 ? "Model" : "Models",
+            value: (
+              <div className="flex flex-wrap gap-1">
+                {models.map((model) => (
+                  <Badge key={model} variant="secondary" className="text-xs">
+                    {model}
+                  </Badge>
+                ))}
+              </div>
+            ),
+          },
+        ]
+      : []),
+    ...(firstRequest
+      ? [
+          {
+            label: "First request",
+            value: (
+              <span className="font-mono tabular-nums">
+                {formatDate({ date: firstRequest })}
+              </span>
+            ),
+          },
+        ]
+      : []),
+    ...(lastRequest
+      ? [
+          {
+            label: "Last request",
+            value: (
+              <span className="font-mono tabular-nums">
+                {formatDate({ date: lastRequest })}
+              </span>
+            ),
+          },
+        ]
+      : []),
+  ];
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-4">
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/llm/logs">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Sessions
-          </Link>
-        </Button>
+    <PageLayout
+      title={<span className="line-clamp-2">{sessionTitle || "Session"}</span>}
+      documentTitle={sessionTitle || "Session"}
+      backLink={<BackLink href="/llm/logs">Back to Sessions</BackLink>}
+      // Who and what this session was, beside the title rather than repeated
+      // as a second heading over a card below it.
+      description={
+        <div className="flex flex-wrap items-center gap-2">
+          {clientSource && <ClientSourceBadge client={clientSource} />}
+          <SourceBadge source={sessionData?.source} />
+          {profileName && (
+            <Badge variant="secondary" className="text-xs">
+              <Layers className="h-3 w-3 mr-1" />
+              {profileName}
+            </Badge>
+          )}
+          {userNames.map((userName) => (
+            <Badge key={userName} variant="outline" className="text-xs">
+              <User className="h-3 w-3 mr-1" />
+              <span>{userName}</span>
+            </Badge>
+          ))}
+          <UnattributedUserBadge reason={sessionData?.unattributedReason} />
+          <VirtualKeyBadge virtualKeys={sessionData?.virtualKeys} />
+        </div>
+      }
+      actionButton={
         <Button
           variant="outline"
           size="sm"
@@ -203,272 +314,197 @@ export default function SessionDetailPage({
           )}
           <span>Export JSON</span>
         </Button>
-      </div>
+      }
+    >
+      <div className="space-y-6">
+        {/* Reads as a continuation of the header band above it, which is where
+            these numbers belong: they describe the session, not a section of
+            the page. The hairline separates them from the content proper. */}
+        <DetailFacts facts={facts} className="border-b pb-6" />
 
-      {/* Session Summary */}
-      <MetadataCard
-        title={sessionTitle || "Session"}
-        badges={
-          <>
-            {clientSource && <ClientSourceBadge client={clientSource} />}
-            <SourceBadge source={sessionData?.source} />
-            {profileName && (
-              <Badge variant="secondary" className="text-xs">
-                <Layers className="h-3 w-3 mr-1" />
-                {profileName}
-              </Badge>
-            )}
-            {userNames.map((userName) => (
-              <Badge key={userName} variant="outline" className="text-xs">
-                <User className="h-3 w-3 mr-1" />
-                <span>{userName}</span>
-              </Badge>
-            ))}
-            <UnattributedUserBadge reason={sessionData?.unattributedReason} />
-            <VirtualKeyBadge virtualKeys={sessionData?.virtualKeys} />
-          </>
-        }
-      >
-        <MetadataItem label="Total Requests">
-          <div className="font-semibold">{totalRequests}</div>
-        </MetadataItem>
-        <MetadataItem label="Total Tokens">
-          <div className="font-mono">
-            {totalInputTokens.toLocaleString()} in /{" "}
-            {totalOutputTokens.toLocaleString()} out
-          </div>
-          {(totalCacheReadTokens > 0 || totalCacheWriteTokens > 0) && (
-            <div className="font-mono text-xs text-muted-foreground">
-              {totalCacheReadTokens.toLocaleString()} cache read /{" "}
-              {totalCacheWriteTokens.toLocaleString()} cache write
-            </div>
-          )}
-        </MetadataItem>
-        <MetadataItem label="Total Cost">
-          <div className="font-mono">
-            {totalCost && totalBaselineCost ? (
-              <TooltipProvider>
-                <BilledCost
-                  cost={totalCost}
-                  billedCost={totalBilledCost}
-                  subscriptionCost={totalSubscriptionCost}
-                  baselineCost={totalBaselineCost}
-                  toonCostSavings={totalToonCostSavings}
-                  format="percent"
-                  tooltip="hover"
-                  variant="session"
+        {/* Latest Conversation */}
+        {lastMainRequest && conversationMessages.length > 0 && (
+          <div>
+            <h2 className="text-xl font-semibold mb-4">Latest Conversation</h2>
+            <div className="border border-border rounded-lg bg-background overflow-hidden">
+              <div className="max-h-[600px] overflow-y-auto">
+                <MessageThread
+                  messages={conversationMessages}
+                  chatErrors={conversationChatErrors}
+                  conversationId={lastMainRequest.sessionId ?? undefined}
+                  containerClassName="h-auto"
+                  hideDivider
+                  profileId={lastMainRequest.profileId ?? undefined}
+                  agentName={profileName ?? undefined}
+                  selectedModel={lastMainInteraction?.modelName}
+                  unsafeContextBoundary={lastMainRequest.unsafeContextBoundary}
                 />
-              </TooltipProvider>
-            ) : (
-              <span>-</span>
-            )}
-          </div>
-        </MetadataItem>
-        <MetadataItem label="Models">
-          <div className="flex flex-wrap gap-1">
-            {models.map((model) => (
-              <Badge key={model} variant="secondary" className="text-xs">
-                {model}
-              </Badge>
-            ))}
-          </div>
-        </MetadataItem>
-        {firstRequest && (
-          <MetadataItem label="First Request">
-            <div className="font-mono text-xs">
-              {formatDate({ date: firstRequest })}
+              </div>
             </div>
-          </MetadataItem>
+          </div>
         )}
-        {lastRequest && (
-          <MetadataItem label="Last Request">
-            <div className="font-mono text-xs">
-              {formatDate({ date: lastRequest })}
-            </div>
-          </MetadataItem>
-        )}
-      </MetadataCard>
 
-      {/* Latest Conversation */}
-      {lastMainRequest && conversationMessages.length > 0 && (
-        <div>
-          <h2 className="text-xl font-semibold mb-4">Latest Conversation</h2>
-          <div className="border border-border rounded-lg bg-background overflow-hidden">
-            <div className="max-h-[600px] overflow-y-auto">
-              <MessageThread
-                messages={conversationMessages}
-                chatErrors={conversationChatErrors}
-                conversationId={lastMainRequest.sessionId ?? undefined}
-                containerClassName="h-auto"
-                hideDivider
-                profileId={lastMainRequest.profileId ?? undefined}
-                agentName={profileName ?? undefined}
-                selectedModel={lastMainInteraction?.modelName}
-                unsafeContextBoundary={lastMainRequest.unsafeContextBoundary}
-              />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Interactions Table */}
-      {interactionsLoading ? (
-        <LoadingState label="Loading session logs…" />
-      ) : (
-        <div className="rounded-md border overflow-x-auto">
-          <Table className="table-fixed w-full min-w-[700px]">
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[120px]">Time</TableHead>
-                <TableHead className="w-[115px]">Agent</TableHead>
-                <TableHead className="w-[140px]">Model</TableHead>
-                <TableHead className="w-[140px]">Cost</TableHead>
-                <TableHead className="w-[30%]">User Message</TableHead>
-                <TableHead className="w-[120px]">Tools</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {interactions.length === 0 ? (
+        {/* Interactions Table */}
+        {interactionsLoading ? (
+          <LoadingState label="Loading session logs…" />
+        ) : (
+          <div className="rounded-md border overflow-x-auto">
+            <Table className="table-fixed w-full min-w-[700px]">
+              <TableHeader>
                 <TableRow>
-                  <TableCell
-                    colSpan={6}
-                    className="text-center text-muted-foreground"
-                  >
-                    No interactions found for this session
-                  </TableCell>
+                  <TableHead className="w-[120px]">Time</TableHead>
+                  <TableHead className="w-[115px]">Agent</TableHead>
+                  <TableHead className="w-[140px]">Model</TableHead>
+                  <TableHead className="w-[140px]">Cost</TableHead>
+                  <TableHead className="w-[30%]">User Message</TableHead>
+                  <TableHead className="w-[120px]">Tools</TableHead>
                 </TableRow>
-              ) : (
-                interactions.map((interaction) => {
-                  const dynamicInteraction = new DynamicInteraction(
-                    interaction,
-                  );
-                  const userMessage = dynamicInteraction.getLastUserMessage();
-                  const toolsUsed = dynamicInteraction.getToolNamesUsed();
-                  const requestType =
-                    "requestType" in interaction
-                      ? (interaction.requestType ?? "main")
-                      : "main";
-                  const externalAgentIdLabel =
-                    "externalAgentIdLabel" in interaction
-                      ? interaction.externalAgentIdLabel
-                      : undefined;
-                  // Show prompt name if available, fall back to raw externalAgentId, then Main/Subagent
-                  const typeLabel =
-                    externalAgentIdLabel ||
-                    interaction.externalAgentId ||
-                    (requestType === "main" ? "Main" : "Subagent");
-
-                  return (
-                    <TableRow
-                      key={interaction.id}
-                      className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => router.push(`/llm/logs/${interaction.id}`)}
+              </TableHeader>
+              <TableBody>
+                {interactions.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={6}
+                      className="text-center text-muted-foreground"
                     >
-                      <TableCell className="font-mono text-xs">
-                        {formatDate({ date: dynamicInteraction.createdAt })}
-                      </TableCell>
-                      <TableCell className="overflow-hidden">
-                        <Badge
-                          variant="outline"
-                          className="text-xs max-w-full inline-flex truncate"
-                        >
-                          {externalAgentIdLabel && (
-                            <Bot className="h-3 w-3 mr-1 shrink-0" />
-                          )}
-                          <span className="truncate">{typeLabel}</span>
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="overflow-hidden">
-                        <div className="flex flex-wrap gap-1">
+                      No interactions found for this session
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  interactions.map((interaction) => {
+                    const dynamicInteraction = new DynamicInteraction(
+                      interaction,
+                    );
+                    const userMessage = dynamicInteraction.getLastUserMessage();
+                    const toolsUsed = dynamicInteraction.getToolNamesUsed();
+                    const requestType =
+                      "requestType" in interaction
+                        ? (interaction.requestType ?? "main")
+                        : "main";
+                    const externalAgentIdLabel =
+                      "externalAgentIdLabel" in interaction
+                        ? interaction.externalAgentIdLabel
+                        : undefined;
+                    // Show prompt name if available, fall back to raw externalAgentId, then Main/Subagent
+                    const typeLabel =
+                      externalAgentIdLabel ||
+                      interaction.externalAgentId ||
+                      (requestType === "main" ? "Main" : "Subagent");
+
+                    return (
+                      <TableRow
+                        key={interaction.id}
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() =>
+                          router.push(`/llm/logs/${interaction.id}`)
+                        }
+                      >
+                        <TableCell className="font-mono text-xs">
+                          {formatDate({ date: dynamicInteraction.createdAt })}
+                        </TableCell>
+                        <TableCell className="overflow-hidden">
                           <Badge
-                            variant="secondary"
+                            variant="outline"
                             className="text-xs max-w-full inline-flex truncate"
                           >
-                            {dynamicInteraction.modelName}
+                            {externalAgentIdLabel && (
+                              <Bot className="h-3 w-3 mr-1 shrink-0" />
+                            )}
+                            <span className="truncate">{typeLabel}</span>
                           </Badge>
-                          {dynamicInteraction.hasErrorResponse() && (
-                            <Badge variant="destructive" className="text-xs">
-                              Error
-                            </Badge>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">
-                        <TooltipProvider>
-                          <BilledCost
-                            cost={interaction.cost || "0"}
-                            billingMode={interaction.billingMode}
-                            baselineCost={
-                              interaction.baselineCost ||
-                              interaction.cost ||
-                              "0"
-                            }
-                            toonCostSavings={interaction.toonCostSavings}
-                            toonTokensBefore={interaction.toonTokensBefore}
-                            toonTokensAfter={interaction.toonTokensAfter}
-                            toonSkipReason={interaction.toonSkipReason}
-                            format="percent"
-                            tooltip="hover"
-                            variant="interaction"
-                            baselineModel={interaction.baselineModel}
-                            actualModel={interaction.model}
-                          />
-                        </TooltipProvider>
-                      </TableCell>
-                      <TableCell className="text-xs overflow-hidden">
-                        <TruncatedText
-                          message={userMessage}
-                          maxLength={80}
-                          showTooltip={false}
-                        />
-                      </TableCell>
-                      <TableCell className="text-xs overflow-hidden">
-                        {toolsUsed.length > 0 ? (
+                        </TableCell>
+                        <TableCell className="overflow-hidden">
                           <div className="flex flex-wrap gap-1">
-                            {toolsUsed.slice(0, 2).map((tool) => (
-                              <Badge
-                                key={tool}
-                                variant="outline"
-                                className="text-xs max-w-[65px] inline-block truncate"
-                              >
-                                {tool}
-                              </Badge>
-                            ))}
-                            {toolsUsed.length > 2 && (
-                              <Badge variant="outline" className="text-xs">
-                                +{toolsUsed.length - 2}
+                            <Badge
+                              variant="secondary"
+                              className="text-xs max-w-full inline-flex truncate"
+                            >
+                              {dynamicInteraction.modelName}
+                            </Badge>
+                            {dynamicInteraction.hasErrorResponse() && (
+                              <Badge variant="destructive" className="text-xs">
+                                Error
                               </Badge>
                             )}
                           </div>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-          {paginationMeta && paginationMeta.total > 0 && (
-            <div className="px-2 py-4">
-              <TablePagination
-                pageIndex={pageIndex}
-                pageSize={pageSize}
-                total={paginationMeta.total}
-                onPaginationChange={setPagination}
-                leftContent={
-                  <>
-                    Showing {offset + 1} to{" "}
-                    {Math.min(offset + pageSize, paginationMeta.total)} of{" "}
-                    {paginationMeta.total} requests
-                  </>
-                }
-              />
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">
+                          <TooltipProvider>
+                            <BilledCost
+                              cost={interaction.cost || "0"}
+                              billingMode={interaction.billingMode}
+                              baselineCost={
+                                interaction.baselineCost ||
+                                interaction.cost ||
+                                "0"
+                              }
+                              toonCostSavings={interaction.toonCostSavings}
+                              toonTokensBefore={interaction.toonTokensBefore}
+                              toonTokensAfter={interaction.toonTokensAfter}
+                              toonSkipReason={interaction.toonSkipReason}
+                              format="percent"
+                              tooltip="hover"
+                              variant="interaction"
+                              baselineModel={interaction.baselineModel}
+                              actualModel={interaction.model}
+                            />
+                          </TooltipProvider>
+                        </TableCell>
+                        <TableCell className="text-xs overflow-hidden">
+                          <TruncatedText
+                            message={userMessage}
+                            maxLength={80}
+                            showTooltip={false}
+                          />
+                        </TableCell>
+                        <TableCell className="text-xs overflow-hidden">
+                          {toolsUsed.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {toolsUsed.slice(0, 2).map((tool) => (
+                                <Badge
+                                  key={tool}
+                                  variant="outline"
+                                  className="text-xs max-w-[65px] inline-block truncate"
+                                >
+                                  {tool}
+                                </Badge>
+                              ))}
+                              {toolsUsed.length > 2 && (
+                                <Badge variant="outline" className="text-xs">
+                                  +{toolsUsed.length - 2}
+                                </Badge>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+            {paginationMeta && paginationMeta.total > 0 && (
+              <div className="px-2 py-4">
+                <TablePagination
+                  pageIndex={pageIndex}
+                  pageSize={pageSize}
+                  total={paginationMeta.total}
+                  onPaginationChange={setPagination}
+                  leftContent={
+                    <>
+                      Showing {offset + 1} to{" "}
+                      {Math.min(offset + pageSize, paginationMeta.total)} of{" "}
+                      {paginationMeta.total} requests
+                    </>
+                  }
+                />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </PageLayout>
   );
 }

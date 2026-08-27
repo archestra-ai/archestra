@@ -2,16 +2,10 @@
 
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
-import type { ReactNode } from "react";
-import { typeRole } from "@/lib/design/type-scale";
-import { cn } from "@/lib/utils";
+import { type DetailFact, DetailFacts } from "@/components/detail-facts";
 
 /** One key configuration value of the record, as `label` over `value`. */
-export interface OverviewFact {
-  /** Doubles as the React key, so two facts may not share a label. */
-  label: string;
-  value: ReactNode;
-}
+export type OverviewFact = DetailFact;
 
 /**
  * The Overview of a detail page: the record's key configuration on one row,
@@ -61,20 +55,9 @@ export function OverviewSummary({
           </Link>
         )}
       </div>
-      {facts.length > 0 && (
-        // One row, wrapping rather than scrolling: a narrow window gets two
-        // short rows instead of a value cut off at the edge.
-        <dl className="flex flex-wrap gap-x-10 gap-y-4 rounded-lg border bg-card p-4">
-          {facts.map((fact) => (
-            <div key={fact.label} className="min-w-0 space-y-1">
-              <dt className={typeRole({ role: "label" })}>{fact.label}</dt>
-              <dd className={cn(typeRole({ role: "body" }), "break-words")}>
-                {fact.value}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      )}
+      {/* One row, wrapping rather than scrolling: a narrow window gets two
+          short rows instead of a value cut off at the edge. */}
+      <DetailFacts facts={facts} className="rounded-lg border bg-card p-4" />
     </section>
   );
 }

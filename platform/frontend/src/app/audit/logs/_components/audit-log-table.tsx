@@ -566,7 +566,7 @@ export function AuditLogTable() {
   return (
     <div className="space-y-4">
       <FilterBar
-        className="mb-4"
+        leading
         onClearFilters={hasFilters ? clearFilters : undefined}
         // Action, outcome and the date range are what people reach for on this
         // trail day to day; the four identity/resource pickers only matter once

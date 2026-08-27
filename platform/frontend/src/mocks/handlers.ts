@@ -17,6 +17,11 @@ import {
 import { catalogSeed } from "./data/catalog";
 import { configSeed, healthSeed, publicConfigSeed } from "./data/config";
 import {
+  CONNECTOR_ID,
+  connectorRunsSeed,
+  connectorSeed,
+} from "./data/connectors";
+import {
   llmLogsSessionsSeed,
   makeInteraction,
   paginated,
@@ -27,6 +32,7 @@ import {
   makeLlmProviderApiKey,
   virtualKeysSeed,
 } from "./data/llm-keys";
+import { findMcpToolCall, mcpToolCallsSeed } from "./data/mcp-tool-calls";
 import {
   appearanceSettingsSeed,
   organizationSeed,
@@ -415,7 +421,25 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/llm-models/by-provider", []),
   ...getJson("/api/llm-models/with-api-keys", []),
   ...getJson("/api/knowledge-bases", []),
-  ...getJson("/api/connectors", []),
+  ...getJson("/api/connectors", paginated([connectorSeed])),
+  ...getJson("/api/connectors/:id", connectorSeed),
+  ...getJson(
+    "/api/connectors/:id/runs",
+    paginated(connectorRunsSeed, { total: 178 }),
+  ),
+  ...getJson("/api/connectors/:id/knowledge-bases", { data: [] }),
+  ...getJson("/api/connectors/:id/permission-coverage", {
+    connectorId: CONNECTOR_ID,
+    totalDocuments: connectorSeed.totalDocsIngested,
+    failClosedDocuments: 0,
+    nextScheduledAt: "2026-08-27T08:00:00.000Z",
+  }),
+  ...getJson("/api/mcp-tool-calls", paginated(mcpToolCallsSeed)),
+  ...paths("/api/mcp-tool-calls/:mcpToolCallId").map((url) =>
+    http.get(url, ({ params }) =>
+      HttpResponse.json(findMcpToolCall(String(params.mcpToolCallId))),
+    ),
+  ),
   ...getJson("/api/identity-providers", []),
 ];
 

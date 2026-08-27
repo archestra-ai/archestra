@@ -841,16 +841,16 @@ describe("ConnectorDetailPage", () => {
 
       render(<ConnectorDetailPage connectorId={CONNECTOR_ID} />);
 
-      expect(screen.getByText("Permissions Coverage")).toBeInTheDocument();
+      expect(screen.getByText("Permissions coverage")).toBeInTheDocument();
       expect(
         screen.getAllByText(
           (_, el) =>
-            el?.tagName === "DIV" &&
+            el?.tagName === "SPAN" &&
             el.textContent === "40 documents with no resolvable readers",
         )[0],
       ).toBeInTheDocument();
       // The permissions row mirrors the content row's Last/cadence items.
-      expect(screen.getByText("Last Permissions Sync")).toBeInTheDocument();
+      expect(screen.getByText("Last permissions sync")).toBeInTheDocument();
       expect(screen.getByText("Every 30 minutes")).toBeInTheDocument();
 
       await userEvent.click(
@@ -884,10 +884,10 @@ describe("ConnectorDetailPage", () => {
 
       // Full coverage is the self-healing steady state — showing it is noise.
       expect(
-        screen.queryByText("Permissions Coverage"),
+        screen.queryByText("Permissions coverage"),
       ).not.toBeInTheDocument();
       // The symmetric permissions items still render.
-      expect(screen.getByText("Last Permissions Sync")).toBeInTheDocument();
+      expect(screen.getByText("Last permissions sync")).toBeInTheDocument();
     });
 
     it("shows Syncing now and disables the menu item while a pass runs", async () => {
@@ -944,7 +944,7 @@ describe("ConnectorDetailPage", () => {
       render(<ConnectorDetailPage connectorId={CONNECTOR_ID} />);
 
       expect(
-        screen.queryByText("Permissions Coverage"),
+        screen.queryByText("Permissions coverage"),
       ).not.toBeInTheDocument();
       expect(screen.queryByText(/awaiting sync/)).not.toBeInTheDocument();
 

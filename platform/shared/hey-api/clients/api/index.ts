@@ -2676,6 +2676,8 @@ export type {
   InstallMcpServerErrors,
   InstallMcpServerResponse,
   InstallMcpServerResponses,
+  InteractionVirtualKey,
+  InteractionVirtualKeyInput,
   KimiChatCompletionsWithAgentData,
   KimiChatCompletionsWithAgentError,
   KimiChatCompletionsWithAgentErrors,

@@ -3,7 +3,7 @@ title: Authentication
 category: LLM Proxy
 order: 3
 description: Authentication methods for the LLM Proxy
-lastUpdated: 2026-08-25
+lastUpdated: 2026-08-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -129,6 +129,14 @@ The setup always adds `X-Archestra-Agent-Id` too — a non-secret client identif
 Claude Desktop can be configured by hand: open **Developer > Configure Third-Party Inference**, fill in the API key and base URL, then add two custom headers — `X-Archestra-Agent-Id` set to `anthropic_claude_desktop`, and `X-Archestra-Virtual-Key` set to the passthrough virtual key.
 
 The connection page also generates an importable configuration profile file for Claude Desktop. Download it, then in **Configure Third-Party Inference** open the **Default** dropdown (top right) and choose **Import configuration…** to load it. Click **Apply Changes** and restart Claude Desktop to pick up the new configuration.
+
+## Attribution in Logs
+
+Every proxied request records the virtual key that authenticated it. **LLM Proxy** logs name that key on the sessions list and on each request's detail view. This tells one caller from another — a CI runner from a developer's laptop, for example.
+
+![LLM Proxy sessions, each naming the virtual key it ran on](/docs/automated_screenshots/platform-llm-proxy-authentication_logs-virtual-key.webp)
+
+A personal virtual key belongs to one user, so the logs attribute its requests to them. A shared key attributes to no one — but it is not anonymous. A team key names the teams it is shared with, and an organization key names whoever created it. Attribution and sharing are separate facts, so a key's creator is never shown as the caller.
 
 ## LLM OAuth Clients
 

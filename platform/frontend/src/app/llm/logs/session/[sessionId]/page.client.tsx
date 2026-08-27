@@ -28,6 +28,7 @@ import {
 import { TablePagination } from "@/components/ui/table-pagination";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { UnattributedUserBadge } from "@/components/unattributed-user-badge";
+import { VirtualKeyBadge } from "@/components/virtual-key-badge";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
@@ -224,6 +225,7 @@ export default function SessionDetailPage({
               </Badge>
             ))}
             <UnattributedUserBadge reason={sessionData?.unattributedReason} />
+            <VirtualKeyBadge virtualKeys={sessionData?.virtualKeys} />
           </>
         }
       >

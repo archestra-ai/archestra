@@ -25,6 +25,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { describeKey } from "@/components/virtual-key-badge";
 import { useProfiles } from "@/lib/agent.query";
 import { useInteraction } from "@/lib/interactions/interaction.query";
 import { formatDate } from "@/lib/utils";
@@ -105,6 +106,13 @@ function LogDetail({
   const authMethod = dynamicInteraction.authMethod
     ? formatAuthMethod(dynamicInteraction.authMethod)
     : null;
+  // Both key columns, in the order they answer "who was this?": the
+  // passthrough key carries the acting user's identity, the standard key only
+  // supplied the provider credential.
+  const virtualKeys = [
+    dynamicInteraction.passthroughVirtualKey,
+    dynamicInteraction.virtualKey,
+  ].filter((key) => key != null);
 
   return (
     <div className="space-y-6">
@@ -215,6 +223,20 @@ function LogDetail({
             {authMethod && (
               <MetadataItem label="Auth Method">
                 <div className="font-mono text-xs">{authMethod}</div>
+              </MetadataItem>
+            )}
+            {virtualKeys.length > 0 && (
+              <MetadataItem label="Virtual API Key">
+                <div className="space-y-1.5">
+                  {virtualKeys.map((key) => (
+                    <div key={key.id} className="space-y-0.5">
+                      <div className="font-mono text-xs">{key.name}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {describeKey(key)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </MetadataItem>
             )}
             {dynamicInteraction.authenticatedAppName && (

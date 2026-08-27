@@ -21,6 +21,7 @@ import { createPaginatedResult } from "@/database/utils/pagination";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
 import type {
+  InteractionVirtualKey,
   ResourceVisibilityScope,
   SelectVirtualApiKey,
   VirtualApiKeyType,
@@ -362,6 +363,105 @@ class VirtualApiKeyModel {
       .limit(1);
 
     return result ?? null;
+  }
+
+  /**
+   * Resolve virtual key ids to the summary the LLM proxy logs render: the
+   * key's name and the user it stands for. Batched (one query for a whole page
+   * of sessions) because the alternative — joining `virtual_api_keys` twice
+   * into the session aggregate, once per key column — needs table aliases and
+   * widens a query that already groups over `interactions`.
+   *
+   * Ids that no longer exist are simply absent from the map: a deleted key
+   * leaves `interactions.virtual_key_id` NULL (ON DELETE SET NULL), so this
+   * only happens in the race between a read and a delete.
+   *
+   * `organizationId`, when given, restricts the lookup to that organization so
+   * a row can never surface a key name across a tenant boundary.
+   */
+  static async findSummariesByIds(params: {
+    ids: string[];
+    organizationId?: string;
+  }): Promise<Map<string, InteractionVirtualKey>> {
+    const ids = [...new Set(params.ids)];
+    if (ids.length === 0) {
+      return new Map();
+    }
+
+    const [rows, teamRows] = await Promise.all([
+      db
+        .select({
+          id: schema.virtualApiKeysTable.id,
+          name: schema.virtualApiKeysTable.name,
+          scope: schema.virtualApiKeysTable.scope,
+          keyType: schema.virtualApiKeysTable.keyType,
+          tokenStart: schema.virtualApiKeysTable.tokenStart,
+          authorId: schema.virtualApiKeysTable.authorId,
+          authorName: schema.usersTable.name,
+        })
+        .from(schema.virtualApiKeysTable)
+        .leftJoin(
+          schema.usersTable,
+          eq(schema.virtualApiKeysTable.authorId, schema.usersTable.id),
+        )
+        .where(
+          params.organizationId
+            ? and(
+                inArray(schema.virtualApiKeysTable.id, ids),
+                eq(
+                  schema.virtualApiKeysTable.organizationId,
+                  params.organizationId,
+                ),
+              )
+            : inArray(schema.virtualApiKeysTable.id, ids),
+        ),
+      // Who a team-scoped key is shared with. Fetched for every id rather than
+      // only the team-scoped ones: the scopes are not known until the query
+      // above returns, and one indexed `IN` is cheaper than a second round
+      // trip to narrow it.
+      db
+        .select({
+          virtualApiKeyId: schema.virtualApiKeyTeamsTable.virtualApiKeyId,
+          teamId: schema.virtualApiKeyTeamsTable.teamId,
+          teamName: schema.teamsTable.name,
+        })
+        .from(schema.virtualApiKeyTeamsTable)
+        .innerJoin(
+          schema.teamsTable,
+          eq(schema.virtualApiKeyTeamsTable.teamId, schema.teamsTable.id),
+        )
+        .where(inArray(schema.virtualApiKeyTeamsTable.virtualApiKeyId, ids))
+        .orderBy(schema.teamsTable.name),
+    ]);
+
+    const teamsByKeyId = new Map<string, { id: string; name: string }[]>();
+    for (const row of teamRows) {
+      const existing = teamsByKeyId.get(row.virtualApiKeyId) ?? [];
+      existing.push({ id: row.teamId, name: row.teamName });
+      teamsByKeyId.set(row.virtualApiKeyId, existing);
+    }
+
+    return new Map(
+      rows.map((row) => [
+        row.id,
+        {
+          id: row.id,
+          name: row.name,
+          scope: row.scope,
+          keyType: row.keyType,
+          tokenStart: row.tokenStart,
+          // Only a personal key attributes traffic to its author. On a shared
+          // key the author is reported as `createdByUserName` instead, so the
+          // key is not anonymous without the creator being mistaken for the
+          // caller — the proxy takes a user from a virtual key only when the
+          // scope is `personal`.
+          ownerUserId: row.scope === "personal" ? row.authorId : null,
+          ownerUserName: row.scope === "personal" ? row.authorName : null,
+          teams: row.scope === "team" ? (teamsByKeyId.get(row.id) ?? []) : [],
+          createdByUserName: row.authorName,
+        },
+      ]),
+    );
   }
 
   /**

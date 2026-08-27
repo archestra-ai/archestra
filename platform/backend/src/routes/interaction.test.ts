@@ -11,6 +11,7 @@ import ConversationChatErrorModel from "@/models/conversation-chat-error";
 import InteractionModel from "@/models/interaction";
 import InteractionDeltaManager from "@/models/interaction-delta-manager";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
+import VirtualApiKeyModel from "@/models/virtual-api-key";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -1094,6 +1095,350 @@ describe("interaction routes", () => {
 
       const session = await fetchSession("provider-key-session");
       expect(session.unattributedReason).toBe("provider_key");
+    });
+  });
+
+  describe("virtual key identity", () => {
+    const seedInteraction = async (opts: {
+      profileId: string;
+      sessionId?: string;
+      userId?: string;
+      virtualKeyId?: string;
+      passthroughVirtualKeyId?: string;
+      authMethod: InsertInteraction["authMethod"];
+    }) =>
+      InteractionModel.create({
+        profileId: opts.profileId,
+        sessionId: opts.sessionId,
+        sessionSource: opts.sessionId ? "claude_metadata" : undefined,
+        type: "anthropic:messages",
+        userId: opts.userId,
+        virtualKeyId: opts.virtualKeyId,
+        passthroughVirtualKeyId: opts.passthroughVirtualKeyId,
+        authMethod: opts.authMethod,
+        request: {
+          model: "claude-3-5-sonnet",
+          max_tokens: 16,
+          messages: [{ role: "user", content: "hi" }],
+        } as unknown as InsertInteraction["request"],
+        response: {
+          id: "msg_1",
+          type: "message",
+          role: "assistant",
+          model: "claude-3-5-sonnet",
+          content: [{ type: "text", text: "ok" }],
+          stop_reason: "end_turn",
+          usage: { input_tokens: 1, output_tokens: 1 },
+        } as unknown as InsertInteraction["response"],
+      });
+
+    const fetchSession = async (sessionId: string) => {
+      const res = await app.inject({
+        method: "GET",
+        url: `/api/interactions/sessions?limit=10&offset=0&sessionId=${sessionId}`,
+      });
+      expect(res.statusCode).toBe(200);
+      return res.json().data[0];
+    };
+
+    test("a session names the shared key it ran on", async ({ makeAgent }) => {
+      const agent = await makeAgent({
+        organizationId,
+        authorId: currentUser.id,
+        scope: "org",
+      });
+      const { virtualKey } = await VirtualApiKeyModel.create({
+        organizationId,
+        name: "ci-shared",
+        scope: "org",
+        authorId: currentUser.id,
+      });
+
+      await seedInteraction({
+        profileId: agent.id,
+        sessionId: "shared-key-named",
+        virtualKeyId: virtualKey.id,
+        authMethod: "virtual_key",
+      });
+
+      const session = await fetchSession("shared-key-named");
+      expect(session.virtualKeys).toEqual([
+        expect.objectContaining({
+          id: virtualKey.id,
+          name: "ci-shared",
+          scope: "org",
+          keyType: "standard",
+          // A shared key attributes to nobody, even though `currentUser`
+          // created it — surfacing the author as the owner would claim an
+          // attribution the proxy never makes. The creator is still reported,
+          // separately, so the key is not anonymous.
+          ownerUserId: null,
+          ownerUserName: null,
+          teams: [],
+          createdByUserName: currentUser.name,
+        }),
+      ]);
+      expect(session.unattributedReason).toBe("shared_virtual_key");
+    });
+
+    test("a team-scoped key reports the teams it is shared with", async ({
+      makeAgent,
+      makeTeam,
+    }) => {
+      const agent = await makeAgent({
+        organizationId,
+        authorId: currentUser.id,
+        scope: "org",
+      });
+      const platform = await makeTeam(organizationId, currentUser.id, {
+        name: "Platform",
+      });
+      const security = await makeTeam(organizationId, currentUser.id, {
+        name: "Security",
+      });
+      const { virtualKey } = await VirtualApiKeyModel.create({
+        organizationId,
+        name: "platform-shared",
+        scope: "team",
+        authorId: currentUser.id,
+        teamIds: [platform.id, security.id],
+      });
+
+      await seedInteraction({
+        profileId: agent.id,
+        sessionId: "team-key-session",
+        virtualKeyId: virtualKey.id,
+        authMethod: "virtual_key",
+      });
+
+      const session = await fetchSession("team-key-session");
+      const [key] = session.virtualKeys;
+      // Ordered by name so the rendered list is stable between reads.
+      expect(key.teams.map((team: { name: string }) => team.name)).toEqual([
+        "Platform",
+        "Security",
+      ]);
+      // Still attributes to nobody: shared with a team is not owned by a user.
+      expect(key.ownerUserId).toBeNull();
+      expect(session.unattributedReason).toBe("shared_virtual_key");
+    });
+
+    test("a personal key reports no teams even if rows exist", async ({
+      makeAgent,
+      makeTeam,
+      makeUser,
+    }) => {
+      const agent = await makeAgent({
+        organizationId,
+        authorId: currentUser.id,
+        scope: "org",
+      });
+      const owner = await makeUser({ email: "solo@example.com" });
+      const team = await makeTeam(organizationId, currentUser.id, {
+        name: "Leftover",
+      });
+      // A key demoted from team to personal scope keeps its junction rows;
+      // `teams` describes sharing, so a personal key must report none.
+      const { virtualKey } = await VirtualApiKeyModel.create({
+        organizationId,
+        name: "demoted-key",
+        scope: "personal",
+        authorId: owner.id,
+        teamIds: [team.id],
+      });
+
+      await seedInteraction({
+        profileId: agent.id,
+        sessionId: "demoted-key-session",
+        userId: owner.id,
+        virtualKeyId: virtualKey.id,
+        authMethod: "virtual_key",
+      });
+
+      const session = await fetchSession("demoted-key-session");
+      expect(session.virtualKeys[0].teams).toEqual([]);
+      expect(session.virtualKeys[0].ownerUserId).toBe(owner.id);
+    });
+
+    test("a personal key carries the user it stands for", async ({
+      makeAgent,
+      makeUser,
+    }) => {
+      const agent = await makeAgent({
+        organizationId,
+        authorId: currentUser.id,
+        scope: "org",
+      });
+      const owner = await makeUser({
+        email: "owner@example.com",
+        name: "Key Owner",
+      });
+      const { virtualKey } = await VirtualApiKeyModel.create({
+        organizationId,
+        name: "owner-personal",
+        scope: "personal",
+        authorId: owner.id,
+      });
+
+      await seedInteraction({
+        profileId: agent.id,
+        sessionId: "personal-key-session",
+        userId: owner.id,
+        virtualKeyId: virtualKey.id,
+        authMethod: "virtual_key",
+      });
+
+      const session = await fetchSession("personal-key-session");
+      expect(session.virtualKeys).toEqual([
+        expect.objectContaining({
+          name: "owner-personal",
+          scope: "personal",
+          ownerUserId: owner.id,
+          ownerUserName: "Key Owner",
+        }),
+      ]);
+      expect(session.unattributedReason).toBeNull();
+    });
+
+    test("both key columns are reported, ordered by name", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({
+        organizationId,
+        authorId: currentUser.id,
+        scope: "org",
+      });
+      const { virtualKey: standard } = await VirtualApiKeyModel.create({
+        organizationId,
+        name: "zzz-provider-credential",
+        scope: "org",
+      });
+      const { virtualKey: passthrough } = await VirtualApiKeyModel.create({
+        organizationId,
+        name: "aaa-user-identity",
+        scope: "personal",
+        keyType: "passthrough",
+        authorId: currentUser.id,
+      });
+
+      await seedInteraction({
+        profileId: agent.id,
+        sessionId: "both-keys-session",
+        userId: currentUser.id,
+        virtualKeyId: standard.id,
+        passthroughVirtualKeyId: passthrough.id,
+        authMethod: "passthrough_virtual_key",
+      });
+
+      const session = await fetchSession("both-keys-session");
+      expect(
+        session.virtualKeys.map((key: { name: string; keyType: string }) => [
+          key.name,
+          key.keyType,
+        ]),
+      ).toEqual([
+        ["aaa-user-identity", "passthrough"],
+        ["zzz-provider-credential", "standard"],
+      ]);
+    });
+
+    test("a session on no virtual key reports none", async ({ makeAgent }) => {
+      const agent = await makeAgent({
+        organizationId,
+        authorId: currentUser.id,
+        scope: "org",
+      });
+      await seedInteraction({
+        profileId: agent.id,
+        sessionId: "no-key-session",
+        authMethod: "provider_key",
+      });
+
+      const session = await fetchSession("no-key-session");
+      expect(session.virtualKeys).toEqual([]);
+    });
+
+    test("the interaction detail resolves both keys", async ({ makeAgent }) => {
+      const agent = await makeAgent({
+        organizationId,
+        authorId: currentUser.id,
+        scope: "org",
+      });
+      const { virtualKey: standard } = await VirtualApiKeyModel.create({
+        organizationId,
+        name: "detail-standard",
+        scope: "org",
+      });
+      const { virtualKey: passthrough } = await VirtualApiKeyModel.create({
+        organizationId,
+        name: "detail-passthrough",
+        scope: "personal",
+        keyType: "passthrough",
+        authorId: currentUser.id,
+      });
+
+      const interaction = await seedInteraction({
+        profileId: agent.id,
+        userId: currentUser.id,
+        virtualKeyId: standard.id,
+        passthroughVirtualKeyId: passthrough.id,
+        authMethod: "passthrough_virtual_key",
+      });
+
+      const res = await app.inject({
+        method: "GET",
+        url: `/api/interactions/${interaction.id}`,
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.virtualKey).toEqual(
+        expect.objectContaining({
+          id: standard.id,
+          name: "detail-standard",
+          tokenStart: standard.tokenStart,
+          ownerUserId: null,
+        }),
+      );
+      expect(body.passthroughVirtualKey).toEqual(
+        expect.objectContaining({
+          name: "detail-passthrough",
+          keyType: "passthrough",
+          ownerUserId: currentUser.id,
+        }),
+      );
+    });
+
+    test("a key from another organization is not resolved", async ({
+      makeAgent,
+      makeOrganization,
+    }) => {
+      const agent = await makeAgent({
+        organizationId,
+        authorId: currentUser.id,
+        scope: "org",
+      });
+      const otherOrg = await makeOrganization();
+      const { virtualKey: foreign } = await VirtualApiKeyModel.create({
+        organizationId: otherOrg.id,
+        name: "other-org-key",
+        scope: "org",
+      });
+
+      const interaction = await seedInteraction({
+        profileId: agent.id,
+        userId: currentUser.id,
+        virtualKeyId: foreign.id,
+        authMethod: "virtual_key",
+      });
+
+      const res = await app.inject({
+        method: "GET",
+        url: `/api/interactions/${interaction.id}`,
+      });
+      expect(res.statusCode).toBe(200);
+      // The id is still on the row, but its name must not cross the tenant
+      // boundary.
+      expect(res.json().virtualKey).toBeNull();
     });
   });
 });

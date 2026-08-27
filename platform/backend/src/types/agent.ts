@@ -19,7 +19,6 @@ import { z } from "zod";
 import { schema } from "@/database";
 import { SuggestedPromptInputSchema } from "./agent-suggested-prompt";
 import { AgentLabelWithDetailsSchema } from "./label";
-import { RunnerConfigSchema } from "./runner";
 import { SelectToolSchema } from "./tool";
 import {
   type ResourceVisibilityScope,
@@ -210,7 +209,6 @@ const selectExtendedFields = {
   missingCredentialBehavior: MissingCredentialBehaviorSchema,
   builtInAgentConfig: BuiltInAgentConfigSchema.nullable(),
   passthroughHeaders: z.array(z.string()).nullable(),
-  runnerConfig: RunnerConfigSchema.nullable(),
 };
 
 const insertExtendedFields = {
@@ -221,7 +219,6 @@ const insertExtendedFields = {
   missingCredentialBehavior: MissingCredentialBehaviorSchema.optional(),
   builtInAgentConfig: BuiltInAgentConfigSchema.nullable().optional(),
   passthroughHeaders: PassthroughHeadersSchema,
-  runnerConfig: RunnerConfigSchema.nullish(),
 };
 
 /**
@@ -394,11 +391,6 @@ export const InsertAgentSchemaBase = createInsertSchema(
     updatedAt: true,
     authorId: true,
     isPersonalGateway: true,
-    // The shared runner credential bag is created server-side when an
-    // administrator configures it. Accepting the id here would let any caller
-    // point an agent at an arbitrary secret row and have its fields injected
-    // into a pod they chose the image for.
-    runnerSecretId: true,
     // Which skills a gateway publishes over skill:// is decided by the
     // skill-assignment routes, which carry a `skill:read` floor. Accepting the
     // flag in the generic agent body would let a caller without that
@@ -439,11 +431,6 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
     updatedAt: true,
     authorId: true,
     isPersonalGateway: true,
-    // The shared runner credential bag is created server-side when an
-    // administrator configures it. Accepting the id here would let any caller
-    // point an agent at an arbitrary secret row and have its fields injected
-    // into a pod they chose the image for.
-    runnerSecretId: true,
     // Which skills a gateway publishes over skill:// is decided by the
     // skill-assignment routes, which carry a `skill:read` floor. Accepting the
     // flag in the generic agent body would let a caller without that

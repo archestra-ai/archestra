@@ -1,41 +1,25 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { userHasPermission } from "@/auth";
-import config from "@/config";
 import { runnerRuntimeManager } from "@/k8s/runner-runtime";
-import logger from "@/logging";
-import { RunnerEventModel, RunnerModel } from "@/models";
+import { RunnerModel } from "@/models";
 import { preflightRunnerCredentials } from "@/services/runners/credentials";
-import { RunnerCredentialsRequiredError } from "@/services/runners/launch-spec";
-import {
-  requireRunnableAgent,
-  startRunner,
-} from "@/services/runners/start-runner";
 import {
   ApiError,
   constructResponseSchema,
+  InsertRunnerSchema,
   MissingRunnerCredentialSchema,
-  RUNNER_CREDENTIALS_REQUIRED_CODE,
   type Runner,
-  RunnerStateSchema,
-  SelectRunnerEventSchema,
   SelectRunnerSchema,
-  type User,
+  UpdateRunnerSchema,
 } from "@/types";
+import {
+  BulkDeleteBodySchema,
+  BulkOutcomeSchema,
+  runBulk,
+} from "../bulk-route";
 
-const RunnerResponseSchema = SelectRunnerSchema;
-
-const CreateRunnerBodySchema = z.object({
-  agentId: z.string().uuid(),
-  name: z.string().min(1).max(200),
-  /** Initial instruction handed to the agent when the session starts. */
-  task: z.string().max(20_000).optional(),
-});
-
-const SteerRunnerBodySchema = z.object({
-  message: z.string().min(1).max(20_000),
-});
+const RunnerBodySchema = InsertRunnerSchema.omit({ organizationId: true });
 
 const runnerRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -43,25 +27,36 @@ const runnerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetAllRunners,
-        description: "List runners in the organization",
+        description: "List runner definitions in the organization",
         tags: ["Runners"],
         querystring: z.object({
-          agentId: z.string().uuid().optional(),
-          state: RunnerStateSchema.optional(),
-          /** Restrict to the caller's own runners. */
-          mine: z.coerce.boolean().optional(),
+          search: z.string().trim().min(1).optional(),
+          environmentId: z.string().uuid().optional(),
+          /** `key:a|b;key2:c` — a runner must match every key. */
+          labels: z.string().optional(),
+          limit: z.coerce.number().int().min(1).max(100).optional(),
+          offset: z.coerce.number().int().min(0).optional(),
         }),
-        response: constructResponseSchema(z.array(RunnerResponseSchema)),
+        response: constructResponseSchema(
+          z.object({
+            runners: z.array(SelectRunnerSchema),
+            total: z.number(),
+          }),
+        ),
       },
     },
-    async ({ query, organizationId, user }, reply) => {
-      const runners = await RunnerModel.list({
-        organizationId,
-        agentId: query.agentId,
-        createdByUserId: query.mine ? user.id : undefined,
-        states: query.state ? [query.state] : undefined,
-      });
-      return reply.send(runners);
+    async ({ query, organizationId }, reply) => {
+      assertRunnersEnabled();
+      return reply.send(
+        await RunnerModel.list({
+          organizationId,
+          search: query.search,
+          environmentId: query.environmentId,
+          labels: parseLabelsFilter(query.labels),
+          limit: query.limit,
+          offset: query.offset,
+        }),
+      );
     },
   );
 
@@ -70,66 +65,50 @@ const runnerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetRunner,
-        description: "Get a runner",
+        description: "Get a runner definition",
         tags: ["Runners"],
         params: z.object({ id: z.string().uuid() }),
-        response: constructResponseSchema(RunnerResponseSchema),
+        response: constructResponseSchema(SelectRunnerSchema),
       },
     },
     async ({ params, organizationId }, reply) => {
+      assertRunnersEnabled();
       return reply.send(await requireRunner(params.id, organizationId));
     },
   );
 
-  fastify.get(
-    "/api/runners/:id/events",
-    {
-      schema: {
-        operationId: RouteId.GetRunnerEvents,
-        description: "Get a runner's session timeline",
-        tags: ["Runners"],
-        params: z.object({ id: z.string().uuid() }),
-        response: constructResponseSchema(z.array(SelectRunnerEventSchema)),
-      },
-    },
-    async ({ params, organizationId }, reply) => {
-      const runner = await requireRunner(params.id, organizationId);
-      return reply.send(await RunnerEventModel.listForRunner(runner.id));
-    },
-  );
-
   /**
-   * What this user still has to supply before an agent's runner can start.
-   * Lets the UI annotate a start button up front rather than failing the click.
+   * What the current user still has to supply before a session on this runner
+   * can start. Lets a caller annotate up front rather than failing on start.
    */
   fastify.get(
-    "/api/runners/preflight",
+    "/api/runners/:id/preflight",
     {
       schema: {
         operationId: RouteId.GetRunnerPreflight,
         description:
-          "Report credentials the current user must supply before starting a runner for an agent",
+          "Report credentials the current user must supply before this runner can act as them",
         tags: ["Runners"],
-        querystring: z.object({ agentId: z.string().uuid() }),
+        params: z.object({ id: z.string().uuid() }),
         response: constructResponseSchema(
           z.object({
-            canStart: z.boolean(),
+            ready: z.boolean(),
             missing: z.array(MissingRunnerCredentialSchema),
             misconfigured: z.array(MissingRunnerCredentialSchema),
           }),
         ),
       },
     },
-    async ({ query, organizationId, user }, reply) => {
+    async ({ params, organizationId, user }, reply) => {
       assertRunnersEnabled();
-      const agent = await requireRunnableAgent(query.agentId, organizationId);
+      const runner = await requireRunner(params.id, organizationId);
       const preflight = await preflightRunnerCredentials({
-        agent,
+        runner,
         organizationId,
         userId: user.id,
       });
       return reply.send({
-        canStart:
+        ready:
           preflight.missing.length === 0 &&
           preflight.misconfigured.length === 0,
         ...preflight,
@@ -142,90 +121,89 @@ const runnerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.CreateRunner,
-        description: "Start a runner for an agent",
+        description: "Create a runner definition",
         tags: ["Runners"],
-        body: CreateRunnerBodySchema,
-        response: constructResponseSchema(RunnerResponseSchema),
+        body: RunnerBodySchema,
+        response: constructResponseSchema(SelectRunnerSchema),
       },
     },
     async ({ body, organizationId, user }, reply) => {
       assertRunnersEnabled();
-      try {
-        return reply.send(
-          await startRunner({
-            agentId: body.agentId,
-            organizationId,
-            userId: user.id,
-            name: body.name,
-            task: body.task,
-          }),
-        );
-      } catch (error) {
-        if (error instanceof RunnerCredentialsRequiredError) {
-          // The code is what a client keys the "connect your credentials" step
-          // off; it then reads the field list from GET /api/runners/preflight,
-          // which returns exactly that shape.
-          throw new ApiError(
-            409,
-            error.message,
-            RUNNER_CREDENTIALS_REQUIRED_CODE,
-          );
-        }
-        throw error;
-      }
+      await assertMayConfigurePrivileged({
+        privileged: body.privileged === true,
+        userId: user.id,
+        organizationId,
+      });
+      return reply.send(await RunnerModel.create({ ...body, organizationId }));
     },
   );
 
-  fastify.post(
-    "/api/runners/:id/steer",
+  fastify.put(
+    "/api/runners/:id",
     {
       schema: {
-        operationId: RouteId.SteerRunner,
-        description: "Send a message into a running session",
+        operationId: RouteId.UpdateRunner,
+        description: "Update a runner definition",
         tags: ["Runners"],
         params: z.object({ id: z.string().uuid() }),
-        body: SteerRunnerBodySchema,
-        response: constructResponseSchema(z.object({ delivered: z.boolean() })),
+        body: UpdateRunnerSchema,
+        response: constructResponseSchema(SelectRunnerSchema),
       },
     },
     async ({ params, body, organizationId, user }, reply) => {
-      const runner = await requireRunner(params.id, organizationId);
-      await assertMaySteer({ runner, user, organizationId });
-      if (runner.state !== "running") {
-        throw new ApiError(
-          409,
-          `This runner is ${runner.state}, so there is no live session to steer`,
-        );
-      }
-
-      await runnerRuntimeManager.steer({ runner, message: body.message });
-      await RunnerEventModel.append({
-        runnerId: runner.id,
-        kind: "steer",
-        message: body.message,
-        actorUserId: user.id,
+      assertRunnersEnabled();
+      await assertMayConfigurePrivileged({
+        privileged: body.privileged === true,
+        userId: user.id,
+        organizationId,
       });
-      return reply.send({ delivered: true });
+      const updated = await RunnerModel.update(params.id, organizationId, body);
+      if (!updated) {
+        throw new ApiError(404, "Runner not found");
+      }
+      return reply.send(updated);
     },
   );
 
-  fastify.post(
-    "/api/runners/:id/stop",
+  fastify.delete(
+    "/api/runners/bulk",
     {
       schema: {
-        operationId: RouteId.StopRunner,
-        description: "Stop a runner",
+        operationId: RouteId.BulkDeleteRunners,
+        description: "Delete runner definitions",
         tags: ["Runners"],
-        params: z.object({ id: z.string().uuid() }),
-        response: constructResponseSchema(RunnerResponseSchema),
+        body: BulkDeleteBodySchema,
+        response: constructResponseSchema(BulkOutcomeSchema),
       },
     },
-    async ({ params, organizationId, user }, reply) => {
-      const runner = await requireRunner(params.id, organizationId);
-      await assertMaySteer({ runner, user, organizationId });
-      await runnerRuntimeManager.stop(runner, "Stopped by request");
-      const stopped = await RunnerModel.findById(runner.id, organizationId);
-      return reply.send(stopped ?? runner);
+    async (request, reply) => {
+      assertRunnersEnabled();
+      const { organizationId } = request;
+      return reply.send(
+        await runBulk({
+          ids: request.body.ids,
+          logLabel: "runners bulk delete",
+          notFoundMessage: "Runner not found",
+          unexpectedMessage: "Could not delete this runner",
+          load: async (ids) => {
+            const loaded = new Map<string, Runner>();
+            for (const id of ids) {
+              const runner = await RunnerModel.findById(id, organizationId);
+              if (runner) loaded.set(id, runner);
+            }
+            return loaded;
+          },
+          describe: (runner) => runner.name,
+          applyEach: async (_runner, id) => {
+            const deleted = await RunnerModel.delete(id, organizationId);
+            if (!deleted) throw new ApiError(404, "Runner not found");
+          },
+          audit: {
+            target: request,
+            snapshot: async (ids) => ({ ids }),
+          },
+        }),
+      );
     },
   );
 
@@ -234,26 +212,19 @@ const runnerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.DeleteRunner,
-        description: "Delete a runner and its session history",
+        description: "Delete a runner definition",
         tags: ["Runners"],
         params: z.object({ id: z.string().uuid() }),
         response: constructResponseSchema(z.object({ deleted: z.boolean() })),
       },
     },
-    async ({ params, organizationId, user }, reply) => {
-      const runner = await requireRunner(params.id, organizationId);
-      await assertMaySteer({ runner, user, organizationId });
-      // Tear the workload down before dropping the row: the row is what tells
-      // us the names of the objects to remove.
-      await runnerRuntimeManager.teardown(runner).catch((error) => {
-        logger.warn(
-          { error, runnerId: runner.id },
-          "Teardown failed while deleting a runner; removing the row anyway",
-        );
-      });
-      return reply.send({
-        deleted: await RunnerModel.delete(runner.id, organizationId),
-      });
+    async ({ params, organizationId }, reply) => {
+      assertRunnersEnabled();
+      const deleted = await RunnerModel.delete(params.id, organizationId);
+      if (!deleted) {
+        throw new ApiError(404, "Runner not found");
+      }
+      return reply.send({ deleted });
     },
   );
 };
@@ -281,29 +252,40 @@ async function requireRunner(
 }
 
 /**
- * Attaching to or steering a runner reaches a shell running under the
- * creator's own credentials, so it is deliberately narrower than the
- * `runner:update` permission that gets you to this point: the creator, or an
- * administrator who can already act across the organization's runners.
+ * A privileged pod holds host devices and full capabilities, so configuring
+ * one is node-level access rather than a runner setting.
  */
-async function assertMaySteer(params: {
-  runner: Runner;
-  user: User;
+async function assertMayConfigurePrivileged(params: {
+  privileged: boolean;
+  userId: string;
   organizationId: string;
 }): Promise<void> {
-  if (params.runner.createdByUserId === params.user.id) {
-    return;
-  }
-  const isAdmin = await userHasPermission(
-    params.user.id,
+  if (!params.privileged) return;
+  const { userHasPermission } = await import("@/auth/utils");
+  const mayGrant = await userHasPermission(
+    params.userId,
     params.organizationId,
     "runner",
     "admin",
   );
-  if (!isAdmin) {
+  if (!mayGrant) {
     throw new ApiError(
       403,
-      "Only the person who started this runner can steer or stop it",
+      "Only a runner administrator can configure a privileged runner",
     );
   }
+}
+
+/** `key:a|b;key2:c` into the shape the model filters on. */
+function parseLabelsFilter(
+  raw: string | undefined,
+): Record<string, string[]> | undefined {
+  if (!raw) return undefined;
+  const parsed: Record<string, string[]> = {};
+  for (const entry of raw.split(";")) {
+    const [key, values] = entry.split(":");
+    if (!key || !values) continue;
+    parsed[key] = values.split("|").filter(Boolean);
+  }
+  return Object.keys(parsed).length > 0 ? parsed : undefined;
 }

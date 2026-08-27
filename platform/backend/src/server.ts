@@ -80,7 +80,6 @@ import { seedRequiredStartingData } from "@/database/seed";
 import { enterpriseTier } from "@/enterprise-tier";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
-import { runnerRuntimeManager } from "@/k8s/runner-runtime";
 import logger from "@/logging";
 import { enterpriseLicenseMiddleware } from "@/middleware";
 import { initAuditDecisions } from "@/middleware/audit-decisions";
@@ -1482,12 +1481,6 @@ const startWebServer = async () => {
     // Eagerly provision a Dagger engine + egress policy for every environment and
     // every organization's default, so no agent routes to a non-existent pod.
     void daggerEnvironmentRuntimeManager.reconcileAll();
-
-    // Reconcile long-running agent sessions: sync what the cluster actually
-    // shows onto the runner rows, and stop the ones past their TTL or idle
-    // timeout. Web replicas only — the sweep serializes across them with a
-    // per-runner lease rather than a leader election.
-    runnerRuntimeManager.start();
 
     // Initialize incoming email provider (if configured)
     // This handles auto-setup of webhook subscription if ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL is set

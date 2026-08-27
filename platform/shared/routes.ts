@@ -457,12 +457,11 @@ export const RouteId = {
   // Runner Routes — long-running agent sessions in their own container.
   GetAllRunners: "getAllRunners",
   GetRunner: "getRunner",
-  GetRunnerEvents: "getRunnerEvents",
   GetRunnerPreflight: "getRunnerPreflight",
   CreateRunner: "createRunner",
-  SteerRunner: "steerRunner",
-  StopRunner: "stopRunner",
+  UpdateRunner: "updateRunner",
   DeleteRunner: "deleteRunner",
+  BulkDeleteRunners: "bulkDeleteRunners",
   // Personal credentials a user supplies for the agents they run.
   GetAllUserCredentials: "getAllUserCredentials",
   UpsertUserCredential: "upsertUserCredential",

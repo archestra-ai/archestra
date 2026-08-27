@@ -49,7 +49,9 @@ const runnerSessionsTable = pgTable(
   },
   (table) => [
     uniqueIndex("runner_sessions_task_id_uidx").on(table.taskId),
-    uniqueIndex("runner_sessions_deployment_name_uidx").on(table.deploymentName),
+    uniqueIndex("runner_sessions_deployment_name_uidx").on(
+      table.deploymentName,
+    ),
     index("runner_sessions_runner_id_idx").on(table.runnerId),
     index("runner_sessions_organization_id_idx").on(table.organizationId),
   ],

@@ -5,7 +5,6 @@
  * questions are how many are alive right now, how they end, and how long
  * provisioning takes:
  *
- *   sum by (state) (runners_active)
  *   sum by (outcome) (increase(runner_terminations_total[1d]))
  *   histogram_quantile(0.95, sum by (le) (rate(runner_provision_duration_seconds_bucket[1h])))
  *
@@ -16,7 +15,6 @@
 
 import client from "prom-client";
 import logger from "@/logging";
-import type { RunnerState } from "@/types";
 
 /** Why a runner stopped. `failed` covers both provisioning and session faults. */
 type RunnerTerminationOutcome =
@@ -26,7 +24,6 @@ type RunnerTerminationOutcome =
   | "expired_ttl"
   | "expired_idle";
 
-let runnersActive: client.Gauge<string>;
 let runnerStartsTotal: client.Counter<string>;
 let runnerTerminationsTotal: client.Counter<string>;
 let runnerProvisionDurationSeconds: client.Histogram<string>;
@@ -37,12 +34,6 @@ let initialized = false;
 export function initializeRunnerMetrics(): void {
   if (initialized) return;
   initialized = true;
-
-  runnersActive = new client.Gauge({
-    name: "runners_active",
-    help: "Runners currently in each non-terminal state",
-    labelNames: ["state"],
-  });
 
   runnerStartsTotal = new client.Counter({
     name: "runner_starts_total",
@@ -70,18 +61,6 @@ export function initializeRunnerMetrics(): void {
   });
 
   logger.info("Runner metrics initialized");
-}
-
-/** Replace the active-runner gauge from one reconcile pass's observation. */
-export function reportRunnerStates(
-  counts: Partial<Record<RunnerState, number>>,
-): void {
-  if (!runnersActive) return;
-  // Set every state the caller reports, including zeros: a state that drops to
-  // zero must clear rather than keep its last non-zero sample forever.
-  for (const [state, count] of Object.entries(counts)) {
-    runnersActive.set({ state }, count ?? 0);
-  }
 }
 
 export function reportRunnerStarted(): void {

@@ -76,10 +76,6 @@ import {
   tools as runToolTools,
 } from "./run-tool";
 import {
-  toolEntries as runnerToolEntries,
-  tools as runnerTools,
-} from "./runners";
-import {
   toolEntries as sandboxToolEntries,
   tools as sandboxTools,
 } from "./sandbox";
@@ -150,7 +146,6 @@ function getToolEntries(): Partial<
       ...hookToolEntries,
       ...mcpGatewayToolEntries,
       ...mcpServerToolEntries,
-      ...runnerToolEntries,
       ...teamToolEntries,
       ...limitToolEntries,
       ...policyToolEntries,
@@ -186,7 +181,6 @@ function getAllTools(): (typeof identityTools)[number][] {
       ...agentTools,
       ...mcpGatewayTools,
       ...mcpServerTools,
-      ...runnerTools,
       ...teamTools,
       ...limitTools,
       ...policyTools,

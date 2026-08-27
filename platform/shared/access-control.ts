@@ -694,12 +694,11 @@ export const requiredEndpointPermissionsMap: Partial<
   // and steer reach a shell running under that person's credentials.
   [RouteId.GetAllRunners]: { runner: ["read"] },
   [RouteId.GetRunner]: { runner: ["read"] },
-  [RouteId.GetRunnerEvents]: { runner: ["read"] },
   [RouteId.GetRunnerPreflight]: { runner: ["read"] },
   [RouteId.CreateRunner]: { runner: ["create"] },
-  [RouteId.SteerRunner]: { runner: ["update"] },
-  [RouteId.StopRunner]: { runner: ["update"] },
+  [RouteId.UpdateRunner]: { runner: ["update"] },
   [RouteId.DeleteRunner]: { runner: ["delete"] },
+  [RouteId.BulkDeleteRunners]: { runner: ["delete"] },
 
   // A user's own credentials: authenticated, but no resource permission —
   // these are personal, and an administrator's runner permissions grant no

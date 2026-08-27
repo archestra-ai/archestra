@@ -26,6 +26,7 @@ import OrganizationModel from "@/models/organization";
 import OrganizationRoleModel from "@/models/organization-role";
 import PluginModel from "@/models/plugin";
 import ProjectModel from "@/models/project";
+import RunnerModel from "@/models/runner";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ServiceAccountModel from "@/models/service-account";
 import SkillModel from "@/models/skill";
@@ -135,6 +136,17 @@ export function deriveAction(
  * @public — consumed by audit-log-snapshot.test.ts to verify registry invariants
  */
 export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
+  // Runners — the container definition an agent's long-running work runs in.
+  // Worth auditing because a runner names an image and the credentials a
+  // session is handed: changing either changes what runs as whom.
+  "/api/runners": {
+    resourceType: "runner",
+    fetchById: (id, orgId) => RunnerModel.findByIdForAudit(id, orgId),
+  },
+  "/api/runners/:id": {
+    resourceType: "runner",
+    fetchById: (id, orgId) => RunnerModel.findByIdForAudit(id, orgId),
+  },
   // Agents
   "/api/agents": {
     resourceType: "agent",

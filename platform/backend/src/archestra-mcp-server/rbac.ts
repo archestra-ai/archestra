@@ -33,15 +33,6 @@ export const TOOL_PERMISSIONS: Record<
   update_hook: { resource: "agent", action: "update" },
   delete_hook: { resource: "agent", action: "update" },
 
-  // Runners — long-running agent sessions. Starting one spends money and runs
-  // under the caller's own credentials; steer/stop additionally check that the
-  // caller started the session (see denyIfNotSteerable).
-  start_runner: { resource: "runner", action: "create" },
-  list_runners: { resource: "runner", action: "read" },
-  get_runner: { resource: "runner", action: "read" },
-  send_to_runner: { resource: "runner", action: "update" },
-  stop_runner: { resource: "runner", action: "update" },
-
   // MCP Gateways
   create_mcp_gateway: { resource: "mcpGateway", action: "create" },
   get_mcp_gateway: { resource: "mcpGateway", action: "read" },

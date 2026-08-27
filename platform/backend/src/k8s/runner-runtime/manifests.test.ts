@@ -5,9 +5,10 @@ import {
   buildRunnerSecret,
   type RunnerLaunchSpec,
 } from "./manifests";
-import { RUNNER_ID_LABEL } from "./naming";
+import { RUNNER_TASK_LABEL } from "./naming";
 
 const SPEC: RunnerLaunchSpec = {
+  taskId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
   runnerId: "11111111-2222-3333-4444-555555555555",
   frozenName: "runner-deploy-app-11111111",
   namespace: "archestra-dev",
@@ -55,9 +56,9 @@ describe("buildRunnerJob", () => {
     expect(job.spec?.template.spec?.containers[0]?.envFrom).toBeUndefined();
   });
 
-  it("selects pods by runner id only, never by a mutable name", () => {
+  it("selects pods by the task they carry, never by a mutable name", () => {
     const labels = buildRunnerJob(SPEC).spec?.template.metadata?.labels ?? {};
-    expect(labels[RUNNER_ID_LABEL]).toBe(SPEC.runnerId);
+    expect(labels[RUNNER_TASK_LABEL]).toBe(SPEC.taskId);
     expect(Object.values(labels)).not.toContain("runner-deploy-app-11111111");
   });
 
@@ -145,7 +146,7 @@ describe("buildRunnerPlatformEgressPolicy", () => {
     });
 
     expect(policy.spec?.podSelector?.matchLabels).toEqual({
-      [RUNNER_ID_LABEL]: SPEC.runnerId,
+      [RUNNER_TASK_LABEL]: SPEC.taskId,
     });
     expect(policy.spec?.policyTypes).toEqual(["Egress"]);
     expect(policy.spec?.egress?.[0]?.ports?.[0]?.port).toBe(9000);

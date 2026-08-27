@@ -141,3 +141,8 @@ export const InsertRunnerSessionSchema = createInsertSchema(
 
 export type RunnerSession = z.infer<typeof SelectRunnerSessionSchema>;
 export type InsertRunnerSession = z.infer<typeof InsertRunnerSessionSchema>;
+
+export const SelectUserCredentialSchema = createSelectSchema(
+  schema.userCredentialsTable,
+);
+export type UserCredential = z.infer<typeof SelectUserCredentialSchema>;

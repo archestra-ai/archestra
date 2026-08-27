@@ -7,7 +7,6 @@ import {
   preflightRunnerCredentials,
   resolveRunnerCredentials,
 } from "./credentials";
-import { sanitizeRunnerConfigForWriter } from "./start-runner";
 
 const CLAUDE_TOKEN: RunnerCredentialDeclaration = {
   key: "CLAUDE_CODE_OAUTH_TOKEN",
@@ -24,20 +23,11 @@ const SHARED_API_KEY: RunnerCredentialDeclaration = {
   required: true,
 };
 
-function agentWith(
+function runnerWith(
   credentials: RunnerCredentialDeclaration[],
-  runnerSecretId: string | null = null,
+  secretId: string | null = null,
 ) {
-  return {
-    id: "agent-id",
-    runnerConfig: {
-      steerMode: "pipe" as const,
-      privileged: false,
-      credentials,
-      environment: [],
-    },
-    runnerSecretId,
-  };
+  return { id: "runner-id", credentials, secretId };
 }
 
 describe("resolveRunnerCredentials", () => {
@@ -49,7 +39,7 @@ describe("resolveRunnerCredentials", () => {
     const user = await makeUser();
 
     const resolved = await resolveRunnerCredentials({
-      agent: agentWith([CLAUDE_TOKEN]),
+      runner: runnerWith([CLAUDE_TOKEN]),
       organizationId: org.id,
       userId: user.id,
     });
@@ -79,7 +69,7 @@ describe("resolveRunnerCredentials", () => {
     });
 
     const resolved = await resolveRunnerCredentials({
-      agent: agentWith([CLAUDE_TOKEN]),
+      runner: runnerWith([CLAUDE_TOKEN]),
       organizationId: org.id,
       userId: user.id,
     });
@@ -110,14 +100,14 @@ describe("resolveRunnerCredentials", () => {
       value: "second-token",
     });
 
-    const agent = agentWith([CLAUDE_TOKEN]);
+    const runner = runnerWith([CLAUDE_TOKEN]);
     const forFirst = await resolveRunnerCredentials({
-      agent,
+      runner,
       organizationId: org.id,
       userId: first.id,
     });
     const forSecond = await resolveRunnerCredentials({
-      agent,
+      runner,
       organizationId: org.id,
       userId: second.id,
     });
@@ -138,7 +128,7 @@ describe("resolveRunnerCredentials", () => {
     );
 
     const resolved = await resolveRunnerCredentials({
-      agent: agentWith([SHARED_API_KEY], bag.id),
+      runner: runnerWith([SHARED_API_KEY], bag.id),
       organizationId: org.id,
       userId: user.id,
     });
@@ -155,7 +145,7 @@ describe("resolveRunnerCredentials", () => {
     const user = await makeUser();
 
     const resolved = await resolveRunnerCredentials({
-      agent: agentWith([SHARED_API_KEY], null),
+      runner: runnerWith([SHARED_API_KEY], null),
       organizationId: org.id,
       userId: user.id,
     });
@@ -176,7 +166,7 @@ describe("resolveRunnerCredentials", () => {
     const user = await makeUser();
 
     const resolved = await resolveRunnerCredentials({
-      agent: agentWith([{ ...CLAUDE_TOKEN, required: false }]),
+      runner: runnerWith([{ ...CLAUDE_TOKEN, required: false }]),
       organizationId: org.id,
       userId: user.id,
     });
@@ -203,7 +193,7 @@ describe("resolveRunnerCredentials", () => {
     });
 
     const resolved = await resolveRunnerCredentials({
-      agent: agentWith([SHARED_API_KEY, CLAUDE_TOKEN], bag.id),
+      runner: runnerWith([SHARED_API_KEY, CLAUDE_TOKEN], bag.id),
       organizationId: org.id,
       userId: user.id,
     });
@@ -224,7 +214,7 @@ describe("preflightRunnerCredentials", () => {
     const user = await makeUser();
 
     const preflight = await preflightRunnerCredentials({
-      agent: agentWith([CLAUDE_TOKEN]),
+      runner: runnerWith([CLAUDE_TOKEN]),
       organizationId: org.id,
       userId: user.id,
     });
@@ -248,72 +238,12 @@ describe("preflightRunnerCredentials", () => {
     });
 
     const preflight = await preflightRunnerCredentials({
-      agent: agentWith([CLAUDE_TOKEN]),
+      runner: runnerWith([CLAUDE_TOKEN]),
       organizationId: org.id,
       userId: user.id,
     });
 
     expect(preflight.missing).toEqual([]);
     expect(preflight.misconfigured).toEqual([]);
-  });
-});
-
-describe("sanitizeRunnerConfigForWriter", () => {
-  test("an ordinary member cannot configure a privileged runner", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-  }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, org.id);
-
-    // A privileged pod holds host devices and full capabilities, so granting
-    // it is node-level access rather than an agent setting.
-    await expect(
-      sanitizeRunnerConfigForWriter({
-        runnerConfig: { privileged: true },
-        userId: user.id,
-        organizationId: org.id,
-      }),
-    ).rejects.toThrow(/runner administrator/i);
-  });
-
-  test("a config without the flag passes through untouched", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-  }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, org.id);
-    const runnerConfig = { privileged: false, image: "example/image:1" };
-
-    expect(
-      await sanitizeRunnerConfigForWriter({
-        runnerConfig,
-        userId: user.id,
-        organizationId: org.id,
-      }),
-    ).toBe(runnerConfig);
-  });
-
-  test("an admin may configure one", async ({
-    makeOrganization,
-    makeAdmin,
-    makeMember,
-  }) => {
-    const org = await makeOrganization();
-    const admin = await makeAdmin();
-    await makeMember(admin.id, org.id, { role: "admin" });
-    const runnerConfig = { privileged: true };
-
-    expect(
-      await sanitizeRunnerConfigForWriter({
-        runnerConfig,
-        userId: admin.id,
-        organizationId: org.id,
-      }),
-    ).toBe(runnerConfig);
   });
 });

@@ -107,7 +107,7 @@ export {
 export { default as ProjectPinModel } from "./project-pin";
 export { default as ProjectShareModel } from "./project-share";
 export { default as RunnerModel } from "./runner";
-export { default as RunnerEventModel } from "./runner-event";
+export { default as RunnerSessionModel } from "./runner-session";
 export { default as ScheduleTriggerModel } from "./schedule-trigger";
 export { default as ScheduleTriggerRunModel } from "./schedule-trigger-run";
 /** @public — re-exported for testability (consumed by src/test/fixtures.ts) */

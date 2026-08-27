@@ -2,8 +2,8 @@ import logger from "@/logging";
 import { UserCredentialModel } from "@/models";
 import { secretManager } from "@/secrets-manager";
 import type {
-  Agent,
   MissingRunnerCredential,
+  Runner,
   RunnerCredentialDeclaration,
 } from "@/types";
 
@@ -28,19 +28,17 @@ type RunnerCredentialResolution = {
  * blank value — an agent handed an empty token fails far from the cause.
  */
 export async function resolveRunnerCredentials(params: {
-  agent: Pick<Agent, "id" | "runnerConfig" | "runnerSecretId">;
+  runner: Pick<Runner, "id" | "credentials" | "secretId">;
   organizationId: string;
   userId: string;
 }): Promise<RunnerCredentialResolution> {
-  const { shared, perUser } = splitDeclarations(
-    params.agent.runnerConfig?.credentials,
-  );
+  const { shared, perUser } = splitDeclarations(params.runner.credentials);
   const env: Record<string, string> = {};
   const missing: MissingRunnerCredential[] = [];
   const misconfigured: MissingRunnerCredential[] = [];
 
   if (shared.length > 0) {
-    const bag = await readSharedBag(params.agent.runnerSecretId);
+    const bag = await readSharedBag(params.runner.secretId);
     for (const declaration of shared) {
       const value = bag[declaration.key];
       if (typeof value === "string" && value.length > 0) {
@@ -74,22 +72,20 @@ export async function resolveRunnerCredentials(params: {
  * rather than failing on click.
  */
 export async function preflightRunnerCredentials(params: {
-  agent: Pick<Agent, "id" | "runnerConfig" | "runnerSecretId">;
+  runner: Pick<Runner, "id" | "credentials" | "secretId">;
   organizationId: string;
   userId: string;
 }): Promise<{
   missing: MissingRunnerCredential[];
   misconfigured: MissingRunnerCredential[];
 }> {
-  const { shared, perUser } = splitDeclarations(
-    params.agent.runnerConfig?.credentials,
-  );
+  const { shared, perUser } = splitDeclarations(params.runner.credentials);
   const missing: MissingRunnerCredential[] = [];
   const misconfigured: MissingRunnerCredential[] = [];
 
   const requiredShared = shared.filter((declaration) => declaration.required);
   if (requiredShared.length > 0) {
-    const bag = await readSharedBag(params.agent.runnerSecretId);
+    const bag = await readSharedBag(params.runner.secretId);
     for (const declaration of requiredShared) {
       const value = bag[declaration.key];
       if (typeof value !== "string" || value.length === 0) {
@@ -118,7 +114,7 @@ export async function preflightRunnerCredentials(params: {
 // ===================== internals =====================
 
 function splitDeclarations(
-  declarations: RunnerCredentialDeclaration[] | undefined,
+  declarations: RunnerCredentialDeclaration[] | null | undefined,
 ): {
   shared: RunnerCredentialDeclaration[];
   perUser: RunnerCredentialDeclaration[];
@@ -148,7 +144,7 @@ async function readSharedBag(
     // response can name every credential an administrator has to restore.
     logger.warn(
       { secretId },
-      "Agent runner shared credential bag is missing from the secrets manager",
+      "Runner shared credential bag is missing from the secrets manager",
     );
     return {};
   }

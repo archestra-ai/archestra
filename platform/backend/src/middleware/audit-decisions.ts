@@ -25,6 +25,7 @@ import OrganizationModel from "@/models/organization";
 import OrganizationRoleModel from "@/models/organization-role";
 import PluginModel from "@/models/plugin";
 import ProjectModel from "@/models/project";
+import RunnerModel from "@/models/runner";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ServiceAccountModel from "@/models/service-account";
 import SkillModel from "@/models/skill";
@@ -589,14 +590,15 @@ export const AUDIT_DECISIONS = {
     reason:
       "derived per-viewer marketplace repo; created implicitly on clone, carries no user-authored state",
   },
-  runnersTable: {
+  runnersTable: { audited: true, model: RunnerModel },
+  runnerLabelsTable: {
+    audited: false,
+    reason: "join table; the runner carries the signal",
+  },
+  runnerSessionsTable: {
     audited: false,
     reason:
-      "session lifecycle already has a dedicated append-only surface: every start, state change, steer and stop is recorded in runner_events and served by GET /api/runners/:id/events",
-  },
-  runnerEventsTable: {
-    audited: false,
-    reason: "the runner audit surface itself; append-only, never mutated",
+      "records which pod carries an A2A task; the task's own state machine and event log are the record of the work",
   },
   userCredentialsTable: {
     audited: false,

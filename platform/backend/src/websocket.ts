@@ -19,12 +19,7 @@ import { BrowserStreamSocketClientContext } from "@/features/browser-stream/webs
 import McpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import { runnerRuntimeManager } from "@/k8s/runner-runtime";
 import logger from "@/logging";
-import {
-  McpServerModel,
-  RunnerEventModel,
-  RunnerModel,
-  UserModel,
-} from "@/models";
+import { McpServerModel, RunnerSessionModel, UserModel } from "@/models";
 import { reportMcpDeploymentStatuses } from "@/observability/metrics/mcp";
 import { isPredefinedAdmin } from "@/services/agent-tool-assignment";
 
@@ -524,18 +519,15 @@ class WebSocketService {
   ): Promise<void> {
     this.unsubscribeRunnerAttach(ws);
 
-    const runner = await RunnerModel.findById(
-      runnerId,
-      clientContext.organizationId,
-    );
-    if (!runner) {
+    const session = await RunnerSessionModel.findByTaskId(runnerId);
+    if (!session || session.organizationId !== clientContext.organizationId) {
       this.sendToClient(ws, {
         type: "runner_attach_error",
-        payload: { runnerId, error: "Runner not found" },
+        payload: { runnerId, error: "Session not found" },
       });
       return;
     }
-    if (!(await this.mayControlRunner(runner, clientContext))) {
+    if (!(await this.mayControlSession(session, clientContext))) {
       this.sendToClient(ws, {
         type: "runner_attach_error",
         payload: {
@@ -552,7 +544,7 @@ class WebSocketService {
 
     try {
       const { podName, command, socket } = await runnerRuntimeManager.attach({
-        runner,
+        session,
         stdin,
         stdout,
         stderr,
@@ -595,12 +587,6 @@ class WebSocketService {
         type: "runner_attach_started",
         payload: { runnerId, command, podName },
       });
-      await RunnerEventModel.append({
-        runnerId,
-        kind: "attached",
-        message: "A human attached to the session",
-        actorUserId: clientContext.userId,
-      });
     } catch (error) {
       this.sendToClient(ws, {
         type: "runner_attach_error",
@@ -635,14 +621,11 @@ class WebSocketService {
   ): Promise<void> {
     this.unsubscribeRunnerLogs(ws);
 
-    const runner = await RunnerModel.findById(
-      runnerId,
-      clientContext.organizationId,
-    );
-    if (!runner) {
+    const session = await RunnerSessionModel.findByTaskId(runnerId);
+    if (!session || session.organizationId !== clientContext.organizationId) {
       this.sendToClient(ws, {
         type: "runner_logs_error",
-        payload: { runnerId, error: "Runner not found" },
+        payload: { runnerId, error: "Session not found" },
       });
       return;
     }
@@ -667,7 +650,7 @@ class WebSocketService {
 
     try {
       await runnerRuntimeManager.streamLogs({
-        runner,
+        session,
         destination: stream,
         lines,
         abortSignal: abortController.signal,
@@ -692,12 +675,15 @@ class WebSocketService {
     subscription.stream.destroy();
   }
 
-  /** Creator or runner admin — the same rule the REST and MCP surfaces apply. */
-  private async mayControlRunner(
-    runner: { createdByUserId: string },
+  /**
+   * The person a session acts as, or a runner admin. Attaching reaches a shell
+   * holding that person's own credentials, so it is deliberately narrow.
+   */
+  private async mayControlSession(
+    session: { actorUserId: string },
     clientContext: WebSocketClientContext,
   ): Promise<boolean> {
-    if (runner.createdByUserId === clientContext.userId) return true;
+    if (session.actorUserId === clientContext.userId) return true;
     return userHasPermission(
       clientContext.userId,
       clientContext.organizationId,

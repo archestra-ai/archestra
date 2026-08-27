@@ -1,6 +1,6 @@
 import type * as k8s from "@kubernetes/client-node";
 import type { RunnerResources } from "@/types";
-import { RUNNER_ID_LABEL, runnerLabels, runnerNames } from "./naming";
+import { RUNNER_TASK_LABEL, runnerLabels, runnerNames } from "./naming";
 
 /** Where the steer FIFO and the generated entrypoint live inside the pod. */
 const RUNNER_RUN_DIR = "/var/run/archestra";
@@ -30,6 +30,9 @@ const RUNNER_UNUSABLE_IMAGE_EXIT_CODE = 78;
  * testable without a cluster.
  */
 export type RunnerLaunchSpec = {
+  /** The A2A task this pod carries. */
+  taskId: string;
+  /** The runner definition it was launched from. */
   runnerId: string;
   frozenName: string;
   namespace: string;
@@ -87,7 +90,7 @@ function buildRunnerBootstrapScript(): string {
  */
 export function buildRunnerJob(spec: RunnerLaunchSpec): k8s.V1Job {
   const names = runnerNames(spec.frozenName);
-  const labels = runnerLabels(spec.runnerId);
+  const labels = runnerLabels({ taskId: spec.taskId, runnerId: spec.runnerId });
 
   return {
     apiVersion: "batch/v1",
@@ -164,7 +167,7 @@ export function buildRunnerSecret(spec: RunnerLaunchSpec): k8s.V1Secret {
     metadata: {
       name: names.secret,
       namespace: spec.namespace,
-      labels: runnerLabels(spec.runnerId),
+      labels: runnerLabels({ taskId: spec.taskId, runnerId: spec.runnerId }),
       ownerReferences: spec.ownerReferences,
     },
     type: "Opaque",
@@ -200,12 +203,15 @@ export function buildRunnerPlatformEgressPolicy(params: {
     metadata: {
       name: names.networkPolicy,
       namespace: params.spec.namespace,
-      labels: runnerLabels(params.spec.runnerId),
+      labels: runnerLabels({
+        taskId: params.spec.taskId,
+        runnerId: params.spec.runnerId,
+      }),
       ownerReferences: params.spec.ownerReferences,
     },
     spec: {
       podSelector: {
-        matchLabels: { [RUNNER_ID_LABEL]: params.spec.runnerId },
+        matchLabels: { [RUNNER_TASK_LABEL]: params.spec.taskId },
       },
       policyTypes: ["Egress"],
       egress: [

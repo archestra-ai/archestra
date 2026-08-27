@@ -42,11 +42,6 @@ export const TOOL_LIST_MCP_SERVER_DEPLOYMENTS_SHORT_NAME =
 export const TOOL_GET_MCP_SERVER_LOGS_SHORT_NAME = "get_mcp_server_logs";
 export const TOOL_RELOAD_MCP_SERVER_TOOLS_SHORT_NAME =
   "reload_mcp_server_tools";
-export const TOOL_START_RUNNER_SHORT_NAME = "start_runner";
-export const TOOL_LIST_RUNNERS_SHORT_NAME = "list_runners";
-export const TOOL_GET_RUNNER_SHORT_NAME = "get_runner";
-export const TOOL_SEND_TO_RUNNER_SHORT_NAME = "send_to_runner";
-export const TOOL_STOP_RUNNER_SHORT_NAME = "stop_runner";
 export const TOOL_CREATE_TEAM_SHORT_NAME = "create_team";
 export const TOOL_GET_TEAM_SHORT_NAME = "get_team";
 export const TOOL_LIST_TEAMS_SHORT_NAME = "list_teams";
@@ -218,11 +213,6 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_LIST_MCP_SERVER_DEPLOYMENTS_SHORT_NAME,
   TOOL_GET_MCP_SERVER_LOGS_SHORT_NAME,
   TOOL_RELOAD_MCP_SERVER_TOOLS_SHORT_NAME,
-  TOOL_START_RUNNER_SHORT_NAME,
-  TOOL_LIST_RUNNERS_SHORT_NAME,
-  TOOL_GET_RUNNER_SHORT_NAME,
-  TOOL_SEND_TO_RUNNER_SHORT_NAME,
-  TOOL_STOP_RUNNER_SHORT_NAME,
   TOOL_CREATE_TEAM_SHORT_NAME,
   TOOL_GET_TEAM_SHORT_NAME,
   TOOL_LIST_TEAMS_SHORT_NAME,
@@ -340,7 +330,6 @@ export const ARCHESTRA_TOOL_GROUPS = [
   { id: "agents", label: "Agents" },
   { id: "mcp_gateways", label: "MCP Gateways" },
   { id: "mcp_servers", label: "MCP Servers" },
-  { id: "runners", label: "Runners" },
   { id: "teams", label: "Teams" },
   { id: "limits", label: "Limits" },
   { id: "policies", label: "Policies" },
@@ -397,11 +386,6 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   get_mcp_server_logs: "mcp_servers",
   reload_mcp_server_tools: "mcp_servers",
 
-  start_runner: "runners",
-  list_runners: "runners",
-  get_runner: "runners",
-  send_to_runner: "runners",
-  stop_runner: "runners",
   create_team: "teams",
   get_team: "teams",
   list_teams: "teams",

@@ -20,11 +20,13 @@ export function DirectoryDialog({
   open,
   onOpenChange,
   directory,
+  onCreated,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Absent = create. */
   directory?: KnowledgeDirectory;
+  onCreated?: (directory: KnowledgeDirectory) => void;
 }) {
   const [name, setName] = useState("");
   const [visibility, setVisibility] =
@@ -66,7 +68,12 @@ export function DirectoryDialog({
       );
       return;
     }
-    createDirectory.mutate(body, { onSuccess });
+    createDirectory.mutate(body, {
+      onSuccess: (createdDirectory) => {
+        if (createdDirectory) onCreated?.(createdDirectory);
+        onSuccess();
+      },
+    });
   };
 
   return (

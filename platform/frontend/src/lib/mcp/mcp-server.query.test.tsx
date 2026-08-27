@@ -266,6 +266,8 @@ describe("useMcpInstallationStatusCacheSync", () => {
     ] as const;
     queryClient.setQueryData(externalKey, [{ mcpServerId: "stale" }]);
     queryClient.setQueryData(detailKey, { name: "stale" });
+    queryClient.setQueryData(["mcp-servers", {}], []);
+    queryClient.setQueryData(["mcp-catalog"], []);
     const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     );
@@ -275,8 +277,27 @@ describe("useMcpInstallationStatusCacheSync", () => {
       readyHandler?.({ type: "websocket_ready", payload: {} });
     });
 
+    expect(queryClient.getQueryState(externalKey)?.isInvalidated).toBe(false);
+    expect(queryClient.getQueryState(detailKey)?.isInvalidated).toBe(false);
+    expect(queryClient.getQueryState(["mcp-servers", {}])?.isInvalidated).toBe(
+      false,
+    );
+    expect(queryClient.getQueryState(["mcp-catalog"])?.isInvalidated).toBe(
+      false,
+    );
+
+    act(() => {
+      readyHandler?.({ type: "websocket_ready", payload: {} });
+    });
+
     expect(queryClient.getQueryState(externalKey)?.isInvalidated).toBe(true);
     expect(queryClient.getQueryState(detailKey)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(["mcp-servers", {}])?.isInvalidated).toBe(
+      true,
+    );
+    expect(queryClient.getQueryState(["mcp-catalog"])?.isInvalidated).toBe(
+      true,
+    );
   });
 
   it("removes an uninstalled server's cached Skills before refetching", async () => {

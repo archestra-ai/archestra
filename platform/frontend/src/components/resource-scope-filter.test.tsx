@@ -94,13 +94,9 @@ describe("ResourceScopeFilter owner selector gating", () => {
   });
 
   it("shows the owner selector for a resource admin", async () => {
-    vi.mocked(useHasPermissions).mockImplementation(
-      (permissions: Record<string, unknown>) => {
-        if ("agent" in permissions)
-          return { data: true } as ReturnType<typeof useHasPermissions>;
-        return { data: true } as ReturnType<typeof useHasPermissions>;
-      },
-    );
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
 
     render(
       <ResourceScopeFilter
@@ -114,6 +110,27 @@ describe("ResourceScopeFilter owner selector gating", () => {
 
     await userEvent.click(comboboxes[1]);
     expect(await screen.findByText("Other users")).toBeInTheDocument();
+  });
+
+  it("uses a caller-owned local navigation path when provided", async () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
+    const navigate = vi.fn();
+
+    render(
+      <ResourceScopeFilter
+        ownerLabelPlural="connections"
+        adminPermission={{ mcpServerInstallation: ["admin"] }}
+        navigate={navigate}
+      />,
+    );
+
+    await userEvent.click(screen.getAllByRole("combobox")[0]);
+    await userEvent.click(screen.getByRole("option", { name: "All types" }));
+
+    expect(navigate).toHaveBeenCalledWith("/agents?");
+    expect(useRouter().push).not.toHaveBeenCalled();
   });
 });
 

@@ -32,6 +32,7 @@ import {
   useOpenExternalAppInChat,
   usePinApp,
 } from "@/lib/app.query";
+import type { BulkRangeSelectionController } from "@/lib/bulk-range-selection";
 import { setPendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-handoff";
 import { AppTypeIcon } from "./app-card";
 import { AppDeleteDialog } from "./app-delete-dialog";
@@ -47,12 +48,14 @@ export function AppsTable({
   rowSelection,
   setRowSelection,
   onPageRowIdsChange,
+  rangeSelection,
 }: {
   apps: AppListItem[];
   onOpenSettings: (app: { id: string }) => void;
   rowSelection: RowSelectionState;
   setRowSelection: OnChangeFn<RowSelectionState>;
   onPageRowIdsChange: (ids: string[]) => void;
+  rangeSelection: BulkRangeSelectionController;
 }) {
   const router = useRouter();
   const openOwnedApp = useOpenAppInChat();
@@ -260,6 +263,7 @@ export function AppsTable({
         rowSelection={rowSelection}
         onRowSelectionChange={setRowSelection}
         onPageRowIdsChange={onPageRowIdsChange}
+        rangeSelection={rangeSelection}
         hideSelectedCount
         onRowClick={(app) => void handleOpen(app)}
         emptyIcon={AppWindow}

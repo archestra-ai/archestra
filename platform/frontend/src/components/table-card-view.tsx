@@ -3,14 +3,17 @@
 import { LayoutGrid, List, type LucideIcon, Search } from "lucide-react";
 import {
   createContext,
+  type MouseEvent,
   type MouseEventHandler,
   type ReactNode,
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import { EmptyState } from "@/components/empty-state";
+import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { TablePagination } from "@/components/ui/table-pagination";
@@ -19,10 +22,12 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { BulkRangeSelectionScope } from "@/lib/bulk-range-selection-context";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 
 export type TableCardViewMode = "cards" | "table";
+export const COLLECTION_CARD_HOVER_CLASSNAME = "hover:bg-muted/50";
 
 type TableCardViewContextValue = {
   mode: TableCardViewMode;
@@ -64,7 +69,9 @@ export function TableCardView({
 
   return (
     <TableCardViewContext.Provider value={{ mode, selectMode }}>
-      {children}
+      <BulkActionsScope>
+        <BulkRangeSelectionScope>{children}</BulkRangeSelectionScope>
+      </BulkActionsScope>
     </TableCardViewContext.Provider>
   );
 }
@@ -115,19 +122,52 @@ export function TableCardViewContent({
   table,
   cards,
   forceTable = false,
+  keepMounted = false,
+  onModeChange,
 }: {
   table: ReactNode;
   cards: ReactNode;
   /** For dense lifecycle/history views that intentionally have no card form. */
   forceTable?: boolean;
+  /** Keep both expensive layouts warm and switch them with CSS. */
+  keepMounted?: boolean;
+  /** Reports the effective layout, including the mobile cards override. */
+  onModeChange?: (mode: TableCardViewMode) => void;
 }) {
   // Nested list components can still render independently in tests and
   // stories; without a page-level provider they retain their table default.
   const mode = useContext(TableCardViewContext)?.mode ?? "table";
   const isMobile = useIsMobile();
+  const effectiveMode = mode === "cards" || isMobile ? "cards" : "table";
+  const warmTable = useRef(table);
+  const warmCards = useRef(cards);
+  if (effectiveMode === "table") warmTable.current = table;
+  else warmCards.current = cards;
+
+  useEffect(() => {
+    onModeChange?.(effectiveMode);
+  }, [effectiveMode, onModeChange]);
 
   if (forceTable) return table;
-  if (mode === "cards" || isMobile) return cards;
+  if (keepMounted) {
+    return (
+      <>
+        <div
+          data-active={effectiveMode === "table"}
+          className={effectiveMode === "table" ? "hidden md:block" : "hidden"}
+        >
+          {warmTable.current}
+        </div>
+        <div
+          data-active={effectiveMode === "cards"}
+          className={effectiveMode === "cards" ? undefined : "hidden"}
+        >
+          {warmCards.current}
+        </div>
+      </>
+    );
+  }
+  if (effectiveMode === "cards") return cards;
 
   // Hidden until `useIsMobile` resolves, preventing a wide table from
   // flashing during hydration on a narrow screen.
@@ -255,6 +295,7 @@ export function TableCard({
   children,
   footer,
   className,
+  onNavigate,
 }: {
   title: ReactNode;
   description?: ReactNode;
@@ -268,14 +309,22 @@ export function TableCard({
   children?: ReactNode;
   footer?: ReactNode;
   className?: string;
+  onNavigate?: () => void;
 }) {
-  const selectable = onSelectedChange !== undefined;
+  const selectable =
+    onSelectedChange !== undefined || onSelectionClick !== undefined;
+  const navigation = useNavigableCard({ onNavigate, selected });
 
   return (
     <div
+      {...navigation.props}
       className={cn(
         "flex h-full flex-col gap-3 rounded-lg border p-4 transition-colors",
-        selected ? "border-primary bg-primary/5" : "hover:bg-muted/30",
+        selected
+          ? cn("border-primary bg-primary/5", navigation.className)
+          : onNavigate
+            ? navigation.className
+            : COLLECTION_CARD_HOVER_CLASSNAME,
         className,
       )}
     >
@@ -285,7 +334,11 @@ export function TableCard({
             className="mt-1"
             checked={selected}
             disabled={selectionDisabled}
-            onCheckedChange={(value) => onSelectedChange(!!value)}
+            onCheckedChange={
+              onSelectedChange
+                ? (value) => onSelectedChange(!!value)
+                : undefined
+            }
             onClick={(event) => {
               event.stopPropagation();
               onSelectionClick?.(event);
@@ -316,6 +369,42 @@ export function TableCard({
   );
 }
 
+export function useNavigableCard({
+  onNavigate,
+  selected,
+}: {
+  onNavigate?: () => void;
+  selected?: boolean;
+}) {
+  const navigateFromPointer = (event: MouseEvent<HTMLElement>) => {
+    if (
+      !onNavigate ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey ||
+      isCardInteractiveTarget(event.target, event.currentTarget)
+    ) {
+      return;
+    }
+    onNavigate();
+  };
+  return {
+    className: onNavigate
+      ? cn(
+          "cursor-pointer",
+          selected ? "hover:bg-primary/10" : COLLECTION_CARD_HOVER_CLASSNAME,
+        )
+      : undefined,
+    props: onNavigate
+      ? {
+          onClick: navigateFromPointer,
+        }
+      : {},
+  };
+}
+
 const VIEW_LABELS: Record<TableCardViewMode, string> = {
   cards: "View as cards",
   table: "View as table",
@@ -329,4 +418,16 @@ function useTableCardView(): TableCardViewContextValue {
     throw new Error("TableCardView components must be inside TableCardView");
   }
   return context;
+}
+
+const CARD_INTERACTIVE_SELECTOR =
+  'a, button, input, select, textarea, summary, [contenteditable="true"], [role="button"], [role="checkbox"], [role="link"], [role="menuitem"], [data-card-interactive]';
+
+function isCardInteractiveTarget(
+  target: EventTarget,
+  currentTarget: EventTarget,
+): boolean {
+  if (!(target instanceof Element)) return false;
+  const interactiveTarget = target.closest(CARD_INTERACTIVE_SELECTOR);
+  return interactiveTarget !== null && interactiveTarget !== currentTarget;
 }

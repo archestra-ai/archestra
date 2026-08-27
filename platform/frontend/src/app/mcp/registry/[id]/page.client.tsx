@@ -9,9 +9,7 @@ import {
   PackageX,
   Pencil,
   RefreshCw,
-  Server,
   Trash2,
-  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -224,7 +222,6 @@ function CatalogItemDetails({
         ? "remote"
         : "local";
   const actionModel = getMcpServerActionModel(item);
-  const connectionsAction = mcpServerAction(actionModel, "connections");
   const editAction = mcpServerAction(actionModel, "edit");
   const cloneAction = mcpServerAction(actionModel, "clone");
   const deleteAction = mcpServerAction(actionModel, "delete");
@@ -469,18 +466,6 @@ function CatalogItemDetails({
       tabs={tabs}
       actionButton={
         <div className="flex shrink-0 items-center gap-2">
-          {connectionsAction.href && (
-            <Button variant="outline" asChild>
-              <Link href={connectionsAction.href}>
-                {variant === "local" ? (
-                  <Server className="h-4 w-4" />
-                ) : (
-                  <Users className="h-4 w-4" />
-                )}
-                {connectionsAction.label}
-              </Link>
-            </Button>
-          )}
           {showChatButton && (
             <Button
               variant="outline"

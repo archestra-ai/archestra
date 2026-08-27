@@ -3,6 +3,10 @@
 import { MAX_BULK_IDS } from "@archestra/shared";
 import type { ReactNode } from "react";
 import { LoadingState } from "@/components/loading";
+import {
+  ContextualActionsPortal,
+  useBulkActionsScope,
+} from "@/components/ui/bulk-actions-context";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -67,36 +71,43 @@ export interface BulkActionsBarProps {
   /** Additional classes for the action rail. */
   className?: string;
   /**
-   * Renders the bar as the compact single-line rail collections use: fixed
-   * height, tighter padding, and horizontal scrolling rather than wrapping
-   * when the actions outgrow a narrow viewport.
-   *
-   * This used to also mount an invisible copy of the bar at zero selection so
-   * the collection never moved. That traded a shift nobody sees for a 54px
-   * hole everybody sees, on every collection screen in the app, permanently.
-   * The bar is now simply absent until there is a selection; the movement it
-   * causes is the direct result of the reader's own click on a checkbox.
+   * Keeps a compact, invisible bar mounted at zero selection so showing the
+   * controls does not displace the collection beneath them.
    */
+  reserveSpace?: boolean;
+  /** Keep controls mounted while a separate toolbar hides this rail. */
+  keepMounted?: boolean;
+  /** Use the compact 42px visual treatment without implying layout reservation. */
   compact?: boolean;
   /** The actions themselves, laid out at the end of the bar. */
   children?: ReactNode;
 }
 
 /**
- * Default collection bulk actions: the compact single-line rail every table
- * and card list uses, owning its own 12px gap before the collection that
- * follows it. Absent entirely until something is selected.
+ * Default collection bulk actions. Unlike the low-level bar, this keeps the
+ * compact action box in normal flow at zero selection so table and card
+ * layouts never move when the controls appear. The slot also owns its 12px
+ * spacing before the collection immediately after it.
  */
 export function BulkActions({
   selectAllMatching,
   maxSelection = MAX_BULK_IDS,
   busy,
   children,
+  reserveSpace = true,
+  keepMounted,
+  compact,
   ...props
-}: Omit<BulkActionsBarProps, "compact"> & {
+}: Omit<BulkActionsBarProps, "reserveSpace"> & {
   /** `null` only for actions that send a filter instead of an ID list. */
   maxSelection?: number | null;
+  /**
+   * Disable only when the caller already owns the space — for example the
+   * selection actions replace an existing filter toolbar in place.
+   */
+  reserveSpace?: boolean;
 }) {
+  const bulkActionsScope = useBulkActionsScope();
   const cappedSelectAll =
     selectAllMatching &&
     selectAllMatching.max === undefined &&
@@ -108,12 +119,14 @@ export function BulkActions({
     : props.count;
   const overLimit = maxSelection !== null && actionCount > maxSelection;
 
-  return (
+  const bar = (
     <BulkActionsBar
       {...props}
       busy={busy}
       selectAllMatching={cappedSelectAll}
-      compact
+      reserveSpace={bulkActionsScope ? false : reserveSpace}
+      keepMounted={bulkActionsScope ? true : keepMounted}
+      compact={bulkActionsScope ? true : compact}
     >
       {overLimit ? (
         <span className="text-sm text-destructive">
@@ -121,9 +134,20 @@ export function BulkActions({
         </span>
       ) : null}
       <fieldset disabled={overLimit || busy} className="contents">
-        {children}
+        {props.count > 0 ? children : null}
       </fieldset>
     </BulkActionsBar>
+  );
+
+  return bulkActionsScope ? (
+    <ContextualActionsPortal
+      targetId={bulkActionsScope.targetId}
+      active={props.count > 0}
+    >
+      {bar}
+    </ContextualActionsPortal>
+  ) : (
+    bar
   );
 }
 
@@ -145,9 +169,12 @@ export function BulkActionsBar({
   countTestId,
   selectAllMatching,
   className,
-  compact,
+  reserveSpace,
+  keepMounted,
+  compact: compactProp,
   children,
 }: BulkActionsBarProps) {
+  const compact = compactProp ?? reserveSpace;
   const pluralize = (n: number) => (n === 1 ? noun : (plural ?? `${noun}s`));
 
   const allMatchingActive = selectAllMatching?.active ?? false;
@@ -177,12 +204,20 @@ export function BulkActionsBar({
         {count > 0 ? text : ""}
       </span>
 
-      {count > 0 ? (
+      {count === 0 && reserveSpace ? (
         <div
+          aria-hidden="true"
+          data-slot="bulk-actions-bar"
+          className={cn("h-[42px] !mt-0 !mb-3 [&+*]:!mt-0", className)}
+        />
+      ) : count > 0 || keepMounted ? (
+        <div
+          aria-hidden={count === 0 ? true : undefined}
           data-slot="bulk-actions-bar"
           className={cn(
-            "rounded-md border bg-muted/40 px-3 py-2",
-            compact && "h-[42px] !mt-0 !mb-3 px-2 py-1 [&+*]:!mt-0",
+            "w-full rounded-md border bg-muted/40 px-3 py-2",
+            compact && "h-[42px] px-2 py-1",
+            reserveSpace && "!mt-0 !mb-3 [&+*]:!mt-0",
             className,
           )}
         >

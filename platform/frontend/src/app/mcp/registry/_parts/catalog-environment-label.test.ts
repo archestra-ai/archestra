@@ -12,14 +12,12 @@ describe("resolveCatalogEnvironmentLabel", () => {
       resolveCatalogEnvironmentLabel({
         environmentId: "prod",
         environments: [],
-        defaultEnvironmentName: "Default",
       }),
     ).toBeNull();
     expect(
       resolveCatalogEnvironmentLabel({
         environmentId: null,
         environments: [],
-        defaultEnvironmentName: "Renamed",
       }),
     ).toBeNull();
   });
@@ -29,7 +27,6 @@ describe("resolveCatalogEnvironmentLabel", () => {
       resolveCatalogEnvironmentLabel({
         environmentId: "staging",
         environments: envs,
-        defaultEnvironmentName: "Default",
       }),
     ).toBe("Staging");
   });
@@ -39,19 +36,17 @@ describe("resolveCatalogEnvironmentLabel", () => {
       resolveCatalogEnvironmentLabel({
         environmentId: null,
         environments: envs,
-        defaultEnvironmentName: "Default",
       }),
     ).toBeNull();
   });
 
-  it("shows the Default name only when it has been customized", () => {
+  it("hides the Default environment even when it has been customized", () => {
     expect(
       resolveCatalogEnvironmentLabel({
         environmentId: null,
         environments: envs,
-        defaultEnvironmentName: "Sandbox",
       }),
-    ).toBe("Sandbox");
+    ).toBeNull();
   });
 
   it("returns null when the assigned environment is no longer in the list", () => {
@@ -59,7 +54,6 @@ describe("resolveCatalogEnvironmentLabel", () => {
       resolveCatalogEnvironmentLabel({
         environmentId: "deleted",
         environments: envs,
-        defaultEnvironmentName: "Default",
       }),
     ).toBeNull();
   });

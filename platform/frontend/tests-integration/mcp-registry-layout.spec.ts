@@ -239,6 +239,67 @@ test.describe("MCP Registry layout", () => {
     expect(spills).toEqual([]);
   });
 
+  test("keeps foreign personal servers out of All and reaches them through Other users", async ({
+    mcpRegistryPage,
+    mswControl,
+    page,
+  }) => {
+    await seed(mswControl);
+    await mcpRegistryPage.goto();
+
+    await expect(mcpRegistryPage.cardForCatalogItem("long-author")).toHaveCount(
+      0,
+    );
+
+    await page.getByRole("combobox", { name: "Filter by type" }).click();
+    await page.getByRole("option", { name: "Personal" }).click();
+    await page.getByRole("combobox", { name: "Filter by owner" }).click();
+    await page.getByRole("option", { name: "Other users" }).click();
+
+    await expect(
+      mcpRegistryPage.cardForCatalogItem("long-author"),
+    ).toBeVisible();
+    await expect(page.getByText(LONG_NAME)).toBeVisible();
+  });
+
+  test("puts visibly flagged cards in Action required", async ({
+    mcpRegistryPage,
+    mswControl,
+    page,
+  }) => {
+    await seed(mswControl);
+    await mcpRegistryPage.goto();
+
+    const firstHeading = page.locator("main h3").first();
+    await expect(firstHeading).toHaveText("Action required");
+    await expect(
+      mcpRegistryPage.cardForCatalogItem("needs-reauth"),
+    ).toBeVisible();
+  });
+
+  test("swaps table bulk actions into the toolbar without moving the table", async ({
+    mcpRegistryPage,
+    mswControl,
+    page,
+  }) => {
+    await seed(mswControl);
+    await mcpRegistryPage.goto();
+    await page.getByRole("button", { name: "View as table" }).click();
+
+    const table = page.locator("table").first();
+    await expect(table).toBeVisible();
+    const before = await table.boundingBox();
+    expect(before).not.toBeNull();
+    expect(page.locator('[data-slot="bulk-actions-bar"]')).toHaveCount(0);
+
+    await page.getByRole("checkbox", { name: "Select org-crowded" }).click();
+
+    await expect(page.getByText("1 server selected")).toBeVisible();
+    await expect(page.locator('[data-slot="bulk-actions-bar"]')).toBeVisible();
+    const after = await table.boundingBox();
+    expect(after?.y).toBe(before?.y);
+  });
+
   test("offers only Uninstall as a table bulk action", async ({
     mcpRegistryPage,
     mswControl,

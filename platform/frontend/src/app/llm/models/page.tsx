@@ -43,6 +43,7 @@ import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
+import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -519,9 +520,9 @@ export default function ModelsPage() {
       tabs={MODEL_NAV_TABS}
       actionButton={refreshModelsButton}
     >
-      <div className="space-y-4">
+      <BulkActionsScope className="space-y-3">
         {models.length > 0 && (
-          <FilterBar className="!mb-3">
+          <FilterBar>
             <SearchInput
               objectNamePlural="models"
               searchFields={["model ID"]}
@@ -684,7 +685,7 @@ export default function ModelsPage() {
               : "No models found"
           }
         />
-      </div>
+      </BulkActionsScope>
 
       {editingModel && (
         <EditModelDialog

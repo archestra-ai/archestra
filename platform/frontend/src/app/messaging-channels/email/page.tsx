@@ -254,7 +254,7 @@ export default function EmailPage() {
         <>
           <Divider />
 
-          <section className="flex flex-col gap-4">
+          <section className="flex flex-col gap-3">
             <div>
               <h2 className="text-lg font-semibold">Agent Email Access</h2>
               <p className="mt-1 text-sm text-muted-foreground">

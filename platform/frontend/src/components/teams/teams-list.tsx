@@ -31,6 +31,7 @@ import {
   TableRowActions,
 } from "@/components/table-row-actions";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
+import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -295,8 +296,8 @@ export function TeamsList() {
 
   return (
     <>
-      <div className="space-y-6">
-        <FilterBar className={!hasLabelFilters ? "!mb-3" : undefined}>
+      <BulkActionsScope className="space-y-3">
+        <FilterBar>
           <SearchInput
             isLoading={isLoading}
             objectNamePlural="teams"
@@ -311,9 +312,7 @@ export function TeamsList() {
         </FilterBar>
 
         {hasLabelFilters && (
-          <div className="!mb-3">
-            <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />
-          </div>
+          <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />
         )}
 
         <BulkActions
@@ -350,7 +349,7 @@ export function TeamsList() {
           emptyMessage="No teams found"
           hideSelectedCount
         />
-      </div>
+      </BulkActionsScope>
 
       <TeamManagementDialog
         mode="create"

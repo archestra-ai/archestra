@@ -1,33 +1,21 @@
 "use client";
 
-import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
 import { Plus } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { PageLayout } from "@/components/page-layout";
-import { Badge } from "@/components/ui/badge";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
-import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
-import {
-  useMcpDeploymentStatuses,
-  useMcpServers,
-} from "@/lib/mcp/mcp-server.query";
-import { useMcpServerIssues } from "@/lib/mcp/use-mcp-server-issues";
-import { waitingActionFacetLabel } from "./_parts/mcp-server-attention-owner";
 import {
   ATTENTION_FACET_STATUS_VALUES,
-  mcpRegistryFacetHref,
   REGISTRY_STATUS_PARAM,
-  selectedAttentionFacet,
 } from "./_parts/registry-list-controls";
 
 /**
  * The registry used to answer "what needs me?" on a second tab, which meant
  * the same server was counted on the tab and listed on the tab but missing
- * from the list everyone actually works in. The tab is gone; the question is
- * now a facet of the one list. Links people already have keep working.
+ * from the list everyone actually works in. The tab is gone: the default sort
+ * puts actionable rows first, while sidebar and legacy links can still narrow
+ * the one list.
  */
 const RETIRED_ATTENTION_TAB_PARAM = "tab";
 const RETIRED_ATTENTION_TAB_VALUE = "attention";
@@ -105,68 +93,10 @@ function McpRegistryListLayout({
   children: React.ReactNode;
   onAdd: () => void;
 }) {
-  const searchParams = useSearchParams();
-  const alertingEnabled = useFeature("mcpServerAlertingEnabled") === true;
-  const { data: catalogItems } = useInternalMcpCatalog();
-  const { data: servers } = useMcpServers();
-  const { statuses } = useMcpDeploymentStatuses();
-  const { issuesByCatalog, facetCounts } = useMcpServerIssues(statuses);
-  const { data: userIsMcpServerAdmin } = useHasPermissions({
-    mcpServerInstallation: ["admin"],
-  });
-  const selectedFacet = selectedAttentionFacet(
-    new Set(searchParams.getAll(REGISTRY_STATUS_PARAM)),
-  );
-  const totalCount = (catalogItems ?? []).filter(
-    (item) => item.id !== ARCHESTRA_MCP_CATALOG_ID,
-  ).length;
-  const othersLabel = waitingActionFacetLabel({
-    issuesByCatalog,
-    servers: servers ?? [],
-  });
-  const tabs = alertingEnabled
-    ? [
-        {
-          label: <RegistryTabLabel label="All" count={totalCount} />,
-          href: "/mcp/registry",
-          selected: selectedFacet === null,
-        },
-        {
-          label: (
-            <RegistryTabLabel
-              label="Action required"
-              count={facetCounts.you}
-              beta
-            />
-          ),
-          href: mcpRegistryFacetHref("you"),
-          // Dismissed alerts are a filter on this tab, not a tab of their own,
-          // so the tab stays selected while that filter is on.
-          selected: selectedFacet === "you" || selectedFacet === "muted",
-          testId: "mcp-registry-action-required-tab",
-        },
-        ...(!userIsMcpServerAdmin && facetCounts.others > 0
-          ? [
-              {
-                label: (
-                  <RegistryTabLabel
-                    label={othersLabel}
-                    count={facetCounts.others}
-                  />
-                ),
-                href: mcpRegistryFacetHref("others"),
-                selected: selectedFacet === "others",
-              },
-            ]
-          : []),
-      ]
-    : [];
-
   return (
     <PageLayout
       title="MCP Registry"
       description="Manage your own list of MCP servers and make them available to agents."
-      tabs={tabs}
       actionButton={
         <PermissionButton
           permissions={{ mcpRegistry: ["create"] }}
@@ -179,28 +109,6 @@ function McpRegistryListLayout({
     >
       {children}
     </PageLayout>
-  );
-}
-
-function RegistryTabLabel({
-  label,
-  count,
-  beta = false,
-}: {
-  label: string;
-  count: number;
-  beta?: boolean;
-}) {
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <span>{label}</span>
-      <span className="tabular-nums text-muted-foreground">({count})</span>
-      {beta ? (
-        <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
-          Beta
-        </Badge>
-      ) : null}
-    </span>
   );
 }
 

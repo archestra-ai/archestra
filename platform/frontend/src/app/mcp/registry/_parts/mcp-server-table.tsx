@@ -22,7 +22,7 @@ import {
   Users,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { memo, useState } from "react";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import {
@@ -31,9 +31,9 @@ import {
 } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
-import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import type { BulkRangeSelectionController } from "@/lib/bulk-range-selection";
 import { useFeature } from "@/lib/config/config.query";
 import { typeRole } from "@/lib/design/type-scale";
 import { useReinstallInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catalog.query";
@@ -53,7 +53,8 @@ import { useCanModifyCatalogItem } from "./catalog-edit-access";
 import { shouldShowMcpCardChatButton } from "./chat-button-visibility";
 import {
   computeDeploymentStatusSummary,
-  getDeploymentLabel,
+  DeploymentStatusIconDot,
+  type DeploymentStatusSummary,
 } from "./deployment-status";
 import type { DismissAlertTarget } from "./dismiss-alert-dialog";
 import { DismissAlertDialog } from "./dismiss-alert-dialog";
@@ -102,6 +103,7 @@ type McpServerTableProps = {
     rowSelection: RowSelectionState;
     onRowSelectionChange: OnChangeFn<RowSelectionState>;
     onPageRowIdsChange: (ids: string[]) => void;
+    rangeSelection: BulkRangeSelectionController;
   };
   attention?: {
     facet: McpServerAttentionFacet;
@@ -136,6 +138,22 @@ export function McpServerTable({
     (!!attention || !!getServerInfo(item).installedServer) &&
     installingItemId !== item.id &&
     !getServerInfo(item).isInstallInProgress;
+  const deploymentSummaryFor = (
+    item: CatalogItem,
+  ): DeploymentStatusSummary | null => {
+    const installedServer = getServerInfo(item).installedServer;
+    if (
+      item.serverType !== "local" ||
+      !installedServer ||
+      deploymentFeedState !== "ready"
+    ) {
+      return null;
+    }
+    return computeDeploymentStatusSummary(
+      [installedServer.id],
+      deploymentStatuses,
+    );
+  };
 
   const standardColumns: ColumnDef<CatalogItem>[] = [
     createSelectColumn<CatalogItem>({
@@ -158,6 +176,7 @@ export function McpServerTable({
           <McpServerNameCell
             item={item}
             environmentLabel={envLabelByCatalog.get(item.id)}
+            deploymentSummary={deploymentSummaryFor(item)}
           />
         );
       },
@@ -228,16 +247,7 @@ export function McpServerTable({
         // Nothing installed means there is no runtime to have a status, and a
         // catalog entry nobody has connected is not "Healthy" — it is nothing.
         if (!installedServer) return null;
-        return (
-          <span className={typeRole({ role: "body" })}>
-            {installedStatusLabel({
-              isLocal: item.serverType === "local",
-              feedState: deploymentFeedState,
-              serverId: installedServer.id,
-              deploymentStatuses,
-            })}
-          </span>
-        );
+        return <InstalledStatusCell />;
       },
     },
     {
@@ -264,38 +274,13 @@ export function McpServerTable({
 
   const attentionColumns: ColumnDef<CatalogItem>[] = attention
     ? [
-        {
-          id: "select",
-          size: 36,
-          header: ({ table }) => (
-            <Checkbox
-              aria-label={
-                attention.facet === "muted"
-                  ? "Select all restorable alerts"
-                  : "Select all alerts"
-              }
-              checked={
-                table.getIsAllRowsSelected()
-                  ? true
-                  : table.getIsSomeRowsSelected()
-                    ? "indeterminate"
-                    : false
-              }
-              onCheckedChange={(checked) =>
-                table.toggleAllRowsSelected(checked === true)
-              }
-            />
-          ),
-          cell: ({ row }) => (
-            <Checkbox
-              aria-label={`Select ${row.original.name}`}
-              checked={row.getIsSelected()}
-              onCheckedChange={(checked) =>
-                row.toggleSelected(checked === true)
-              }
-            />
-          ),
-        },
+        createSelectColumn<CatalogItem>({
+          rowLabel: (item) => `Select ${item.name}`,
+          allLabel:
+            attention.facet === "muted"
+              ? "Select all restorable alerts"
+              : "Select all alerts",
+        }),
         {
           id: "name",
           accessorKey: "name",
@@ -307,6 +292,7 @@ export function McpServerTable({
               <McpServerNameCell
                 item={item}
                 environmentLabel={envLabelByCatalog.get(item.id)}
+                deploymentSummary={deploymentSummaryFor(item)}
               />
             );
           },
@@ -410,6 +396,7 @@ export function McpServerTable({
       onRowSelectionChange={
         attention?.onRowSelectionChange ?? selection?.onRowSelectionChange
       }
+      rangeSelection={selection?.rangeSelection}
       onPageRowIdsChange={attention ? undefined : selection?.onPageRowIdsChange}
       hideSelectedCount={!!attention}
       onRowClick={
@@ -432,7 +419,7 @@ export function McpServerTable({
 // (install/reinstall flows, dialogs) stays in the parent via callbacks, same
 // as for the cards; this component only re-derives the card's visibility
 // rules from the shared queries.
-function McpServerRowActions({
+const McpServerRowActions = memo(function McpServerRowActions({
   item,
   installedServer,
   issues,
@@ -738,21 +725,28 @@ function McpServerRowActions({
       />
     </>
   );
-}
+});
 
 // === internal helpers ===
 
 function McpServerNameCell({
   item,
   environmentLabel,
+  deploymentSummary,
 }: {
   item: CatalogItem;
   environmentLabel: string | null | undefined;
+  deploymentSummary: DeploymentStatusSummary | null;
 }) {
   return (
     <div className="min-w-0">
       <div className="flex min-w-0 items-center gap-2">
-        <McpCatalogIcon icon={item.icon} catalogId={item.id} size={16} />
+        <span className="relative shrink-0">
+          <McpCatalogIcon icon={item.icon} catalogId={item.id} size={16} />
+          {deploymentSummary && (
+            <DeploymentStatusIconDot summary={deploymentSummary} />
+          )}
+        </span>
         <span className="truncate font-medium">{item.name}</span>
         {environmentLabel && (
           <Badge variant="outline" className="shrink-0 text-muted-foreground">
@@ -774,39 +768,17 @@ function McpServerNameCell({
   );
 }
 
-/**
- * What an installed server's Status cell says when it has no outstanding
- * issue. The feed's own state decides, never the absence of an entry: on a
- * deployment without Kubernetes no entry will ever arrive, and on one with it
- * the first entries arrive a moment after the page does.
- *
- * The words come from `getDeploymentLabel` over the same summary the card
- * builds, so the two views cannot describe one pod differently. Reading only
- * `state === "running"` called every other reported state "Status unavailable"
- * — including "Hibernated", which is the healthy steady state of an idle
- * server, and "Succeeded", which is a Job that finished and is still serving.
- * "Status unavailable" is reserved for a feed that has nothing to say.
- */
-function installedStatusLabel({
-  isLocal,
-  feedState,
-  serverId,
-  deploymentStatuses,
-}: {
-  isLocal: boolean;
-  feedState: McpDeploymentFeedState;
-  serverId: string;
-  deploymentStatuses: Record<string, McpDeploymentStatusEntry>;
-}): string {
-  // A remote server has no pod, so "Installed" is the whole runtime story.
-  if (!isLocal || feedState === "disabled") return "Installed";
-  if (feedState === "loading") return "Checking…";
-  const summary =
-    feedState === "ready"
-      ? computeDeploymentStatusSummary([serverId], deploymentStatuses)
-      : null;
-  if (summary) return getDeploymentLabel(summary.overallState);
-  return "Status unavailable";
+function InstalledStatusCell() {
+  return (
+    <div
+      className={cn(
+        typeRole({ role: "body" }),
+        "flex min-h-9 flex-wrap items-center gap-x-2 gap-y-1",
+      )}
+    >
+      <Badge variant="secondary">Installed</Badge>
+    </div>
+  );
 }
 
 // Plain-text variant of LOCAL_MCP_DISABLED_MESSAGE (the shared const is JSX

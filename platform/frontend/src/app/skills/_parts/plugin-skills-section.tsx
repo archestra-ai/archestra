@@ -240,6 +240,7 @@ export function PluginSkillsSection({
             title={<Link href={pluginSkillHref(skill)}>{skill.name}</Link>}
             description={skill.description || "No description"}
             actions={renderActions(skill)}
+            onNavigate={() => router.push(pluginSkillHref(skill))}
             footer={
               <div className="flex items-center justify-between gap-3">
                 <span>

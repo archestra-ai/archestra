@@ -1,4 +1,9 @@
-import type { McpDeploymentStatusEntry } from "@archestra/shared";
+import {
+  DocsPage,
+  getDocsUrl,
+  type McpDeploymentStatusEntry,
+} from "@archestra/shared";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
   Tooltip,
   TooltipContent,
@@ -143,6 +148,73 @@ export function DeploymentStatusDot({ state }: { state: DeploymentState }) {
       />
     </span>
   );
+}
+
+/** Presence-style runtime indicator shared by MCP cards and table name cells. */
+export function DeploymentStatusIconDot({
+  summary,
+}: {
+  summary: DeploymentStatusSummary;
+}) {
+  const state = summary.overallState;
+  const idleCopy = getDeploymentStatusTooltipCopy(state);
+  const label = getDeploymentStatusIconTooltipLabel(summary);
+  const idleRelated = state === "hibernated" || state === "waking";
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span
+            className="absolute -right-0.5 -bottom-0.5 rounded-full border-2 border-card"
+            role="img"
+            aria-label={`Runtime status: ${getDeploymentLabel(state)}`}
+          >
+            <DeploymentStatusDot state={state} />
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>
+            <span>{label}.</span>
+            {idleCopy && <span> {idleCopy}</span>}
+            {idleRelated && (
+              <>
+                <span> </span>
+                <ExternalDocsLink
+                  href={getDocsUrl(
+                    DocsPage.PlatformOrchestrator,
+                    "idle-hibernation",
+                  )}
+                  showIcon={false}
+                >
+                  Learn more
+                </ExternalDocsLink>
+              </>
+            )}
+          </p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+function getDeploymentStatusIconTooltipLabel(
+  summary: DeploymentStatusSummary,
+): string {
+  switch (summary.overallState) {
+    case "running":
+      return `Running ${summary.running}/${summary.total} pods`;
+    case "pending":
+      return `Starting ${summary.pending}/${summary.total} pods`;
+    case "failed":
+      return `Failed ${summary.failed}/${summary.total} pods`;
+    case "degraded":
+      return `Running ${summary.running}/${summary.total} pods; ${summary.failed} failed`;
+    case "hibernated":
+      return "Hibernated";
+    case "waking":
+      return "Waking";
+  }
 }
 
 export function DeploymentStatusBanner({

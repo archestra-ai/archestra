@@ -111,7 +111,7 @@ export function ModelProvidersSection() {
           {({ hasPermission }) => {
             const locked = updateMutation.isPending || !hasPermission;
             return (
-              <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-3">
                 <FilterBar
                   onClearFilters={search ? () => setSearch("") : undefined}
                 >

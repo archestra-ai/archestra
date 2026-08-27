@@ -19,6 +19,7 @@ import {
   TableRowActions,
 } from "@/components/table-row-actions";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
+import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -280,8 +281,8 @@ export function ConnectorDocumentsTable({
   );
 
   return (
-    <div className="space-y-4">
-      <FilterBar className="!mb-3">
+    <BulkActionsScope className="space-y-3">
+      <FilterBar>
         <SearchInput
           isLoading={isFetching}
           value={search}
@@ -484,6 +485,6 @@ export function ConnectorDocumentsTable({
           pendingLabel="Deleting..."
         />
       )}
-    </div>
+    </BulkActionsScope>
   );
 }

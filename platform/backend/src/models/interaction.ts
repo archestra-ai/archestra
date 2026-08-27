@@ -1508,9 +1508,14 @@ class InteractionModel {
         userNames: s.userNames ?? [],
         userIds,
         unattributedReason: deriveUnattributedReason(userIds, authMethods),
+        // Deduplicated across both columns: the two hold disjoint keys today
+        // (each header rejects the other's key type), but a key reported twice
+        // would render as two identical badges, so do not rely on that here.
         virtualKeys: [
-          ...(s.virtualKeyIds ?? []),
-          ...(s.passthroughVirtualKeyIds ?? []),
+          ...new Set([
+            ...(s.virtualKeyIds ?? []),
+            ...(s.passthroughVirtualKeyIds ?? []),
+          ]),
         ]
           .map((id) => virtualKeyMap.get(id))
           .filter((key): key is InteractionVirtualKey => key !== undefined)

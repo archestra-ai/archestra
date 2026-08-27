@@ -49,7 +49,7 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
-import { RunnerConfigSection } from "@/app/agents/_parts/runner-config-section";
+import { RunnerSelector } from "@/app/agents/_parts/runner-selector";
 import {
   AgentHooksEditor,
   type AgentHooksEditorRef,
@@ -847,12 +847,6 @@ export interface AgentFormProps {
  * mount across agents would render one agent's configuration under another's
  * name until those land, and a save would write it onto the wrong agent.
  */
-type RunnerConfigValue = NonNullable<
-  archestraApiTypes.CreateAgentData["body"]
->["runnerConfig"] extends infer T
-  ? T | null
-  : never;
-
 export function AgentForm({
   agent,
   agentType = "profile",
@@ -880,13 +874,6 @@ export function AgentForm({
   const shouldLoadKnowledgeSources = true;
   const shouldLoadLlmConfiguration = agentType === "agent";
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
-  // A privileged runner is node-level access, so only a runner administrator
-  // may configure one — the backend refuses it regardless, this just keeps the
-  // control from appearing to someone who cannot use it.
-  const { data: canConfigurePrivilegedRunner } = useHasPermissions({
-    runner: ["admin"],
-  });
-
   const { data: allInternalAgents = [] } = useDelegationTargetAgents({
     enabled: supportsSubagents && !!canReadAgents,
   });
@@ -1145,7 +1132,7 @@ export function AgentForm({
     String(DUAL_LLM_DEFAULT_MAX_ROUNDS),
   );
   const [passthroughHeaders, setPassthroughHeaders] = useState<string[]>([]);
-  const [runnerConfig, setRunnerConfig] = useState<RunnerConfigValue>(null);
+  const [runnerId, setRunnerId] = useState<string | null>(null);
   const [toolExposureMode, setToolExposureMode] =
     useState<ToolExposureMode>("full");
   const [missingCredentialBehavior, setMissingCredentialBehavior] =
@@ -1486,7 +1473,7 @@ export function AgentForm({
                 ? String(agentData.builtInAgentConfig.maxRounds)
                 : String(DUAL_LLM_DEFAULT_MAX_ROUNDS),
             passthroughHeaders: agentData.passthroughHeaders ?? [],
-            runnerConfig: agentData.runnerConfig ?? null,
+            runnerId: agentData.runnerId ?? null,
             toolExposureMode: agentData.toolExposureMode ?? "full",
             missingCredentialBehavior:
               agentData.missingCredentialBehavior ?? "allow",
@@ -1516,7 +1503,7 @@ export function AgentForm({
             autoConfigureOnToolDiscovery: false,
             dualLlmMaxRounds: String(DUAL_LLM_DEFAULT_MAX_ROUNDS),
             passthroughHeaders: [],
-            runnerConfig: null,
+            runnerId: null,
             // New agents default to "Auto" (implicit access to all tools);
             // admins can switch to "Custom" (explicitly assigned tools).
             toolExposureMode: "full",
@@ -1544,7 +1531,7 @@ export function AgentForm({
       setScope(nextValues.scope);
       setPersonalDefaultOverride(null);
       setPassthroughHeaders(nextValues.passthroughHeaders);
-      setRunnerConfig(nextValues.runnerConfig);
+      setRunnerId(nextValues.runnerId);
       setToolExposureMode(nextValues.toolExposureMode);
       setMissingCredentialBehavior(nextValues.missingCredentialBehavior);
       setAccessAllTools(nextValues.accessAllTools);
@@ -2024,7 +2011,7 @@ export function AgentForm({
                 passthroughHeaders:
                   passthroughHeaders.length > 0 ? passthroughHeaders : null,
               }),
-              runnerConfig,
+              runnerId,
             }),
             // The tools group: what the agent may reach, and how.
             ...(showToolsSections && {
@@ -2085,7 +2072,7 @@ export function AgentForm({
             passthroughHeaders:
               passthroughHeaders.length > 0 ? passthroughHeaders : null,
           }),
-          runnerConfig,
+          runnerId,
         });
         if (!created) return false;
         savedAgentId = created?.id ?? "";
@@ -2326,7 +2313,7 @@ export function AgentForm({
     accessAllSubagents,
     supportsEnvironment,
     supportsSubagents,
-    runnerConfig,
+    runnerId,
   ]);
 
   const handleSave = useCallback(async () => {
@@ -2388,7 +2375,7 @@ export function AgentForm({
     missingCredentialBehavior,
     accessAllTools,
     accessAllSubagents,
-    runnerConfig,
+    runnerId,
   });
   const isDirty =
     !readOnly &&
@@ -3620,14 +3607,10 @@ export function AgentForm({
                   />
                 </div>
 
-                {/* Runner: what a long-running session for this agent starts
-                    from. Without it the agent cannot be run as one at all. */}
+                {/* Runner: where a long-running session for this agent runs.
+                    Optional — without one the agent has no long-running mode. */}
                 {agentType === "agent" && (
-                  <RunnerConfigSection
-                    value={runnerConfig ?? null}
-                    onChange={setRunnerConfig}
-                    canConfigurePrivileged={canConfigurePrivilegedRunner}
-                  />
+                  <RunnerSelector value={runnerId} onChange={setRunnerId} />
                 )}
 
                 {/* Security (LLM Proxy and Agent only) */}
@@ -3885,7 +3868,7 @@ type AgentFormFields = {
   autoConfigureOnToolDiscovery: boolean;
   dualLlmMaxRounds: string;
   passthroughHeaders: string[];
-  runnerConfig: RunnerConfigValue;
+  runnerId: string | null;
   toolExposureMode: ToolExposureMode;
   missingCredentialBehavior: MissingCredentialBehavior;
   accessAllTools: boolean;

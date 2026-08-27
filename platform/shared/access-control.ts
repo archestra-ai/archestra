@@ -699,6 +699,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateRunner]: { runner: ["update"] },
   [RouteId.DeleteRunner]: { runner: ["delete"] },
   [RouteId.BulkDeleteRunners]: { runner: ["delete"] },
+  [RouteId.GetRunnerLabelKeys]: { runner: ["read"] },
+  [RouteId.GetRunnerLabelValues]: { runner: ["read"] },
 
   // A user's own credentials: authenticated, but no resource permission —
   // these are personal, and an administrator's runner permissions grant no
@@ -2109,6 +2111,10 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // Agents
   "/agents": { agent: ["read"] },
   "/agents/new": { agent: ["create"] },
+  "/messaging-channels": { agentTrigger: ["read"] },
+  "/messaging-channels/slack": { agentTrigger: ["read"] },
+  "/messaging-channels/ms-teams": { agentTrigger: ["read"] },
+  "/messaging-channels/email": { agentTrigger: ["read"] },
   "/skills": { skill: ["read"] },
   "/skills/new": { skill: ["create"] },
   "/plugins": { plugin: ["read"] },

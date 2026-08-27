@@ -2,15 +2,16 @@ import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { runnerRuntimeManager } from "@/k8s/runner-runtime";
-import { RunnerModel } from "@/models";
+import { RunnerLabelModel, RunnerModel } from "@/models";
 import { preflightRunnerCredentials } from "@/services/runners/credentials";
 import {
+  AgentLabelWithDetailsSchema,
   ApiError,
   constructResponseSchema,
   InsertRunnerSchema,
   MissingRunnerCredentialSchema,
   type Runner,
-  SelectRunnerSchema,
+  SelectRunnerWithLabelsSchema,
   UpdateRunnerSchema,
 } from "@/types";
 import {
@@ -19,7 +20,16 @@ import {
   runBulk,
 } from "../bulk-route";
 
-const RunnerBodySchema = InsertRunnerSchema.omit({ organizationId: true });
+const RunnerBodySchema = InsertRunnerSchema.omit({
+  organizationId: true,
+}).extend({
+  /** Omitted leaves existing labels untouched; `[]` clears them. */
+  labels: z.array(AgentLabelWithDetailsSchema).optional(),
+});
+
+const RunnerUpdateBodySchema = UpdateRunnerSchema.extend({
+  labels: z.array(AgentLabelWithDetailsSchema).optional(),
+});
 
 const runnerRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -39,7 +49,7 @@ const runnerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         response: constructResponseSchema(
           z.object({
-            runners: z.array(SelectRunnerSchema),
+            runners: z.array(SelectRunnerWithLabelsSchema),
             total: z.number(),
           }),
         ),
@@ -68,12 +78,55 @@ const runnerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get a runner definition",
         tags: ["Runners"],
         params: z.object({ id: z.string().uuid() }),
-        response: constructResponseSchema(SelectRunnerSchema),
+        response: constructResponseSchema(SelectRunnerWithLabelsSchema),
       },
     },
     async ({ params, organizationId }, reply) => {
       assertRunnersEnabled();
-      return reply.send(await requireRunner(params.id, organizationId));
+      const runner = await requireRunner(params.id, organizationId);
+      return reply.send({
+        ...runner,
+        labels: await RunnerLabelModel.getLabelsForRunner(runner.id),
+      });
+    },
+  );
+
+  fastify.get(
+    "/api/runners/labels/keys",
+    {
+      schema: {
+        operationId: RouteId.GetRunnerLabelKeys,
+        description: "Label keys in use by this organization's runners",
+        tags: ["Runners"],
+        response: constructResponseSchema(z.array(z.string())),
+      },
+    },
+    async ({ organizationId }, reply) => {
+      assertRunnersEnabled();
+      return reply.send(await RunnerLabelModel.getAllKeys(organizationId));
+    },
+  );
+
+  fastify.get(
+    "/api/runners/labels/values",
+    {
+      schema: {
+        operationId: RouteId.GetRunnerLabelValues,
+        description: "Label values in use by this organization's runners",
+        tags: ["Runners"],
+        querystring: z.object({
+          key: z.string().optional().describe("Filter values by label key"),
+        }),
+        response: constructResponseSchema(z.array(z.string())),
+      },
+    },
+    async ({ query: { key }, organizationId }, reply) => {
+      assertRunnersEnabled();
+      return reply.send(
+        key
+          ? await RunnerLabelModel.getValuesByKey({ organizationId, key })
+          : await RunnerLabelModel.getAllValues(organizationId),
+      );
     },
   );
 
@@ -124,7 +177,7 @@ const runnerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Create a runner definition",
         tags: ["Runners"],
         body: RunnerBodySchema,
-        response: constructResponseSchema(SelectRunnerSchema),
+        response: constructResponseSchema(SelectRunnerWithLabelsSchema),
       },
     },
     async ({ body, organizationId, user }, reply) => {
@@ -134,7 +187,12 @@ const runnerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
       });
-      return reply.send(await RunnerModel.create({ ...body, organizationId }));
+      const { labels, ...values } = body;
+      const created = await RunnerModel.create(
+        { ...values, organizationId },
+        labels,
+      );
+      return reply.send({ ...created, labels: labels ?? [] });
     },
   );
 
@@ -146,8 +204,8 @@ const runnerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Update a runner definition",
         tags: ["Runners"],
         params: z.object({ id: z.string().uuid() }),
-        body: UpdateRunnerSchema,
-        response: constructResponseSchema(SelectRunnerSchema),
+        body: RunnerUpdateBodySchema,
+        response: constructResponseSchema(SelectRunnerWithLabelsSchema),
       },
     },
     async ({ params, body, organizationId, user }, reply) => {
@@ -157,11 +215,20 @@ const runnerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
       });
-      const updated = await RunnerModel.update(params.id, organizationId, body);
+      const { labels, ...values } = body;
+      const updated = await RunnerModel.update(
+        params.id,
+        organizationId,
+        values,
+        labels,
+      );
       if (!updated) {
         throw new ApiError(404, "Runner not found");
       }
-      return reply.send(updated);
+      return reply.send({
+        ...updated,
+        labels: await RunnerLabelModel.getLabelsForRunner(updated.id),
+      });
     },
   );
 

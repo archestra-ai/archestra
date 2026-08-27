@@ -1,6 +1,13 @@
 import { and, asc, count, eq, ilike, inArray, isNull, or } from "drizzle-orm";
-import db, { schema } from "@/database";
-import type { InsertRunner, Runner, UpdateRunner } from "@/types";
+import db, { schema, withDbTransaction } from "@/database";
+import type {
+  AgentLabelWithDetails,
+  InsertRunner,
+  Runner,
+  RunnerWithLabels,
+  UpdateRunner,
+} from "@/types";
+import RunnerLabelModel from "./runner-label";
 
 /**
  * Runner definitions: the container an agent's long-running work executes in.
@@ -9,12 +16,20 @@ import type { InsertRunner, Runner, UpdateRunner } from "@/types";
  * one is recorded in `runner_sessions`.
  */
 class RunnerModel {
-  static async create(runner: InsertRunner): Promise<Runner> {
-    const [created] = await db
-      .insert(schema.runnersTable)
-      .values(runner)
-      .returning();
-    return created;
+  static async create(
+    runner: InsertRunner,
+    labels?: AgentLabelWithDetails[],
+  ): Promise<Runner> {
+    return withDbTransaction(async (tx) => {
+      const [created] = await tx
+        .insert(schema.runnersTable)
+        .values(runner)
+        .returning();
+      if (labels) {
+        await RunnerLabelModel.syncRunnerLabels(created.id, labels, tx);
+      }
+      return created;
+    });
   }
 
   static async findById(
@@ -42,7 +57,7 @@ class RunnerModel {
     labels?: Record<string, string[]>;
     limit?: number;
     offset?: number;
-  }): Promise<{ runners: Runner[]; total: number }> {
+  }): Promise<{ runners: RunnerWithLabels[]; total: number }> {
     const filters = [
       eq(schema.runnersTable.organizationId, params.organizationId),
     ];
@@ -64,8 +79,14 @@ class RunnerModel {
       );
     }
 
-    const matchingIds = await RunnerModel.idsMatchingLabels(params.labels);
-    if (matchingIds !== null) {
+    const labelFilter = Object.fromEntries(
+      Object.entries(params.labels ?? {}).filter(
+        ([, values]) => values.length > 0,
+      ),
+    );
+    if (Object.keys(labelFilter).length > 0) {
+      const matchingIds =
+        await RunnerLabelModel.getRunnerIdsMatchingLabels(labelFilter);
       if (matchingIds.length === 0) return { runners: [], total: 0 };
       filters.push(inArray(schema.runnersTable.id, matchingIds));
     }
@@ -84,25 +105,43 @@ class RunnerModel {
       .limit(params.limit ?? 50)
       .offset(params.offset ?? 0);
 
-    return { runners, total };
+    // One query for every runner's labels rather than one per row.
+    const labelsByRunner = await RunnerLabelModel.getLabelsForRunners(
+      runners.map((runner) => runner.id),
+    );
+
+    return {
+      runners: runners.map((runner) => ({
+        ...runner,
+        labels: labelsByRunner.get(runner.id) ?? [],
+      })),
+      total,
+    };
   }
 
   static async update(
     id: string,
     organizationId: string,
     values: UpdateRunner,
+    labels?: AgentLabelWithDetails[],
   ): Promise<Runner | null> {
-    const [updated] = await db
-      .update(schema.runnersTable)
-      .set({ ...values, updatedAt: new Date() })
-      .where(
-        and(
-          eq(schema.runnersTable.id, id),
-          eq(schema.runnersTable.organizationId, organizationId),
-        ),
-      )
-      .returning();
-    return updated ?? null;
+    return withDbTransaction(async (tx) => {
+      const [updated] = await tx
+        .update(schema.runnersTable)
+        .set({ ...values, updatedAt: new Date() })
+        .where(
+          and(
+            eq(schema.runnersTable.id, id),
+            eq(schema.runnersTable.organizationId, organizationId),
+          ),
+        )
+        .returning();
+      if (!updated) return null;
+      if (labels) {
+        await RunnerLabelModel.syncRunnerLabels(id, labels, tx);
+      }
+      return updated;
+    });
   }
 
   static async delete(id: string, organizationId: string): Promise<boolean> {
@@ -124,49 +163,6 @@ class RunnerModel {
     orgId: string,
   ): Promise<Record<string, unknown> | null> {
     return RunnerModel.findById(id, orgId);
-  }
-
-  // ===================== internals =====================
-
-  /**
-   * Runner ids carrying every requested label key with one of its accepted
-   * values. Null means no label filter was asked for, which is different from
-   * a filter that matched nothing.
-   */
-  private static async idsMatchingLabels(
-    labels: Record<string, string[]> | undefined,
-  ): Promise<string[] | null> {
-    const entries = Object.entries(labels ?? {}).filter(
-      ([, values]) => values.length > 0,
-    );
-    if (entries.length === 0) return null;
-
-    let matching: string[] | null = null;
-    for (const [key, values] of entries) {
-      const rows = await db
-        .select({ runnerId: schema.runnerLabelsTable.runnerId })
-        .from(schema.runnerLabelsTable)
-        .innerJoin(
-          schema.labelKeysTable,
-          eq(schema.labelKeysTable.id, schema.runnerLabelsTable.labelKeyId),
-        )
-        .innerJoin(
-          schema.labelValuesTable,
-          eq(schema.labelValuesTable.id, schema.runnerLabelsTable.labelValueId),
-        )
-        .where(
-          and(
-            eq(schema.labelKeysTable.key, key),
-            inArray(schema.labelValuesTable.value, values),
-          ),
-        );
-      const ids = rows.map((row) => row.runnerId);
-      // Keys are ANDed: a runner has to satisfy every one of them.
-      matching =
-        matching === null ? ids : matching.filter((id) => ids.includes(id));
-      if (matching.length === 0) return [];
-    }
-    return matching;
   }
 }
 

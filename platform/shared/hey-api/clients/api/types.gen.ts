@@ -12970,32 +12970,7 @@ export type GetAgentsResponses = {
             modelId: string | null;
             identityProviderId: string | null;
             environmentId: string | null;
-            runnerConfig: {
-                image?: string;
-                command?: Array<string>;
-                steerMode?: 'pipe' | 'tmux_keys';
-                privileged?: boolean;
-                resources?: {
-                    cpuRequest?: string;
-                    memoryRequest?: string;
-                    cpuLimit?: string;
-                    memoryLimit?: string;
-                };
-                ttlHours?: number;
-                idleTimeoutMinutes?: number;
-                credentials?: Array<{
-                    key: string;
-                    scope: 'shared' | 'per_user';
-                    label: string;
-                    description?: string;
-                    required: boolean;
-                }>;
-                environment?: Array<{
-                    key: string;
-                    value: string;
-                }>;
-            } | null;
-            runnerSecretId: string | null;
+            runnerId: string | null;
             passthroughHeaders: Array<string> | null;
             toolExposureMode: 'full' | 'search_and_run_only';
             missingCredentialBehavior: 'allow' | 'warn' | 'block';
@@ -13095,31 +13070,7 @@ export type CreateAgentData = {
         modelId?: string | null;
         identityProviderId?: string | null;
         environmentId?: string | null;
-        runnerConfig?: {
-            image?: string;
-            command?: Array<string>;
-            steerMode?: 'pipe' | 'tmux_keys';
-            privileged?: boolean;
-            resources?: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            };
-            ttlHours?: number;
-            idleTimeoutMinutes?: number;
-            credentials?: Array<{
-                key: string;
-                scope: 'shared' | 'per_user';
-                label: string;
-                description?: string;
-                required: boolean;
-            }>;
-            environment?: Array<{
-                key: string;
-                value: string;
-            }>;
-        } | null;
+        runnerId?: string | null;
         passthroughHeaders?: Array<string> | null;
         toolExposureMode?: 'full' | 'search_and_run_only';
         missingCredentialBehavior?: 'allow' | 'warn' | 'block';
@@ -13255,32 +13206,7 @@ export type CreateAgentResponses = {
         modelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
-        runnerConfig: {
-            image?: string;
-            command?: Array<string>;
-            steerMode?: 'pipe' | 'tmux_keys';
-            privileged?: boolean;
-            resources?: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            };
-            ttlHours?: number;
-            idleTimeoutMinutes?: number;
-            credentials?: Array<{
-                key: string;
-                scope: 'shared' | 'per_user';
-                label: string;
-                description?: string;
-                required: boolean;
-            }>;
-            environment?: Array<{
-                key: string;
-                value: string;
-            }>;
-        } | null;
-        runnerSecretId: string | null;
+        runnerId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
@@ -13483,32 +13409,7 @@ export type GetAllAgentsResponses = {
         modelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
-        runnerConfig: {
-            image?: string;
-            command?: Array<string>;
-            steerMode?: 'pipe' | 'tmux_keys';
-            privileged?: boolean;
-            resources?: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            };
-            ttlHours?: number;
-            idleTimeoutMinutes?: number;
-            credentials?: Array<{
-                key: string;
-                scope: 'shared' | 'per_user';
-                label: string;
-                description?: string;
-                required: boolean;
-            }>;
-            environment?: Array<{
-                key: string;
-                value: string;
-            }>;
-        } | null;
-        runnerSecretId: string | null;
+        runnerId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
@@ -13766,32 +13667,7 @@ export type GetDefaultMcpGatewayResponses = {
         modelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
-        runnerConfig: {
-            image?: string;
-            command?: Array<string>;
-            steerMode?: 'pipe' | 'tmux_keys';
-            privileged?: boolean;
-            resources?: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            };
-            ttlHours?: number;
-            idleTimeoutMinutes?: number;
-            credentials?: Array<{
-                key: string;
-                scope: 'shared' | 'per_user';
-                label: string;
-                description?: string;
-                required: boolean;
-            }>;
-            environment?: Array<{
-                key: string;
-                value: string;
-            }>;
-        } | null;
-        runnerSecretId: string | null;
+        runnerId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
@@ -14041,32 +13917,7 @@ export type ImportAgentResponses = {
             modelId: string | null;
             identityProviderId: string | null;
             environmentId: string | null;
-            runnerConfig: {
-                image?: string;
-                command?: Array<string>;
-                steerMode?: 'pipe' | 'tmux_keys';
-                privileged?: boolean;
-                resources?: {
-                    cpuRequest?: string;
-                    memoryRequest?: string;
-                    cpuLimit?: string;
-                    memoryLimit?: string;
-                };
-                ttlHours?: number;
-                idleTimeoutMinutes?: number;
-                credentials?: Array<{
-                    key: string;
-                    scope: 'shared' | 'per_user';
-                    label: string;
-                    description?: string;
-                    required: boolean;
-                }>;
-                environment?: Array<{
-                    key: string;
-                    value: string;
-                }>;
-            } | null;
-            runnerSecretId: string | null;
+            runnerId: string | null;
             passthroughHeaders: Array<string> | null;
             toolExposureMode: 'full' | 'search_and_run_only';
             missingCredentialBehavior: 'allow' | 'warn' | 'block';
@@ -14329,32 +14180,7 @@ export type GetAgentResponses = {
         modelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
-        runnerConfig: {
-            image?: string;
-            command?: Array<string>;
-            steerMode?: 'pipe' | 'tmux_keys';
-            privileged?: boolean;
-            resources?: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            };
-            ttlHours?: number;
-            idleTimeoutMinutes?: number;
-            credentials?: Array<{
-                key: string;
-                scope: 'shared' | 'per_user';
-                label: string;
-                description?: string;
-                required: boolean;
-            }>;
-            environment?: Array<{
-                key: string;
-                value: string;
-            }>;
-        } | null;
-        runnerSecretId: string | null;
+        runnerId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
@@ -14445,31 +14271,7 @@ export type UpdateAgentData = {
         modelId?: string | null;
         identityProviderId?: string | null;
         environmentId?: string | null;
-        runnerConfig?: {
-            image?: string;
-            command?: Array<string>;
-            steerMode?: 'pipe' | 'tmux_keys';
-            privileged?: boolean;
-            resources?: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            };
-            ttlHours?: number;
-            idleTimeoutMinutes?: number;
-            credentials?: Array<{
-                key: string;
-                scope: 'shared' | 'per_user';
-                label: string;
-                description?: string;
-                required: boolean;
-            }>;
-            environment?: Array<{
-                key: string;
-                value: string;
-            }>;
-        } | null;
+        runnerId?: string | null;
         passthroughHeaders?: Array<string> | null;
         toolExposureMode?: 'full' | 'search_and_run_only';
         missingCredentialBehavior?: 'allow' | 'warn' | 'block';
@@ -14607,32 +14409,7 @@ export type UpdateAgentResponses = {
         modelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
-        runnerConfig: {
-            image?: string;
-            command?: Array<string>;
-            steerMode?: 'pipe' | 'tmux_keys';
-            privileged?: boolean;
-            resources?: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            };
-            ttlHours?: number;
-            idleTimeoutMinutes?: number;
-            credentials?: Array<{
-                key: string;
-                scope: 'shared' | 'per_user';
-                label: string;
-                description?: string;
-                required: boolean;
-            }>;
-            environment?: Array<{
-                key: string;
-                value: string;
-            }>;
-        } | null;
-        runnerSecretId: string | null;
+        runnerId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
@@ -15064,32 +14841,7 @@ export type RestoreAgentVersionResponses = {
         modelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
-        runnerConfig: {
-            image?: string;
-            command?: Array<string>;
-            steerMode?: 'pipe' | 'tmux_keys';
-            privileged?: boolean;
-            resources?: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            };
-            ttlHours?: number;
-            idleTimeoutMinutes?: number;
-            credentials?: Array<{
-                key: string;
-                scope: 'shared' | 'per_user';
-                label: string;
-                description?: string;
-                required: boolean;
-            }>;
-            environment?: Array<{
-                key: string;
-                value: string;
-            }>;
-        } | null;
-        runnerSecretId: string | null;
+        runnerId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
@@ -15270,32 +15022,7 @@ export type CloneAgentResponses = {
         modelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
-        runnerConfig: {
-            image?: string;
-            command?: Array<string>;
-            steerMode?: 'pipe' | 'tmux_keys';
-            privileged?: boolean;
-            resources?: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            };
-            ttlHours?: number;
-            idleTimeoutMinutes?: number;
-            credentials?: Array<{
-                key: string;
-                scope: 'shared' | 'per_user';
-                label: string;
-                description?: string;
-                required: boolean;
-            }>;
-            environment?: Array<{
-                key: string;
-                value: string;
-            }>;
-        } | null;
-        runnerSecretId: string | null;
+        runnerId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
@@ -16803,32 +16530,7 @@ export type RestoreAgentResponses = {
         modelId: string | null;
         identityProviderId: string | null;
         environmentId: string | null;
-        runnerConfig: {
-            image?: string;
-            command?: Array<string>;
-            steerMode?: 'pipe' | 'tmux_keys';
-            privileged?: boolean;
-            resources?: {
-                cpuRequest?: string;
-                memoryRequest?: string;
-                cpuLimit?: string;
-                memoryLimit?: string;
-            };
-            ttlHours?: number;
-            idleTimeoutMinutes?: number;
-            credentials?: Array<{
-                key: string;
-                scope: 'shared' | 'per_user';
-                label: string;
-                description?: string;
-                required: boolean;
-            }>;
-            environment?: Array<{
-                key: string;
-                value: string;
-            }>;
-        } | null;
-        runnerSecretId: string | null;
+        runnerId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         missingCredentialBehavior: 'allow' | 'warn' | 'block';
@@ -84511,9 +84213,11 @@ export type GetAllRunnersData = {
     body?: never;
     path?: never;
     query?: {
-        agentId?: string;
-        state?: 'pending' | 'provisioning' | 'running' | 'stopping' | 'stopped' | 'failed';
-        mine?: boolean;
+        search?: string;
+        environmentId?: string;
+        labels?: string;
+        limit?: number;
+        offset?: number;
     };
     url: '/api/runners';
 };
@@ -84587,48 +84291,87 @@ export type GetAllRunnersResponses = {
     /**
      * Default Response
      */
-    200: Array<{
-        id: string;
-        organizationId: string;
-        agentId: string;
-        createdByUserId: string;
-        name: string;
-        state: 'pending' | 'provisioning' | 'running' | 'stopping' | 'stopped' | 'failed';
-        statusReason: string | null;
-        environmentId: string | null;
-        image: string;
-        command: Array<string> | null;
-        task: string | null;
-        steerMode: 'pipe' | 'tmux_keys';
-        privileged: boolean;
-        resources: {
-            cpuRequest?: string;
-            memoryRequest?: string;
-            cpuLimit?: string;
-            memoryLimit?: string;
-        } | null;
-        deploymentName: string | null;
-        namespace: string | null;
-        secretName: string | null;
-        virtualApiKeyId: string | null;
-        ttlHours: number | null;
-        idleTimeoutMinutes: number | null;
-        lastActivityAt: string | null;
-        startedAt: string | null;
-        stoppedAt: string | null;
-        nextEventSequence: number;
-        createdAt: string;
-        updatedAt: string;
-    }>;
+    200: {
+        runners: Array<{
+            id: string;
+            organizationId: string;
+            name: string;
+            description: string | null;
+            image: string;
+            command: Array<string> | null;
+            steerMode: 'pipe' | 'tmux_keys';
+            privileged: boolean;
+            resources: {
+                cpuRequest?: string;
+                memoryRequest?: string;
+                cpuLimit?: string;
+                memoryLimit?: string;
+            } | null;
+            environment: Array<{
+                key: string;
+                value: string;
+            }> | null;
+            credentials: Array<{
+                key: string;
+                scope: 'shared' | 'per_user';
+                label: string;
+                description?: string;
+                required: boolean;
+            }> | null;
+            secretId: string | null;
+            environmentId: string | null;
+            ttlHours: number | null;
+            idleTimeoutMinutes: number | null;
+            createdAt: string;
+            updatedAt: string;
+            labels: Array<{
+                key: string;
+                value: string;
+                keyId?: string;
+                valueId?: string;
+            }>;
+        }>;
+        total: number;
+    };
 };
 
 export type GetAllRunnersResponse = GetAllRunnersResponses[keyof GetAllRunnersResponses];
 
 export type CreateRunnerData = {
     body: {
-        agentId: string;
         name: string;
-        task?: string;
+        description?: string | null;
+        image: string;
+        command?: Array<string> | null;
+        steerMode?: 'pipe' | 'tmux_keys';
+        privileged?: boolean;
+        resources?: {
+            cpuRequest?: string;
+            memoryRequest?: string;
+            cpuLimit?: string;
+            memoryLimit?: string;
+        } | null;
+        environment?: Array<{
+            key: string;
+            value: string;
+        }> | null;
+        credentials?: Array<{
+            key: string;
+            scope: 'shared' | 'per_user';
+            label: string;
+            description?: string;
+            required: boolean;
+        }> | null;
+        secretId?: string | null;
+        environmentId?: string | null;
+        ttlHours?: number | null;
+        idleTimeoutMinutes?: number | null;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
     path?: never;
     query?: never;
@@ -84707,15 +84450,10 @@ export type CreateRunnerResponses = {
     200: {
         id: string;
         organizationId: string;
-        agentId: string;
-        createdByUserId: string;
         name: string;
-        state: 'pending' | 'provisioning' | 'running' | 'stopping' | 'stopped' | 'failed';
-        statusReason: string | null;
-        environmentId: string | null;
+        description: string | null;
         image: string;
         command: Array<string> | null;
-        task: string | null;
         steerMode: 'pipe' | 'tmux_keys';
         privileged: boolean;
         resources: {
@@ -84724,18 +84462,29 @@ export type CreateRunnerResponses = {
             cpuLimit?: string;
             memoryLimit?: string;
         } | null;
-        deploymentName: string | null;
-        namespace: string | null;
-        secretName: string | null;
-        virtualApiKeyId: string | null;
+        environment: Array<{
+            key: string;
+            value: string;
+        }> | null;
+        credentials: Array<{
+            key: string;
+            scope: 'shared' | 'per_user';
+            label: string;
+            description?: string;
+            required: boolean;
+        }> | null;
+        secretId: string | null;
+        environmentId: string | null;
         ttlHours: number | null;
         idleTimeoutMinutes: number | null;
-        lastActivityAt: string | null;
-        startedAt: string | null;
-        stoppedAt: string | null;
-        nextEventSequence: number;
         createdAt: string;
         updatedAt: string;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
@@ -84907,15 +84656,10 @@ export type GetRunnerResponses = {
     200: {
         id: string;
         organizationId: string;
-        agentId: string;
-        createdByUserId: string;
         name: string;
-        state: 'pending' | 'provisioning' | 'running' | 'stopping' | 'stopped' | 'failed';
-        statusReason: string | null;
-        environmentId: string | null;
+        description: string | null;
         image: string;
         command: Array<string> | null;
-        task: string | null;
         steerMode: 'pipe' | 'tmux_keys';
         privileged: boolean;
         resources: {
@@ -84924,33 +84668,78 @@ export type GetRunnerResponses = {
             cpuLimit?: string;
             memoryLimit?: string;
         } | null;
-        deploymentName: string | null;
-        namespace: string | null;
-        secretName: string | null;
-        virtualApiKeyId: string | null;
+        environment: Array<{
+            key: string;
+            value: string;
+        }> | null;
+        credentials: Array<{
+            key: string;
+            scope: 'shared' | 'per_user';
+            label: string;
+            description?: string;
+            required: boolean;
+        }> | null;
+        secretId: string | null;
+        environmentId: string | null;
         ttlHours: number | null;
         idleTimeoutMinutes: number | null;
-        lastActivityAt: string | null;
-        startedAt: string | null;
-        stoppedAt: string | null;
-        nextEventSequence: number;
         createdAt: string;
         updatedAt: string;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
 export type GetRunnerResponse = GetRunnerResponses[keyof GetRunnerResponses];
 
-export type GetRunnerEventsData = {
-    body?: never;
+export type UpdateRunnerData = {
+    body: {
+        name?: string;
+        description?: string | null;
+        image?: string;
+        command?: Array<string> | null;
+        steerMode?: 'pipe' | 'tmux_keys';
+        privileged?: boolean;
+        resources?: {
+            cpuRequest?: string;
+            memoryRequest?: string;
+            cpuLimit?: string;
+            memoryLimit?: string;
+        } | null;
+        environment?: Array<{
+            key: string;
+            value: string;
+        }> | null;
+        credentials?: Array<{
+            key: string;
+            scope: 'shared' | 'per_user';
+            label: string;
+            description?: string;
+            required: boolean;
+        }> | null;
+        secretId?: string | null;
+        environmentId?: string | null;
+        ttlHours?: number | null;
+        idleTimeoutMinutes?: number | null;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
+    };
     path: {
         id: string;
     };
     query?: never;
-    url: '/api/runners/{id}/events';
+    url: '/api/runners/{id}';
 };
 
-export type GetRunnerEventsErrors = {
+export type UpdateRunnerErrors = {
     /**
      * Default Response
      */
@@ -85013,35 +84802,229 @@ export type GetRunnerEventsErrors = {
     };
 };
 
-export type GetRunnerEventsError = GetRunnerEventsErrors[keyof GetRunnerEventsErrors];
+export type UpdateRunnerError = UpdateRunnerErrors[keyof UpdateRunnerErrors];
 
-export type GetRunnerEventsResponses = {
+export type UpdateRunnerResponses = {
     /**
      * Default Response
      */
-    200: Array<{
+    200: {
         id: string;
-        runnerId: string;
-        sequence: number;
-        kind: 'state_changed' | 'steer' | 'attached' | 'system';
-        message: string | null;
-        payload: {
-            [key: string]: unknown;
+        organizationId: string;
+        name: string;
+        description: string | null;
+        image: string;
+        command: Array<string> | null;
+        steerMode: 'pipe' | 'tmux_keys';
+        privileged: boolean;
+        resources: {
+            cpuRequest?: string;
+            memoryRequest?: string;
+            cpuLimit?: string;
+            memoryLimit?: string;
         } | null;
-        actorUserId: string | null;
+        environment: Array<{
+            key: string;
+            value: string;
+        }> | null;
+        credentials: Array<{
+            key: string;
+            scope: 'shared' | 'per_user';
+            label: string;
+            description?: string;
+            required: boolean;
+        }> | null;
+        secretId: string | null;
+        environmentId: string | null;
+        ttlHours: number | null;
+        idleTimeoutMinutes: number | null;
         createdAt: string;
-    }>;
+        updatedAt: string;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
+    };
 };
 
-export type GetRunnerEventsResponse = GetRunnerEventsResponses[keyof GetRunnerEventsResponses];
+export type UpdateRunnerResponse = UpdateRunnerResponses[keyof UpdateRunnerResponses];
+
+export type GetRunnerLabelKeysData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/runners/labels/keys';
+};
+
+export type GetRunnerLabelKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetRunnerLabelKeysError = GetRunnerLabelKeysErrors[keyof GetRunnerLabelKeysErrors];
+
+export type GetRunnerLabelKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type GetRunnerLabelKeysResponse = GetRunnerLabelKeysResponses[keyof GetRunnerLabelKeysResponses];
+
+export type GetRunnerLabelValuesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Filter values by label key
+         */
+        key?: string;
+    };
+    url: '/api/runners/labels/values';
+};
+
+export type GetRunnerLabelValuesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetRunnerLabelValuesError = GetRunnerLabelValuesErrors[keyof GetRunnerLabelValuesErrors];
+
+export type GetRunnerLabelValuesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type GetRunnerLabelValuesResponse = GetRunnerLabelValuesResponses[keyof GetRunnerLabelValuesResponses];
 
 export type GetRunnerPreflightData = {
     body?: never;
-    path?: never;
-    query: {
-        agentId: string;
+    path: {
+        id: string;
     };
-    url: '/api/runners/preflight';
+    query?: never;
+    url: '/api/runners/{id}/preflight';
 };
 
 export type GetRunnerPreflightErrors = {
@@ -85114,7 +85097,7 @@ export type GetRunnerPreflightResponses = {
      * Default Response
      */
     200: {
-        canStart: boolean;
+        ready: boolean;
         missing: Array<{
             key: string;
             label: string;
@@ -85130,18 +85113,19 @@ export type GetRunnerPreflightResponses = {
 
 export type GetRunnerPreflightResponse = GetRunnerPreflightResponses[keyof GetRunnerPreflightResponses];
 
-export type SteerRunnerData = {
+export type BulkDeleteRunnersData = {
     body: {
-        message: string;
+        /**
+         * Ids to act on. Duplicates are collapsed.
+         */
+        ids: Array<string>;
     };
-    path: {
-        id: string;
-    };
+    path?: never;
     query?: never;
-    url: '/api/runners/{id}/steer';
+    url: '/api/runners/bulk';
 };
 
-export type SteerRunnerErrors = {
+export type BulkDeleteRunnersErrors = {
     /**
      * Default Response
      */
@@ -85204,133 +85188,27 @@ export type SteerRunnerErrors = {
     };
 };
 
-export type SteerRunnerError = SteerRunnerErrors[keyof SteerRunnerErrors];
+export type BulkDeleteRunnersError = BulkDeleteRunnersErrors[keyof BulkDeleteRunnersErrors];
 
-export type SteerRunnerResponses = {
+export type BulkDeleteRunnersResponses = {
     /**
      * Default Response
      */
     200: {
-        delivered: boolean;
+        affected?: number;
+        succeeded: Array<{
+            id: string;
+            name: string;
+        }>;
+        failed: Array<{
+            id: string;
+            name: string | null;
+            error: string;
+        }>;
     };
 };
 
-export type SteerRunnerResponse = SteerRunnerResponses[keyof SteerRunnerResponses];
-
-export type StopRunnerData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/runners/{id}/stop';
-};
-
-export type StopRunnerErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type StopRunnerError = StopRunnerErrors[keyof StopRunnerErrors];
-
-export type StopRunnerResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        organizationId: string;
-        agentId: string;
-        createdByUserId: string;
-        name: string;
-        state: 'pending' | 'provisioning' | 'running' | 'stopping' | 'stopped' | 'failed';
-        statusReason: string | null;
-        environmentId: string | null;
-        image: string;
-        command: Array<string> | null;
-        task: string | null;
-        steerMode: 'pipe' | 'tmux_keys';
-        privileged: boolean;
-        resources: {
-            cpuRequest?: string;
-            memoryRequest?: string;
-            cpuLimit?: string;
-            memoryLimit?: string;
-        } | null;
-        deploymentName: string | null;
-        namespace: string | null;
-        secretName: string | null;
-        virtualApiKeyId: string | null;
-        ttlHours: number | null;
-        idleTimeoutMinutes: number | null;
-        lastActivityAt: string | null;
-        startedAt: string | null;
-        stoppedAt: string | null;
-        nextEventSequence: number;
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type StopRunnerResponse = StopRunnerResponses[keyof StopRunnerResponses];
+export type BulkDeleteRunnersResponse = BulkDeleteRunnersResponses[keyof BulkDeleteRunnersResponses];
 
 export type GetScheduleTriggersData = {
     body?: never;

@@ -462,6 +462,8 @@ export const RouteId = {
   UpdateRunner: "updateRunner",
   DeleteRunner: "deleteRunner",
   BulkDeleteRunners: "bulkDeleteRunners",
+  GetRunnerLabelKeys: "getRunnerLabelKeys",
+  GetRunnerLabelValues: "getRunnerLabelValues",
   // Personal credentials a user supplies for the agents they run.
   GetAllUserCredentials: "getAllUserCredentials",
   UpsertUserCredential: "upsertUserCredential",

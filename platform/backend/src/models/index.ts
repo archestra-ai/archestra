@@ -107,6 +107,7 @@ export {
 export { default as ProjectPinModel } from "./project-pin";
 export { default as ProjectShareModel } from "./project-share";
 export { default as RunnerModel } from "./runner";
+export { default as RunnerLabelModel } from "./runner-label";
 export { default as RunnerSessionModel } from "./runner-session";
 export { default as ScheduleTriggerModel } from "./schedule-trigger";
 export { default as ScheduleTriggerRunModel } from "./schedule-trigger-run";

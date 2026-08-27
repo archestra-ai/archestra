@@ -5,6 +5,7 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { AgentLabelWithDetailsSchema } from "./label";
 
 /**
  * How a steer message reaches the running process.
@@ -128,7 +129,13 @@ export const UpdateRunnerSchema = createUpdateSchema(
   runnerInsertRefinements,
 ).omit({ id: true, organizationId: true, createdAt: true, updatedAt: true });
 
+/** A runner as a list or detail response renders it: definition plus labels. */
+export const SelectRunnerWithLabelsSchema = SelectRunnerSchema.extend({
+  labels: z.array(AgentLabelWithDetailsSchema),
+});
+
 export type Runner = z.infer<typeof SelectRunnerSchema>;
+export type RunnerWithLabels = z.infer<typeof SelectRunnerWithLabelsSchema>;
 export type InsertRunner = z.infer<typeof InsertRunnerSchema>;
 export type UpdateRunner = z.infer<typeof UpdateRunnerSchema>;
 

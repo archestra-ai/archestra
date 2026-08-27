@@ -6,6 +6,9 @@ import runnersTable from "./runner";
 /**
  * Labels on a runner, sharing the organization-wide key/value vocabulary with
  * agents, apps and MCP catalog entries so one filter language covers them all.
+ *
+ * Property names match the other label junctions (`keyId`/`valueId`); the
+ * columns keep the more explicit `label_*` prefix they were created with.
  */
 const runnerLabelsTable = pgTable(
   "runner_labels",
@@ -13,16 +16,16 @@ const runnerLabelsTable = pgTable(
     runnerId: uuid("runner_id")
       .notNull()
       .references(() => runnersTable.id, { onDelete: "cascade" }),
-    labelKeyId: uuid("label_key_id")
+    keyId: uuid("label_key_id")
       .notNull()
       .references(() => labelKeysTable.id, { onDelete: "cascade" }),
-    labelValueId: uuid("label_value_id")
+    valueId: uuid("label_value_id")
       .notNull()
       .references(() => labelValuesTable.id, { onDelete: "cascade" }),
   },
   (table) => [
-    primaryKey({ columns: [table.runnerId, table.labelKeyId] }),
-    index("runner_labels_label_value_id_idx").on(table.labelValueId),
+    primaryKey({ columns: [table.runnerId, table.keyId] }),
+    index("runner_labels_label_value_id_idx").on(table.valueId),
   ],
 );
 

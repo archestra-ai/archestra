@@ -13,22 +13,29 @@ import {
   BookOpen,
   Bot,
   Boxes,
+  Brain,
   Bug,
   Cable,
   CircleDollarSign,
   Database,
+  Files,
   FolderKanban,
+  Gauge,
   Github,
   Inbox,
+  KeyRound,
   type LucideIcon,
   MessageCircle,
   MessagesSquare,
   MoreHorizontal,
   Network,
   PencilRuler,
+  Plug,
+  Puzzle,
   Route,
   Settings,
   ShieldCheck,
+  ShieldUser,
   Slack,
   Sparkles,
   Star,
@@ -38,9 +45,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import React from "react";
 import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
-import { getCostsNavigationUrl } from "@/app/_parts/costs-navigation";
 import { SidebarUserMenu } from "@/app/_parts/sidebar-user-menu";
-import { getSkillsNavigation } from "@/app/_parts/skills-navigation";
 import { AppLogo } from "@/components/app-logo";
 import { McpRegistryAttentionBadge } from "@/components/mcp-registry-attention-badge";
 import { OnboardingDot } from "@/components/onboarding-dot";
@@ -52,6 +57,7 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -109,7 +115,14 @@ interface NavItem {
 }
 
 interface NavGroup {
-  label: string;
+  /** Stable React key, and the group's name in code regardless of its label. */
+  id: string;
+  /**
+   * Section heading above the group's rows. Omitted for the closing group,
+   * which holds the app-wide rows that belong to no section — it is separated
+   * by space alone.
+   */
+  label?: string;
   items: NavItem[];
 }
 
@@ -164,13 +177,6 @@ const chatsNavItems: NavItem[] = [
   },
 ];
 
-/**
- * The Skills & Plugins section: one sidebar row landing on Skills, with
- * Plugins reached through the tab bar at the top of both pages (see
- * `components/skills-plugins-nav-tabs.tsx`).
- */
-const SKILLS_SECTION_PREFIXES = ["/skills", "/plugins"];
-
 /** Which tab a route belongs to; null = no opinion (keep the current tab). */
 function routeSidebarMode(pathname: string): SidebarMode | null {
   const chatPrefixes = ["/chat", "/projects", "/apps", "/connection"];
@@ -181,7 +187,8 @@ function routeSidebarMode(pathname: string): SidebarMode | null {
   }
   const studioPrefixes = [
     "/agents",
-    ...SKILLS_SECTION_PREFIXES,
+    "/skills",
+    "/plugins",
     "/mcp",
     "/llm",
     "/knowledge",
@@ -273,9 +280,16 @@ function SidebarModeToggle({
   );
 }
 
-// Labeled groups shown in the scrollable content (like sidebar-10 Favorites/Workspaces)
+/**
+ * Studio navigation, grouped by the object each row manages. Rows are one per
+ * page rather than one per section: a section's landing page used to stand in
+ * for its siblings (Skills for Plugins, Model Providers for Models, Costs for
+ * Limits), which left everything behind the first tab invisible from the
+ * sidebar. Each page keeps its tab bar; the sidebar now names what is there.
+ */
 const contentNavGroups: NavGroup[] = [
   {
+    id: "agents",
     label: "Agents",
     items: [
       {
@@ -285,17 +299,21 @@ const contentNavGroups: NavGroup[] = [
         customIsActive: (pathname: string) => pathname.startsWith("/agents"),
       },
       {
-        // Plugins is the second tab of this page rather than a row of its own,
-        // so the row is lit on both routes. Its title and target are rewritten
-        // per reader by `getSkillsNavigation`.
-        title: "Skills & Plugins",
+        title: "Skills",
         url: "/skills",
         icon: Sparkles,
-        customIsActive: (pathname: string) =>
-          SKILLS_SECTION_PREFIXES.some((prefix) => pathname.startsWith(prefix)),
-        // "New", the default: the row is named for Skills, which is new. The
-        // Plugins tab keeps its own Beta chip in the tab bar.
+        customIsActive: (pathname: string) => pathname.startsWith("/skills"),
         beta: true,
+      },
+      {
+        // Dropped entirely when the deployment has plugins turned off — see
+        // the `pluginsEnabled` filter in `AppSidebar`.
+        title: "Plugins",
+        url: "/plugins",
+        icon: Puzzle,
+        customIsActive: (pathname: string) => pathname.startsWith("/plugins"),
+        beta: true,
+        badgeLabel: "Beta",
       },
       {
         title: "Messaging Channels",
@@ -307,16 +325,9 @@ const contentNavGroups: NavGroup[] = [
     ],
   },
   {
-    label: "MCP & Tools",
+    id: "mcp",
+    label: "MCP",
     items: [
-      {
-        title: "Guardrails",
-        url: "/mcp/tool-guardrails",
-        icon: ShieldCheck,
-        testId: E2eTestId.SidebarNavGuardrails,
-        customIsActive: (pathname: string) =>
-          pathname.startsWith("/mcp/tool-guardrails"),
-      },
       {
         title: "MCP Registry",
         url: "/mcp/registry",
@@ -333,52 +344,104 @@ const contentNavGroups: NavGroup[] = [
         customIsActive: (pathname: string) =>
           pathname.startsWith("/mcp/gateways"),
       },
+      {
+        title: "Guardrails",
+        url: "/mcp/tool-guardrails",
+        icon: ShieldCheck,
+        testId: E2eTestId.SidebarNavGuardrails,
+        customIsActive: (pathname: string) =>
+          pathname.startsWith("/mcp/tool-guardrails"),
+      },
     ],
   },
   {
-    label: "LLM Proxy",
+    id: "llm",
+    label: "LLM",
     items: [
       {
+        // Exact match: the proxy's sibling tabs are rows of their own now, so
+        // a prefix match would light this row on all three.
         title: "LLM Proxy",
         url: "/llm/proxy",
         icon: Network,
-        customIsActive: (pathname: string) => pathname.startsWith("/llm/proxy"),
-        // A role may grant only the Virtual Keys or OAuth Clients tab; any of
-        // the three pages keeps the entry visible.
-        permissionUrls: [
-          "/llm/proxy",
-          "/llm/proxy/virtual-keys",
-          "/llm/proxy/oauth-clients",
-        ],
+        customIsActive: (pathname: string) => pathname === "/llm/proxy",
+      },
+      {
+        title: "Virtual Keys",
+        url: "/llm/proxy/virtual-keys",
+        icon: KeyRound,
+      },
+      {
+        title: "OAuth Clients",
+        url: "/llm/proxy/oauth-clients",
+        icon: ShieldUser,
       },
       {
         title: "Model Providers",
         url: "/llm/model-providers",
         icon: Boxes,
         customIsActive: (pathname: string) =>
-          pathname.startsWith("/llm/model-providers") ||
-          pathname.startsWith("/llm/models"),
+          pathname.startsWith("/llm/model-providers"),
+        // The dot covers the pair (see DOTTED_NAV_ITEMS): opening Models
+        // clears it too.
         dotKey: "nav:model-providers",
       },
       {
-        title: "Costs & Limits",
+        title: "Models",
+        url: "/llm/models",
+        icon: Brain,
+        customIsActive: (pathname: string) =>
+          pathname.startsWith("/llm/models"),
+      },
+      {
+        title: "Costs",
         url: "/llm/costs",
         icon: CircleDollarSign,
-        customIsActive: (pathname: string) =>
-          pathname.startsWith("/llm/costs") || pathname === "/llm/limits",
-        permissionUrls: ["/llm/costs", "/llm/limits"],
+        customIsActive: (pathname: string) => pathname.startsWith("/llm/costs"),
+      },
+      {
+        title: "Limits",
+        url: "/llm/limits",
+        icon: Gauge,
+        customIsActive: (pathname: string) => pathname === "/llm/limits",
       },
     ],
   },
   {
-    label: "Other",
+    id: "knowledge",
+    // Its rows are the three Knowledge tabs. "Knowledge Bases" keeps the name
+    // the rest of the product uses (page title, docs, API) rather than
+    // shortening to "Bases" under the heading.
+    label: "Knowledge",
     items: [
       {
-        title: "Knowledge",
+        title: "Connectors",
         url: "/knowledge/connectors",
-        icon: Database,
-        customIsActive: (pathname: string) => pathname.startsWith("/knowledge"),
+        icon: Plug,
+        customIsActive: (pathname: string) =>
+          pathname.startsWith("/knowledge/connectors"),
       },
+      {
+        title: "Files",
+        url: "/knowledge/files",
+        icon: Files,
+        customIsActive: (pathname: string) =>
+          pathname.startsWith("/knowledge/files"),
+      },
+      {
+        title: "Knowledge Bases",
+        url: "/knowledge/knowledge-bases",
+        icon: Database,
+        customIsActive: (pathname: string) =>
+          pathname.startsWith("/knowledge/knowledge-bases"),
+      },
+    ],
+  },
+  {
+    // No heading: these span every section above, so naming the group would
+    // only invent a category ("Other") that means nothing to the reader.
+    id: "platform",
+    items: [
       {
         title: "Logs",
         url: "/llm/logs",
@@ -565,18 +628,39 @@ const NavPrimary = ({
             <span>Search chats</span>
           </SidebarMenuButton>
         </SidebarMenuItem>
-        {groups.map((group) => {
-          const permittedItems = group.items.filter((item) =>
-            isNavItemPermitted(item, permissionMap),
-          );
-          if (permittedItems.length === 0) return null;
-          return (
-            <React.Fragment key={group.label}>
-              {permittedItems.map(renderItem)}
-            </React.Fragment>
-          );
-        })}
       </SidebarMenu>
+      {groups.map((group) => {
+        const permittedItems = group.items.filter((item) =>
+          isNavItemPermitted(item, permissionMap),
+        );
+        if (permittedItems.length === 0) return null;
+        return (
+          <React.Fragment key={group.id}>
+            {group.label && (
+              <SidebarGroupLabel
+                role="heading"
+                aria-level={2}
+                className="uppercase tracking-wider"
+              >
+                {group.label}
+              </SidebarGroupLabel>
+            )}
+            {/* Each group is its own list under its own heading. The heading's
+                own row height is the space between groups; a group without one
+                (and the first group, whose heading follows the header) supplies
+                that space itself. Collapsed to the icon rail the headings are
+                folded away, so the spacing goes with them and the icons keep a
+                single rhythm. */}
+            <SidebarMenu
+              className={cn(
+                !group.label && "mt-4 group-data-[collapsible=icon]:mt-0",
+              )}
+            >
+              {permittedItems.map(renderItem)}
+            </SidebarMenu>
+          </React.Fragment>
+        );
+      })}
     </SidebarGroup>
   );
 };
@@ -736,23 +820,19 @@ export function AppSidebar() {
     [showConnect],
   );
 
-  const filteredNavGroups = contentNavGroups.map((group) => ({
-    ...group,
-    items: group.items.map((item) => {
-      if (item.url === "/llm/costs") {
-        return { ...item, url: getCostsNavigationUrl(permissionMap) };
-      }
-      // Naming a page after a feature this deployment turned off sends the
-      // reader looking for a tab that isn't there.
-      if (item.url === "/skills") {
-        return {
-          ...item,
-          ...getSkillsNavigation({ permissionMap, pluginsEnabled }),
-        };
-      }
-      return item;
-    }),
-  }));
+  // Advertising a page this deployment turned off sends the reader looking for
+  // something that isn't there, so Plugins waits for the flag answer rather
+  // than appearing and then vanishing.
+  const filteredNavGroups = React.useMemo(
+    () =>
+      contentNavGroups.map((group) => ({
+        ...group,
+        items: group.items.filter(
+          (item) => item.url !== "/plugins" || pluginsEnabled === true,
+        ),
+      })),
+    [pluginsEnabled],
+  );
 
   return (
     <Sidebar collapsible="icon">

@@ -76,6 +76,7 @@ export function makeUserPermissions(
     agent: [...ALL, "team-admin", "deploy-to-restricted"],
     agentTrigger: [...ALL],
     skill: [...ALL, "team-admin", "deploy-to-restricted"],
+    plugin: [...ALL],
     chat: [...ALL],
     team: [...ALL],
     member: [...ALL],

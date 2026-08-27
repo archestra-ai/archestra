@@ -7,7 +7,7 @@ import {
   type ResourceVisibilityScope,
   type SupportedProvider,
 } from "@archestra/shared";
-import { CheckIcon, ChevronDown, Key } from "lucide-react";
+import { CheckIcon, ChevronDown, Key, Plus } from "lucide-react";
 import Image from "next/image";
 import { useMemo } from "react";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
@@ -50,6 +50,7 @@ interface LlmProviderApiKeyDropdownProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSelectKey: (keyId: string) => void;
+  onAddApiKey?: () => void;
   currentProvider?: SupportedProvider;
   triggerVariant?: "prompt-input" | "button" | "select";
   triggerClassName?: string;
@@ -81,6 +82,7 @@ export function LlmProviderApiKeyDropdown({
   open,
   onOpenChange,
   onSelectKey,
+  onAddApiKey,
   currentProvider,
   triggerVariant = "prompt-input",
   triggerClassName,
@@ -281,13 +283,21 @@ export function LlmProviderApiKeyDropdown({
                 ))}
               </CommandGroup>
             )}
-            {availableProviders.length > 0 && (
+            {(availableProviders.length > 0 || onAddApiKey) && (
               <div className="border-t px-3 pb-1 pt-2 text-xs">
                 <div className="font-medium text-foreground">API keys</div>
                 <div className="text-muted-foreground">
                   Stored credentials shared according to scope
                 </div>
               </div>
+            )}
+            {onAddApiKey && (
+              <CommandGroup>
+                <CommandItem onSelect={onAddApiKey} className="cursor-pointer">
+                  <Plus className="h-4 w-4 shrink-0" />
+                  <span>Add provider key</span>
+                </CommandItem>
+              </CommandGroup>
             )}
             {availableProviders.map((provider) => (
               <CommandGroup

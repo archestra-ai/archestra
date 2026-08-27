@@ -125,6 +125,63 @@ describe("LlmProviderApiKeyDropdown", () => {
     expect(options[0]).toHaveTextContent("Staging key");
   });
 
+  it("offers provider-key creation inside the selector", async () => {
+    const user = userEvent.setup();
+    const onAddApiKey = vi.fn();
+
+    renderDropdown({
+      availableKeys: [],
+      selectedApiKeyId: null,
+      onSelectKey: () => {},
+      onAddApiKey,
+      triggerVariant: "button",
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: /select provider key/i }),
+    );
+    await user.click(screen.getByRole("option", { name: "Add provider key" }));
+
+    expect(onAddApiKey).toHaveBeenCalledOnce();
+  });
+
+  it("places provider-key creation at the top of the API keys section", async () => {
+    const user = userEvent.setup();
+
+    renderDropdown({
+      availableKeys: [
+        {
+          id: "chatgpt-subscription",
+          name: "ChatGPT Subscription",
+          provider: "openai",
+          scope: "personal",
+          subscriptionKind: "chatgpt",
+        },
+        {
+          id: "openai-key",
+          name: "OpenAI production",
+          provider: "openai",
+          scope: "org",
+        },
+      ] as LlmProviderApiKey[],
+      selectedApiKeyId: null,
+      onSelectKey: () => {},
+      onAddApiKey: () => {},
+      triggerVariant: "button",
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: /select provider key/i }),
+    );
+
+    const options = screen.getAllByRole("option");
+    expect(options.map((option) => option.textContent)).toEqual([
+      expect.stringContaining("ChatGPT Subscription"),
+      "Add provider key",
+      expect.stringContaining("OpenAI production"),
+    ]);
+  });
+
   it("separates personal subscriptions from API keys", async () => {
     const user = userEvent.setup();
 

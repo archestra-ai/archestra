@@ -3,7 +3,7 @@ import db, { schema } from "@/database";
 import type { AgentRun, InsertAgentRun } from "@/types";
 
 /**
- * The pod carrying one A2A task. Holds no lifecycle state of its own — the
+ * The Agent run carrying one A2A task. Holds no lifecycle state of its own — the
  * task's state machine is the record of how the work is going.
  */
 class AgentRunModel {

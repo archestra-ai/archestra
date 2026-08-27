@@ -2,7 +2,7 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { stepCountIs, streamText } from "ai";
+import { type ModelMessage, stepCountIs, streamText } from "ai";
 import {
   type BackgroundExecutionAgentConfig,
   BackgroundExecutionAgentConfigError,
@@ -45,6 +45,13 @@ async function main(): Promise<number> {
     write(`archestra: could not read the steer channel: ${describe(error)}`);
   });
   steerQueue.start();
+  const shutdown = new AbortController();
+  const stop = () => {
+    shutdown.abort();
+    steerQueue.stop();
+  };
+  process.once("SIGTERM", stop);
+  process.once("SIGINT", stop);
 
   const anthropic = createAnthropic({
     // The injected base is `/v1/anthropic/{agentId}` — the shape a BYO CLI
@@ -59,14 +66,14 @@ async function main(): Promise<number> {
   write(`${Object.keys(tools).length} tools available.`);
   write("");
 
-  const messages: Array<{ role: "user" | "assistant"; content: string }> = [];
+  let messages: ModelMessage[] = [];
   if (config.task) {
     messages.push({ role: "user", content: config.task });
   }
 
   let exitCode = 0;
   try {
-    while (true) {
+    while (!shutdown.signal.aborted) {
       if (messages.length === 0 || messages.at(-1)?.role === "assistant") {
         // Nothing to answer. Park on the steer channel rather than spinning —
         // this is what makes a session that is idle for days almost free.
@@ -92,21 +99,23 @@ async function main(): Promise<number> {
         messages,
         tools,
         stopWhen: stepCountIs(config.maxSteps),
+        abortSignal: shutdown.signal,
       });
 
-      let assistantText = "";
       for await (const part of result.fullStream) {
         if (part.type === "text-delta") {
-          assistantText += part.text;
           process.stdout.write(part.text);
         } else if (part.type === "tool-call") {
           write(`\n[tool] ${part.toolName}`);
         } else if (part.type === "error") {
-          write(`\n[error] ${describe(part.error)}`);
+          // Provider errors may include raw response data. The platform logs
+          // carry the detail; terminal scrollback must never echo secrets.
+          write("\n[error] The model request failed.");
         }
       }
       write("");
-      messages.push({ role: "assistant", content: assistantText });
+      messages.push(...(await result.response).messages);
+      messages = trimHistory(messages);
 
       // Steers that arrived mid-turn are consumed here, at the boundary, so
       // they join the conversation in order instead of interrupting a call.
@@ -115,12 +124,19 @@ async function main(): Promise<number> {
         messages.push({ role: "user", content: message });
       }
     }
-  } catch (error) {
-    write(`\narchestra: the session failed: ${describe(error)}`);
-    exitCode = 1;
+  } catch {
+    if (!shutdown.signal.aborted) {
+      // SDK/provider exceptions can carry raw HTTP response bodies. Keep the
+      // user-visible terminal generic rather than persisting those details in
+      // the run's scrollback and logs.
+      write("\narchestra: the session failed.");
+      exitCode = 1;
+    }
   } finally {
     steerQueue.stop();
     await mcpClient.close().catch(() => undefined);
+    process.off("SIGTERM", stop);
+    process.off("SIGINT", stop);
   }
 
   return exitCode;
@@ -158,11 +174,28 @@ function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/**
+ * Bound long-lived sessions without splitting a user turn from the assistant
+ * and tool messages that answer it. The newest complete turns are retained.
+ */
+function trimHistory(messages: ModelMessage[]): ModelMessage[] {
+  if (messages.length <= MAX_HISTORY_MESSAGES) return messages;
+  const minimumStart = messages.length - MAX_HISTORY_MESSAGES;
+  const nextUserTurn = messages.findIndex(
+    (message, index) => index >= minimumStart && message.role === "user",
+  );
+  return nextUserTurn === -1
+    ? messages.slice(-MAX_HISTORY_MESSAGES)
+    : messages.slice(nextUserTurn);
+}
+
+const MAX_HISTORY_MESSAGES = 200;
+
 main()
   .then((code) => {
     process.exitCode = code;
   })
-  .catch((error) => {
-    write(`archestra: ${describe(error)}`);
+  .catch(() => {
+    write("archestra: the session could not start.");
     process.exitCode = 1;
   });

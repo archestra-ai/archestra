@@ -16,8 +16,8 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useFeature } from "@/lib/config/config.query";
 
-export const DEFAULT_BACKGROUND_EXECUTION_IMAGE =
-  "ghcr.io/archestra-ai/runner-agent:latest";
+const BACKGROUND_EXECUTION_IMAGE_PLACEHOLDER =
+  "ghcr.io/example/background-agent:1.0.0";
 
 export type BackgroundExecutionConfig = {
   image: string;
@@ -45,7 +45,7 @@ export type BackgroundExecutionConfig = {
 
 export function defaultBackgroundExecution(): BackgroundExecutionConfig {
   return {
-    image: DEFAULT_BACKGROUND_EXECUTION_IMAGE,
+    image: "",
     command: null,
     backend: "kubernetes",
     steerMode: "pipe",
@@ -109,7 +109,7 @@ export function AgentBackgroundExecutionFields({
                 id="background-execution-image"
                 value={config.image}
                 onChange={(event) => update({ image: event.target.value })}
-                placeholder={DEFAULT_BACKGROUND_EXECUTION_IMAGE}
+                placeholder={BACKGROUND_EXECUTION_IMAGE_PLACEHOLDER}
               />
               <p className="text-xs text-muted-foreground">
                 The deployment uses this Agent&apos;s Environment and its
@@ -161,13 +161,14 @@ export function AgentBackgroundExecutionFields({
                 min={1}
                 max={1440}
                 value={config.idleTimeoutMinutes ?? ""}
-                onChange={(event) =>
+                onChange={(event) => {
+                  const next = event.currentTarget.valueAsNumber;
                   update({
-                    idleTimeoutMinutes: event.target.value
-                      ? Number(event.target.value)
+                    idleTimeoutMinutes: Number.isFinite(next)
+                      ? Math.min(1440, Math.max(1, next))
                       : null,
-                  })
-                }
+                  });
+                }}
                 placeholder="Installation default"
               />
             </div>

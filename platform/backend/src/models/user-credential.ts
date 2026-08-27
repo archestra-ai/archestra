@@ -148,19 +148,24 @@ class UserCredentialModel {
         ),
       );
     const byKey = new Map(rows.map((row) => [row.key, row]));
-    for (const key of params.keys) {
-      const row = byKey.get(key);
-      if (!row) {
-        missing.push(key);
-        continue;
+    const resolved = await Promise.all(
+      params.keys.map(async (key) => {
+        const row = byKey.get(key);
+        if (!row) return { key, value: null };
+        const secret = await secretManager().getSecret(row.secretId);
+        const value = secret?.secret?.[SECRET_VALUE_FIELD];
+        return {
+          key,
+          value: typeof value === "string" && value.length > 0 ? value : null,
+        };
+      }),
+    );
+    for (const entry of resolved) {
+      if (entry.value === null) {
+        missing.push(entry.key);
+      } else {
+        values[entry.key] = entry.value;
       }
-      const secret = await secretManager().getSecret(row.secretId);
-      const value = secret?.secret?.[SECRET_VALUE_FIELD];
-      if (typeof value !== "string" || value.length === 0) {
-        missing.push(key);
-        continue;
-      }
-      values[key] = value;
     }
     return { values, missing };
   }

@@ -76,7 +76,12 @@ async function startPodSession(params: {
         "Teardown after a failed runner launch did not complete",
       );
     });
-    await AgentRunModel.close(session.id);
+    await AgentRunModel.close(session.id).catch((error) => {
+      logger.warn(
+        { error, sessionId: session.id, taskId: params.taskId },
+        "Could not mark the Agent run as ended",
+      );
+    });
     throw error;
   }
 
@@ -229,7 +234,12 @@ export async function runTaskInPod(params: {
         "Runner session teardown did not complete",
       );
     });
-    await AgentRunModel.close(session.id);
+    await AgentRunModel.close(session.id).catch((error) => {
+      logger.warn(
+        { error, sessionId: session.id, taskId: params.taskId },
+        "Could not mark the Agent run as ended",
+      );
+    });
   }
 }
 
@@ -264,6 +274,7 @@ function followOutput(params: {
           { error, sessionId: params.session.id },
           "Could not follow runner logs; the task continues without streamed output",
         );
+        destination.destroy();
         resolve();
       });
   });

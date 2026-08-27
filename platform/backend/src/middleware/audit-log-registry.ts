@@ -144,6 +144,12 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "agent",
     fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
   },
+  "/api/agents/:id/background-execution/credentials/:key": {
+    resourceType: "agent",
+    action: "agent.updated",
+    fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
+    onlyWhenChanged: true,
+  },
   "/api/agents/:id/restore": {
     resourceType: "agent",
     action: "agent.restored",

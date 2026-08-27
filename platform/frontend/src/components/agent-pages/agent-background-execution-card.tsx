@@ -3,6 +3,7 @@
 import { CheckCircle2, KeyRound, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalSecretReferenceDialog } from "@/components/external-secret-reference-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,6 +38,8 @@ export function AgentBackgroundExecutionCard({
   const [vaultCredentialKey, setVaultCredentialKey] = useState<string | null>(
     null,
   );
+  const [credentialToDelete, setCredentialToDelete] =
+    useState<CredentialDeclaration | null>(null);
 
   if (credentials.length === 0) return null;
 
@@ -140,12 +143,7 @@ export function AgentBackgroundExecutionCard({
                     size="icon"
                     aria-label={`Delete ${credential.label}`}
                     disabled={deleteCredential.isPending}
-                    onClick={() =>
-                      deleteCredential.mutate(credential.key, {
-                        onSuccess: () =>
-                          toast.success(`${credential.label} deleted`),
-                      })
-                    }
+                    onClick={() => setCredentialToDelete(credential)}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -173,6 +171,25 @@ export function AgentBackgroundExecutionCard({
           }
         />
       )}
+      <DeleteConfirmDialog
+        open={credentialToDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setCredentialToDelete(null);
+        }}
+        title="Delete background credential?"
+        description={`The stored value for ${credentialToDelete?.label ?? "this credential"} will be removed from the secret manager.`}
+        isPending={deleteCredential.isPending}
+        onConfirm={() => {
+          if (!credentialToDelete) return;
+          const label = credentialToDelete.label;
+          deleteCredential.mutate(credentialToDelete.key, {
+            onSuccess: () => {
+              toast.success(`${label} deleted`);
+              setCredentialToDelete(null);
+            },
+          });
+        }}
+      />
     </section>
   );
 }

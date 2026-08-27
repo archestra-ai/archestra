@@ -14,6 +14,7 @@ export { default as AgentExcludedSubagentModel } from "./agent-excluded-subagent
 export { default as AgentExcludedToolModel } from "./agent-excluded-tool";
 export { default as AgentKnowledgeBaseModel } from "./agent-knowledge-base";
 export { default as AgentLabelModel } from "./agent-label";
+export { default as AgentRunModel } from "./agent-run";
 export { default as AgentSkillModel } from "./agent-skill";
 export { default as AgentTeamModel } from "./agent-team";
 export { default as AgentToolModel } from "./agent-tool";
@@ -106,7 +107,6 @@ export {
 } from "./project";
 export { default as ProjectPinModel } from "./project-pin";
 export { default as ProjectShareModel } from "./project-share";
-export { default as AgentRunModel } from "./runner-session";
 export { default as ScheduleTriggerModel } from "./schedule-trigger";
 export { default as ScheduleTriggerRunModel } from "./schedule-trigger-run";
 /** @public — re-exported for testability (consumed by src/test/fixtures.ts) */

@@ -1,5 +1,5 @@
-import { createReadStream } from "node:fs";
-import { createInterface } from "node:readline";
+import { createReadStream, type ReadStream } from "node:fs";
+import { createInterface, type Interface } from "node:readline";
 
 /**
  * Messages a human sent into a live session, delivered at turn boundaries.
@@ -14,6 +14,8 @@ import { createInterface } from "node:readline";
 export class SteerQueue {
   private readonly pending: string[] = [];
   private stopped = false;
+  private stream: ReadStream | null = null;
+  private lines: Interface | null = null;
 
   constructor(
     private readonly fifoPath: string,
@@ -26,6 +28,8 @@ export class SteerQueue {
 
   stop(): void {
     this.stopped = true;
+    this.lines?.close();
+    this.stream?.destroy();
   }
 
   /** Take everything queued since the last call, oldest first. */
@@ -65,6 +69,8 @@ export class SteerQueue {
       try {
         const stream = createReadStream(this.fifoPath);
         const lines = createInterface({ input: stream });
+        this.stream = stream;
+        this.lines = lines;
         for await (const line of lines) {
           const message = line.trim();
           if (message) {
@@ -73,8 +79,13 @@ export class SteerQueue {
         }
         lines.close();
       } catch (error) {
-        this.onError(error);
-        await delay(1000);
+        if (!this.stopped) {
+          this.onError(error);
+          await delay(1000);
+        }
+      } finally {
+        this.lines = null;
+        this.stream = null;
       }
     }
   }

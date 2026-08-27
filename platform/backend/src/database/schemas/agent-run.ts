@@ -52,6 +52,7 @@ const agentRunsTable = pgTable(
     uniqueIndex("agent_runs_deployment_name_uidx").on(table.deploymentName),
     index("agent_runs_agent_id_idx").on(table.agentId),
     index("agent_runs_organization_id_idx").on(table.organizationId),
+    index("agent_runs_actor_user_id_idx").on(table.actorUserId),
   ],
 );
 

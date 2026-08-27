@@ -290,6 +290,7 @@ export function ExecTerminal({
             <Button
               variant="ghost"
               size="sm"
+              aria-label="Copy terminal command"
               onClick={handleCopyCommand}
               className="absolute top-1/2 -translate-y-1/2 right-1 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
             >

@@ -38,6 +38,7 @@ CREATE UNIQUE INDEX "agent_runs_task_id_uidx" ON "agent_runs" USING btree ("task
 CREATE UNIQUE INDEX "agent_runs_deployment_name_uidx" ON "agent_runs" USING btree ("deployment_name");--> statement-breakpoint
 CREATE INDEX "agent_runs_agent_id_idx" ON "agent_runs" USING btree ("agent_id");--> statement-breakpoint
 CREATE INDEX "agent_runs_organization_id_idx" ON "agent_runs" USING btree ("organization_id");--> statement-breakpoint
+CREATE INDEX "agent_runs_actor_user_id_idx" ON "agent_runs" USING btree ("actor_user_id");--> statement-breakpoint
 CREATE INDEX "user_credentials_user_id_idx" ON "user_credentials" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "user_credentials_agent_id_idx" ON "user_credentials" USING btree ("agent_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "user_credentials_org_user_agent_key_uidx" ON "user_credentials" USING btree ("organization_id","user_id","agent_id","key");--> statement-breakpoint

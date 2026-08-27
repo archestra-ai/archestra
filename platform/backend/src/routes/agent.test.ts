@@ -7,6 +7,7 @@ import {
 } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
+import config from "@/config";
 import db, { schema } from "@/database";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import {
@@ -228,6 +229,42 @@ describe("agent routes", () => {
       expect(response.json().error.message).toContain(
         "can only be configured for Agents",
       );
+    });
+
+    test("requires deployment-operator approval for privileged Background execution", async () => {
+      const previous = config.agentBackgroundExecution.allowPrivileged;
+      config.agentBackgroundExecution.allowPrivileged = false;
+      try {
+        const response = await app.inject({
+          method: "POST",
+          url: "/api/agents",
+          payload: {
+            name: `Privileged Background Agent ${crypto.randomUUID().slice(0, 8)}`,
+            agentType: "agent",
+            scope: "personal",
+            teams: [],
+            backgroundExecution: {
+              image: "example.com/coding-agent:1.0.0",
+              command: null,
+              backend: "kubernetes",
+              steerMode: "pipe",
+              privileged: true,
+              resources: null,
+              environment: null,
+              credentials: null,
+              ttlHours: null,
+              idleTimeoutMinutes: null,
+            },
+          },
+        });
+
+        expect(response.statusCode).toBe(403);
+        expect(response.json().error.message).toContain(
+          "disabled by the deployment operator",
+        );
+      } finally {
+        config.agentBackgroundExecution.allowPrivileged = previous;
+      }
     });
 
     test("rejects an agent with a model but no API key", async () => {

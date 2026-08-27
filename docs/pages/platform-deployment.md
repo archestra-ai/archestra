@@ -845,6 +845,10 @@ Background execution runs delegated Agent tasks in dedicated Kubernetes pods. Yo
   - Default: `false`
   - Values: `true`, `false`
 
+- **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ALLOW_PRIVILEGED`** - Allows Agent administrators to configure privileged background pods. Privileged containers have node-level access.
+  - Default: `false`
+  - Values: `true`, `false`
+
 - **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_PLATFORM_BASE_URL`** - Base URL a background pod uses to reach the LLM proxy and the MCP gateway. It has to be reachable from inside the cluster. With neither this nor `ARCHESTRA_INTERNAL_API_BASE_URL` set, starting a run fails rather than letting it bypass the proxy.
   - Default: `ARCHESTRA_INTERNAL_API_BASE_URL`
 

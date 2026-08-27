@@ -73,6 +73,23 @@ class RunnerRuntimeManager {
         })),
     };
 
+    const existingJob = await clients.batchApi
+      .readNamespacedJob({
+        name: names.job,
+        namespace: withOwner.namespace,
+      })
+      .catch((error) => {
+        if (isK8sNotFoundError(error)) return null;
+        throw error;
+      });
+    if (existingJob) {
+      logger.info(
+        { taskId: withOwner.taskId, job: names.job },
+        "Adopting an existing runner job with the same frozen name",
+      );
+      return;
+    }
+
     await withK8sApiRetry(
       () =>
         clients.coreApi.createNamespacedSecret({
@@ -80,14 +97,7 @@ class RunnerRuntimeManager {
           body: buildRunnerSecret(withOwner),
         }),
       { label: "create runner secret" },
-    ).catch(async (error) => {
-      if (!isK8sConflictError(error)) throw error;
-      await clients.coreApi.replaceNamespacedSecret({
-        name: names.secret,
-        namespace: withOwner.namespace,
-        body: buildRunnerSecret(withOwner),
-      });
-    });
+    );
 
     await this.applyPlatformEgressPolicy(withOwner);
 

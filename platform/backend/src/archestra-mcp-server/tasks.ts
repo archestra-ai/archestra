@@ -19,6 +19,7 @@ import {
   A2ATaskModel,
   AgentModel,
   AgentRunModel,
+  AgentTeamModel,
 } from "@/models";
 import { preflightAgentDeploymentCredentials } from "@/services/runners/credentials";
 import { resolveAgentDeployment } from "@/services/runners/pod-execution";
@@ -116,6 +117,22 @@ const registry = defineArchestraTools([
         if (!agent || agent.organizationId !== actor.organizationId) {
           return errorResult("Agent not found");
         }
+        const isAgentAdmin = await userHasPermission(
+          actor.id,
+          actor.organizationId,
+          "agent",
+          "admin",
+        );
+        if (
+          !(await AgentTeamModel.userHasAgentAccess(
+            actor.id,
+            agent.id,
+            isAgentAdmin,
+            agent,
+          ))
+        ) {
+          return errorResult("Agent not found");
+        }
 
         const deployment = resolveAgentDeployment(agent);
         if (deployment && !runnerRuntimeManager.isEnabled) {
@@ -178,9 +195,13 @@ const registry = defineArchestraTools([
           });
         }
 
+        const taskRow = await A2ATaskModel.findById(response.task.id);
+        if (!taskRow) {
+          throw new Error("Started task was not persisted");
+        }
         return structuredSuccessResult(
           {
-            task: protocolTaskSummary(response.task, agent.id),
+            task: taskRowSummary(taskRow),
             execution: deployment ? "background" : "foreground",
           },
           `Task ${response.task.id} started on ${agent.name}` +
@@ -368,8 +389,14 @@ const registry = defineArchestraTools([
           agentId: task.row.agentId,
           request: { id: task.row.id },
         });
+        const canceledRow = await A2ATaskModel.findById(task.row.id);
+        if (!canceledRow) {
+          throw new Error("Canceled task was not persisted");
+        }
         return structuredSuccessResult(
-          { task: protocolTaskSummary(canceled, task.row.agentId) },
+          {
+            task: taskRowSummary(canceledRow),
+          },
           `Task ${task.row.id}: ${describeProtocolState(canceled)}`,
         );
       } catch (error) {
@@ -524,24 +551,6 @@ function taskRowSummary(row: {
     status_reason: row.statusReason ?? null,
     created_at: row.createdAt.toISOString(),
     state_changed_at: (row.stateChangedAt ?? row.createdAt).toISOString(),
-  };
-}
-
-function protocolTaskSummary(
-  task: {
-    id: string;
-    status: { state?: string; message?: unknown };
-  },
-  agentId: string,
-) {
-  const now = new Date().toISOString();
-  return {
-    task_id: task.id,
-    state: displayState(task.status.state),
-    agent_id: agentId,
-    status_reason: null,
-    created_at: now,
-    state_changed_at: now,
   };
 }
 

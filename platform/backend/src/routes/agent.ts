@@ -26,6 +26,7 @@ import {
   assertAgentTeams,
 } from "@/auth/agent-type-permissions";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
+import config from "@/config";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import {
   AgentLabelModel,
@@ -2709,6 +2710,15 @@ function requireBackgroundExecutionPermission(params: {
     throw new ApiError(
       403,
       "Only Agent administrators can enable a privileged background deployment",
+    );
+  }
+  if (
+    params.backgroundExecution.privileged &&
+    !config.agentBackgroundExecution.allowPrivileged
+  ) {
+    throw new ApiError(
+      403,
+      "Privileged background deployments are disabled by the deployment operator",
     );
   }
 }

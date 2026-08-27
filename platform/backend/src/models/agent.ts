@@ -3907,6 +3907,33 @@ class AgentModel {
       incomingEmailSecurityMode: row.incomingEmailSecurityMode,
       incomingEmailAllowedDomain: row.incomingEmailAllowedDomain ?? null,
       builtInAgentConfig: row.builtInAgentConfig ?? null,
+      backgroundExecution: row.backgroundExecution
+        ? {
+            image: row.backgroundExecution.image,
+            command: row.backgroundExecution.command,
+            backend: row.backgroundExecution.backend,
+            steerMode: row.backgroundExecution.steerMode,
+            privileged: row.backgroundExecution.privileged,
+            resources: row.backgroundExecution.resources,
+            environmentKeys: (row.backgroundExecution.environment ?? [])
+              .map((entry) => entry.key)
+              .sort(),
+            credentials: (row.backgroundExecution.credentials ?? [])
+              .map(({ key, scope, label, required }) => ({
+                key,
+                scope,
+                label,
+                required,
+              }))
+              .sort((a, b) => a.key.localeCompare(b.key)),
+            ttlHours: row.backgroundExecution.ttlHours,
+            idleTimeoutMinutes: row.backgroundExecution.idleTimeoutMinutes,
+          }
+        : null,
+      // A reference id is safe to audit and changes on every shared-secret
+      // rotation, producing a non-empty diff without recording secret values.
+      backgroundExecutionCredentialRevision:
+        row.backgroundExecutionSecretId ?? null,
       tools: tools.map((t) => t.name).sort(),
       knowledgeBaseIds: [...knowledgeBaseIds].sort(),
       connectorIds: [...connectorIds].sort(),

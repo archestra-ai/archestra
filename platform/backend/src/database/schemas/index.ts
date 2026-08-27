@@ -56,6 +56,7 @@ export { default as agentExcludedSubagentsTable } from "./agent-excluded-subagen
 export { default as agentExcludedToolsTable } from "./agent-excluded-tool";
 export { default as agentKnowledgeBasesTable } from "./agent-knowledge-base";
 export { default as agentLabelsTable } from "./agent-label";
+export { default as agentRunsTable } from "./agent-run";
 export { default as agentSkillsTable } from "./agent-skill";
 export { default as agentSuggestedPromptsTable } from "./agent-suggested-prompt";
 export { default as agentTeamsTable } from "./agent-team";
@@ -178,7 +179,6 @@ export {
   projectShareUsersTable,
 } from "./project";
 export { default as projectPinsTable } from "./project-pin";
-export { default as agentRunsTable } from "./runner-session";
 export { default as scheduleTriggersTable } from "./schedule-trigger";
 export { default as scheduleTriggerRunsTable } from "./schedule-trigger-run";
 export { default as secretsTable } from "./secret";

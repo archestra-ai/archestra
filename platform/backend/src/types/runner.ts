@@ -144,7 +144,7 @@ export type AgentDeployment = AgentBackgroundExecution & {
 export const SelectAgentRunSchema = createSelectSchema(schema.agentRunsTable);
 export const InsertAgentRunSchema = createInsertSchema(
   schema.agentRunsTable,
-).omit({ id: true, startedAt: true });
+).omit({ id: true, startedAt: true, endedAt: true });
 
 export type AgentRun = z.infer<typeof SelectAgentRunSchema>;
 export type InsertAgentRun = z.infer<typeof InsertAgentRunSchema>;

@@ -104,8 +104,9 @@ export function AgentRuns({ agentId }: { agentId: string }) {
 }
 
 function RunDetails({ run }: { run: AgentRun }) {
+  const [tab, setTab] = useState("logs");
   return (
-    <Tabs defaultValue="logs" className="min-w-0">
+    <Tabs value={tab} onValueChange={setTab} className="min-w-0">
       <TabsList>
         <TabsTrigger value="logs">
           <ScrollText className="h-4 w-4" /> Logs
@@ -118,7 +119,7 @@ function RunDetails({ run }: { run: AgentRun }) {
         <RunLogs taskId={run.taskId} active={!run.endedAt} />
       </TabsContent>
       <TabsContent value="shell" className="mt-3">
-        <RunTerminal taskId={run.taskId} />
+        <RunTerminal taskId={run.taskId} active={tab === "shell"} />
       </TabsContent>
     </Tabs>
   );
@@ -171,7 +172,7 @@ function RunLogs({ taskId, active }: { taskId: string; active: boolean }) {
   );
 }
 
-function RunTerminal({ taskId }: { taskId: string }) {
+function RunTerminal({ taskId, active }: { taskId: string; active: boolean }) {
   const transport = useMemo<ExecSessionTransport>(
     () => ({
       open: (handlers) => {
@@ -232,5 +233,7 @@ function RunTerminal({ taskId }: { taskId: string }) {
     [taskId],
   );
 
-  return <ExecTerminal sessionKey={taskId} transport={transport} isActive />;
+  return (
+    <ExecTerminal sessionKey={taskId} transport={transport} isActive={active} />
+  );
 }

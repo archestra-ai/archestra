@@ -44,7 +44,10 @@ const userCredentialsTable = pgTable(
       .notNull()
       .references(() => secretsTable.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
   },
   (table) => [
     index("user_credentials_user_id_idx").on(table.userId),

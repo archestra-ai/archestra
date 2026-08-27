@@ -1,3 +1,4 @@
+import { a2aTaskEventNotifier } from "@/agents/a2a/a2a-task-event-notifier";
 import { buildChatOpsTaskNotification } from "@/archestra-mcp-server/chatops-task-notification";
 import logger from "@/logging";
 import { A2AArtifactModel, A2ATaskModel } from "@/models";
@@ -11,7 +12,6 @@ export async function watchChatOpsTask(params: {
   const deadline = Date.now() + 2 * 60 * 60 * 1000;
   try {
     while (Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 5000));
       const task = await A2ATaskModel.findById(params.taskId);
       if (!task) return;
 
@@ -33,16 +33,21 @@ export async function watchChatOpsTask(params: {
         statusReason: task.statusReason,
         output: text,
       });
-      if (!notification) continue;
+      if (notification) {
+        const { chatOpsManager } = await import("./chatops-manager");
+        await chatOpsManager.notifyBindingThread({
+          bindingId: params.bindingId,
+          threadId: params.threadId,
+          agentName: params.agentName,
+          text: notification,
+        });
+        return;
+      }
 
-      const { chatOpsManager } = await import("./chatops-manager");
-      await chatOpsManager.notifyBindingThread({
-        bindingId: params.bindingId,
-        threadId: params.threadId,
-        agentName: params.agentName,
-        text: notification,
+      await a2aTaskEventNotifier.wait({
+        key: params.taskId,
+        timeoutMs: TASK_WATCH_FALLBACK_MS,
       });
-      return;
     }
   } catch (error) {
     logger.warn(
@@ -51,3 +56,5 @@ export async function watchChatOpsTask(params: {
     );
   }
 }
+
+const TASK_WATCH_FALLBACK_MS = 30_000;

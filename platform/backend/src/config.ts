@@ -2237,6 +2237,13 @@ const config = {
      */
     enabled:
       process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ENABLED === "true",
+    /**
+     * Privileged pods have node-level impact. Agent administrators cannot
+     * enable them unless the deployment operator explicitly opts in too.
+     */
+    allowPrivileged:
+      process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ALLOW_PRIVILEGED ===
+      "true",
     /** Fallback lifetime cap for runners whose agent sets none. */
     defaultTtlHours: parsePositiveInt(
       process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_DEFAULT_TTL_HOURS,

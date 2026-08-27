@@ -154,12 +154,6 @@ export async function buildRunnerLaunchSpec(params: {
     ),
     ARCHESTRA_AGENT_BACKGROUND_EXECUTION_AGENT_ID: params.deployment.agentId,
     ARCHESTRA_AGENT_BACKGROUND_EXECUTION_AGENT_NAME: agent?.name ?? "agent",
-    ...(agent?.systemPrompt
-      ? {
-          ARCHESTRA_AGENT_BACKGROUND_EXECUTION_SYSTEM_PROMPT:
-            agent.systemPrompt,
-        }
-      : {}),
     ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID: params.taskId,
     ARCHESTRA_AGENT_BACKGROUND_EXECUTION_STEER_FIFO: RUNNER_STEER_FIFO,
     // The finish contract: a session that has done its work parks this long
@@ -171,9 +165,6 @@ export async function buildRunnerLaunchSpec(params: {
     ARCHESTRA_LLM_PROXY_URL: proxyUrl,
     ANTHROPIC_BASE_URL: proxyUrl,
     ARCHESTRA_MCP_GATEWAY_URL: `${platformBaseUrl}/v1/mcp/${params.agentId}`,
-    ...(params.task
-      ? { ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK: params.task }
-      : {}),
   };
 
   const secretEnv: Record<string, string> = {
@@ -183,6 +174,15 @@ export async function buildRunnerLaunchSpec(params: {
     // variables, so the virtual key is presented that way too.
     ANTHROPIC_API_KEY: virtualKey.value,
     ANTHROPIC_AUTH_TOKEN: virtualKey.value,
+    ...(agent?.systemPrompt
+      ? {
+          ARCHESTRA_AGENT_BACKGROUND_EXECUTION_SYSTEM_PROMPT:
+            agent.systemPrompt,
+        }
+      : {}),
+    ...(params.task
+      ? { ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK: params.task }
+      : {}),
     ...credentials.env,
   };
 

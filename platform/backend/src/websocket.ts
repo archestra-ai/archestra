@@ -311,6 +311,7 @@ class WebSocketService {
         ws.on("close", () => {
           this.unsubscribeMcpLogs(ws);
           this.unsubscribeMcpExec(ws);
+          this.cleanupAgentRunSubscriptions(ws);
           this.unsubscribeMcpDeploymentStatuses(ws);
           logger.trace(
             `WebSocket client disconnected. Remaining connections: ${this.wss?.clients.size}`,
@@ -322,6 +323,7 @@ class WebSocketService {
           logger.error({ error }, "WebSocket error");
           this.unsubscribeMcpLogs(ws);
           this.unsubscribeMcpExec(ws);
+          this.cleanupAgentRunSubscriptions(ws);
           this.unsubscribeMcpDeploymentStatuses(ws);
           this.clientContexts.delete(ws);
         });
@@ -631,6 +633,16 @@ class WebSocketService {
       });
       return;
     }
+    if (!(await this.mayControlSession(session, clientContext))) {
+      this.sendToClient(ws, {
+        type: "agent_run_logs_error",
+        payload: {
+          runId,
+          error: "Only the person who started this run can view its logs",
+        },
+      });
+      return;
+    }
 
     const abortController = new AbortController();
     const stream = new PassThrough();
@@ -675,6 +687,11 @@ class WebSocketService {
     this.agentRunLogsSubscriptions.delete(ws);
     subscription.abortController.abort();
     subscription.stream.destroy();
+  }
+
+  private cleanupAgentRunSubscriptions(ws: WebSocket): void {
+    this.unsubscribeAgentRunAttach(ws);
+    this.unsubscribeAgentRunLogs(ws);
   }
 
   /**

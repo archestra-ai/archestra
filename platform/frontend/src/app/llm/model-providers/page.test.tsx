@@ -581,7 +581,7 @@ describe("ApiKeysPage", () => {
     const links = screen.getAllByRole("link", { name: "View all" });
     expect(links.map((link) => link.getAttribute("href"))).toEqual([
       "/llm/proxy/virtual-keys?providerApiKeyId=provider-key-1",
-      "/llm/proxy/oauth-clients?providerApiKeyId=provider-key-1",
+      "/settings/oauth-clients?type=llm&providerApiKeyId=provider-key-1",
     ]);
   });
 

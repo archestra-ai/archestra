@@ -15,6 +15,11 @@ const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
     description:
       "Organization-owned identities for automation. Each service account has a role and its own API keys for the platform API.",
   },
+  "/settings/oauth-clients": {
+    title: "OAuth Clients",
+    description:
+      "Applications that authenticate with OAuth rather than a person signing in — to the LLM Proxy, or to your MCP gateways and agents. Each client is scoped to the resources it may reach.",
+  },
   "/settings/agents": {
     title: "Agents",
     description:

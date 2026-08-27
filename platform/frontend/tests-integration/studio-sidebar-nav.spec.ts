@@ -27,7 +27,8 @@ const STUDIO_NAV = [
   "MCP Gateways",
   "LLM Proxy",
   "Virtual Keys",
-  "OAuth Clients",
+  // No OAuth Clients row on either side: every client, LLM and MCP alike,
+  // is managed on one page in settings.
   "Model Providers",
   "Models",
   "Costs & Limits",
@@ -164,7 +165,7 @@ test.describe("studio sidebar navigation", () => {
     const names = await rowNames(page);
     expect(names).not.toContain("Virtual Keys");
     // Its siblings are gated separately and stay.
-    expect(names).toContain("OAuth Clients");
+    expect(names).toContain("Model Providers");
     // Every Knowledge row is gone, so its heading goes with them.
     expect(names).not.toContain("Connectors");
     expect(await sectionHeadings(page).allInnerTexts()).not.toContain(

@@ -34,7 +34,6 @@ import {
   Route,
   Settings,
   ShieldCheck,
-  ShieldUser,
   Slack,
   Sparkles,
   Star,
@@ -105,6 +104,14 @@ interface NavItem {
    * to the filtered list, and an anchor may not contain another anchor.
    */
   countBadge?: React.ReactNode;
+  /**
+   * Tooltip text for the collapsed icon rail, where the group headings are
+   * folded away and a row has only its own name to identify it. Set it where
+   * that name is ambiguous without the heading above it — two rows both called
+   * "OAuth Clients", a "Files" that could be any of several kinds. Defaults to
+   * `title`.
+   */
+  tooltipLabel?: string;
   /**
    * Pages whose permissions gate this item, for items whose `url` isn't in
    * `requiredPagePermissionsMap` (e.g. a landing page that redirects between
@@ -377,11 +384,6 @@ const contentNavGroups: NavGroup[] = [
         icon: KeyRound,
       },
       {
-        title: "OAuth Clients",
-        url: "/llm/proxy/oauth-clients",
-        icon: ShieldUser,
-      },
-      {
         title: "Model Providers",
         url: "/llm/model-providers",
         icon: Boxes,
@@ -421,6 +423,7 @@ const contentNavGroups: NavGroup[] = [
     items: [
       {
         title: "Connectors",
+        tooltipLabel: "Knowledge Connectors",
         url: "/knowledge/connectors",
         icon: Plug,
         customIsActive: (pathname: string) =>
@@ -428,6 +431,7 @@ const contentNavGroups: NavGroup[] = [
       },
       {
         title: "Files",
+        tooltipLabel: "Knowledge Files",
         url: "/knowledge/files",
         icon: Files,
         customIsActive: (pathname: string) =>
@@ -522,7 +526,7 @@ const NavPrimary = ({
     <SidebarMenuItem key={item.title}>
       <SidebarMenuButton
         asChild
-        tooltip={item.title}
+        tooltip={item.tooltipLabel ?? item.title}
         isActive={
           item.customIsActive?.(pathname, searchParams) ??
           pathname.startsWith(item.url)

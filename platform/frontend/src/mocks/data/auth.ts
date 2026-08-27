@@ -85,6 +85,7 @@ export function makeUserPermissions(
     llmProviderApiKey: [...ALL],
     llmVirtualKey: [...ALL],
     llmOauthClient: [...ALL],
+    mcpOauthClient: [...ALL],
     llmModel: [...ALL],
     llmLimit: [...ALL],
     llmCost: [...ALL],

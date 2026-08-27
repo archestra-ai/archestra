@@ -15,6 +15,7 @@ import {
   Plug,
   PlugZap,
   ShieldCheck,
+  ShieldUser,
   UserCog,
   Users,
   UsersRound,
@@ -39,6 +40,15 @@ export function useSettingsTabs() {
             label: "Service Accounts",
             href: "/settings/service-accounts",
             Icon: Bot,
+          },
+        ]
+      : []),
+    ...(permissionMap?.["/settings/oauth-clients"]
+      ? [
+          {
+            label: "OAuth Clients",
+            href: "/settings/oauth-clients",
+            Icon: ShieldUser,
           },
         ]
       : []),

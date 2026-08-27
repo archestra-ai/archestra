@@ -12,7 +12,6 @@ import { getFrontendDocsUrl } from "@/lib/docs/docs";
 const TABS = [
   { label: "LLM Proxy", href: "/llm/proxy" },
   { label: "Virtual Keys", href: "/llm/proxy/virtual-keys" },
-  { label: "OAuth Clients", href: "/llm/proxy/oauth-clients" },
 ];
 
 const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
@@ -25,11 +24,6 @@ const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
     title: "Virtual Keys",
     description:
       "Two kinds of keys. Standard virtual keys authenticate your apps through your provider keys; passthrough virtual keys grant no access and only attribute bring-your-own-key requests to a user.",
-  },
-  "/llm/proxy/oauth-clients": {
-    title: "OAuth Clients",
-    description:
-      "Applications registered to authenticate to the LLM Proxy with OAuth, as themselves or on behalf of signed-in users.",
   },
 };
 

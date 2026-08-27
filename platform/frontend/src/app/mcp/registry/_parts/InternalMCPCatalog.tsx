@@ -1196,7 +1196,7 @@ export function InternalMCPCatalog({
               value={searchQueryFromUrl}
               onSearchChange={handleSearchChange}
               syncQueryParams={false}
-              debounceMs={300}
+              debounceMs={0}
               className={filterSearchClass}
               inputClassName="w-full bg-background/50 backdrop-blur-sm border-border/50 focus:border-primary/50 transition-colors pl-9"
             />
@@ -1621,7 +1621,6 @@ function McpServerCatalogSection({
         selectAllMatching={selectAllMatching}
       />
       <TableCardViewContent
-        keepMounted
         onModeChange={syncVisiblePageSelection}
         table={
           <McpServerTable

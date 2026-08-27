@@ -1,4 +1,4 @@
-import type { Locator, Page } from "@playwright/test";
+import type { Locator } from "@playwright/test";
 import { shareableSkillsSeed } from "../src/mocks/data/skill-share";
 import { expect, test } from "./fixtures";
 
@@ -80,8 +80,6 @@ test.describe("Bulk actions bar", () => {
       height: 42,
       gapBelow: 12,
     });
-    const collectionTopBefore = await collectionTop(page);
-
     await firstRow.click();
 
     const afterSelection = await bulkLayoutGeometry(bar);
@@ -90,7 +88,7 @@ test.describe("Bulk actions bar", () => {
       gapBelow: 12,
     });
     // Reserving the rail prevents table/card layout from jumping on selection.
-    expect(afterSelection.collectionTop).toBe(collectionTopBefore);
+    expect(afterSelection.collectionTop).toBe(beforeSelection.collectionTop);
   });
 
   test("scrolls crowded actions inside the fixed mobile rail", async ({
@@ -209,31 +207,5 @@ async function bulkLayoutGeometry(bar: Locator): Promise<{
       gapBelow: collection.getBoundingClientRect().top - barRect.bottom,
       collectionTop: collection.getBoundingClientRect().top,
     };
-  });
-}
-
-/**
- * Top of the collection when no bar is mounted. `bulkLayoutGeometry` walks
- * out from the bar itself, which does not exist at zero selection, so this
- * anchors on the live region the bar always renders beside instead.
- */
-async function collectionTop(page: Page): Promise<number> {
-  return page.evaluate(() => {
-    // Same upward walk `bulkLayoutGeometry` does from the bar: the live region
-    // and the collection are siblings on some pages and separated by a wrapper
-    // on others, so climb until there is a following element to measure.
-    let branch = document.querySelector(
-      'span[aria-live="polite"].sr-only',
-    ) as HTMLElement | null;
-    let next: HTMLElement | null = null;
-    while (branch && !next) {
-      next = branch.nextElementSibling as HTMLElement | null;
-      while (next?.classList.contains("sr-only")) {
-        next = next.nextElementSibling as HTMLElement | null;
-      }
-      branch = branch.parentElement;
-    }
-    if (!next) throw new Error("no collection after the bulk live region");
-    return next.getBoundingClientRect().top;
   });
 }

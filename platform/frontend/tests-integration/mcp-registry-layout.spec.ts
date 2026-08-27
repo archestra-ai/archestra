@@ -239,6 +239,45 @@ test.describe("MCP Registry layout", () => {
     expect(spills).toEqual([]);
   });
 
+  test("mounts only the active registry layout", async ({
+    mcpRegistryPage,
+    mswControl,
+    page,
+  }) => {
+    await seed(mswControl);
+    await mcpRegistryPage.goto();
+    await expect(mcpRegistryPage.serverCards.first()).toBeVisible();
+
+    await page.getByRole("button", { name: "View as table" }).click();
+    await expect(page.locator("table")).toBeVisible();
+    await expect(mcpRegistryPage.serverCards).toHaveCount(0);
+
+    await page.getByRole("button", { name: "View as cards" }).click();
+    await expect(mcpRegistryPage.serverCards.first()).toBeVisible();
+    await expect(page.locator("table")).toHaveCount(0);
+  });
+
+  test("filters local registry search without a debounce pause", async ({
+    mcpRegistryPage,
+    mswControl,
+    page,
+  }) => {
+    await seed(mswControl);
+    await mcpRegistryPage.goto();
+
+    await page
+      .getByRole("textbox", { name: "Search MCP servers by name" })
+      .fill("not-installed");
+
+    await expect(mcpRegistryPage.cardForCatalogItem("org-crowded")).toHaveCount(
+      0,
+      { timeout: 200 },
+    );
+    await expect(
+      mcpRegistryPage.cardForCatalogItem("not-installed"),
+    ).toBeVisible();
+  });
+
   test("keeps foreign personal servers out of All and reaches them through Other users", async ({
     mcpRegistryPage,
     mswControl,

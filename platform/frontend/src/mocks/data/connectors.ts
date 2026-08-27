@@ -31,29 +31,30 @@ export const connectorSeed = {
 };
 
 /**
- * Ten completed content runs, six hours apart, matching the connector's
- * schedule. "No changes" is the ordinary steady state for a wiki that syncs
- * four times a day, so that is what most rows say.
+ * Ten settled content runs, six hours apart, matching the connector's
+ * schedule. The Result column derives "No changes" from a successful run that
+ * ingested nothing, which is the ordinary steady state for a wiki syncing four
+ * times a day, so that is what most rows say; the most recent one picked up a
+ * few edits.
  */
 export const connectorRunsSeed = Array.from({ length: 10 }, (_, index) => {
   const startedAt = new Date(
     Date.parse(connectorSeed.lastSyncAt) - index * 6 * 60 * 60 * 1000,
   );
-  const finishedAt = new Date(startedAt.getTime() + 2000);
-  // The most recent run picked up a handful of edits; the rest were clean.
-  const changed = index === 0;
+  const ingested = index === 0 ? 14 : 0;
   return {
     id: `run-${index}`,
     connectorId: CONNECTOR_ID,
     runType: "content",
-    status: "completed",
-    result: changed ? "changes" : "no_changes",
+    status: "success",
     startedAt: startedAt.toISOString(),
-    finishedAt: finishedAt.toISOString(),
-    documentsAdded: changed ? 3 : 0,
-    documentsUpdated: changed ? 11 : 0,
-    documentsDeleted: 0,
-    documentsFailed: 0,
+    // `completedAt`, not `finishedAt`: the duration column measures an
+    // unfinished run against now, so the wrong field name made every settled
+    // run read as still running for hours.
+    completedAt: new Date(startedAt.getTime() + 2000).toISOString(),
+    documentsIngested: ingested,
+    documentsProcessed: ingested,
+    totalItems: connectorSeed.totalDocsIngested,
     error: null,
   };
 });

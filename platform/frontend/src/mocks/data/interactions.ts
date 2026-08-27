@@ -173,6 +173,44 @@ export const llmLogsSessionsSeed = [
 ];
 
 /**
+ * Requests inside the seeded Claude Code session, so the session detail page
+ * has a conversation to show above its table rather than the empty state. The
+ * ids differ so the table's rows link to distinct interaction detail pages.
+ */
+export const llmLogsInteractionsSeed = [
+  makeInteraction({
+    id: "cc-interaction-1",
+    sessionId: "cc-session",
+    createdAt: "2026-08-27T07:54:18.000Z",
+    request: {
+      model: "gpt-4o",
+      messages: [
+        {
+          role: "user",
+          content: "Which of our MCP servers failed to start this week?",
+        },
+      ],
+    },
+    inputTokens: 4210,
+    outputTokens: 318,
+    cacheReadTokens: 18_400,
+    cost: "0.0182",
+  }),
+  makeInteraction({
+    id: "cc-interaction-2",
+    sessionId: "cc-session",
+    createdAt: "2026-08-27T07:41:02.000Z",
+    request: {
+      model: "gpt-4o",
+      messages: [{ role: "user", content: "Summarise yesterday's sync runs." }],
+    },
+    inputTokens: 1980,
+    outputTokens: 145,
+    cost: "0.0071",
+  }),
+];
+
+/**
  * Wraps items in the standard paginated envelope used by the interaction list
  * and sessions endpoints.
  */

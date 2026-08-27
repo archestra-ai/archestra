@@ -22,6 +22,7 @@ import {
   connectorSeed,
 } from "./data/connectors";
 import {
+  llmLogsInteractionsSeed,
   llmLogsSessionsSeed,
   makeInteraction,
   paginated,
@@ -364,7 +365,7 @@ export const handlers: HttpHandler[] = [
   ),
   ...getJson("/api/interactions/user-ids", []),
   ...getJson("/api/interactions/external-agent-ids", []),
-  ...getJson("/api/interactions", paginated([])),
+  ...getJson("/api/interactions", paginated(llmLogsInteractionsSeed)),
   ...getJson("/api/interactions/:interactionId", makeInteraction()),
 
   // /connection probes the org's default gateway + the single LLM Proxy

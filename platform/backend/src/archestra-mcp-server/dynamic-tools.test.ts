@@ -526,6 +526,27 @@ describe("isDynamicallyAvailableArchestraTool", () => {
     expect(available).toBe(false);
   });
 
+  test("query_knowledge_sources unavailable when several accessible connectors are all excluded", async () => {
+    // The availability probe reads one more row than the agent excludes. Two
+    // of each is the case that catches an off-by-one there: the page comes
+    // back short of its limit, so every visible connector has been seen.
+    const first = await makeTestConnector({ organizationId });
+    const second = await makeTestConnector({ organizationId });
+    await AgentExcludedConnectorModel.replaceForAgent(agent.id, [
+      first.id,
+      second.id,
+    ]);
+
+    const available = await isDynamicallyAvailableArchestraTool({
+      toolName: QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+      agentId: agent.id,
+      userId,
+      organizationId,
+    });
+
+    expect(available).toBe(false);
+  });
+
   test("query_knowledge_sources stays available when one accessible connector survives the agent's exclusions", async () => {
     const excluded = await makeTestConnector({ organizationId });
     await makeTestConnector({ organizationId });

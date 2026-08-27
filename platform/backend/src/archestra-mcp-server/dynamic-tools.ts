@@ -330,10 +330,12 @@ async function agentHasSearchableKnowledgeConnectors(params: {
     // available to everyone; its per-chunk ACLs gate what a user retrieves.
     visibilityScope: "query",
     environmentId,
-    // Only the no-exclusions case can stop at the first row: with exclusions
-    // in play the first row may be one of them, and "the only visible source
-    // is disabled" has to read as an empty surface, not a full one.
-    ...(excludedConnectorIds.length === 0 ? { limit: 1 } : {}),
+    // One more row than the agent excludes is always enough to decide this,
+    // however many connectors the organization has. Fewer rows than the limit
+    // means we have seen the whole visible set, so the check below is exact;
+    // a full page cannot be entirely excluded, because N distinct ids do not
+    // fit in an exclusion set of size N-1.
+    limit: excludedConnectorIds.length + 1,
   });
   const excluded = new Set(excludedConnectorIds);
   return connectors.some((connector) => !excluded.has(connector.id));

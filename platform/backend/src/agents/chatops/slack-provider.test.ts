@@ -1343,9 +1343,23 @@ describe("SlackProvider.parseWebhookNotification — background execution reacti
     expect(history).not.toHaveBeenCalled();
   });
 
-  test("🦀 on a bot-authored message is ignored", async () => {
-    const { provider } = createBackgroundReactionProvider({
+  test("🦀 on this bot's own message is ignored", async () => {
+    const { provider, history } = createBackgroundReactionProvider({
       text: "Do not run this",
+    });
+
+    const result = await provider.parseWebhookNotification(
+      crabReactionPayload({ item_user: BOT }),
+      {},
+    );
+
+    expect(result).toBeNull();
+    expect(history).not.toHaveBeenCalled();
+  });
+
+  test("🦀 can delegate a message posted through another Slack app", async () => {
+    const { provider } = createBackgroundReactionProvider({
+      text: "Implement the requested change",
       bot_id: "B_OTHER_BOT",
     });
 
@@ -1354,7 +1368,7 @@ describe("SlackProvider.parseWebhookNotification — background execution reacti
       {},
     );
 
-    expect(result).toBeNull();
+    expect(result?.text).toBe(":crab: Implement the requested change");
   });
 });
 

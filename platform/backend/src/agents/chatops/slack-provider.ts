@@ -1565,7 +1565,8 @@ class SlackProvider implements ChatOpsProvider {
       !this.client ||
       event.item?.type !== "message" ||
       !event.user ||
-      event.user === this.botUserId
+      event.user === this.botUserId ||
+      event.item_user === this.botUserId
     ) {
       return null;
     }
@@ -1581,12 +1582,11 @@ class SlackProvider implements ChatOpsProvider {
       const message = result.messages?.find(
         (candidate) => candidate.ts === messageTs,
       );
-      if (
-        !message ||
-        message.bot_id ||
-        message.subtype === "bot_message" ||
-        message.user === this.botUserId
-      ) {
+      // A human may deliberately delegate a message posted through another
+      // Slack app (including Slack's own MCP app). The reaction is the explicit
+      // authorization boundary, so only our own bot's output is excluded to
+      // prevent feedback loops.
+      if (!message || message.user === this.botUserId) {
         return null;
       }
 
@@ -2652,6 +2652,7 @@ interface SlackEventPayload {
     files?: SlackFile[];
     // reaction_added fields (channel/ts live under `item`, not at the top level)
     reaction?: string;
+    item_user?: string;
     item?: { type?: string; channel: string; ts: string };
   };
   challenge?: string;

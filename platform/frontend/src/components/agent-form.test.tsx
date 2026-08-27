@@ -1378,12 +1378,18 @@ describe("AgentForm knowledge in Auto mode", () => {
     expect(within(disabled).getByText("Legacy wiki")).toBeVisible();
     // The excluded source is named there and nowhere else, and the source the
     // agent still reaches is not named at all.
+    // The Custom-mode editors stay mounted while Auto is on so pending edits
+    // survive a mode switch, and jsdom loads no Tailwind, so their `hidden`
+    // container is still queryable. Only what Auto shows counts here.
+    const shown = (nodes: HTMLElement[]) =>
+      nodes.filter((node) => !node.closest(".hidden"));
+
     expect(
-      within(section)
-        .getAllByText("Legacy wiki")
-        .every((node) => disabled.contains(node)),
+      shown(within(section).getAllByText("Legacy wiki")).every((node) =>
+        disabled.contains(node),
+      ),
     ).toBe(true);
-    expect(within(section).queryByText("Handbook")).toBeNull();
+    expect(shown(within(section).queryAllByText("Handbook"))).toHaveLength(0);
   });
 
   it("saves the disabled set when a source is turned off", async () => {

@@ -14,7 +14,7 @@ path = "src/lib.rs"
 [dependencies]
 archestra-bench-core = { path = "../core" }
 nitpicker-agent = "0.5.1"
-rig-core = "0.41"
+rig-core = "0.42"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 eyre = "0.6"
 serde = { version = "1", features = ["derive"] }

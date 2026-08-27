@@ -211,9 +211,9 @@ function OauthClientsTable() {
     {
       id: "name",
       header: "Name",
-      size: 150,
+      size: 140,
       cell: ({ row }) => (
-        <span className="block max-w-[150px] truncate font-medium">
+        <span className="block max-w-[140px] truncate font-medium">
           <span>{row.original.client.name}</span>
           {row.original.client.disabled && (
             <span className="ml-1.5 text-muted-foreground">(disabled)</span>
@@ -222,23 +222,30 @@ function OauthClientsTable() {
       ),
     },
     {
+      // The kind and the resources it reaches are one fact, and the settings
+      // column is too narrow to spend two columns saying it.
       id: "type",
       header: "Authenticates to",
-      size: 120,
+      size: 170,
       cell: ({ row }) => (
-        <Badge variant="secondary">
-          {row.original.kind === "llm" ? (
-            <span>LLM Proxy</span>
-          ) : (
-            <span>MCP</span>
-          )}
-        </Badge>
+        <div className="min-w-0 space-y-1">
+          <Badge variant="secondary">
+            {row.original.kind === "llm" ? (
+              <span>LLM Proxy</span>
+            ) : (
+              <span>MCP</span>
+            )}
+          </Badge>
+          <p className="max-w-[170px] truncate text-xs text-muted-foreground">
+            {describeAccess(row.original)}
+          </p>
+        </div>
       ),
     },
     {
       id: "clientId",
       header: "Client ID",
-      size: 170,
+      size: 140,
       cell: ({ row }) => (
         <div className="flex items-center gap-1 font-mono text-xs">
           <code className="max-w-[120px] truncate">
@@ -262,7 +269,7 @@ function OauthClientsTable() {
     {
       id: "grantType",
       header: "Grant type",
-      size: 130,
+      size: 110,
       cell: ({ row }) => (
         <Badge variant="outline">
           {row.original.client.grantType === "authorization_code" ? (
@@ -274,19 +281,9 @@ function OauthClientsTable() {
       ),
     },
     {
-      id: "access",
-      header: "Access",
-      size: 130,
-      cell: ({ row }) => (
-        <span className="block max-w-[130px] truncate text-muted-foreground">
-          {describeAccess(row.original)}
-        </span>
-      ),
-    },
-    {
       id: "accessibleTo",
       header: "Accessible to",
-      size: 130,
+      size: 110,
       cell: ({ row }) => (
         <ResourceVisibilityBadge
           scope={row.original.client.scope}
@@ -370,8 +367,9 @@ function OauthClientsTable() {
               })
             }
             placeholder="Filter by what it authenticates to"
+            showSearch={false}
             items={[
-              { value: "all", label: "Everything" },
+              { value: "all", label: "All types" },
               { value: "llm", label: "LLM Proxy" },
               { value: "mcp", label: "MCP" },
             ]}
@@ -385,6 +383,7 @@ function OauthClientsTable() {
               })
             }
             placeholder="Filter by grant type"
+            showSearch={false}
             items={[
               { value: "all", label: "All grant types" },
               { value: "client_credentials", label: "Application" },

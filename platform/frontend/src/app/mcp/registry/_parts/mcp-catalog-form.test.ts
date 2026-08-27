@@ -87,6 +87,26 @@ describe("formSchema", () => {
       expect(formSchema.parse(data)).toEqual(data);
     });
 
+    it("accepts RFC-valid punctuation in header names", () => {
+      const data = {
+        ...baseValidData,
+        serverType: "remote" as const,
+        serverUrl: "https://api.example.com/mcp",
+        additionalHeaders: [
+          {
+            headerName: "X_API.KEY",
+            promptOnInstallation: true,
+            required: false,
+            value: "",
+            description: "",
+          },
+        ],
+        localConfig: undefined,
+      };
+
+      expect(formSchema.safeParse(data).success).toBe(true);
+    });
+
     it("should reject remote server without URL", () => {
       const data = {
         ...baseValidData,
@@ -154,7 +174,7 @@ describe("formSchema", () => {
       };
 
       expect(() => formSchema.parse(data)).toThrow(
-        "Header name must contain only alphanumeric characters and hyphens",
+        "Header name contains invalid HTTP header characters",
       );
     });
   });

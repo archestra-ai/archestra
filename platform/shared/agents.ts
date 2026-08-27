@@ -54,4 +54,8 @@ export const BLOCKED_PASSTHROUGH_HEADERS = new Set([
 
 export const MAX_PASSTHROUGH_HEADERS = 20;
 
-export const HEADER_NAME_REGEX = /^[a-zA-Z0-9-]+$/;
+/** RFC 9110 `field-name` is an RFC 9110 `token`. */
+export const HEADER_NAME_REGEX = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+
+export const HEADER_NAME_VALIDATION_MESSAGE =
+  "Header name contains invalid HTTP header characters";

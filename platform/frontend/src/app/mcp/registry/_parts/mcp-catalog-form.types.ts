@@ -1,7 +1,10 @@
-import { LocalConfigFormSchema } from "@archestra/shared";
+import {
+  HEADER_NAME_REGEX,
+  HEADER_NAME_VALIDATION_MESSAGE,
+  LocalConfigFormSchema,
+} from "@archestra/shared";
 import { z } from "zod";
 
-const HEADER_NAME_REGEX = /^[A-Za-z0-9-]+$/;
 const SSO_CALLBACK_PATH = "/api/auth/sso/callback";
 
 const headerNameSchema = z
@@ -9,10 +12,7 @@ const headerNameSchema = z
   .trim()
   .min(1, "Header name is required")
   .max(128, "Header name is too long")
-  .regex(
-    HEADER_NAME_REGEX,
-    "Header name must contain only alphanumeric characters and hyphens",
-  );
+  .regex(HEADER_NAME_REGEX, HEADER_NAME_VALIDATION_MESSAGE);
 
 const additionalHeaderSchema = z.object({
   fieldName: z.string().optional(),

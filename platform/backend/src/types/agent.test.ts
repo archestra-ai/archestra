@@ -27,10 +27,10 @@ describe("PassthroughHeadersSchema", () => {
   test("accepts valid header names and lowercases them", () => {
     const result = PassthroughHeadersSchema.safeParse([
       "X-Correlation-Id",
-      "x-tenant-id",
+      "X_Tenant.Id",
     ]);
     expect(result.success).toBe(true);
-    expect(result.data).toEqual(["x-correlation-id", "x-tenant-id"]);
+    expect(result.data).toEqual(["x-correlation-id", "x_tenant.id"]);
   });
 
   test("accepts null", () => {

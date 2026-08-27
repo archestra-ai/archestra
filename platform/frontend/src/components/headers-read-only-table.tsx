@@ -5,13 +5,16 @@ import type {
   FieldArrayWithId,
   FieldPath,
   FieldValues,
-  UseFormWatch,
+  UseFormReturn,
 } from "react-hook-form";
 import type { FieldScopeValue } from "@/components/field-scope-select";
 import { Button } from "@/components/ui/button";
 
 interface HeadersReadOnlyTableProps<TFieldValues extends FieldValues> {
-  form: { watch: UseFormWatch<TFieldValues> };
+  form: Pick<
+    UseFormReturn<TFieldValues>,
+    "formState" | "getFieldState" | "watch"
+  >;
   // biome-ignore lint/suspicious/noExplicitAny: field arrays require generic any
   fields: FieldArrayWithId<TFieldValues, any, "id">[];
   fieldNamePrefix: string;
@@ -43,9 +46,13 @@ export function HeadersReadOnlyTable<TFieldValues extends FieldValues>({
         <div className="w-9" />
       </div>
       {fields.map((field, index) => {
-        const headerName = form.watch(
-          `${fieldNamePrefix}.${index}.headerName` as FieldPath<TFieldValues>,
-        ) as string | undefined;
+        const headerNamePath =
+          `${fieldNamePrefix}.${index}.headerName` as FieldPath<TFieldValues>;
+        const headerName = form.watch(headerNamePath) as string | undefined;
+        const headerNameError = form.getFieldState(
+          headerNamePath,
+          form.formState,
+        ).error?.message;
         const required = Boolean(
           form.watch(
             `${fieldNamePrefix}.${index}.required` as FieldPath<TFieldValues>,
@@ -91,9 +98,16 @@ export function HeadersReadOnlyTable<TFieldValues extends FieldValues>({
             }}
             className={`${GRID_CLASS} group items-center border-b py-3 text-xs last:border-b-0 cursor-pointer hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
           >
-            <div className="min-w-0 truncate font-mono">
-              {headerName || (
-                <span className="text-muted-foreground italic">unnamed</span>
+            <div className="min-w-0">
+              <div className="truncate font-mono">
+                {headerName || (
+                  <span className="text-muted-foreground italic">unnamed</span>
+                )}
+              </div>
+              {headerNameError && (
+                <p className="mt-1 text-xs text-destructive" role="alert">
+                  {headerNameError}
+                </p>
               )}
             </div>
             <div className="min-w-0 truncate">

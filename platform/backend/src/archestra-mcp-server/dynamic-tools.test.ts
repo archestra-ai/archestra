@@ -10,7 +10,11 @@ import {
   TOOL_WHOAMI_SHORT_NAME,
 } from "@archestra/shared";
 import config from "@/config";
-import { KnowledgeBaseConnectorModel, ToolModel } from "@/models";
+import {
+  AgentExcludedConnectorModel,
+  KnowledgeBaseConnectorModel,
+  ToolModel,
+} from "@/models";
 import McpServerUserModel from "@/models/mcp-server-user";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { afterAll, beforeEach, describe, expect, test } from "@/test";
@@ -506,6 +510,35 @@ describe("isDynamicallyAvailableArchestraTool", () => {
     });
 
     expect(available).toBe(false);
+  });
+
+  test("query_knowledge_sources unavailable when every accessible connector is excluded for this agent", async () => {
+    const connector = await makeTestConnector({ organizationId });
+    await AgentExcludedConnectorModel.replaceForAgent(agent.id, [connector.id]);
+
+    const available = await isDynamicallyAvailableArchestraTool({
+      toolName: QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+      agentId: agent.id,
+      userId,
+      organizationId,
+    });
+
+    expect(available).toBe(false);
+  });
+
+  test("query_knowledge_sources stays available when one accessible connector survives the agent's exclusions", async () => {
+    const excluded = await makeTestConnector({ organizationId });
+    await makeTestConnector({ organizationId });
+    await AgentExcludedConnectorModel.replaceForAgent(agent.id, [excluded.id]);
+
+    const available = await isDynamicallyAvailableArchestraTool({
+      toolName: QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+      agentId: agent.id,
+      userId,
+      organizationId,
+    });
+
+    expect(available).toBe(true);
   });
 
   test("query_knowledge_sources unavailable when the only connector is scoped to another team", async ({

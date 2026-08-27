@@ -3,6 +3,7 @@ import { vi } from "vitest";
 import db, { schema } from "@/database";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import {
+  AgentExcludedConnectorModel,
   AgentExcludedSubagentModel,
   AgentExcludedToolModel,
   AgentModel,
@@ -524,6 +525,40 @@ describe("POST /api/agents/:id/versions/:version/restore", () => {
 
     expect(
       await AgentExcludedSubagentModel.findTargetAgentIdsByAgent(agent.id),
+    ).toEqual([kept.id]);
+  });
+
+  test("restores the excluded-knowledge-source set in both directions", async ({
+    makeAgent,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const knowledgeBase = await makeKnowledgeBase(organizationId);
+    const kept = await makeKnowledgeBaseConnector(
+      knowledgeBase.id,
+      organizationId,
+      { name: "Runbooks" },
+    );
+    const excludedLater = await makeKnowledgeBaseConnector(
+      knowledgeBase.id,
+      organizationId,
+      { name: "Legacy wiki" },
+    );
+
+    const agent = await makeAgent({ organizationId });
+    await AgentExcludedConnectorModel.replaceForAgent(agent.id, [kept.id]);
+    const withOneExclusion = (await AgentVersionModel.forkIfChanged(agent.id))
+      ?.version;
+
+    await AgentExcludedConnectorModel.replaceForAgent(agent.id, [
+      excludedLater.id,
+    ]);
+
+    const response = await restore(agent.id, withOneExclusion as number);
+    expect(response.statusCode).toBe(200);
+
+    expect(
+      await AgentExcludedConnectorModel.findConnectorIdsByAgent(agent.id),
     ).toEqual([kept.id]);
   });
 

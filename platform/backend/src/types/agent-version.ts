@@ -74,6 +74,14 @@ export const AgentConfigSnapshotSchema = z.object({
   ),
   knowledgeBases: z.array(z.object({ id: z.string(), name: z.string() })),
   connectors: z.array(z.object({ id: z.string(), name: z.string() })),
+  /**
+   * Auto-mode knowledge-source exclusions. Defaulted because snapshots taken
+   * before the setting existed have no field to read, and an agent that
+   * predates it excluded nothing.
+   */
+  excludedConnectors: z
+    .array(z.object({ id: z.string(), name: z.string() }))
+    .default([]),
 });
 
 export type AgentConfigSnapshot = z.infer<typeof AgentConfigSnapshotSchema>;

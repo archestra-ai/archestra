@@ -79,6 +79,7 @@ const snapshot = (
   hooks: [],
   knowledgeBases: [],
   connectors: [],
+  excludedConnectors: [],
   ...overrides,
 });
 

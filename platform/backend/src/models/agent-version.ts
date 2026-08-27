@@ -58,6 +58,7 @@ class AgentVersionModel {
       hooks,
       knowledgeBases,
       connectors,
+      excludedConnectors,
       modelRows,
       keyRows,
     ] = await Promise.all([
@@ -146,6 +147,20 @@ class AgentVersionModel {
           ),
         )
         .where(eq(schema.agentConnectorAssignmentsTable.agentId, agent.id)),
+      tx
+        .select({
+          id: schema.agentExcludedConnectorsTable.connectorId,
+          name: schema.knowledgeBaseConnectorsTable.name,
+        })
+        .from(schema.agentExcludedConnectorsTable)
+        .innerJoin(
+          schema.knowledgeBaseConnectorsTable,
+          eq(
+            schema.agentExcludedConnectorsTable.connectorId,
+            schema.knowledgeBaseConnectorsTable.id,
+          ),
+        )
+        .where(eq(schema.agentExcludedConnectorsTable.agentId, agent.id)),
       agent.modelId
         ? tx
             .select({ externalId: schema.modelsTable.externalId })
@@ -208,6 +223,7 @@ class AgentVersionModel {
       ),
       knowledgeBases: knowledgeBases.sort(byNameThen((k) => k.id)),
       connectors: connectors.sort(byNameThen((c) => c.id)),
+      excludedConnectors: excludedConnectors.sort(byNameThen((c) => c.id)),
     };
   }
 

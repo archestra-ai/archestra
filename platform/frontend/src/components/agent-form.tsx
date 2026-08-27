@@ -83,6 +83,7 @@ import { ModelSelector } from "@/components/chat/model-selector";
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { IdentityFields } from "@/components/identity-fields";
+import { KnowledgeSourceExclusionsEditor } from "@/components/knowledge-source-exclusions-editor";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import {
   formatPermissionRequirement,
@@ -163,6 +164,10 @@ import {
   useUpdateDefaultAgentId,
   useUpdateProfile,
 } from "@/lib/agent.query";
+import {
+  useAgentKnowledgeSourceExclusions,
+  useUpdateAgentKnowledgeSourceExclusions,
+} from "@/lib/agent-knowledge-source-exclusions.query";
 import {
   useAgentSkillExclusions,
   useAgentSkills,
@@ -893,6 +898,8 @@ export function AgentForm({
   const { data: currentDelegations = [], isSuccess: delegationsLoaded } =
     useAgentDelegations(supportsSubagents ? agent?.id : undefined);
   const syncSubagentExclusions = useUpdateAgentSubagentExclusions();
+  const syncKnowledgeSourceExclusions =
+    useUpdateAgentKnowledgeSourceExclusions();
   const {
     data: currentSubagentExclusions,
     isSuccess: subagentExclusionsLoaded,
@@ -1020,6 +1027,12 @@ export function AgentForm({
     enabled: shouldLoadKnowledgeSources && !!canReadKnowledgeBase,
   });
   const connectors = connectorsData ?? [];
+  const {
+    data: currentKnowledgeSourceExclusions,
+    isSuccess: knowledgeSourceExclusionsLoaded,
+  } = useAgentKnowledgeSourceExclusions(
+    shouldLoadKnowledgeSources && canReadKnowledgeBase ? agent?.id : undefined,
+  );
   const agentLlmApiKeyId = agent?.llmApiKeyId;
   const { data: availableApiKeys = [] } = useAvailableLlmProviderApiKeys({
     includeKeyId: agentLlmApiKeyId ?? undefined,
@@ -1092,11 +1105,15 @@ export function AgentForm({
     undefined,
   );
 
-  // Drives the Custom picker's disabled state: a source stamped with another
-  // environment cannot be assigned to this record.
+  // One definition of "in this record's environment", used by the Custom
+  // picker's disabled state below and by the set of sources Auto mode offers
+  // to disable.
   const isInSelectedEnvironment = (connectorEnvironmentId: string | null) =>
     !environmentScopingEnabled ||
     (connectorEnvironmentId ?? null) === (environmentId ?? null);
+  const environmentConnectors = connectors.filter((connector) =>
+    isInSelectedEnvironment(connector.environmentId ?? null),
+  );
   const agentEnvironmentName =
     environments.find((env) => env.id === environmentId)?.name ?? null;
   const [mcpEnvConflicts, setMcpEnvConflicts] = useState<McpEnvConflict[]>([]);
@@ -1140,6 +1157,9 @@ export function AgentForm({
   // Delegation targets excluded from the Auto surface ("Auto All Except Some").
   // Inert while in Custom subagent mode. Seeded async from the backend.
   const [disabledSubagentIds, setDisabledSubagentIds] = useState<string[]>([]);
+  const [disabledKnowledgeSourceIds, setDisabledKnowledgeSourceIds] = useState<
+    string[]
+  >([]);
   // Skills published over `skill://`. Auto exposes every org-scoped skill in the
   // agent's environment minus exclusions; Custom publishes exactly the assigned
   // set. Both sets persist independently, so switching mode discards neither.
@@ -1512,6 +1532,20 @@ export function AgentForm({
       );
     }
   }, [agentId, currentExcludedSubagentIds, subagentExclusionsLoaded]);
+
+  // Same for the Auto-mode disabled-knowledge-sources set, and for the same
+  // reason: it arrives after the agent reset.
+  const currentExcludedConnectorIds = (
+    currentKnowledgeSourceExclusions?.excludedConnectorIds ?? []
+  ).join(",");
+
+  useEffect(() => {
+    if (agentId && knowledgeSourceExclusionsLoaded) {
+      setDisabledKnowledgeSourceIds(
+        currentExcludedConnectorIds.split(",").filter(Boolean),
+      );
+    }
+  }, [agentId, currentExcludedConnectorIds, knowledgeSourceExclusionsLoaded]);
 
   // Seed the published-skill sets once they load, for the same reason as the
   // subagent sets above: they arrive after the agent reset, so keeping them out
@@ -2014,6 +2048,16 @@ export function AgentForm({
                 exclusions: { excludedSubagentIds: disabledSubagentIdsToSave },
               });
             }
+            // A new agent starts with nothing disabled, so only a non-empty
+            // set is worth a write.
+            if (disabledKnowledgeSourceIds.length > 0) {
+              await syncKnowledgeSourceExclusions.mutateAsync({
+                agentId: savedAgentId,
+                exclusions: {
+                  excludedConnectorIds: disabledKnowledgeSourceIds,
+                },
+              });
+            }
             await savePublishedSkills(savedAgentId);
           } catch (error) {
             await deleteAgent.mutateAsync(savedAgentId);
@@ -2077,6 +2121,27 @@ export function AgentForm({
         await syncSubagentExclusions.mutateAsync({
           agentId: savedAgentId,
           exclusions: { excludedSubagentIds: disabledSubagentIdsToSave },
+        });
+      }
+
+      // Persist the Auto-mode disabled-knowledge-sources set only when it
+      // changed, for the same no-op-audit reason as the sets above. Not
+      // skipped for built-ins: their knowledge surface is configured like any
+      // other agent's.
+      if (
+        agent &&
+        savedAgentId &&
+        knowledgeSourceExclusionsLoaded &&
+        hasUnsavedChanges(
+          [
+            ...(currentKnowledgeSourceExclusions?.excludedConnectorIds ?? []),
+          ].sort(),
+          [...disabledKnowledgeSourceIds].sort(),
+        )
+      ) {
+        await syncKnowledgeSourceExclusions.mutateAsync({
+          agentId: savedAgentId,
+          exclusions: { excludedConnectorIds: disabledKnowledgeSourceIds },
         });
       }
 
@@ -2156,6 +2221,10 @@ export function AgentForm({
     personalDefaultChanged,
     syncDelegations,
     syncSubagentExclusions,
+    currentKnowledgeSourceExclusions,
+    disabledKnowledgeSourceIds,
+    knowledgeSourceExclusionsLoaded,
+    syncKnowledgeSourceExclusions,
     showSkills,
     skillsLoaded,
     accessAllSkills,
@@ -2252,6 +2321,13 @@ export function AgentForm({
       hasUnsavedChanges(
         [...(currentSubagentExclusions?.excludedSubagentIds ?? [])].sort(),
         [...disabledSubagentIds].sort(),
+      ) ||
+      // Same for the Auto-mode disabled-knowledge-sources set.
+      hasUnsavedChanges(
+        [
+          ...(currentKnowledgeSourceExclusions?.excludedConnectorIds ?? []),
+        ].sort(),
+        [...disabledKnowledgeSourceIds].sort(),
       ) ||
       // Auto-mode exclusions load async, so they're diffed against the
       // baseline the editor reports (same pattern as delegations above)
@@ -2934,6 +3010,31 @@ export function AgentForm({
                         {agentTypeDisplayName[agentType] || "agent"}.
                       </p>
                     )}
+                    {/* The knowledge half of the Auto-mode exclusions. Auto
+                        mode assigns nothing and so names no source above; this
+                        editor is the one place a source is named, and being
+                        named here means the opposite of assignment — it is
+                        what this agent's knowledge search leaves out. */}
+                    {autoToolsMode &&
+                      canReadKnowledgeBase &&
+                      isKnowledgeConfigured &&
+                      environmentConnectors.length > 0 && (
+                        <div className="space-y-2 pt-2">
+                          <p className="text-sm text-muted-foreground">
+                            Disabled knowledge sources
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            These sources stay out of this{" "}
+                            {agentTypeDisplayName[agentType] || "agent"}&apos;s
+                            knowledge search while Auto mode is on.
+                          </p>
+                          <KnowledgeSourceExclusionsEditor
+                            sources={environmentConnectors}
+                            selectedIds={disabledKnowledgeSourceIds}
+                            onSelectionChange={setDisabledKnowledgeSourceIds}
+                          />
+                        </div>
+                      )}
                     {/* Auto-mode exclusions; kept mounted while hidden so
                         pending edits and the save-time ref survive switching
                         to "Custom". */}

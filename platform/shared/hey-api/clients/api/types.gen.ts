@@ -14686,6 +14686,10 @@ export type GetAgentVersionResponses = {
                 id: string;
                 name: string;
             }>;
+            excludedConnectors: Array<{
+                id: string;
+                name: string;
+            }>;
         };
         contentHash: string;
         createdAt: string;
@@ -15571,6 +15575,187 @@ export type UpdateAgentSubagentExclusionsResponses = {
 };
 
 export type UpdateAgentSubagentExclusionsResponse = UpdateAgentSubagentExclusionsResponses[keyof UpdateAgentSubagentExclusionsResponses];
+
+export type GetAgentKnowledgeSourceExclusionsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/knowledge-source-exclusions';
+};
+
+export type GetAgentKnowledgeSourceExclusionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentKnowledgeSourceExclusionsError = GetAgentKnowledgeSourceExclusionsErrors[keyof GetAgentKnowledgeSourceExclusionsErrors];
+
+export type GetAgentKnowledgeSourceExclusionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        /**
+         * Knowledge connector IDs excluded from the agent's Auto knowledge surface
+         */
+        excludedConnectorIds: Array<string>;
+    };
+};
+
+export type GetAgentKnowledgeSourceExclusionsResponse = GetAgentKnowledgeSourceExclusionsResponses[keyof GetAgentKnowledgeSourceExclusionsResponses];
+
+export type UpdateAgentKnowledgeSourceExclusionsData = {
+    body: {
+        /**
+         * Knowledge connector IDs excluded from the agent's Auto knowledge surface
+         */
+        excludedConnectorIds: Array<string>;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/knowledge-source-exclusions';
+};
+
+export type UpdateAgentKnowledgeSourceExclusionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateAgentKnowledgeSourceExclusionsError = UpdateAgentKnowledgeSourceExclusionsErrors[keyof UpdateAgentKnowledgeSourceExclusionsErrors];
+
+export type UpdateAgentKnowledgeSourceExclusionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        /**
+         * Knowledge connector IDs excluded from the agent's Auto knowledge surface
+         */
+        excludedConnectorIds: Array<string>;
+    };
+};
+
+export type UpdateAgentKnowledgeSourceExclusionsResponse = UpdateAgentKnowledgeSourceExclusionsResponses[keyof UpdateAgentKnowledgeSourceExclusionsResponses];
 
 export type GetAgentSkillsData = {
     body?: never;

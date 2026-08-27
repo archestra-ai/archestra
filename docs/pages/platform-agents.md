@@ -3,7 +3,7 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, invocation paths, knowledge sources, and prompt templating
-lastUpdated: 2026-08-24
+lastUpdated: 2026-08-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -48,7 +48,7 @@ Tool call policies still apply to the target tool. If the model calls `run_tool`
 
 ### Excluding Servers and Tools
 
-**Auto** can be too broad: it gives the agent everything the calling user can reach. To carve out exceptions, each agent has an exclusion list — edit it under **Disabled tools** on the **Auto** tab of the agent's **Tools & Knowledge** step (or via `GET`/`PUT /api/agents/:id/tool-exclusions`), excluding whole MCP servers or individual tools. Use this for an agent that should see everything except, say, a payments server or a single destructive tool.
+**Auto** can be too broad: it gives the agent everything the calling user can reach. To carve out exceptions, each agent has an exclusion list — edit it under **Disabled tools** on the **Auto** tab of the agent's **Tools & Knowledge** step (or via `GET`/`PUT /api/agents/:id/tool-exclusions`), excluding whole MCP servers or individual tools. Use this for an agent that should see everything except, say, a payments server or a single destructive tool. [Knowledge sources](#knowledge-sources) have a list of their own.
 
 While the tools setting is **Auto**, exclusions cover the agent's entire surface:
 
@@ -108,7 +108,9 @@ Go to **Settings → Agents → Available messaging channels** to remove any cha
 
 Knowledge follows the same **Auto** / **Custom** setting as tools (**Tools & Knowledge Sources** on the agent's **Tools & Knowledge** step). In **Auto** mode the agent can search every Knowledge Base and connector the chatting user can access, in its environment. In **Custom** mode it searches only the sources you assign to it. Either mode is still filtered by each user's own visibility.
 
-Whenever an agent has at least one reachable knowledge source, Archestra adds the built-in [`query_knowledge_sources`](/docs/platform-archestra-mcp-server#query_knowledge_sources) tool so the model can search across them during a run.
+**Auto** can be too broad here too. Each agent has its own list of disabled knowledge sources — edit it under **Disabled knowledge sources** on the **Auto** tab of the agent's **Tools & Knowledge** step, or via `GET`/`PUT /api/agents/:id/knowledge-source-exclusions`. A disabled source drops out of every search the agent runs, so you can keep an archived wiki out of its answers without hiding it from anyone else. The list applies only while the setting is **Auto**; **Custom** mode already searches just what you assign.
+
+Whenever an agent has at least one reachable knowledge source, Archestra adds the built-in [`query_knowledge_sources`](/docs/platform-archestra-mcp-server#query_knowledge_sources) tool so the model can search across them during a run. The tool disappears when every source the caller can reach is disabled for that agent.
 
 The output of `query_knowledge_sources` is treated as sensitive by default, which can impact the ability to use subsequent tools. See [Archestra MCP Server](/docs/platform-archestra-mcp-server#auth), and [AI Tool Guardrails](/docs/platform-ai-tool-guardrails), for more details.
 

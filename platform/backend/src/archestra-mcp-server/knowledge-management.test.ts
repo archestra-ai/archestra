@@ -13,7 +13,12 @@ import {
   knowledgeSourceAccessControlService,
   queryService,
 } from "@/knowledge-base";
-import { KbChunkModel, KbDocumentModel, TeamModel } from "@/models";
+import {
+  AgentExcludedConnectorModel,
+  KbChunkModel,
+  KbDocumentModel,
+  TeamModel,
+} from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { Agent, KnowledgeBase, KnowledgeBaseConnector } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
@@ -110,6 +115,98 @@ describe("knowledge-management tool execution", () => {
       expect(result.isError).toBeFalsy();
       expect(querySpy).toHaveBeenCalledOnce();
       expect(querySpy.mock.calls[0][0].connectorIds).toContain(connector.id);
+
+      querySpy.mockRestore();
+    });
+
+    test("drops per-agent excluded knowledge sources from the dynamic query", async ({
+      makeAgent,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const kb = await makeKnowledgeBase(org.id);
+      const searchable = await makeKnowledgeBaseConnector(kb.id, org.id, {
+        name: "Runbooks",
+      });
+      const disabled = await makeKnowledgeBaseConnector(kb.id, org.id, {
+        name: "Legacy wiki",
+      });
+      const dynamicAgent = await makeAgent({
+        name: "Dynamic Knowledge Agent",
+        organizationId: org.id,
+        accessAllTools: true,
+      });
+      await AgentExcludedConnectorModel.replaceForAgent(dynamicAgent.id, [
+        disabled.id,
+      ]);
+
+      const querySpy = vi
+        .spyOn(queryService, "query")
+        .mockResolvedValueOnce([] as any);
+
+      const result = await executeArchestraTool(
+        t("query_knowledge_sources"),
+        { query: "anything" },
+        {
+          agent: { id: dynamicAgent.id, name: dynamicAgent.name },
+          organizationId: org.id,
+          userId: user.id,
+        },
+      );
+
+      expect(result.isError).toBeFalsy();
+      expect(querySpy.mock.calls[0][0].connectorIds).toEqual([searchable.id]);
+
+      querySpy.mockRestore();
+    });
+
+    test("says the sources are disabled when exclusions empty the dynamic surface", async ({
+      makeAgent,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      const dynamicAgent = await makeAgent({
+        name: "Dynamic Knowledge Agent",
+        organizationId: org.id,
+        accessAllTools: true,
+      });
+      await AgentExcludedConnectorModel.replaceForAgent(dynamicAgent.id, [
+        connector.id,
+      ]);
+
+      const querySpy = vi.spyOn(queryService, "query");
+
+      const result = await executeArchestraTool(
+        t("query_knowledge_sources"),
+        { query: "anything" },
+        {
+          agent: { id: dynamicAgent.id, name: dynamicAgent.name },
+          organizationId: org.id,
+          userId: user.id,
+        },
+      );
+
+      expect(result.isError).toBe(true);
+      // Distinguished from "you can't reach any source": the caller could,
+      // this agent was told not to.
+      expect((result.content[0] as any).text).toContain(
+        "disabled for this agent",
+      );
+      expect(querySpy).not.toHaveBeenCalled();
 
       querySpy.mockRestore();
     });

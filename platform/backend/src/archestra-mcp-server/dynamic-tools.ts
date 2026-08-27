@@ -8,7 +8,12 @@ import {
 import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base/source-access-control";
-import { AgentModel, KnowledgeBaseConnectorModel, ToolModel } from "@/models";
+import {
+  AgentExcludedConnectorModel,
+  AgentModel,
+  KnowledgeBaseConnectorModel,
+  ToolModel,
+} from "@/models";
 import {
   type AgentToolExclusionSets,
   agentToolExclusionsService,
@@ -164,8 +169,8 @@ export async function resolveDynamicToolByUiResource(params: {
  * - the deployment feature gates that also govern registration/execution in
  *   index.ts — sandbox runtime, Projects, and apps (see
  *   isBuiltInFeatureEnabled);
- * - query_knowledge_sources additionally requires the user to have access to
- *   at least one knowledge connector.
+ * - query_knowledge_sources additionally requires at least one knowledge
+ *   connector the user can access and this agent has not excluded.
  * The caller (executeArchestraTool) has already enforced the tool's RBAC
  * permission; this adds the dynamic-access gates on top.
  */
@@ -204,11 +209,12 @@ export async function isDynamicallyAvailableArchestraTool(params: {
     return false;
   }
   return shortName === TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME
-    ? userHasAccessibleKnowledgeConnectors(
-        ctx.userId,
-        ctx.organizationId,
-        ctx.agentEnvironmentId,
-      )
+    ? agentHasSearchableKnowledgeConnectors({
+        agentId: params.agentId,
+        userId: ctx.userId,
+        organizationId: ctx.organizationId,
+        environmentId: ctx.agentEnvironmentId,
+      })
     : true;
 }
 
@@ -218,7 +224,8 @@ export async function isDynamicallyAvailableArchestraTool(params: {
  * catalog the user can access plus the Archestra built-ins, minus the
  * exclusions in `isExcludedFromDiscovery`: `agent__` rows, the meta tools
  * (search_tools/run_tool), feature-gated-off built-in groups, and
- * query_knowledge_sources when the user cannot access a knowledge connector.
+ * query_knowledge_sources when no knowledge connector is both accessible to the
+ * user and un-excluded for this agent.
  */
 export async function getUnassignedDiscoverableTools(params: {
   assignedToolNames: Set<string>;
@@ -243,11 +250,12 @@ export async function getUnassignedDiscoverableTools(params: {
 
   const [accessibleTools, hasKnowledgeConnectors] = await Promise.all([
     getAccessibleTools(ctx.userId, ctx.organizationId, ctx.agentEnvironmentId),
-    userHasAccessibleKnowledgeConnectors(
-      ctx.userId,
-      ctx.organizationId,
-      ctx.agentEnvironmentId,
-    ),
+    agentHasSearchableKnowledgeConnectors({
+      agentId: params.agentId,
+      userId: ctx.userId,
+      organizationId: ctx.organizationId,
+      environmentId: ctx.agentEnvironmentId,
+    }),
   ]);
   return accessibleTools.filter(
     (tool) =>
@@ -293,20 +301,27 @@ export async function dynamicAccessContext(params: {
 
 // === Internal helpers ===
 
-// Whether at least one knowledge connector is queryable by the user (org-wide
-// or auto-sync-permissions visibility, or team-scoped to one of their teams;
-// knowledgeSource admins see all). Gates the dynamic availability of
-// query_knowledge_sources.
-async function userHasAccessibleKnowledgeConnectors(
-  userId: string,
-  organizationId: string,
-  environmentId: string | null,
-): Promise<boolean> {
-  const access =
-    await knowledgeSourceAccessControlService.buildAccessControlContext({
+// Whether the agent's Auto knowledge surface has anything left to search:
+// at least one knowledge connector queryable by the user (org-wide or
+// auto-sync-permissions visibility, or team-scoped to one of their teams;
+// knowledgeSource admins see all) that this agent has not excluded. Gates the
+// dynamic availability of query_knowledge_sources, and mirrors the surface
+// handleQueryKnowledgeSources actually queries — a tool that could only ever
+// answer "everything here is disabled" should not be offered.
+async function agentHasSearchableKnowledgeConnectors(params: {
+  agentId: string;
+  userId: string;
+  organizationId: string;
+  environmentId: string | null;
+}): Promise<boolean> {
+  const { agentId, userId, organizationId, environmentId } = params;
+  const [access, excludedConnectorIds] = await Promise.all([
+    knowledgeSourceAccessControlService.buildAccessControlContext({
       userId,
       organizationId,
-    });
+    }),
+    AgentExcludedConnectorModel.findConnectorIdsByAgent(agentId),
+  ]);
   const connectors = await KnowledgeBaseConnectorModel.findByOrganization({
     organizationId,
     canReadAll: access.canReadAll,
@@ -315,9 +330,13 @@ async function userHasAccessibleKnowledgeConnectors(
     // available to everyone; its per-chunk ACLs gate what a user retrieves.
     visibilityScope: "query",
     environmentId,
-    limit: 1,
+    // Only the no-exclusions case can stop at the first row: with exclusions
+    // in play the first row may be one of them, and "the only visible source
+    // is disabled" has to read as an empty surface, not a full one.
+    ...(excludedConnectorIds.length === 0 ? { limit: 1 } : {}),
   });
-  return connectors.length > 0;
+  const excluded = new Set(excludedConnectorIds);
+  return connectors.some((connector) => !excluded.has(connector.id));
 }
 
 // Whether a sandbox-group tool is enabled for discovery/dynamic dispatch under
@@ -342,7 +361,8 @@ function isSandboxToolEnabled(shortName: string): boolean {
 // - built-ins of a feature-gated-off group — sandbox runtime, Projects, apps —
 //   drop out under the same gates as registration/execution (see
 //   isBuiltInFeatureEnabled);
-// - query_knowledge_sources without an accessible knowledge connector (the
+// - query_knowledge_sources without a searchable knowledge connector — one the
+//   user can access and this agent has not excluded (the
 //   discovery path passes `hasKnowledgeConnectors` it already computed;
 //   the single-tool path checks it in isDynamicallyAvailableArchestraTool).
 // RBAC and the dynamic-access gates still apply on top.

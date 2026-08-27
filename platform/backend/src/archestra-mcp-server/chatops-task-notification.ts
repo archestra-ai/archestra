@@ -11,16 +11,16 @@ export function buildChatOpsTaskNotification(params: {
   statusReason: string | null;
   output: string;
 }): string | null {
-  const pullRequestUrl = findPullRequestUrl(params.output);
-  if (pullRequestUrl) {
-    return `🦀 PR ready: ${pullRequestUrl}`;
-  }
-
   if (!TERMINAL_TASK_STATES.has(params.state)) {
     return null;
   }
 
   if (params.state === "TASK_STATE_COMPLETED") {
+    const pullRequestUrl = findPullRequestUrl(params.output);
+    if (pullRequestUrl) {
+      return `🦀 PR ready: ${pullRequestUrl}`;
+    }
+
     const output = conciseOutput(params.output);
     return `🦀 Task \`${params.taskId}\` finished.${output ? `\n\n${output}` : ""}`;
   }

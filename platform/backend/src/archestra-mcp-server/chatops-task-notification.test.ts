@@ -2,11 +2,23 @@ import { describe, expect, test } from "vitest";
 import { buildChatOpsTaskNotification } from "./chatops-task-notification";
 
 describe("buildChatOpsTaskNotification", () => {
-  test("posts a concise PR update while a background run remains attachable", () => {
+  test("does not announce a PR URL before the background run is terminal", () => {
     expect(
       buildChatOpsTaskNotification({
         taskId: "task-1",
         state: "TASK_STATE_WORKING",
+        statusReason: null,
+        output:
+          "[tool] archestra__run_tool\nDone: https://github.com/example/project/pull/42\n[waiting for direction]",
+      }),
+    ).toBeNull();
+  });
+
+  test("posts a concise PR update after the background run completes", () => {
+    expect(
+      buildChatOpsTaskNotification({
+        taskId: "task-1",
+        state: "TASK_STATE_COMPLETED",
         statusReason: null,
         output:
           "[tool] archestra__run_tool\nDone: https://github.com/example/project/pull/42\n[waiting for direction]",
@@ -34,6 +46,20 @@ describe("buildChatOpsTaskNotification", () => {
         output: "",
       }),
     ).toBe("🦀 Task `task-1` failed. The deployment could not start.");
+  });
+
+  test("does not mistake a PR URL in failed-task output for success", () => {
+    expect(
+      buildChatOpsTaskNotification({
+        taskId: "task-1",
+        state: "TASK_STATE_FAILED",
+        statusReason: "The coding agent exited before finishing.",
+        output:
+          "Review https://github.com/example/project/pull/42 and fix any issues.",
+      }),
+    ).toBe(
+      "🦀 Task `task-1` failed. The coding agent exited before finishing.",
+    );
   });
 
   test("removes runtime boilerplate from a completed task", () => {

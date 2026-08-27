@@ -228,16 +228,22 @@ class McpServerModel {
   }
 
   /**
-   * The installs whose stored credential `userId` may actually present to the
-   * upstream: the connections they made themselves, and the ones shared with
-   * them — a team install of a team they belong to, or an org install.
+   * The installs whose stored credential `userId` may present to the upstream:
+   * the connections they made themselves, and the ones shared with them — a
+   * team install of a team they belong to, or an org install.
    *
-   * Deliberately narrower than {@link findById}'s visibility gate, and
-   * deliberately blind to `mcpServerInstallation:admin`. An installation admin
+   * This is the platform's definition of "an install this person may use", and
+   * the same set {@link getAccessibleInstallIds} hands the Apps run page. It is
+   * deliberately narrower than {@link findById}'s visibility gate and
+   * deliberately blind to `mcpServerInstallation:admin`: an installation admin
    * manages every connection in the organization and sees other people's
    * personal ones in the registry, but managing a connection is not the same
-   * as being able to authenticate as the person who made it: nothing may
-   * borrow another member's credential to talk to a third-party server.
+   * as being able to authenticate as the person who made it.
+   *
+   * Ownership is read from BOTH `owner_id` and the `mcp_server_users` join.
+   * `create` writes the two together, but they are separate statements, and a
+   * row carrying only one of them still belongs to exactly one person — locking
+   * someone out of the connection they made is the worse failure of the two.
    *
    * @param restrictToIds when given, only these installs are considered — pass
    * the ids already on the page to keep the org-scope scan bounded.
@@ -1050,12 +1056,7 @@ class McpServerModel {
   private static async getAccessibleInstallIds(
     userId: string,
   ): Promise<string[]> {
-    const [teamIds, personalIds, orgIds] = await Promise.all([
-      McpServerModel.getUserAccessibleMcpServerIdsByTeam(userId),
-      McpServerUserModel.getUserPersonalMcpServerIds(userId),
-      McpServerModel.getOrgScopedMcpServerIds(),
-    ]);
-    return [...new Set([...teamIds, ...personalIds, ...orgIds])];
+    return [...(await McpServerModel.getCredentialUsableServerIds(userId))];
   }
 
   /** Default install for a run: personal → team → org (mcp-apps.md FR-31). */

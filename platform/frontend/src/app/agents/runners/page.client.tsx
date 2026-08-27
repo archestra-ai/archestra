@@ -27,6 +27,7 @@ import {
   TableCardViewContent,
   TableCardViewToggle,
 } from "@/components/table-card-view";
+import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
@@ -37,6 +38,7 @@ import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import {
   type Runner,
   useBulkDeleteRunners,
+  useDeleteRunner,
   useRunnerLabelKeys,
   useRunnerLabelValues,
   useRunners,
@@ -56,6 +58,7 @@ export default function RunnersPage() {
   const [pageIndex, setPageIndex] = useState(0);
 
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [deletingRunner, setDeletingRunner] = useState<Runner | null>(null);
 
   const filters = useMemo(
     () => ({
@@ -76,6 +79,7 @@ export default function RunnersPage() {
   const { data: environmentList } = useEnvironments();
   const { data: labelKeys } = useRunnerLabelKeys();
   const bulkDelete = useBulkDeleteRunners();
+  const deleteRunner = useDeleteRunner();
 
   const hasActiveFilters =
     Boolean(search) || Boolean(labels) || environmentId !== ALL_ENVIRONMENTS;
@@ -132,6 +136,34 @@ export default function RunnersPage() {
       );
     },
     [environmentList],
+  );
+
+  // Delete lives in the row menu rather than a pixel from Edit, matching how
+  // every other list keeps an irreversible action out of thumb's reach.
+  const renderRunnerActions = useCallback(
+    (runner: Runner) => (
+      <TableRowActions
+        itemName={runner.name}
+        actions={[
+          {
+            icon: <Pencil className="h-4 w-4" />,
+            label: "Edit",
+            permissions: { runner: ["update"] },
+            onClick: () => openEdit(runner),
+          },
+        ]}
+        dropdownActions={[
+          {
+            icon: <Trash2 className="h-4 w-4" />,
+            label: "Delete",
+            permissions: { runner: ["delete"] },
+            variant: "destructive",
+            onClick: () => setDeletingRunner(runner),
+          },
+        ]}
+      />
+    ),
+    [openEdit],
   );
 
   const columns = useMemo<ColumnDef<Runner>[]>(
@@ -216,26 +248,14 @@ export default function RunnersPage() {
         id: "actions",
         header: "Actions",
         enableHiding: false,
-        size: 160,
+        size: 120,
         // The whole cell, so a click on an action never also opens the row.
         cell: ({ row }) => (
-          <RowClickShield>
-            <div className="flex items-center gap-1">
-              <PermissionButton
-                permissions={{ runner: ["update"] }}
-                variant="ghost"
-                size="sm"
-                onClick={() => openEdit(row.original)}
-              >
-                <Pencil className="h-4 w-4" />
-                Edit
-              </PermissionButton>
-            </div>
-          </RowClickShield>
+          <RowClickShield>{renderRunnerActions(row.original)}</RowClickShield>
         ),
       },
     ],
-    [environmentName, openEdit],
+    [environmentName, renderRunnerActions],
   );
 
   return (
@@ -337,16 +357,7 @@ export default function RunnersPage() {
                     setRowSelection({ ...rowSelection, [runner.id]: value })
                   }
                   selectionLabel={`Select ${runner.name}`}
-                  actions={
-                    <PermissionButton
-                      permissions={{ runner: ["update"] }}
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => openEdit(runner)}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </PermissionButton>
-                  }
+                  actions={renderRunnerActions(runner)}
                   onSelectionClick={(event) => event.stopPropagation()}
                   footer={
                     <div className="flex flex-wrap items-center gap-2">
@@ -389,6 +400,21 @@ export default function RunnersPage() {
           }
         />
       </TableCardView>
+
+      <DeleteConfirmDialog
+        open={deletingRunner !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeletingRunner(null);
+        }}
+        title={`Delete ${deletingRunner?.name}?`}
+        description="Agents assigned to this runner lose their long-running mode until you assign another."
+        isPending={deleteRunner.isPending}
+        onConfirm={async () => {
+          if (!deletingRunner) return;
+          await deleteRunner.mutateAsync(deletingRunner.id);
+          setDeletingRunner(null);
+        }}
+      />
 
       <DeleteConfirmDialog
         open={bulkDeleteOpen}

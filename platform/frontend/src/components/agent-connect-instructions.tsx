@@ -1,6 +1,6 @@
 "use client";
 
-import type { AgentType } from "@archestra/shared";
+import { type AgentType, MCP_GATEWAY_OAUTH_SCOPE } from "@archestra/shared";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
@@ -10,14 +10,19 @@ import {
 import { GenericAuthRow } from "@/app/connection/mcp-client-instructions";
 import { TerminalBlock } from "@/app/connection/terminal-block";
 import { agentEditHref } from "@/components/agent-pages/agent-page-config";
-import { McpOauthManagement } from "@/components/mcp-oauth-management";
+import { AuthMethodRow } from "@/components/auth-method-row";
+import { CreateOAuthClientDialog } from "@/components/create-oauth-client-dialog";
+import {
+  type CreatedCredentials,
+  OAuthClientCreatedDialog,
+} from "@/components/oauth-client-created-dialog";
 import { SECRET_PLACEHOLDER_TOKEN } from "@/components/secret-copy-button";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useProfile } from "@/lib/agent.query";
+import { useProfile, useProfiles } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import config from "@/lib/config/config";
+import { useCreateMcpOauthClient } from "@/lib/mcp-oauth-clients.query";
 import { useOrganization } from "@/lib/organization.query";
 
 /**
@@ -75,69 +80,90 @@ export function McpGatewayConnectInstructions({
 // MCP Gateway authentication surface
 // =========================================================================
 
-type GatewayAuthTab = "oauth" | "token" | "idp";
-
 function McpGatewayAuthSurface({ gateway }: { gateway: ConnectTarget }) {
-  const [authTab, setAuthTab] = useState<GatewayAuthTab>("oauth");
+  const [createOauthOpen, setCreateOauthOpen] = useState(false);
+  const { data: canCreateOauth } = useHasPermissions({
+    mcpOauthClient: ["create"],
+  });
+  const { data: canReadOauth } = useHasPermissions({
+    mcpOauthClient: ["read"],
+  });
+  const { data: resources = [] } = useProfiles({
+    filters: { agentTypes: ["mcp_gateway", "agent"] },
+  });
+  const create = useCreateMcpOauthClient();
+  const [revealed, setRevealed] = useState<CreatedCredentials | null>(null);
 
   return (
-    <section className="space-y-4 rounded-lg border bg-card p-4">
+    <section className="rounded-lg border bg-card p-4">
       <h3 className="text-sm font-semibold">Authentication</h3>
-      <Tabs
-        value={authTab}
-        onValueChange={(value) => setAuthTab(value as GatewayAuthTab)}
-      >
-        <TabsList>
-          <TabsTrigger value="oauth">OAuth</TabsTrigger>
-          <TabsTrigger value="token">Platform token</TabsTrigger>
-          <TabsTrigger value="idp">Identity provider</TabsTrigger>
-        </TabsList>
-      </Tabs>
+      {/* One row per way in, rather than a tab strip. The tabs put two of the
+          four behind a click, which is the same reason a reader never found
+          the pages this gateway's siblings live on. Mirrors the LLM Proxy's
+          own authentication list so the two read as one surface. */}
+      <div className="mt-1 divide-y">
+        <AuthMethodRow
+          title="OAuth"
+          description="For interactive MCP clients such as Claude and Cursor. The client registers itself and the user signs in on first connect — nothing to copy — and its tools are filtered by that user's permissions."
+        />
 
-      {authTab === "oauth" && (
-        <div className="space-y-3">
-          <AuthFacts
-            rows={[
-              ["For", "interactive MCP clients such as Claude and Cursor"],
-              [
-                "How",
-                "the client registers and signs in on first connect — nothing to copy",
-              ],
-              ["Access", "tools filtered by the signed-in user's permissions"],
-            ]}
-          />
-          <div className="space-y-3 border-t pt-3">
-            <div className="space-y-1">
-              <p className="text-xs font-medium">Registered OAuth clients</p>
-              <p className="text-xs text-muted-foreground">
-                For applications calling as themselves or for signed-in users.
-              </p>
-            </div>
-            <McpOauthManagement
-              resourceId={gateway.id}
-              resourceKind="gateway"
-            />
-          </div>
-        </div>
-      )}
+        <AuthMethodRow
+          title="OAuth clients"
+          description="Register applications that call this gateway as themselves, for services running with no one signed in."
+          action={
+            canCreateOauth ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCreateOauthOpen(true)}
+              >
+                Create OAuth client
+              </Button>
+            ) : null
+          }
+          manageHref={canReadOauth ? "/settings/oauth-clients?type=mcp" : null}
+          manageLabel="Manage OAuth clients"
+        />
 
-      {authTab === "token" && (
-        <div className="space-y-3">
-          <AuthFacts
-            rows={[
-              ["For", "headless clients and automations"],
-              ["How", "a personal or team token in the Bearer header"],
-              ["Access", "tools filtered by the token owner's permissions"],
-            ]}
-          />
+        <AuthMethodRow
+          title="Platform token"
+          description="For headless clients and automations: a personal or team token in the Bearer header, with tools filtered by the token owner's permissions."
+        >
           <GenericAuthRow
             gatewayId={gateway.id}
             placeholder={SECRET_PLACEHOLDER_TOKEN}
           />
-        </div>
-      )}
+        </AuthMethodRow>
 
-      {authTab === "idp" && <IdentityProviderStatus target={gateway} />}
+        <IdentityProviderStatus target={gateway} />
+      </div>
+
+      <CreateOAuthClientDialog
+        open={createOauthOpen}
+        onOpenChange={setCreateOauthOpen}
+        defaultClientType="mcp"
+        fixedClientType="mcp"
+        defaultAllowedGatewayIds={[gateway.id]}
+        gateways={resources}
+        providerApiKeys={[]}
+        onSubmit={async (values) => {
+          if (values.kind !== "mcp") return;
+          const result = await create.mutateAsync(values.body);
+          if (result) {
+            setRevealed({ ...result, oauthScope: MCP_GATEWAY_OAUTH_SCOPE });
+            setCreateOauthOpen(false);
+          }
+        }}
+        isSubmitting={create.isPending}
+      />
+      <OAuthClientCreatedDialog
+        open={!!revealed}
+        onOpenChange={(open) => {
+          if (!open) setRevealed(null);
+        }}
+        title="OAuth Client Created"
+        credentials={revealed}
+      />
     </section>
   );
 }
@@ -159,47 +185,33 @@ function IdentityProviderStatus({ target }: { target: ConnectTarget }) {
   const editHref = agentEditHref("mcp_gateway", target.id);
 
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div className="space-y-1.5">
-        <p className="max-w-3xl text-xs text-muted-foreground">
-          Use a JWT from your identity provider. Requests are linked to the user
-          in the token and use that user&apos;s access.
-        </p>
-        <p className="text-xs">
-          {idpId ? (
-            <span className="text-green-600 dark:text-green-500">
-              ● {idpName ?? "Identity provider"} — configured
-            </span>
-          ) : (
-            <>○ Not configured</>
-          )}
-        </p>
-      </div>
-      {!canUpdate ? null : orgHasIdps ? (
-        <Button variant="outline" size="sm" className="shrink-0" asChild>
-          <Link href={editHref}>Edit gateway</Link>
-        </Button>
-      ) : (
-        <Button variant="outline" size="sm" className="shrink-0" asChild>
-          <Link href="/settings/identity-providers">
-            Set up identity providers
-          </Link>
-        </Button>
-      )}
-    </div>
-  );
-}
-
-function AuthFacts({ rows }: { rows: Array<[string, string]> }) {
-  return (
-    <dl className="grid grid-cols-[100px_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-xs">
-      {rows.map(([label, value]) => (
-        <div key={label} className="contents">
-          <dt className="text-muted-foreground">{label}</dt>
-          <dd className="text-foreground/90">{value}</dd>
-        </div>
-      ))}
-    </dl>
+    <AuthMethodRow
+      title="Identity provider"
+      description="Use a JWT from your identity provider. Requests are linked to the user in the token and use that user's access."
+      action={
+        !canUpdate ? null : orgHasIdps ? (
+          <Button variant="outline" size="sm" className="shrink-0" asChild>
+            <Link href={editHref}>Edit gateway</Link>
+          </Button>
+        ) : (
+          <Button variant="outline" size="sm" className="shrink-0" asChild>
+            <Link href="/settings/identity-providers">
+              Set up identity providers
+            </Link>
+          </Button>
+        )
+      }
+    >
+      <p className="text-xs">
+        {idpId ? (
+          <span className="text-green-600 dark:text-green-500">
+            ● {idpName ?? "Identity provider"} — configured
+          </span>
+        ) : (
+          <span>○ Not configured</span>
+        )}
+      </p>
+    </AuthMethodRow>
   );
 }
 

@@ -2098,7 +2098,6 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // LLM
   "/llm/proxy": { llmProxy: ["read"] },
   "/llm/proxy/virtual-keys": { llmVirtualKey: ["read"] },
-  "/llm/proxy/oauth-clients": { llmOauthClient: ["read"] },
   "/llm/model-providers": { llmProviderApiKey: ["read"] },
   "/llm/models": { llmModel: ["read"] },
   // Intentionally ungated: this page is fixed to the caller's own usage.
@@ -2126,6 +2125,15 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
 
   // Settings
   "/settings/service-accounts": { serviceAccount: ["read"] },
+  // Every OAuth client in one place — LLM proxy, MCP gateways and agents
+  // alike — so the reader is not asked which product a credential belongs to
+  // before they can find it.
+  //
+  // Gated on the LLM half alone: this map AND-s the resources it lists and
+  // the guard has no "any of", so naming both would hide the page from a
+  // custom role holding only one. The MCP half is gated inside the page
+  // instead. Every predefined role grants the two together.
+  "/settings/oauth-clients": { llmOauthClient: ["read"] },
   "/settings/llm": { llmSettings: ["read"] },
   "/settings/mcp": { mcpSettings: ["read"] },
   "/settings/skills": { skillsSettings: ["read"] },

@@ -13,19 +13,24 @@ import {
   BookOpen,
   Bot,
   Boxes,
+  Brain,
   Bug,
   Cable,
   CircleDollarSign,
   Database,
+  Files,
   FolderKanban,
   Github,
   Inbox,
+  KeyRound,
   type LucideIcon,
   MessageCircle,
   MessagesSquare,
   MoreHorizontal,
   Network,
   PencilRuler,
+  Plug,
+  Puzzle,
   Route,
   Settings,
   ShieldCheck,
@@ -40,7 +45,13 @@ import React from "react";
 import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
 import { getCostsNavigationUrl } from "@/app/_parts/costs-navigation";
 import { SidebarUserMenu } from "@/app/_parts/sidebar-user-menu";
-import { getSkillsNavigation } from "@/app/_parts/skills-navigation";
+import {
+  chatsNavItems,
+  contentNavGroups,
+  isNavItemPermitted,
+  type NavGroup,
+  type NavItem,
+} from "@/app/_parts/studio-nav";
 import { AppLogo } from "@/components/app-logo";
 import { McpRegistryAttentionBadge } from "@/components/mcp-registry-attention-badge";
 import { OnboardingDot } from "@/components/onboarding-dot";
@@ -52,6 +63,7 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -72,104 +84,9 @@ import type { NavDotKey } from "@/lib/onboarding/nav-onboarding";
 import { useNavOnboarding } from "@/lib/onboarding/use-nav-onboarding";
 import { cn } from "@/lib/utils";
 
-interface NavSubItem {
-  title: string;
-  url: string;
-  testId?: string;
-  customIsActive?: (pathname: string, searchParams: URLSearchParams) => boolean;
-}
-
-interface NavItem {
-  title: string;
-  url: string;
-  icon: LucideIcon;
-  iconClassName?: string;
-  testId?: string;
-  customIsActive?: (pathname: string, searchParams: URLSearchParams) => boolean;
-  onClick?: () => void;
-  subItems?: NavSubItem[];
-  beta?: boolean;
-  /** Onboarding red-dot target; shown while the user hasn't visited the item. */
-  dotKey?: NavDotKey;
-  /** Chip label shown when `beta` is set; defaults to "New". */
-  badgeLabel?: string;
-  /**
-   * Trailing live count, e.g. MCP servers needing attention. Rendered as a
-   * sibling of the nav link rather than inside it: the badge is itself a link
-   * to the filtered list, and an anchor may not contain another anchor.
-   */
-  countBadge?: React.ReactNode;
-  /**
-   * Pages whose permissions gate this item, for items whose `url` isn't in
-   * `requiredPagePermissionsMap` (e.g. a landing page that redirects between
-   * differently-gated tabs). Visible when ANY of them is permitted; without
-   * this, gating falls back to `url`.
-   */
-  permissionUrls?: string[];
-}
-
-interface NavGroup {
-  label: string;
-  items: NavItem[];
-}
-
-function isNavItemPermitted(
-  item: NavItem,
-  permissionMap: Record<string, boolean>,
-): boolean {
-  if (item.permissionUrls) {
-    // No `?? true` fallback here: these URLs are asserted to be in
-    // requiredPagePermissionsMap, so a typo should hide the item, not
-    // silently show it to everyone.
-    return item.permissionUrls.some((url) => permissionMap[url] === true);
-  }
-  return permissionMap[item.url] ?? true;
-}
-
 type SidebarMode = "chats" | "studio";
 
 const SIDEBAR_MODE_STORAGE_KEY = "archestra-sidebar-mode";
-
-// Items of the Chats tab (flat list above Recents)
-const chatsNavItems: NavItem[] = [
-  {
-    title: "New Chat",
-    url: "/chat",
-    icon: MessageCircle,
-    customIsActive: (pathname: string) => pathname === "/chat",
-  },
-  {
-    title: "Projects",
-    url: "/projects",
-    icon: FolderKanban,
-    customIsActive: (pathname: string) => pathname.startsWith("/projects"),
-    beta: true,
-    dotKey: "nav:projects",
-  },
-  {
-    title: "Apps",
-    url: "/apps",
-    icon: AppWindow,
-    customIsActive: (pathname: string) => pathname === "/apps",
-    beta: true,
-    dotKey: "nav:apps",
-    badgeLabel: "Beta",
-  },
-  {
-    title: "Connect",
-    url: "/connection",
-    icon: Cable,
-    customIsActive: (pathname: string) => pathname.startsWith("/connection"),
-    dotKey: "nav:connect",
-  },
-];
-
-/**
- * The Skills & Plugins section: one sidebar row landing on Skills, with
- * Plugins reached through the tab bar at the top of both pages (see
- * `components/skills-plugins-nav-tabs.tsx`).
- */
-const SKILLS_SECTION_PREFIXES = ["/skills", "/plugins"];
 
 /** Which tab a route belongs to; null = no opinion (keep the current tab). */
 function routeSidebarMode(pathname: string): SidebarMode | null {
@@ -181,7 +98,8 @@ function routeSidebarMode(pathname: string): SidebarMode | null {
   }
   const studioPrefixes = [
     "/agents",
-    ...SKILLS_SECTION_PREFIXES,
+    "/skills",
+    "/plugins",
     "/mcp",
     "/llm",
     "/knowledge",
@@ -273,151 +191,6 @@ function SidebarModeToggle({
   );
 }
 
-// Labeled groups shown in the scrollable content (like sidebar-10 Favorites/Workspaces)
-const contentNavGroups: NavGroup[] = [
-  {
-    label: "Agents",
-    items: [
-      {
-        title: "Agents",
-        url: "/agents",
-        icon: Bot,
-        customIsActive: (pathname: string) => pathname.startsWith("/agents"),
-      },
-      {
-        // Plugins is the second tab of this page rather than a row of its own,
-        // so the row is lit on both routes. Its title and target are rewritten
-        // per reader by `getSkillsNavigation`.
-        title: "Skills & Plugins",
-        url: "/skills",
-        icon: Sparkles,
-        customIsActive: (pathname: string) =>
-          SKILLS_SECTION_PREFIXES.some((prefix) => pathname.startsWith(prefix)),
-        // "New", the default: the row is named for Skills, which is new. The
-        // Plugins tab keeps its own Beta chip in the tab bar.
-        beta: true,
-      },
-      {
-        title: "Messaging Channels",
-        url: "/messaging-channels",
-        icon: Inbox,
-        customIsActive: (pathname: string) =>
-          pathname.startsWith("/messaging-channels"),
-      },
-    ],
-  },
-  {
-    label: "MCP & Tools",
-    items: [
-      {
-        title: "Guardrails",
-        url: "/mcp/tool-guardrails",
-        icon: ShieldCheck,
-        testId: E2eTestId.SidebarNavGuardrails,
-        customIsActive: (pathname: string) =>
-          pathname.startsWith("/mcp/tool-guardrails"),
-      },
-      {
-        title: "MCP Registry",
-        url: "/mcp/registry",
-        icon: Route,
-        customIsActive: (pathname: string) =>
-          pathname.startsWith("/mcp/registry"),
-        dotKey: "nav:mcp-registry",
-        countBadge: <McpRegistryAttentionBadge />,
-      },
-      {
-        title: "MCP Gateways",
-        url: "/mcp/gateways",
-        icon: Waypoints,
-        customIsActive: (pathname: string) =>
-          pathname.startsWith("/mcp/gateways"),
-      },
-    ],
-  },
-  {
-    label: "LLM Proxy",
-    items: [
-      {
-        title: "LLM Proxy",
-        url: "/llm/proxy",
-        icon: Network,
-        customIsActive: (pathname: string) => pathname.startsWith("/llm/proxy"),
-        // A role may grant only the Virtual Keys or OAuth Clients tab; any of
-        // the three pages keeps the entry visible.
-        permissionUrls: [
-          "/llm/proxy",
-          "/llm/proxy/virtual-keys",
-          "/llm/proxy/oauth-clients",
-        ],
-      },
-      {
-        title: "Model Providers",
-        url: "/llm/model-providers",
-        icon: Boxes,
-        customIsActive: (pathname: string) =>
-          pathname.startsWith("/llm/model-providers") ||
-          pathname.startsWith("/llm/models"),
-        dotKey: "nav:model-providers",
-      },
-      {
-        title: "Costs & Limits",
-        url: "/llm/costs",
-        icon: CircleDollarSign,
-        customIsActive: (pathname: string) =>
-          pathname.startsWith("/llm/costs") || pathname === "/llm/limits",
-        permissionUrls: ["/llm/costs", "/llm/limits"],
-      },
-    ],
-  },
-  {
-    label: "Other",
-    items: [
-      {
-        title: "Knowledge",
-        url: "/knowledge/connectors",
-        icon: Database,
-        customIsActive: (pathname: string) => pathname.startsWith("/knowledge"),
-      },
-      {
-        title: "Logs",
-        url: "/llm/logs",
-        icon: MessagesSquare,
-        customIsActive: (pathname: string) =>
-          pathname.startsWith("/llm/logs") ||
-          pathname.startsWith("/mcp/logs") ||
-          pathname.startsWith("/audit/logs"),
-      },
-      {
-        title: "Settings",
-        url: "/settings",
-        icon: Settings,
-        customIsActive: (pathname: string) => pathname.startsWith("/settings"),
-        // /settings is a landing page that forwards to the first permitted
-        // tab; show the item when the user can see any settings page.
-        permissionUrls: [
-          "/settings/appearance",
-          "/settings/auth",
-          "/settings/service-accounts",
-          "/settings/agents",
-          "/settings/security",
-          "/settings/llm",
-          "/settings/mcp",
-          "/settings/skills",
-          "/settings/knowledge",
-          "/settings/environments",
-          "/settings/users",
-          "/settings/teams",
-          "/settings/roles",
-          "/settings/github",
-          "/settings/identity-providers",
-          "/settings/secrets",
-        ],
-      },
-    ],
-  },
-];
-
 // Primary navigation: renders all items in a single SidebarGroup/SidebarMenu
 const NavPrimary = ({
   items,
@@ -442,7 +215,7 @@ const NavPrimary = ({
     <SidebarMenuItem key={item.title}>
       <SidebarMenuButton
         asChild
-        tooltip={item.title}
+        tooltip={item.tooltipLabel ?? item.title}
         isActive={
           item.customIsActive?.(pathname, searchParams) ??
           pathname.startsWith(item.url)
@@ -565,18 +338,39 @@ const NavPrimary = ({
             <span>Search chats</span>
           </SidebarMenuButton>
         </SidebarMenuItem>
-        {groups.map((group) => {
-          const permittedItems = group.items.filter((item) =>
-            isNavItemPermitted(item, permissionMap),
-          );
-          if (permittedItems.length === 0) return null;
-          return (
-            <React.Fragment key={group.label}>
-              {permittedItems.map(renderItem)}
-            </React.Fragment>
-          );
-        })}
       </SidebarMenu>
+      {groups
+        .map((group) => ({
+          group,
+          permittedItems: group.items.filter((item) =>
+            isNavItemPermitted(item, permissionMap),
+          ),
+        }))
+        .filter(({ permittedItems }) => permittedItems.length > 0)
+        .map(({ group, permittedItems }, index) => (
+          <React.Fragment key={group.id}>
+            {group.label && (
+              <SidebarGroupLabel role="heading" aria-level={2}>
+                {group.label}
+              </SidebarGroupLabel>
+            )}
+            {/* Each group is its own list under its own heading. The heading's
+                own row height is the space between groups; a group without one
+                — and the group that renders first, whichever survives the
+                permission filter — supplies that space itself. Collapsed to
+                the icon rail the headings fold away, so the spacing goes with
+                them and the icons keep a single rhythm. */}
+            <SidebarMenu
+              className={cn(
+                !group.label &&
+                  index > 0 &&
+                  "mt-4 group-data-[collapsible=icon]:mt-0",
+              )}
+            >
+              {permittedItems.map(renderItem)}
+            </SidebarMenu>
+          </React.Fragment>
+        ))}
     </SidebarGroup>
   );
 };
@@ -736,23 +530,26 @@ export function AppSidebar() {
     [showConnect],
   );
 
-  const filteredNavGroups = contentNavGroups.map((group) => ({
-    ...group,
-    items: group.items.map((item) => {
-      if (item.url === "/llm/costs") {
-        return { ...item, url: getCostsNavigationUrl(permissionMap) };
-      }
-      // Naming a page after a feature this deployment turned off sends the
-      // reader looking for a tab that isn't there.
-      if (item.url === "/skills") {
-        return {
-          ...item,
-          ...getSkillsNavigation({ permissionMap, pluginsEnabled }),
-        };
-      }
-      return item;
-    }),
-  }));
+  // Advertising a page this deployment turned off sends the reader looking for
+  // something that isn't there, so Plugins waits for the flag answer rather
+  // than appearing and then vanishing.
+  const filteredNavGroups = React.useMemo(
+    () =>
+      contentNavGroups.map((group) => ({
+        ...group,
+        items: group.items
+          .filter((item) => item.url !== "/plugins" || pluginsEnabled === true)
+          // Costs & Limits is one row over two pages, so it has to choose
+          // which one it opens: a reader who may read limits but not costs
+          // would otherwise land on a page they cannot see.
+          .map((item) =>
+            item.url === "/llm/costs"
+              ? { ...item, url: getCostsNavigationUrl(permissionMap) }
+              : item,
+          ),
+      })),
+    [pluginsEnabled, permissionMap],
+  );
 
   return (
     <Sidebar collapsible="icon">

@@ -1,7 +1,7 @@
 "use client";
 
 import { type ChatProvider, LLM_PROXY_OAUTH_SCOPE } from "@archestra/shared";
-import { ArrowRight, Info } from "lucide-react";
+import { Info } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
@@ -10,6 +10,7 @@ import {
   resolveCandidateBaseUrls,
 } from "@/app/connection/connection-flow.utils";
 import { TerminalBlock } from "@/app/connection/terminal-block";
+import { AuthMethodRow } from "@/components/auth-method-row";
 import { CreateOAuthClientDialog } from "@/components/create-oauth-client-dialog";
 import {
   CreateVirtualKeyDialogWithData,
@@ -341,7 +342,7 @@ function AuthenticationOverview() {
               </Button>
             ) : null
           }
-          manageHref={canReadOauth ? "/llm/proxy/oauth-clients" : null}
+          manageHref={canReadOauth ? "/settings/oauth-clients?type=llm" : null}
           manageLabel="Manage OAuth clients"
         />
 
@@ -360,65 +361,6 @@ function AuthenticationOverview() {
         onOpenChange={setOauthCreateOpen}
       />
     </section>
-  );
-}
-
-/**
- * One authentication method in the overview list: name and one-line
- * description on the left, its actions on the right, extra detail (a header
- * snippet, a status line) beneath the description.
- */
-function AuthMethodRow({
-  title,
-  description,
-  action,
-  manageHref,
-  manageLabel,
-  children,
-}: {
-  title: string;
-  description: string;
-  action?: React.ReactNode;
-  manageHref?: string | null;
-  manageLabel?: string;
-  children?: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-3 py-4 first:pt-3 last:pb-1 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-      <div className="min-w-0 max-w-2xl space-y-1.5">
-        <p className="text-sm font-medium">{title}</p>
-        <p className="text-xs text-muted-foreground">{description}</p>
-        {children}
-      </div>
-      {action || (manageHref && manageLabel) ? (
-        <div className="flex shrink-0 flex-col items-start gap-1.5 sm:items-end">
-          {action}
-          {manageHref && manageLabel ? (
-            <ManageLink href={manageHref}>{manageLabel}</ManageLink>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function ManageLink({
-  href,
-  children,
-}: {
-  href: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <p className="text-xs">
-      <Link
-        href={href}
-        className="inline-flex items-center gap-1 text-primary hover:underline"
-      >
-        <span>{children}</span>
-        <ArrowRight className="h-3 w-3" />
-      </Link>
-    </p>
   );
 }
 

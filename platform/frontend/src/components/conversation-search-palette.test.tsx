@@ -122,10 +122,11 @@ vi.mock("@/components/ui/badge", () => ({
   ),
 }));
 
+import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import { usePathname, useRouter } from "next/navigation";
 // Import component after mocks
 import { act } from "react";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { ConversationSearchPalette } from "./conversation-search-palette";
 
@@ -145,6 +146,14 @@ describe("ConversationSearchPalette", () => {
       isPending: false,
       isLoading: false,
     } as ReturnType<typeof useHasPermissions>);
+    // The palette lists only pages the reader may open, so without a
+    // permission answer it lists none. Grant everything by default; the
+    // gating itself is covered by its own test below.
+    vi.mocked(usePermissionMap).mockReturnValue(
+      Object.fromEntries(
+        Object.keys(requiredPagePermissionsMap).map((url) => [url, true]),
+      ),
+    );
     vi.mocked(useFeature).mockReturnValue(false);
     vi.mocked(usePathname).mockReturnValue("/chat");
     mockUseConversations.mockReturnValue({
@@ -201,6 +210,35 @@ describe("ConversationSearchPalette", () => {
     expect(screen.getAllByText("Today")).toHaveLength(2);
     expect(screen.queryByText("Previous 7 Days")).not.toBeInTheDocument();
     expect(screen.queryByText("Previous 30 Days")).not.toBeInTheDocument();
+  });
+
+  it("drops the Chats heading when there are no chats under it", () => {
+    mockUseConversations.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isFetching: false,
+    });
+    render(<ConversationSearchPalette {...defaultProps} />);
+
+    expect(screen.queryByText("Chats")).not.toBeInTheDocument();
+    // The rest of the idle view is untouched.
+    expect(screen.getByText("Pages")).toBeInTheDocument();
+    expect(screen.getByText("New chat")).toBeInTheDocument();
+  });
+
+  it("offers New Chat once, as its own row rather than also as a page", () => {
+    mockUseConversations.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isFetching: false,
+    });
+    render(<ConversationSearchPalette {...defaultProps} />);
+
+    // The action row stays; the Pages list must not repeat it as a
+    // destination. (A bare text count would also catch the footer's
+    // keyboard-shortcut legend, which is neither.)
+    expect(screen.getByTestId("cmd-item-new-chat")).toBeInTheDocument();
+    expect(screen.queryAllByTestId(/^cmd-item-\/chat\b/)).toHaveLength(0);
   });
 
   it("keeps the Pinned heading for pinned conversations", () => {
@@ -288,6 +326,28 @@ describe("ConversationSearchPalette", () => {
 
     expect(screen.getByText("MCP Registry")).toBeInTheDocument();
     expect(screen.queryByText("Agents")).not.toBeInTheDocument();
+  });
+
+  it("leaves out a page the reader may not open", () => {
+    mockUseConversations.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isFetching: false,
+    });
+    vi.mocked(usePermissionMap).mockReturnValue(
+      Object.fromEntries(
+        Object.keys(requiredPagePermissionsMap).map((url) => [
+          url,
+          url !== "/mcp/registry",
+        ]),
+      ),
+    );
+    render(<ConversationSearchPalette {...defaultProps} />);
+
+    // Its siblings are gated separately and stay, so this is the permission
+    // check and not an empty list.
+    expect(screen.getByText("MCP Gateways")).toBeInTheDocument();
+    expect(screen.queryByText("MCP Registry")).not.toBeInTheDocument();
   });
 
   it("shows page matches alongside matching chats", () => {

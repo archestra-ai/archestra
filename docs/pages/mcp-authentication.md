@@ -30,7 +30,7 @@ The MCP Gateway supports six client authentication methods. Choose based on who 
 | Method | Most relevant for | Acting user | Notes |
 | --- | --- | --- | --- |
 | OAuth 2.1 | Interactive MCP clients — Claude Desktop, Cursor, Copilot CLI, Open WebUI | Yes | Client self-registers (DCR/CIMD); public + PKCE; automatic endpoint discovery. |
-| OAuth client credentials | Applications and machine-to-machine callers — backend services, automation jobs, bots | No | Pre-registered client scoped to an explicit gateway list. |
+| OAuth client credentials | Applications and machine-to-machine callers — backend services, automation jobs, bots | No | Pre-registered in **Settings > OAuth Clients**, scoped to an explicit gateway list. |
 | OAuth authorization code (manually registered) | A pre-approved server app acting for whoever is signed in — e.g. an agentic chat backend | Yes | Confidential client (secret + PKCE); enables per-user resolution. |
 | Bearer token | Direct API integrations and scripts | Personal tokens only | Static platform token (`arch_<token>`); team and org tokens don't identify one user. |
 | ID-JAG | Clients signed in through a corporate IdP (enterprise-managed authorization) | Yes | RFC 8693 token exchange; the IdP issues a JWT Archestra validates. |
@@ -67,7 +67,7 @@ Admins can change this in **Settings > Organization > Auth**. The setting is org
 
 When the caller is an application — a backend service, automation job, or another team's bot — rather than a human, register an MCP OAuth client and use the OAuth 2.0 `client_credentials` grant. This is the machine-to-machine equivalent of the user OAuth flow: the credential belongs to an application, not a person.
 
-Open the **Connect** dialog for an Agent or MCP Gateway, then use its OAuth client controls. Each client is scoped to an explicit list of Agents and gateways. Creation returns a `client_id` and a one-time `client_secret`, which you can rotate later. A client can only mint tokens for resources on its list.
+Register one in **Settings > OAuth Clients**, which lists every OAuth client in the deployment — those for MCP gateways and agents alongside those for the LLM Proxy. Each client is scoped to an explicit list of Agents and gateways. Creation returns a `client_id` and a one-time `client_secret`, which you can rotate later. A client can only mint tokens for resources on its list.
 
 Like agents and gateways, each OAuth client has a visibility level — **Personal** (only its creator), **Teams** (members of selected teams), or **Organization** — controlling who can see, edit, rotate, and delete it. New clients default to Personal; sharing with teams requires `mcpOauthClient:team-admin`, organization-wide visibility requires `mcpOauthClient:admin`, and admins see every client regardless. Visibility only governs management access — it does not change which gateways the client's tokens can reach at runtime.
 
@@ -85,7 +85,7 @@ Because there is no acting user, per-user dynamic credential resolution does not
 
 When a pre-registered application needs to act with the **user's** Archestra identity — for example an agentic chat backend calling gateways for whoever is signed in — register an MCP OAuth client with the `authorization_code` grant. Its tokens are user-bound, so unlike client credentials, gateway tools resolve each caller's own permissions and connections, and **Resolve at call time** works.
 
-Open the **Connect** dialog for an Agent or MCP Gateway. Create an OAuth client, choose **On behalf of users**, and add one or more redirect URIs. The client is confidential and returns a `client_id` and one-time `client_secret`. PKCE is required.
+In **Settings > OAuth Clients**, create a client, choose **On behalf of users**, and add one or more redirect URIs. The client is confidential and returns a `client_id` and one-time `client_secret`. PKCE is required.
 
 The application runs the standard browser flow:
 

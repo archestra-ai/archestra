@@ -55,6 +55,17 @@ interface SearchableSelectProps {
   disabled?: boolean;
   allowCustom?: boolean;
   showSearchIcon?: boolean;
+  /**
+   * Set false where the options are a short fixed set — a filter over two or
+   * three known values shows the reader everything already, so the search
+   * field is the one thing in the popover with nothing to do.
+   *
+   * Deliberately the caller's call rather than a count: keying it off how many
+   * options happen to exist would give a roster a search field in one
+   * organization and not another, and the search-first pickers (users, models,
+   * virtual keys) would lose theirs whenever the list happened to be short.
+   */
+  showSearch?: boolean;
   hint?: string;
   onSearchQueryChange?: (value: string) => void;
   emptyMessage?: string;
@@ -82,6 +93,7 @@ export function SearchableSelect({
   disabled = false,
   allowCustom = false,
   showSearchIcon = true,
+  showSearch = true,
   hint,
   onSearchQueryChange,
   emptyMessage = "No results found.",
@@ -206,22 +218,24 @@ export function SearchableSelect({
         side={contentSide}
         avoidCollisions={contentAvoidCollisions}
       >
-        <div className="flex items-center border-b px-3 py-2">
-          {showSearchIcon && (
-            <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
-          )}
-          <input
-            aria-label={searchPlaceholder || "Search options"}
-            placeholder={searchPlaceholder}
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              onSearchQueryChange?.(e.target.value);
-            }}
-            onKeyDown={handleKeyDown}
-            className="flex w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-          />
-        </div>
+        {showSearch && (
+          <div className="flex items-center border-b px-3 py-2">
+            {showSearchIcon && (
+              <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+            )}
+            <input
+              aria-label={searchPlaceholder || "Search options"}
+              placeholder={searchPlaceholder}
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                onSearchQueryChange?.(e.target.value);
+              }}
+              onKeyDown={handleKeyDown}
+              className="flex w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            />
+          </div>
+        )}
         {hint && (
           <div className="mt-2 px-3 pb-1.5 text-xs text-muted-foreground">
             {hint}

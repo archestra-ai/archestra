@@ -998,7 +998,7 @@ function DeleteApiKeyDescription({
             <p className="font-medium">OAuth clients</p>
             <Link
               className="text-primary underline-offset-4 hover:underline"
-              href={`/llm/proxy/oauth-clients?providerApiKeyId=${apiKey.id}`}
+              href={`/settings/oauth-clients?type=llm&providerApiKeyId=${apiKey.id}`}
             >
               View all
             </Link>

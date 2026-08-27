@@ -1,25 +1,14 @@
 "use client";
+import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import { useDebounce } from "@uidotdev/usehooks";
-import {
-  Bot,
-  Cable,
-  Folder,
-  Home,
-  Key,
-  MessageCircle,
-  MessagesSquare,
-  Network,
-  Pencil,
-  Pin,
-  Router,
-  Settings,
-  Shield,
-  UsersRound,
-  Wrench,
-  Zap,
-} from "lucide-react";
+import { Folder, MessageCircle, Pencil, Pin, UsersRound } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  chatsNavItems,
+  contentNavGroups,
+  isNavItemPermitted,
+} from "@/app/_parts/studio-nav";
 import { AgentIcon } from "@/components/agent-icon";
 import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
 import { Badge } from "@/components/ui/badge";
@@ -48,7 +37,7 @@ import {
   SHORTCUT_SIDEBAR,
 } from "@/consts";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
 import {
   useConversations,
   useDeleteConversation,
@@ -85,87 +74,76 @@ function extractTextFromMessages(
   return textParts.join(" ");
 }
 
-// Product navigation items matching sidebar names
-const navigationItems = [
-  {
-    icon: Bot,
-    label: "Agents",
-    value: "agents",
-    keywords: "agent bot ai",
-    href: "/agents",
-  },
-  {
-    icon: Zap,
-    label: "Messaging Channels",
-    value: "messaging-channels",
-    keywords:
-      "messaging channels triggers automation webhooks slack ms teams email a2a",
-    href: "/messaging-channels/ms-teams",
-  },
-  {
-    icon: Shield,
-    label: "MCP Gateways",
-    value: "mcp-gateways",
-    keywords: "gateways security mcp",
-    href: "/mcp/gateways",
-  },
-  {
-    icon: Network,
-    label: "LLM Proxy",
-    value: "llm-proxy",
-    keywords: "proxy llm network virtual keys oauth clients",
-    href: "/llm/proxy",
-  },
-  {
-    icon: Key,
-    label: "Model Providers",
-    value: "model-providers",
-    keywords: "provider settings api keys models llm",
-    href: "/llm/model-providers",
-  },
-  {
-    icon: MessagesSquare,
-    label: "Logs",
-    value: "logs",
-    keywords: "logs llm proxy requests",
-    href: "/llm/logs",
-  },
-  {
-    icon: Wrench,
-    label: "Tool Guardrails",
-    value: "tool-guardrails",
-    keywords: "tools guardrails policies permissions security",
-    href: "/mcp/tool-guardrails",
-  },
-  {
-    icon: Router,
-    label: "MCP Registry",
-    value: "mcp-registry",
-    keywords: "mcp catalog registry servers",
-    href: "/mcp/registry",
-  },
-  {
-    icon: Home,
-    label: "Costs & Limits",
-    value: "cost-limits",
-    keywords: "usage cost dashboard limits budget",
-    href: "/llm/costs",
-  },
-  {
-    icon: Cable,
-    label: "Connect",
-    value: "connect",
-    keywords: "connect integration api",
-    href: "/connection",
-  },
-  {
-    icon: Settings,
-    label: "Settings",
-    value: "settings",
-    keywords: "settings configuration preferences",
-    href: "/settings",
-  },
-];
+/**
+ * Search synonyms, for words a reader might type that the destination's own
+ * name does not contain. Keyed by URL so a rename cannot strand them, and
+ * optional: a page without an entry is still found by its name.
+ */
+const NAVIGATION_KEYWORDS: Record<string, string> = {
+  "/agents": "agent bot ai",
+  "/skills": "skills abilities",
+  "/plugins": "plugins extensions",
+  "/messaging-channels":
+    "messaging channels triggers automation webhooks slack ms teams email a2a",
+  "/mcp/registry": "mcp catalog registry servers",
+  "/mcp/gateways": "gateways security mcp",
+  "/mcp/tool-guardrails": "tools guardrails policies permissions security",
+  "/llm/proxy": "proxy llm network",
+  "/llm/proxy/virtual-keys": "virtual keys credentials",
+  "/llm/model-providers": "provider api keys models llm",
+  "/llm/models": "models catalog",
+  "/llm/costs": "usage cost dashboard limits budget spend",
+  "/knowledge/connectors": "knowledge connectors sources sync",
+  "/knowledge/files": "knowledge files documents uploads",
+  "/knowledge/knowledge-bases": "knowledge bases embeddings retrieval rag",
+  "/llm/logs": "logs llm proxy requests",
+  "/settings": "settings configuration preferences",
+  "/connection": "connect integration api",
+  "/projects": "projects workspaces",
+  "/apps": "apps",
+};
+
+/**
+ * The destinations this palette can jump to, taken from the same definition
+ * the sidebar renders and filtered by the same permission rule — so a page
+ * the reader may not open is not offered here, and a page named or moved in
+ * one surface cannot go stale in the other.
+ */
+function useNavigationDestinations() {
+  const permissionMap = usePermissionMap(requiredPagePermissionsMap);
+  const pluginsEnabled = useFeature("plugins");
+  // Connect needs both halves of what it explains, exactly as the sidebar
+  // gates its own row.
+  const { data: canReadLlmProxy } = useHasPermissions({ llmProxy: ["read"] });
+  const { data: canReadMcpGateway } = useHasPermissions({
+    mcpGateway: ["read"],
+  });
+
+  return useMemo(() => {
+    if (!permissionMap) return [];
+    const items = [
+      // New Chat is the palette's own first row, so listing it again here
+      // would offer the same destination twice.
+      ...chatsNavItems.filter((item) => item.url !== "/chat"),
+      ...contentNavGroups.flatMap((group) => group.items),
+    ];
+    return items
+      .filter((item) => {
+        if (item.url === "/connection") {
+          return canReadLlmProxy === true && canReadMcpGateway === true;
+        }
+        if (item.url === "/plugins") return pluginsEnabled === true;
+        return isNavItemPermitted(item, permissionMap);
+      })
+      .map((item) => ({
+        icon: item.icon,
+        label: item.tooltipLabel ?? item.title,
+        value: item.url,
+        keywords: NAVIGATION_KEYWORDS[item.url] ?? "",
+        href: item.url,
+      }));
+  }, [permissionMap, pluginsEnabled, canReadLlmProxy, canReadMcpGateway]);
+}
 
 interface ConversationSearchPaletteProps {
   open: boolean;
@@ -212,6 +190,8 @@ export function ConversationSearchPalette({
     search: debouncedSearch,
   });
 
+  const navigationDestinations = useNavigationDestinations();
+
   // Show skeleton during typing or initial fetch
   const isSearching = searchQuery.trim().length > 0;
   const isTyping = searchQuery !== debouncedSearch;
@@ -221,14 +201,14 @@ export function ConversationSearchPalette({
     if (recentChatsView) return [];
 
     const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
-    if (!normalizedQuery) return navigationItems;
+    if (!normalizedQuery) return navigationDestinations;
 
-    return navigationItems.filter((item) =>
+    return navigationDestinations.filter((item) =>
       `${item.label} ${item.value} ${item.keywords}`
         .toLocaleLowerCase()
         .includes(normalizedQuery),
     );
-  }, [recentChatsView, searchQuery]);
+  }, [recentChatsView, searchQuery, navigationDestinations]);
 
   const browseConversations = useMemo(() => {
     if (debouncedSearch.trim()) {
@@ -633,7 +613,10 @@ export function ConversationSearchPalette({
               )}
             </CommandGroup>
 
-            {!recentChatsView && (
+            {/* Only when there is something under it. A reader who has never
+                started a chat was shown the heading over empty space, between
+                the New chat row and Pages. */}
+            {!recentChatsView && conversations.length > 0 && (
               <>
                 <CommandSeparator className="my-2" />
 

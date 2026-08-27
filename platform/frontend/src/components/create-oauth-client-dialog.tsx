@@ -105,7 +105,7 @@ export function CreateOAuthClientDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="Create OAuth Client"
-      description="Register an application that authenticates to your agents, MCP gateways, or the LLM Proxy with OAuth."
+      description={describeClientType(fixedClientType)}
     >
       <DialogForm
         onSubmit={async (event) => {
@@ -249,6 +249,21 @@ type RadioCardOption = {
   label: string;
   description: string;
 };
+
+/**
+ * Names only the surface this dialog can actually register for. Opened from
+ * the LLM Proxy or from MCP, the type is fixed and its picker hidden — so
+ * listing all three reads as a menu the reader has not been given.
+ */
+function describeClientType(fixedClientType?: OAuthClientType) {
+  if (fixedClientType === "llm") {
+    return "Register an application that authenticates to the LLM Proxy with OAuth.";
+  }
+  if (fixedClientType === "mcp") {
+    return "Register an application that authenticates to your MCP gateways and agents with OAuth.";
+  }
+  return "Register an application that authenticates to your agents, MCP gateways, or the LLM Proxy with OAuth.";
+}
 
 const CLIENT_TYPE_OPTIONS: RadioCardOption[] = [
   {

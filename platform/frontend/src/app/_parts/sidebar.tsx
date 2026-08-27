@@ -57,7 +57,6 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -115,14 +114,8 @@ interface NavItem {
 }
 
 interface NavGroup {
-  /** Stable React key, and the group's name in code regardless of its label. */
+  /** Stable React key, and the group's name in code. Never rendered. */
   id: string;
-  /**
-   * Section heading above the group's rows. Omitted for the closing group,
-   * which holds the app-wide rows that belong to no section — it is separated
-   * by space alone.
-   */
-  label?: string;
   items: NavItem[];
 }
 
@@ -286,11 +279,15 @@ function SidebarModeToggle({
  * for its siblings (Skills for Plugins, Model Providers for Models, Costs for
  * Limits), which left everything behind the first tab invisible from the
  * sidebar. Each page keeps its tab bar; the sidebar now names what is there.
+ *
+ * The groups carry no heading. A heading here would have to name a category
+ * the rows already spell out — "Agents" above a row called Agents — and the
+ * Chats sidebar sets the precedent: its own rows sit unlabelled and only its
+ * collections (Pinned, Recents) take a heading. Space alone separates them.
  */
 const contentNavGroups: NavGroup[] = [
   {
     id: "agents",
-    label: "Agents",
     items: [
       {
         title: "Agents",
@@ -326,7 +323,6 @@ const contentNavGroups: NavGroup[] = [
   },
   {
     id: "mcp",
-    label: "MCP",
     items: [
       {
         title: "MCP Registry",
@@ -344,19 +340,10 @@ const contentNavGroups: NavGroup[] = [
         customIsActive: (pathname: string) =>
           pathname.startsWith("/mcp/gateways"),
       },
-      {
-        title: "Guardrails",
-        url: "/mcp/tool-guardrails",
-        icon: ShieldCheck,
-        testId: E2eTestId.SidebarNavGuardrails,
-        customIsActive: (pathname: string) =>
-          pathname.startsWith("/mcp/tool-guardrails"),
-      },
     ],
   },
   {
     id: "llm",
-    label: "LLM",
     items: [
       {
         // Exact match: the proxy's sibling tabs are rows of their own now, so
@@ -411,8 +398,7 @@ const contentNavGroups: NavGroup[] = [
     id: "knowledge",
     // Its rows are the three Knowledge tabs. "Knowledge Bases" keeps the name
     // the rest of the product uses (page title, docs, API) rather than
-    // shortening to "Bases" under the heading.
-    label: "Knowledge",
+    // shortening to "Bases".
     items: [
       {
         title: "Connectors",
@@ -438,10 +424,22 @@ const contentNavGroups: NavGroup[] = [
     ],
   },
   {
-    // No heading: these span every section above, so naming the group would
-    // only invent a category ("Other") that means nothing to the reader.
+    // The rows that span every group above: what tools are allowed to do,
+    // what they did, and how the deployment is configured.
     id: "platform",
     items: [
+      {
+        // Not under MCP: the page's own tools come from installed MCP
+        // servers, from agents and apps, and from traffic between agents and
+        // LLMs. The URL stays /mcp/tool-guardrails — docs and deep links
+        // point at it, and the route is not what the reader is being told.
+        title: "Guardrails",
+        url: "/mcp/tool-guardrails",
+        icon: ShieldCheck,
+        testId: E2eTestId.SidebarNavGuardrails,
+        customIsActive: (pathname: string) =>
+          pathname.startsWith("/mcp/tool-guardrails"),
+      },
       {
         title: "Logs",
         url: "/llm/logs",
@@ -629,38 +627,30 @@ const NavPrimary = ({
           </SidebarMenuButton>
         </SidebarMenuItem>
       </SidebarMenu>
-      {groups.map((group) => {
-        const permittedItems = group.items.filter((item) =>
-          isNavItemPermitted(item, permissionMap),
-        );
-        if (permittedItems.length === 0) return null;
-        return (
-          <React.Fragment key={group.id}>
-            {group.label && (
-              <SidebarGroupLabel
-                role="heading"
-                aria-level={2}
-                className="uppercase tracking-wider"
-              >
-                {group.label}
-              </SidebarGroupLabel>
+      {/* Each group is its own list, told apart by the space above it rather
+          than by a heading. The gap is dropped on the group that renders
+          first — whichever survives the permission filter, since a reader who
+          may open none of Agents starts at the next one — and in the icon rail,
+          where every row is a bare icon and the gaps would read as arbitrary
+          breaks in a single column. */}
+      {groups
+        .map((group) => ({
+          group,
+          permittedItems: group.items.filter((item) =>
+            isNavItemPermitted(item, permissionMap),
+          ),
+        }))
+        .filter(({ permittedItems }) => permittedItems.length > 0)
+        .map(({ group, permittedItems }, index) => (
+          <SidebarMenu
+            key={group.id}
+            className={cn(
+              index > 0 && "mt-4 group-data-[collapsible=icon]:mt-0",
             )}
-            {/* Each group is its own list under its own heading. The heading's
-                own row height is the space between groups; a group without one
-                (and the first group, whose heading follows the header) supplies
-                that space itself. Collapsed to the icon rail the headings are
-                folded away, so the spacing goes with them and the icons keep a
-                single rhythm. */}
-            <SidebarMenu
-              className={cn(
-                !group.label && "mt-4 group-data-[collapsible=icon]:mt-0",
-              )}
-            >
-              {permittedItems.map(renderItem)}
-            </SidebarMenu>
-          </React.Fragment>
-        );
-      })}
+          >
+            {permittedItems.map(renderItem)}
+          </SidebarMenu>
+        ))}
     </SidebarGroup>
   );
 };

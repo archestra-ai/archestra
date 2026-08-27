@@ -495,6 +495,7 @@ function SessionsTable() {
             input so toggling it never reflows the filter bar or the table. */}
         <div className={filterSearchClass}>
           <SearchInput
+            isLoading={isFetching}
             objectNamePlural="logs"
             searchFields={["session ID"]}
             paramName="search"

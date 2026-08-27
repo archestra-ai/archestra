@@ -482,6 +482,7 @@ function McpToolCallsTable({
   // Shared search input component
   const searchInputComponent = (
     <SearchInput
+      isLoading={isFetching}
       objectNamePlural="tool calls"
       searchFields={["tool name", "server name"]}
       paramName="search"

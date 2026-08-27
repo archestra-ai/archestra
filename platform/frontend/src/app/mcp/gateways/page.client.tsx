@@ -690,6 +690,7 @@ function McpGateways({
                 actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
               >
                 <SearchInput
+                  isLoading={isFetching}
                   objectNamePlural="gateways"
                   searchFields={["name"]}
                   paramName="name"

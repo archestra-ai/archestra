@@ -455,7 +455,11 @@ function KnowledgeBasesList() {
             <FilterBar
               actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
             >
-              <SearchInput paramName="search" className={filterSearchClass} />
+              <SearchInput
+                paramName="search"
+                className={filterSearchClass}
+                isLoading={isFetching}
+              />
               <ResourceDeletedStatusFilter
                 deletePermission={{ knowledgeSource: ["delete"] }}
               />

@@ -67993,6 +67993,7 @@ export type GetMcpServersResponses = {
             reason: string;
             mutedAt: string;
         }>;
+        canUseCredential: boolean;
     }>;
 };
 

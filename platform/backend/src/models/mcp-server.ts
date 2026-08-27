@@ -228,6 +228,82 @@ class McpServerModel {
   }
 
   /**
+   * The installs whose stored credential `userId` may actually present to the
+   * upstream: the connections they made themselves, and the ones shared with
+   * them — a team install of a team they belong to, or an org install.
+   *
+   * Deliberately narrower than {@link findById}'s visibility gate, and
+   * deliberately blind to `mcpServerInstallation:admin`. An installation admin
+   * manages every connection in the organization and sees other people's
+   * personal ones in the registry, but managing a connection is not the same
+   * as being able to authenticate as the person who made it: nothing may
+   * borrow another member's credential to talk to a third-party server.
+   *
+   * @param restrictToIds when given, only these installs are considered — pass
+   * the ids already on the page to keep the org-scope scan bounded.
+   */
+  static async getCredentialUsableServerIds(
+    userId: string,
+    restrictToIds?: string[],
+  ): Promise<Set<string>> {
+    if (restrictToIds?.length === 0) return new Set();
+
+    const rows = await db
+      .select({ id: schema.mcpServersTable.id })
+      .from(schema.mcpServersTable)
+      .leftJoin(
+        schema.mcpServerUsersTable,
+        and(
+          eq(schema.mcpServerUsersTable.mcpServerId, schema.mcpServersTable.id),
+          eq(schema.mcpServerUsersTable.userId, userId),
+        ),
+      )
+      .leftJoin(
+        schema.teamMembersTable,
+        and(
+          eq(schema.teamMembersTable.teamId, schema.mcpServersTable.teamId),
+          eq(schema.teamMembersTable.userId, userId),
+        ),
+      )
+      .where(
+        and(
+          // Active installs only — a soft-deleted install grants nothing.
+          notDeleted(schema.mcpServersTable),
+          restrictToIds
+            ? inArray(schema.mcpServersTable.id, restrictToIds)
+            : undefined,
+          or(
+            // Their own connection.
+            eq(schema.mcpServersTable.ownerId, userId),
+            isNotNull(schema.mcpServerUsersTable.userId),
+            // Shared with them.
+            and(
+              eq(schema.mcpServersTable.scope, "team"),
+              isNotNull(schema.teamMembersTable.userId),
+            ),
+            eq(schema.mcpServersTable.scope, "org"),
+          ),
+        ),
+      );
+
+    return new Set(rows.map((row) => row.id));
+  }
+
+  /**
+   * Single-install form of {@link getCredentialUsableServerIds} — same rule,
+   * same query, scoped to one id.
+   */
+  static async userCanUseCredential(
+    userId: string,
+    mcpServerId: string,
+  ): Promise<boolean> {
+    const usable = await McpServerModel.getCredentialUsableServerIds(userId, [
+      mcpServerId,
+    ]);
+    return usable.has(mcpServerId);
+  }
+
+  /**
    * Get IDs of org-scoped MCP servers visible to every member of the
    * organization.
    */

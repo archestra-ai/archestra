@@ -124,6 +124,14 @@ export const SelectMcpServerSchema = createSelectSchema(
  */
 export const McpServerListEntrySchema = SelectMcpServerSchema.extend({
   alertMutes: z.array(McpServerAlertMuteSchema),
+  /**
+   * Whether the CALLER may present this install's stored credential to the
+   * upstream — their own connection, or one shared with them. False for
+   * another member's personal connection, which the listing still returns to
+   * installation admins so they can manage it. Surfaces that authenticate as
+   * the install (the Inspector) offer only the connections this is true for.
+   */
+  canUseCredential: z.boolean(),
 });
 
 export const InsertMcpServerSchema = createInsertSchema(schema.mcpServersTable)

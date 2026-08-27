@@ -266503,6 +266503,9 @@
                           ],
                           "additionalProperties": false
                         }
+                      },
+                      "canUseCredential": {
+                        "type": "boolean"
                       }
                     },
                     "required": [
@@ -266529,7 +266532,8 @@
                       "createdAt",
                       "updatedAt",
                       "deletedAt",
-                      "alertMutes"
+                      "alertMutes",
+                      "canUseCredential"
                     ],
                     "additionalProperties": false
                   }

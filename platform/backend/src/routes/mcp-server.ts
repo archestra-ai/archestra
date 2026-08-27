@@ -176,8 +176,15 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (catalogId) {
           deleted = deleted.filter((s) => s.catalogId === catalogId);
         }
-        // An uninstalled connection reports no alerts, so it carries no mutes.
-        return reply.send(deleted.map((s) => ({ ...s, alertMutes: [] })));
+        // An uninstalled connection reports no alerts, so it carries no mutes,
+        // and there is nothing left to authenticate against.
+        return reply.send(
+          deleted.map((s) => ({
+            ...s,
+            alertMutes: [],
+            canUseCredential: false,
+          })),
+        );
       }
 
       const [{ success: isMcpServerAdmin }, userIsPredefinedAdmin] =
@@ -217,14 +224,20 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      const alertMutesByCatalogId = config.mcpServer.alertingEnabled
-        ? await McpServerAlertMuteModel.findForViewer({
-            userId: user.id,
-            catalogIds: [
-              ...new Set(allServers.map((server) => server.catalogId)),
-            ],
-          })
-        : new Map<string, McpServerAlertMute[]>();
+      const [alertMutesByCatalogId, credentialUsableIds] = await Promise.all([
+        config.mcpServer.alertingEnabled
+          ? McpServerAlertMuteModel.findForViewer({
+              userId: user.id,
+              catalogIds: [
+                ...new Set(allServers.map((server) => server.catalogId)),
+              ],
+            })
+          : new Map<string, McpServerAlertMute[]>(),
+        McpServerModel.getCredentialUsableServerIds(
+          user.id,
+          allServers.map((server) => server.id),
+        ),
+      ]);
 
       return reply.send(
         allServers.map((server) => ({
@@ -232,6 +245,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           alertMutes: (
             alertMutesByCatalogId.get(server.catalogId) ?? []
           ).filter((mute) => mute.mcpServerId === server.id),
+          canUseCredential: credentialUsableIds.has(server.id),
         })),
       );
     },
@@ -2055,6 +2069,19 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       if (!mcpServer) {
         throw new ApiError(404, "MCP server not found");
+      }
+
+      // Inspecting sends real requests upstream signed with this install's
+      // stored credential, so it is gated on being able to *use* that
+      // credential, not merely to see the install. The listing deliberately
+      // shows an installation admin every connection in the organization,
+      // other members' personal ones included — without this, picking one of
+      // those in the Inspector authenticated as its owner.
+      if (!(await McpServerModel.userCanUseCredential(user.id, mcpServer.id))) {
+        throw new ApiError(
+          403,
+          "This connection belongs to another user. You can only inspect your own connections, or ones shared with you.",
+        );
       }
 
       const catalogItem = mcpServer.catalogId

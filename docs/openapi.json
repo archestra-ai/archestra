@@ -267598,6 +267598,10 @@
                           "org"
                         ]
                       },
+                      "ownerId": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "ownerEmail": {
                         "nullable": true,
                         "type": "string"
@@ -267608,6 +267612,7 @@
                       "name",
                       "agentType",
                       "scope",
+                      "ownerId",
                       "ownerEmail"
                     ],
                     "additionalProperties": false
@@ -268158,6 +268163,10 @@
                                 "org"
                               ]
                             },
+                            "ownerId": {
+                              "nullable": true,
+                              "type": "string"
+                            },
                             "ownerEmail": {
                               "nullable": true,
                               "type": "string"
@@ -268168,6 +268177,7 @@
                             "name",
                             "agentType",
                             "scope",
+                            "ownerId",
                             "ownerEmail"
                           ],
                           "additionalProperties": false
@@ -268842,6 +268852,10 @@
                               "org"
                             ]
                           },
+                          "ownerId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "ownerEmail": {
                             "nullable": true,
                             "type": "string"
@@ -268852,6 +268866,7 @@
                           "name",
                           "agentType",
                           "scope",
+                          "ownerId",
                           "ownerEmail"
                         ],
                         "additionalProperties": false
@@ -269401,6 +269416,10 @@
                               "org"
                             ]
                           },
+                          "ownerId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "ownerEmail": {
                             "nullable": true,
                             "type": "string"
@@ -269411,6 +269430,7 @@
                           "name",
                           "agentType",
                           "scope",
+                          "ownerId",
                           "ownerEmail"
                         ],
                         "additionalProperties": false
@@ -270269,6 +270289,10 @@
                               "org"
                             ]
                           },
+                          "ownerId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "ownerEmail": {
                             "nullable": true,
                             "type": "string"
@@ -270279,6 +270303,7 @@
                           "name",
                           "agentType",
                           "scope",
+                          "ownerId",
                           "ownerEmail"
                         ],
                         "additionalProperties": false
@@ -271160,6 +271185,10 @@
                               "org"
                             ]
                           },
+                          "ownerId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "ownerEmail": {
                             "nullable": true,
                             "type": "string"
@@ -271170,6 +271199,7 @@
                           "name",
                           "agentType",
                           "scope",
+                          "ownerId",
                           "ownerEmail"
                         ],
                         "additionalProperties": false
@@ -273307,6 +273337,10 @@
                               "org"
                             ]
                           },
+                          "ownerId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "ownerEmail": {
                             "nullable": true,
                             "type": "string"
@@ -273317,6 +273351,7 @@
                           "name",
                           "agentType",
                           "scope",
+                          "ownerId",
                           "ownerEmail"
                         ],
                         "additionalProperties": false

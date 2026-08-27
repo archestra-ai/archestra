@@ -361,6 +361,7 @@ describe("McpServerModel", () => {
             name: agent.name,
             scope: agent.scope,
             agentType: agent.agentType,
+            ownerId: agent.ownerId,
             ownerEmail: agent.ownerEmail,
           }))
           .sort((a, b) =>
@@ -371,12 +372,14 @@ describe("McpServerModel", () => {
           name: "My Assistant",
           scope: "personal",
           agentType: "agent",
+          ownerId: alice.id,
           ownerEmail: "alice@example.com",
         },
         {
           name: "My Assistant",
           scope: "personal",
           agentType: "agent",
+          ownerId: bob.id,
           ownerEmail: "bob@example.com",
         },
       ]);
@@ -402,7 +405,11 @@ describe("McpServerModel", () => {
       ]);
 
       expect(byOrg.get(org.id)).toEqual([
-        expect.objectContaining({ name: "Shared Gateway", ownerEmail: null }),
+        expect.objectContaining({
+          name: "Shared Gateway",
+          ownerId: null,
+          ownerEmail: null,
+        }),
       ]);
     });
 

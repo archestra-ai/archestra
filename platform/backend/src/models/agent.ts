@@ -273,6 +273,7 @@ class AgentModel {
         name: schema.agentsTable.name,
         agentType: schema.agentsTable.agentType,
         scope: schema.agentsTable.scope,
+        ownerId: schema.agentsTable.authorId,
         ownerEmail: schema.usersTable.email,
       })
       .from(schema.agentsTable)

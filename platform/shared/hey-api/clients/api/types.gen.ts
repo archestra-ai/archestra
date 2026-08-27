@@ -68184,6 +68184,7 @@ export type GetMcpServerAutoModeAgentsResponses = {
         name: string;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         scope: 'personal' | 'team' | 'org';
+        ownerId: string | null;
         ownerEmail: string | null;
     }>;
 };
@@ -68318,6 +68319,7 @@ export type GetMcpServersResponses = {
             name: string;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             scope: 'personal' | 'team' | 'org';
+            ownerId: string | null;
             ownerEmail: string | null;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
@@ -68475,6 +68477,7 @@ export type InstallMcpServerResponses = {
             name: string;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             scope: 'personal' | 'team' | 'org';
+            ownerId: string | null;
             ownerEmail: string | null;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
@@ -68690,6 +68693,7 @@ export type GetMcpServerResponses = {
             name: string;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             scope: 'personal' | 'team' | 'org';
+            ownerId: string | null;
             ownerEmail: string | null;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
@@ -68830,6 +68834,7 @@ export type ReauthenticateMcpServerResponses = {
             name: string;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             scope: 'personal' | 'team' | 'org';
+            ownerId: string | null;
             ownerEmail: string | null;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
@@ -69057,6 +69062,7 @@ export type RestoreMcpServerResponses = {
             name: string;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             scope: 'personal' | 'team' | 'org';
+            ownerId: string | null;
             ownerEmail: string | null;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
@@ -69653,6 +69659,7 @@ export type ReinstallMcpServerResponses = {
             name: string;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             scope: 'personal' | 'team' | 'org';
+            ownerId: string | null;
             ownerEmail: string | null;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';

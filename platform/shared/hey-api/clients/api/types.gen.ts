@@ -82271,6 +82271,8 @@ export type GetPluginSkillsResponses = {
         pluginId: string;
         pluginName: string;
         pluginSlug: string;
+        sourceRepo: string | null;
+        sourceMarketplaceRepo: string | null;
         pluginEnabled: boolean;
         scope: 'personal' | 'team' | 'org';
         clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
@@ -82474,6 +82476,8 @@ export type GetPluginSkillResponses = {
         pluginId: string;
         pluginName: string;
         pluginSlug: string;
+        sourceRepo: string | null;
+        sourceMarketplaceRepo: string | null;
         pluginEnabled: boolean;
         scope: 'personal' | 'team' | 'org';
         clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';

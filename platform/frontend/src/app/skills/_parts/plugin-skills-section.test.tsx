@@ -24,6 +24,8 @@ const skill = {
   pluginId: "11111111-1111-4111-8111-111111111111",
   pluginName: "STE bundle",
   pluginSlug: "ste-bundle-11111111",
+  sourceRepo: "archestra-ai/portable-skills",
+  sourceMarketplaceRepo: null,
   pluginEnabled: true,
   scope: "org" as const,
   clientType: "claude-code" as const,
@@ -31,7 +33,7 @@ const skill = {
   skillPath: "skills/ste-writing",
   name: "ste-writing",
   description: "Write without AI slop.",
-  compatibility: null,
+  compatibility: "Requires node 20+.",
   fileCount: 2,
   usageCount: 3,
   usageUserCount: 2,
@@ -47,12 +49,16 @@ describe("PluginSkillsSection", () => {
   });
 
   it("renders plugin provenance and the beta category", () => {
-    render(<PluginSkillsSection skills={[skill]} />);
+    const { container } = render(<PluginSkillsSection skills={[skill]} />);
 
     expect(screen.getByText("Skills from plugins")).toBeInTheDocument();
     expect(screen.getByText("Beta")).toBeInTheDocument();
     expect(screen.getByText("STE bundle")).toBeInTheDocument();
+    expect(
+      container.querySelector('[title="Source: archestra-ai/portable-skills"]'),
+    ).toBeInTheDocument();
     expect(screen.getByText("ste-writing")).toBeInTheDocument();
+    expect(screen.getByText("compatibility")).toBeInTheDocument();
     expect(screen.getByText(/claude-code/)).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "STE bundle" })).toBeNull();
     expect(screen.queryByRole("link", { name: "View ste-writing" })).toBeNull();

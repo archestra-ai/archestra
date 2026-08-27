@@ -2,7 +2,7 @@
 
 import type { archestraApiTypes } from "@archestra/shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
-import { ChartColumn, Puzzle } from "lucide-react";
+import { ChartColumn, Info, Puzzle } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -13,7 +13,13 @@ import {
   TableRowActions,
 } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useSession } from "@/lib/auth/auth.query";
+import { PluginSourceIcon } from "../../plugins/_parts/plugin-source-icon";
 import { SkillCollection, SkillSortableHeader } from "./skill-collection";
 import { SkillUsageDialog } from "./skill-usage-dialog";
 import { SkillUsageSummary } from "./skill-usage-summary";
@@ -84,15 +90,22 @@ export function PluginSkillsSection({
           onToggle={() => column.toggleSorting(column.getIsSorted() === "asc")}
         />
       ),
-      size: 220,
+      size: 180,
+      minSize: 180,
+      maxSize: 240,
       cell: ({ row }) => (
         <div className="flex min-w-0 items-center gap-2.5">
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-muted/30">
-            <Puzzle className="size-4 text-muted-foreground" />
-          </div>
+          <PluginSourceIcon plugin={row.original} />
           <div className="min-w-0">
-            <div className="truncate font-medium">
-              {row.original.pluginName}
+            <div className="flex items-center gap-2">
+              <span className="truncate font-medium">
+                {row.original.pluginName}
+              </span>
+              {!row.original.pluginEnabled && (
+                <Badge variant="outline" className="shrink-0">
+                  Disabled
+                </Badge>
+              )}
             </div>
             <div className="truncate text-xs text-muted-foreground">
               {row.original.clientType} ·{" "}
@@ -112,13 +125,28 @@ export function PluginSkillsSection({
           onToggle={() => column.toggleSorting(column.getIsSorted() === "asc")}
         />
       ),
-      size: 460,
+      size: 450,
+      minSize: 320,
+      maxSize: 600,
       cell: ({ row }) => (
-        <div className="min-w-0">
-          <div className="truncate font-medium">{row.original.name}</div>
-          <div className="truncate text-xs text-muted-foreground">
-            {row.original.description}
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="truncate font-medium">{row.original.name}</div>
+            <div className="truncate text-xs text-muted-foreground">
+              {row.original.description || "No description"}
+            </div>
           </div>
+          {row.original.compatibility && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="outline" className="shrink-0 gap-1">
+                  <Info className="h-3 w-3" />
+                  compatibility
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>{row.original.compatibility}</TooltipContent>
+            </Tooltip>
+          )}
         </div>
       ),
     },
@@ -140,7 +168,7 @@ export function PluginSkillsSection({
     },
     {
       id: "files",
-      size: 100,
+      size: 90,
       header: () => <div className="text-right">Files</div>,
       cell: ({ row }) => (
         <div className="text-right text-sm text-muted-foreground">
@@ -176,10 +204,12 @@ export function PluginSkillsSection({
     },
     {
       id: "actions",
-      size: 100,
-      header: () => <div className="text-right">Actions</div>,
+      size: 150,
+      header: () => <div className="pl-4 text-right">Actions</div>,
       cell: ({ row }) => (
-        <div className="flex justify-end">{renderActions(row.original)}</div>
+        <div className="flex justify-end pl-4">
+          {renderActions(row.original)}
+        </div>
       ),
     },
   ];
@@ -206,7 +236,7 @@ export function PluginSkillsSection({
         renderCard={(skill) => (
           <TableCard
             key={`${skill.pluginId}:${skill.skillPath}`}
-            icon={<Puzzle className="size-4 text-muted-foreground" />}
+            icon={<PluginSourceIcon plugin={skill} />}
             title={<Link href={pluginSkillHref(skill)}>{skill.name}</Link>}
             description={skill.description || "No description"}
             actions={renderActions(skill)}
@@ -234,6 +264,17 @@ export function PluginSkillsSection({
               />
               {!skill.pluginEnabled && (
                 <Badge variant="outline">Plugin disabled</Badge>
+              )}
+              {skill.compatibility && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge variant="outline" className="gap-1">
+                      <Info className="h-3 w-3" />
+                      compatibility
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>{skill.compatibility}</TooltipContent>
+                </Tooltip>
               )}
             </div>
           </TableCard>

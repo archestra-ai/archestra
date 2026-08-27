@@ -321148,6 +321148,14 @@
                       "pluginSlug": {
                         "type": "string"
                       },
+                      "sourceRepo": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "sourceMarketplaceRepo": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "pluginEnabled": {
                         "type": "boolean"
                       },
@@ -321217,6 +321225,8 @@
                       "pluginId",
                       "pluginName",
                       "pluginSlug",
+                      "sourceRepo",
+                      "sourceMarketplaceRepo",
                       "pluginEnabled",
                       "scope",
                       "clientType",
@@ -321874,6 +321884,14 @@
                     "pluginSlug": {
                       "type": "string"
                     },
+                    "sourceRepo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "sourceMarketplaceRepo": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "pluginEnabled": {
                       "type": "boolean"
                     },
@@ -321989,6 +322007,8 @@
                     "pluginId",
                     "pluginName",
                     "pluginSlug",
+                    "sourceRepo",
+                    "sourceMarketplaceRepo",
                     "pluginEnabled",
                     "scope",
                     "clientType",

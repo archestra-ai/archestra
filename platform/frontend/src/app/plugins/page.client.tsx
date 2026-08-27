@@ -94,6 +94,7 @@ import {
   pluginDetailHref,
   resolvePluginInstallSelection,
 } from "./_parts/plugin-page-config";
+import { PluginSourceIcon } from "./_parts/plugin-source-icon";
 
 const PLUGINS_DESCRIPTION =
   "Plugins ship native hook configurations and companion scripts to connected coding agents, stored verbatim and approved per content hash.";
@@ -1062,28 +1063,6 @@ function FacetSelect({
 
 function clientFilterIcon(clientType: string): ReactNode {
   return <PluginClientIcon clientType={clientType} />;
-}
-
-function PluginSourceIcon({ plugin }: { plugin: PluginListItem }) {
-  const repo = plugin.sourceMarketplaceRepo ?? plugin.sourceRepo;
-  if (repo) {
-    return (
-      <span
-        className="flex size-9 shrink-0 items-center justify-center rounded-lg border bg-muted/30"
-        aria-hidden
-      >
-        <RepositoryOwnerIcon repo={repo} className="size-6" />
-      </span>
-    );
-  }
-  return (
-    <span
-      className="flex size-9 shrink-0 items-center justify-center rounded-lg border bg-muted/30 text-muted-foreground"
-      aria-hidden
-    >
-      <Braces className="size-4" />
-    </span>
-  );
 }
 
 function SortIcon({ isSorted }: { isSorted: "asc" | "desc" | false }) {

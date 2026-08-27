@@ -17,6 +17,8 @@ export const PluginSkillListItemSchema = z.object({
   pluginId: z.string().uuid(),
   pluginName: z.string(),
   pluginSlug: z.string(),
+  sourceRepo: z.string().nullable(),
+  sourceMarketplaceRepo: z.string().nullable(),
   pluginEnabled: z.boolean(),
   scope: ResourceVisibilityScopeSchema,
   /** Provenance only: SKILL.md instructions are portable across clients/OSes. */

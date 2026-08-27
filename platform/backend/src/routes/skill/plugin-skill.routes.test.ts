@@ -173,6 +173,8 @@ describe("plugin Skill routes", () => {
         source: "plugin",
         pluginId: ste.id,
         pluginName: "STE bundle",
+        sourceRepo: null,
+        sourceMarketplaceRepo: null,
         pluginEnabled: true,
         scope: "org",
         clientType: "claude-code",

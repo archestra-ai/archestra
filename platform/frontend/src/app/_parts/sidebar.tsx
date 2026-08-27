@@ -20,7 +20,6 @@ import {
   Database,
   Files,
   FolderKanban,
-  Gauge,
   Github,
   Inbox,
   KeyRound,
@@ -45,6 +44,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import React from "react";
 import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
+import { getCostsNavigationUrl } from "@/app/_parts/costs-navigation";
 import { SidebarUserMenu } from "@/app/_parts/sidebar-user-menu";
 import { AppLogo } from "@/components/app-logo";
 import { McpRegistryAttentionBadge } from "@/components/mcp-registry-attention-badge";
@@ -57,6 +57,7 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -114,8 +115,17 @@ interface NavItem {
 }
 
 interface NavGroup {
-  /** Stable React key, and the group's name in code. Never rendered. */
+  /** Stable React key, and the group's name in code regardless of its label. */
   id: string;
+  /**
+   * Section heading above the group's rows, in title case — the acronyms keep
+   * their caps because that is how they are spelled, not a style applied to
+   * them.
+   *
+   * Omitted for the closing group, which holds the app-wide rows that belong
+   * to no section — it is separated by space alone.
+   */
+  label?: string;
   items: NavItem[];
 }
 
@@ -274,20 +284,26 @@ function SidebarModeToggle({
 }
 
 /**
- * Studio navigation, grouped by the object each row manages. Rows are one per
- * page rather than one per section: a section's landing page used to stand in
- * for its siblings (Skills for Plugins, Model Providers for Models, Costs for
- * Limits), which left everything behind the first tab invisible from the
- * sidebar. Each page keeps its tab bar; the sidebar now names what is there.
+ * Studio navigation, grouped by the object each row manages. Rows are broadly
+ * one per page rather than one per section: a section's landing page used to
+ * stand in for its siblings (Skills for Plugins, Model Providers for Models,
+ * LLM Proxy for Virtual Keys and OAuth Clients), which left everything behind
+ * the first tab invisible from the sidebar. Each page keeps its tab bar; the
+ * sidebar now names what is there.
  *
- * The groups carry no heading. A heading here would have to name a category
- * the rows already spell out — "Agents" above a row called Agents — and the
- * Chats sidebar sets the precedent: its own rows sit unlabelled and only its
- * collections (Pinned, Recents) take a heading. Space alone separates them.
+ * Costs & Limits is the one row still covering two pages, kept that way to
+ * hold the LLM group's height down.
+ *
+ * The headings take the Chats sidebar's own treatment for Pinned and Recents:
+ * small, muted, title case. Set in caps they read as peers of the rows beneath
+ * them, which is what made "AGENTS" above a row called Agents look like the
+ * same word twice; at this weight they are a marker the eye skims past on the
+ * way to the rows.
  */
 const contentNavGroups: NavGroup[] = [
   {
     id: "agents",
+    label: "Agents",
     items: [
       {
         title: "Agents",
@@ -323,6 +339,7 @@ const contentNavGroups: NavGroup[] = [
   },
   {
     id: "mcp",
+    label: "MCP",
     items: [
       {
         title: "MCP Registry",
@@ -344,6 +361,7 @@ const contentNavGroups: NavGroup[] = [
   },
   {
     id: "llm",
+    label: "LLM",
     items: [
       {
         // Exact match: the proxy's sibling tabs are rows of their own now, so
@@ -381,16 +399,16 @@ const contentNavGroups: NavGroup[] = [
           pathname.startsWith("/llm/models"),
       },
       {
-        title: "Costs",
+        // The one row in this list that still covers two pages. Costs and
+        // Limits share a tab bar and the row would otherwise push the group
+        // to eight; `getCostsNavigationUrl` picks which of the two it opens
+        // for a reader who may not read both.
+        title: "Costs & Limits",
         url: "/llm/costs",
         icon: CircleDollarSign,
-        customIsActive: (pathname: string) => pathname.startsWith("/llm/costs"),
-      },
-      {
-        title: "Limits",
-        url: "/llm/limits",
-        icon: Gauge,
-        customIsActive: (pathname: string) => pathname === "/llm/limits",
+        customIsActive: (pathname: string) =>
+          pathname.startsWith("/llm/costs") || pathname === "/llm/limits",
+        permissionUrls: ["/llm/costs", "/llm/limits"],
       },
     ],
   },
@@ -398,7 +416,8 @@ const contentNavGroups: NavGroup[] = [
     id: "knowledge",
     // Its rows are the three Knowledge tabs. "Knowledge Bases" keeps the name
     // the rest of the product uses (page title, docs, API) rather than
-    // shortening to "Bases".
+    // shortening to "Bases" under the heading.
+    label: "Knowledge",
     items: [
       {
         title: "Connectors",
@@ -627,12 +646,6 @@ const NavPrimary = ({
           </SidebarMenuButton>
         </SidebarMenuItem>
       </SidebarMenu>
-      {/* Each group is its own list, told apart by the space above it rather
-          than by a heading. The gap is dropped on the group that renders
-          first — whichever survives the permission filter, since a reader who
-          may open none of Agents starts at the next one — and in the icon rail,
-          where every row is a bare icon and the gaps would read as arbitrary
-          breaks in a single column. */}
       {groups
         .map((group) => ({
           group,
@@ -642,14 +655,28 @@ const NavPrimary = ({
         }))
         .filter(({ permittedItems }) => permittedItems.length > 0)
         .map(({ group, permittedItems }, index) => (
-          <SidebarMenu
-            key={group.id}
-            className={cn(
-              index > 0 && "mt-4 group-data-[collapsible=icon]:mt-0",
+          <React.Fragment key={group.id}>
+            {group.label && (
+              <SidebarGroupLabel role="heading" aria-level={2}>
+                {group.label}
+              </SidebarGroupLabel>
             )}
-          >
-            {permittedItems.map(renderItem)}
-          </SidebarMenu>
+            {/* Each group is its own list under its own heading. The heading's
+                own row height is the space between groups; a group without one
+                — and the group that renders first, whichever survives the
+                permission filter — supplies that space itself. Collapsed to
+                the icon rail the headings fold away, so the spacing goes with
+                them and the icons keep a single rhythm. */}
+            <SidebarMenu
+              className={cn(
+                !group.label &&
+                  index > 0 &&
+                  "mt-4 group-data-[collapsible=icon]:mt-0",
+              )}
+            >
+              {permittedItems.map(renderItem)}
+            </SidebarMenu>
+          </React.Fragment>
         ))}
     </SidebarGroup>
   );
@@ -817,11 +844,18 @@ export function AppSidebar() {
     () =>
       contentNavGroups.map((group) => ({
         ...group,
-        items: group.items.filter(
-          (item) => item.url !== "/plugins" || pluginsEnabled === true,
-        ),
+        items: group.items
+          .filter((item) => item.url !== "/plugins" || pluginsEnabled === true)
+          // Costs & Limits is one row over two pages, so it has to choose
+          // which one it opens: a reader who may read limits but not costs
+          // would otherwise land on a page they cannot see.
+          .map((item) =>
+            item.url === "/llm/costs"
+              ? { ...item, url: getCostsNavigationUrl(permissionMap) }
+              : item,
+          ),
       })),
-    [pluginsEnabled],
+    [pluginsEnabled, permissionMap],
   );
 
   return (

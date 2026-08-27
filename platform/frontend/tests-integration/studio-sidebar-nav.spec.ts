@@ -4,18 +4,18 @@ import { expect, test } from "./fixtures";
 import type { MswControl } from "./helpers/msw-control";
 
 /**
- * Studio navigation is one row per page, in groups told apart by the space
- * above them. Before that, a section's landing page stood in for its siblings
- * — one "LLM Proxy" row covered Virtual Keys and OAuth Clients, one
- * "Costs & Limits" row covered both — so a page behind a tab had no name
- * anywhere in the sidebar and no way in from it.
+ * Studio navigation is broadly one row per page, under a small title-case
+ * section heading. Before that, a section's landing page stood in for its
+ * siblings — one "LLM Proxy" row covered Virtual Keys and OAuth Clients — so
+ * a page behind a tab had no name anywhere in the sidebar and no way in from
+ * it. Costs & Limits is the one row still covering two pages.
  *
  * What these pin is the part that is easy to break silently: every page is
  * reachable and named, each row lights only for its own page (a prefix match
- * on `/llm/proxy` would light three rows at once), the groups carry no
- * heading, the leading gap belongs to whichever group survives the permission
- * filter first, and Plugins stays out of the list until the deployment turns
- * plugins on.
+ * on `/llm/proxy` would light three rows at once), the one shared row opens
+ * the page its reader may actually see, a group disappears with its heading
+ * when the reader may open none of it, and Plugins stays out of the list
+ * until the deployment turns plugins on.
  */
 
 /** Rows of the studio nav, in order, as a reader sees them. */
@@ -30,8 +30,7 @@ const STUDIO_NAV = [
   "OAuth Clients",
   "Model Providers",
   "Models",
-  "Costs",
-  "Limits",
+  "Costs & Limits",
   "Connectors",
   "Files",
   "Knowledge Bases",
@@ -53,24 +52,12 @@ function studioNavRows(page: import("@playwright/test").Page) {
   );
 }
 
-/** The gap above a group is what separates it; nothing in the nav is a heading. */
-function navHeadings(page: import("@playwright/test").Page) {
+function sectionHeadings(page: import("@playwright/test").Page) {
   return page
     .locator(
       '[data-slot="sidebar-content"] > [data-slot="sidebar-group"]:first-child',
     )
     .getByRole("heading");
-}
-
-/** Top margin of each group's list, in source order, as the browser resolves it. */
-function groupGaps(page: import("@playwright/test").Page) {
-  return page
-    .locator(
-      '[data-slot="sidebar-content"] > [data-slot="sidebar-group"]:first-child [data-slot="sidebar-menu"]',
-    )
-    .evaluateAll((lists) =>
-      lists.map((list) => getComputedStyle(list).marginTop),
-    );
 }
 
 /** Chip suffixes ("Skills\nNew") come from the row's badge, not its name. */
@@ -108,24 +95,22 @@ async function enablePlugins({
 }
 
 test.describe("studio sidebar navigation", () => {
-  test("names every studio page, and heads no group with a category", async ({
+  test("names every studio page under its section heading", async ({
     page,
   }) => {
     await page.goto("/agents");
 
     await expect(studioNavRows(page).first()).toBeVisible();
     expect(await rowNames(page)).toEqual(STUDIO_NAV);
-    // A heading here could only repeat the rows under it — "Agents" above a
-    // row called Agents. The space above each group carries the grouping, and
-    // the group that renders first does not lead with one.
-    await expect(navHeadings(page)).toHaveCount(0);
-    expect(await groupGaps(page)).toEqual([
-      "0px", // the header rows
-      "0px", // Agents
-      "16px", // MCP
-      "16px", // LLM
-      "16px", // Knowledge
-      "16px", // Guardrails, Logs, Settings
+    // Title case, not caps: set in caps these read as peers of the rows under
+    // them, which made "AGENTS" above a row called Agents the same word twice.
+    // Guardrails, Logs and Settings close the list with no heading — they
+    // belong to no one section.
+    expect(await sectionHeadings(page).allInnerTexts()).toEqual([
+      "Agents",
+      "MCP",
+      "LLM",
+      "Knowledge",
     ]);
   });
 
@@ -141,6 +126,28 @@ test.describe("studio sidebar navigation", () => {
     // a prefix match would have added.
     await page.goto("/llm/proxy");
     await expect(active).toHaveText(/^LLM Proxy/);
+
+    // Costs & Limits lighting on both of its pages is not pinned here: it
+    // costs nine mock endpoints of page data to assert one pathname
+    // predicate. What is worth pinning about that row — which of the two it
+    // opens for a reader who may not see both — is the test below.
+  });
+
+  test("points the one shared row at the page its reader may open", async ({
+    page,
+    mswControl,
+  }) => {
+    const row = page.getByRole("link", { name: /^Costs & Limits/ });
+
+    // Both readable: the row opens Costs, the first of the two.
+    await page.goto("/agents");
+    await expect(row).toHaveAttribute("href", "/llm/costs");
+
+    // Costs alone is denied, so the row that survives on the strength of
+    // Limits has to open Limits rather than the page behind the 403.
+    await setPermissions({ mswControl }, { llmCost: [] });
+    await page.goto("/agents");
+    await expect(row).toHaveAttribute("href", "/llm/limits");
   });
 
   test("drops a row the reader may not open, and the group with the last of them", async ({
@@ -158,33 +165,11 @@ test.describe("studio sidebar navigation", () => {
     expect(names).not.toContain("Virtual Keys");
     // Its siblings are gated separately and stay.
     expect(names).toContain("OAuth Clients");
-    // Every Knowledge row is gone, so its group goes with them — and takes
-    // its gap, rather than leaving a double space between LLM and Guardrails.
+    // Every Knowledge row is gone, so its heading goes with them.
     expect(names).not.toContain("Connectors");
-    expect(await groupGaps(page)).toEqual([
-      "0px", // the header rows
-      "0px", // Agents
-      "16px", // MCP
-      "16px", // LLM
-      "16px", // Guardrails, Logs, Settings
-    ]);
-  });
-
-  test("gives the leading gap to whichever group the reader may open first", async ({
-    page,
-    mswControl,
-  }) => {
-    // A reader with none of Agents starts at MCP Registry, which must not
-    // then hang below a gap the group above it no longer fills.
-    await setPermissions(
-      { mswControl },
-      { agent: [], skill: [], agentTrigger: [] },
+    expect(await sectionHeadings(page).allInnerTexts()).not.toContain(
+      "Knowledge",
     );
-    await page.goto("/mcp/registry");
-
-    await expect(studioNavRows(page).first()).toBeVisible();
-    expect((await rowNames(page))[0]).toBe("MCP Registry");
-    expect((await groupGaps(page))[1]).toBe("0px");
   });
 
   test("offers Plugins where the deployment enables plugins", async ({

@@ -21,6 +21,7 @@ import {
   trimMessagesToTokenLimit,
 } from "@/routes/chat/context-trimming";
 import { EmptyModelResponseError } from "@/routes/chat/errors";
+import { applyPromptCacheBreakpoints } from "@/routes/chat/normalization/apply-prompt-cache";
 import {
   parseTokenBucketError,
   refitOutputBudgetToTokenBucket,
@@ -66,6 +67,11 @@ type StreamTextConfig = Parameters<typeof streamText>[0];
  */
 export async function runAgentStream(params: {
   config: StreamTextConfig;
+  promptCache?: {
+    provider: string;
+    model: string;
+    anthropicNativeEndpoint: boolean;
+  };
   recovery?: {
     logContext?: Record<string, unknown>;
     /**
@@ -93,7 +99,7 @@ export async function runAgentStream(params: {
    */
   getAbortiveFinishReason: () => string | null;
 }> {
-  const { config, recovery } = params;
+  const { config, promptCache, recovery } = params;
   const logContext = recovery?.logContext ?? {};
   // Set when the committed attempt is abortive; read by the abortive-turn
   // tracker to classify a `length` truncation as non-retryable.
@@ -147,6 +153,16 @@ export async function runAgentStream(params: {
   // empty-response retry reuses the trimmed payload instead of resending the
   // original (too-large) one.
   let currentConfig: StreamTextConfig = { ...config, onError };
+  if (promptCache && Array.isArray(currentConfig.messages)) {
+    currentConfig = {
+      ...currentConfig,
+      prompt: undefined,
+      messages: applyPromptCacheBreakpoints({
+        ...promptCache,
+        messages: currentConfig.messages,
+      }),
+    };
+  }
   // Reset before each attempt so a discarded retry's error never leaks into the
   // committed mapping. This is safe only because the loop always probes an
   // attempt to a terminal event (finish/error/done) before deciding to retry —
@@ -172,12 +188,12 @@ export async function runAgentStream(params: {
       const contextError = parseContextLengthError(probe.error);
       if (
         contextError !== null &&
-        Array.isArray(config.messages) &&
+        Array.isArray(currentConfig.messages) &&
         contextTrimAttempts < MAX_CONTEXT_TRIM_ATTEMPTS
       ) {
         contextTrimAttempts++;
         const trimmed = trimMessagesToTokenLimit({
-          messages: config.messages,
+          messages: currentConfig.messages,
           maxTokens: contextError.maxInputTokens,
           requestedTokens: contextError.requestedTokens,
           systemPrompt:
@@ -188,14 +204,15 @@ export async function runAgentStream(params: {
             ...logContext,
             maxTokens: contextError.maxInputTokens,
             requestedTokens: contextError.requestedTokens,
-            originalMessages: config.messages.length,
+            originalMessages: currentConfig.messages.length,
             trimmedMessages: trimmed.length,
           },
           "[ContextTrimming] retrying with trimmed messages",
         );
         // `prompt: undefined` keeps the object on the `messages` side of the
         // streamText `messages | prompt` union after the spread (the trim branch
-        // only runs when `config.messages` is an array, so there is no prompt).
+        // only runs when `currentConfig.messages` is an array, so there is no
+        // prompt).
         currentConfig = {
           ...currentConfig,
           prompt: undefined,

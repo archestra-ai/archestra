@@ -44,6 +44,16 @@ const agentRunsTable = pgTable(
       () => virtualApiKeysTable.id,
       { onDelete: "set null" },
     ),
+    /** Messaging thread to notify after a detached execution settles. */
+    chatOpsBindingId: uuid("chatops_binding_id"),
+    chatOpsThreadId: text("chatops_thread_id"),
+    /** Reclaimable delivery lease; a crashed sender cannot strand the reply. */
+    completionNotificationClaimedAt: timestamp(
+      "completion_notification_claimed_at",
+      { mode: "date" },
+    ),
+    /** Set after the provider accepts the terminal reply. */
+    completionNotifiedAt: timestamp("completion_notified_at", { mode: "date" }),
     /** Bounded tail of container output retained after the pod is removed. */
     logs: text("logs"),
     startedAt: timestamp("started_at", { mode: "date" }).notNull().defaultNow(),

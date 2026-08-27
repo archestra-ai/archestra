@@ -151,6 +151,10 @@ export const InsertAgentRunSchema = createInsertSchema(
 
 export const SelectAgentExecutionSchema = SelectAgentRunSchema.omit({
   logs: true,
+  chatOpsBindingId: true,
+  chatOpsThreadId: true,
+  completionNotificationClaimedAt: true,
+  completionNotifiedAt: true,
 }).extend({
   state: A2ATaskStateSchema,
   statusReason: z.string().nullable(),

@@ -33,6 +33,8 @@ async function startPodSession(params: {
   agentId: string;
   actorUserId: string;
   organizationId: string;
+  chatOpsBindingId?: string;
+  chatOpsThreadId?: string;
   task?: string | null;
 }): Promise<AgentRun> {
   const backend = resolveRunnerBackend(params.deployment.backend);
@@ -77,6 +79,8 @@ async function startPodSession(params: {
     namespace,
     secretName: `${spec.frozenName}-env`,
     virtualApiKeyId,
+    chatOpsBindingId: params.chatOpsBindingId,
+    chatOpsThreadId: params.chatOpsThreadId,
   });
 
   try {
@@ -93,7 +97,7 @@ async function startPodSession(params: {
     });
     await AgentRunModel.close({ id: session.id }).catch((error) => {
       logger.warn(
-        { error, sessionId: session.id, taskId: params.taskId },
+        { error, sessionId: session.id, taskId: session.taskId },
         "Could not mark the Agent run as ended",
       );
     });
@@ -157,13 +161,69 @@ export async function runTaskInPod(params: {
   agentId: string;
   actorUserId: string;
   organizationId: string;
+  chatOpsBindingId?: string;
+  chatOpsThreadId?: string;
   task?: string | null;
   onTextDelta?: (delta: string) => void;
   abortSignal?: AbortSignal;
 }): Promise<A2AExecuteResult> {
-  const backend = resolveRunnerBackend(params.deployment.backend);
   const launchedAt = Date.now();
   const session = await startPodSession(params);
+  return await followTaskInPod({
+    session,
+    backendName: params.deployment.backend,
+    launchedAt,
+    onTextDelta: params.onTextDelta,
+    abortSignal: params.abortSignal,
+  });
+}
+
+/**
+ * Re-attach the durable A2A lifecycle to a Job that survived a backend
+ * restart. Kubernetes owns the work; this process resumes output capture,
+ * heartbeats and terminal settlement without launching a second workload.
+ */
+export async function resumeTaskInPod(params: {
+  session: AgentRun;
+  onTextDelta?: (delta: string) => void;
+  abortSignal?: AbortSignal;
+}): Promise<A2AExecuteResult> {
+  return await followTaskInPod({
+    session: params.session,
+    backendName: "kubernetes",
+    onTextDelta: params.onTextDelta,
+    abortSignal: params.abortSignal,
+  });
+}
+
+/** Clean up a session whose task settled while no backend owned its run. */
+export async function cleanupTaskPod(session: AgentRun): Promise<void> {
+  const backend = resolveRunnerBackend("kubernetes");
+  let retainedLogs = "";
+  const stopCapture = new AbortController();
+  const capture = followOutput({
+    backend,
+    session,
+    abortSignal: stopCapture.signal,
+    onChunk: (chunk) => {
+      retainedLogs = retainLogTail(retainedLogs, chunk);
+    },
+  });
+  await Promise.race([capture, delayMs(LOG_DRAIN_GRACE_MS)]);
+  stopCapture.abort();
+  await backend.teardown(session);
+  await AgentRunModel.close({ id: session.id, logs: retainedLogs });
+}
+
+async function followTaskInPod(params: {
+  session: AgentRun;
+  backendName: AgentDeployment["backend"];
+  launchedAt?: number;
+  onTextDelta?: (delta: string) => void;
+  abortSignal?: AbortSignal;
+}): Promise<A2AExecuteResult> {
+  const backend = resolveRunnerBackend(params.backendName);
+  const { session } = params;
   const transcript: string[] = [];
   let retainedLogs = "";
   let outcome: "succeeded" | "failed" | "aborted" = "failed";
@@ -176,7 +236,9 @@ export async function runTaskInPod(params: {
     // Measured from the launch call rather than from the session row, so the
     // number answers "how long until this could do work" — image pull and
     // scheduling included, which is where the time actually goes.
-    reportRunnerProvisioned((Date.now() - launchedAt) / 1000);
+    if (params.launchedAt !== undefined) {
+      reportRunnerProvisioned((Date.now() - params.launchedAt) / 1000);
+    }
     reportRunnerStarted();
 
     // Logs are followed on their own promise: the Job outcome is what ends the
@@ -238,14 +300,14 @@ export async function runTaskInPod(params: {
     );
     await backend.teardown(session).catch((error) => {
       logger.warn(
-        { error, sessionId: session.id, taskId: params.taskId },
+        { error, sessionId: session.id, taskId: session.taskId },
         "Runner session teardown did not complete",
       );
     });
     await AgentRunModel.close({ id: session.id, logs: retainedLogs }).catch(
       (error) => {
         logger.warn(
-          { error, sessionId: session.id, taskId: params.taskId },
+          { error, sessionId: session.id, taskId: session.taskId },
           "Could not mark the Agent run as ended",
         );
       },

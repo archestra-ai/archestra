@@ -1,6 +1,17 @@
-import { and, desc, eq, getTableColumns, isNull } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  getTableColumns,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  or,
+} from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { AgentExecution, AgentRun, InsertAgentRun } from "@/types";
+import { A2A_TERMINAL_TASK_STATES } from "@/types/a2a-task";
 
 /**
  * The Agent run carrying one A2A task. Holds no lifecycle state of its own — the
@@ -32,13 +43,37 @@ class AgentRunModel {
       .where(isNull(schema.agentRunsTable.endedAt));
   }
 
+  /** Terminal messaging executions whose completion reply is still pending. */
+  static async listPendingChatOpsNotifications(): Promise<AgentRun[]> {
+    return db
+      .select(getTableColumns(schema.agentRunsTable))
+      .from(schema.agentRunsTable)
+      .innerJoin(
+        schema.a2aTasksTable,
+        eq(schema.agentRunsTable.taskId, schema.a2aTasksTable.id),
+      )
+      .where(
+        and(
+          isNotNull(schema.agentRunsTable.chatOpsBindingId),
+          isNotNull(schema.agentRunsTable.chatOpsThreadId),
+          isNull(schema.agentRunsTable.completionNotifiedAt),
+          inArray(schema.a2aTasksTable.state, A2A_TERMINAL_TASK_STATES),
+        ),
+      );
+  }
+
   static async listForAgent(params: {
     agentId: string;
     organizationId: string;
   }): Promise<AgentExecution[]> {
-    const { logs: _logs, ...runColumns } = getTableColumns(
-      schema.agentRunsTable,
-    );
+    const {
+      logs: _logs,
+      chatOpsBindingId: _chatOpsBindingId,
+      chatOpsThreadId: _chatOpsThreadId,
+      completionNotificationClaimedAt: _completionNotificationClaimedAt,
+      completionNotifiedAt: _completionNotifiedAt,
+      ...runColumns
+    } = getTableColumns(schema.agentRunsTable);
     return db
       .select({
         ...runColumns,
@@ -84,6 +119,60 @@ class AgentRunModel {
       .set({ virtualApiKeyId: null })
       .where(eq(schema.agentRunsTable.id, id));
   }
+
+  /** Claim delivery, including a claim abandoned by a crashed sender. */
+  static async claimCompletionNotification(
+    taskId: string,
+  ): Promise<AgentRun | null> {
+    const staleBefore = new Date(Date.now() - NOTIFICATION_CLAIM_TTL_MS);
+    const [claimed] = await db
+      .update(schema.agentRunsTable)
+      .set({ completionNotificationClaimedAt: new Date() })
+      .where(
+        and(
+          eq(schema.agentRunsTable.taskId, taskId),
+          isNull(schema.agentRunsTable.completionNotifiedAt),
+          or(
+            isNull(schema.agentRunsTable.completionNotificationClaimedAt),
+            lt(
+              schema.agentRunsTable.completionNotificationClaimedAt,
+              staleBefore,
+            ),
+          ),
+        ),
+      )
+      .returning();
+    return claimed ?? null;
+  }
+
+  /** Record provider acceptance; only an active claimant can finish delivery. */
+  static async markCompletionNotified(id: string): Promise<void> {
+    await db
+      .update(schema.agentRunsTable)
+      .set({ completionNotifiedAt: new Date() })
+      .where(
+        and(
+          eq(schema.agentRunsTable.id, id),
+          isNotNull(schema.agentRunsTable.completionNotificationClaimedAt),
+          isNull(schema.agentRunsTable.completionNotifiedAt),
+        ),
+      );
+  }
+
+  /** Release a failed attempt so the next reconciliation can retry it. */
+  static async releaseCompletionNotification(id: string): Promise<void> {
+    await db
+      .update(schema.agentRunsTable)
+      .set({ completionNotificationClaimedAt: null })
+      .where(
+        and(
+          eq(schema.agentRunsTable.id, id),
+          isNull(schema.agentRunsTable.completionNotifiedAt),
+        ),
+      );
+  }
 }
 
 export default AgentRunModel;
+
+const NOTIFICATION_CLAIM_TTL_MS = 2 * 60 * 1_000;

@@ -218,13 +218,13 @@ class RunnerRuntimeManager {
     abortSignal?: AbortSignal;
   }): Promise<void> {
     const clients = this.requireClients();
-    const podName = await this.findPodName(params.session);
-    if (!podName) {
-      throw new Error("This session has no running pod to read logs from");
+    const pod = await this.findPodPhase(params.session);
+    if (!pod) {
+      throw new Error("This session has no pod to read logs from");
     }
     const request = await clients.log.log(
       params.session.namespace,
-      podName,
+      pod.name,
       RUNNER_CONTAINER_NAME,
       params.destination,
       {

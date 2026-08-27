@@ -118,6 +118,7 @@ import { mcpActiveUseTracker } from "@/services/mcp-active-use.ee";
 // SPDX-SnippetEnd
 import { mcpGatewayTaskReaper } from "@/services/mcp-gateway-task-reaper";
 import { mcpToolsRefreshManager } from "@/services/mcp-tools-refresh";
+import { agentExecutionReconciler } from "@/services/runners/reconciler";
 import { systemKeyManager } from "@/services/system-key-manager";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { taskQueueService } from "@/task-queue";
@@ -1553,6 +1554,7 @@ const startWebServer = async () => {
     // (it also prunes terminal event logs), started here unconditionally so
     // orphaned tasks get settled even on pods that never start a run.
     a2aTaskRunService.startMaintenance();
+    agentExecutionReconciler.start();
 
     /**
      * Here we don't expose the metrics endpoint on the main API port, but we do collect metrics

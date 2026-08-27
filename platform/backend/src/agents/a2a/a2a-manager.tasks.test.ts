@@ -1,6 +1,7 @@
 import { vi } from "vitest";
 import { A2AArtifactModel, A2AMessageModel, A2ATaskModel } from "@/models";
 import { describe, expect, test } from "@/test";
+import type { AgentRun } from "@/types";
 import { type A2AActor, A2AError, A2AErrorKind } from "./a2a-base";
 import { buildApprovalDecisionSendMessageRequest } from "./a2a-helper";
 import { A2AManager } from "./a2a-manager";
@@ -12,8 +13,9 @@ import {
   A2AProtocolTaskState,
 } from "./a2a-protocol";
 
-const { executeA2AMessage, runTaskInPod } = vi.hoisted(() => ({
+const { executeA2AMessage, resumeTaskInPod, runTaskInPod } = vi.hoisted(() => ({
   executeA2AMessage: vi.fn(),
+  resumeTaskInPod: vi.fn(),
   runTaskInPod: vi.fn(),
 }));
 
@@ -35,6 +37,7 @@ vi.mock("@/services/runners/pod-execution", () => ({
         }
       : null,
   runTaskInPod,
+  resumeTaskInPod,
 }));
 
 const actor: A2AActor = {
@@ -157,6 +160,68 @@ async function waitForState(
 }
 
 describe("A2AManager full task mode", () => {
+  test("re-adopts a surviving background Job and settles its existing task", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "background-agent", teams: [] });
+    const context = await A2AContextManager.createContext(actor);
+    const task = await A2ATaskModel.create({
+      contextId: context.id,
+      agentId: agent.id,
+      state: A2AProtocolTaskState.Working,
+      lastHeartbeatAt: new Date(0),
+    });
+    const session: AgentRun = {
+      id: crypto.randomUUID(),
+      organizationId: agent.organizationId,
+      taskId: task.id,
+      agentId: agent.id,
+      actorUserId: actor.id,
+      deploymentName: "runner-background-agent-recovery",
+      namespace: "archestra-dev",
+      secretName: null,
+      virtualApiKeyId: null,
+      chatOpsBindingId: null,
+      chatOpsThreadId: null,
+      completionNotificationClaimedAt: null,
+      completionNotifiedAt: null,
+      logs: null,
+      startedAt: new Date(),
+      endedAt: null,
+    };
+    resumeTaskInPod.mockImplementationOnce(
+      async (params: { onTextDelta?: (delta: string) => void }) => {
+        params.onTextDelta?.("recovered answer");
+        const messageId = crypto.randomUUID();
+        return {
+          messageId,
+          text: "recovered answer",
+          finishReason: "stop",
+          responseUiMessage: {
+            id: messageId,
+            role: "assistant",
+            parts: [{ type: "text", text: "recovered answer" }],
+          },
+        };
+      },
+    );
+
+    await fullManager().adoptBackgroundTask({ taskId: task.id, session });
+
+    expect(resumeTaskInPod).toHaveBeenCalledWith(
+      expect.objectContaining({ session }),
+    );
+    expect((await A2ATaskModel.findById(task.id))?.state).toBe(
+      A2AProtocolTaskState.Completed,
+    );
+    expect(await A2AArtifactModel.findByTaskId(task.id)).toEqual([
+      expect.objectContaining({
+        name: "agent-response",
+        parts: [{ text: "recovered answer" }],
+      }),
+    ]);
+  });
+
   test("an Agent deployment is used for a tasked run, while direct chat stays in the foreground", async ({
     makeAgent,
   }) => {

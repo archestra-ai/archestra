@@ -24,9 +24,10 @@ import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
 import { validateMCPGatewayToken } from "@/routes/mcp-gateway/utils";
 import {
   resolveAgentDeployment,
+  resumeTaskInPod,
   runTaskInPod,
 } from "@/services/runners/pod-execution";
-import type { A2AContext, A2AMessage } from "@/types";
+import type { A2AContext, A2AMessage, AgentRun } from "@/types";
 import { isTerminalA2ATaskState } from "@/types/a2a-task";
 import {
   type OutboundUrlRejection,
@@ -182,6 +183,41 @@ export class A2AManager {
 
   constructor(config?: A2AManagerConfig) {
     this.config = config ?? {};
+  }
+
+  /**
+   * Re-adopt a container-backed task whose Job outlived the backend process
+   * that launched it. The ordinary lifecycle remains authoritative, so the
+   * recovered run produces the same artifact and terminal events as a run
+   * that never crossed a restart.
+   */
+  public async adoptBackgroundTask(params: {
+    taskId: string;
+    session: AgentRun;
+  }): Promise<void> {
+    if (this.config.taskMode !== "full") {
+      throw new Error(
+        "[A2AManager] Background task adoption requires full mode",
+      );
+    }
+    const task = await A2ATaskManager.loadTaskWithDataById(params.taskId);
+    if (
+      task.state !== A2AProtocolTaskState.Submitted &&
+      task.state !== A2AProtocolTaskState.Working
+    ) {
+      return;
+    }
+    await this.runTaskLifecycle({
+      task,
+      contextId: task.contextId,
+      survivesRestart: true,
+      executeRun: (runOpts) =>
+        resumeTaskInPod({
+          session: params.session,
+          onTextDelta: runOpts.onTextDelta,
+          abortSignal: runOpts.abortSignal,
+        }),
+    });
   }
 
   public async sendMessage(params: {
@@ -557,6 +593,8 @@ export class A2AManager {
                 agentId,
                 actorUserId: actor.kind === "user" ? actor.id : "system",
                 organizationId: actor.organizationId,
+                chatOpsBindingId: systemParams?.chatOpsBindingId,
+                chatOpsThreadId: systemParams?.chatOpsThreadId,
                 task: executedTurnText,
                 onTextDelta: runOpts.onTextDelta,
                 abortSignal: runOpts.abortSignal,

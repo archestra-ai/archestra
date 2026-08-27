@@ -1,5 +1,5 @@
 {
-  "id": "8ea213d6-5613-4689-9d41-24603e3e4826",
+  "id": "b1ee52c9-91b9-4ba1-a0f0-4f493b134719",
   "prevId": "361f4d84-2b3b-47c1-b35d-15c394edd83f",
   "version": "7",
   "dialect": "postgresql",
@@ -1636,6 +1636,30 @@
         "virtual_api_key_id": {
           "name": "virtual_api_key_id",
           "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "chatops_binding_id": {
+          "name": "chatops_binding_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "chatops_thread_id": {
+          "name": "chatops_thread_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "completion_notification_claimed_at": {
+          "name": "completion_notification_claimed_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "completion_notified_at": {
+          "name": "completion_notified_at",
+          "type": "timestamp",
           "primaryKey": false,
           "notNull": false
         },

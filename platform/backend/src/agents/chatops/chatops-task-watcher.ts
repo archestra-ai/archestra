@@ -1,7 +1,7 @@
 import { a2aTaskEventNotifier } from "@/agents/a2a/a2a-task-event-notifier";
 import { buildChatOpsTaskNotification } from "@/archestra-mcp-server/chatops-task-notification";
 import logger from "@/logging";
-import { A2AArtifactModel, A2ATaskModel } from "@/models";
+import { A2AArtifactModel, A2ATaskModel, AgentRunModel } from "@/models";
 
 export async function watchChatOpsTask(params: {
   taskId: string;
@@ -34,13 +34,32 @@ export async function watchChatOpsTask(params: {
         output: text,
       });
       if (notification) {
+        const execution = await AgentRunModel.findByTaskId(params.taskId);
+        const claimedExecution = execution
+          ? await AgentRunModel.claimCompletionNotification(params.taskId)
+          : null;
+        if (execution && !claimedExecution) {
+          return;
+        }
         const { chatOpsManager } = await import("./chatops-manager");
-        await chatOpsManager.notifyBindingThread({
-          bindingId: params.bindingId,
-          threadId: params.threadId,
-          agentName: params.agentName,
-          text: notification,
-        });
+        try {
+          await chatOpsManager.notifyBindingThread({
+            bindingId: params.bindingId,
+            threadId: params.threadId,
+            agentName: params.agentName,
+            text: notification,
+          });
+          if (claimedExecution) {
+            await AgentRunModel.markCompletionNotified(claimedExecution.id);
+          }
+        } catch (error) {
+          if (claimedExecution) {
+            await AgentRunModel.releaseCompletionNotification(
+              claimedExecution.id,
+            );
+          }
+          throw error;
+        }
         return;
       }
 

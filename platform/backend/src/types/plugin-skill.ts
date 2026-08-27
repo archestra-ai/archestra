@@ -28,6 +28,9 @@ export const PluginSkillListItemSchema = z.object({
   description: z.string(),
   compatibility: z.string().nullable(),
   fileCount: z.number().int().nonnegative(),
+  usageCount: z.number().int().nonnegative(),
+  usageUserCount: z.number().int().nonnegative(),
+  lastUsedAt: z.date().nullable(),
 });
 
 export const PluginSkillFileSchema = z.object({
@@ -44,8 +47,6 @@ export const PluginSkillDetailSchema = PluginSkillListItemSchema.extend({
   /** The SKILL.md markdown body, frontmatter stripped. */
   content: z.string(),
   allowedTools: z.string().nullable(),
-  /** Bundled files are omitted unless the caller has plugin:admin. */
-  resourcesRestricted: z.boolean(),
   files: z.array(PluginSkillFileSchema),
 });
 

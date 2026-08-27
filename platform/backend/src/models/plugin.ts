@@ -656,6 +656,7 @@ class PluginModel {
   static async findSkillManifestCandidates(params: {
     organizationId: string;
     accessiblePluginIds?: string[];
+    orgScopeOnly?: boolean;
   }): Promise<
     Array<{
       plugin: Plugin;
@@ -672,6 +673,9 @@ class PluginModel {
           eq(schema.pluginsTable.organizationId, params.organizationId),
           params.accessiblePluginIds
             ? inArray(schema.pluginsTable.id, params.accessiblePluginIds)
+            : undefined,
+          params.orgScopeOnly
+            ? eq(schema.pluginsTable.scope, "org")
             : undefined,
           notDeleted(schema.pluginsTable),
         ),

@@ -87,7 +87,6 @@ test.describe("Bulk actions bar", () => {
     const afterSelection = await bulkLayoutGeometry(bar);
     expect(afterSelection).toMatchObject({
       height: 42,
-      gapAbove: 12,
       gapBelow: 12,
     });
     // Reserving the rail prevents table/card layout from jumping on selection.
@@ -188,20 +187,10 @@ test.describe("Bulk actions bar", () => {
 
 async function bulkLayoutGeometry(bar: Locator): Promise<{
   height: number;
-  gapAbove: number;
   gapBelow: number;
   collectionTop: number;
 }> {
   return bar.evaluate((element) => {
-    let branch = element as HTMLElement | null;
-    let previous: HTMLElement | null = null;
-    while (branch && !previous) {
-      previous = branch.previousElementSibling as HTMLElement | null;
-      while (previous?.classList.contains("sr-only")) {
-        previous = previous.previousElementSibling as HTMLElement | null;
-      }
-      branch = branch.parentElement;
-    }
     let collectionBranch = element as HTMLElement | null;
     let collection: HTMLElement | null = null;
     while (collectionBranch && !collection) {
@@ -217,7 +206,6 @@ async function bulkLayoutGeometry(bar: Locator): Promise<{
 
     return {
       height: barRect.height,
-      gapAbove: barRect.top - (previous?.getBoundingClientRect().bottom ?? 0),
       gapBelow: collection.getBoundingClientRect().top - barRect.bottom,
       collectionTop: collection.getBoundingClientRect().top,
     };

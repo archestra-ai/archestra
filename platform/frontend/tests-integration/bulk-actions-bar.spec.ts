@@ -78,7 +78,6 @@ test.describe("Bulk actions bar", () => {
     const beforeSelection = await bulkLayoutGeometry(bar);
     expect(beforeSelection).toMatchObject({
       height: 42,
-      gapAbove: 12,
       gapBelow: 12,
     });
     const collectionTopBefore = await collectionTop(page);

@@ -4,15 +4,15 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { stepCountIs, streamText } from "ai";
 import {
-  type RunnerAgentConfig,
-  RunnerAgentConfigError,
+  type BackgroundExecutionAgentConfig,
+  BackgroundExecutionAgentConfigError,
   readConfig,
 } from "./config.js";
 import { loadGatewayTools } from "./gateway-tools.js";
 import { SteerQueue } from "./steer-queue.js";
 
 /**
- * The agent loop that runs inside a Runner.
+ * The agent loop that runs inside a Background execution deployment.
  *
  * It is deliberately thin. Everything that decides what the agent may do — the
  * model, the tool set, the policies, the budget — is resolved by the platform
@@ -21,18 +21,18 @@ import { SteerQueue } from "./steer-queue.js";
  * tmux session, and take direction from a human without losing its place.
  */
 async function main(): Promise<number> {
-  let config: RunnerAgentConfig;
+  let config: BackgroundExecutionAgentConfig;
   try {
     config = readConfig(process.env);
   } catch (error: unknown) {
-    if (error instanceof RunnerAgentConfigError) {
+    if (error instanceof BackgroundExecutionAgentConfigError) {
       write(`archestra: ${error.message}`);
       return 78;
     }
     throw error;
   }
 
-  write(`Archestra runner ${config.runnerName} (${config.runnerId})`);
+  write(`Archestra background run for ${config.agentName} (${config.agentId})`);
   write(
     `Model ${config.model} via the Archestra proxy. Tools from the MCP gateway.`,
   );
@@ -71,8 +71,15 @@ async function main(): Promise<number> {
         // Nothing to answer. Park on the steer channel rather than spinning —
         // this is what makes a session that is idle for days almost free.
         write("[waiting for direction]");
-        const incoming = await steerQueue.waitForMessage();
-        if (incoming.length === 0) break;
+        const incoming = await steerQueue.waitForMessage(config.idleTimeoutMs);
+        if (incoming.length === 0) {
+          if (config.idleTimeoutMs !== null) {
+            write(
+              "[archestra] no further direction — session complete, exiting",
+            );
+          }
+          break;
+        }
         for (const message of incoming) {
           write(`> ${message}`);
           messages.push({ role: "user", content: message });
@@ -123,7 +130,9 @@ async function main(): Promise<number> {
  * the invoking user's own bearer — the pod has no privileged path back into the
  * platform, so its tool access is exactly that person's.
  */
-async function connectGateway(config: RunnerAgentConfig): Promise<Client> {
+async function connectGateway(
+  config: BackgroundExecutionAgentConfig,
+): Promise<Client> {
   const transport = new StreamableHTTPClientTransport(
     new URL(config.gatewayUrl),
     {

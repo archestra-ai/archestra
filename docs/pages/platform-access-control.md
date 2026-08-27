@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-08-26
+lastUpdated: 2026-08-27
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -45,7 +45,6 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | Resource | Actions |
 |----------|--------|
 | Agents | `read`, `create`, `update`, `delete`, `team-admin`, `deploy-to-restricted` |
-| Runners | `read`, `create`, `update`, `delete` |
 | Skills | `read`, `create`, `update`, `delete`, `team-admin`, `deploy-to-restricted` |
 | Plugins | `read`, `create`, `update`, `delete` |
 | Apps | `read`, `create`, `update`, `delete`, `team-admin`, `deploy-to-restricted` |
@@ -95,7 +94,6 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | Resource | Actions |
 |----------|--------|
 | Agents | `read`, `create`, `update`, `delete` |
-| Runners | `read`, `create`, `update`, `delete` |
 | Skills | `read`, `create`, `update`, `delete` |
 | Apps | `read`, `create`, `update`, `delete` |
 | Code Sandbox | `execute` |
@@ -286,11 +284,6 @@ The following table lists all available permissions that can be assigned to cust
 | `project:share-org` | Share projects with the entire organization, and change the sharing of or delete a project that is already org-wide. Without it, projects can still be shared with teams. Additive: sharing still requires project:update and deleting still requires project:delete. |
 | `project:admin` | Oversee projects owned by other members: discover them, view/edit/delete the project and its sharing, and view, download, or delete their files — but not read their chats. Additive: edit/delete still require project:update/delete, and schedule management rides scheduledTask:admin (all included in the Admin role). |
 | `project:read-all` | View chats that other members started in any project you can access. Without this, you only see the chats you started yourself — including in projects you own. |
-| `runner:read` | View and list runners and their session timelines |
-| `runner:create` | Start runners — long-running agent sessions in a container |
-| `runner:update` | Steer and stop runners you started |
-| `runner:delete` | Delete runners and their session history |
-| `runner:admin` | Steer, stop and delete any runner in the organization, including sessions started by other people |
 | `sandbox:execute` | Run commands and upload/download files in code execution sandboxes |
 | `scheduledTask:read` | View scheduled tasks and their run history |
 | `scheduledTask:create` | Create new scheduled tasks and trigger runs |

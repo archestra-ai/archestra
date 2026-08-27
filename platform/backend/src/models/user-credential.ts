@@ -18,23 +18,25 @@ class UserCredentialModel {
   /**
    * Store or replace one credential. Replacement writes the new secret before
    * deleting the old one, so a crash mid-rotation leaves the credential intact
-   * rather than stranding the user with a runner they can no longer start.
+   * rather than stranding the user with a deployment they can no longer start.
    */
   static async upsert(params: {
     organizationId: string;
     userId: string;
+    agentId: string;
     key: string;
     value: string;
   }): Promise<UserCredential> {
-    const { organizationId, userId, key, value } = params;
+    const { organizationId, userId, agentId, key, value } = params;
     const existing = await UserCredentialModel.find({
       organizationId,
       userId,
+      agentId,
       key,
     });
     const secret = await secretManager().createSecret(
       { [SECRET_VALUE_FIELD]: value },
-      `user-credential-${userId}-${key}`,
+      `agent-deployment-credential-${agentId}-${userId}-${key}`,
     );
 
     if (existing) {
@@ -49,7 +51,7 @@ class UserCredentialModel {
 
     const [created] = await db
       .insert(schema.userCredentialsTable)
-      .values({ organizationId, userId, key, secretId: secret.id })
+      .values({ organizationId, userId, agentId, key, secretId: secret.id })
       .returning();
     return created;
   }
@@ -57,6 +59,7 @@ class UserCredentialModel {
   static async find(params: {
     organizationId: string;
     userId: string;
+    agentId: string;
     key: string;
   }): Promise<UserCredential | null> {
     const [row] = await db
@@ -66,6 +69,7 @@ class UserCredentialModel {
         and(
           eq(schema.userCredentialsTable.organizationId, params.organizationId),
           eq(schema.userCredentialsTable.userId, params.userId),
+          eq(schema.userCredentialsTable.agentId, params.agentId),
           eq(schema.userCredentialsTable.key, params.key),
         ),
       )
@@ -73,9 +77,10 @@ class UserCredentialModel {
     return row ?? null;
   }
 
-  static async listForUser(params: {
+  static async listForAgentUser(params: {
     organizationId: string;
     userId: string;
+    agentId: string;
   }): Promise<UserCredential[]> {
     return db
       .select()
@@ -84,6 +89,7 @@ class UserCredentialModel {
         and(
           eq(schema.userCredentialsTable.organizationId, params.organizationId),
           eq(schema.userCredentialsTable.userId, params.userId),
+          eq(schema.userCredentialsTable.agentId, params.agentId),
         ),
       )
       .orderBy(asc(schema.userCredentialsTable.key));
@@ -93,6 +99,7 @@ class UserCredentialModel {
   static async listPresentKeys(params: {
     organizationId: string;
     userId: string;
+    agentId: string;
     keys: string[];
   }): Promise<Set<string>> {
     if (params.keys.length === 0) {
@@ -105,6 +112,7 @@ class UserCredentialModel {
         and(
           eq(schema.userCredentialsTable.organizationId, params.organizationId),
           eq(schema.userCredentialsTable.userId, params.userId),
+          eq(schema.userCredentialsTable.agentId, params.agentId),
           inArray(schema.userCredentialsTable.key, params.keys),
         ),
       );
@@ -112,7 +120,7 @@ class UserCredentialModel {
   }
 
   /**
-   * Resolve values for injection into a runner's Kubernetes Secret. A row whose
+   * Resolve values for injection into a run's Kubernetes Secret. A row whose
    * secret has vanished from the manager is reported as missing rather than
    * injected empty — an agent started with a blank token fails confusingly far
    * from the cause.
@@ -120,6 +128,7 @@ class UserCredentialModel {
   static async resolveValues(params: {
     organizationId: string;
     userId: string;
+    agentId: string;
     keys: string[];
   }): Promise<{ values: Record<string, string>; missing: string[] }> {
     const values: Record<string, string> = {};
@@ -134,6 +143,7 @@ class UserCredentialModel {
         and(
           eq(schema.userCredentialsTable.organizationId, params.organizationId),
           eq(schema.userCredentialsTable.userId, params.userId),
+          eq(schema.userCredentialsTable.agentId, params.agentId),
           inArray(schema.userCredentialsTable.key, params.keys),
         ),
       );
@@ -158,6 +168,7 @@ class UserCredentialModel {
   static async delete(params: {
     organizationId: string;
     userId: string;
+    agentId: string;
     key: string;
   }): Promise<boolean> {
     const existing = await UserCredentialModel.find(params);

@@ -19,7 +19,7 @@ import { BrowserStreamSocketClientContext } from "@/features/browser-stream/webs
 import McpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import { runnerRuntimeManager } from "@/k8s/runner-runtime";
 import logger from "@/logging";
-import { McpServerModel, RunnerSessionModel, UserModel } from "@/models";
+import { AgentRunModel, McpServerModel, UserModel } from "@/models";
 import { reportMcpDeploymentStatuses } from "@/observability/metrics/mcp";
 import { isPredefinedAdmin } from "@/services/agent-tool-assignment";
 
@@ -29,8 +29,8 @@ interface McpLogsSubscription {
   abortController: AbortController;
 }
 
-interface RunnerAttachSubscription {
-  runnerId: string;
+interface AgentRunAttachSubscription {
+  runId: string;
   stdin: PassThrough;
   stdout: PassThrough;
   stderr: PassThrough;
@@ -41,8 +41,8 @@ interface RunnerAttachSubscription {
   };
 }
 
-interface RunnerLogsSubscription {
-  runnerId: string;
+interface AgentRunLogsSubscription {
+  runId: string;
   stream: PassThrough;
   abortController: AbortController;
 }
@@ -85,9 +85,11 @@ class WebSocketService {
   private wss: WebSocketServer | null = null;
   private mcpLogsSubscriptions: Map<WebSocket, McpLogsSubscription> = new Map();
   private mcpExecSubscriptions: Map<WebSocket, McpExecSubscription> = new Map();
-  private runnerAttachSubscriptions: Map<WebSocket, RunnerAttachSubscription> =
-    new Map();
-  private runnerLogsSubscriptions: Map<WebSocket, RunnerLogsSubscription> =
+  private agentRunAttachSubscriptions: Map<
+    WebSocket,
+    AgentRunAttachSubscription
+  > = new Map();
+  private agentRunLogsSubscriptions: Map<WebSocket, AgentRunLogsSubscription> =
     new Map();
   private mcpDeploymentStatusSubscriptions: Map<
     WebSocket,
@@ -184,27 +186,27 @@ class WebSocketService {
         message.payload.rows,
       );
     },
-    subscribe_runner_attach: (ws, message, clientContext) => {
-      if (message.type !== "subscribe_runner_attach") return;
-      return this.handleSubscribeRunnerAttach(
+    subscribe_agent_run_attach: (ws, message, clientContext) => {
+      if (message.type !== "subscribe_agent_run_attach") return;
+      return this.handleSubscribeAgentRunAttach(
         ws,
-        message.payload.runnerId,
+        message.payload.runId,
         clientContext,
       );
     },
-    unsubscribe_runner_attach: (ws) => {
-      this.unsubscribeRunnerAttach(ws);
+    unsubscribe_agent_run_attach: (ws) => {
+      this.unsubscribeAgentRunAttach(ws);
     },
-    runner_attach_input: (ws, message) => {
-      if (message.type !== "runner_attach_input") return;
-      const subscription = this.runnerAttachSubscriptions.get(ws);
-      if (subscription?.runnerId !== message.payload.runnerId) return;
+    agent_run_attach_input: (ws, message) => {
+      if (message.type !== "agent_run_attach_input") return;
+      const subscription = this.agentRunAttachSubscriptions.get(ws);
+      if (subscription?.runId !== message.payload.runId) return;
       subscription.stdin.write(message.payload.data);
     },
-    runner_attach_resize: (ws, message) => {
-      if (message.type !== "runner_attach_resize") return;
-      const subscription = this.runnerAttachSubscriptions.get(ws);
-      if (subscription?.runnerId !== message.payload.runnerId) return;
+    agent_run_attach_resize: (ws, message) => {
+      if (message.type !== "agent_run_attach_resize") return;
+      const subscription = this.agentRunAttachSubscriptions.get(ws);
+      if (subscription?.runId !== message.payload.runId) return;
       // SPDY channel 4 carries terminal dimensions; without it tmux keeps the
       // default 80x24 and redraws the pane to a size nobody is looking at.
       const resize = JSON.stringify({
@@ -218,17 +220,17 @@ class WebSocketService {
         subscription.socket.send(frame);
       }
     },
-    subscribe_runner_logs: (ws, message, clientContext) => {
-      if (message.type !== "subscribe_runner_logs") return;
-      return this.handleSubscribeRunnerLogs(
+    subscribe_agent_run_logs: (ws, message, clientContext) => {
+      if (message.type !== "subscribe_agent_run_logs") return;
+      return this.handleSubscribeAgentRunLogs(
         ws,
-        message.payload.runnerId,
+        message.payload.runId,
         message.payload.lines ?? MCP_DEFAULT_LOG_LINES,
         clientContext,
       );
     },
-    unsubscribe_runner_logs: (ws) => {
-      this.unsubscribeRunnerLogs(ws);
+    unsubscribe_agent_run_logs: (ws) => {
+      this.unsubscribeAgentRunLogs(ws);
     },
     subscribe_mcp_deployment_statuses: (ws, _message, clientContext) => {
       return this.handleSubscribeMcpDeploymentStatuses(ws, clientContext);
@@ -506,33 +508,33 @@ class WebSocketService {
   }
 
   /**
-   * Attach the browser to a runner's live session.
+   * Attach the browser to a agent run's live session.
    *
-   * Authorization is narrower than being able to see the runner: attaching
+   * Authorization is narrower than being able to see the agent run: attaching
    * lands inside a shell running under the creator's own credentials, so only
-   * they or a runner admin may do it.
+   * they or a agent administrator may do it.
    */
-  private async handleSubscribeRunnerAttach(
+  private async handleSubscribeAgentRunAttach(
     ws: WebSocket,
-    runnerId: string,
+    runId: string,
     clientContext: WebSocketClientContext,
   ): Promise<void> {
-    this.unsubscribeRunnerAttach(ws);
+    this.unsubscribeAgentRunAttach(ws);
 
-    const session = await RunnerSessionModel.findByTaskId(runnerId);
+    const session = await AgentRunModel.findByTaskId(runId);
     if (!session || session.organizationId !== clientContext.organizationId) {
       this.sendToClient(ws, {
-        type: "runner_attach_error",
-        payload: { runnerId, error: "Session not found" },
+        type: "agent_run_attach_error",
+        payload: { runId, error: "Session not found" },
       });
       return;
     }
     if (!(await this.mayControlSession(session, clientContext))) {
       this.sendToClient(ws, {
-        type: "runner_attach_error",
+        type: "agent_run_attach_error",
         payload: {
-          runnerId,
-          error: "Only the person who started this runner can attach to it",
+          runId,
+          error: "Only the person who started this run can attach to it",
         },
       });
       return;
@@ -551,58 +553,58 @@ class WebSocketService {
         onStatus: (status) => {
           if (status.status === "Failure") {
             this.sendToClient(ws, {
-              type: "runner_attach_closed",
-              payload: { runnerId, reason: status.message ?? undefined },
+              type: "agent_run_attach_closed",
+              payload: { runId, reason: status.message ?? undefined },
             });
           }
         },
       });
 
-      this.runnerAttachSubscriptions.set(ws, {
-        runnerId,
+      this.agentRunAttachSubscriptions.set(ws, {
+        runId,
         stdin,
         stdout,
         stderr,
-        socket: socket as unknown as RunnerAttachSubscription["socket"],
+        socket: socket as unknown as AgentRunAttachSubscription["socket"],
       });
 
       for (const stream of [stdout, stderr]) {
         stream.on("data", (chunk: Buffer) => {
           this.sendToClient(ws, {
-            type: "runner_attach_output",
-            payload: { runnerId, data: chunk.toString() },
+            type: "agent_run_attach_output",
+            payload: { runId, data: chunk.toString() },
           });
         });
       }
 
       socket.on("close", () => {
         this.sendToClient(ws, {
-          type: "runner_attach_closed",
-          payload: { runnerId },
+          type: "agent_run_attach_closed",
+          payload: { runId },
         });
-        this.unsubscribeRunnerAttach(ws);
+        this.unsubscribeAgentRunAttach(ws);
       });
 
       this.sendToClient(ws, {
-        type: "runner_attach_started",
-        payload: { runnerId, command, podName },
+        type: "agent_run_attach_started",
+        payload: { runId, command, podName },
       });
     } catch (error) {
       this.sendToClient(ws, {
-        type: "runner_attach_error",
+        type: "agent_run_attach_error",
         payload: {
-          runnerId,
+          runId,
           error: error instanceof Error ? error.message : "Could not attach",
         },
       });
-      this.unsubscribeRunnerAttach(ws);
+      this.unsubscribeAgentRunAttach(ws);
     }
   }
 
-  private unsubscribeRunnerAttach(ws: WebSocket): void {
-    const subscription = this.runnerAttachSubscriptions.get(ws);
+  private unsubscribeAgentRunAttach(ws: WebSocket): void {
+    const subscription = this.agentRunAttachSubscriptions.get(ws);
     if (!subscription) return;
-    this.runnerAttachSubscriptions.delete(ws);
+    this.agentRunAttachSubscriptions.delete(ws);
     subscription.stdin.destroy();
     subscription.stdout.destroy();
     subscription.stderr.destroy();
@@ -613,39 +615,39 @@ class WebSocketService {
     }
   }
 
-  private async handleSubscribeRunnerLogs(
+  private async handleSubscribeAgentRunLogs(
     ws: WebSocket,
-    runnerId: string,
+    runId: string,
     lines: number,
     clientContext: WebSocketClientContext,
   ): Promise<void> {
-    this.unsubscribeRunnerLogs(ws);
+    this.unsubscribeAgentRunLogs(ws);
 
-    const session = await RunnerSessionModel.findByTaskId(runnerId);
+    const session = await AgentRunModel.findByTaskId(runId);
     if (!session || session.organizationId !== clientContext.organizationId) {
       this.sendToClient(ws, {
-        type: "runner_logs_error",
-        payload: { runnerId, error: "Session not found" },
+        type: "agent_run_logs_error",
+        payload: { runId, error: "Session not found" },
       });
       return;
     }
 
     const abortController = new AbortController();
     const stream = new PassThrough();
-    this.runnerLogsSubscriptions.set(ws, { runnerId, stream, abortController });
+    this.agentRunLogsSubscriptions.set(ws, { runId, stream, abortController });
 
     stream.on("data", (chunk: Buffer) => {
       this.sendToClient(ws, {
-        type: "runner_logs",
-        payload: { runnerId, logs: chunk.toString() },
+        type: "agent_run_logs",
+        payload: { runId, logs: chunk.toString() },
       });
     });
     stream.on("end", () => {
       this.sendToClient(ws, {
-        type: "runner_logs_ended",
-        payload: { runnerId },
+        type: "agent_run_logs_ended",
+        payload: { runId },
       });
-      this.unsubscribeRunnerLogs(ws);
+      this.unsubscribeAgentRunLogs(ws);
     });
 
     try {
@@ -657,26 +659,26 @@ class WebSocketService {
       });
     } catch (error) {
       this.sendToClient(ws, {
-        type: "runner_logs_error",
+        type: "agent_run_logs_error",
         payload: {
-          runnerId,
+          runId,
           error: error instanceof Error ? error.message : "Could not read logs",
         },
       });
-      this.unsubscribeRunnerLogs(ws);
+      this.unsubscribeAgentRunLogs(ws);
     }
   }
 
-  private unsubscribeRunnerLogs(ws: WebSocket): void {
-    const subscription = this.runnerLogsSubscriptions.get(ws);
+  private unsubscribeAgentRunLogs(ws: WebSocket): void {
+    const subscription = this.agentRunLogsSubscriptions.get(ws);
     if (!subscription) return;
-    this.runnerLogsSubscriptions.delete(ws);
+    this.agentRunLogsSubscriptions.delete(ws);
     subscription.abortController.abort();
     subscription.stream.destroy();
   }
 
   /**
-   * The person a session acts as, or a runner admin. Attaching reaches a shell
+   * The person a session acts as, or a agent administrator. Attaching reaches a shell
    * holding that person's own credentials, so it is deliberately narrow.
    */
   private async mayControlSession(
@@ -687,7 +689,7 @@ class WebSocketService {
     return userHasPermission(
       clientContext.userId,
       clientContext.organizationId,
-      "runner",
+      "agent",
       "admin",
     );
   }

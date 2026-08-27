@@ -20,8 +20,7 @@ interface McpExecTerminalProps {
 
 /**
  * A debug shell into an MCP server's pod. The terminal itself is shared with
- * Runners; only the WebSocket conversation differs, so that is all this file
- * carries.
+ * Agent background runs; only the WebSocket conversation differs.
  */
 export function McpExecTerminal({ serverId, isActive }: McpExecTerminalProps) {
   const transport = useMemo<ExecSessionTransport>(

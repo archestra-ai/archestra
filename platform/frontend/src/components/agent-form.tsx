@@ -49,7 +49,10 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
-import { RunnerSelector } from "@/app/agents/_parts/runner-selector";
+import {
+  AgentBackgroundExecutionFields,
+  type BackgroundExecutionConfig,
+} from "@/components/agent-background-execution-fields";
 import {
   AgentHooksEditor,
   type AgentHooksEditorRef,
@@ -1132,7 +1135,8 @@ export function AgentForm({
     String(DUAL_LLM_DEFAULT_MAX_ROUNDS),
   );
   const [passthroughHeaders, setPassthroughHeaders] = useState<string[]>([]);
-  const [runnerId, setRunnerId] = useState<string | null>(null);
+  const [backgroundExecution, setBackgroundExecution] =
+    useState<BackgroundExecutionConfig | null>(null);
   const [toolExposureMode, setToolExposureMode] =
     useState<ToolExposureMode>("full");
   const [missingCredentialBehavior, setMissingCredentialBehavior] =
@@ -1473,7 +1477,9 @@ export function AgentForm({
                 ? String(agentData.builtInAgentConfig.maxRounds)
                 : String(DUAL_LLM_DEFAULT_MAX_ROUNDS),
             passthroughHeaders: agentData.passthroughHeaders ?? [],
-            runnerId: agentData.runnerId ?? null,
+            backgroundExecution:
+              (agentData.backgroundExecution as BackgroundExecutionConfig | null) ??
+              null,
             toolExposureMode: agentData.toolExposureMode ?? "full",
             missingCredentialBehavior:
               agentData.missingCredentialBehavior ?? "allow",
@@ -1503,7 +1509,7 @@ export function AgentForm({
             autoConfigureOnToolDiscovery: false,
             dualLlmMaxRounds: String(DUAL_LLM_DEFAULT_MAX_ROUNDS),
             passthroughHeaders: [],
-            runnerId: null,
+            backgroundExecution: null,
             // New agents default to "Auto" (implicit access to all tools);
             // admins can switch to "Custom" (explicitly assigned tools).
             toolExposureMode: "full",
@@ -1531,7 +1537,7 @@ export function AgentForm({
       setScope(nextValues.scope);
       setPersonalDefaultOverride(null);
       setPassthroughHeaders(nextValues.passthroughHeaders);
-      setRunnerId(nextValues.runnerId);
+      setBackgroundExecution(nextValues.backgroundExecution);
       setToolExposureMode(nextValues.toolExposureMode);
       setMissingCredentialBehavior(nextValues.missingCredentialBehavior);
       setAccessAllTools(nextValues.accessAllTools);
@@ -2011,7 +2017,7 @@ export function AgentForm({
                 passthroughHeaders:
                   passthroughHeaders.length > 0 ? passthroughHeaders : null,
               }),
-              runnerId,
+              backgroundExecution,
             }),
             // The tools group: what the agent may reach, and how.
             ...(showToolsSections && {
@@ -2072,7 +2078,7 @@ export function AgentForm({
             passthroughHeaders:
               passthroughHeaders.length > 0 ? passthroughHeaders : null,
           }),
-          runnerId,
+          backgroundExecution,
         });
         if (!created) return false;
         savedAgentId = created?.id ?? "";
@@ -2313,7 +2319,7 @@ export function AgentForm({
     accessAllSubagents,
     supportsEnvironment,
     supportsSubagents,
-    runnerId,
+    backgroundExecution,
   ]);
 
   const handleSave = useCallback(async () => {
@@ -2375,7 +2381,7 @@ export function AgentForm({
     missingCredentialBehavior,
     accessAllTools,
     accessAllSubagents,
-    runnerId,
+    backgroundExecution,
   });
   const isDirty =
     !readOnly &&
@@ -3607,10 +3613,11 @@ export function AgentForm({
                   />
                 </div>
 
-                {/* Runner: where a long-running session for this agent runs.
-                    Optional — without one the agent has no long-running mode. */}
                 {agentType === "agent" && (
-                  <RunnerSelector value={runnerId} onChange={setRunnerId} />
+                  <AgentBackgroundExecutionFields
+                    value={backgroundExecution}
+                    onChange={setBackgroundExecution}
+                  />
                 )}
 
                 {/* Security (LLM Proxy and Agent only) */}
@@ -3868,7 +3875,7 @@ type AgentFormFields = {
   autoConfigureOnToolDiscovery: boolean;
   dualLlmMaxRounds: string;
   passthroughHeaders: string[];
-  runnerId: string | null;
+  backgroundExecution: BackgroundExecutionConfig | null;
   toolExposureMode: ToolExposureMode;
   missingCredentialBehavior: MissingCredentialBehavior;
   accessAllTools: boolean;

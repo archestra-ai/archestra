@@ -2704,6 +2704,25 @@ class AgentModel {
     return row ?? null;
   }
 
+  /**
+   * Update the server-managed secret bag behind Background execution.
+   * Credential values never travel through the generic Agent update body.
+   */
+  static async setBackgroundExecutionSecretId(params: {
+    id: string;
+    secretId: string | null;
+  }): Promise<boolean> {
+    const updated = await db
+      .update(schema.agentsTable)
+      .set({
+        backgroundExecutionSecretId: params.secretId,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.agentsTable.id, params.id))
+      .returning({ id: schema.agentsTable.id });
+    return updated.length > 0;
+  }
+
   static async update(
     id: string,
     {

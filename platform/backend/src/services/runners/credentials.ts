@@ -1,14 +1,16 @@
+import { isVaultReference } from "@archestra/shared";
 import logger from "@/logging";
-import { UserCredentialModel } from "@/models";
-import { secretManager } from "@/secrets-manager";
+import { AgentModel, SecretModel, UserCredentialModel } from "@/models";
+import { isByosEnabled, secretManager } from "@/secrets-manager";
 import type {
-  MissingRunnerCredential,
-  Runner,
-  RunnerCredentialDeclaration,
+  AgentDeployment,
+  AgentDeploymentCredentialDeclaration,
+  MissingAgentDeploymentCredential,
 } from "@/types";
+import { ApiError } from "@/types";
 
 /**
- * Outcome of resolving one agent's declared credentials for one user.
+ * Outcome of resolving one runner's declared credentials for one user.
  *
  * `missing` and `misconfigured` are deliberately separate: the first lists
  * personal credentials the invoking user can supply themselves (and is what
@@ -16,29 +18,29 @@ import type {
  * shared credentials only an administrator can fix. Collapsing them would ask
  * a user to provide something they have no way to provide.
  */
-type RunnerCredentialResolution = {
+type AgentDeploymentCredentialResolution = {
   env: Record<string, string>;
-  missing: MissingRunnerCredential[];
-  misconfigured: MissingRunnerCredential[];
+  missing: MissingAgentDeploymentCredential[];
+  misconfigured: MissingAgentDeploymentCredential[];
 };
 
 /**
- * Resolve every credential an agent declares into environment variables for a
+ * Resolve every credential a runner declares into environment variables for a
  * runner started by `userId`, reporting anything absent instead of injecting a
  * blank value — an agent handed an empty token fails far from the cause.
  */
-export async function resolveRunnerCredentials(params: {
-  runner: Pick<Runner, "id" | "credentials" | "secretId">;
+export async function resolveAgentDeploymentCredentials(params: {
+  deployment: Pick<AgentDeployment, "agentId" | "credentials" | "secretId">;
   organizationId: string;
   userId: string;
-}): Promise<RunnerCredentialResolution> {
-  const { shared, perUser } = splitDeclarations(params.runner.credentials);
+}): Promise<AgentDeploymentCredentialResolution> {
+  const { shared, perUser } = splitDeclarations(params.deployment.credentials);
   const env: Record<string, string> = {};
-  const missing: MissingRunnerCredential[] = [];
-  const misconfigured: MissingRunnerCredential[] = [];
+  const missing: MissingAgentDeploymentCredential[] = [];
+  const misconfigured: MissingAgentDeploymentCredential[] = [];
 
   if (shared.length > 0) {
-    const bag = await readSharedBag(params.runner.secretId);
+    const bag = await readSharedBag(params.deployment.secretId);
     for (const declaration of shared) {
       const value = bag[declaration.key];
       if (typeof value === "string" && value.length > 0) {
@@ -53,6 +55,7 @@ export async function resolveRunnerCredentials(params: {
     const resolved = await UserCredentialModel.resolveValues({
       organizationId: params.organizationId,
       userId: params.userId,
+      agentId: params.deployment.agentId,
       keys: perUser.map((declaration) => declaration.key),
     });
     Object.assign(env, resolved.values);
@@ -71,56 +74,126 @@ export async function resolveRunnerCredentials(params: {
  * UI before a user asks for a runner, so a start button can say what is needed
  * rather than failing on click.
  */
-export async function preflightRunnerCredentials(params: {
-  runner: Pick<Runner, "id" | "credentials" | "secretId">;
+export async function preflightAgentDeploymentCredentials(params: {
+  deployment: Pick<AgentDeployment, "agentId" | "credentials" | "secretId">;
   organizationId: string;
   userId: string;
 }): Promise<{
-  missing: MissingRunnerCredential[];
-  misconfigured: MissingRunnerCredential[];
+  configured: string[];
+  missing: MissingAgentDeploymentCredential[];
+  misconfigured: MissingAgentDeploymentCredential[];
 }> {
-  const { shared, perUser } = splitDeclarations(params.runner.credentials);
-  const missing: MissingRunnerCredential[] = [];
-  const misconfigured: MissingRunnerCredential[] = [];
+  const { shared, perUser } = splitDeclarations(params.deployment.credentials);
+  const configured: string[] = [];
+  const missing: MissingAgentDeploymentCredential[] = [];
+  const misconfigured: MissingAgentDeploymentCredential[] = [];
 
-  const requiredShared = shared.filter((declaration) => declaration.required);
-  if (requiredShared.length > 0) {
-    const bag = await readSharedBag(params.runner.secretId);
-    for (const declaration of requiredShared) {
+  if (shared.length > 0) {
+    const bag = await readSharedBag(params.deployment.secretId);
+    for (const declaration of shared) {
       const value = bag[declaration.key];
-      if (typeof value !== "string" || value.length === 0) {
+      if (typeof value === "string" && value.length > 0) {
+        configured.push(declaration.key);
+      } else if (declaration.required) {
         misconfigured.push(toMissing(declaration));
       }
     }
   }
 
-  const requiredPerUser = perUser.filter((declaration) => declaration.required);
-  if (requiredPerUser.length > 0) {
+  if (perUser.length > 0) {
     const present = await UserCredentialModel.listPresentKeys({
       organizationId: params.organizationId,
       userId: params.userId,
-      keys: requiredPerUser.map((declaration) => declaration.key),
+      agentId: params.deployment.agentId,
+      keys: perUser.map((declaration) => declaration.key),
     });
-    for (const declaration of requiredPerUser) {
-      if (!present.has(declaration.key)) {
+    for (const declaration of perUser) {
+      if (present.has(declaration.key)) {
+        configured.push(declaration.key);
+      } else if (declaration.required) {
         missing.push(toMissing(declaration));
       }
     }
   }
 
-  return { missing, misconfigured };
+  return { configured, missing, misconfigured };
+}
+
+/**
+ * Store one declared credential at the scope chosen by the runner definition.
+ * A read-only Vault deployment expects `value` to be a `path#key` reference;
+ * the configured secrets manager resolves it only when a session launches.
+ */
+export async function setAgentDeploymentCredential(params: {
+  deployment: AgentDeployment;
+  organizationId: string;
+  userId: string;
+  key: string;
+  value: string;
+}): Promise<{ scope: AgentDeploymentCredentialDeclaration["scope"] }> {
+  const declaration = requireDeclaration(params.deployment, params.key);
+  assertCredentialValue(params.value);
+
+  if (declaration.scope === "per_user") {
+    await UserCredentialModel.upsert({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      agentId: params.deployment.agentId,
+      key: declaration.key,
+      value: params.value,
+    });
+  } else {
+    await replaceSharedBag({
+      deployment: params.deployment,
+      patch: { [declaration.key]: params.value },
+    });
+  }
+
+  return { scope: declaration.scope };
+}
+
+/** Remove only this runner's value; declarations remain part of its config. */
+export async function deleteAgentDeploymentCredential(params: {
+  deployment: AgentDeployment;
+  organizationId: string;
+  userId: string;
+  key: string;
+}): Promise<{
+  deleted: boolean;
+  scope: AgentDeploymentCredentialDeclaration["scope"];
+}> {
+  const declaration = requireDeclaration(params.deployment, params.key);
+  if (declaration.scope === "per_user") {
+    return {
+      scope: declaration.scope,
+      deleted: await UserCredentialModel.delete({
+        organizationId: params.organizationId,
+        userId: params.userId,
+        agentId: params.deployment.agentId,
+        key: declaration.key,
+      }),
+    };
+  }
+
+  const bag = await readRawSharedBag(params.deployment.secretId);
+  if (!(declaration.key in bag)) {
+    return { scope: declaration.scope, deleted: false };
+  }
+  const { [declaration.key]: _removed, ...remaining } = bag;
+  await replaceSharedBag({ deployment: params.deployment, values: remaining });
+  return { scope: declaration.scope, deleted: true };
 }
 
 // ===================== internals =====================
 
 function splitDeclarations(
-  declarations: RunnerCredentialDeclaration[] | null | undefined,
+  declarations: AgentDeploymentCredentialDeclaration[] | null | undefined,
 ): {
-  shared: RunnerCredentialDeclaration[];
-  perUser: RunnerCredentialDeclaration[];
+  shared: AgentDeploymentCredentialDeclaration[];
+  perUser: AgentDeploymentCredentialDeclaration[];
 } {
-  const shared: RunnerCredentialDeclaration[] = [];
-  const perUser: RunnerCredentialDeclaration[] = [];
+  const shared: AgentDeploymentCredentialDeclaration[] = [];
+  const perUser: AgentDeploymentCredentialDeclaration[] = [];
   for (const declaration of declarations ?? []) {
     if (declaration.scope === "per_user") {
       perUser.push(declaration);
@@ -131,6 +204,82 @@ function splitDeclarations(
   return { shared, perUser };
 }
 
+function requireDeclaration(
+  deployment: Pick<AgentDeployment, "credentials">,
+  key: string,
+): AgentDeploymentCredentialDeclaration {
+  const declaration = deployment.credentials?.find(
+    (entry) => entry.key === key,
+  );
+  if (!declaration) {
+    throw new ApiError(
+      404,
+      "Credential is not declared by this Agent's Background execution configuration",
+    );
+  }
+  return declaration;
+}
+
+function assertCredentialValue(value: string): void {
+  if (!isByosEnabled()) return;
+  if (!isVaultReference(value)) {
+    throw new ApiError(
+      400,
+      "Readonly Vault credentials must select a secret and key",
+    );
+  }
+}
+
+async function replaceSharedBag(params: {
+  deployment: AgentDeployment;
+  patch?: Record<string, string>;
+  values?: Record<string, unknown>;
+}): Promise<void> {
+  const previousId = params.deployment.secretId;
+  const previous = params.values ?? (await readRawSharedBag(previousId));
+  const next = { ...previous, ...params.patch };
+  if (Object.keys(next).length === 0) {
+    const updated = await AgentModel.setBackgroundExecutionSecretId({
+      id: params.deployment.agentId,
+      secretId: null,
+    });
+    if (!updated) {
+      throw new Error(
+        "Agent disappeared while clearing deployment credentials",
+      );
+    }
+    if (previousId) await deleteSecretQuietly(previousId);
+    return;
+  }
+  const created = await secretManager().createSecret(
+    next,
+    `agent-${params.deployment.agentId}-deployment-credentials`,
+  );
+  try {
+    const updated = await AgentModel.setBackgroundExecutionSecretId({
+      id: params.deployment.agentId,
+      secretId: created.id,
+    });
+    if (!updated) {
+      throw new Error(
+        "Agent disappeared while updating deployment credentials",
+      );
+    }
+  } catch (error) {
+    await deleteSecretQuietly(created.id);
+    throw error;
+  }
+  if (previousId) await deleteSecretQuietly(previousId);
+}
+
+async function readRawSharedBag(
+  secretId: string | null,
+): Promise<Record<string, unknown>> {
+  if (!secretId) return {};
+  const secret = await SecretModel.findById(secretId);
+  return secret?.secret ?? {};
+}
+
 async function readSharedBag(
   secretId: string | null,
 ): Promise<Record<string, unknown>> {
@@ -139,12 +288,12 @@ async function readSharedBag(
   }
   const secret = await secretManager().getSecret(secretId);
   if (!secret) {
-    // The bag was deleted out from under the agent. Reported per-key as
+    // The bag was deleted out from under the Agent. Reported per-key as
     // misconfigured by the callers above rather than thrown here, so the
     // response can name every credential an administrator has to restore.
     logger.warn(
       { secretId },
-      "Runner shared credential bag is missing from the secrets manager",
+      "Agent Background execution credential bag is missing from the secrets manager",
     );
     return {};
   }
@@ -152,11 +301,22 @@ async function readSharedBag(
 }
 
 function toMissing(
-  declaration: RunnerCredentialDeclaration,
-): MissingRunnerCredential {
+  declaration: AgentDeploymentCredentialDeclaration,
+): MissingAgentDeploymentCredential {
   return {
     key: declaration.key,
     label: declaration.label,
     description: declaration.description,
   };
+}
+
+async function deleteSecretQuietly(secretId: string): Promise<void> {
+  try {
+    await secretManager().deleteSecret(secretId);
+  } catch (error) {
+    logger.warn(
+      { error, secretId },
+      "Failed to delete replaced Agent Background execution credential secret",
+    );
+  }
 }

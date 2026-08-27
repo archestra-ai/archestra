@@ -16,7 +16,10 @@ const SPEC: RunnerLaunchSpec = {
   command: null,
   privileged: false,
   resources: { cpuRequest: "500m", memoryRequest: "1Gi", memoryLimit: "4Gi" },
-  env: { ARCHESTRA_RUNNER_ID: "11111111-2222-3333-4444-555555555555" },
+  env: {
+    ARCHESTRA_AGENT_BACKGROUND_EXECUTION_AGENT_ID:
+      "11111111-2222-3333-4444-555555555555",
+  },
   secretEnv: { ARCHESTRA_MCP_GATEWAY_TOKEN: "arch_secret" },
   activeDeadlineSeconds: 3600,
   imagePullSecrets: [],
@@ -84,7 +87,8 @@ describe("buildRunnerJob", () => {
       command: ["claude", "--task", "it's a 'quoted' task; rm -rf /"],
     });
     const entrypoint = job.spec?.template.spec?.containers[0]?.env?.find(
-      (entry) => entry.name === "ARCHESTRA_RUNNER_ENTRYPOINT",
+      (entry) =>
+        entry.name === "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ENTRYPOINT",
     );
 
     expect(entrypoint?.value).toBe(
@@ -96,7 +100,8 @@ describe("buildRunnerJob", () => {
     const entrypoint = buildRunnerJob(
       SPEC,
     ).spec?.template.spec?.containers[0]?.env?.find(
-      (entry) => entry.name === "ARCHESTRA_RUNNER_ENTRYPOINT",
+      (entry) =>
+        entry.name === "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ENTRYPOINT",
     );
     expect(entrypoint?.value).toBe("archestra-runner-agent");
   });

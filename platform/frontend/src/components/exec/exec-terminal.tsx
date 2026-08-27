@@ -29,7 +29,7 @@ export type ExecSessionHandlers = {
  * The connection itself, supplied by the caller.
  *
  * Keeping it out of this component is what lets one terminal serve both an MCP
- * server's debug shell and a Runner's live agent session: the two speak
+ * server's debug shell and an Agent's live background run: the two speak
  * different WebSocket messages, but neither difference belongs to xterm
  * lifecycle, fitting, or the status chrome below.
  */

@@ -17,11 +17,12 @@ import type {
   MissingCredentialBehavior,
   ToolExposureMode,
 } from "@/types/agent";
+import type { AgentBackgroundExecution } from "@/types/runner";
 import environmentsTable from "./environment";
 import identityProvidersTable from "./identity-provider";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
 import modelsTable from "./model";
-import runnersTable from "./runner";
+import secretsTable from "./secret";
 import { softDeletablePgTable } from "./soft-deletable-table";
 import usersTable from "./user";
 
@@ -127,16 +128,16 @@ const agentsTable = softDeletablePgTable(
     ),
 
     /**
-     * Runner this agent's long-running work executes on. Null = the agent has
-     * no long-running mode; its work runs in-process like every other agent.
-     *
-     * A reference rather than an inline spec: one container definition is
-     * shared by every agent that should run the same way, and changing it does
-     * not mean editing each of them.
+     * Optional deployment used for delegated/background work. Direct chat
+     * stays in the foreground platform loop even when this is configured.
      */
-    runnerId: uuid("runner_id").references(() => runnersTable.id, {
-      onDelete: "set null",
-    }),
+    backgroundExecution: jsonb(
+      "background_execution",
+    ).$type<AgentBackgroundExecution>(),
+    /** Bag holding shared credential values declared by backgroundExecution. */
+    backgroundExecutionSecretId: uuid(
+      "background_execution_secret_id",
+    ).references(() => secretsTable.id, { onDelete: "set null" }),
 
     /** Allowlist of HTTP header names to forward from gateway requests to downstream MCP servers */
     passthroughHeaders: text("passthrough_headers").array(),

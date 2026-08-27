@@ -3,18 +3,13 @@ import { Writable } from "node:stream";
 import type { A2AExecuteResult } from "@/agents/a2a-executor";
 import config from "@/config";
 import logger from "@/logging";
-import {
-  EnvironmentModel,
-  OrganizationModel,
-  RunnerModel,
-  RunnerSessionModel,
-} from "@/models";
+import { AgentRunModel, EnvironmentModel, OrganizationModel } from "@/models";
 import {
   reportRunnerProvisioned,
   reportRunnerStarted,
   reportRunnerTerminated,
 } from "@/observability/metrics/runner";
-import type { Runner, RunnerSession } from "@/types";
+import type { Agent, AgentDeployment, AgentRun } from "@/types";
 import { ApiError } from "@/types";
 import { type RunnerBackend, resolveRunnerBackend } from "./backends";
 import { buildRunnerLaunchSpec } from "./launch-spec";
@@ -32,22 +27,22 @@ import { buildRunnerLaunchSpec } from "./launch-spec";
  * task's streamed text, and abort tears the pod down.
  */
 async function startPodSession(params: {
-  runner: Runner;
+  deployment: AgentDeployment;
   taskId: string;
   agentId: string;
   actorUserId: string;
   organizationId: string;
   task?: string | null;
-}): Promise<RunnerSession> {
-  const backend = resolveRunnerBackend(params.runner.backend);
+}): Promise<AgentRun> {
+  const backend = resolveRunnerBackend(params.deployment.backend);
 
   const namespace = await resolveNamespace({
     organizationId: params.organizationId,
-    environmentId: params.runner.environmentId,
+    environmentId: params.deployment.environmentId,
   });
 
   const { spec, virtualApiKeyId } = await buildRunnerLaunchSpec({
-    runner: params.runner,
+    deployment: params.deployment,
     taskId: params.taskId,
     agentId: params.agentId,
     actorUserId: params.actorUserId,
@@ -58,10 +53,10 @@ async function startPodSession(params: {
 
   // The row lands before the workload: it is what teardown reads to find the
   // objects, so a crash between the two must leave a record, not an orphan.
-  const session = await RunnerSessionModel.create({
+  const session = await AgentRunModel.create({
     organizationId: params.organizationId,
     taskId: params.taskId,
-    runnerId: params.runner.id,
+    agentId: params.deployment.agentId,
     actorUserId: params.actorUserId,
     deploymentName: spec.frozenName,
     namespace,
@@ -81,20 +76,32 @@ async function startPodSession(params: {
         "Teardown after a failed runner launch did not complete",
       );
     });
-    await RunnerSessionModel.close(session.id);
+    await AgentRunModel.close(session.id);
     throw error;
   }
 
   return session;
 }
 
-/** The runner an agent's long-running work executes on, if it has one. */
-export async function resolveRunnerForAgent(params: {
-  runnerId: string | null;
-  organizationId: string;
-}): Promise<Runner | null> {
-  if (!params.runnerId) return null;
-  return RunnerModel.findById(params.runnerId, params.organizationId);
+/** Runtime-ready deployment for an Agent that opted into background execution. */
+export function resolveAgentDeployment(
+  agent: Pick<
+    Agent,
+    | "id"
+    | "organizationId"
+    | "environmentId"
+    | "backgroundExecution"
+    | "backgroundExecutionSecretId"
+  >,
+): AgentDeployment | null {
+  if (!agent.backgroundExecution) return null;
+  return {
+    ...agent.backgroundExecution,
+    agentId: agent.id,
+    organizationId: agent.organizationId,
+    environmentId: agent.environmentId,
+    secretId: agent.backgroundExecutionSecretId,
+  };
 }
 
 /**
@@ -134,7 +141,7 @@ async function resolveNamespace(params: {
  * the minted virtual key.
  */
 export async function runTaskInPod(params: {
-  runner: Runner;
+  deployment: AgentDeployment;
   taskId: string;
   agentId: string;
   actorUserId: string;
@@ -143,7 +150,7 @@ export async function runTaskInPod(params: {
   onTextDelta?: (delta: string) => void;
   abortSignal?: AbortSignal;
 }): Promise<A2AExecuteResult> {
-  const backend = resolveRunnerBackend(params.runner.backend);
+  const backend = resolveRunnerBackend(params.deployment.backend);
   const launchedAt = Date.now();
   const session = await startPodSession(params);
   const transcript: string[] = [];
@@ -189,7 +196,7 @@ export async function runTaskInPod(params: {
     if (completion.outcome === "failed") {
       throw new ApiError(
         502,
-        completion.reason ?? "The runner exited without completing",
+        completion.reason ?? "The background run exited without completing",
       );
     }
 
@@ -222,14 +229,14 @@ export async function runTaskInPod(params: {
         "Runner session teardown did not complete",
       );
     });
-    await RunnerSessionModel.close(session.id);
+    await AgentRunModel.close(session.id);
   }
 }
 
 /** Forward the session's output to `onChunk`, resolving when the stream ends. */
 function followOutput(params: {
   backend: RunnerBackend;
-  session: RunnerSession;
+  session: AgentRun;
   abortSignal?: AbortSignal;
   onChunk: (chunk: string) => void;
 }): Promise<void> {

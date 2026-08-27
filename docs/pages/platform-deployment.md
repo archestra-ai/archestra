@@ -2,7 +2,7 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-08-26
+lastUpdated: 2026-08-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -837,33 +837,30 @@ Upgrading from a chart that ran the included engine leaves its cache volume behi
 - **`ARCHESTRA_DAGGER_RUNTIME_MAX_QUEUE_LENGTH`** - Sandbox commands allowed to wait for a free slot. Past this, a command fails with a runtime-at-capacity error instead of queueing.
   - Default: `50`
 
-### Runners
+### Agent Background Execution
 
-Runners are long-running agent sessions, each in its own Kubernetes pod. A session can be attached to and steered while it runs. Runners need the Kubernetes runtime configured (see `ARCHESTRA_ORCHESTRATOR_*`); without it the feature stays unavailable.
+Background execution runs delegated Agent tasks in dedicated Kubernetes pods. You can view logs, open a shell, and steer a run while it is active. It needs the Kubernetes runtime configured (see `ARCHESTRA_ORCHESTRATOR_*`); without it the capability stays unavailable.
 
-- **`ARCHESTRA_RUNNERS_ENABLED`** - Enables Runners. A runner carries the credentials of the person who started it, so this gate is independent of `ARCHESTRA_BETA` and never turns on by implication.
+- **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ENABLED`** - Enables Background execution. A run can carry the credentials of the person who started it, so this gate is independent of `ARCHESTRA_BETA` and never turns on by implication.
   - Default: `false`
   - Values: `true`, `false`
 
-- **`ARCHESTRA_RUNNERS_PLATFORM_BASE_URL`** - Base URL a runner pod uses to reach the LLM proxy and the MCP gateway. It has to be reachable from inside the cluster. With neither this nor `ARCHESTRA_INTERNAL_API_BASE_URL` set, starting a runner fails rather than letting a session run outside the proxy.
+- **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_PLATFORM_BASE_URL`** - Base URL a background pod uses to reach the LLM proxy and the MCP gateway. It has to be reachable from inside the cluster. With neither this nor `ARCHESTRA_INTERNAL_API_BASE_URL` set, starting a run fails rather than letting it bypass the proxy.
   - Default: `ARCHESTRA_INTERNAL_API_BASE_URL`
 
-- **`ARCHESTRA_RUNNERS_DEFAULT_IMAGE`** - Image used when an agent declares no runner image of its own. Any image works as long as it contains `tmux` and a POSIX shell.
-  - Default: `ghcr.io/archestra-ai/runner-agent-base:latest`
-
-- **`ARCHESTRA_RUNNERS_DEFAULT_TTL_HOURS`** - Lifetime cap for runners whose agent sets none. Kubernetes enforces it on the workload as well.
+- **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_DEFAULT_TTL_HOURS`** - Lifetime cap for runs whose Agent sets none. Kubernetes enforces it on the workload as well.
   - Default: `72`
 
-- **`ARCHESTRA_RUNNERS_DEFAULT_IDLE_TIMEOUT_MINUTES`** - How long a runner may sit without a steer or attach before it stops. An idle runner stops rather than scaling to zero, because its in-memory session state cannot survive the pod.
+- **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_DEFAULT_IDLE_TIMEOUT_MINUTES`** - How long the built-in execution agent waits for another steer after finishing its current work before the run exits. An Agent can override this value. Custom images receive the timeout as `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_IDLE_TIMEOUT_SECONDS` and must implement the wait themselves.
   - Default: `180`
 
-- **`ARCHESTRA_RUNNERS_CPU_REQUEST`**, **`ARCHESTRA_RUNNERS_MEMORY_REQUEST`**, **`ARCHESTRA_RUNNERS_MEMORY_LIMIT`** - Pod resources for a runner whose agent sets none. There is no CPU limit by default: throttling an agent mid-turn reads as a hang rather than back-pressure.
+- **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_CPU_REQUEST`**, **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MEMORY_REQUEST`**, **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MEMORY_LIMIT`** - Pod resources for a run whose Agent sets none. There is no CPU limit by default: throttling an agent mid-turn reads as a hang rather than back-pressure.
   - Defaults: `500m`, `1Gi`, `4Gi`
 
-- **`ARCHESTRA_RUNNERS_PLATFORM_POD_SELECTOR`** - Label selector matching the platform's own API pods, written as `key=value` pairs. Runner pods get an egress policy allowing exactly that destination. Override it when your deployment labels the platform differently.
+- **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_PLATFORM_POD_SELECTOR`** - Label selector matching the platform's own API pods, written as `key=value` pairs. Background pods get an egress policy allowing exactly that destination. Override it when your deployment labels the platform differently.
   - Default: `archestra.io/p4-shim-client=true`
 
-- **`ARCHESTRA_RUNNERS_RECONCILE_INTERVAL_SECONDS`** - How often the reconciler syncs runner state and applies the lifetime and idle stops.
+- **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_RECONCILE_INTERVAL_SECONDS`** - How often the reconciler syncs run state and applies the lifetime and idle stops.
   - Default: `30`
 
 ### Skills Marketplace

@@ -12,12 +12,12 @@ import {
   withK8sApiRetry,
 } from "@/k8s/shared";
 import logger from "@/logging";
-import { RunnerSessionModel, VirtualApiKeyModel } from "@/models";
+import { AgentRunModel, VirtualApiKeyModel } from "@/models";
 import McpDeploymentLeaseModel, {
   ClusterLeaseHeldError,
 } from "@/models/mcp-deployment-lease";
 import { reportRunnerSteer } from "@/observability/metrics/runner";
-import type { RunnerSession, RunnerSteerMode } from "@/types";
+import type { AgentDeploymentSteerMode, AgentRun } from "@/types";
 import {
   buildRunnerJob,
   buildRunnerPlatformEgressPolicy,
@@ -45,7 +45,7 @@ class RunnerRuntimeManager {
   private clusterReachable: boolean | null = null;
 
   get isEnabled(): boolean {
-    return config.runners.enabled && this.canReachCluster();
+    return config.agentBackgroundExecution.enabled && this.canReachCluster();
   }
 
   /**
@@ -67,7 +67,7 @@ class RunnerRuntimeManager {
         ).catch((error) => {
           logger.warn(
             { error },
-            "Could not resolve runtime owner references for a runner session",
+            "Could not resolve runtime owner references for an Agent run",
           );
           return undefined;
         })),
@@ -116,8 +116,8 @@ class RunnerRuntimeManager {
    * own input loop.
    */
   async steer(params: {
-    session: RunnerSession;
-    steerMode: RunnerSteerMode;
+    session: AgentRun;
+    steerMode: AgentDeploymentSteerMode;
     message: string;
   }): Promise<void> {
     const podName = await this.findPodName(params.session);
@@ -144,7 +144,7 @@ class RunnerRuntimeManager {
         : [
             "/bin/sh",
             "-c",
-            `printf '%s\\n' ${shellQuote(message)} > "$ARCHESTRA_RUNNER_STEER_FIFO"`,
+            `printf '%s\\n' ${shellQuote(message)} > "$ARCHESTRA_AGENT_BACKGROUND_EXECUTION_STEER_FIFO"`,
           ];
 
     await this.execInPod({ session: params.session, podName, command });
@@ -159,7 +159,7 @@ class RunnerRuntimeManager {
    * browser tab never ends a session mid-task.
    */
   async attach(params: {
-    session: RunnerSession;
+    session: AgentRun;
     stdin: Readable;
     stdout: Writable;
     stderr: Writable;
@@ -191,7 +191,7 @@ class RunnerRuntimeManager {
 
   /** Follow the session's stdout, which is what the agent loop prints. */
   async streamLogs(params: {
-    session: RunnerSession;
+    session: AgentRun;
     destination: Writable;
     lines: number;
     abortSignal?: AbortSignal;
@@ -223,7 +223,7 @@ class RunnerRuntimeManager {
   }
 
   /** Pod carrying a session, or null when nothing is scheduled. */
-  async findPodName(session: RunnerSession): Promise<string | null> {
+  async findPodName(session: AgentRun): Promise<string | null> {
     const clients = this.requireClients();
     const pods = await clients.coreApi.listNamespacedPod({
       namespace: session.namespace,
@@ -243,7 +243,7 @@ class RunnerRuntimeManager {
    * poll would otherwise look like a pod that never scheduled.
    */
   async findPodPhase(
-    session: RunnerSession,
+    session: AgentRun,
   ): Promise<{ name: string; phase: string } | null> {
     const clients = this.requireClients();
     const pods = await clients.coreApi.listNamespacedPod({
@@ -267,10 +267,13 @@ class RunnerRuntimeManager {
    * lifecycle above.
    */
   async waitForCompletion(params: {
-    session: RunnerSession;
+    session: AgentRun;
     abortSignal?: AbortSignal;
     pollIntervalMs?: number;
-  }): Promise<{ outcome: "succeeded" | "failed" | "aborted"; reason?: string }> {
+  }): Promise<{
+    outcome: "succeeded" | "failed" | "aborted";
+    reason?: string;
+  }> {
     const clients = this.requireClients();
     const { job: jobName } = runnerNames(params.session.deploymentName);
     const interval = params.pollIntervalMs ?? RUNNER_COMPLETION_POLL_MS;
@@ -286,7 +289,10 @@ class RunnerRuntimeManager {
       if (!job) {
         // The Job is gone: either torn down under us, or it never landed.
         // Either way there is no outcome left to wait for.
-        return { outcome: "failed", reason: "The runner job no longer exists" };
+        return {
+          outcome: "failed",
+          reason: "The background job no longer exists",
+        };
       }
       if ((job.status?.succeeded ?? 0) > 0) {
         return { outcome: "succeeded" };
@@ -300,7 +306,7 @@ class RunnerRuntimeManager {
           reason:
             condition?.message ??
             condition?.reason ??
-            "The runner exited without completing",
+            "The background run exited without completing",
         };
       }
 
@@ -315,7 +321,7 @@ class RunnerRuntimeManager {
    * Safe to retry, including after a partial failure — an object already gone
    * is a success, and everything else is retried like the create path.
    */
-  async teardown(session: RunnerSession): Promise<void> {
+  async teardown(session: AgentRun): Promise<void> {
     // The key outlives the pod otherwise: a finished session's API key would
     // keep working, still charging the person it acted as.
     await this.revokeVirtualKey(session);
@@ -373,7 +379,7 @@ class RunnerRuntimeManager {
    * duplicate it — the caller learns nothing ran.
    */
   async withSessionLease(
-    session: RunnerSession,
+    session: AgentRun,
     operation: () => Promise<void>,
   ): Promise<boolean> {
     try {
@@ -400,7 +406,7 @@ class RunnerRuntimeManager {
     const body = buildRunnerPlatformEgressPolicy({
       spec,
       platformNamespace: process.env.POD_NAMESPACE || getK8sNamespace(),
-      platformPodLabels: config.runners.platformPodSelector,
+      platformPodLabels: config.agentBackgroundExecution.platformPodSelector,
       platformPorts: [config.api.port],
     });
     try {
@@ -418,7 +424,7 @@ class RunnerRuntimeManager {
     }
   }
 
-  private async revokeVirtualKey(session: RunnerSession): Promise<void> {
+  private async revokeVirtualKey(session: AgentRun): Promise<void> {
     if (!session.virtualApiKeyId) return;
     try {
       await VirtualApiKeyModel.delete(session.virtualApiKeyId);
@@ -429,11 +435,11 @@ class RunnerRuntimeManager {
       );
       return;
     }
-    await RunnerSessionModel.clearVirtualApiKey(session.id);
+    await AgentRunModel.clearVirtualApiKey(session.id);
   }
 
   private async execInPod(params: {
-    session: RunnerSession;
+    session: AgentRun;
     podName: string;
     command: string[];
   }): Promise<void> {
@@ -497,7 +503,7 @@ class RunnerRuntimeManager {
 
   private requireClients(): K8sClients {
     if (!this.isEnabled) {
-      throw new Error("Runner runtime is not enabled");
+      throw new Error("Agent Background execution is not enabled");
     }
     if (!this.clients) {
       this.clients = createK8sClients(

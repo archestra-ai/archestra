@@ -38,14 +38,22 @@ export class SteerQueue {
   }
 
   /**
-   * Block until a message arrives. Used when the agent has finished its work
-   * and has nothing to do but wait — a session that idles for a week costs
-   * nothing while it is parked here.
+   * Block until a message arrives, or until `timeoutMs` passes with nothing.
+   *
+   * The timeout is the session's finish contract: a task that has done its
+   * work parks here briefly in case a human wants to steer it further, and
+   * exits cleanly when nobody does — which is what lets the Job complete and
+   * the task settle instead of a session that never ends. `null` waits
+   * forever (interactive sessions that are meant to be parked).
    */
-  async waitForMessage(): Promise<string[]> {
+  async waitForMessage(timeoutMs: number | null = null): Promise<string[]> {
+    const deadline = timeoutMs === null ? null : Date.now() + timeoutMs;
     while (!this.stopped) {
       if (this.pending.length > 0) {
         return this.drain();
+      }
+      if (deadline !== null && Date.now() >= deadline) {
+        return [];
       }
       await delay(500);
     }

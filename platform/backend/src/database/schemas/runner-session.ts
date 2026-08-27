@@ -7,7 +7,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import a2aTasksTable from "./a2a-task";
-import runnersTable from "./runner";
+import agentsTable from "./agent";
 import usersTable from "./user";
 import virtualApiKeysTable from "./virtual-api-key";
 
@@ -19,8 +19,8 @@ import virtualApiKeysTable from "./virtual-api-key";
  * disagreement. This row answers "which Kubernetes objects belong to this
  * task, and whose credentials are in them" — nothing else.
  */
-const runnerSessionsTable = pgTable(
-  "runner_sessions",
+const agentRunsTable = pgTable(
+  "agent_runs",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     organizationId: text("organization_id").notNull(),
@@ -28,9 +28,9 @@ const runnerSessionsTable = pgTable(
     taskId: uuid("task_id")
       .notNull()
       .references(() => a2aTasksTable.id, { onDelete: "cascade" }),
-    runnerId: uuid("runner_id")
+    agentId: uuid("agent_id")
       .notNull()
-      .references(() => runnersTable.id, { onDelete: "cascade" }),
+      .references(() => agentsTable.id, { onDelete: "cascade" }),
     /** The person the session acts as; its credentials are the ones injected. */
     actorUserId: text("actor_user_id")
       .notNull()
@@ -48,13 +48,11 @@ const runnerSessionsTable = pgTable(
     endedAt: timestamp("ended_at", { mode: "date" }),
   },
   (table) => [
-    uniqueIndex("runner_sessions_task_id_uidx").on(table.taskId),
-    uniqueIndex("runner_sessions_deployment_name_uidx").on(
-      table.deploymentName,
-    ),
-    index("runner_sessions_runner_id_idx").on(table.runnerId),
-    index("runner_sessions_organization_id_idx").on(table.organizationId),
+    uniqueIndex("agent_runs_task_id_uidx").on(table.taskId),
+    uniqueIndex("agent_runs_deployment_name_uidx").on(table.deploymentName),
+    index("agent_runs_agent_id_idx").on(table.agentId),
+    index("agent_runs_organization_id_idx").on(table.organizationId),
   ],
 );
 
-export default runnerSessionsTable;
+export default agentRunsTable;

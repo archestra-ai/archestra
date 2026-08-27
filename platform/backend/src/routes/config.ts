@@ -91,12 +91,12 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               // SPDX-SnippetEnd
               sandbox: z.boolean(),
               /**
-               * Runners: long-running agentic sessions in their own pods.
+               * Delegated Agent tasks in dedicated deployments.
                * True only when the feature is switched on AND the Kubernetes
                * runtime is configured — the UI must not offer to start a
-               * runner nothing can schedule.
+               * deployment nothing can schedule.
                */
-              runners: z.boolean(),
+              agentBackgroundExecution: z.boolean(),
               plugins: z.boolean(),
               // Max size of a file the sandbox can stage. The chat composer caps
               // sandbox-routed uploads at this instead of guessing.
@@ -229,7 +229,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           sandbox: skillSandboxRuntimeService.isEnabled,
           // The same predicate the routes gate on, so the UI can never offer
           // a feature whose endpoints answer 404.
-          runners: runnerRuntimeManager.isEnabled,
+          agentBackgroundExecution: runnerRuntimeManager.isEnabled,
           plugins: config.plugins.enabled,
           sandboxArtifactBytesLimit: config.skillsSandbox.artifactBytesLimit,
           chatAttachmentStorageBytesLimit:

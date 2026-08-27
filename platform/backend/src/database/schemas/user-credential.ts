@@ -6,14 +6,15 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import agentsTable from "./agent";
 import secretsTable from "./secret";
 import usersTable from "./user";
 
 /**
- * A credential one user has deposited for their own use — the `per_user` half
- * of an agent's declared credentials (see `RunnerCredentialDeclaration`).
+ * A credential one user has deposited for one Agent deployment — the `per_user` half of
+ * its declared Background execution credentials.
  *
- * Exists because some agents cannot act on a person's behalf with a shared
+ * Exists because some deployments cannot act on a person's behalf with a shared
  * organization credential: a Claude Code subscription token, a personal GitHub
  * PAT, anything where the upstream identity must be the individual's. The
  * value never leaves the secrets manager; this row only carries the reference.
@@ -29,6 +30,10 @@ const userCredentialsTable = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => usersTable.id, { onDelete: "cascade" }),
+    /** Agent whose background-execution declaration this credential satisfies. */
+    agentId: uuid("agent_id")
+      .notNull()
+      .references(() => agentsTable.id, { onDelete: "cascade" }),
     /**
      * Declaration key this satisfies, and the environment variable name the
      * value is injected under (e.g. `CLAUDE_CODE_OAUTH_TOKEN`).
@@ -43,9 +48,11 @@ const userCredentialsTable = pgTable(
   },
   (table) => [
     index("user_credentials_user_id_idx").on(table.userId),
-    uniqueIndex("user_credentials_org_user_key_uidx").on(
+    index("user_credentials_agent_id_idx").on(table.agentId),
+    uniqueIndex("user_credentials_org_user_agent_key_uidx").on(
       table.organizationId,
       table.userId,
+      table.agentId,
       table.key,
     ),
   ],

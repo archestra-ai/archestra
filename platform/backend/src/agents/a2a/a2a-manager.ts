@@ -11,10 +11,6 @@ import {
 import { z } from "zod";
 import logger from "@/logging";
 import {
-  resolveRunnerForAgent,
-  runTaskInPod,
-} from "@/services/runners/pod-execution";
-import {
   A2AArtifactModel,
   A2AMessageModel,
   A2APushNotificationConfigModel,
@@ -26,6 +22,10 @@ import {
 } from "@/models";
 import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
 import { validateMCPGatewayToken } from "@/routes/mcp-gateway/utils";
+import {
+  resolveAgentDeployment,
+  runTaskInPod,
+} from "@/services/runners/pod-execution";
 import type { A2AContext, A2AMessage } from "@/types";
 import { isTerminalA2ATaskState } from "@/types/a2a-task";
 import {
@@ -522,14 +522,10 @@ export class A2AManager {
             })
           : [],
       ]);
-      // An agent with a runner does its work in a container instead of in this
-      // process. Resolved once per send: the decision belongs to the agent's
-      // configuration, not to the caller, so every entry point that reaches
-      // the task lifecycle inherits it without opting in.
-      const runner = await resolveRunnerForAgent({
-        runnerId: agent.runnerId ?? null,
-        organizationId: agent.organizationId,
-      });
+      // Background execution belongs to the Agent itself. It is considered
+      // only by the durable task path below; direct chat always stays in the
+      // foreground platform loop.
+      const deployment = resolveAgentDeployment(agent);
 
       const executeRun = (runOpts: {
         abortSignal?: AbortSignal;
@@ -551,10 +547,10 @@ export class A2AManager {
           callback: async () => {
             // Only a task run goes to the container. The association is for
             // long-running work, so an ordinary send still answers in process
-            // and an agent gaining a runner does not change how chat behaves.
-            if (runner && runOpts.taskId) {
+            // and an Agent gaining Background execution does not change chat.
+            if (deployment && runOpts.taskId) {
               return runTaskInPod({
-                runner,
+                deployment,
                 // The task is the pod's identity: one session per task, so a
                 // resumed task adopts its own pod rather than starting a second.
                 taskId: runOpts.taskId,
@@ -632,7 +628,7 @@ export class A2AManager {
             task: runTask,
             contextId: runContextId,
             executeRun,
-            survivesRestart: Boolean(runner),
+            survivesRestart: Boolean(deployment),
           });
 
         if (params.taskRun?.detached) {

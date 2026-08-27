@@ -1858,7 +1858,7 @@ export function parseLabelSelector(
     const labelValue = rest.join("=").trim();
     if (!label || !labelValue) {
       logger.error(
-        `ARCHESTRA_RUNNERS_PLATFORM_POD_SELECTOR is not a key=value list (${raw}); using the default`,
+        `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_PLATFORM_POD_SELECTOR is not a key=value list (${raw}); using the default`,
       );
       return defaultValue;
     }
@@ -2223,30 +2223,23 @@ const config = {
       process.env.ARCHESTRA_SKILL_MARKETPLACE_CACHE_DIR?.trim() ||
       path.join(homedir(), ".archestra", "skill-marketplace-cache"),
   },
-  runners: {
+  agentBackgroundExecution: {
     /**
-     * Runners: long-running agentic sessions, one Kubernetes pod each,
-     * attachable and steerable while they run.
+     * Background execution: delegated Agent tasks run in one Kubernetes pod
+     * each and remain attachable and steerable while they run.
      *
      * Deliberately an independent switch rather than `betaFeatureEnabled`:
      * the feature spawns compute holding a user's personal credentials, so
      * flipping the ARCHESTRA_BETA master switch must never turn it on by
      * implication. It also needs the Kubernetes runtime configured — without
-     * that, `orchestratorK8sRuntime` is false and Runners stay unavailable
+     * that, `orchestratorK8sRuntime` is false and background runs stay unavailable
      * regardless of this value.
      */
-    enabled: process.env.ARCHESTRA_RUNNERS_ENABLED === "true",
-    /**
-     * Image used when an agent declares no runner image of its own: the
-     * Archestra runner-agent, an opinionated agent loop already wired to this
-     * deployment's LLM proxy and MCP gateway.
-     */
-    defaultImage:
-      process.env.ARCHESTRA_RUNNERS_DEFAULT_IMAGE?.trim() ||
-      "ghcr.io/archestra-ai/runner-agent-base:latest",
+    enabled:
+      process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ENABLED === "true",
     /** Fallback lifetime cap for runners whose agent sets none. */
     defaultTtlHours: parsePositiveInt(
-      process.env.ARCHESTRA_RUNNERS_DEFAULT_TTL_HOURS,
+      process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_DEFAULT_TTL_HOURS,
       72,
     ),
     /**
@@ -2255,20 +2248,26 @@ const config = {
      * survive the pod, so the loss is made explicit instead of silent.
      */
     defaultIdleTimeoutMinutes: parsePositiveInt(
-      process.env.ARCHESTRA_RUNNERS_DEFAULT_IDLE_TIMEOUT_MINUTES,
+      process.env
+        .ARCHESTRA_AGENT_BACKGROUND_EXECUTION_DEFAULT_IDLE_TIMEOUT_MINUTES,
       180,
     ),
     resources: {
-      cpuRequest: process.env.ARCHESTRA_RUNNERS_CPU_REQUEST?.trim() || "500m",
+      cpuRequest:
+        process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_CPU_REQUEST?.trim() ||
+        "500m",
       memoryRequest:
-        process.env.ARCHESTRA_RUNNERS_MEMORY_REQUEST?.trim() || "1Gi",
+        process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MEMORY_REQUEST?.trim() ||
+        "1Gi",
       /**
        * No CPU limit by default, matching the MCP server runtime: throttling
        * an agent mid-turn surfaces as confusing timeouts rather than
        * back-pressure. Memory is limited because a runaway agent process
        * should die rather than take the node with it.
        */
-      memoryLimit: process.env.ARCHESTRA_RUNNERS_MEMORY_LIMIT?.trim() || "4Gi",
+      memoryLimit:
+        process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MEMORY_LIMIT?.trim() ||
+        "4Gi",
     },
     /**
      * Base URL a runner pod uses to reach this deployment's LLM proxy and MCP
@@ -2281,7 +2280,7 @@ const config = {
      * provider call.
      */
     platformBaseUrl:
-      process.env.ARCHESTRA_RUNNERS_PLATFORM_BASE_URL?.trim() ||
+      process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_PLATFORM_BASE_URL?.trim() ||
       process.env.ARCHESTRA_INTERNAL_API_BASE_URL?.trim() ||
       "",
     /**
@@ -2292,12 +2291,13 @@ const config = {
      * when the platform runs outside the cluster.
      */
     platformPodSelector: parseLabelSelector(
-      process.env.ARCHESTRA_RUNNERS_PLATFORM_POD_SELECTOR,
+      process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_PLATFORM_POD_SELECTOR,
       { "archestra.io/p4-shim-client": "true" },
     ),
     /** How often the reconciler syncs runner state and applies TTL/idle stops. */
     reconcileIntervalSeconds: parsePositiveInt(
-      process.env.ARCHESTRA_RUNNERS_RECONCILE_INTERVAL_SECONDS,
+      process.env
+        .ARCHESTRA_AGENT_BACKGROUND_EXECUTION_RECONCILE_INTERVAL_SECONDS,
       30,
     ),
   },

@@ -12,12 +12,29 @@ import {
   A2AProtocolTaskState,
 } from "./a2a-protocol";
 
-const { executeA2AMessage } = vi.hoisted(() => ({
+const { executeA2AMessage, runTaskInPod } = vi.hoisted(() => ({
   executeA2AMessage: vi.fn(),
+  runTaskInPod: vi.fn(),
 }));
 
 vi.mock("@/agents/a2a-executor.ts", () => ({
   executeA2AMessage,
+}));
+
+vi.mock("@/services/runners/pod-execution", () => ({
+  resolveAgentDeployment: (agent: {
+    id: string;
+    name: string;
+    backgroundExecution?: object | null;
+  }) =>
+    agent.backgroundExecution
+      ? {
+          agentId: agent.id,
+          name: agent.name,
+          ...agent.backgroundExecution,
+        }
+      : null,
+  runTaskInPod,
 }));
 
 const actor: A2AActor = {
@@ -140,6 +157,60 @@ async function waitForState(
 }
 
 describe("A2AManager full task mode", () => {
+  test("an Agent deployment is used for a tasked run, while direct chat stays in the foreground", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      name: "background-agent",
+      teams: [],
+      backgroundExecution: {
+        image: "example.invalid/background-agent:test",
+        command: null,
+        backend: "kubernetes",
+        steerMode: "pipe",
+        privileged: false,
+        resources: null,
+        environment: null,
+        credentials: null,
+        ttlHours: null,
+        idleTimeoutMinutes: null,
+      },
+    });
+    mockExecutorText("foreground answer");
+    runTaskInPod.mockResolvedValueOnce({
+      messageId: crypto.randomUUID(),
+      text: "background answer",
+      finishReason: "stop",
+      responseUiMessage: {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        parts: [{ type: "text", text: "background answer" }],
+      },
+    });
+
+    const direct = await sendMessage({
+      manager: fullManager(),
+      agentId: agent.id,
+    });
+    expect(direct.message?.parts).toEqual([{ text: "foreground answer" }]);
+    expect(runTaskInPod).not.toHaveBeenCalled();
+
+    const tasked = await sendMessage({
+      manager: fullManager(),
+      agentId: agent.id,
+      taskRun: { createTask: true, detached: false },
+    });
+    expect(tasked.task?.status.state).toBe(A2AProtocolTaskState.Completed);
+    expect(runTaskInPod).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: agent.id,
+        taskId: tasked.task?.id,
+        deployment: expect.objectContaining({ agentId: agent.id }),
+      }),
+    );
+    expect(executeA2AMessage).toHaveBeenCalledTimes(1);
+  });
+
   test("blocking tasked run walks SUBMITTED -> WORKING -> COMPLETED with artifact, events, and timestamps", async ({
     makeAgent,
   }) => {

@@ -1,7 +1,7 @@
 import type { Writable } from "node:stream";
 import { runnerRuntimeManager } from "@/k8s/runner-runtime";
 import type { RunnerLaunchSpec } from "@/k8s/runner-runtime/manifests";
-import type { RunnerSession } from "@/types";
+import type { AgentRun } from "@/types";
 import { ApiError } from "@/types";
 import type { RunnerBackend, RunnerCompletion } from "./types";
 
@@ -24,7 +24,7 @@ class KubernetesRunnerBackend implements RunnerBackend {
   }
 
   async waitUntilRunning(params: {
-    session: RunnerSession;
+    session: AgentRun;
     abortSignal?: AbortSignal;
   }): Promise<void> {
     const deadline = Date.now() + POD_START_TIMEOUT_MS;
@@ -37,7 +37,7 @@ class KubernetesRunnerBackend implements RunnerBackend {
       if (Date.now() > deadline) {
         throw new ApiError(
           504,
-          "The runner pod did not start in time. The image may be unavailable, or the cluster may have no room to schedule it.",
+          "The background run did not start in time. The image may be unavailable, or the cluster may have no room to schedule it.",
         );
       }
       await delay(POD_START_POLL_MS, params.abortSignal);
@@ -45,7 +45,7 @@ class KubernetesRunnerBackend implements RunnerBackend {
   }
 
   async streamOutput(params: {
-    session: RunnerSession;
+    session: AgentRun;
     destination: Writable;
     abortSignal?: AbortSignal;
   }): Promise<void> {
@@ -58,13 +58,13 @@ class KubernetesRunnerBackend implements RunnerBackend {
   }
 
   async waitForCompletion(params: {
-    session: RunnerSession;
+    session: AgentRun;
     abortSignal?: AbortSignal;
   }): Promise<RunnerCompletion> {
     return runnerRuntimeManager.waitForCompletion(params);
   }
 
-  async teardown(session: RunnerSession): Promise<void> {
+  async teardown(session: AgentRun): Promise<void> {
     await runnerRuntimeManager.teardown(session);
   }
 }

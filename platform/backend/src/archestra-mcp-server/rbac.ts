@@ -181,14 +181,13 @@ export const TOOL_PERMISSIONS: Record<
   download_file: { resource: "sandbox", action: "execute" },
   upload_file: { resource: "sandbox", action: "execute" },
 
-  // Long-running A2A tasks. Reading and observing is runner:read; starting
-  // work (which may spin a container as the caller) is runner:create; steering
-  // and canceling are runner:update. Per-task ownership stays in the handlers.
-  start_task: { resource: "runner", action: "create" },
-  get_task: { resource: "runner", action: "read" },
-  list_tasks: { resource: "runner", action: "read" },
-  steer_task: { resource: "runner", action: "update" },
-  cancel_task: { resource: "runner", action: "update" },
+  // Tasks are an Agent capability, including when an Agent opts into
+  // Background execution. Per-task ownership stays in the handlers.
+  start_task: { resource: "agent", action: "read" },
+  get_task: { resource: "agent", action: "read" },
+  list_tasks: { resource: "agent", action: "read" },
+  steer_task: { resource: "agent", action: "read" },
+  cancel_task: { resource: "agent", action: "read" },
   // Persistent file store — these operate on `skill_sandbox_files`, not the
   // sandbox itself, so they gate on `file:manage`. Per-file authorization
   // (authorship, project membership) stays in the handlers.

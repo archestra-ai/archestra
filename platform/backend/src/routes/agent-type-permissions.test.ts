@@ -235,6 +235,54 @@ describe("agent type permission isolation (routes)", () => {
           url: "/api/agents?agentType=llm_proxy",
         });
         expect(proxyRes.statusCode).toBe(400);
+
+        const backgroundAgent = await memberApp.inject({
+          method: "POST",
+          url: "/api/agents",
+          payload: {
+            name: "background-agent",
+            agentType: "agent",
+            scope: "personal",
+            teams: [],
+            backgroundExecution: {
+              image: "example.com/coding-agent:latest",
+              command: null,
+              backend: "kubernetes",
+              steerMode: "pipe",
+              privileged: false,
+              resources: null,
+              environment: null,
+              credentials: null,
+              ttlHours: null,
+              idleTimeoutMinutes: null,
+            },
+          },
+        });
+        expect(backgroundAgent.statusCode).toBe(200);
+
+        const privilegedAgent = await memberApp.inject({
+          method: "POST",
+          url: "/api/agents",
+          payload: {
+            name: "privileged-background-agent",
+            agentType: "agent",
+            scope: "personal",
+            teams: [],
+            backgroundExecution: {
+              image: "example.com/coding-agent:latest",
+              command: null,
+              backend: "kubernetes",
+              steerMode: "pipe",
+              privileged: true,
+              resources: null,
+              environment: null,
+              credentials: null,
+              ttlHours: null,
+              idleTimeoutMinutes: null,
+            },
+          },
+        });
+        expect(privilegedAgent.statusCode).toBe(403);
       } finally {
         await memberApp.close();
       }

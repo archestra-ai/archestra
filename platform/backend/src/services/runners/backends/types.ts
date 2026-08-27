@@ -1,6 +1,6 @@
 import type { Writable } from "node:stream";
 import type { RunnerLaunchSpec } from "@/k8s/runner-runtime/manifests";
-import type { RunnerSession } from "@/types";
+import type { AgentRun } from "@/types";
 
 /**
  * How a runner's work is actually executed.
@@ -31,13 +31,13 @@ export interface RunnerBackend {
    * not be mistaken for one that failed to schedule.
    */
   waitUntilRunning(params: {
-    session: RunnerSession;
+    session: AgentRun;
     abortSignal?: AbortSignal;
   }): Promise<void>;
 
   /** Follow the session's output. Resolves when the stream ends. */
   streamOutput(params: {
-    session: RunnerSession;
+    session: AgentRun;
     destination: Writable;
     abortSignal?: AbortSignal;
   }): Promise<void>;
@@ -49,12 +49,12 @@ export interface RunnerBackend {
    * cancellation apart from a failure without inspecting an error.
    */
   waitForCompletion(params: {
-    session: RunnerSession;
+    session: AgentRun;
     abortSignal?: AbortSignal;
   }): Promise<RunnerCompletion>;
 
   /** Release everything the session holds. Safe to call more than once. */
-  teardown(session: RunnerSession): Promise<void>;
+  teardown(session: AgentRun): Promise<void>;
 }
 
 /** Mirrors `RunnerBackendNameSchema`; the column stores exactly these. */

@@ -89,21 +89,21 @@ const McpExecResizePayloadSchema = z.object({
   rows: z.number().int().min(1),
 });
 
-// Runner attach: the same shape as the MCP exec conversation, keyed by runner.
-const RunnerIdPayloadSchema = z.object({
-  runnerId: z.string().uuid(),
+// Agent run attach: the same shape as the MCP exec conversation, keyed by run.
+const AgentRunIdPayloadSchema = z.object({
+  runId: z.string().uuid(),
 });
-const RunnerAttachInputPayloadSchema = z.object({
-  runnerId: z.string().uuid(),
+const AgentRunAttachInputPayloadSchema = z.object({
+  runId: z.string().uuid(),
   data: z.string(),
 });
-const RunnerAttachResizePayloadSchema = z.object({
-  runnerId: z.string().uuid(),
+const AgentRunAttachResizePayloadSchema = z.object({
+  runId: z.string().uuid(),
   cols: z.number().int().min(1),
   rows: z.number().int().min(1),
 });
-const SubscribeRunnerLogsPayloadSchema = z.object({
-  runnerId: z.string().uuid(),
+const SubscribeAgentRunLogsPayloadSchema = z.object({
+  runId: z.string().uuid(),
   lines: z.number().int().min(1).max(10_000).optional(),
 });
 
@@ -176,28 +176,28 @@ export const ClientWebSocketMessageSchema = z.discriminatedUnion("type", [
     payload: McpExecResizePayloadSchema,
   }),
   z.object({
-    type: z.literal("subscribe_runner_attach"),
-    payload: RunnerIdPayloadSchema,
+    type: z.literal("subscribe_agent_run_attach"),
+    payload: AgentRunIdPayloadSchema,
   }),
   z.object({
-    type: z.literal("unsubscribe_runner_attach"),
-    payload: RunnerIdPayloadSchema,
+    type: z.literal("unsubscribe_agent_run_attach"),
+    payload: AgentRunIdPayloadSchema,
   }),
   z.object({
-    type: z.literal("runner_attach_input"),
-    payload: RunnerAttachInputPayloadSchema,
+    type: z.literal("agent_run_attach_input"),
+    payload: AgentRunAttachInputPayloadSchema,
   }),
   z.object({
-    type: z.literal("runner_attach_resize"),
-    payload: RunnerAttachResizePayloadSchema,
+    type: z.literal("agent_run_attach_resize"),
+    payload: AgentRunAttachResizePayloadSchema,
   }),
   z.object({
-    type: z.literal("subscribe_runner_logs"),
-    payload: SubscribeRunnerLogsPayloadSchema,
+    type: z.literal("subscribe_agent_run_logs"),
+    payload: SubscribeAgentRunLogsPayloadSchema,
   }),
   z.object({
-    type: z.literal("unsubscribe_runner_logs"),
-    payload: RunnerIdPayloadSchema,
+    type: z.literal("unsubscribe_agent_run_logs"),
+    payload: AgentRunIdPayloadSchema,
   }),
   z.object({
     type: z.literal("subscribe_mcp_deployment_statuses"),
@@ -405,44 +405,44 @@ export type McpDeploymentStatusEntry = {
   deploymentName?: string;
 };
 
-// Runner attach + logs, server -> client
-export type RunnerAttachStartedMessage = {
-  type: "runner_attach_started";
-  payload: { runnerId: string; command: string; podName: string };
+// Agent run attach + logs, server -> client
+export type AgentRunAttachStartedMessage = {
+  type: "agent_run_attach_started";
+  payload: { runId: string; command: string; podName: string };
 };
 
-export type RunnerAttachOutputMessage = {
-  type: "runner_attach_output";
-  payload: { runnerId: string; data: string };
+export type AgentRunAttachOutputMessage = {
+  type: "agent_run_attach_output";
+  payload: { runId: string; data: string };
 };
 
-export type RunnerAttachErrorMessage = {
-  type: "runner_attach_error";
-  payload: { runnerId: string; error: string };
+export type AgentRunAttachErrorMessage = {
+  type: "agent_run_attach_error";
+  payload: { runId: string; error: string };
 };
 
-export type RunnerAttachClosedMessage = {
-  type: "runner_attach_closed";
+export type AgentRunAttachClosedMessage = {
+  type: "agent_run_attach_closed";
   payload: {
-    runnerId: string;
+    runId: string;
     /** Why the session ended, when the exec reported a failure status. */
     reason?: string;
   };
 };
 
-export type RunnerLogsMessage = {
-  type: "runner_logs";
-  payload: { runnerId: string; logs: string };
+export type AgentRunLogsMessage = {
+  type: "agent_run_logs";
+  payload: { runId: string; logs: string };
 };
 
-export type RunnerLogsErrorMessage = {
-  type: "runner_logs_error";
-  payload: { runnerId: string; error: string };
+export type AgentRunLogsErrorMessage = {
+  type: "agent_run_logs_error";
+  payload: { runId: string; error: string };
 };
 
-export type RunnerLogsEndedMessage = {
-  type: "runner_logs_ended";
-  payload: { runnerId: string };
+export type AgentRunLogsEndedMessage = {
+  type: "agent_run_logs_ended";
+  payload: { runId: string };
 };
 
 export type McpDeploymentStatusesMessage = {
@@ -529,13 +529,13 @@ export type ServerWebSocketMessage =
   | McpExecOutputMessage
   | McpExecErrorMessage
   | McpExecClosedMessage
-  | RunnerAttachStartedMessage
-  | RunnerAttachOutputMessage
-  | RunnerAttachErrorMessage
-  | RunnerAttachClosedMessage
-  | RunnerLogsMessage
-  | RunnerLogsErrorMessage
-  | RunnerLogsEndedMessage
+  | AgentRunAttachStartedMessage
+  | AgentRunAttachOutputMessage
+  | AgentRunAttachErrorMessage
+  | AgentRunAttachClosedMessage
+  | AgentRunLogsMessage
+  | AgentRunLogsErrorMessage
+  | AgentRunLogsEndedMessage
   | McpDeploymentStatusesMessage
   | McpInstallationStatusMessage
   | McpServersChangedMessage

@@ -58,4 +58,10 @@ describe("SteerQueue", () => {
       expect(await queue.waitForMessage()).toEqual([]);
     });
   });
+
+  it("returns an empty batch when the idle timeout expires", async () => {
+    await withQueue("", async (queue) => {
+      expect(await queue.waitForMessage(1)).toEqual([]);
+    });
+  });
 });

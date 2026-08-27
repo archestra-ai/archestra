@@ -152,17 +152,12 @@ class AgentLabelModel {
           schema.appLabelsTable,
           eq(schema.labelKeysTable.id, schema.appLabelsTable.keyId),
         )
-        .leftJoin(
-          schema.runnerLabelsTable,
-          eq(schema.labelKeysTable.id, schema.runnerLabelsTable.keyId),
-        )
         .where(
           and(
             isNull(schema.agentLabelsTable.keyId),
             isNull(schema.mcpCatalogLabelsTable.keyId),
             isNull(schema.teamLabelsTable.keyId),
             isNull(schema.appLabelsTable.keyId),
-            isNull(schema.runnerLabelsTable.keyId),
           ),
         );
 
@@ -186,17 +181,12 @@ class AgentLabelModel {
           schema.appLabelsTable,
           eq(schema.labelValuesTable.id, schema.appLabelsTable.valueId),
         )
-        .leftJoin(
-          schema.runnerLabelsTable,
-          eq(schema.labelValuesTable.id, schema.runnerLabelsTable.valueId),
-        )
         .where(
           and(
             isNull(schema.agentLabelsTable.valueId),
             isNull(schema.mcpCatalogLabelsTable.valueId),
             isNull(schema.teamLabelsTable.valueId),
             isNull(schema.appLabelsTable.valueId),
-            isNull(schema.runnerLabelsTable.valueId),
           ),
         );
 

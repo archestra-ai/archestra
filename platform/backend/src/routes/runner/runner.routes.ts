@@ -1,164 +1,55 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { runnerRuntimeManager } from "@/k8s/runner-runtime";
-import { RunnerLabelModel, RunnerModel } from "@/models";
-import { preflightRunnerCredentials } from "@/services/runners/credentials";
 import {
-  AgentLabelWithDetailsSchema,
+  getAgentTypePermissionChecker,
+  requireAgentModifyPermission,
+} from "@/auth";
+import { runnerRuntimeManager } from "@/k8s/runner-runtime";
+import { AgentModel, AgentRunModel, TeamModel } from "@/models";
+import {
+  deleteAgentDeploymentCredential,
+  preflightAgentDeploymentCredentials,
+  setAgentDeploymentCredential,
+} from "@/services/runners/credentials";
+import { resolveAgentDeployment } from "@/services/runners/pod-execution";
+import {
+  type Agent,
+  type AgentDeployment,
   ApiError,
   constructResponseSchema,
-  InsertRunnerSchema,
-  MissingRunnerCredentialSchema,
-  type Runner,
-  SelectRunnerWithLabelsSchema,
-  UpdateRunnerSchema,
+  MissingAgentDeploymentCredentialSchema,
+  SelectAgentRunSchema,
 } from "@/types";
-import {
-  BulkDeleteBodySchema,
-  BulkOutcomeSchema,
-  runBulk,
-} from "../bulk-route";
 
-const RunnerBodySchema = InsertRunnerSchema.omit({
-  organizationId: true,
-}).extend({
-  /** Omitted leaves existing labels untouched; `[]` clears them. */
-  labels: z.array(AgentLabelWithDetailsSchema).optional(),
-});
-
-const RunnerUpdateBodySchema = UpdateRunnerSchema.extend({
-  labels: z.array(AgentLabelWithDetailsSchema).optional(),
-});
-
-const runnerRoutes: FastifyPluginAsyncZod = async (fastify) => {
+const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
+  fastify,
+) => {
   fastify.get(
-    "/api/runners",
+    "/api/agents/:id/background-execution/preflight",
     {
       schema: {
-        operationId: RouteId.GetAllRunners,
-        description: "List runner definitions in the organization",
-        tags: ["Runners"],
-        querystring: z.object({
-          search: z.string().trim().min(1).optional(),
-          environmentId: z.string().uuid().optional(),
-          /** `key:a|b;key2:c` — a runner must match every key. */
-          labels: z.string().optional(),
-          limit: z.coerce.number().int().min(1).max(100).optional(),
-          offset: z.coerce.number().int().min(0).optional(),
-        }),
-        response: constructResponseSchema(
-          z.object({
-            runners: z.array(SelectRunnerWithLabelsSchema),
-            total: z.number(),
-          }),
-        ),
-      },
-    },
-    async ({ query, organizationId }, reply) => {
-      assertRunnersEnabled();
-      return reply.send(
-        await RunnerModel.list({
-          organizationId,
-          search: query.search,
-          environmentId: query.environmentId,
-          labels: parseLabelsFilter(query.labels),
-          limit: query.limit,
-          offset: query.offset,
-        }),
-      );
-    },
-  );
-
-  fastify.get(
-    "/api/runners/:id",
-    {
-      schema: {
-        operationId: RouteId.GetRunner,
-        description: "Get a runner definition",
-        tags: ["Runners"],
-        params: z.object({ id: z.string().uuid() }),
-        response: constructResponseSchema(SelectRunnerWithLabelsSchema),
-      },
-    },
-    async ({ params, organizationId }, reply) => {
-      assertRunnersEnabled();
-      const runner = await requireRunner(params.id, organizationId);
-      return reply.send({
-        ...runner,
-        labels: await RunnerLabelModel.getLabelsForRunner(runner.id),
-      });
-    },
-  );
-
-  fastify.get(
-    "/api/runners/labels/keys",
-    {
-      schema: {
-        operationId: RouteId.GetRunnerLabelKeys,
-        description: "Label keys in use by this organization's runners",
-        tags: ["Runners"],
-        response: constructResponseSchema(z.array(z.string())),
-      },
-    },
-    async ({ organizationId }, reply) => {
-      assertRunnersEnabled();
-      return reply.send(await RunnerLabelModel.getAllKeys(organizationId));
-    },
-  );
-
-  fastify.get(
-    "/api/runners/labels/values",
-    {
-      schema: {
-        operationId: RouteId.GetRunnerLabelValues,
-        description: "Label values in use by this organization's runners",
-        tags: ["Runners"],
-        querystring: z.object({
-          key: z.string().optional().describe("Filter values by label key"),
-        }),
-        response: constructResponseSchema(z.array(z.string())),
-      },
-    },
-    async ({ query: { key }, organizationId }, reply) => {
-      assertRunnersEnabled();
-      return reply.send(
-        key
-          ? await RunnerLabelModel.getValuesByKey({ organizationId, key })
-          : await RunnerLabelModel.getAllValues(organizationId),
-      );
-    },
-  );
-
-  /**
-   * What the current user still has to supply before a session on this runner
-   * can start. Lets a caller annotate up front rather than failing on start.
-   */
-  fastify.get(
-    "/api/runners/:id/preflight",
-    {
-      schema: {
-        operationId: RouteId.GetRunnerPreflight,
+        operationId: RouteId.GetAgentBackgroundExecutionPreflight,
         description:
-          "Report credentials the current user must supply before this runner can act as them",
-        tags: ["Runners"],
+          "Report credentials the current user still needs before this Agent can execute delegated work in its deployment",
+        tags: ["Agents"],
         params: z.object({ id: z.string().uuid() }),
         response: constructResponseSchema(
           z.object({
             ready: z.boolean(),
-            missing: z.array(MissingRunnerCredentialSchema),
-            misconfigured: z.array(MissingRunnerCredentialSchema),
+            configured: z.array(z.string()),
+            missing: z.array(MissingAgentDeploymentCredentialSchema),
+            misconfigured: z.array(MissingAgentDeploymentCredentialSchema),
           }),
         ),
       },
     },
-    async ({ params, organizationId, user }, reply) => {
-      assertRunnersEnabled();
-      const runner = await requireRunner(params.id, organizationId);
-      const preflight = await preflightRunnerCredentials({
-        runner,
-        organizationId,
-        userId: user.id,
+    async (request, reply) => {
+      const deployment = await requireReadableDeployment(request);
+      const preflight = await preflightAgentDeploymentCredentials({
+        deployment,
+        organizationId: request.organizationId,
+        userId: request.user.id,
       });
       return reply.send({
         ready:
@@ -169,190 +60,209 @@ const runnerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  fastify.post(
-    "/api/runners",
-    {
-      schema: {
-        operationId: RouteId.CreateRunner,
-        description: "Create a runner definition",
-        tags: ["Runners"],
-        body: RunnerBodySchema,
-        response: constructResponseSchema(SelectRunnerWithLabelsSchema),
-      },
-    },
-    async ({ body, organizationId, user }, reply) => {
-      assertRunnersEnabled();
-      await assertMayConfigurePrivileged({
-        privileged: body.privileged === true,
-        userId: user.id,
-        organizationId,
-      });
-      const { labels, ...values } = body;
-      const created = await RunnerModel.create(
-        { ...values, organizationId },
-        labels,
-      );
-      return reply.send({ ...created, labels: labels ?? [] });
-    },
-  );
-
   fastify.put(
-    "/api/runners/:id",
+    "/api/agents/:id/background-execution/credentials/:key",
     {
       schema: {
-        operationId: RouteId.UpdateRunner,
-        description: "Update a runner definition",
-        tags: ["Runners"],
-        params: z.object({ id: z.string().uuid() }),
-        body: RunnerUpdateBodySchema,
-        response: constructResponseSchema(SelectRunnerWithLabelsSchema),
+        operationId: RouteId.SetAgentBackgroundExecutionCredential,
+        description:
+          "Store or replace one credential declared by an Agent's Background execution configuration",
+        tags: ["Agents"],
+        params: z.object({
+          id: z.string().uuid(),
+          key: z.string().min(1).max(128),
+        }),
+        body: z.object({ value: z.string().min(1).max(20_000) }),
+        response: constructResponseSchema(
+          z.object({ configured: z.literal(true) }),
+        ),
       },
     },
-    async ({ params, body, organizationId, user }, reply) => {
-      assertRunnersEnabled();
-      await assertMayConfigurePrivileged({
-        privileged: body.privileged === true,
-        userId: user.id,
-        organizationId,
-      });
-      const { labels, ...values } = body;
-      const updated = await RunnerModel.update(
-        params.id,
-        organizationId,
-        values,
-        labels,
+    async (request, reply) => {
+      const { agent, deployment } =
+        await requireReadableDeploymentWithAgent(request);
+      const declaration = requireCredentialDeclaration(
+        deployment,
+        request.params.key,
       );
-      if (!updated) {
-        throw new ApiError(404, "Runner not found");
+      if (declaration.scope === "shared") {
+        await requireWritableAgent({ request, agent });
+      } else {
+        request.auditSkip = true;
       }
-      return reply.send({
-        ...updated,
-        labels: await RunnerLabelModel.getLabelsForRunner(updated.id),
+      await setAgentDeploymentCredential({
+        deployment,
+        organizationId: request.organizationId,
+        userId: request.user.id,
+        key: declaration.key,
+        value: request.body.value,
       });
+      return reply.send({ configured: true as const });
     },
   );
 
   fastify.delete(
-    "/api/runners/bulk",
+    "/api/agents/:id/background-execution/credentials/:key",
     {
       schema: {
-        operationId: RouteId.BulkDeleteRunners,
-        description: "Delete runner definitions",
-        tags: ["Runners"],
-        body: BulkDeleteBodySchema,
-        response: constructResponseSchema(BulkOutcomeSchema),
+        operationId: RouteId.DeleteAgentBackgroundExecutionCredential,
+        description:
+          "Remove one stored Background execution credential value without changing its declaration",
+        tags: ["Agents"],
+        params: z.object({
+          id: z.string().uuid(),
+          key: z.string().min(1).max(128),
+        }),
+        response: constructResponseSchema(z.object({ deleted: z.boolean() })),
       },
     },
     async (request, reply) => {
-      assertRunnersEnabled();
-      const { organizationId } = request;
+      const { agent, deployment } =
+        await requireReadableDeploymentWithAgent(request);
+      const declaration = requireCredentialDeclaration(
+        deployment,
+        request.params.key,
+      );
+      if (declaration.scope === "shared") {
+        await requireWritableAgent({ request, agent });
+      } else {
+        request.auditSkip = true;
+      }
+      const result = await deleteAgentDeploymentCredential({
+        deployment,
+        organizationId: request.organizationId,
+        userId: request.user.id,
+        key: declaration.key,
+      });
+      if (!result.deleted) {
+        throw new ApiError(404, "Credential is not configured");
+      }
+      return reply.send({ deleted: true });
+    },
+  );
+
+  fastify.get(
+    "/api/agents/:id/runs",
+    {
+      schema: {
+        operationId: RouteId.GetAgentRuns,
+        description:
+          "List deployment runs created by delegated tasks for this Agent",
+        tags: ["Agents"],
+        params: z.object({ id: z.string().uuid() }),
+        response: constructResponseSchema(z.array(SelectAgentRunSchema)),
+      },
+    },
+    async (request, reply) => {
+      await requireReadableAgent(request);
       return reply.send(
-        await runBulk({
-          ids: request.body.ids,
-          logLabel: "runners bulk delete",
-          notFoundMessage: "Runner not found",
-          unexpectedMessage: "Could not delete this runner",
-          load: async (ids) => {
-            const loaded = new Map<string, Runner>();
-            for (const id of ids) {
-              const runner = await RunnerModel.findById(id, organizationId);
-              if (runner) loaded.set(id, runner);
-            }
-            return loaded;
-          },
-          describe: (runner) => runner.name,
-          applyEach: async (_runner, id) => {
-            const deleted = await RunnerModel.delete(id, organizationId);
-            if (!deleted) throw new ApiError(404, "Runner not found");
-          },
-          audit: {
-            target: request,
-            snapshot: async (ids) => ({ ids }),
-          },
+        await AgentRunModel.listForAgent({
+          agentId: request.params.id,
+          organizationId: request.organizationId,
         }),
       );
     },
   );
-
-  fastify.delete(
-    "/api/runners/:id",
-    {
-      schema: {
-        operationId: RouteId.DeleteRunner,
-        description: "Delete a runner definition",
-        tags: ["Runners"],
-        params: z.object({ id: z.string().uuid() }),
-        response: constructResponseSchema(z.object({ deleted: z.boolean() })),
-      },
-    },
-    async ({ params, organizationId }, reply) => {
-      assertRunnersEnabled();
-      const deleted = await RunnerModel.delete(params.id, organizationId);
-      if (!deleted) {
-        throw new ApiError(404, "Runner not found");
-      }
-      return reply.send({ deleted });
-    },
-  );
 };
 
-export default runnerRoutes;
+export default agentBackgroundExecutionRoutes;
 
 // ===================== internals =====================
 
-function assertRunnersEnabled(): void {
-  // 404 rather than 403: a disabled feature is invisible, not forbidden.
+type AgentRequest = {
+  params: { id: string };
+  user: { id: string };
+  organizationId: string;
+};
+
+async function requireReadableDeployment(
+  request: AgentRequest,
+): Promise<AgentDeployment> {
+  return (await requireReadableDeploymentWithAgent(request)).deployment;
+}
+
+async function requireReadableDeploymentWithAgent(
+  request: AgentRequest,
+): Promise<{ agent: Agent; deployment: AgentDeployment }> {
   if (!runnerRuntimeManager.isEnabled) {
     throw new ApiError(404, "Not found");
   }
-}
-
-async function requireRunner(
-  id: string,
-  organizationId: string,
-): Promise<Runner> {
-  const runner = await RunnerModel.findById(id, organizationId);
-  if (!runner) {
-    throw new ApiError(404, "Runner not found");
+  const agent = await requireReadableAgent(request);
+  const deployment = resolveAgentDeployment(agent);
+  if (!deployment) {
+    throw new ApiError(404, "Background execution is not configured");
   }
-  return runner;
+  return { agent, deployment };
 }
 
-/**
- * A privileged pod holds host devices and full capabilities, so configuring
- * one is node-level access rather than a runner setting.
- */
-async function assertMayConfigurePrivileged(params: {
-  privileged: boolean;
-  userId: string;
-  organizationId: string;
-}): Promise<void> {
-  if (!params.privileged) return;
-  const { userHasPermission } = await import("@/auth/utils");
-  const mayGrant = await userHasPermission(
-    params.userId,
-    params.organizationId,
-    "runner",
-    "admin",
+async function requireReadableAgent(request: AgentRequest): Promise<Agent> {
+  const candidate = await AgentModel.findById(
+    request.params.id,
+    request.user.id,
+    true,
   );
-  if (!mayGrant) {
+  if (
+    !candidate ||
+    candidate.organizationId !== request.organizationId ||
+    candidate.agentType !== "agent"
+  ) {
+    throw new ApiError(404, "Agent not found");
+  }
+  const checker = await getAgentTypePermissionChecker({
+    userId: request.user.id,
+    organizationId: request.organizationId,
+  });
+  try {
+    checker.require("agent", "read");
+  } catch {
+    throw new ApiError(404, "Agent not found");
+  }
+  if (!checker.isAdmin("agent")) {
+    const visible = await AgentModel.findById(
+      request.params.id,
+      request.user.id,
+      false,
+    );
+    if (!visible) throw new ApiError(404, "Agent not found");
+  }
+  return candidate;
+}
+
+async function requireWritableAgent(params: {
+  request: AgentRequest;
+  agent: Agent;
+}): Promise<void> {
+  const checker = await getAgentTypePermissionChecker({
+    userId: params.request.user.id,
+    organizationId: params.request.organizationId,
+  });
+  checker.require("agent", "update");
+  const userTeamIds = checker.isAdmin("agent")
+    ? []
+    : await TeamModel.getUserTeamIds(params.request.user.id);
+  requireAgentModifyPermission({
+    checker,
+    agentType: "agent",
+    agentScope: params.agent.scope,
+    agentAuthorId: params.agent.authorId,
+    agentTeamIds: params.agent.teams.map((team) => team.id),
+    userTeamIds,
+    userId: params.request.user.id,
+  });
+}
+
+function requireCredentialDeclaration(
+  deployment: AgentDeployment,
+  key: string,
+): NonNullable<AgentDeployment["credentials"]>[number] {
+  const declaration = deployment.credentials?.find(
+    (entry) => entry.key === key,
+  );
+  if (!declaration) {
     throw new ApiError(
-      403,
-      "Only a runner administrator can configure a privileged runner",
+      404,
+      "Credential is not declared by this Agent's Background execution configuration",
     );
   }
-}
-
-/** `key:a|b;key2:c` into the shape the model filters on. */
-function parseLabelsFilter(
-  raw: string | undefined,
-): Record<string, string[]> | undefined {
-  if (!raw) return undefined;
-  const parsed: Record<string, string[]> = {};
-  for (const entry of raw.split(";")) {
-    const [key, values] = entry.split(":");
-    if (!key || !values) continue;
-    parsed[key] = values.split("|").filter(Boolean);
-  }
-  return Object.keys(parsed).length > 0 ? parsed : undefined;
+  return declaration;
 }

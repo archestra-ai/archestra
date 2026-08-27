@@ -8,8 +8,9 @@ import {
 } from "@archestra/shared";
 import { z } from "zod";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
-import { A2AManager } from "@/agents/a2a/a2a-manager";
+import type { A2AManager } from "@/agents/a2a/a2a-manager";
 import { A2AProtocolRole } from "@/agents/a2a/a2a-protocol";
+import { watchChatOpsTask } from "@/agents/chatops/chatops-task-watcher";
 import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
 import { runnerRuntimeManager } from "@/k8s/runner-runtime";
@@ -17,11 +18,11 @@ import {
   A2AArtifactModel,
   A2ATaskModel,
   AgentModel,
-  RunnerModel,
-  RunnerSessionModel,
+  AgentRunModel,
 } from "@/models";
-import { preflightRunnerCredentials } from "@/services/runners/credentials";
-import { RUNNER_CREDENTIALS_REQUIRED_CODE } from "@/types";
+import { preflightAgentDeploymentCredentials } from "@/services/runners/credentials";
+import { resolveAgentDeployment } from "@/services/runners/pod-execution";
+import { AGENT_DEPLOYMENT_CREDENTIALS_REQUIRED_CODE } from "@/types";
 import {
   catchError,
   defineArchestraTool,
@@ -37,13 +38,10 @@ import type { ArchestraContext } from "./types";
  * A2A v2 protocol drives, so a client speaking either surface sees the same
  * tasks in the same states.
  *
- * When the target agent has a runner, the work executes in that runner's
- * container; without one it runs in-process. The caller does not choose — the
- * agent's configuration does, exactly as it does for A2A callers.
+ * When the target Agent has Background execution configured, delegated work
+ * runs in its deployment; otherwise it runs in-process. Direct chat is always
+ * foreground and never reaches this detached task path.
  */
-
-/** One manager for the whole tool group; tasks demand the durable lifecycle. */
-const taskManager = new A2AManager({ taskMode: "full" });
 
 const TaskSummarySchema = z.object({
   task_id: z.string().describe("Pass to get_task / steer_task / cancel_task."),
@@ -63,10 +61,9 @@ const TaskSummarySchema = z.object({
 
 const StartTaskOutputSchema = z.object({
   task: TaskSummarySchema,
-  runner: z
-    .string()
-    .nullable()
-    .describe("Name of the runner the work executes on; null = in-process."),
+  execution: z
+    .enum(["background", "foreground"])
+    .describe("Where the delegated task executes."),
 });
 
 const GetTaskOutputSchema = z.object({
@@ -83,7 +80,7 @@ const GetTaskOutputSchema = z.object({
       started_at: z.string().nullable(),
     })
     .nullable()
-    .describe("The container session, when the task runs on a runner."),
+    .describe("The Agent run, when the task uses Background execution."),
 });
 
 const ListTasksOutputSchema = z.object({
@@ -101,7 +98,7 @@ const registry = defineArchestraTools([
     title: "Start Task",
     description:
       "Start long-running work on an agent as a durable task and return immediately with its id. " +
-      "If the agent has a runner, the work executes in that runner's container. " +
+      "If the Agent has Background execution configured, the work executes in its deployment. " +
       "Poll get_task for progress, steer_task to interject, cancel_task to stop.",
     schema: z.object({
       agent_id: z.string().describe("The agent to do the work."),
@@ -120,12 +117,10 @@ const registry = defineArchestraTools([
           return errorResult("Agent not found");
         }
 
-        const runner = agent.runnerId
-          ? await RunnerModel.findById(agent.runnerId, actor.organizationId)
-          : null;
-        if (runner && !runnerRuntimeManager.isEnabled) {
+        const deployment = resolveAgentDeployment(agent);
+        if (deployment && !runnerRuntimeManager.isEnabled) {
           return errorResult(
-            `Agent "${agent.name}" runs on runner "${runner.name}", but runners are not available on this deployment.`,
+            `Agent "${agent.name}" has Background execution configured, but deployments are not available on this installation.`,
           );
         }
 
@@ -134,25 +129,25 @@ const registry = defineArchestraTools([
         // already returned a task id, leaving the caller to discover the
         // refusal by polling. A missing personal credential is known right
         // now, so it comes back right now, as a link to fix it.
-        if (runner) {
-          const preflight = await preflightRunnerCredentials({
-            runner,
+        if (deployment) {
+          const preflight = await preflightAgentDeploymentCredentials({
+            deployment,
             organizationId: actor.organizationId,
             userId: actor.id,
           });
           if (preflight.missing.length > 0) {
-            return credentialsNeededResult(preflight.missing);
+            return credentialsNeededResult(agent.id, preflight.missing);
           }
           if (preflight.misconfigured.length > 0) {
             return errorResult(
-              `Runner "${runner.name}" is missing shared credentials an administrator must configure: ${preflight.misconfigured
+              `Agent "${agent.name}" is missing shared Background execution credentials an administrator must configure: ${preflight.misconfigured
                 .map((entry) => entry.label)
                 .join(", ")}`,
             );
           }
         }
 
-        const response = await taskManager.sendMessage({
+        const response = await (await taskManager.get()).sendMessage({
           actor,
           agentId: agent.id,
           request: {
@@ -170,13 +165,26 @@ const registry = defineArchestraTools([
           );
         }
 
+        // Work started from a chat thread reports back to that thread when it
+        // settles — otherwise "I'll follow up when it's done" is a promise
+        // nobody keeps. In-process watcher: a backend restart drops it, which
+        // matches every other chatops run's lifetime today.
+        if (context.chatOpsBindingId && context.chatOpsThreadId) {
+          void watchChatOpsTask({
+            taskId: response.task.id,
+            bindingId: context.chatOpsBindingId,
+            threadId: context.chatOpsThreadId,
+            agentName: agent.name,
+          });
+        }
+
         return structuredSuccessResult(
           {
             task: protocolTaskSummary(response.task, agent.id),
-            runner: runner?.name ?? null,
+            execution: deployment ? "background" : "foreground",
           },
           `Task ${response.task.id} started on ${agent.name}` +
-            (runner ? ` (runner: ${runner.name})` : "") +
+            (deployment ? " (Background execution)" : " (foreground)") +
             ". Poll get_task for progress.",
         );
       } catch (error) {
@@ -184,9 +192,9 @@ const registry = defineArchestraTools([
         // it is a prompt. Hand back the exact keys and a link into the
         // platform where this person deposits them, so the client can show
         // "add your token here" instead of an opaque failure.
-        const missing = missingCredentialsFrom(error);
-        if (missing) {
-          return credentialsNeededResult(missing);
+        const needed = missingCredentialsFrom(error);
+        if (needed) {
+          return credentialsNeededResult(needed.agentId, needed.missing);
         }
         return catchError(error, "starting the task");
       }
@@ -222,7 +230,7 @@ const registry = defineArchestraTools([
           .join("");
         const truncated = text.length > MAX_INLINED_OUTPUT_CHARS;
 
-        const session = await RunnerSessionModel.findByTaskId(task.row.id);
+        const session = await AgentRunModel.findByTaskId(task.row.id);
 
         return structuredSuccessResult(
           {
@@ -291,7 +299,7 @@ const registry = defineArchestraTools([
     title: "Steer Task",
     description:
       "Interject one message into a running task's container session — a course correction " +
-      "without stopping the work. Only tasks running on a runner can be steered.",
+      "without stopping the work. Only tasks using Background execution can be steered.",
     schema: z.object({
       task_id: z.string().uuid(),
       message: z.string().trim().min(1, "message is required."),
@@ -302,7 +310,7 @@ const registry = defineArchestraTools([
         const task = await requireAccessibleTask(args.task_id, actor);
         if ("error" in task) return errorResult(task.error);
 
-        const session = await RunnerSessionModel.findByTaskId(task.row.id);
+        const session = await AgentRunModel.findByTaskId(task.row.id);
         if (!session || session.endedAt !== null) {
           return errorResult(
             "This task has no live container session to steer. In-process tasks cannot be steered; finished ones no longer listen.",
@@ -312,20 +320,20 @@ const registry = defineArchestraTools([
         // holding that person's own credentials.
         if (!(await mayControlSession(session, actor))) {
           return errorResult(
-            "Only the person the session acts as (or a runner administrator) can steer it.",
+            "Only the person the run acts as (or an Agent administrator) can steer it.",
           );
         }
-        const runner = await RunnerModel.findById(
-          session.runnerId,
-          actor.organizationId,
-        );
-        if (!runner) {
-          return errorResult("The task's runner no longer exists.");
+        const agent = await AgentModel.findById(session.agentId);
+        const deployment = agent ? resolveAgentDeployment(agent) : null;
+        if (!deployment) {
+          return errorResult(
+            "The Agent no longer has Background execution configured.",
+          );
         }
 
         await runnerRuntimeManager.steer({
           session,
-          steerMode: runner.steerMode,
+          steerMode: deployment.steerMode,
           message: args.message,
         });
         return structuredSuccessResult(
@@ -355,7 +363,7 @@ const registry = defineArchestraTools([
           return errorResult("This task has no agent to cancel against.");
         }
 
-        const canceled = await taskManager.cancelTask({
+        const canceled = await (await taskManager.get()).cancelTask({
           actor,
           agentId: task.row.agentId,
           request: { id: task.row.id },
@@ -377,17 +385,34 @@ export const tools = registry.tools;
 // === Internal helpers ===
 
 /**
+ * Importing A2AManager eagerly creates a cycle through AgentModel's MCP client
+ * and this tool registry. Defer the runtime import until a task tool executes.
+ */
+class LazyTaskManager {
+  private managerPromise: Promise<A2AManager> | null = null;
+
+  async get(): Promise<A2AManager> {
+    this.managerPromise ??= import("@/agents/a2a/a2a-manager").then(
+      ({ A2AManager }) => new A2AManager({ taskMode: "full" }),
+    );
+    return this.managerPromise;
+  }
+}
+
+/** One lazily-created manager for the whole tool group. */
+const taskManager = new LazyTaskManager();
+
+/**
  * The refusal as a prompt: the exact keys still needed, and a deep link into
  * the platform where this person deposits them.
  */
 function credentialsNeededResult(
+  agentId: string,
   missing: Array<{ key: string; label: string; description?: string }>,
 ) {
-  const url = `${config.frontendBaseUrl}/account/credentials?add=${encodeURIComponent(
-    missing.map((entry) => entry.key).join(","),
-  )}`;
+  const url = `${config.frontendBaseUrl}/agents/${agentId}?tab=overview#background-execution-credentials`;
   return errorResult(
-    `This agent's runner needs credentials you have not set up yet:\n${missing
+    `This Agent's Background execution needs credentials you have not set up yet:\n${missing
       .map(
         (entry) =>
           `- ${entry.label} (${entry.key})${entry.description ? `: ${entry.description}` : ""}`,
@@ -399,20 +424,22 @@ function credentialsNeededResult(
 }
 
 /** The missing-credential list when the error is that refusal; null otherwise. */
-function missingCredentialsFrom(
-  error: unknown,
-): Array<{ key: string; label: string; description?: string }> | null {
+function missingCredentialsFrom(error: unknown): {
+  agentId: string;
+  missing: Array<{ key: string; label: string; description?: string }>;
+} | null {
   if (
     error &&
     typeof error === "object" &&
-    (error as { code?: unknown }).code === RUNNER_CREDENTIALS_REQUIRED_CODE &&
+    (error as { code?: unknown }).code ===
+      AGENT_DEPLOYMENT_CREDENTIALS_REQUIRED_CODE &&
+    typeof (error as { agentId?: unknown }).agentId === "string" &&
     Array.isArray((error as { missing?: unknown }).missing)
   ) {
-    return (
-      error as {
-        missing: Array<{ key: string; label: string; description?: string }>;
-      }
-    ).missing;
+    return error as {
+      agentId: string;
+      missing: Array<{ key: string; label: string; description?: string }>;
+    };
   }
   return null;
 }
@@ -432,7 +459,7 @@ function requireActor(context: ArchestraContext): A2AActor {
 
 /**
  * A task the caller may see: their own, or any in their organization when they
- * hold runner:admin. Missing and inaccessible return the same message so task
+ * hold agent:admin. Missing and inaccessible return the same message so task
  * ids cannot be probed.
  */
 async function requireAccessibleTask(
@@ -466,7 +493,7 @@ async function requireAccessibleTask(
       (await userHasPermission(
         actor.id,
         actor.organizationId,
-        "runner",
+        "agent",
         "admin",
       ));
     if (!isAdmin) return notFound;
@@ -479,7 +506,7 @@ async function mayControlSession(
   actor: A2AActor,
 ): Promise<boolean> {
   if (session.actorUserId === actor.id) return true;
-  return userHasPermission(actor.id, actor.organizationId, "runner", "admin");
+  return userHasPermission(actor.id, actor.organizationId, "agent", "admin");
 }
 
 function taskRowSummary(row: {

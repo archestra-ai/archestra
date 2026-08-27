@@ -152,10 +152,10 @@ export const TOOL_DELETE_PLUGIN_SHORT_NAME = "delete_plugin";
 // code execution sandbox — implicit per-conversation sandbox; the create step
 // is hidden (lazy default).
 export const TOOL_RUN_COMMAND_SHORT_NAME = "run_command";
-// Long-running A2A tasks: start work on another agent (in its runner when it
-// has one), then observe, steer and cancel it. The MCP face of the same task
-// machinery the A2A v2 protocol exposes, so either kind of client can drive
-// the identical lifecycle.
+// Durable Agent tasks: delegated work uses Background execution when the
+// target Agent configured it; direct chat remains foreground. The MCP face of
+// the same task machinery the A2A v2 protocol exposes, so either kind of
+// client can drive the identical lifecycle.
 export const TOOL_START_TASK_SHORT_NAME = "start_task";
 export const TOOL_GET_TASK_SHORT_NAME = "get_task";
 export const TOOL_LIST_TASKS_SHORT_NAME = "list_tasks";

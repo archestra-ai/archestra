@@ -1,8 +1,9 @@
 "use client";
 
 import { E2eTestId, parseVaultReference } from "@archestra/shared";
-import { CheckCircle2, Info, Key, Loader2 } from "lucide-react";
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { CheckCircle2, Info, Key } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ExternalSecretReferenceDialog } from "@/components/external-secret-reference-dialog";
 import {
   FieldScopeSelect,
   type FieldScopeValue,
@@ -23,12 +24,6 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { MCP_CONFIG_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
-
-const ExternalSecretSelector = lazy(
-  () =>
-    // biome-ignore lint/style/noRestrictedImports: lazy loading
-    import("@/components/external-secret-selector.ee"),
-);
 
 export type EnvVarType = "plain_text" | "secret" | "boolean" | "number";
 
@@ -282,9 +277,10 @@ export function EnvironmentVariableDialog({
       </div>
 
       {useExternalSecretsManager && vaultDialogOpen && (
-        <VaultPickerDialog
-          envKey={trimmedKey || "field"}
+        <ExternalSecretReferenceDialog
+          fieldLabel={trimmedKey || "field"}
           initialValue={isVaultRef ? draft.value : undefined}
+          description="Select a secret from your team's external Vault to use for this environment variable."
           onClose={() => setVaultDialogOpen(false)}
           onConfirm={(ref) => {
             updateDraft({ value: ref });
@@ -438,80 +434,5 @@ function StaticValueEditor({
         </p>
       )}
     </div>
-  );
-}
-
-function VaultPickerDialog({
-  envKey,
-  initialValue,
-  onClose,
-  onConfirm,
-}: {
-  envKey: string;
-  initialValue: string | undefined;
-  onClose: () => void;
-  onConfirm: (ref: string) => void;
-}) {
-  const parsed = initialValue ? parseVaultReference(initialValue) : null;
-  const [teamId, setTeamId] = useState<string | null>(null);
-  const [secretPath, setSecretPath] = useState<string | null>(
-    parsed?.path ?? null,
-  );
-  const [secretKey, setSecretKey] = useState<string | null>(
-    parsed?.key ?? null,
-  );
-
-  return (
-    <StandardDialog
-      open
-      onOpenChange={(next) => {
-        if (!next) onClose();
-      }}
-      size="small"
-      title={
-        <span className="flex items-center gap-2">
-          <Key className="h-5 w-5" />
-          Set external secret
-          <span className="font-mono text-muted-foreground">{envKey}</span>
-        </span>
-      }
-      description="Select a secret from your team's external Vault to use for this environment variable."
-      footer={
-        <>
-          <Button type="button" variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            onClick={() => {
-              if (secretPath && secretKey) {
-                onConfirm(`${secretPath}#${secretKey}`);
-              }
-            }}
-            disabled={!secretPath || !secretKey}
-          >
-            Confirm
-          </Button>
-        </>
-      }
-    >
-      <Suspense
-        fallback={
-          <div className="flex h-24 items-center justify-center text-muted-foreground">
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            Loading...
-          </div>
-        }
-      >
-        <ExternalSecretSelector
-          selectedTeamId={teamId}
-          selectedSecretPath={secretPath}
-          selectedSecretKey={secretKey}
-          onTeamChange={setTeamId}
-          onSecretChange={setSecretPath}
-          onSecretKeyChange={setSecretKey}
-        />
-      </Suspense>
-    </StandardDialog>
   );
 }

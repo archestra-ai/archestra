@@ -24,6 +24,7 @@ import {
   LlmProviderApiKeyModel,
   OrganizationModel,
   TeamModel,
+  ToolModel,
   UserModel,
 } from "@/models";
 import { RouteCategory } from "@/observability/tracing";
@@ -60,7 +61,12 @@ import {
   resolveSignupWelcomeMode,
 } from "./auto-provision";
 import { claimThreadMuteHint, getThreadMuteMarker } from "./channel-activation";
+import {
+  compactChatOpsResponse,
+  isBackgroundExecutionRequest,
+} from "./chatops-response";
 import { chatOpsRunRegistry } from "./chatops-run-registry";
+import { watchChatOpsTask } from "./chatops-task-watcher";
 import {
   CHATOPS_ATTACHMENT_LIMITS,
   CHATOPS_CHANNEL_DISCOVERY,
@@ -95,6 +101,7 @@ export class ChatOpsManager {
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
   private readonly a2aManager: A2AManager;
   private readonly statefulA2aManager: A2AManager;
+  private readonly backgroundTaskA2aManager: A2AManager;
 
   constructor() {
     this.a2aManager = new A2AManager({
@@ -108,6 +115,7 @@ export class ChatOpsManager {
     this.statefulA2aManager = new A2AManager({
       trustedContextAccess: true,
     });
+    this.backgroundTaskA2aManager = new A2AManager({ taskMode: "full" });
   }
 
   getMSTeamsProvider(): MSTeamsProvider | null {
@@ -200,6 +208,64 @@ export class ChatOpsManager {
    * Uses a distributed TTL cache to avoid rediscovering too frequently.
    * Providers implement channel listing; this method handles caching, upsert, and stale cleanup.
    */
+  /**
+   * Post one message into a bound channel's thread, outside any incoming
+   * message flow. This is how background work started FROM a chatops
+   * conversation (a runner task) reports back when it finishes — the promise
+   * "I'll follow up once it completes" only means something if something can
+   * actually follow up.
+   */
+  async notifyBindingThread(params: {
+    bindingId: string;
+    threadId: string;
+    text: string;
+    agentName?: string;
+  }): Promise<void> {
+    const binding = await ChatOpsChannelBindingModel.findById(params.bindingId);
+    if (!binding) {
+      logger.warn(
+        { bindingId: params.bindingId },
+        "[ChatOps] notifyBindingThread: binding no longer exists",
+      );
+      return;
+    }
+    const provider =
+      binding.provider === "slack"
+        ? this.slackProvider
+        : binding.provider === "ms-teams"
+          ? this.msTeamsProvider
+          : binding.provider === "telegram"
+            ? this.telegramProvider
+            : null;
+    if (!provider?.isConfigured()) {
+      logger.warn(
+        { bindingId: params.bindingId, provider: binding.provider },
+        "[ChatOps] notifyBindingThread: provider not configured",
+      );
+      return;
+    }
+    await provider.sendReply({
+      // A synthesized reference, not a real incoming message: sendReply only
+      // routes on channelId/threadId, and this reply answers a thread rather
+      // than a specific message.
+      originalMessage: {
+        messageId: `notify-${params.bindingId}-${Date.now()}`,
+        channelId: binding.channelId,
+        workspaceId: null,
+        threadId: params.threadId,
+        senderId: "system",
+        senderName: "system",
+        text: "",
+        rawText: "",
+        timestamp: new Date(),
+        isThreadReply: true,
+      },
+      text: params.text,
+      replyInThread: true,
+      footer: params.agentName ? `🤖 ${params.agentName}` : undefined,
+    });
+  }
+
   async discoverChannels(params: {
     provider: ChatOpsProvider;
     context: unknown;
@@ -960,6 +1026,8 @@ export class ChatOpsManager {
       provider,
       fullMessage,
       ephemeralExecutionPrefix,
+      backgroundExecutionRequested:
+        isBackgroundExecutionRequest(cleanedMessageText),
       sendReply,
       userId: authResult.userId,
     });
@@ -1674,6 +1742,7 @@ export class ChatOpsManager {
     provider: ChatOpsProvider;
     fullMessage: string;
     ephemeralExecutionPrefix?: string;
+    backgroundExecutionRequested: boolean;
     sendReply: boolean;
     userId: string;
   }): Promise<ChatOpsProcessingResult> {
@@ -1684,6 +1753,7 @@ export class ChatOpsManager {
       provider,
       fullMessage,
       ephemeralExecutionPrefix,
+      backgroundExecutionRequested,
       sendReply,
       userId,
     } = params;
@@ -1758,6 +1828,32 @@ export class ChatOpsManager {
     const muteMarkerAtStart = await getThreadMuteMarker(threadKey);
 
     try {
+      if (backgroundExecutionRequested) {
+        const started = await this.startMarkedBackgroundTask({
+          coordinator: agent,
+          binding,
+          message,
+          provider,
+          fullMessage,
+          userId,
+        });
+        if (started) {
+          const response = `🦀 Task ${started.taskId} started — I’ll post the PR here when it’s ready.`;
+          if (sendReply) {
+            await provider.sendReply({
+              originalMessage: message,
+              text: response,
+              footer: buildAgentFooter(agent.name),
+              ...((await this.shouldHintThreadMute(provider, message)) && {
+                hint: THREAD_MUTE_HINT,
+              }),
+              conversationReference: message.metadata?.conversationReference,
+            });
+          }
+          return { success: true, agentResponse: response };
+        }
+      }
+
       const executeParams = {
         agent,
         binding,
@@ -1852,6 +1948,78 @@ export class ChatOpsManager {
       if (typingHeartbeat) clearInterval(typingHeartbeat);
       unregister();
     }
+  }
+
+  private async startMarkedBackgroundTask(params: {
+    coordinator: { id: string; name: string };
+    binding: { id: string; organizationId: string };
+    message: IncomingChatMessage;
+    provider: ChatOpsProvider;
+    fullMessage: string;
+    userId: string;
+  }): Promise<{ taskId: string } | null> {
+    const tools = await ToolModel.getMcpToolsByAgent(params.coordinator.id);
+    const targetIds = [
+      ...new Set(
+        tools.flatMap((tool) =>
+          tool.delegateToAgentId ? [tool.delegateToAgentId] : [],
+        ),
+      ),
+    ];
+    const candidates = (
+      await Promise.all(targetIds.map((id) => AgentModel.findById(id)))
+    ).filter(
+      (agent) =>
+        agent?.organizationId === params.binding.organizationId &&
+        agent.backgroundExecution !== null,
+    );
+    if (candidates.length !== 1) return null;
+    const target = candidates[0];
+    if (!target) return null;
+
+    const threadId =
+      params.message.threadId ??
+      params.message.channelId ??
+      params.message.messageId;
+    const source: InteractionSource =
+      CHATOPS_PROVIDER_SOURCES[params.provider.providerId];
+    const result = await this.backgroundTaskA2aManager.sendMessage({
+      actor: {
+        kind: "user",
+        id: params.userId,
+        organizationId: params.binding.organizationId,
+      },
+      agentId: target.id,
+      request: buildSendMessageRequest({
+        parts: [
+          { text: params.fullMessage },
+          ...buildAttachmentsMessageParts(params.message.attachments || []),
+        ],
+      }),
+      systemParams: {
+        sessionId: buildChatOpsSessionId(
+          params.provider.providerId,
+          params.message.channelId,
+          params.message.threadId,
+        ),
+        source,
+        routeCategory: RouteCategory.CHATOPS,
+        chatOpsBindingId: params.binding.id,
+        chatOpsThreadId: threadId,
+      },
+      taskRun: { createTask: true, detached: true },
+    });
+    if (!result.task) {
+      throw new Error("Background execution did not create a task");
+    }
+
+    void watchChatOpsTask({
+      taskId: result.task.id,
+      bindingId: params.binding.id,
+      threadId,
+      agentName: target.name,
+    });
+    return { taskId: result.task.id };
   }
 
   /**
@@ -2062,7 +2230,7 @@ export class ChatOpsManager {
     const text = (resultMessage.parts || [])
       .map((part) => part.text)
       .join("\n");
-    let agentResponse = stripThinkingBlocks(text);
+    let agentResponse = compactChatOpsResponse(stripThinkingBlocks(text));
 
     // The agent's way to stay silent in group conversations — post nothing.
     // The sentinel ANYWHERE in the response means silence: models often

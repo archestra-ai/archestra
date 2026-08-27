@@ -8,6 +8,7 @@ const mockClaimThreadMuteHint = vi.fn();
 // cache: defaults to null (no mute) so unrelated tests reply normally; the mute
 // tests override it to simulate a marker moving while a run is in flight.
 const mockGetThreadMuteMarker = vi.fn().mockResolvedValue(null);
+const mockWatchChatOpsTask = vi.fn();
 vi.mock("./channel-activation", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./channel-activation")>();
   return {
@@ -20,6 +21,9 @@ vi.mock("./channel-activation", async (importOriginal) => {
     ) => mockGetThreadMuteMarker(...args),
   };
 });
+vi.mock("./chatops-task-watcher", () => ({
+  watchChatOpsTask: (...args: unknown[]) => mockWatchChatOpsTask(...args),
+}));
 
 import { ChatErrorCode, ChatErrorMessages } from "@archestra/shared";
 import { eq } from "drizzle-orm";
@@ -30,6 +34,7 @@ import {
   A2AMessageModel,
   AgentModel,
   AgentTeamModel,
+  AgentToolModel,
   ChatOpsChannelBindingModel,
   ChatOpsConfigModel,
   ChatOpsThreadContextModel,
@@ -203,6 +208,121 @@ describe("ChatOpsManager security validation", () => {
       workspaceId: "test-workspace-id",
     });
   }
+
+  test("posts background task completion into the bound thread", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const binding = await unboundChannelBinding(organization.id);
+    const sendReply = vi.fn().mockResolvedValue("reply-id");
+    const manager = makeManagerWith(createMockProvider({ sendReply }));
+
+    await manager.notifyBindingThread({
+      bindingId: binding.id,
+      threadId: "task-thread",
+      text: "Task finished.",
+      agentName: "Research agent",
+    });
+
+    expect(sendReply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: "Task finished.",
+        replyInThread: true,
+        footer: "🤖 Research agent",
+        originalMessage: expect.objectContaining({
+          channelId: "test-channel-id",
+          threadId: "task-thread",
+          isThreadReply: true,
+        }),
+      }),
+    );
+  });
+
+  test("routes a crab-prefixed channel message directly to the sole Background execution subagent", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const user = await makeUser({ email: "background@example.com" });
+    const organization = await makeOrganization();
+    const team = await makeTeam(organization.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const coordinator = await makeInternalAgent({
+      organizationId: organization.id,
+      teams: [team.id],
+    });
+    const worker = await makeInternalAgent({
+      name: "Coding worker",
+      organizationId: organization.id,
+      teams: [team.id],
+      backgroundExecution: {
+        image: "coding-worker:dev",
+        command: null,
+        backend: "kubernetes",
+        steerMode: "pipe",
+        privileged: false,
+        resources: null,
+        environment: null,
+        credentials: null,
+        ttlHours: 24,
+        idleTimeoutMinutes: 30,
+      },
+    });
+    await AgentTeamModel.assignTeamsToAgent(coordinator.id, [team.id]);
+    await AgentTeamModel.assignTeamsToAgent(worker.id, [team.id]);
+    await AgentToolModel.assignDelegation(coordinator.id, worker.id);
+    const binding = await ChatOpsChannelBindingModel.create({
+      organizationId: organization.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: coordinator.id,
+    });
+
+    const sendReply = vi.fn().mockResolvedValue("reply-id");
+    const provider = createMockProvider({
+      getUserEmail: async () => user.email,
+      sendReply,
+    });
+    const manager = makeManagerWith(provider);
+    const sendMessage = vi.fn().mockResolvedValue({
+      task: { id: "612c2ad0-ac2d-4a86-bc85-c8143bfed577" },
+    });
+    (
+      manager as unknown as {
+        backgroundTaskA2aManager: { sendMessage: typeof sendMessage };
+      }
+    ).backgroundTaskA2aManager = { sendMessage };
+
+    const result = await manager.processMessage({
+      message: createMockMessage({
+        text: ":crab: open a small pull request",
+        rawText: ":crab: open a small pull request",
+      }),
+      provider,
+    });
+
+    expect(result.success).toBe(true);
+    expect(sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: worker.id,
+        taskRun: { createTask: true, detached: true },
+      }),
+    );
+    expect(sendReply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: "🦀 Task 612c2ad0-ac2d-4a86-bc85-c8143bfed577 started — I’ll post the PR here when it’s ready.",
+      }),
+    );
+    expect(mockWatchChatOpsTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bindingId: binding.id,
+        agentName: worker.name,
+      }),
+    );
+  });
 
   test("auto-assigns the sole agent when a channel has no agent yet", async ({
     makeOrganization,

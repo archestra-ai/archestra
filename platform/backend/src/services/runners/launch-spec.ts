@@ -9,27 +9,32 @@ import {
   UserTokenModel,
   VirtualApiKeyModel,
 } from "@/models";
-import type { MissingRunnerCredential, Runner } from "@/types";
-import { ApiError, RUNNER_CREDENTIALS_REQUIRED_CODE } from "@/types";
-import { resolveRunnerCredentials } from "./credentials";
+import type {
+  AgentDeployment,
+  MissingAgentDeploymentCredential,
+} from "@/types";
+import { AGENT_DEPLOYMENT_CREDENTIALS_REQUIRED_CODE, ApiError } from "@/types";
+import { resolveAgentDeploymentCredentials } from "./credentials";
 
 /**
  * Raised when a session cannot start only because the person it would act as
- * has not supplied credentials the runner declares. Carries the list so every
+ * has not supplied credentials the Agent declares. Carries the list so every
  * surface can name exactly what to add instead of reporting an opaque failure.
  */
-class RunnerCredentialsRequiredError extends ApiError {
-  readonly code = RUNNER_CREDENTIALS_REQUIRED_CODE;
-  readonly missing: MissingRunnerCredential[];
+class AgentDeploymentCredentialsRequiredError extends ApiError {
+  readonly code = AGENT_DEPLOYMENT_CREDENTIALS_REQUIRED_CODE;
+  readonly agentId: string;
+  readonly missing: MissingAgentDeploymentCredential[];
 
-  constructor(missing: MissingRunnerCredential[]) {
+  constructor(agentId: string, missing: MissingAgentDeploymentCredential[]) {
     super(
       409,
-      `This runner needs credentials you have not set up yet: ${missing
+      `This Agent's background execution needs credentials you have not set up yet: ${missing
         .map((entry) => entry.label)
         .join(", ")}`,
     );
-    this.name = "RunnerCredentialsRequiredError";
+    this.name = "AgentDeploymentCredentialsRequiredError";
+    this.agentId = agentId;
     this.missing = missing;
   }
 }
@@ -44,7 +49,7 @@ class RunnerCredentialsRequiredError extends ApiError {
  * are all derived from the acting identity.
  */
 export async function buildRunnerLaunchSpec(params: {
-  runner: Runner;
+  deployment: AgentDeployment;
   /** The A2A task this pod carries; its id names the workload. */
   taskId: string;
   /** Agent the task belongs to, for the proxy and gateway routes. */
@@ -57,31 +62,35 @@ export async function buildRunnerLaunchSpec(params: {
   imagePullSecrets?: string[];
   ownerReferences?: RunnerLaunchSpec["ownerReferences"];
 }): Promise<{ spec: RunnerLaunchSpec; virtualApiKeyId: string }> {
-  const platformBaseUrl = config.runners.platformBaseUrl.replace(/\/+$/, "");
+  const platformBaseUrl =
+    config.agentBackgroundExecution.platformBaseUrl.replace(/\/+$/, "");
   if (!platformBaseUrl) {
     // Refusing beats starting a session that would call providers directly,
     // outside every policy and cost record the proxy exists to keep.
     throw new ApiError(
       500,
-      "Runners require ARCHESTRA_RUNNERS_PLATFORM_BASE_URL (or ARCHESTRA_INTERNAL_API_BASE_URL) so the session can reach the LLM proxy and MCP gateway",
+      "Background execution requires ARCHESTRA_AGENT_BACKGROUND_EXECUTION_PLATFORM_BASE_URL (or ARCHESTRA_INTERNAL_API_BASE_URL) so the run can reach the LLM proxy and MCP gateway",
     );
   }
 
-  const credentials = await resolveRunnerCredentials({
-    runner: params.runner,
+  const credentials = await resolveAgentDeploymentCredentials({
+    deployment: params.deployment,
     organizationId: params.organizationId,
     userId: params.actorUserId,
   });
   if (credentials.misconfigured.length > 0) {
     throw new ApiError(
       409,
-      `This runner is missing shared credentials an administrator must configure: ${credentials.misconfigured
+      `This Agent's background execution is missing shared credentials an administrator must configure: ${credentials.misconfigured
         .map((entry) => entry.label)
         .join(", ")}`,
     );
   }
   if (credentials.missing.length > 0) {
-    throw new RunnerCredentialsRequiredError(credentials.missing);
+    throw new AgentDeploymentCredentialsRequiredError(
+      params.deployment.agentId,
+      credentials.missing,
+    );
   }
 
   const userToken = await UserTokenModel.ensureUserToken(
@@ -113,13 +122,13 @@ export async function buildRunnerLaunchSpec(params: {
   if (!providerApiKey) {
     throw new ApiError(
       409,
-      "No Anthropic API key is configured for your account, teams, or organization, so a runner session has nothing to talk to the model with. Ask an admin to add one under LLM provider keys.",
+      "No Anthropic API key is configured for your account, teams, or organization, so this background run has nothing to talk to the model with. Ask an admin to add one under LLM provider keys.",
     );
   }
 
   const virtualKey = await VirtualApiKeyModel.create({
     organizationId: params.organizationId,
-    name: `runner-${params.taskId.slice(0, 8)}`,
+    name: `background-task-${params.taskId.slice(0, 8)}`,
     // Personal scope is what attributes the session's LLM spend to the human
     // it acts as rather than to the organization at large.
     scope: "personal",
@@ -138,16 +147,27 @@ export async function buildRunnerLaunchSpec(params: {
     // An entry overriding ANTHROPIC_BASE_URL would be exactly the bypass the
     // platform-URL guard above exists to prevent.
     ...Object.fromEntries(
-      (params.runner.environment ?? []).map(({ key, value }) => [key, value]),
+      (params.deployment.environment ?? []).map(({ key, value }) => [
+        key,
+        value,
+      ]),
     ),
-    ARCHESTRA_RUNNER_ID: params.runner.id,
-    ARCHESTRA_RUNNER_NAME: params.runner.name,
-    ARCHESTRA_RUNNER_TASK_ID: params.taskId,
-    ARCHESTRA_RUNNER_STEER_FIFO: RUNNER_STEER_FIFO,
+    ARCHESTRA_AGENT_BACKGROUND_EXECUTION_AGENT_ID: params.deployment.agentId,
+    ARCHESTRA_AGENT_BACKGROUND_EXECUTION_AGENT_NAME: agent?.name ?? "agent",
+    ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID: params.taskId,
+    ARCHESTRA_AGENT_BACKGROUND_EXECUTION_STEER_FIFO: RUNNER_STEER_FIFO,
+    // The finish contract: a session that has done its work parks this long
+    // for further direction, then exits so the Job — and the task — settle.
+    ARCHESTRA_AGENT_BACKGROUND_EXECUTION_IDLE_TIMEOUT_SECONDS: String(
+      (params.deployment.idleTimeoutMinutes ??
+        config.agentBackgroundExecution.defaultIdleTimeoutMinutes) * 60,
+    ),
     ARCHESTRA_LLM_PROXY_URL: proxyUrl,
     ANTHROPIC_BASE_URL: proxyUrl,
     ARCHESTRA_MCP_GATEWAY_URL: `${platformBaseUrl}/v1/mcp/${params.agentId}`,
-    ...(params.task ? { ARCHESTRA_RUNNER_TASK: params.task } : {}),
+    ...(params.task
+      ? { ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK: params.task }
+      : {}),
   };
 
   const secretEnv: Record<string, string> = {
@@ -164,22 +184,27 @@ export async function buildRunnerLaunchSpec(params: {
     virtualApiKeyId: virtualKey.virtualKey.id,
     spec: {
       taskId: params.taskId,
-      runnerId: params.runner.id,
-      frozenName: constructFrozenRunnerName(params.runner.name, params.taskId),
+      runnerId: params.deployment.agentId,
+      frozenName: constructFrozenRunnerName(
+        agent?.name ?? "agent",
+        params.taskId,
+      ),
       namespace: params.namespace,
-      image: params.runner.image,
-      command: params.runner.command ?? null,
-      privileged: params.runner.privileged,
-      resources: params.runner.resources ?? {
-        cpuRequest: config.runners.resources.cpuRequest,
-        memoryRequest: config.runners.resources.memoryRequest,
-        memoryLimit: config.runners.resources.memoryLimit,
+      image: params.deployment.image,
+      command: params.deployment.command ?? null,
+      privileged: params.deployment.privileged,
+      resources: params.deployment.resources ?? {
+        cpuRequest: config.agentBackgroundExecution.resources.cpuRequest,
+        memoryRequest: config.agentBackgroundExecution.resources.memoryRequest,
+        memoryLimit: config.agentBackgroundExecution.resources.memoryLimit,
       },
       env: nonSecretEnv,
       secretEnv,
-      activeDeadlineSeconds: params.runner.ttlHours
-        ? params.runner.ttlHours * 60 * 60
-        : null,
+      activeDeadlineSeconds:
+        (params.deployment.ttlHours ??
+          config.agentBackgroundExecution.defaultTtlHours) *
+        60 *
+        60,
       imagePullSecrets: params.imagePullSecrets ?? [],
       ownerReferences: params.ownerReferences,
     },

@@ -170,6 +170,66 @@ describe("agent routes", () => {
       expect(agent.suggestedPrompts[0].prompt).toBe("Get me started");
     });
 
+    test("persists Background execution on an Agent", async () => {
+      const backgroundExecution = {
+        image: "example.com/coding-agent:latest",
+        command: null,
+        backend: "kubernetes",
+        steerMode: "pipe",
+        privileged: false,
+        resources: null,
+        environment: [{ key: "WORK_MODE", value: "background" }],
+        credentials: null,
+        ttlHours: 24,
+        idleTimeoutMinutes: 30,
+      };
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/agents",
+        payload: {
+          name: `Background Agent ${crypto.randomUUID().slice(0, 8)}`,
+          agentType: "agent",
+          scope: "personal",
+          teams: [],
+          backgroundExecution,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().backgroundExecution).toEqual(backgroundExecution);
+    });
+
+    test("rejects Background execution on an MCP Gateway", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/agents",
+        payload: {
+          name: `Gateway ${crypto.randomUUID().slice(0, 8)}`,
+          agentType: "mcp_gateway",
+          scope: "personal",
+          teams: [],
+          backgroundExecution: {
+            image: "example.com/coding-agent:latest",
+            command: null,
+            backend: "kubernetes",
+            steerMode: "pipe",
+            privileged: false,
+            resources: null,
+            environment: null,
+            credentials: null,
+            ttlHours: null,
+            idleTimeoutMinutes: null,
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain(
+        "can only be configured for Agents",
+      );
+    });
+
     test("rejects an agent with a model but no API key", async () => {
       const response = await app.inject({
         method: "POST",

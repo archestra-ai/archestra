@@ -83,12 +83,9 @@ import {
   toolEntries as searchToolEntries,
   tools as searchToolTools,
 } from "./search-tools";
-import {
-  toolEntries as taskToolEntries,
-  tools as taskTools,
-} from "./tasks";
 import { handleSkillDelegation } from "./skill-delegation";
 import { toolEntries as skillToolEntries, tools as skillTools } from "./skills";
+import { toolEntries as taskToolEntries, tools as taskTools } from "./tasks";
 import { toolEntries as teamToolEntries, tools as teamTools } from "./teams";
 import { toolParamsSkeleton } from "./tool-args-skeleton";
 import {

@@ -1,1 +1,0 @@
-ALTER TABLE "runners" ADD COLUMN "backend" text DEFAULT 'kubernetes' NOT NULL;

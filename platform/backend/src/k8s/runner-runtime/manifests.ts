@@ -1,5 +1,5 @@
 import type * as k8s from "@kubernetes/client-node";
-import type { RunnerResources } from "@/types";
+import type { AgentDeploymentResources } from "@/types";
 import { RUNNER_TASK_LABEL, runnerLabels, runnerNames } from "./naming";
 
 /** Where the steer FIFO and the generated entrypoint live inside the pod. */
@@ -40,7 +40,7 @@ export type RunnerLaunchSpec = {
   /** Shell command tmux runs; null uses the default runner-agent entrypoint. */
   command: string[] | null;
   privileged: boolean;
-  resources: RunnerResources | null;
+  resources: AgentDeploymentResources | null;
   /** Non-secret environment, inlined into the pod spec. */
   env: Record<string, string>;
   /** Secret environment, delivered through a Kubernetes Secret via envFrom. */
@@ -75,7 +75,7 @@ function buildRunnerBootstrapScript(): string {
     '  echo "archestra: this image has no tmux, which runners require for attach and steering" >&2',
     `  exit ${RUNNER_UNUSABLE_IMAGE_EXIT_CODE}`,
     "fi",
-    `printf '%s\\n' "$ARCHESTRA_RUNNER_ENTRYPOINT" > ${RUNNER_RUN_DIR}/entry.sh`,
+    `printf '%s\\n' "$ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ENTRYPOINT" > ${RUNNER_RUN_DIR}/entry.sh`,
     `tmux new-session -d -s ${RUNNER_TMUX_SESSION} "/bin/sh ${RUNNER_RUN_DIR}/entry.sh; echo; echo '[archestra] agent session exited'; sleep 10"`,
     // Mirror the pane to the container's stdout. tmux gives the agent a pty,
     // so without this its output exists only inside the pane: kubectl logs
@@ -139,7 +139,7 @@ export function buildRunnerJob(spec: RunnerLaunchSpec): k8s.V1Job {
                   value,
                 })),
                 {
-                  name: "ARCHESTRA_RUNNER_ENTRYPOINT",
+                  name: "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ENTRYPOINT",
                   value: resolveEntrypoint(spec.command),
                 },
               ],
@@ -280,7 +280,7 @@ function shellQuote(argument: string): string {
 }
 
 function buildResourceRequirements(
-  resources: RunnerResources | null,
+  resources: AgentDeploymentResources | null,
 ): k8s.V1ResourceRequirements {
   const requests: Record<string, string> = {};
   const limits: Record<string, string> = {};

@@ -142,6 +142,8 @@ Auto delegation resolves per calling user. It applies in chat and other flows th
 
 When an agent delegates work to another agent, Archestra tracks the full call chain for observability. Delegated agents also inherit the current [tool guardrails](/docs/platform-ai-tool-guardrails) trust state, so downstream tool policy enforcement does not reset mid-run.
 
+For durable work, an Agent can optionally use [Background execution](/docs/platform-agent-background-execution). Direct conversations always stay in the foreground Agent loop. A delegated task uses the target Agent's isolated deployment only when that target has Background execution configured.
+
 ## Convert to Skill
 
 An agent can be converted into an [Agent Skill](/docs/platform-agent-skills) — a reusable `SKILL.md` instruction set that any agent can activate from chat. Use this when the agent's value is mostly in its instructions and you want them available as a `/slash-command` rather than as a separate agent to switch to.

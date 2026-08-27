@@ -1,14 +1,14 @@
-# runner-agent-base: the default image an Archestra Runner starts from.
+# runner-agent-base: the built-in image for Agent background execution.
 #
-# A Runner's contract with its image is small and deliberately so: tmux and a
+# A background deployment's contract with its image is deliberately small: tmux and a
 # POSIX shell must exist, because the runtime makes tmux PID 1 and that is what
 # lets a human attach to a live session and steer it. Everything else here is
 # convenience — git and a toolbelt an agent usually reaches for.
 #
 # This image also satisfies the second half of the contract: `archestra-runner-agent`
-# on PATH, so a runner started with no explicit command has something to run.
+# on PATH, so a background run with no explicit command has something to run.
 # A bring-your-own image either provides that binary or sets its own command.
-FROM node:24-bookworm-slim
+FROM node:24-bookworm-slim AS background-execution-base
 
 # tmux is load-bearing, not a convenience: without it the runtime's bootstrap
 # refuses to start rather than launching a session nobody could attach to.
@@ -21,7 +21,7 @@ WORKDIR /opt/archestra
 
 # Installed with pnpm, not npm: this package takes `ai` from the workspace
 # catalog, and `catalog:` is a pnpm protocol. Resolving it here keeps the
-# runner's SDK version governed by the same catalog the backend uses, instead
+# execution agent's SDK version governed by the same catalog the backend uses, instead
 # of a copy that drifts.
 RUN corepack enable
 
@@ -45,7 +45,7 @@ RUN chmod +x /opt/archestra/runner-agent/dist/index.js \
  && ln -s /opt/archestra/runner-agent/dist/index.js /usr/local/bin/archestra-runner-agent
 
 # The agent runs as a normal user: nothing it does needs root, and an image that
-# only works as root pushes every deployment towards a privileged runner.
+# only works as root pushes every deployment towards a privileged workload.
 # The base image already ships a uid-1000 user; reuse it rather than adding a
 # second one, and give it the two directories a session actually writes to.
 RUN mkdir -p /home/node/workspace /var/run/archestra \
@@ -55,4 +55,22 @@ WORKDIR /home/node/workspace
 
 # No CMD: the runtime always supplies the bootstrap that creates the steer FIFO
 # and starts tmux. An image-level CMD here would be dead weight that masks a
-# misconfigured runner by appearing to work.
+# misconfigured deployment by appearing to work.
+
+# Local Crab Env variant. The production Crab Env in ../../infra is a VM image;
+# this target carries the equivalent coding essentials that make sense inside
+# a short-lived Kubernetes container while retaining the platform-native Agent
+# loop as its default execution process.
+FROM background-execution-base AS crab-env
+USER root
+RUN apt-get update -qq \
+ && apt-get install -y --no-install-recommends \
+      build-essential python3 gh openssh-client \
+ && rm -rf /var/lib/apt/lists/* \
+ && corepack prepare pnpm@11.9.0 --activate
+USER 1000:1000
+WORKDIR /home/node/workspace
+
+# Keep the default build target as the lean platform-native image. Build the
+# local coding variant with: docker build --target crab-env -t crab-env:dev .
+FROM background-execution-base AS runner-agent-base

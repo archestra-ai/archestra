@@ -1,31 +1,29 @@
-import {
-  createInsertSchema,
-  createSelectSchema,
-  createUpdateSchema,
-} from "drizzle-zod";
+import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
-import { AgentLabelWithDetailsSchema } from "./label";
 
 /**
  * How a steer message reaches the running process.
  *
- * `pipe` — write to the runner-agent FIFO; the loop injects it at the next turn
+ * `pipe` — write to the execution-agent FIFO; the loop injects it at the next turn
  * boundary. Safe by construction: a message can never land mid-tool-call.
  * `tmux_keys` — type into the tmux session (`send-keys`). The bring-your-own-image
  * path for CLIs that own their own input loop, e.g. Claude Code.
  */
 /**
- * Execution backends a runner can name. One today; the enum is the seam other
+ * Execution backends a Background execution configuration can name. One today;
+ * the enum is the seam other
  * backends (a VM per task, an agent-sandbox) slot into without a schema change
  * anywhere above it.
  */
-export const RunnerBackendNameSchema = z.enum(["kubernetes"]);
+export const AgentDeploymentBackendSchema = z.enum(["kubernetes"]);
 
-export const RunnerSteerModeSchema = z.enum(["pipe", "tmux_keys"]);
-export type RunnerSteerMode = z.infer<typeof RunnerSteerModeSchema>;
+export const AgentDeploymentSteerModeSchema = z.enum(["pipe", "tmux_keys"]);
+export type AgentDeploymentSteerMode = z.infer<
+  typeof AgentDeploymentSteerModeSchema
+>;
 
-export const RunnerResourcesSchema = z.object({
+export const AgentDeploymentResourcesSchema = z.object({
   cpuRequest: z.string().optional(),
   memoryRequest: z.string().optional(),
   /**
@@ -35,7 +33,9 @@ export const RunnerResourcesSchema = z.object({
   cpuLimit: z.string().optional(),
   memoryLimit: z.string().optional(),
 });
-export type RunnerResources = z.infer<typeof RunnerResourcesSchema>;
+export type AgentDeploymentResources = z.infer<
+  typeof AgentDeploymentResourcesSchema
+>;
 
 // ===================== Credential declarations =====================
 
@@ -45,14 +45,19 @@ export type RunnerResources = z.infer<typeof RunnerResourcesSchema>;
  *
  * `per_user` exists for credentials that carry an individual's identity
  * upstream: a personal Claude subscription token, a personal GitHub PAT. A
- * runner needing one cannot start until that specific user has deposited it,
+ * background run needing one cannot start until that specific user has deposited it,
  * which is why missing credentials surface as an actionable prompt rather than
  * an opaque failure.
  */
-export const RunnerCredentialScopeSchema = z.enum(["shared", "per_user"]);
-export type RunnerCredentialScope = z.infer<typeof RunnerCredentialScopeSchema>;
+export const AgentDeploymentCredentialScopeSchema = z.enum([
+  "shared",
+  "per_user",
+]);
+export type AgentDeploymentCredentialScope = z.infer<
+  typeof AgentDeploymentCredentialScopeSchema
+>;
 
-export const RunnerCredentialDeclarationSchema = z.object({
+export const AgentDeploymentCredentialDeclarationSchema = z.object({
   /** Environment variable the resolved value is injected under. */
   key: z
     .string()
@@ -62,25 +67,25 @@ export const RunnerCredentialDeclarationSchema = z.object({
       /^[A-Z_][A-Z0-9_]*$/,
       "Credential keys are environment variable names (A-Z, 0-9, underscore)",
     ),
-  scope: RunnerCredentialScopeSchema,
+  scope: AgentDeploymentCredentialScopeSchema,
   /** Human label shown when prompting a user to supply the credential. */
   label: z.string().min(1).max(200),
   /** How to obtain it, e.g. "Run `claude setup-token` and paste the result". */
   description: z.string().max(1000).optional(),
   required: z.boolean(),
 });
-export type RunnerCredentialDeclaration = z.infer<
-  typeof RunnerCredentialDeclarationSchema
+export type AgentDeploymentCredentialDeclaration = z.infer<
+  typeof AgentDeploymentCredentialDeclarationSchema
 >;
 
 /** One credential the invoking user still needs to supply. */
-export const MissingRunnerCredentialSchema = z.object({
+export const MissingAgentDeploymentCredentialSchema = z.object({
   key: z.string(),
   label: z.string(),
   description: z.string().optional(),
 });
-export type MissingRunnerCredential = z.infer<
-  typeof MissingRunnerCredentialSchema
+export type MissingAgentDeploymentCredential = z.infer<
+  typeof MissingAgentDeploymentCredentialSchema
 >;
 
 /**
@@ -88,75 +93,61 @@ export type MissingRunnerCredential = z.infer<
  * for want of personal credentials. Clients key the "connect your credentials"
  * prompt off this rather than parsing prose.
  */
-export const RUNNER_CREDENTIALS_REQUIRED_CODE = "RUNNER_CREDENTIALS_REQUIRED";
+export const AGENT_DEPLOYMENT_CREDENTIALS_REQUIRED_CODE =
+  "AGENT_DEPLOYMENT_CREDENTIALS_REQUIRED";
 
-// ===================== Agent runner configuration =====================
+// ===================== Agent Background execution configuration =====================
 
-export const RunnerEnvironmentEntrySchema = z.object({
+export const AgentDeploymentEnvironmentEntrySchema = z.object({
   key: z.string().min(1),
   value: z.string(),
 });
-export type RunnerEnvironmentEntry = z.infer<
-  typeof RunnerEnvironmentEntrySchema
+export type AgentDeploymentEnvironmentEntry = z.infer<
+  typeof AgentDeploymentEnvironmentEntrySchema
 >;
 
-// ===================== Database-derived types =====================
-
-/**
- * Column refinements: drizzle-zod widens `$type<>` columns to plain strings,
- * and the insert side additionally restores the optionality a refinement drops
- * for a column with a default or a nullable one.
- */
-const runnerSelectRefinements = {
-  backend: RunnerBackendNameSchema,
-  steerMode: RunnerSteerModeSchema,
-  resources: RunnerResourcesSchema.nullable(),
+/** Optional container deployment used only for delegated/background work. */
+export const AgentBackgroundExecutionSchema = z.object({
+  image: z.string().trim().min(1).max(2_000),
   command: z.array(z.string()).nullable(),
-  environment: z.array(RunnerEnvironmentEntrySchema).nullable(),
-  credentials: z.array(RunnerCredentialDeclarationSchema).nullable(),
-} as const;
-
-const runnerInsertRefinements = {
-  backend: RunnerBackendNameSchema.optional(),
-  steerMode: RunnerSteerModeSchema.optional(),
-  resources: RunnerResourcesSchema.nullish(),
-  command: z.array(z.string()).nullish(),
-  environment: z.array(RunnerEnvironmentEntrySchema).nullish(),
-  credentials: z.array(RunnerCredentialDeclarationSchema).nullish(),
-} as const;
-
-export const SelectRunnerSchema = createSelectSchema(
-  schema.runnersTable,
-  runnerSelectRefinements,
-);
-export const InsertRunnerSchema = createInsertSchema(
-  schema.runnersTable,
-  runnerInsertRefinements,
-).omit({ id: true, createdAt: true, updatedAt: true });
-export const UpdateRunnerSchema = createUpdateSchema(
-  schema.runnersTable,
-  runnerInsertRefinements,
-).omit({ id: true, organizationId: true, createdAt: true, updatedAt: true });
-
-/** A runner as a list or detail response renders it: definition plus labels. */
-export const SelectRunnerWithLabelsSchema = SelectRunnerSchema.extend({
-  labels: z.array(AgentLabelWithDetailsSchema),
+  backend: AgentDeploymentBackendSchema,
+  steerMode: AgentDeploymentSteerModeSchema,
+  privileged: z.boolean(),
+  resources: AgentDeploymentResourcesSchema.nullable(),
+  environment: z.array(AgentDeploymentEnvironmentEntrySchema).nullable(),
+  credentials: z.array(AgentDeploymentCredentialDeclarationSchema).nullable(),
+  ttlHours: z
+    .number()
+    .int()
+    .min(1)
+    .max(24 * 30)
+    .nullable(),
+  idleTimeoutMinutes: z
+    .number()
+    .int()
+    .min(1)
+    .max(24 * 60)
+    .nullable(),
 });
+export type AgentBackgroundExecution = z.infer<
+  typeof AgentBackgroundExecutionSchema
+>;
 
-export type Runner = z.infer<typeof SelectRunnerSchema>;
-export type RunnerWithLabels = z.infer<typeof SelectRunnerWithLabelsSchema>;
-export type InsertRunner = z.infer<typeof InsertRunnerSchema>;
-export type UpdateRunner = z.infer<typeof UpdateRunnerSchema>;
+/** Runtime-ready deployment: Agent-owned config plus server-only associations. */
+export type AgentDeployment = AgentBackgroundExecution & {
+  agentId: string;
+  organizationId: string;
+  environmentId: string | null;
+  secretId: string | null;
+};
 
-export const SelectRunnerSessionSchema = createSelectSchema(
-  schema.runnerSessionsTable,
-);
-export const InsertRunnerSessionSchema = createInsertSchema(
-  schema.runnerSessionsTable,
+export const SelectAgentRunSchema = createSelectSchema(schema.agentRunsTable);
+export const InsertAgentRunSchema = createInsertSchema(
+  schema.agentRunsTable,
 ).omit({ id: true, startedAt: true });
 
-export type RunnerSession = z.infer<typeof SelectRunnerSessionSchema>;
-export type InsertRunnerSession = z.infer<typeof InsertRunnerSessionSchema>;
+export type AgentRun = z.infer<typeof SelectAgentRunSchema>;
+export type InsertAgentRun = z.infer<typeof InsertAgentRunSchema>;
 
 export const SelectUserCredentialSchema = createSelectSchema(
   schema.userCredentialsTable,

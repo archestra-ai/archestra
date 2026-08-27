@@ -35,10 +35,6 @@ export const allAvailableActions: Record<Resource, Action[]> = {
     "admin",
     "deploy-to-restricted",
   ],
-  // Runners inherit an agent's team access, so they carry no team-admin of
-  // their own. `admin` is what lets someone steer or stop a runner another
-  // person started — attach reaches a shell holding that person's credentials.
-  runner: ["read", "create", "update", "delete", "admin"],
   skill: [
     "read",
     "create",
@@ -175,7 +171,6 @@ export const editorPermissions: Record<Resource, Action[]> = {
     "team-admin",
     "deploy-to-restricted",
   ],
-  runner: ["read", "create", "update", "delete"],
   skill: [
     "read",
     "create",
@@ -281,7 +276,6 @@ export const editorPermissions: Record<Resource, Action[]> = {
 export const memberPermissions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete"],
-  runner: ["read", "create", "update", "delete"],
   skill: ["read", "create", "update", "delete"],
   plugin: [],
   app: ["read", "create", "update", "delete"],
@@ -433,12 +427,6 @@ export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
  */
 export const permissionDescriptions: Record<string, string> = {
   // Agents
-  "runner:read": "View and list runners and their session timelines",
-  "runner:create": "Start runners — long-running agent sessions in a container",
-  "runner:update": "Steer and stop runners you started",
-  "runner:delete": "Delete runners and their session history",
-  "runner:admin":
-    "Steer, stop and delete any runner in the organization, including sessions started by other people",
   "agent:read": "View and list agents",
   "agent:create": "Create new agents",
   "agent:update": "Modify agent configuration and settings",
@@ -687,27 +675,13 @@ export const requiredEndpointPermissionsMap: Partial<
    */
   [RouteId.GetOrganization]: {},
 
-  // Runners. Reading is a normal member capability; starting one spends money
-  // and holds the caller's own credentials, so it needs create. Steer and stop
-  // act on a live session, so they are update — the route additionally
-  // restricts them to the runner's creator or a runner admin, because attach
-  // and steer reach a shell running under that person's credentials.
-  [RouteId.GetAllRunners]: { runner: ["read"] },
-  [RouteId.GetRunner]: { runner: ["read"] },
-  [RouteId.GetRunnerPreflight]: { runner: ["read"] },
-  [RouteId.CreateRunner]: { runner: ["create"] },
-  [RouteId.UpdateRunner]: { runner: ["update"] },
-  [RouteId.DeleteRunner]: { runner: ["delete"] },
-  [RouteId.BulkDeleteRunners]: { runner: ["delete"] },
-  [RouteId.GetRunnerLabelKeys]: { runner: ["read"] },
-  [RouteId.GetRunnerLabelValues]: { runner: ["read"] },
-
-  // A user's own credentials: authenticated, but no resource permission —
-  // these are personal, and an administrator's runner permissions grant no
-  // access to another person's values.
-  [RouteId.GetAllUserCredentials]: {},
-  [RouteId.UpsertUserCredential]: {},
-  [RouteId.DeleteUserCredential]: {},
+  // Background execution belongs to Agents. Read access is enough to view
+  // runs and manage one's own declared credentials; shared credential writes
+  // additionally enforce Agent update + scope ownership inside the route.
+  [RouteId.GetAgentBackgroundExecutionPreflight]: { agent: ["read"] },
+  [RouteId.SetAgentBackgroundExecutionCredential]: { agent: ["read"] },
+  [RouteId.DeleteAgentBackgroundExecutionCredential]: { agent: ["read"] },
+  [RouteId.GetAgentRuns]: { agent: ["read"] },
   // Completing onboarding flips an org-wide flag, so gate it on admin-level
   // organization-settings update, like the other org-settings routes.
   [RouteId.CompleteOnboarding]: { organizationSettings: ["update"] },

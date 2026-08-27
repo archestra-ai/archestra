@@ -25,7 +25,6 @@ import OrganizationModel from "@/models/organization";
 import OrganizationRoleModel from "@/models/organization-role";
 import PluginModel from "@/models/plugin";
 import ProjectModel from "@/models/project";
-import RunnerModel from "@/models/runner";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ServiceAccountModel from "@/models/service-account";
 import SkillModel from "@/models/skill";
@@ -590,12 +589,7 @@ export const AUDIT_DECISIONS = {
     reason:
       "derived per-viewer marketplace repo; created implicitly on clone, carries no user-authored state",
   },
-  runnersTable: { audited: true, model: RunnerModel },
-  runnerLabelsTable: {
-    audited: false,
-    reason: "join table; the runner carries the signal",
-  },
-  runnerSessionsTable: {
+  agentRunsTable: {
     audited: false,
     reason:
       "records which pod carries an A2A task; the task's own state machine and event log are the record of the work",

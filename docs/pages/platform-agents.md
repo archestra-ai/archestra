@@ -48,7 +48,7 @@ Tool call policies still apply to the target tool. If the model calls `run_tool`
 
 ### Excluding Servers and Tools
 
-**Auto** can be too broad: it gives the agent everything the calling user can reach. To carve out exceptions, each agent has an exclusion list — edit it under **Disabled tools** on the **Auto** tab of the agent's **Tools & Knowledge** step (or via `GET`/`PUT /api/agents/:id/tool-exclusions`), excluding whole MCP servers or individual tools. Use this for an agent that should see everything except, say, a payments server or a single destructive tool. [Knowledge sources](#knowledge-sources) have a list of their own.
+**Auto** can be too broad: it gives the agent everything the calling user can reach. To carve out exceptions, each agent has an exclusion list — edit it under **All tools except** on the **Auto** tab of the agent's **Tools & Knowledge** step (or via `GET`/`PUT /api/agents/:id/tool-exclusions`), excluding whole MCP servers or individual tools. Use this for an agent that should see everything except, say, a payments server or a single destructive tool. [Knowledge sources](#knowledge-sources) have a list of their own.
 
 While the tools setting is **Auto**, exclusions cover the agent's entire surface:
 
@@ -66,12 +66,14 @@ Exclusions are stored per agent and have no effect in **Custom** mode. Cloning a
 
 By default, an agent exposes every assigned tool through MCP `tools/list`.
 
-For larger toolsets, enable **Load tools when needed**. This keeps the initial tool list small. MCP clients see the built-in [`search_tools`](/docs/platform-archestra-mcp-server#search_tools) and [`run_tool`](/docs/platform-archestra-mcp-server#run_tool) tools first. Those two tools are enabled implicitly and do not need normal tool assignment.
+For larger toolsets, turn on **Progressive tool loading**. This keeps the initial tool list small. MCP clients see the built-in [`search_tools`](/docs/platform-archestra-mcp-server#search_tools) and [`run_tool`](/docs/platform-archestra-mcp-server#run_tool) tools first. Those two tools are enabled implicitly and do not need normal tool assignment.
 
 - `search_tools` can still discover them
 - `run_tool` can still execute them
 
 Use this when the full tool menu is too large to send to the model on every turn, but you still want the agent to keep access to the same assigned toolset.
+
+**Auto** mode always loads tools progressively. Discovery only works through `search_tools` and `run_tool`, so the switch shows as on and cannot be turned off there.
 
 See [MCP Gateway - Load Tools When Needed](/docs/platform-mcp-gateway#load-tools-when-needed) for the MCP-client-facing behavior and the same mode on gateways.
 
@@ -108,7 +110,7 @@ Go to **Settings → Agents → Available messaging channels** to remove any cha
 
 Knowledge follows the same **Auto** / **Custom** setting as tools (**Tools & Knowledge Sources** on the agent's **Tools & Knowledge** step). In **Auto** mode the agent can search every Knowledge Base and connector the chatting user can access, in its environment. In **Custom** mode it searches only the sources you assign to it. Either mode is still filtered by each user's own visibility.
 
-**Auto** can be too broad here too. Each agent has its own list of disabled knowledge sources — edit it under **Disabled knowledge sources** on the **Auto** tab of the agent's **Tools & Knowledge** step, or via `GET`/`PUT /api/agents/:id/knowledge-source-exclusions`. A disabled source drops out of every search the agent runs, so you can keep an archived wiki out of its answers without hiding it from anyone else. The list applies only while the setting is **Auto**; **Custom** mode already searches just what you assign.
+**Auto** can be too broad here too. Each agent has its own list of disabled knowledge sources — edit it under **All knowledge sources except** on the **Auto** tab of the agent's **Tools & Knowledge** step, or via `GET`/`PUT /api/agents/:id/knowledge-source-exclusions`. A disabled source drops out of every search the agent runs, so you can keep an archived wiki out of its answers without hiding it from anyone else. The list applies only while the setting is **Auto**; **Custom** mode already searches just what you assign.
 
 Whenever an agent has at least one reachable knowledge source, Archestra adds the built-in [`query_knowledge_sources`](/docs/platform-archestra-mcp-server#query_knowledge_sources) tool so the model can search across them during a run. The tool disappears when every source the caller can reach is disabled for that agent.
 
@@ -132,7 +134,7 @@ A skill that names an `agent` in its frontmatter runs in that subagent instead �
 
 An agent can delegate work to other agents — its **subagents**. Like **Tools & Knowledge Sources**, delegation has an **Auto** or **Custom** setting, under **Subagents** on the agent's **Tools & Knowledge** step.
 
-In **Custom** mode the agent delegates only to the subagents you assign. In **Auto** mode it can delegate to any agent the calling user can access — new agents included automatically — minus a disabled list. Disable specific agents under **Disabled subagents** on the **Auto** tab (or via `GET`/`PUT /api/agents/:id/subagent-exclusions`). Each user's own access still applies, so **Auto** never means any agent can call any agent — a caller only reaches agents it could already see. Both modes stay within the agent's [environment](/docs/platform-environments): only same-environment agents are eligible.
+In **Custom** mode the agent delegates only to the subagents you assign. In **Auto** mode it can delegate to any agent the calling user can access — new agents included automatically — minus a disabled list. Disable specific agents under **All subagents except** on the **Auto** tab (or via `GET`/`PUT /api/agents/:id/subagent-exclusions`). Each user's own access still applies, so **Auto** never means any agent can call any agent — a caller only reaches agents it could already see. Both modes stay within the agent's [environment](/docs/platform-environments): only same-environment agents are eligible.
 
 Auto delegation resolves per calling user. It applies in chat and other flows that carry a signed-in user; automated runs without one — a scheduled trigger, for example — fall back to the explicitly assigned targets.
 

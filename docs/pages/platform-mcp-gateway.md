@@ -3,7 +3,7 @@ title: MCP Gateway
 category: MCP
 order: 1
 description: Unified access point for all MCP servers
-lastUpdated: 2026-08-20
+lastUpdated: 2026-08-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -147,7 +147,7 @@ See [Access Control](/docs/platform-access-control) for the permission model.
 
 By default, a gateway exposes every assigned tool through MCP `tools/list`.
 
-For larger toolsets, enable **Load tools when needed** on the gateway's **Tools & Knowledge** step. This keeps the initial tool list small. Clients see the built-in [`search_tools`](/docs/platform-archestra-mcp-server#search_tools) and [`run_tool`](/docs/platform-archestra-mcp-server#run_tool) tools first.
+For larger toolsets, turn on **Progressive tool loading** on the gateway's **Tools & Knowledge** step. This keeps the initial tool list small. Clients see the built-in [`search_tools`](/docs/platform-archestra-mcp-server#search_tools) and [`run_tool`](/docs/platform-archestra-mcp-server#run_tool) tools first.
 
 Those two tools are enabled implicitly and do not appear in the built-in tool picker. The rest of the gateway's assigned tools stay available on demand:
 

@@ -67,6 +67,9 @@ export const E2eTestId = {
   EditAgentButton: "edit-agent-button",
   AgentToolsSection: "agent-tools-section",
   AgentToolsAddButton: "agent-tools-add-button",
+  AgentKnowledgeSources: "agent-knowledge-sources",
+  AgentKnowledgeSourcePill: "agent-knowledge-source-pill",
+  AgentKnowledgeSourcesCombobox: "agent-knowledge-sources-combobox",
   AgentKnowledgeSourceExclusions: "agent-knowledge-source-exclusions",
   AgentKnowledgeSourceExclusionPill: "agent-knowledge-source-exclusion-pill",
   AgentKnowledgeSourceExclusionsCombobox:

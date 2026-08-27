@@ -197,9 +197,10 @@ describe("AuthSettingsPage", () => {
     );
     await user.click(screen.getByRole("option", { name: "24 hours" }));
 
-    // Default role: member -> admin
+    // Default role: member -> admin. The role picker is a searchable popover,
+    // so its options are buttons rather than listbox options.
     await user.click(screen.getByTestId("default-member-role-select"));
-    await user.click(screen.getByRole("option", { name: /admin/i }));
+    await user.click(screen.getByRole("button", { name: /admin/i }));
 
     await user.click(screen.getByRole("button", { name: "Save" }));
 

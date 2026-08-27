@@ -610,7 +610,7 @@ describe("executeA2AMessage current turn assembly", () => {
 
     const config = mockStreamText.mock.calls[0]?.[0];
     expect(config.messages).toHaveLength(history.length + 1);
-    expect(config.messages.at(-1)).toEqual({
+    expect(config.messages.at(-1)).toMatchObject({
       role: "user",
       content: "current question",
     });
@@ -639,7 +639,7 @@ describe("executeA2AMessage current turn assembly", () => {
     });
 
     const config = mockStreamText.mock.calls[0]?.[0];
-    expect(config.messages).toEqual(history);
+    expect(config.messages).toMatchObject(history);
   });
 
   test("stops the run once the model repeatedly calls a tool outside the tool list", async ({

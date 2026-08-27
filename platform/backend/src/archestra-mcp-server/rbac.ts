@@ -164,6 +164,15 @@ export const TOOL_PERMISSIONS: Record<
   create_skill: { resource: "skill", action: "create" },
   update_skill: { resource: "skill", action: "update" },
   edit_skill: { resource: "skill", action: "update" },
+  // Plugins — executable opaque bytes, so only the metadata catalog is
+  // readable without plugin:admin; byte reads and every mutation require
+  // plugin:admin, matching the REST routes (plugin.routes.ts).
+  list_plugins: { resource: "plugin", action: "read" },
+  get_plugin: { resource: "plugin", action: "admin" },
+  create_plugin: { resource: "plugin", action: "admin" },
+  update_plugin: { resource: "plugin", action: "admin" },
+  edit_plugin: { resource: "plugin", action: "admin" },
+  delete_plugin: { resource: "plugin", action: "admin" },
   // Code execution sandbox — gated by `sandbox:execute` and per-agent tool
   // assignment. The implicit per-conversation sandbox is created lazily; the
   // create step is not a tool. load_skill (skill:read) mounts a skill into

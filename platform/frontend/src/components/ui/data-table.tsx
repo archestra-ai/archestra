@@ -282,153 +282,175 @@ export function DataTable<TData, TValue>({
 
   return (
     <div className="w-full space-y-4">
-      <div className="overflow-x-auto rounded-md border">
-        {/* The table never shrinks below the columns' summed configured sizes
+      {/* The bar is a sibling of the scrolling container, not a child: an
+          absolutely positioned child of an `overflow-x-auto` element scrolls
+          away with the content on a table wide enough to scroll. */}
+      <div className="relative">
+        {isLoading && <TableLoadingBar />}
+        <div className="overflow-x-auto rounded-md border">
+          {/* The table never shrinks below the columns' summed configured sizes
             (tanstack defaults unsized columns to 150px) — on narrow screens
             the wrapper scrolls horizontally instead of crushing columns until
             headers stack letter-by-letter and cell contents overlap. */}
-        <Table
-          className={tableClassName}
-          style={{ minWidth: configuredTableSize }}
-        >
-          {!hideHeader && (
-            <TableHeader>
-              {table.getHeaderGroups().map((headerGroup) => (
-                <TableRow key={headerGroup.id} className="hover:bg-transparent">
-                  {headerGroup.headers.map((header) => {
-                    const sorted = header.column.getIsSorted();
-                    return (
-                      <TableHead
-                        key={header.id}
-                        data-column-id={header.column.id}
-                        aria-sort={
-                          header.column.getCanSort()
-                            ? sorted === "asc"
-                              ? "ascending"
-                              : sorted === "desc"
-                                ? "descending"
-                                : "none"
-                            : undefined
-                        }
-                        className={getColumnClassName(header.column.id)}
-                        style={getColumnStyle({
-                          columnId: header.column.id,
-                          configuredSize: header.column.columnDef.size,
-                          minSize: header.column.columnDef.minSize,
-                          renderedSize: header.getSize(),
-                          fixedWidth: fixedWidthColumnIds.includes(
-                            header.column.id,
-                          ),
-                          flexibleWidth: flexibleColumnIds.includes(
-                            header.column.id,
-                          ),
-                          fixedColumnsSize,
-                          flexibleColumnsSize,
-                        })}
-                      >
-                        {header.isPlaceholder
-                          ? null
-                          : flexRender(
-                              header.column.columnDef.header,
-                              header.getContext(),
-                            )}
-                      </TableHead>
-                    );
-                  })}
-                </TableRow>
-              ))}
-            </TableHeader>
-          )}
-          <TableBody>
-            {table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => (
-                <React.Fragment key={row.id}>
+          <Table
+            aria-busy={isLoading}
+            className={tableClassName}
+            style={{ minWidth: configuredTableSize }}
+          >
+            {!hideHeader && (
+              <TableHeader>
+                {table.getHeaderGroups().map((headerGroup) => (
                   <TableRow
-                    data-state={row.getIsSelected() && "selected"}
-                    className={cn(
-                      onRowClick ? "cursor-pointer hover:bg-muted/50" : "",
-                      getRowClassName?.(row.original),
-                    )}
-                    onClick={(e) => onRowClick?.(row.original, e)}
+                    key={headerGroup.id}
+                    className="hover:bg-transparent"
                   >
-                    {row.getVisibleCells().map((cell) => (
-                      <TableCell
-                        key={cell.id}
-                        data-column-id={cell.column.id}
-                        onClick={
-                          cell.column.id === SELECT_COLUMN_ID
-                            ? handleSelectCellClick
-                            : undefined
-                        }
-                        className={getColumnClassName(cell.column.id)}
-                        style={getColumnStyle({
-                          columnId: cell.column.id,
-                          configuredSize: cell.column.columnDef.size,
-                          minSize: cell.column.columnDef.minSize,
-                          renderedSize: cell.column.getSize(),
-                          fixedWidth: fixedWidthColumnIds.includes(
-                            cell.column.id,
-                          ),
-                          flexibleWidth: flexibleColumnIds.includes(
-                            cell.column.id,
-                          ),
-                          fixedColumnsSize,
-                          flexibleColumnsSize,
-                        })}
-                      >
-                        {flexRender(
-                          cell.column.columnDef.cell,
-                          cell.getContext(),
-                        )}
-                      </TableCell>
-                    ))}
+                    {headerGroup.headers.map((header) => {
+                      const sorted = header.column.getIsSorted();
+                      return (
+                        <TableHead
+                          key={header.id}
+                          data-column-id={header.column.id}
+                          aria-sort={
+                            header.column.getCanSort()
+                              ? sorted === "asc"
+                                ? "ascending"
+                                : sorted === "desc"
+                                  ? "descending"
+                                  : "none"
+                              : undefined
+                          }
+                          className={getColumnClassName(header.column.id)}
+                          style={getColumnStyle({
+                            columnId: header.column.id,
+                            configuredSize: header.column.columnDef.size,
+                            minSize: header.column.columnDef.minSize,
+                            renderedSize: header.getSize(),
+                            fixedWidth: fixedWidthColumnIds.includes(
+                              header.column.id,
+                            ),
+                            flexibleWidth: flexibleColumnIds.includes(
+                              header.column.id,
+                            ),
+                            fixedColumnsSize,
+                            flexibleColumnsSize,
+                          })}
+                        >
+                          {header.isPlaceholder
+                            ? null
+                            : flexRender(
+                                header.column.columnDef.header,
+                                header.getContext(),
+                              )}
+                        </TableHead>
+                      );
+                    })}
                   </TableRow>
-                  {renderSubComponent && row.getIsExpanded() && (
-                    <TableRow>
-                      <TableCell
-                        colSpan={row.getVisibleCells().length}
-                        className="p-0"
-                      >
-                        {renderSubComponent({ row })}
-                      </TableCell>
+                ))}
+              </TableHeader>
+            )}
+            {/* Rows already on screen are the previous query's answer, so they
+              fade back while the next one is in flight rather than sitting
+              there looking current. The delay keeps a refetch that resolves
+              immediately from registering as a flicker; coming back is
+              undelayed so results land at full strength. */}
+            <TableBody
+              className={cn(
+                "transition-opacity duration-200 motion-reduce:transition-none",
+                isLoading && "opacity-60 delay-150",
+              )}
+            >
+              {table.getRowModel().rows?.length ? (
+                table.getRowModel().rows.map((row) => (
+                  <React.Fragment key={row.id}>
+                    <TableRow
+                      data-state={row.getIsSelected() && "selected"}
+                      className={cn(
+                        onRowClick ? "cursor-pointer hover:bg-muted/50" : "",
+                        getRowClassName?.(row.original),
+                      )}
+                      onClick={(e) => onRowClick?.(row.original, e)}
+                    >
+                      {row.getVisibleCells().map((cell) => (
+                        <TableCell
+                          key={cell.id}
+                          data-column-id={cell.column.id}
+                          onClick={
+                            cell.column.id === SELECT_COLUMN_ID
+                              ? handleSelectCellClick
+                              : undefined
+                          }
+                          className={getColumnClassName(cell.column.id)}
+                          style={getColumnStyle({
+                            columnId: cell.column.id,
+                            configuredSize: cell.column.columnDef.size,
+                            minSize: cell.column.columnDef.minSize,
+                            renderedSize: cell.column.getSize(),
+                            fixedWidth: fixedWidthColumnIds.includes(
+                              cell.column.id,
+                            ),
+                            flexibleWidth: flexibleColumnIds.includes(
+                              cell.column.id,
+                            ),
+                            fixedColumnsSize,
+                            flexibleColumnsSize,
+                          })}
+                        >
+                          {flexRender(
+                            cell.column.columnDef.cell,
+                            cell.getContext(),
+                          )}
+                        </TableCell>
+                      ))}
                     </TableRow>
-                  )}
-                </React.Fragment>
-              ))
-            ) : (
-              <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={columns.length} className="py-0">
-                  {/* An empty body while a fetch is still out is not an empty
+                    {renderSubComponent && row.getIsExpanded() && (
+                      <TableRow>
+                        <TableCell
+                          colSpan={row.getVisibleCells().length}
+                          className="p-0"
+                        >
+                          {renderSubComponent({ row })}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </React.Fragment>
+                ))
+              ) : (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={columns.length} className="py-0">
+                    {/* An empty body while a fetch is still out is not an empty
                       result, so it says nothing: announcing "No Data" and then
                       replacing it with rows a moment later is the flash this
                       area used to produce. The row keeps its height either
                       way, so the rows arrive without shifting the pagination
                       controls underneath. */}
-                  <div className="flex min-h-[164px] flex-col items-center justify-center text-center">
-                    {!isLoading && (
-                      <EmptyState
-                        icon={
-                          emptyIcon ?? (hasActiveFilters ? Search : undefined)
-                        }
-                        title={
-                          hasActiveFilters ? filteredEmptyMessage : emptyMessage
-                        }
-                        description={
-                          hasActiveFilters
-                            ? filteredEmptyDescription
-                            : emptyDescription
-                        }
-                        onClearFilters={
-                          hasActiveFilters ? onClearFilters : undefined
-                        }
-                      />
-                    )}
-                  </div>
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+                    <div className="flex min-h-[164px] flex-col items-center justify-center text-center">
+                      {!isLoading && (
+                        <EmptyState
+                          icon={
+                            emptyIcon ?? (hasActiveFilters ? Search : undefined)
+                          }
+                          title={
+                            hasActiveFilters
+                              ? filteredEmptyMessage
+                              : emptyMessage
+                          }
+                          description={
+                            hasActiveFilters
+                              ? filteredEmptyDescription
+                              : emptyDescription
+                          }
+                          onClearFilters={
+                            hasActiveFilters ? onClearFilters : undefined
+                          }
+                        />
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </div>
       {(pagination || !manualPagination) &&
         (!hidePaginationWhenSinglePage ||
@@ -441,6 +463,28 @@ export function DataTable<TData, TValue>({
             compactPagination={compactPagination}
           />
         )}
+    </div>
+  );
+}
+
+/**
+ * An indeterminate sweep pinned to the table's top edge while a request is out.
+ *
+ * Deliberately not a spinner in place of the rows: a search refetch keeps the
+ * previous page on screen, so replacing it would collapse the table's height on
+ * every keystroke. This states that what is on screen is about to be replaced
+ * without moving any of it.
+ */
+function TableLoadingBar() {
+  return (
+    <div
+      role="progressbar"
+      aria-label="Loading results"
+      // Inset by a pixel so it sits inside the container's border rather than
+      // across it, and rounded to match the corner it tucks into.
+      className="pointer-events-none absolute inset-x-px top-px z-10 h-[3px] overflow-hidden rounded-t-[5px] bg-primary/15 animate-in fade-in-0 duration-200 [animation-delay:150ms] [animation-fill-mode:backwards] motion-reduce:animate-none"
+    >
+      <div className="archestra-table-loading-sweep h-full rounded-full bg-primary" />
     </div>
   );
 }

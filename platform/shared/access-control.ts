@@ -729,6 +729,13 @@ export const requiredEndpointPermissionsMap: Partial<
   // Subagent (delegation-target) exclusions: agent-type read/update permission checked dynamically in handler
   [RouteId.GetAgentSubagentExclusions]: {},
   [RouteId.UpdateAgentSubagentExclusions]: {},
+  // Knowledge-source exclusions (which knowledge connectors the agent's Auto
+  // surface may search): agent-type read/update permission checked dynamically
+  // in handler, on top of this floor. `knowledgeSource:read` is the floor
+  // rather than `{}` because these routes name knowledge connectors by id —
+  // the same disclosure the connector list endpoint gates on that permission.
+  [RouteId.GetAgentKnowledgeSourceExclusions]: { knowledgeSource: ["read"] },
+  [RouteId.UpdateAgentKnowledgeSourceExclusions]: { knowledgeSource: ["read"] },
   // Skill assignments/exclusions (what the gateway publishes over skill://):
   // agent-type read/update permission checked dynamically in handler, on top
   // of this floor. `skill:read` is the floor rather than `{}` because these
@@ -861,6 +868,9 @@ export const requiredEndpointPermissionsMap: Partial<
     mcpRegistry: ["read"],
   },
   [RouteId.GetInternalMcpCatalogTools]: {
+    mcpRegistry: ["read"],
+  },
+  [RouteId.GetInternalMcpCatalogToolsBatch]: {
     mcpRegistry: ["read"],
   },
   [RouteId.UpdateInternalMcpCatalogItem]: {
@@ -1259,6 +1269,7 @@ export const requiredEndpointPermissionsMap: Partial<
     serviceAccount: ["update"],
   },
   [RouteId.BulkDeleteServiceAccounts]: { serviceAccount: ["delete"] },
+  [RouteId.BulkSetServiceAccountsDisabled]: { serviceAccount: ["update"] },
   [RouteId.DeleteServiceAccount]: {
     serviceAccount: ["delete"],
   },
@@ -1823,6 +1834,11 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.UpdatePluginGithubSync]: { plugin: ["update", "admin"] },
   [RouteId.TriggerPluginGithubSync]: { plugin: ["update", "admin"] },
+  // Skills projected from plugin file trees: a Skills surface over plugin
+  // metadata, so it needs both floors — per-plugin visibility is enforced
+  // in the handlers.
+  [RouteId.GetPluginSkills]: { skill: ["read"], plugin: ["read"] },
+  [RouteId.GetPluginSkill]: { skill: ["read"], plugin: ["read"] },
   [RouteId.DiscoverGithubSkills]: { skill: ["read"] },
   [RouteId.SearchSkillCatalog]: { skill: ["read"] },
   [RouteId.PreviewGithubSkill]: { skill: ["read"] },

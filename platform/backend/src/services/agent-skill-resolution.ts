@@ -14,7 +14,13 @@ import AgentExcludedSkillModel from "@/models/agent-excluded-skill";
 import AgentSkillModel from "@/models/agent-skill";
 import SkillModel from "@/models/skill";
 import { skillVisibleInEnvironment } from "@/services/environments/environment-isolation";
-import type { Agent, PublishableSkill, Skill } from "@/types";
+import {
+  type Agent,
+  type AgentType,
+  GATEWAY_CAPABLE_AGENT_TYPES,
+  type PublishableSkill,
+  type Skill,
+} from "@/types";
 
 /**
  * The gateway facts the publication rules read.
@@ -87,6 +93,27 @@ export function skillsSurfaceEnabled(): boolean {
 }
 
 /**
+ * Whether skill publication applies to an agent type at all.
+ *
+ * `skill://` publication is a gateway surface: it hands skills to the MCP
+ * client holding the gateway's token. An internal agent reaches skills through
+ * `load_skill` inside its own runtime instead, and an LLM Proxy has no MCP
+ * surface at all — neither publishes. Legacy `profile` rows are gateways under
+ * an older name, so they do.
+ *
+ * Both ends read this one predicate so they cannot disagree: the assignment
+ * service refuses a write against a type that does not publish, and the
+ * resolutions below serve nothing for one — so assignments left behind by an
+ * earlier build, when the editor was offered on agents too, stay off the wire
+ * rather than being served by a surface with no UI to manage them.
+ */
+export function publishesSkills(agentType: AgentType): boolean {
+  return (GATEWAY_CAPABLE_AGENT_TYPES as readonly AgentType[]).includes(
+    agentType,
+  );
+}
+
+/**
  * One page of the skills this gateway agent publishes, in id order (the cursor
  * key), plus whether another page follows.
  *
@@ -111,6 +138,9 @@ export async function resolveExposedSkills(params: {
 }): Promise<{ skills: PublishableSkill[]; hasMore: boolean } | null> {
   const agent = await AgentModel.findGatewayAgentById(params.agentId);
   if (!agent) return null;
+  // An empty page rather than the null that means "no such agent": the agent
+  // exists, it simply is not a publishing surface.
+  if (!publishesSkills(agent.agentType)) return { skills: [], hasMore: false };
 
   // One more than the page, so "another page follows" is answered by the read
   // itself rather than by a second count of a set that may have moved since.
@@ -147,8 +177,8 @@ export async function resolveExposedSkills(params: {
  * addressed row and, in Auto mode, one exclusion probe.
  *
  * Applies exactly the gates {@link resolveExposedSkills} applies, and answers
- * null for every reason — wrong mode, excluded, out of environment,
- * unpublishable kind or name, or simply absent. A caller therefore cannot
+ * null for every reason — not a publishing surface, wrong mode, excluded, out
+ * of environment, unpublishable kind or name, or simply absent. A caller therefore cannot
  * tell an unexposed skill from a nonexistent one, so the surface cannot be
  * probed for which skills an org holds.
  */
@@ -160,6 +190,7 @@ export async function resolveExposedSkill(params: {
 }): Promise<PublishableSkill | null> {
   const agent = await AgentModel.findGatewayAgentById(params.agentId);
   if (!agent) return null;
+  if (!publishesSkills(agent.agentType)) return null;
 
   const key = { name: params.name, authorId: params.authorId };
   const skill = agent.accessAllSkills

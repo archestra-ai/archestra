@@ -426,11 +426,17 @@ function ConnectorsList() {
     >
       <TableCardView storageKey="archestra-connectors-view">
         <div>
-          <div className="mb-6 flex flex-col gap-2">
+          <div
+            className={`${!isDeletedView && !isConnectorsLoadError ? "mb-3" : "mb-6"} flex flex-col gap-2`}
+          >
             <FilterBar
               actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
             >
-              <SearchInput paramName="search" className={filterSearchClass} />
+              <SearchInput
+                paramName="search"
+                className={filterSearchClass}
+                isLoading={isFetching}
+              />
               <Select
                 value={connectorTypeFilter}
                 onValueChange={handleConnectorTypeChange}

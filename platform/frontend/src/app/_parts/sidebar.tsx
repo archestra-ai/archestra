@@ -475,7 +475,14 @@ const NavPrimary = ({
               // in the DOM, not off the item declaring one: a badge that has
               // nothing to report renders nothing, and the dot keeps the
               // corner to itself.
-              className="absolute top-1 right-1 group-has-data-[sidebar=menu-action]/menu-item:right-8"
+              //
+              // Centred on the row rather than pinned to its top: `top-1` put
+              // a 6px dot 4px down a 32px row, which read as floating above
+              // the label instead of belonging to it. Centring is `inset-y-0`
+              // plus `my-auto` rather than `top-1/2 -translate-y-1/2` because
+              // the dot's enter/exit animation keyframes set `transform`
+              // themselves and would drop the centring translate mid-play.
+              className="absolute inset-y-0 my-auto h-1.5 right-1 group-has-data-[sidebar=menu-action]/menu-item:right-8"
             />
           )}
         </SidebarPrefetchLink>

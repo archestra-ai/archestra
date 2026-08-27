@@ -47,11 +47,15 @@ export function useAgentOverviewFacts({
   // would be the same value twice on one screen.
   const showsEnvironment = kind === "agent" && !isBuiltIn;
   const showsTools = !isBuiltIn;
+  // Publishing skills over `skill://` is a gateway surface — an agent has no
+  // MCP client to serve them to — so the fact belongs on the gateway pages
+  // only. Legacy `profile` rows render under `mcp_gateway`, so they keep it.
+  const showsSkills = kind === "mcp_gateway" && !isBuiltIn;
 
   const model = useModelFact({ agent, enabled: showsModel });
   const environment = useEnvironmentFact({ agent, enabled: showsEnvironment });
   const tools = useToolsFact({ agent, enabled: showsTools });
-  const skills = useSkillsFact({ agent, enabled: showsTools });
+  const skills = useSkillsFact({ agent, enabled: showsSkills });
 
   return [...model, ...environment, ...tools, ...skills];
 }

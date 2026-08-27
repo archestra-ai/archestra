@@ -3,7 +3,7 @@ title: Plugins
 category: Agents
 order: 4
 description: Client-native extensions delivered to Claude Code, Codex, Copilot CLI, and Cursor
-lastUpdated: 2026-08-26
+lastUpdated: 2026-08-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -34,6 +34,8 @@ Every plugin targets one client:
 It also declares support for macOS/Linux, Windows, or both. This prevents a setup command from installing an incompatible payload.
 
 Archestra stores plugin files without translating them. Imported executable modes are preserved. Files such as `.mcp.json` remain part of the plugin when the client supports them.
+
+You can also manage plugins from chat. The built-in plugin tools list and read plugins, create manual plugins, replace or edit files, and delete plugins. File replacements and edits check the plugin's content hash so a stale chat cannot overwrite a newer change. GitHub-sourced files stay read-only — review and apply those updates in the Plugins UI.
 
 ## Importing a Marketplace
 
@@ -112,3 +114,5 @@ An authorized platform administrator selects the plugin and runs the setup comma
 | [Archestra hook](/docs/platform-agent-hooks) | Runs a script in Archestra's sandbox during an agent lifecycle event. |
 
 Use a plugin when the coding client must own the behavior. Use a Skill when the model needs reusable guidance.
+
+Skills embedded in a plugin also appear under **Skills from plugins** on the Skills page. This read-only Beta category ignores the plugin's client and platform when listing `SKILL.md` files. The source client remains visible because scripts or tool names inside the Skill may still depend on it.

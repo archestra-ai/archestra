@@ -131,6 +131,7 @@ import {
   DeepSeek,
   Gemini,
   Groq,
+  InteractionVirtualKeySchema,
   Minimax,
   Mistral,
   Ollama,
@@ -308,6 +309,12 @@ export function registerOpenApiSchemas() {
   z.globalRegistry.add(EmbeddingDimensionsSchema, {
     id: "EmbeddingDimensions",
     enum: [...SUPPORTED_EMBEDDING_DIMENSIONS],
+  });
+  // Referenced from every interaction response variant (one per provider) and
+  // from the session summary. Registered so the spec emits a single component
+  // instead of inlining the same object at ~60 sites.
+  z.globalRegistry.add(InteractionVirtualKeySchema, {
+    id: "InteractionVirtualKey",
   });
 }
 

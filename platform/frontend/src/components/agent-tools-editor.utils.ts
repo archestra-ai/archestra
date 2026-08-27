@@ -227,36 +227,6 @@ export function filterDefaultArchestraToolIds(
   );
 }
 
-/**
- * Given catalog items and a parallel array of tool lists, find the
- * creation-default Archestra tools and return their IDs plus the catalog
- * index.
- *
- * Returns null if the Archestra catalog isn't found, tools aren't loaded,
- * or no default tools match.
- */
-export function getDefaultArchestraToolIds(
-  catalogItems: { id: string; name: string }[],
-  toolsByCatalogIndex: ({ id: string; name: string }[] | undefined)[],
-  options: {
-    skillsEnabled?: boolean;
-    sandboxEnabled?: boolean;
-  } = {},
-): { toolIds: Set<string>; catalogIndex: number } | null {
-  const catalogIndex = catalogItems.findIndex(
-    (c) => c.id === ARCHESTRA_MCP_CATALOG_ID,
-  );
-  if (catalogIndex === -1) return null;
-
-  const tools = toolsByCatalogIndex[catalogIndex];
-  if (!tools || tools.length === 0) return null;
-
-  const toolIds = filterDefaultArchestraToolIds(tools, options);
-  if (toolIds.size === 0) return null;
-
-  return { toolIds, catalogIndex };
-}
-
 type EnvScopedCatalog = {
   id: string;
   name: string;

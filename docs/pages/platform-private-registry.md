@@ -3,7 +3,7 @@ title: Private MCP Registry
 category: MCP
 order: 2
 description: Managing your organization's MCP servers in a private registry
-lastUpdated: 2026-08-21
+lastUpdated: 2026-08-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -69,7 +69,7 @@ Installations can be personal or team-scoped.
 - **Personal installations** are owned by one user and are useful when each person needs their own upstream account.
 - **Team installations** are shared with a team and are useful for shared service accounts or team-owned integrations.
 
-A personal installation is a hard usage boundary: its credential can only ever authenticate calls made by the person who added it. It cannot be assigned, pinned, or borrowed by another user — not even by an Admin. Predefined Admins can see limited connection metadata and revoke a connection for operational oversight, but cannot use its credential.
+A personal installation is a hard usage boundary: its credential can only ever authenticate calls made by the person who added it. It cannot be assigned, pinned, or borrowed by another user — not even by an Admin. Predefined Admins can see limited connection metadata and revoke a connection for operational oversight, but cannot use its credential. The **Inspector** honors the same boundary: it calls the server as the selected connection, so it offers only your own connections and the ones shared with you.
 
 If a static credential is intended to be shared, add it explicitly as a **team or organization service account**. This makes the shared intent and audience visible instead of turning a person's identity into an implicit service account.
 

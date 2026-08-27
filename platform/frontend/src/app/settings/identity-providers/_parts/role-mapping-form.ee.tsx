@@ -36,8 +36,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { RoleSelectContent } from "@/components/ui/role-select";
-import { Select, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RoleSelect } from "@/components/ui/role-select";
 import { Separator } from "@/components/ui/separator";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { cn } from "@/lib/utils";
@@ -225,19 +224,16 @@ export function RoleMappingForm({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Default Role</FormLabel>
-            <Select
-              onValueChange={field.onChange}
-              value={field.value || "member"}
-            >
-              <FormControl>
-                <SelectTrigger
-                  data-testid={E2eTestId.IdpRoleMappingDefaultRole}
-                >
-                  <SelectValue placeholder="Select default role" />
-                </SelectTrigger>
-              </FormControl>
-              <RoleSelectContent restrictToGrantable={false} />
-            </Select>
+            <FormControl>
+              <RoleSelect
+                value={field.value || "member"}
+                onValueChange={field.onChange}
+                placeholder="Select default role"
+                data-testid={E2eTestId.IdpRoleMappingDefaultRole}
+                className="w-full"
+                restrictToGrantable={false}
+              />
+            </FormControl>
             <FormDescription>
               Role assigned when no mapping rules match.
             </FormDescription>
@@ -418,14 +414,16 @@ function RoleMappingRuleRow({
               <div className="flex min-h-5 items-center">
                 <FormLabel className="text-xs">{appName} Role</FormLabel>
               </div>
-              <Select onValueChange={field.onChange} value={field.value}>
-                <FormControl>
-                  <SelectTrigger data-testid={E2eTestId.IdpRoleMappingRuleRole}>
-                    <SelectValue placeholder="Select role" />
-                  </SelectTrigger>
-                </FormControl>
-                <RoleSelectContent restrictToGrantable={false} />
-              </Select>
+              <FormControl>
+                <RoleSelect
+                  value={field.value}
+                  onValueChange={field.onChange}
+                  placeholder="Select role"
+                  data-testid={E2eTestId.IdpRoleMappingRuleRole}
+                  className="w-full"
+                  restrictToGrantable={false}
+                />
+              </FormControl>
               <FormMessage />
             </FormItem>
           )}

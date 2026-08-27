@@ -3,7 +3,7 @@ title: Publishing Skills over MCP
 category: MCP
 order: 6
 description: Serve your organization's skills to MCP clients as skill:// resources
-lastUpdated: 2026-08-24
+lastUpdated: 2026-08-26
 ---
 
 A gateway can publish your organization's [skills](/docs/platform-agent-skills) to the MCP clients that connect to it. The client reads them as `skill://` resources and offers them alongside its own skills.
@@ -29,7 +29,7 @@ Skills reach clients as resources. This is separate from `load_skill`, the tool 
 
 ## Choosing What a Gateway Publishes
 
-Open the gateway and use the **Published skills** control. It works like the gateway's tool control. Agents have the same control. The LLM Proxy and built-in agents do not.
+Open the gateway and use the **Published skills** control. It works like the gateway's tool control. Only MCP gateways have it: agents reach skills through `load_skill` in their own runtime, and the LLM Proxy and built-in agents have no MCP surface to publish on.
 
 **Auto** publishes every organization-scoped skill in the gateway's [environment](/docs/platform-environments). New organization skills appear automatically. Exclude individual ones to keep them off the surface. Auto publishes only the skills that *can* be published: an organization skill that is templated, delegates to an agent, or carries a non-conforming name is skipped without an error. Assign skills in Custom mode if you want to be told why one cannot be published.
 

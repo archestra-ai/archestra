@@ -59,6 +59,10 @@ import {
   tools as mcpServerTools,
 } from "./mcp-servers";
 import {
+  toolEntries as pluginToolEntries,
+  tools as pluginTools,
+} from "./plugins";
+import {
   toolEntries as policyToolEntries,
   tools as policyTools,
 } from "./policies";
@@ -152,6 +156,7 @@ function getToolEntries(): Partial<
       ...searchToolEntries,
       ...runToolEntries,
       ...skillToolEntries,
+      ...pluginToolEntries,
       ...sandboxToolEntries,
       ...appToolEntries,
       ...appDataToolEntries,
@@ -186,6 +191,7 @@ function getAllTools(): (typeof identityTools)[number][] {
       ...searchToolTools,
       ...runToolTools,
       ...skillTools,
+      ...pluginTools,
       ...sandboxTools,
       ...hookTools,
       ...appTools,
@@ -210,6 +216,14 @@ function getHookToolNames(): ReadonlySet<string> {
     hookToolNamesCache = new Set(hookTools.map((tool) => tool.name));
   }
   return hookToolNamesCache;
+}
+
+let pluginToolNamesCache: ReadonlySet<string> | undefined;
+function getPluginToolNames(): ReadonlySet<string> {
+  if (!pluginToolNamesCache) {
+    pluginToolNamesCache = new Set(pluginTools.map((tool) => tool.name));
+  }
+  return pluginToolNamesCache;
 }
 
 export function getArchestraMcpTools() {
@@ -372,12 +386,15 @@ export async function executeArchestraTool(
  * Whether a built-in's runtime is configured on this deployment. Sandbox tools
  * materialize a Dagger container and lifecycle hooks execute inside that same
  * sandbox, so both are unusable without the code runtime and advertising them
- * would promise the model a capability the call cannot deliver.
+ * would promise the model a capability the call cannot deliver. Plugin tools
+ * follow the plugins beta flag for the same reason: the REST surface they
+ * mirror is a 404 while the flag is off.
  */
 function isToolRuntimeEnabled(canonicalName: string): boolean {
   if (getSandboxToolNames().has(canonicalName))
     return config.skillsSandbox.enabled;
   if (getHookToolNames().has(canonicalName)) return config.hooks.enabled;
+  if (getPluginToolNames().has(canonicalName)) return config.plugins.enabled;
   return true;
 }
 

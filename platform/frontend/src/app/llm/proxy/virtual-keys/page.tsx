@@ -44,7 +44,7 @@ import {
 } from "@/components/table-card-view";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
-import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -331,9 +331,10 @@ function VirtualKeysTable() {
   return (
     <TableCardView storageKey="archestra-llm-virtual-keys-view">
       <div>
-        <div className="mb-6">
+        <div className="mb-3">
           <FilterBar actions={<TableCardViewToggle />}>
             <SearchInput
+              isLoading={query.isFetching}
               objectNamePlural="keys"
               searchFields={["name"]}
               paramName="search"
@@ -379,12 +380,11 @@ function VirtualKeysTable() {
           </FilterBar>
         </div>
 
-        <BulkActionsBar
+        <BulkActions
           count={selectedKeys.length}
           noun="key"
           onClear={clearSelection}
           busy={bulkDelete.isPending}
-          className="mb-3"
         >
           <PermissionButton
             permissions={{ llmVirtualKey: ["delete"] }}
@@ -395,7 +395,7 @@ function VirtualKeysTable() {
             <Trash2 className="h-4 w-4" />
             <span>Delete</span>
           </PermissionButton>
-        </BulkActionsBar>
+        </BulkActions>
 
         <TableCardViewContent
           cards={

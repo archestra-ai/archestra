@@ -141,6 +141,14 @@ export const TOOL_LOAD_SKILL_SHORT_NAME = "load_skill";
 export const TOOL_CREATE_SKILL_SHORT_NAME = "create_skill";
 export const TOOL_UPDATE_SKILL_SHORT_NAME = "update_skill";
 export const TOOL_EDIT_SKILL_SHORT_NAME = "edit_skill";
+// Plugins — client-native hook/skill bundles delivered to developer machines.
+// Executable opaque bytes, so only list is readable without plugin:admin.
+export const TOOL_LIST_PLUGINS_SHORT_NAME = "list_plugins";
+export const TOOL_GET_PLUGIN_SHORT_NAME = "get_plugin";
+export const TOOL_CREATE_PLUGIN_SHORT_NAME = "create_plugin";
+export const TOOL_UPDATE_PLUGIN_SHORT_NAME = "update_plugin";
+export const TOOL_EDIT_PLUGIN_SHORT_NAME = "edit_plugin";
+export const TOOL_DELETE_PLUGIN_SHORT_NAME = "delete_plugin";
 // code execution sandbox — implicit per-conversation sandbox; the create step
 // is hidden (lazy default).
 export const TOOL_RUN_COMMAND_SHORT_NAME = "run_command";
@@ -266,6 +274,12 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_CREATE_SKILL_SHORT_NAME,
   TOOL_UPDATE_SKILL_SHORT_NAME,
   TOOL_EDIT_SKILL_SHORT_NAME,
+  TOOL_LIST_PLUGINS_SHORT_NAME,
+  TOOL_GET_PLUGIN_SHORT_NAME,
+  TOOL_CREATE_PLUGIN_SHORT_NAME,
+  TOOL_UPDATE_PLUGIN_SHORT_NAME,
+  TOOL_EDIT_PLUGIN_SHORT_NAME,
+  TOOL_DELETE_PLUGIN_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_UPLOAD_FILE_SHORT_NAME,
@@ -325,6 +339,7 @@ export const ARCHESTRA_TOOL_GROUPS = [
   { id: "projects", label: "Projects" },
   { id: "meta", label: "Meta" },
   { id: "skills", label: "Skills" },
+  { id: "plugins", label: "Plugins" },
   // `id` keeps the original spelling so the taxonomy keys stay stable; the
   // label follows the feature's user-facing name (docs page "Code Sandbox").
   { id: "skill_sandbox", label: "Code Sandbox" },
@@ -440,6 +455,13 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   create_skill: "skills",
   update_skill: "skills",
   edit_skill: "skills",
+
+  list_plugins: "plugins",
+  get_plugin: "plugins",
+  create_plugin: "plugins",
+  update_plugin: "plugins",
+  edit_plugin: "plugins",
+  delete_plugin: "plugins",
 
   run_command: "skill_sandbox",
   download_file: "skill_sandbox",
@@ -621,6 +643,18 @@ export const TOOL_UPDATE_SKILL_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_UPDATE_SKILL_SHORT_NAME}` as const;
 export const TOOL_EDIT_SKILL_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_EDIT_SKILL_SHORT_NAME}` as const;
+export const TOOL_LIST_PLUGINS_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_LIST_PLUGINS_SHORT_NAME}` as const;
+export const TOOL_GET_PLUGIN_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_GET_PLUGIN_SHORT_NAME}` as const;
+export const TOOL_CREATE_PLUGIN_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_CREATE_PLUGIN_SHORT_NAME}` as const;
+export const TOOL_UPDATE_PLUGIN_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_UPDATE_PLUGIN_SHORT_NAME}` as const;
+export const TOOL_EDIT_PLUGIN_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_EDIT_PLUGIN_SHORT_NAME}` as const;
+export const TOOL_DELETE_PLUGIN_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_DELETE_PLUGIN_SHORT_NAME}` as const;
 export const TOOL_RUN_COMMAND_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_RUN_COMMAND_SHORT_NAME}` as const;
 export const TOOL_DOWNLOAD_FILE_FULL_NAME =
@@ -674,6 +708,29 @@ export const SKILL_ARCHESTRA_TOOL_SHORT_NAMES = [
 const SKILL_RUNTIME_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set(
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
 );
+
+/**
+ * Plugin management tools. Never auto-assigned: the whole group follows the
+ * `plugins` deployment beta flag (see `config.plugins.enabled`), stays out of
+ * the default seed sets, and is reached through manual assignment or the
+ * search_tools/run_tool dynamic surface.
+ */
+export const PLUGIN_ARCHESTRA_TOOL_SHORT_NAMES = [
+  TOOL_LIST_PLUGINS_SHORT_NAME,
+  TOOL_GET_PLUGIN_SHORT_NAME,
+  TOOL_CREATE_PLUGIN_SHORT_NAME,
+  TOOL_UPDATE_PLUGIN_SHORT_NAME,
+  TOOL_EDIT_PLUGIN_SHORT_NAME,
+  TOOL_DELETE_PLUGIN_SHORT_NAME,
+] as const satisfies readonly ArchestraToolShortName[];
+
+const PLUGIN_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> = new Set(
+  PLUGIN_ARCHESTRA_TOOL_SHORT_NAMES,
+);
+
+export function isPluginArchestraToolShortName(shortName: string): boolean {
+  return PLUGIN_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName);
+}
 
 /**
  * True for an Archestra skill-runtime/plumbing tool (list, load, create,

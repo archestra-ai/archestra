@@ -38,7 +38,7 @@ import {
 } from "@/components/table-card-view";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
-import { BulkActionsBar } from "@/components/ui/bulk-actions-bar";
+import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -300,9 +300,10 @@ function OauthClientsTable() {
   return (
     <TableCardView storageKey="archestra-llm-oauth-clients-view">
       <div>
-        <div className="mb-6">
+        <div className="mb-3">
           <FilterBar actions={<TableCardViewToggle />}>
             <SearchInput
+              isLoading={query.isFetching}
               objectNamePlural="OAuth clients"
               searchFields={["name"]}
               paramName="search"
@@ -332,12 +333,11 @@ function OauthClientsTable() {
           </FilterBar>
         </div>
 
-        <BulkActionsBar
+        <BulkActions
           count={selectedClients.length}
           noun="client"
           onClear={clearSelection}
           busy={bulkDelete.isPending}
-          className="mb-3"
         >
           <PermissionButton
             permissions={{ llmOauthClient: ["delete"] }}
@@ -348,7 +348,7 @@ function OauthClientsTable() {
             <Trash2 className="h-4 w-4" />
             <span>Delete</span>
           </PermissionButton>
-        </BulkActionsBar>
+        </BulkActions>
 
         <TableCardViewContent
           cards={

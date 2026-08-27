@@ -430,6 +430,7 @@ export function ChannelsSection({
             }
           >
             <SearchInput
+              isLoading={isFetching}
               placeholder="Search channels..."
               paramName="search"
               className={filterSearchClass}
@@ -1034,7 +1035,11 @@ function InstructionsCell({
     <Button
       variant="ghost"
       size="sm"
-      className="h-7 gap-1.5 px-2 text-xs"
+      // -ml-2 cancels the button's own px-2 so the icon starts on the column's
+      // text origin, level with the "Instructions" header and with the dash the
+      // agent-less row renders. Keeping px-2 (rather than dropping it) leaves
+      // the hover target its padding, same as the file-detail header's button.
+      className="-ml-2 h-7 gap-1.5 px-2 text-xs"
       onClick={onEdit}
     >
       <MessageSquareText

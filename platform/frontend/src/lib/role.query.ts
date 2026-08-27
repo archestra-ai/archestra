@@ -1,6 +1,5 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { toBulkOutcome } from "@/lib/bulk-action";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import { handleApiError, throwOnApiError } from "@/lib/utils";
@@ -16,6 +15,7 @@ const {
 
 type RolesQuery = NonNullable<archestraApiTypes.GetRolesData["query"]>;
 type RolesPaginatedParams = Pick<RolesQuery, "limit" | "offset" | "name">;
+type Role = archestraApiTypes.GetRolesResponses["200"]["data"][number];
 
 /**
  * Query keys for role-related queries
@@ -28,21 +28,36 @@ export const roleKeys = {
 };
 
 /**
- * Hook to fetch all roles for the organization
+ * Every role in the organization, for the pickers that assign one.
+ *
+ * This walks the pages rather than reading the first one: `/api/roles` serves
+ * the four predefined roles ahead of the custom roles, so a single default-size
+ * page left an organization seeing only its first six custom roles — in every
+ * role picker at once, while the Roles settings page listed them all. That
+ * reads as "the role I just made doesn't exist" rather than as a missing page.
+ *
+ * De-duplicated on `role`, the identifier the pickers use as an option value.
+ * Two options sharing a value make a selection ambiguous, and there are two
+ * ways to get there: a custom role whose generated identifier collides with a
+ * predefined one (naming a role "Admin" yields `admin`), and a walk that races
+ * a role being created, since a new name shifts the ordering under the offsets.
+ * Predefined roles are served first and so win the collision.
+ *
+ * The walk still stops at `useAllMatching`'s ceiling, stated here rather than
+ * inherited quietly, since an unstated ceiling is what this was. It sits far
+ * above any workable number of roles: a picker listing a thousand of them has
+ * problems that fetching the thousand-and-first would not fix.
  */
-export function useRoles(params?: {
-  initialData?: archestraApiTypes.GetRolesResponses["200"]["data"];
-}) {
-  return useQuery({
-    queryKey: roleKeys.lists(),
-    queryFn: async () => {
-      const response = await getRoles({
-        query: { limit: DEFAULT_TABLE_LIMIT, offset: 0 },
-      });
+export function useRoles() {
+  return useAllMatching<Role>({
+    queryKey: [...roleKeys.lists()],
+    max: 1000,
+    fetchPage: async ({ limit, offset }) => {
+      const response = await getRoles({ query: { limit, offset } });
       throwOnApiError(response.error, { toastOnError: false });
       return response.data?.data ?? [];
     },
-    initialData: params?.initialData,
+    select: dedupeByRole,
   });
 }
 
@@ -196,5 +211,18 @@ export function useDeleteRole() {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: roleKeys.lists() });
     },
+  });
+}
+
+// ===
+// Internal helpers
+// ===
+
+function dedupeByRole(roles: Role[]): Role[] {
+  const seen = new Set<string>();
+  return roles.filter((role) => {
+    if (seen.has(role.role)) return false;
+    seen.add(role.role);
+    return true;
   });
 }

@@ -18,15 +18,43 @@ import { ResourceVisibilityScopeSchema } from "./visibility";
  *
  * Personal agents are auto-seeded one per member and every member's copy
  * carries the same name ("My Assistant", "My Gateway"), so a bare name list
- * reads as duplicates. `scope` and `ownerEmail` are carried alongside so the
- * UI can attribute each one to its owner. `ownerEmail` is null when the author
- * has been deleted (the FK nulls out) or for agents with no author.
+ * reads as duplicates. `scope`, `ownerId` and `ownerEmail` are carried
+ * alongside so the UI can attribute each one to its owner.
+ *
+ * Both owner fields are null together when the agent has no author, and for a
+ * PERSONAL agent that means one thing: the author's account was deleted. The
+ * FK is `ON DELETE SET NULL` and users are hard-deleted, so the agent outlives
+ * the person. Every create path stamps an author, and both routes that could
+ * make an existing agent personal refuse to do so without one, so there is no
+ * other way into that state — a consumer may say "deleted", not "unknown".
+ *
+ * Who they were is NOT recoverable, here or anywhere: sixteen tables lose a
+ * user identity the same way. Retaining it belongs in user deletion, not in a
+ * column per table — see the PR discussion.
+ *
+ * A surface that names an owner has to distinguish these cases rather than
+ * fall back to the scope, which is how the Usage tab came to print the word
+ * "Personal" where an owner belongs.
+ *
+ * `ownerId` is what identifies the viewer's own agents: matching on the email
+ * would compare a display string, and it is absent on exactly the rows that
+ * most need telling apart.
  */
 export const McpServerAgentUsageSchema = z.object({
   id: z.string(),
   name: z.string(),
   agentType: AgentTypeSchema,
   scope: ResourceVisibilityScopeSchema,
+  /**
+   * The AGENT's author — `agents.author_id`. Not to be confused with
+   * `SelectMcpServerSchema.ownerEmail` further down this file, which is the
+   * person who installed the SERVER (`mcp_server.owner_id`): the two live in
+   * the same file and mean different people. Named for the pre-existing
+   * `ownerEmail` it sits beside rather than for the column, so the pair stays
+   * consistent; renaming both to `author*` is worth doing, but it reaches
+   * `ToolDelegationTarget` too and belongs in its own change.
+   */
+  ownerId: z.string().nullable(),
   ownerEmail: z.string().nullable(),
 });
 
@@ -124,6 +152,18 @@ export const SelectMcpServerSchema = createSelectSchema(
  */
 export const McpServerListEntrySchema = SelectMcpServerSchema.extend({
   alertMutes: z.array(McpServerAlertMuteSchema),
+  /**
+   * Whether the CALLER may present this install's stored credential to the
+   * upstream — their own connection, or one shared with them. False for
+   * another member's personal connection, which the listing still returns to
+   * installation admins so they can manage it. Surfaces that authenticate as
+   * the install (the Inspector) offer only the connections this is true for.
+   */
+  canUseCredential: z
+    .boolean()
+    .describe(
+      "Whether the caller may present this install's stored credential to the upstream — their own connection, or one shared with them. False for another member's personal connection, which the listing still returns to installation admins so they can manage it.",
+    ),
 });
 
 export const InsertMcpServerSchema = createInsertSchema(schema.mcpServersTable)

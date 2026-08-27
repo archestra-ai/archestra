@@ -20357,6 +20357,78 @@
           "description"
         ]
       },
+      "InteractionVirtualKeyInput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "personal",
+              "team",
+              "org"
+            ]
+          },
+          "keyType": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "passthrough"
+            ]
+          },
+          "tokenStart": {
+            "type": "string"
+          },
+          "ownerUserId": {
+            "nullable": true,
+            "type": "string"
+          },
+          "ownerUserName": {
+            "nullable": true,
+            "type": "string"
+          },
+          "teams": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "name"
+              ]
+            }
+          },
+          "createdByUserName": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "scope",
+          "keyType",
+          "tokenStart",
+          "ownerUserId",
+          "ownerUserName",
+          "teams",
+          "createdByUserName"
+        ]
+      },
       "TextSearchLanguage": {
         "type": "string",
         "enum": [
@@ -41591,6 +41663,80 @@
           "description"
         ],
         "additionalProperties": false
+      },
+      "InteractionVirtualKey": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "personal",
+              "team",
+              "org"
+            ]
+          },
+          "keyType": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "passthrough"
+            ]
+          },
+          "tokenStart": {
+            "type": "string"
+          },
+          "ownerUserId": {
+            "nullable": true,
+            "type": "string"
+          },
+          "ownerUserName": {
+            "nullable": true,
+            "type": "string"
+          },
+          "teams": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "name"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "createdByUserName": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "scope",
+          "keyType",
+          "tokenStart",
+          "ownerUserId",
+          "ownerUserName",
+          "teams",
+          "createdByUserName"
+        ],
+        "additionalProperties": false
       }
     }
   },
@@ -50631,6 +50777,26 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "excludedConnectors": {
+                          "default": [],
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name"
+                            ],
+                            "additionalProperties": false
+                          }
                         }
                       },
                       "required": [
@@ -50659,7 +50825,8 @@
                         "suggestedPrompts",
                         "hooks",
                         "knowledgeBases",
-                        "connectors"
+                        "connectors",
+                        "excludedConnectors"
                       ],
                       "additionalProperties": false
                     },
@@ -54361,6 +54528,592 @@
           "kind": "none",
           "note": "None (no additional RBAC permission required)",
           "permissions": []
+        }
+      }
+    },
+    "/api/agents/{id}/knowledge-source-exclusions": {
+      "get": {
+        "operationId": "getAgentKnowledgeSourceExclusions",
+        "tags": [
+          "Agents"
+        ],
+        "description": "Get the agent's Auto-mode knowledge-source exclusions: knowledge connectors removed from the surface its knowledge queries span while 'access all tools' is on\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "excludedConnectorIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "description": "Knowledge connector IDs excluded from the agent's Auto knowledge surface"
+                    }
+                  },
+                  "required": [
+                    "excludedConnectorIds"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "knowledgeSource:read"
+          ]
+        }
+      },
+      "put": {
+        "operationId": "updateAgentKnowledgeSourceExclusions",
+        "tags": [
+          "Agents"
+        ],
+        "description": "Replace the agent's Auto-mode knowledge-source exclusions (full replace of the excluded knowledge-connector set)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "excludedConnectorIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "description": "Knowledge connector IDs excluded from the agent's Auto knowledge surface"
+                  }
+                },
+                "required": [
+                  "excludedConnectorIds"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "excludedConnectorIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "description": "Knowledge connector IDs excluded from the agent's Auto knowledge surface"
+                    }
+                  },
+                  "required": [
+                    "excludedConnectorIds"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "knowledgeSource:read"
+          ]
         }
       }
     },
@@ -79623,6 +80376,7 @@
                 "serviceAccount.updated",
                 "serviceAccount.deleted",
                 "serviceAccount.bulk_deleted",
+                "serviceAccount.bulk_updated",
                 "skill.created",
                 "skill.updated",
                 "skill.bulk_updated",
@@ -79964,6 +80718,7 @@
                                   "serviceAccount.updated",
                                   "serviceAccount.deleted",
                                   "serviceAccount.bulk_deleted",
+                                  "serviceAccount.bulk_updated",
                                   "skill.created",
                                   "skill.updated",
                                   "skill.bulk_updated",
@@ -80608,6 +81363,7 @@
                             "serviceAccount.updated",
                             "serviceAccount.deleted",
                             "serviceAccount.bulk_deleted",
+                            "serviceAccount.bulk_updated",
                             "skill.created",
                             "skill.updated",
                             "skill.bulk_updated",
@@ -145973,6 +146729,22 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -147033,6 +147805,22 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -147802,6 +148590,22 @@
                               "connectorName": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
                               }
                             },
                             "required": [
@@ -148561,6 +149365,22 @@
                               "connectorName": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
                               }
                             },
                             "required": [
@@ -149320,6 +150140,22 @@
                               "connectorName": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
                               }
                             },
                             "required": [
@@ -150079,6 +150915,22 @@
                               "connectorName": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
                               }
                             },
                             "required": [
@@ -150707,6 +151559,22 @@
                               "connectorName": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
                               },
                               "requestType": {
                                 "type": "string",
@@ -151346,6 +152214,22 @@
                               "connectorName": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
                               },
                               "requestType": {
                                 "type": "string",
@@ -154039,6 +154923,22 @@
                               "connectorName": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
                               },
                               "requestType": {
                                 "type": "string",
@@ -157373,6 +158273,22 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -158011,6 +158927,22 @@
                               "connectorName": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
                               },
                               "requestType": {
                                 "type": "string",
@@ -158651,6 +159583,22 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -159289,6 +160237,22 @@
                               "connectorName": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
                               },
                               "requestType": {
                                 "type": "string",
@@ -159929,6 +160893,22 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -160567,6 +161547,22 @@
                               "connectorName": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
                               },
                               "requestType": {
                                 "type": "string",
@@ -161207,6 +162203,22 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -161845,6 +162857,22 @@
                               "connectorName": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
                               }
                             },
                             "required": [
@@ -162473,6 +163501,22 @@
                               "connectorName": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
                               }
                             },
                             "required": [
@@ -163101,6 +164145,22 @@
                               "connectorName": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
                               }
                             },
                             "required": [
@@ -163729,6 +164789,22 @@
                               "connectorName": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
                               },
                               "requestType": {
                                 "type": "string",
@@ -164369,6 +165445,22 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -165007,6 +166099,22 @@
                               "connectorName": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
                               },
                               "requestType": {
                                 "type": "string",
@@ -168047,6 +169155,22 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -171080,6 +172204,22 @@
                               "connectorName": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
                               },
                               "requestType": {
                                 "type": "string",
@@ -174120,6 +175260,22 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -174758,6 +175914,22 @@
                               "connectorName": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
                               },
                               "requestType": {
                                 "type": "string",
@@ -175633,6 +176805,22 @@
                               "connectorName": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
                               },
                               "requestType": {
                                 "type": "string",
@@ -176694,6 +177882,22 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -177754,6 +178958,22 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -178805,6 +180025,22 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "virtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
+                              "passthroughVirtualKey": {
+                                "nullable": true,
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/InteractionVirtualKey"
+                                  }
+                                ]
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -179511,6 +180747,12 @@
                               }
                             ]
                           },
+                          "virtualKeys": {
+                            "type": "array",
+                            "items": {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          },
                           "lastUserMessagePreview": {
                             "nullable": true,
                             "description": "Short preview (max 200 chars) of the session's last user message. Raw request bodies are not returned by this listing.",
@@ -179560,6 +180802,7 @@
                           "userNames",
                           "userIds",
                           "unattributedReason",
+                          "virtualKeys",
                           "lastUserMessagePreview",
                           "lastInteractionType",
                           "conversationTitle",
@@ -181012,6 +182255,22 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -182072,6 +183331,22 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -182841,6 +184116,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         }
                       },
                       "required": [
@@ -183600,6 +184891,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         }
                       },
                       "required": [
@@ -184359,6 +185666,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         }
                       },
                       "required": [
@@ -185118,6 +186441,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         }
                       },
                       "required": [
@@ -185746,6 +187085,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         },
                         "requestType": {
                           "type": "string",
@@ -186385,6 +187740,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         },
                         "requestType": {
                           "type": "string",
@@ -189078,6 +190449,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         },
                         "requestType": {
                           "type": "string",
@@ -192412,6 +193799,22 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -193050,6 +194453,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         },
                         "requestType": {
                           "type": "string",
@@ -193690,6 +195109,22 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -194328,6 +195763,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         },
                         "requestType": {
                           "type": "string",
@@ -194968,6 +196419,22 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -195606,6 +197073,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         },
                         "requestType": {
                           "type": "string",
@@ -196246,6 +197729,22 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -196884,6 +198383,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         }
                       },
                       "required": [
@@ -197512,6 +199027,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         }
                       },
                       "required": [
@@ -198140,6 +199671,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         }
                       },
                       "required": [
@@ -198768,6 +200315,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         },
                         "requestType": {
                           "type": "string",
@@ -199408,6 +200971,22 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -200046,6 +201625,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         },
                         "requestType": {
                           "type": "string",
@@ -203086,6 +204681,22 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -206119,6 +207730,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         },
                         "requestType": {
                           "type": "string",
@@ -209159,6 +210786,22 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -209797,6 +211440,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         },
                         "requestType": {
                           "type": "string",
@@ -210672,6 +212331,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         },
                         "requestType": {
                           "type": "string",
@@ -211733,6 +213408,22 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -212793,6 +214484,22 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -213843,6 +215550,22 @@
                         "connectorName": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "virtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
+                        },
+                        "passthroughVirtualKey": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/InteractionVirtualKey"
+                            }
+                          ]
                         },
                         "requestType": {
                           "type": "string",
@@ -219982,6 +221705,281 @@
           "kind": "static",
           "permissions": [
             "mcpRegistry:delete"
+          ]
+        }
+      }
+    },
+    "/api/internal_mcp_catalog/tools": {
+      "get": {
+        "operationId": "getInternalMcpCatalogToolsBatch",
+        "tags": [
+          "MCP Catalog"
+        ],
+        "description": "Get id/name/catalog for every listable tool across all catalog items the caller can see, in one request. Backs the tool pickers, which previously issued one request per catalog item.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:read`: Browse the MCP server registry",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "catalogId": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name",
+                      "catalogId"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "mcpRegistry:read"
           ]
         }
       }
@@ -265631,6 +267629,10 @@
                           "org"
                         ]
                       },
+                      "ownerId": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "ownerEmail": {
                         "nullable": true,
                         "type": "string"
@@ -265641,6 +267643,7 @@
                       "name",
                       "agentType",
                       "scope",
+                      "ownerId",
                       "ownerEmail"
                     ],
                     "additionalProperties": false
@@ -266191,6 +268194,10 @@
                                 "org"
                               ]
                             },
+                            "ownerId": {
+                              "nullable": true,
+                              "type": "string"
+                            },
                             "ownerEmail": {
                               "nullable": true,
                               "type": "string"
@@ -266201,6 +268208,7 @@
                             "name",
                             "agentType",
                             "scope",
+                            "ownerId",
                             "ownerEmail"
                           ],
                           "additionalProperties": false
@@ -266256,6 +268264,10 @@
                           ],
                           "additionalProperties": false
                         }
+                      },
+                      "canUseCredential": {
+                        "type": "boolean",
+                        "description": "Whether the caller may present this install's stored credential to the upstream — their own connection, or one shared with them. False for another member's personal connection, which the listing still returns to installation admins so they can manage it."
                       }
                     },
                     "required": [
@@ -266282,7 +268294,8 @@
                       "createdAt",
                       "updatedAt",
                       "deletedAt",
-                      "alertMutes"
+                      "alertMutes",
+                      "canUseCredential"
                     ],
                     "additionalProperties": false
                   }
@@ -266875,6 +268888,10 @@
                               "org"
                             ]
                           },
+                          "ownerId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "ownerEmail": {
                             "nullable": true,
                             "type": "string"
@@ -266885,6 +268902,7 @@
                           "name",
                           "agentType",
                           "scope",
+                          "ownerId",
                           "ownerEmail"
                         ],
                         "additionalProperties": false
@@ -267434,6 +269452,10 @@
                               "org"
                             ]
                           },
+                          "ownerId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "ownerEmail": {
                             "nullable": true,
                             "type": "string"
@@ -267444,6 +269466,7 @@
                           "name",
                           "agentType",
                           "scope",
+                          "ownerId",
                           "ownerEmail"
                         ],
                         "additionalProperties": false
@@ -268302,6 +270325,10 @@
                               "org"
                             ]
                           },
+                          "ownerId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "ownerEmail": {
                             "nullable": true,
                             "type": "string"
@@ -268312,6 +270339,7 @@
                           "name",
                           "agentType",
                           "scope",
+                          "ownerId",
                           "ownerEmail"
                         ],
                         "additionalProperties": false
@@ -269193,6 +271221,10 @@
                               "org"
                             ]
                           },
+                          "ownerId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "ownerEmail": {
                             "nullable": true,
                             "type": "string"
@@ -269203,6 +271235,7 @@
                           "name",
                           "agentType",
                           "scope",
+                          "ownerId",
                           "ownerEmail"
                         ],
                         "additionalProperties": false
@@ -271340,6 +273373,10 @@
                               "org"
                             ]
                           },
+                          "ownerId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "ownerEmail": {
                             "nullable": true,
                             "type": "string"
@@ -271350,6 +273387,7 @@
                           "name",
                           "agentType",
                           "scope",
+                          "ownerId",
                           "ownerEmail"
                         ],
                         "additionalProperties": false
@@ -319076,6 +321114,763 @@
         }
       }
     },
+    "/api/skills/plugins": {
+      "get": {
+        "operationId": "getPluginSkills",
+        "tags": [
+          "Skills"
+        ],
+        "description": "List the portable Skills embedded in the plugins visible to the caller.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:read`: View plugins and their file metadata\n`skill:read`: View and use agent skills within your scope (org, your teams, your own)",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "source": {
+                        "type": "string",
+                        "enum": [
+                          "plugin"
+                        ]
+                      },
+                      "pluginId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "pluginName": {
+                        "type": "string"
+                      },
+                      "pluginSlug": {
+                        "type": "string"
+                      },
+                      "pluginEnabled": {
+                        "type": "boolean"
+                      },
+                      "scope": {
+                        "type": "string",
+                        "enum": [
+                          "personal",
+                          "team",
+                          "org"
+                        ]
+                      },
+                      "clientType": {
+                        "type": "string",
+                        "enum": [
+                          "claude-code",
+                          "copilot-cli",
+                          "codex",
+                          "cursor"
+                        ]
+                      },
+                      "supportedPlatforms": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "posix",
+                            "windows"
+                          ]
+                        }
+                      },
+                      "skillPath": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "description": {
+                        "type": "string"
+                      },
+                      "compatibility": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "fileCount": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "source",
+                      "pluginId",
+                      "pluginName",
+                      "pluginSlug",
+                      "pluginEnabled",
+                      "scope",
+                      "clientType",
+                      "supportedPlatforms",
+                      "skillPath",
+                      "name",
+                      "description",
+                      "compatibility",
+                      "fileCount"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "plugin:read",
+            "skill:read"
+          ]
+        }
+      }
+    },
+    "/api/skills/plugins/{pluginId}": {
+      "get": {
+        "operationId": "getPluginSkill",
+        "tags": [
+          "Skills"
+        ],
+        "description": "Read one Skill embedded in a plugin, with its bundled resource files.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:read`: View plugins and their file metadata\n`skill:read`: View and use agent skills within your scope (org, your teams, your own)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "in": "query",
+            "name": "skillPath",
+            "required": false,
+            "description": "Parent directory of the SKILL.md inside the plugin; omit for a root-level skill."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "pluginId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "plugin"
+                      ]
+                    },
+                    "pluginId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "pluginName": {
+                      "type": "string"
+                    },
+                    "pluginSlug": {
+                      "type": "string"
+                    },
+                    "pluginEnabled": {
+                      "type": "boolean"
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "team",
+                        "org"
+                      ]
+                    },
+                    "clientType": {
+                      "type": "string",
+                      "enum": [
+                        "claude-code",
+                        "copilot-cli",
+                        "codex",
+                        "cursor"
+                      ]
+                    },
+                    "supportedPlatforms": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "posix",
+                          "windows"
+                        ]
+                      }
+                    },
+                    "skillPath": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "compatibility": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "fileCount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "manifest": {
+                      "type": "string"
+                    },
+                    "content": {
+                      "type": "string"
+                    },
+                    "allowedTools": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "resourcesRestricted": {
+                      "type": "boolean"
+                    },
+                    "files": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "content": {
+                            "type": "string"
+                          },
+                          "encoding": {
+                            "type": "string",
+                            "enum": [
+                              "utf8",
+                              "base64"
+                            ]
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "script",
+                              "reference",
+                              "asset"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "content",
+                          "encoding",
+                          "kind"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "source",
+                    "pluginId",
+                    "pluginName",
+                    "pluginSlug",
+                    "pluginEnabled",
+                    "scope",
+                    "clientType",
+                    "supportedPlatforms",
+                    "skillPath",
+                    "name",
+                    "description",
+                    "compatibility",
+                    "fileCount",
+                    "manifest",
+                    "content",
+                    "allowedTools",
+                    "resourcesRestricted",
+                    "files"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "plugin:read",
+            "skill:read"
+          ]
+        }
+      }
+    },
     "/api/projects": {
       "post": {
         "operationId": "createProject",
@@ -330563,6 +333358,21 @@
                         "type": "integer",
                         "minimum": 0,
                         "maximum": 9007199254740991
+                      },
+                      "activeTokenCount": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "lastUsedAt": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "soonestExpiryAt": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "date-time"
                       }
                     },
                     "required": [
@@ -330573,7 +333383,10 @@
                       "disabled",
                       "createdAt",
                       "updatedAt",
-                      "tokenCount"
+                      "tokenCount",
+                      "activeTokenCount",
+                      "lastUsedAt",
+                      "soonestExpiryAt"
                     ],
                     "additionalProperties": false
                   }
@@ -330887,6 +333700,21 @@
                       "minimum": 0,
                       "maximum": 9007199254740991
                     },
+                    "activeTokenCount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "lastUsedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "soonestExpiryAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "tokens": {
                       "type": "array",
                       "items": {
@@ -330943,6 +333771,9 @@
                     "createdAt",
                     "updatedAt",
                     "tokenCount",
+                    "activeTokenCount",
+                    "lastUsedAt",
+                    "soonestExpiryAt",
                     "tokens"
                   ],
                   "additionalProperties": false
@@ -331244,6 +334075,21 @@
                       "minimum": 0,
                       "maximum": 9007199254740991
                     },
+                    "activeTokenCount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "lastUsedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "soonestExpiryAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "tokens": {
                       "type": "array",
                       "items": {
@@ -331300,6 +334146,9 @@
                     "createdAt",
                     "updatedAt",
                     "tokenCount",
+                    "activeTokenCount",
+                    "lastUsedAt",
+                    "soonestExpiryAt",
                     "tokens"
                   ],
                   "additionalProperties": false
@@ -331625,6 +334474,21 @@
                       "minimum": 0,
                       "maximum": 9007199254740991
                     },
+                    "activeTokenCount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "lastUsedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "soonestExpiryAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "tokens": {
                       "type": "array",
                       "items": {
@@ -331681,6 +334545,9 @@
                     "createdAt",
                     "updatedAt",
                     "tokenCount",
+                    "activeTokenCount",
+                    "lastUsedAt",
+                    "soonestExpiryAt",
                     "tokens"
                   ],
                   "additionalProperties": false
@@ -332200,6 +335067,341 @@
       }
     },
     "/api/service-accounts/bulk": {
+      "patch": {
+        "operationId": "bulkSetServiceAccountsDisabled",
+        "tags": [
+          "Service Accounts"
+        ],
+        "description": "Enable or disable several service accounts in one request. A disabled account authenticates with none of its keys, so this is the reversible way to stop an automation without destroying the keys it would need to start again. Ids outside the caller's organization are reported in `failed` as not found and leave the rest of the batch applied. An account already in the requested state is reported as succeeded without being rewritten.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`serviceAccount:update`: Modify service accounts",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ids": {
+                    "minItems": 1,
+                    "maxItems": 500,
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Ids to act on. Duplicates are collapsed."
+                  },
+                  "disabled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "ids",
+                  "disabled"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "affected": {
+                      "type": "number"
+                    },
+                    "succeeded": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "failed": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "error": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "error"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "succeeded",
+                    "failed"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "serviceAccount:update"
+          ]
+        }
+      },
       "delete": {
         "operationId": "bulkDeleteServiceAccounts",
         "tags": [

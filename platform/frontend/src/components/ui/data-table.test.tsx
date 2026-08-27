@@ -83,9 +83,10 @@ describe("DataTable page index clamping", () => {
     // rather than replacing a loader that sat at a different height.
     expect(container.querySelector("table")).not.toBeNull();
     expect(screen.getByRole("columnheader", { name: "Name" })).toBeVisible();
-    // Nothing claims the result is empty while a fetch is still out.
+    // Nothing claims the result is empty while a fetch is still out — but the
+    // table does say it is working, rather than sitting there blank.
     expect(screen.queryByText("No results")).toBeNull();
-    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.getByRole("progressbar")).toBeInTheDocument();
   });
 
   it("reports an empty result only once the fetch has settled", () => {
@@ -121,11 +122,25 @@ describe("DataTable page index clamping", () => {
     expect(onClearFilters).toHaveBeenCalledTimes(1);
   });
 
-  it("does not disturb rows already on screen while refetching", () => {
-    render(<DataTable columns={columns} data={makeRows(2)} isLoading />);
+  /**
+   * A search refetch keeps the previous page on screen, so the table cannot
+   * announce the request by swapping the rows for a spinner — that would
+   * collapse its height on every keystroke. It marks itself busy around them
+   * instead, which is the whole reason a search used to look like it had done
+   * nothing.
+   */
+  it("announces a refetch without disturbing the rows already on screen", () => {
+    const { rerender } = render(
+      <DataTable columns={columns} data={makeRows(2)} isLoading />,
+    );
 
     expect(screen.getByText("row-0")).toBeVisible();
-    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.getByRole("progressbar")).toBeInTheDocument();
+
+    rerender(<DataTable columns={columns} data={makeRows(2)} />);
+
+    expect(screen.getByText("row-0")).toBeVisible();
+    expect(screen.queryByRole("progressbar")).toBeNull();
   });
 });
 

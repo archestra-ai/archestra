@@ -96,6 +96,7 @@ function makeSessionSummary(
     userNames: [],
     userIds: [],
     unattributedReason: null,
+    virtualKeys: [],
     lastUserMessagePreview: null,
     lastInteractionType: null,
     conversationTitle: null,
@@ -217,5 +218,100 @@ describe("LlmProxyLogsPage proxy filter", () => {
     expect(screen.getByText("+1 more")).toBeVisible();
     expect(screen.queryByRole("columnheader", { name: "Source" })).toBeNull();
     expect(screen.queryByRole("columnheader", { name: "Details" })).toBeNull();
+  });
+
+  // Naming the key is the point: a shared-key session used to render only
+  // "No user — shared key", which says a virtual key was used but not which.
+  it("names the virtual key a session ran on", () => {
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: {
+        data: [
+          makeSessionSummary({
+            profileId: orgProxy.id,
+            profileName: orgProxy.name,
+            userNames: [],
+            unattributedReason: "shared_virtual_key",
+            virtualKeys: [
+              {
+                id: "vk-1",
+                name: "ci-runners",
+                scope: "org",
+                keyType: "standard",
+                tokenStart: "archestra_ab",
+                ownerUserId: null,
+                ownerUserName: null,
+                teams: [],
+                createdByUserName: "Demo Admin",
+              },
+            ],
+          }),
+        ],
+        pagination: { total: 1 },
+      },
+      isFetching: false,
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+
+    render(<LlmProxyLogsPage />);
+
+    expect(screen.getByText("ci-runners")).toBeVisible();
+    expect(screen.getByText("No user — shared key")).toBeVisible();
+  });
+
+  it("names the key and its owner for an attributed session", () => {
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: {
+        data: [
+          makeSessionSummary({
+            profileId: orgProxy.id,
+            profileName: orgProxy.name,
+            userNames: ["Demo Admin"],
+            unattributedReason: null,
+            virtualKeys: [
+              {
+                id: "vk-2",
+                name: "demo-admin-laptop",
+                scope: "personal",
+                keyType: "standard",
+                tokenStart: "archestra_cd",
+                ownerUserId: "u-1",
+                ownerUserName: "Demo Admin",
+                teams: [],
+                createdByUserName: "Demo Admin",
+              },
+            ],
+          }),
+        ],
+        pagination: { total: 1 },
+      },
+      isFetching: false,
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+
+    render(<LlmProxyLogsPage />);
+
+    expect(screen.getByText("demo-admin-laptop")).toBeVisible();
+    expect(screen.getByText("Demo Admin")).toBeVisible();
+  });
+
+  it("shows no key badge for a session that used none", () => {
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: {
+        data: [
+          makeSessionSummary({
+            profileId: orgProxy.id,
+            profileName: orgProxy.name,
+            userNames: [],
+            unattributedReason: "provider_key",
+            virtualKeys: [],
+          }),
+        ],
+        pagination: { total: 1 },
+      },
+      isFetching: false,
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+
+    render(<LlmProxyLogsPage />);
+
+    expect(screen.getByText("No user — provider key")).toBeVisible();
+    expect(screen.queryByText(/archestra_/)).toBeNull();
   });
 });

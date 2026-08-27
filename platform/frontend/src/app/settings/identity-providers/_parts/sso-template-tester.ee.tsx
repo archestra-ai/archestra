@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useIdentityProviderLatestIdTokenClaims } from "@/lib/auth/identity-provider.query.ee";
+import { formatRoleName } from "@/lib/utils/role";
 import type {
   SsoRoleMappingRule,
   SsoTemplateTestMode,
@@ -267,14 +268,6 @@ function getRoleMappingDescription(params: {
   }
 
   return `${selectedRuleText} Based on current rules and your latest token, you would be assigned ${formatRoleName(params.outcome.role)}.`;
-}
-
-function formatRoleName(role: string) {
-  return role
-    .split(/[-_\s]+/)
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(" ");
 }
 
 async function loadHandlebars(): Promise<HandlebarsRuntime> {

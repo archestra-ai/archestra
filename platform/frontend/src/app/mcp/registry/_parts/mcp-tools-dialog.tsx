@@ -133,7 +133,7 @@ export function McpToolsDialog({
       description="View and manage tools provided by this MCP server"
       size="large"
       className="max-h-[80vh]"
-      bodyClassName="space-y-4"
+      bodyClassName="space-y-3"
     >
       {!isLoading && tools.length > 0 && (
         <div className="relative">

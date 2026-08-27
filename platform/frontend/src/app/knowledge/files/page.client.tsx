@@ -505,6 +505,7 @@ export default function KnowledgeFilesPage() {
     >
       <div className="space-y-6">
         <FilterBar
+          className="!mb-3"
           onClearFilters={
             search
               ? () => {
@@ -534,6 +535,7 @@ export default function KnowledgeFilesPage() {
           )}
 
           <SearchInput
+            isLoading={isLoading}
             value={search}
             onSearchChange={(value) => {
               setSearch(value);

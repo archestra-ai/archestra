@@ -162,6 +162,47 @@ describe("channels table — per-channel instructions", () => {
     expect(configured.textContent).toContain("Edit");
   });
 
+  it("asks before throwing away a dirty edit when Cancel is clicked", async () => {
+    // Cancel used to close the dialog directly, so it discarded an unsaved
+    // edit with no confirmation while Esc, the backdrop and the X all asked
+    // first — the one exit that loses work being the one that never warned.
+    const user = userEvent.setup();
+    renderTable();
+
+    await screen.findByRole("row", { name: /incident-response/ });
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+
+    const textarea = await screen.findByLabelText("Channel instructions");
+    await user.clear(textarea);
+    await user.type(textarea, "a policy I have not saved yet");
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    // The editor is still there, behind a confirmation, rather than gone.
+    expect(
+      await screen.findByLabelText("Channel instructions"),
+    ).toBeInTheDocument();
+  });
+
+  it("closes immediately on Cancel when nothing was changed", async () => {
+    // The guard must not turn every Cancel into a prompt: with a clean form
+    // there is nothing to lose, and a confirmation there is just friction.
+    const user = userEvent.setup();
+    renderTable();
+
+    await screen.findByRole("row", { name: /incident-response/ });
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    await screen.findByLabelText("Channel instructions");
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() =>
+      expect(
+        screen.queryByLabelText("Channel instructions"),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
   it("saves an edit as the channel's instructions", async () => {
     const user = userEvent.setup();
     renderTable();

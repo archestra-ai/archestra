@@ -2,10 +2,12 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const { mockUseFeature } = vi.hoisted(() => ({ mockUseFeature: vi.fn() }));
+
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query", () => ({
-  useFeature: () => false,
+  useFeature: mockUseFeature,
 }));
 vi.mock("@/lib/hooks/use-app-name");
 vi.mock("@/lib/organization.query");
@@ -17,6 +19,7 @@ vi.mock("@/lib/skills/skill.query", () => ({
   useSkillsPaginated: vi.fn(),
   useSkillSourceRepos: vi.fn(),
   useExternalMcpSkills: () => ({ data: [], isPending: false }),
+  usePluginSkills: vi.fn(),
   useRestoreSkill: vi.fn(),
   usePermanentlyDeleteSkill: vi.fn(),
 }));
@@ -46,6 +49,7 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { useIsGlobalAdmin } from "@/lib/organization.query";
 import {
   usePermanentlyDeleteSkill,
+  usePluginSkills,
   useRestoreSkill,
   useSkillSourceRepos,
   useSkillsPaginated,
@@ -124,6 +128,7 @@ const openRowMenu = (skillName: string) =>
 describe("SkillsPage rows", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseFeature.mockReturnValue(false);
     vi.mocked(useRouter).mockReturnValue({
       push: vi.fn(),
       replace: vi.fn(),
@@ -163,6 +168,11 @@ describe("SkillsPage rows", () => {
       isPending: false,
       // biome-ignore lint/suspicious/noExplicitAny: partial mutation is enough
     } as any);
+    vi.mocked(usePluginSkills).mockReturnValue({
+      data: [],
+      isFetching: false,
+      // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+    } as any);
     mockSkills([MINE]);
   });
 
@@ -175,6 +185,7 @@ describe("SkillsPage rows", () => {
     render(<SkillsPage />);
 
     expect(screen.queryByText("Standalone skills")).not.toBeInTheDocument();
+    expect(screen.queryByText("Skills from plugins")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Chat pdf-tools")).toBeInTheDocument();
     expect(screen.getByLabelText("Edit pdf-tools")).toBeInTheDocument();
     // Delete is one click away from Edit no longer.
@@ -189,6 +200,36 @@ describe("SkillsPage rows", () => {
     expect(
       screen.getByRole("menuitem", { name: "Delete" }),
     ).toBeInTheDocument();
+  });
+
+  it("shows Skills from plugins only when the plugins feature is enabled", () => {
+    mockUseFeature.mockImplementation((name: string) => name === "plugins");
+    vi.mocked(usePluginSkills).mockReturnValue({
+      data: [
+        {
+          source: "plugin",
+          pluginId: "11111111-1111-4111-8111-111111111111",
+          pluginName: "STE bundle",
+          pluginSlug: "ste-bundle-11111111",
+          pluginEnabled: true,
+          scope: "org",
+          clientType: "claude-code",
+          supportedPlatforms: ["posix"],
+          skillPath: "skills/ste-writing",
+          name: "ste-writing",
+          description: "Write plainly.",
+          compatibility: null,
+          fileCount: 2,
+        },
+      ],
+      isFetching: false,
+      // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+    } as any);
+
+    render(<SkillsPage />);
+
+    expect(screen.getByText("Skills from plugins")).toBeInTheDocument();
+    expect(screen.getByText("ste-writing")).toBeInTheDocument();
   });
 
   it("refuses Edit and Delete on somebody else's skill, with the reason", async () => {

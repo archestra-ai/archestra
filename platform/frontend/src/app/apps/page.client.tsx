@@ -184,6 +184,7 @@ export default function AppsPage() {
       <TableCardView storageKey="archestra-apps-view">
         <FilterBar className="mb-6" actions={<TableCardViewToggle />}>
           <SearchInput
+            isLoading={isFetching}
             paramName="search"
             placeholder="Search apps"
             className={filterSearchClass}
@@ -364,7 +365,7 @@ export function AppSection({
   if (apps.length === 0) return null;
 
   return (
-    <section className="space-y-[11px]">
+    <section className="space-y-3">
       <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
         {title}
       </h2>

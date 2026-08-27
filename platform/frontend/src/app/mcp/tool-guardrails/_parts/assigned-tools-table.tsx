@@ -632,8 +632,9 @@ export function AssignedToolsTable({
 
   return (
     <div className="space-y-6">
-      <FilterBar className="mb-4">
+      <FilterBar className="!mb-3">
         <SearchInput
+          isLoading={isLoading}
           objectNamePlural="tools"
           searchFields={["name"]}
           paramName="search"

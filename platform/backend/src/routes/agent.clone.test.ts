@@ -1147,4 +1147,41 @@ describe("clone agent route", () => {
       excludedToolIds: [excludedTool.id],
     });
   });
+
+  test("copies Auto-mode knowledge-source exclusions to the clone", async ({
+    makeInternalAgent,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const knowledgeBase = await makeKnowledgeBase(organizationId);
+    const connector = await makeKnowledgeBaseConnector(
+      knowledgeBase.id,
+      organizationId,
+    );
+    const sourceAgent = await makeInternalAgent({
+      organizationId,
+      name: "Excluding Agent",
+      accessAllTools: true,
+      knowledgeBaseIds: [knowledgeBase.id],
+    });
+    const { agentKnowledgeSourceExclusionsService } = await import(
+      "@/services/agent-knowledge-source-exclusions"
+    );
+    await agentKnowledgeSourceExclusionsService.replaceExclusions({
+      agentId: sourceAgent.id,
+      organizationId,
+      excludedConnectorIds: [connector.id],
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${sourceAgent.id}/clone`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const cloned = response.json() as Agent;
+    expect(
+      await agentKnowledgeSourceExclusionsService.getExclusions(cloned.id),
+    ).toEqual({ excludedConnectorIds: [connector.id] });
+  });
 });

@@ -253,6 +253,160 @@ describe("mcp server inspect route", () => {
     });
   });
 
+  // Regression: the registry deliberately shows an installation admin every
+  // connection in the organization, other members' personal ones included, so
+  // they can manage them. The Inspector, though, calls the upstream signed with
+  // the selected connection's own credential — picking a colleague's there
+  // authenticated as that colleague.
+  describe("credential ownership", () => {
+    test("refuses to inspect another member's personal connection", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeUser,
+    }) => {
+      const colleague = await makeUser({ email: "colleague@example.com" });
+      const catalog = await makeInternalMcpCatalog({
+        organizationId,
+        serverType: "remote",
+      });
+      const mcpServer = await makeMcpServer({
+        ownerId: colleague.id,
+        catalogId: catalog.id,
+        scope: "personal",
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/mcp_server/${mcpServer.id}/inspect`,
+        payload: { method: "tools/list" },
+      });
+
+      // The caller holds mcpServerInstallation:admin (hasPermissionMock
+      // resolves true) and can still see the install — admin is deliberately
+      // not a way to borrow the credential.
+      expect(response.statusCode).toBe(403);
+      expect(response.json().error.message).toContain("another user");
+      expect(inspectServerMock).not.toHaveBeenCalled();
+    });
+
+    test("refuses to inspect a team connection of a team the caller is not in", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTeam,
+      makeUser,
+    }) => {
+      const colleague = await makeUser({ email: "colleague@example.com" });
+      const otherTeam = await makeTeam(organizationId, colleague.id, {
+        name: "Not Mine",
+      });
+      const catalog = await makeInternalMcpCatalog({
+        organizationId,
+        serverType: "remote",
+      });
+      const mcpServer = await makeMcpServer({
+        ownerId: colleague.id,
+        catalogId: catalog.id,
+        scope: "team",
+        teamId: otherTeam.id,
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/mcp_server/${mcpServer.id}/inspect`,
+        payload: { method: "tools/list" },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(inspectServerMock).not.toHaveBeenCalled();
+    });
+
+    test("inspects the caller's own connection", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        organizationId,
+        serverType: "remote",
+      });
+      const mcpServer = await makeMcpServer({
+        ownerId: user.id,
+        catalogId: catalog.id,
+        scope: "personal",
+      });
+      inspectServerMock.mockResolvedValueOnce({ tools: [] });
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/mcp_server/${mcpServer.id}/inspect`,
+        payload: { method: "tools/list" },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(inspectServerMock).toHaveBeenCalledTimes(1);
+    });
+
+    test("inspects a connection shared through a team the caller belongs to", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTeam,
+      makeTeamMember,
+      makeUser,
+    }) => {
+      const colleague = await makeUser({ email: "colleague@example.com" });
+      const team = await makeTeam(organizationId, colleague.id, {
+        name: "Shared",
+      });
+      await makeTeamMember(team.id, user.id);
+      const catalog = await makeInternalMcpCatalog({
+        organizationId,
+        serverType: "remote",
+      });
+      const mcpServer = await makeMcpServer({
+        ownerId: colleague.id,
+        catalogId: catalog.id,
+        scope: "team",
+        teamId: team.id,
+      });
+      inspectServerMock.mockResolvedValueOnce({ tools: [] });
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/mcp_server/${mcpServer.id}/inspect`,
+        payload: { method: "tools/list" },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(inspectServerMock).toHaveBeenCalledTimes(1);
+    });
+
+    test("inspects an org-scoped connection anyone may use", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeUser,
+    }) => {
+      const colleague = await makeUser({ email: "colleague@example.com" });
+      const catalog = await makeInternalMcpCatalog({
+        organizationId,
+        serverType: "remote",
+      });
+      const mcpServer = await makeMcpServer({
+        ownerId: colleague.id,
+        catalogId: catalog.id,
+        scope: "org",
+      });
+      inspectServerMock.mockResolvedValueOnce({ tools: [] });
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/mcp_server/${mcpServer.id}/inspect`,
+        payload: { method: "tools/list" },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(inspectServerMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
   test("filters team-installed connections by selected assignment team", async ({
     makeInternalMcpCatalog,
     makeMcpServer,
@@ -4260,16 +4414,100 @@ describe("mcp server core route coverage", () => {
       const servers = response.json();
       const returned = servers.find((s: { id: string }) => s.id === server.id);
       // The owner rides along so the UI can tell same-named personal agents
-      // ("My Assistant", "My Gateway") apart.
+      // ("My Assistant", "My Gateway") apart, and so the Usage tab can mark the
+      // viewer's own agents by id rather than by matching a display string.
       expect(returned.assignedAgents).toEqual([
         {
           id: agent.id,
           name: "Server Consumer",
           agentType: agent.agentType,
           scope: "personal",
+          ownerId: user.id,
           ownerEmail: user.email,
         },
       ]);
+    });
+
+    // The registry lists other members' personal connections to an
+    // installation admin so they can manage them, but the surfaces that
+    // authenticate AS a connection (the Inspector) must offer only the ones
+    // the caller may actually present upstream.
+    test("marks which listed connections the caller may authenticate as", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTeam,
+      makeTeamMember,
+      makeUser,
+    }) => {
+      const colleague = await makeUser({ email: "colleague@example.com" });
+      // Only the predefined Admin role is shown another member's personal
+      // connection at all — the case this flag has to get right.
+      await db
+        .update(schema.membersTable)
+        .set({ role: "admin" })
+        .where(
+          and(
+            eq(schema.membersTable.userId, user.id),
+            eq(schema.membersTable.organizationId, organizationId),
+          ),
+        );
+      const myTeam = await makeTeam(organizationId, user.id, { name: "Mine" });
+      await makeTeamMember(myTeam.id, user.id);
+      const theirTeam = await makeTeam(organizationId, colleague.id, {
+        name: "Theirs",
+      });
+      const catalog = await makeInternalMcpCatalog({
+        organizationId,
+        serverType: "remote",
+      });
+
+      const mine = await makeMcpServer({
+        ownerId: user.id,
+        catalogId: catalog.id,
+        scope: "personal",
+      });
+      const theirs = await makeMcpServer({
+        ownerId: colleague.id,
+        catalogId: catalog.id,
+        scope: "personal",
+      });
+      const sharedWithMe = await makeMcpServer({
+        ownerId: colleague.id,
+        catalogId: catalog.id,
+        scope: "team",
+        teamId: myTeam.id,
+      });
+      const sharedWithThem = await makeMcpServer({
+        ownerId: colleague.id,
+        catalogId: catalog.id,
+        scope: "team",
+        teamId: theirTeam.id,
+      });
+      const orgWide = await makeMcpServer({
+        ownerId: colleague.id,
+        catalogId: catalog.id,
+        scope: "org",
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/mcp_server",
+      });
+
+      expect(response.statusCode).toBe(200);
+      const byId = new Map<string, boolean>(
+        response
+          .json()
+          .map((s: { id: string; canUseCredential: boolean }) => [
+            s.id,
+            s.canUseCredential,
+          ]),
+      );
+      expect(byId.get(mine.id)).toBe(true);
+      expect(byId.get(sharedWithMe.id)).toBe(true);
+      expect(byId.get(orgWide.id)).toBe(true);
+      expect(byId.get(theirs.id)).toBe(false);
+      expect(byId.get(sharedWithThem.id)).toBe(false);
     });
   });
 

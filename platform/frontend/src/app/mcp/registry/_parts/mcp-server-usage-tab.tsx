@@ -12,11 +12,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  agentOwnerLabel,
-  agentTypeLabel,
-  deriveAgentUsage,
-} from "./mcp-server-agent-usage";
+import { type AgentOwner, describeAgentOwner } from "@/lib/agent-owner-label";
+import { useSession } from "@/lib/auth/auth.query";
+import { agentTypeLabel, deriveAgentUsage } from "./mcp-server-agent-usage";
 
 type McpServerFromApi = archestraApiTypes.GetMcpServersResponses["200"][number];
 
@@ -39,6 +37,8 @@ export function McpServerUsageTab({
     serversForCatalog,
     autoModeAgents,
   });
+  const { data: session } = useSession();
+  const currentUserId = session?.user?.id;
 
   if (all.length === 0) {
     return (
@@ -71,41 +71,68 @@ export function McpServerUsageTab({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {all.map((agent) => {
-              const owner = agentOwnerLabel(agent);
-              return (
-                <TableRow key={agent.id}>
-                  <TableCell className="font-medium">{agent.name}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {agentTypeLabel(agent.agentType)}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {/*
-                      Personal agents are seeded per member and share a name, so
-                      the owner is what tells them apart. Org- and team-scoped
-                      agents belong to everyone, hence the scope label instead —
-                      spelled out the way every scope pill spells it, so this
-                      column never shows the raw `org` enum.
-                    */}
-                    {owner ? (
-                      <span>{owner}</span>
-                    ) : (
-                      <span>{scopeLabel(agent.scope)}</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {agent.access === "assigned" ? (
-                      <Badge variant="secondary">Assigned tools</Badge>
-                    ) : (
-                      <Badge variant="outline">Auto — all tools</Badge>
-                    )}
-                  </TableCell>
-                </TableRow>
-              );
-            })}
+            {all.map((agent) => (
+              <TableRow key={agent.id}>
+                <TableCell className="font-medium">{agent.name}</TableCell>
+                <TableCell className="text-muted-foreground">
+                  {agentTypeLabel(agent.agentType)}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  <OwnerCell owner={describeAgentOwner(agent, currentUserId)} />
+                </TableCell>
+                <TableCell>
+                  {agent.access === "assigned" ? (
+                    <Badge variant="secondary">Assigned tools</Badge>
+                  ) : (
+                    <Badge variant="outline">Auto — all tools</Badge>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
           </TableBody>
         </Table>
       </div>
     </div>
   );
+}
+
+/**
+ * One cell, one question: whose agent is this.
+ *
+ * Every branch is a distinct answer. The personal scope label is deliberately
+ * absent — this column used to print "Personal" whenever the owner's email was
+ * missing, which said nothing about ownership while looking exactly like an
+ * answer, and left the viewer's own agents indistinguishable from a departed
+ * colleague's.
+ */
+function OwnerCell({ owner }: { owner: AgentOwner }) {
+  switch (owner.kind) {
+    case "self":
+      return (
+        <span
+          className="font-medium text-foreground"
+          // The email is still the identity behind "You"; keep it reachable
+          // for anyone reconciling this table against a list of accounts.
+          title={owner.email ?? undefined}
+        >
+          You
+        </span>
+      );
+    case "user":
+      return <span>{owner.email}</span>;
+    case "deleted":
+      return (
+        <span
+          className="italic"
+          title="The account that owned this agent has been deleted."
+        >
+          Deleted user
+        </span>
+      );
+    case "scope":
+      // A team- or org-scoped agent belongs to the team or the organization,
+      // so the scope is the owner. Spelled the way every scope pill spells it,
+      // so this column never shows the raw `org` enum.
+      return <span>{scopeLabel(owner.scope)}</span>;
+  }
 }

@@ -1,5 +1,5 @@
 {
-  "id": "7bcd8a15-8d70-4065-814e-b1abcae48455",
+  "id": "28be2ed2-72e9-4f80-a6f9-98ec213fcd90",
   "prevId": "f1b24994-6a93-4f61-a95f-f11751e63b57",
   "version": "7",
   "dialect": "postgresql",
@@ -1117,6 +1117,73 @@
       "compositePrimaryKeys": {
         "agent_connector_assignment_agent_id_connector_id_pk": {
           "name": "agent_connector_assignment_agent_id_connector_id_pk",
+          "columns": [
+            "agent_id",
+            "connector_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.agent_excluded_connectors": {
+      "name": "agent_excluded_connectors",
+      "schema": "",
+      "columns": {
+        "agent_id": {
+          "name": "agent_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "connector_id": {
+          "name": "connector_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "agent_excluded_connectors_agent_id_agents_id_fk": {
+          "name": "agent_excluded_connectors_agent_id_agents_id_fk",
+          "tableFrom": "agent_excluded_connectors",
+          "tableTo": "agents",
+          "columnsFrom": [
+            "agent_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "agent_excluded_connectors_connector_id_knowledge_base_connectors_id_fk": {
+          "name": "agent_excluded_connectors_connector_id_knowledge_base_connectors_id_fk",
+          "tableFrom": "agent_excluded_connectors",
+          "tableTo": "knowledge_base_connectors",
+          "columnsFrom": [
+            "connector_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "agent_excluded_connectors_agent_id_connector_id_pk": {
+          "name": "agent_excluded_connectors_agent_id_connector_id_pk",
           "columns": [
             "agent_id",
             "connector_id"
@@ -3659,13 +3726,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": true
-        },
-        "open_in_fullscreen": {
-          "name": "open_in_fullscreen",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
         },
         "locked": {
           "name": "locked",

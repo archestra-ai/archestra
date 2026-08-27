@@ -64,21 +64,28 @@ export interface BulkActionsBarProps {
   countTestId?: string;
   /** Omit to keep the selection confined to the current page. */
   selectAllMatching?: SelectAllMatching;
-  /** The bar carries no outer spacing of its own; place it in the caller's flow. */
+  /** Additional classes for the action rail. */
   className?: string;
   /**
-   * Keeps a compact, invisible bar mounted at zero selection so showing the
-   * controls does not displace the collection beneath them.
+   * Renders the bar as the compact single-line rail collections use: fixed
+   * height, tighter padding, and horizontal scrolling rather than wrapping
+   * when the actions outgrow a narrow viewport.
+   *
+   * This used to also mount an invisible copy of the bar at zero selection so
+   * the collection never moved. That traded a shift nobody sees for a 54px
+   * hole everybody sees, on every collection screen in the app, permanently.
+   * The bar is now simply absent until there is a selection; the movement it
+   * causes is the direct result of the reader's own click on a checkbox.
    */
-  reserveSpace?: boolean;
+  compact?: boolean;
   /** The actions themselves, laid out at the end of the bar. */
   children?: ReactNode;
 }
 
 /**
- * Default collection bulk actions. Unlike the low-level bar, this keeps the
- * compact action box in normal flow at zero selection so table and card
- * layouts never move when the controls appear.
+ * Default collection bulk actions: the compact single-line rail every table
+ * and card list uses, owning its own 12px gap before the collection that
+ * follows it. Absent entirely until something is selected.
  */
 export function BulkActions({
   selectAllMatching,
@@ -86,7 +93,7 @@ export function BulkActions({
   busy,
   children,
   ...props
-}: Omit<BulkActionsBarProps, "reserveSpace"> & {
+}: Omit<BulkActionsBarProps, "compact"> & {
   /** `null` only for actions that send a filter instead of an ID list. */
   maxSelection?: number | null;
 }) {
@@ -106,7 +113,7 @@ export function BulkActions({
       {...props}
       busy={busy}
       selectAllMatching={cappedSelectAll}
-      reserveSpace
+      compact
     >
       {overLimit ? (
         <span className="text-sm text-destructive">
@@ -138,7 +145,7 @@ export function BulkActionsBar({
   countTestId,
   selectAllMatching,
   className,
-  reserveSpace,
+  compact,
   children,
 }: BulkActionsBarProps) {
   const pluralize = (n: number) => (n === 1 ? noun : (plural ?? `${noun}s`));
@@ -170,20 +177,19 @@ export function BulkActionsBar({
         {count > 0 ? text : ""}
       </span>
 
-      {count === 0 && reserveSpace ? (
-        <div aria-hidden="true" className={cn("h-[42px]", className)} />
-      ) : count > 0 ? (
+      {count > 0 ? (
         <div
+          data-slot="bulk-actions-bar"
           className={cn(
             "rounded-md border bg-muted/40 px-3 py-2",
-            reserveSpace && "px-2 py-1",
+            compact && "h-[42px] !mt-0 !mb-3 px-2 py-1 [&+*]:!mt-0",
             className,
           )}
         >
           <div
             className={cn(
               "flex flex-wrap items-center gap-2",
-              reserveSpace && "flex-nowrap gap-1.5 overflow-x-auto",
+              compact && "flex-nowrap gap-1.5 overflow-x-auto",
             )}
           >
             <span
@@ -222,7 +228,7 @@ export function BulkActionsBar({
             <div
               className={cn(
                 "ml-auto flex flex-wrap items-center gap-2",
-                reserveSpace && "shrink-0 flex-nowrap gap-1.5",
+                compact && "shrink-0 flex-nowrap gap-1.5",
               )}
             >
               {children}

@@ -7,7 +7,7 @@ import {
   MCP_CATALOG_SERVER_QUERY_PARAM,
   type McpDeploymentStatusEntry,
 } from "@archestra/shared";
-import { CheckCircle2, Download, Route, Trash2 } from "lucide-react";
+import { CheckCircle2, Route, Trash2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -430,6 +430,10 @@ export function InternalMCPCatalog({
         setOAuthMcpServerId(reauthServerId);
         setOAuthReturnUrl(window.location.href);
         setReauthServerId(null);
+      } else {
+        // A fresh install must state that it is not a re-authentication, so a
+        // stale ID from an earlier re-auth in this tab cannot divert it.
+        setOAuthMcpServerId(null);
       }
 
       window.location.href = authorizationUrl;
@@ -1109,6 +1113,12 @@ export function InternalMCPCatalog({
     filters.author.size > 0 ||
     filters.status.has(INSTALLED_STATUS_VALUE) ||
     filters.status.has(NOT_INSTALLED_STATUS_VALUE);
+  const hasFilterChips =
+    filters.issue.size > 0 ||
+    filters.environment.size > 0 ||
+    filters.author.size > 0 ||
+    filters.status.has(INSTALLED_STATUS_VALUE) ||
+    filters.status.has(NOT_INSTALLED_STATUS_VALUE);
   const handleClearAllFilters = useCallback(() => {
     const params = new URLSearchParams(searchParams.toString());
     params.delete("search");
@@ -1140,7 +1150,13 @@ export function InternalMCPCatalog({
   return (
     <TableCardView storageKey="archestra-mcp-registry-view" defaultMode="table">
       <div className="space-y-4">
-        <div className="space-y-3">
+        <div
+          className={
+            !hasLabelFilters && !hasFilterChips
+              ? "space-y-3 !mb-3"
+              : "space-y-3"
+          }
+        >
           <FilterBar
             onClearFilters={
               hasAppliedBarFilters ? handleClearBarFilters : undefined
@@ -1214,9 +1230,12 @@ export function InternalMCPCatalog({
           </FilterBar>
         </div>
         {hasLabelFilters && (
-          <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />
+          <div className={!hasFilterChips ? "!mb-3" : undefined}>
+            <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />
+          </div>
         )}
         <RegistryFilterChips
+          className="!mb-3"
           selected={filters}
           onRemove={removeFilter}
           onClearAll={clearAdvancedFilters}
@@ -1475,7 +1494,9 @@ function McpServerCatalogSection({
   showTitle: boolean;
 }) {
   const canSelect = (item: CatalogItem) =>
-    installingItemId !== item.id && !getServerInfo(item).isInstallInProgress;
+    !!getServerInfo(item).installedServer &&
+    installingItemId !== item.id &&
+    !getServerInfo(item).isInstallInProgress;
   const {
     rowSelection,
     setRowSelection,
@@ -1498,9 +1519,6 @@ function McpServerCatalogSection({
     canSelect,
   });
 
-  const selectedToInstall = selected.filter(
-    (item) => !getServerInfo(item).installedServer,
-  );
   const selectedToUninstall = selected
     .filter((item) => getServerInfo(item).installedServer)
     .map((item) => ({
@@ -1517,11 +1535,9 @@ function McpServerCatalogSection({
       )}
       <McpServerBulkActions
         selected={selected}
-        selectedToInstall={selectedToInstall}
         selectedToUninstall={selectedToUninstall}
         clearSelection={clearSelection}
         selectAllMatching={selectAllMatching}
-        onInstall={onInstall}
       />
       <TableCardViewContent
         table={
@@ -1595,18 +1611,14 @@ function McpServerCatalogSection({
 
 function McpServerBulkActions({
   selected,
-  selectedToInstall,
   selectedToUninstall,
   clearSelection,
   selectAllMatching,
-  onInstall,
 }: {
   selected: readonly CatalogItem[];
-  selectedToInstall: readonly CatalogItem[];
   selectedToUninstall: Array<{ id: string; name: string }>;
   clearSelection: () => void;
   selectAllMatching: SelectAllMatching;
-  onInstall: (item: CatalogItem) => void;
 }) {
   const [bulkUninstallOpen, setBulkUninstallOpen] = useState(false);
   const bulkUninstall = useBulkUninstallMcpServers();
@@ -1620,30 +1632,6 @@ function McpServerBulkActions({
         busy={bulkUninstall.isPending}
         selectAllMatching={selectAllMatching}
       >
-        <PermissionButton
-          permissions={{ mcpServerInstallation: ["create"] }}
-          variant="outline"
-          size="sm"
-          disabled={selectedToInstall.length !== 1}
-          tooltip={
-            selectedToInstall.length === 0
-              ? "Every selected server is already installed."
-              : selectedToInstall.length > 1
-                ? "Install servers one at a time so each configuration can be reviewed."
-                : undefined
-          }
-          onClick={() => {
-            const item = selectedToInstall[0];
-            if (!item) return;
-            onInstall(item);
-            clearSelection();
-          }}
-        >
-          <Download className="h-4 w-4" />
-          <span>
-            Install{countSuffix(selectedToInstall.length, selected.length)}
-          </span>
-        </PermissionButton>
         <PermissionButton
           permissions={{ mcpServerInstallation: ["delete"] }}
           variant="destructive"

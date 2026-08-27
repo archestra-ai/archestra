@@ -3,7 +3,7 @@ title: Skills
 category: Agents
 order: 3
 description: Reusable SKILL.md instruction sets that agents load on demand
-lastUpdated: 2026-08-25
+lastUpdated: 2026-08-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -118,6 +118,16 @@ Writing skills by hand stays available — in the editor, and through the `creat
 > **Beta feature** — set `ARCHESTRA_MCP_SKILLS_ENABLED=true` (or enable the master `ARCHESTRA_BETA` switch). See [Deployment](/docs/platform-deployment).
 
 Skills over MCP let MCP servers publish reusable, task-focused instructions and supporting resources alongside their tools. In Archestra, Skills offered by server installations you can access appear on the **Skills** page, where you can inspect them, review their usage, or start a Chat with that Skill attached to your next message. They are intended for service-owned playbooks and workflows that should remain managed by the MCP server rather than be recreated as standalone Archestra Skills. The integration follows the draft [`io.modelcontextprotocol/skills` extension in SEP-2640](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2640); see the [rendered specification](https://mcp-sep-skills-extension.mintlify.site/seps/2640-skills-extension) and the official [Skills Over MCP working group](https://modelcontextprotocol.io/community/working-groups/skills-over-mcp) for details.
+
+## Skills from plugins
+
+> **Beta feature** — set `ARCHESTRA_PLUGINS_ENABLED=true`, or enable the `ARCHESTRA_BETA` switch. See [Deployment](/docs/platform-deployment).
+
+Plugins can contain one or more `SKILL.md` trees. Every valid Skill inside a plugin you can access appears in the **Skills from plugins** category.
+
+The category does not filter by the plugin's client or operating system. Skill instructions are usually portable, so a Skill from a Claude Code plugin can still help in another client. The source client and platforms stay visible because bundled scripts and tool names may depend on them.
+
+Plugin Skills are read-only. Anyone with plugin read access can inspect the `SKILL.md` instructions. Bundled resource files remain visible only to plugin admins because they can contain executable code. All files stay managed by the source plugin and update with it. Archestra does not copy or version them as standalone Skills.
 
 ## Permissions and scope
 

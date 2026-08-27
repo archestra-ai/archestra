@@ -62,6 +62,8 @@ This needs the `ChannelMessage.Read.Group` permission, which the team owner cons
 
 Each channel can carry its own instructions for the agent — free text you write on the **Messaging Channels** → **MS Teams** page, next to the agent assignment. Archestra sends them to the agent with every message in that channel, alongside the agent's own instructions. Where the two disagree, the channel's instructions win, so one agent can behave differently in each channel it answers in.
 
+Channel instructions add to what the agent does. They never take an ability away. Anything they don't mention, the agent handles as usual.
+
 Write them as you would talk to the agent. "Every message in this channel is a task — create it immediately, don't ask for confirmation" is a typical one. Clearing the box removes them.
 
 ### Commands

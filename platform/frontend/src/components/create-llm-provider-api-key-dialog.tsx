@@ -45,7 +45,7 @@ export type CreateLlmProviderApiKeyDialogProps = {
   /** This dialog must connect the exact subscription kind pinned by an agent. */
   requiresExactSubscriptionCredential?: boolean;
   showConsoleLink?: boolean;
-  onSuccess?: () => void;
+  onSuccess?: (keyId?: string) => void;
   /**
    * Re-authentication mode: rotate this existing key's credential in place
    * instead of creating a new key. Used to reconnect an expired personal
@@ -123,7 +123,7 @@ export function CreateLlmProviderApiKeyDialog({
     // same tick the credential lands — before any effect has run.
     const scope = subscriptionKind ? "personal" : values.scope;
     try {
-      await createMutation.mutateAsync({
+      const createdKey = await createMutation.mutateAsync({
         name:
           values.name?.trim() ||
           (subscriptionKind
@@ -156,7 +156,7 @@ export function CreateLlmProviderApiKeyDialog({
           : undefined,
       });
       onOpenChange(false);
-      onSuccess?.();
+      onSuccess?.(createdKey?.id);
       return true;
     } catch {
       // Error handled by mutation
@@ -171,12 +171,12 @@ export function CreateLlmProviderApiKeyDialog({
       // stale one still selected in conversations. Uses the self-service
       // reconnect endpoint rather than the permission-gated PATCH, so default
       // members can refresh their own expired sign-in.
-      await reconnectMutation.mutateAsync({
+      const reconnectedKey = await reconnectMutation.mutateAsync({
         id: reconnectKeyId,
         apiKey: credential,
       });
       onOpenChange(false);
-      onSuccess?.();
+      onSuccess?.(reconnectedKey?.id ?? reconnectKeyId);
       return;
     }
     const values = { ...form.getValues(), apiKey: credential };

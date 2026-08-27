@@ -608,10 +608,11 @@ function MembersTab({
   return (
     <>
       <FilterBar
-        className="mb-4"
+        className={isPending ? "mb-4" : "mb-3"}
         actions={<TabButtons activeTab={activeTab} onTabChange={onTabChange} />}
       >
         <SearchInput
+          isLoading={isFetching}
           objectNamePlural="users"
           searchFields={["name", "email"]}
           paramName="name"
@@ -861,6 +862,7 @@ function ChangeRoleDialog({
         <RoleSelect
           value={selectedRole}
           onValueChange={setSelectedRole}
+          ariaLabel="Role"
           className="w-full"
         />
       </DialogBody>

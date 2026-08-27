@@ -236,6 +236,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "mcpServer.bulk_deleted": "MCP servers bulk deleted",
   "role.bulk_deleted": "Roles bulk deleted",
   "serviceAccount.bulk_deleted": "Service accounts bulk deleted",
+  "serviceAccount.bulk_updated": "Service accounts bulk updated",
   "team.bulk_deleted": "Teams bulk deleted",
   "unknown.deleted": "Unknown delete",
 };

@@ -750,3 +750,31 @@ button.plugin-featured-action::after {
 [data-radix-popper-content-wrapper]:has(> [data-pointer-events-none]) {
   pointer-events: none;
 }
+
+/* ── Data table: request in flight ──
+   The sweeping half of `<DataTable>`'s loading bar. The bar's track, colours
+   and fade-in live in the component; only the animation needs a keyframe, and
+   the width belongs with it because the two are one motion. */
+
+@keyframes archestra-table-loading-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(340%);
+  }
+}
+
+.archestra-table-loading-sweep {
+  width: 30%;
+  animation: archestra-table-loading-sweep 1.1s ease-in-out infinite;
+}
+
+/* Motion sensitivity: hold the bar still and fill the track instead. It still
+   marks the table as busy, which is the information the bar carries. */
+@media (prefers-reduced-motion: reduce) {
+  .archestra-table-loading-sweep {
+    width: 100%;
+    animation: none;
+  }
+}

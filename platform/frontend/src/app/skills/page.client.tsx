@@ -91,6 +91,7 @@ import {
   useBulkDeleteSkills,
   useExternalMcpSkills,
   usePermanentlyDeleteSkill,
+  usePluginSkills,
   useRestoreSkill,
   useSkillSourceRepos,
   useSkillsPaginated,
@@ -107,6 +108,10 @@ import {
   filterExternalMcpSkills,
 } from "./_parts/external-mcp-skills-section";
 import {
+  filterPluginSkills,
+  PluginSkillsSection,
+} from "./_parts/plugin-skills-section";
+import {
   getSkillActionModel,
   skillAction,
   skillActionHref,
@@ -116,7 +121,7 @@ import { SkillUsageSummary } from "./_parts/skill-usage-summary";
 import { SkillVersionHistoryDialog } from "./_parts/skill-version-history-dialog";
 
 type SkillItem = archestraApiTypes.GetSkillsResponses["200"]["data"][number];
-type SkillKind = "all" | "standalone" | "mcp";
+type SkillKind = "all" | "standalone" | "mcp" | "plugin";
 
 const SYNC_INTERVAL_LABELS: Record<string, string> = {
   "15m": "Synced every 15 minutes",
@@ -195,14 +200,29 @@ function SkillsList() {
   const { data: sourceReposData } = useSkillSourceRepos();
   const sourceRepos = sourceReposData?.repos ?? [];
   const mcpSkillsEnabled = useFeature("mcpGatewaySkillsEnabled") === true;
+  const pluginsEnabled = useFeature("plugins") === true;
+  const { data: canReadPlugins } = useHasPermissions({ plugin: ["read"] });
+  const pluginSkillsEnabled = pluginsEnabled && canReadPlugins === true;
   const kindParam = searchParams.get("kind");
   const requestedKind: SkillKind =
-    kindParam === "standalone" || kindParam === "mcp" ? kindParam : "all";
+    kindParam === "standalone" || kindParam === "mcp" || kindParam === "plugin"
+      ? kindParam
+      : "all";
   const kind: SkillKind =
-    isDeletedView || !mcpSkillsEnabled ? "standalone" : requestedKind;
-  const showStandaloneSkills = kind !== "mcp";
+    isDeletedView || (!mcpSkillsEnabled && !pluginSkillsEnabled)
+      ? "standalone"
+      : requestedKind === "mcp" && !mcpSkillsEnabled
+        ? "all"
+        : requestedKind === "plugin" && !pluginSkillsEnabled
+          ? "all"
+          : requestedKind;
+  const showStandaloneSkills = kind === "all" || kind === "standalone";
   const showMcpSkills =
-    mcpSkillsEnabled && !isDeletedView && kind !== "standalone";
+    mcpSkillsEnabled && !isDeletedView && (kind === "all" || kind === "mcp");
+  const showPluginSkills =
+    pluginSkillsEnabled &&
+    !isDeletedView &&
+    (kind === "all" || kind === "plugin");
   const { data: externalSkills = [], isFetching: isExternalSkillsFetching } =
     useExternalMcpSkills({
       enabled: showMcpSkills,
@@ -211,6 +231,15 @@ function SkillsList() {
     ? []
     : filterExternalMcpSkills({
         skills: externalSkills,
+        search,
+        scope: scopeFilter.scope,
+      });
+  const { data: pluginSkills = [], isFetching: isPluginSkillsFetching } =
+    usePluginSkills({ enabled: showPluginSkills });
+  const visiblePluginSkills = sourceRepo
+    ? []
+    : filterPluginSkills({
+        skills: pluginSkills,
         search,
         scope: scopeFilter.scope,
       });
@@ -239,7 +268,7 @@ function SkillsList() {
       } else {
         params.set("kind", value);
       }
-      if (value === "mcp") {
+      if (value === "mcp" || value === "plugin") {
         params.delete("sourceRepo");
       }
       params.set("page", "1");
@@ -368,17 +397,23 @@ function SkillsList() {
     !!sourceRepo ||
     scopeFilter.hasActiveScopeFilters ||
     isDeletedView ||
-    (mcpSkillsEnabled && !isDeletedView && kind !== "all");
+    ((mcpSkillsEnabled || pluginSkillsEnabled) &&
+      !isDeletedView &&
+      kind !== "all");
   const hasVisibleSkills =
     (showStandaloneSkills && totalSkills > 0) ||
-    (showMcpSkills && visibleExternalSkills.length > 0);
+    (showMcpSkills && visibleExternalSkills.length > 0) ||
+    (showPluginSkills && visiblePluginSkills.length > 0);
   const showEmptyState =
     !isFetching &&
     !(showMcpSkills && isExternalSkillsFetching) &&
+    !(showPluginSkills && isPluginSkillsFetching) &&
     !hasVisibleSkills &&
     !hasActiveFilters;
   const noVisibleFilterResults =
-    totalSkills === 0 && visibleExternalSkills.length === 0;
+    totalSkills === 0 &&
+    visibleExternalSkills.length === 0 &&
+    visiblePluginSkills.length === 0;
   const showStandaloneSection =
     showStandaloneSkills &&
     (totalSkills > 0 ||
@@ -387,7 +422,10 @@ function SkillsList() {
       (kind === "all" && noVisibleFilterResults));
   const showMcpSection =
     showMcpSkills && (visibleExternalSkills.length > 0 || kind === "mcp");
-  const showStandaloneHeading = isDeletedView || mcpSkillsEnabled;
+  const showPluginSection =
+    showPluginSkills && (visiblePluginSkills.length > 0 || kind === "plugin");
+  const showStandaloneHeading =
+    isDeletedView || mcpSkillsEnabled || pluginSkillsEnabled;
 
   const clearFilters = useCallback(() => {
     const params = new URLSearchParams(searchParams.toString());
@@ -710,39 +748,48 @@ function SkillsList() {
             <SkillsEmptyState />
           ) : (
             <>
-              <div className="mb-6 flex flex-col gap-2">
+              <div className="mb-3 flex flex-col gap-2">
                 <FilterBar
                   onClearFilters={hasActiveFilters ? clearFilters : undefined}
                   actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
                 >
                   <SearchInput
+                    isLoading={isFetching}
                     paramName="search"
                     className={filterSearchClass}
                   />
-                  {mcpSkillsEnabled && !isDeletedView && (
-                    <Select value={kind} onValueChange={setKindFilter}>
-                      <SelectTrigger
-                        size="sm"
-                        aria-label="Filter by skill source"
-                        className={filterControlClass({
-                          active: kind !== "all",
-                        })}
-                      >
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent
-                        position="popper"
-                        side="bottom"
-                        align="start"
-                      >
-                        <SelectItem value="all">All kinds</SelectItem>
-                        <SelectItem value="standalone">
-                          Standalone skills
-                        </SelectItem>
-                        <SelectItem value="mcp">MCP skills</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  )}
+                  {(mcpSkillsEnabled || pluginSkillsEnabled) &&
+                    !isDeletedView && (
+                      <Select value={kind} onValueChange={setKindFilter}>
+                        <SelectTrigger
+                          size="sm"
+                          aria-label="Filter by skill source"
+                          className={filterControlClass({
+                            active: kind !== "all",
+                          })}
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent
+                          position="popper"
+                          side="bottom"
+                          align="start"
+                        >
+                          <SelectItem value="all">All kinds</SelectItem>
+                          <SelectItem value="standalone">
+                            Standalone skills
+                          </SelectItem>
+                          {mcpSkillsEnabled && (
+                            <SelectItem value="mcp">MCP skills</SelectItem>
+                          )}
+                          {pluginSkillsEnabled && (
+                            <SelectItem value="plugin">
+                              Skills from plugins
+                            </SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    )}
                   <ResourceScopeFilter
                     ownerLabelPlural="skills"
                     adminPermission={{ skill: ["admin"] }}
@@ -990,6 +1037,14 @@ function SkillsList() {
                     skills={visibleExternalSkills}
                     showWhenEmpty={kind === "mcp"}
                     isLoading={isExternalSkillsFetching}
+                  />
+                )}
+
+                {showPluginSection && (
+                  <PluginSkillsSection
+                    skills={visiblePluginSkills}
+                    showWhenEmpty={kind === "plugin"}
+                    isLoading={isPluginSkillsFetching}
                   />
                 )}
               </div>

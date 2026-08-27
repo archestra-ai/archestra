@@ -1,12 +1,30 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  clearInstallContext,
   clearOAuthPendingChatResume,
+  getOAuthMcpServerId,
   getOAuthPendingChatResume,
   getOAuthUserConfigValues,
   setOAuthInstallChatResume,
+  setOAuthMcpServerId,
   setOAuthReauthChatResume,
   setOAuthUserConfigValues,
 } from "./oauth-session";
+
+describe("oauth-session install context", () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+  });
+
+  it("drops the re-authentication server ID so a later install is not diverted", () => {
+    setOAuthMcpServerId("server_abc");
+    expect(getOAuthMcpServerId()).toBe("server_abc");
+
+    clearInstallContext();
+
+    expect(getOAuthMcpServerId()).toBeNull();
+  });
+});
 
 describe("oauth-session reauth chat resume", () => {
   beforeEach(() => {

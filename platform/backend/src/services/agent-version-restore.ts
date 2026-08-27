@@ -7,6 +7,7 @@ import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import logger from "@/logging";
 import {
+  AgentExcludedConnectorModel,
   AgentExcludedSubagentModel,
   AgentExcludedToolModel,
   AgentModel,
@@ -19,6 +20,7 @@ import {
   ModelModel,
   ToolModel,
 } from "@/models";
+import { agentKnowledgeSourceExclusionsService } from "@/services/agent-knowledge-source-exclusions";
 import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
 import {
   assignToolToAgent,
@@ -171,6 +173,7 @@ type RestorePlan = {
   hooks: InsertHookFile[] | null;
   excludedToolIds: string[] | null;
   excludedSubagentIds: string[] | null;
+  excludedConnectorIds: string[] | null;
   knowledge: { knowledgeBaseIds: string[]; connectorIds: string[] } | null;
 };
 
@@ -192,11 +195,13 @@ async function buildRestorePlan(params: {
     currentHooks,
     currentExcludedToolIds,
     currentExcludedSubagentIds,
+    currentExcludedConnectorIds,
   ] = await Promise.all([
     AgentToolModel.findAssignmentsByAgent(agentId),
     HookFileModel.listByAgent(agentId, organizationId),
     AgentExcludedToolModel.findToolIdsByAgent(agentId),
     AgentExcludedSubagentModel.findTargetAgentIdsByAgent(agentId),
+    AgentExcludedConnectorModel.findConnectorIdsByAgent(agentId),
   ]);
 
   const { toolsToAssign, toolIdsToUnassign } = diffTools(snapshot, assignments);
@@ -219,6 +224,12 @@ async function buildRestorePlan(params: {
     )
       ? null
       : snapshot.excludedSubagents.map((ref) => ref.agentId),
+    excludedConnectorIds: sameIds(
+      snapshot.excludedConnectors.map((ref) => ref.id),
+      currentExcludedConnectorIds,
+    )
+      ? null
+      : snapshot.excludedConnectors.map((ref) => ref.id),
     knowledge: await planKnowledge({
       snapshot,
       current,
@@ -293,6 +304,15 @@ async function applyRestorePlan(plan: RestorePlan): Promise<void> {
       agentId: plan.agentId,
       organizationId: plan.organizationId,
       excludedSubagentIds: plan.excludedSubagentIds,
+      deferVersionFork: true,
+    });
+  }
+
+  if (plan.excludedConnectorIds !== null) {
+    await agentKnowledgeSourceExclusionsService.replaceExclusions({
+      agentId: plan.agentId,
+      organizationId: plan.organizationId,
+      excludedConnectorIds: plan.excludedConnectorIds,
       deferVersionFork: true,
     });
   }

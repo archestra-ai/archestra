@@ -67,6 +67,10 @@ export const E2eTestId = {
   EditAgentButton: "edit-agent-button",
   AgentToolsSection: "agent-tools-section",
   AgentToolsAddButton: "agent-tools-add-button",
+  AgentKnowledgeSourceExclusions: "agent-knowledge-source-exclusions",
+  AgentKnowledgeSourceExclusionPill: "agent-knowledge-source-exclusion-pill",
+  AgentKnowledgeSourceExclusionsCombobox:
+    "agent-knowledge-source-exclusions-combobox",
   AgentToolCatalogPill: "agent-tool-catalog-pill",
   AssignmentComboboxSearchInput: "assignment-combobox-search-input",
   AssignmentComboboxOption: "assignment-combobox-option",
@@ -160,6 +164,7 @@ export const E2eTestId = {
   McpLogsViewButton: "mcp-logs-view-button",
   McpLogsEditConfigButton: "mcp-logs-edit-config-button",
   McpLogsTab: "mcp-logs-tab",
+  McpInspectorNoConnection: "mcp-inspector-no-connection",
   // Connectivity / offline status bar
   ConnectivityStatusBar: "connectivity-status-bar",
   ConnectivityStatusBarRetry: "connectivity-status-bar-retry",

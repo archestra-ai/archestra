@@ -116,6 +116,12 @@ export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
           setOAuthReturnUrl(window.location.href);
           setReauthServerId(null);
         } else {
+          // A fresh install must state that it is not a re-authentication.
+          // Without this, an ID left in session storage by an earlier
+          // re-authentication in the same tab makes the callback take the
+          // re-auth path and the install never happens.
+          setOAuthMcpServerId(null);
+
           const isFirstInstallation = !installedServers?.some(
             (server) => server.catalogId === params.catalogItem.id,
           );

@@ -2,7 +2,7 @@
 title: Costs & Limits
 category: LLM Proxy
 order: 4
-lastUpdated: 2026-08-24
+lastUpdated: 2026-08-26
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -16,6 +16,8 @@ The **Costs** tab at `/llm/costs` is the organization-wide rollup for LLM traffi
 - which teams are driving spend
 - which models are responsible for the largest share of cost
 - whether TOON compression and prompt caching are reducing spend over time
+
+The **LLM Proxy** section reports one total rather than a list. There is a single LLM Proxy, so all of its traffic counts toward that one figure.
 
 For a fuller cost view outside the Archestra UI, use Archestra's exported [metrics](platform-observability#metrics) and the prebuilt [Grafana dashboards](platform-observability#grafana-dashboards). Those surfaces are better suited for long-term monitoring, alerting, and cross-system cost analysis.
 

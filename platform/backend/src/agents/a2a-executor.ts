@@ -629,6 +629,11 @@ export async function executeA2AMessage(
     try {
       const runStream = await runAgentStream({
         config: streamConfig,
+        promptCache: {
+          provider,
+          model: selectedModel,
+          anthropicNativeEndpoint,
+        },
         recovery: {
           logContext: { agentId: agent.id, sessionId },
           ...(openAiReasoningSummaryKey !== null

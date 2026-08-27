@@ -82,21 +82,18 @@ describe("BulkActionsBar", () => {
     expect(onClear).toHaveBeenCalledTimes(1);
   });
 
-  it("reserves a compact in-flow slot by default for collection actions", () => {
-    const { container, rerender } = render(
-      <BulkActions count={0} noun="skill" countTestId="count" />,
+  it("is absent until something is selected, so the collection sits where it reads", () => {
+    const { container } = render(
+      <BulkActions count={0} noun="document" onClear={() => {}} />,
     );
 
-    expect(container.querySelector("div")?.className).toContain("h-[42px]");
+    // The bar used to keep an invisible 42px copy of itself mounted here to
+    // avoid moving the collection. That hole was visible on every collection
+    // screen; the shift it prevented follows the reader's own click.
+    expect(
+      container.querySelector('[data-slot="bulk-actions-bar"]'),
+    ).toBeNull();
     expect(screen.queryByRole("button")).toBeNull();
-    expect(container.querySelector('[aria-live="polite"]')?.textContent).toBe(
-      "",
-    );
-
-    rerender(<BulkActions count={2} noun="skill" countTestId="count" />);
-
-    expect(container.querySelector("div")?.className).not.toContain("h-[42px]");
-    expect(screen.getByTestId("count").textContent).toBe("2 skills selected");
   });
 
   it("blocks an ID-list action above the default bulk limit", () => {

@@ -59,6 +59,8 @@ Each chat shows up on the channel page, where you assign the agent that answers 
 
 Each chat can carry its own instructions for the agent — free text you write on the **Messaging Channels** → **Telegram** page, next to the agent assignment. Archestra sends them to the agent with every message in that chat, alongside the agent's own instructions. Where the two disagree, the chat's instructions win, so one agent can behave differently in each chat it answers in.
 
+Chat instructions add to what the agent does. They never take an ability away. Anything they don't mention, the agent handles as usual.
+
 Write them as you would talk to the agent. "Every message in this chat is a task — create it immediately, don't ask for confirmation" is a typical one. Clearing the box removes them.
 
 ### Commands

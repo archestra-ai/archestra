@@ -619,7 +619,7 @@ function PluginsList() {
             <PluginsEmptyState />
           ) : (
             <>
-              <div className="mb-2 flex flex-col gap-2">
+              <div className="mb-3 flex flex-col gap-2">
                 <FilterBar
                   onClearFilters={hasActiveFilters ? clearFilters : undefined}
                   moreFilters={[

@@ -19,6 +19,7 @@ const {
   getInternalMcpCatalogLabelKeys,
   getInternalMcpCatalogLabelValues,
   getInternalMcpCatalogTools,
+  getInternalMcpCatalogToolsBatch,
   getK8sImagePullSecrets,
   refreshInternalMcpCatalogImage,
   reinstallInternalMcpCatalogItem,
@@ -302,6 +303,18 @@ export function useDeleteInternalMcpCatalogItem() {
 export type CatalogTool =
   archestraApiTypes.GetInternalMcpCatalogToolsResponses["200"][number];
 
+/** One `{ id, name, catalogId }` row from the batched catalog-tools route. */
+export type CatalogToolReference =
+  archestraApiTypes.GetInternalMcpCatalogToolsBatchResponses["200"][number];
+
+/**
+ * Under the `["mcp-catalog", ...]` prefix so every existing catalog
+ * invalidation (install, reinstall, rename, delete — all of which can change
+ * the discovered tool set) sweeps it, exactly as it already sweeps the
+ * per-catalog `["mcp-catalog", id, "tools"]` entries.
+ */
+export const catalogToolsBatchQueryKey = ["mcp-catalog", "tools"] as const;
+
 /**
  * Fetch tools for a catalog item by catalog ID (raw function for use with useQueries).
  */
@@ -317,6 +330,46 @@ export async function fetchCatalogTools(
     console.error("Failed to fetch catalog tools:", error);
     return [];
   }
+}
+
+/**
+ * Every catalog item's tool ids/names in a single request, grouped by catalog.
+ *
+ * The tool pickers need to know which tools belong to which server across the
+ * whole registry — to count them, to group saved selections into per-server
+ * pills, and to resolve "exclude this whole server" into tool ids. Asking
+ * {@link useCatalogTools} for each catalog instead meant one request per
+ * catalog item on mount, each carrying full tool rows with their assigned-agent
+ * lists; on a registry of any size that fan-out saturated the browser's
+ * connection pool and delayed the very catalog-list request the picker's
+ * "Loading tools..." state is waiting on. This route returns just
+ * `{ id, name, catalogId }`, once.
+ */
+export function useAllCatalogTools(options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: catalogToolsBatchQueryKey,
+    queryFn: async () => {
+      const { data, error } = await getInternalMcpCatalogToolsBatch();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
+    enabled: options?.enabled,
+  });
+}
+
+/**
+ * Grouped by catalog id, preserving the response order within each catalog.
+ */
+export function groupCatalogTools(
+  tools: readonly CatalogToolReference[] | undefined,
+): Map<string, CatalogToolReference[]> {
+  const byCatalog = new Map<string, CatalogToolReference[]>();
+  for (const tool of tools ?? []) {
+    const existing = byCatalog.get(tool.catalogId);
+    if (existing) existing.push(tool);
+    else byCatalog.set(tool.catalogId, [tool]);
+  }
+  return byCatalog;
 }
 
 /**

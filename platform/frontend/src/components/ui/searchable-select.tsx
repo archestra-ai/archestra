@@ -35,6 +35,15 @@ interface SearchableSelectProps {
    * announces as an unnamed combobox.
    */
   ariaLabel?: string;
+  /** Applied to the trigger, so tests can reach the control by test id. */
+  "data-testid"?: string;
+  /**
+   * Forwarded to the trigger. A form wrapper (`FormControl`) injects these to
+   * point the control at its description and error text; dropping them leaves
+   * the message on screen but unannounced.
+   */
+  "aria-describedby"?: string;
+  "aria-invalid"?: React.AriaAttributes["aria-invalid"];
   searchPlaceholder?: string;
   items: Array<SearchableSelectItem>;
   /**
@@ -63,6 +72,9 @@ export function SearchableSelect({
   placeholder = "Select...",
   id,
   ariaLabel,
+  "data-testid": testId,
+  "aria-describedby": ariaDescribedBy,
+  "aria-invalid": ariaInvalid,
   searchPlaceholder = "Search...",
   items,
   pinnedItems,
@@ -154,6 +166,9 @@ export function SearchableSelect({
           role="combobox"
           aria-expanded={open}
           aria-label={ariaLabel}
+          aria-describedby={ariaDescribedBy}
+          aria-invalid={ariaInvalid}
+          data-testid={testId}
           disabled={disabled}
           className={cn(
             multiline

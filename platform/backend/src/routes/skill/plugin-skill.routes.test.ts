@@ -330,6 +330,15 @@ describe("plugin Skill routes", () => {
             "install/NOTICE",
             "runtime/LICENSE",
             "settings/.mcp.json",
+            "docs/plugin.json",
+            "plugin.json",
+            "marketplace.json",
+            ".CLAUDE-PLUGIN/PLUGIN.JSON",
+            "preinstall.js",
+            "postinstall.sh",
+            "installer.sh",
+            "bootstrapper.py",
+            "tools/preinstall.js",
           ].map((path) => ({
             path,
             content: "plugin-specific\n",
@@ -345,7 +354,12 @@ describe("plugin Skill routes", () => {
             "README.md",
             "agents/reviewer.md",
             "commands/release.md",
+            "output-format.md",
+            "output-formats/compact.md",
+            "output-style.md",
             "output-styles/concise.md",
+            "output_styles/verbose.md",
+            "references/install.md",
             ".claude/agents/reviewer.md",
             ".claude/commands/release.md",
             ".claude/output-styles/concise.md",
@@ -410,6 +424,10 @@ describe("plugin Skill routes", () => {
             "bundles/client/skills/ste-writing/NOTICE",
             "bundles/client/skills/ste-writing/README.md",
             "bundles/client/skills/ste-writing/agents/editor.md",
+            "bundles/client/skills/ste-writing/output-format.md",
+            "bundles/client/skills/ste-writing/output-formats/compact.md",
+            "bundles/client/skills/ste-writing/references/install.md",
+            "bundles/client/skills/ste-writing/tools/postinstall.sh",
           ].map((path) => ({
             path,
             content: "nested adoptable context\n",
@@ -433,8 +451,8 @@ describe("plugin Skill routes", () => {
       (item: { skillPath: string }) =>
         item.skillPath === "bundles/client/skills/ste-writing",
     );
-    expect(rootItem).toMatchObject({ name: "root-guide", fileCount: 23 });
-    expect(nestedItem).toMatchObject({ name: "ste-writing", fileCount: 5 });
+    expect(rootItem).toMatchObject({ name: "root-guide", fileCount: 37 });
+    expect(nestedItem).toMatchObject({ name: "ste-writing", fileCount: 9 });
 
     const rootDetail = await ctx.app.inject({
       method: "GET",
@@ -445,12 +463,16 @@ describe("plugin Skill routes", () => {
       expect.objectContaining({ path: ".claude/agents/reviewer.md" }),
       expect.objectContaining({ path: ".claude/commands/release.md" }),
       expect.objectContaining({ path: ".claude/output-styles/concise.md" }),
+      expect.objectContaining({ path: ".claude/settings.json" }),
       expect.objectContaining({ path: ".codex/agents/reviewer.toml" }),
+      expect.objectContaining({ path: ".codex/config.toml" }),
       expect.objectContaining({ path: ".copilot/mcp-config.json" }),
       expect.objectContaining({ path: ".cursor/agents/reviewer.md" }),
       expect.objectContaining({ path: ".cursor/commands/release.md" }),
       expect.objectContaining({ path: ".cursor/mcp.json" }),
+      expect.objectContaining({ path: ".cursor/rules/project.mdc" }),
       expect.objectContaining({ path: ".github/agents/reviewer.agent.md" }),
+      expect.objectContaining({ path: ".github/copilot-instructions.md" }),
       expect.objectContaining({ path: ".github/mcp.json" }),
       expect.objectContaining({ path: ".github/prompts/release.prompt.md" }),
       expect.objectContaining({ path: ".lsp.json" }),
@@ -462,9 +484,19 @@ describe("plugin Skill routes", () => {
       expect.objectContaining({ path: "agents/reviewer.md" }),
       expect.objectContaining({ path: "assets/root-template.txt" }),
       expect.objectContaining({ path: "commands/release.md" }),
+      expect.objectContaining({ path: "docs/plugin.json" }),
+      expect.objectContaining({ path: "notes.md" }),
+      expect.objectContaining({ path: "output-format.md" }),
+      expect.objectContaining({ path: "output-formats/compact.md" }),
+      expect.objectContaining({ path: "output-style.md" }),
       expect.objectContaining({ path: "output-styles/concise.md" }),
+      expect.objectContaining({ path: "output_styles/verbose.md" }),
+      expect.objectContaining({ path: "package.json" }),
+      expect.objectContaining({ path: "references/install.md" }),
       expect.objectContaining({ path: "references/root-notes.md" }),
+      expect.objectContaining({ path: "runtime/LICENSE" }),
       expect.objectContaining({ path: "scripts/root-check.sh" }),
+      expect.objectContaining({ path: "settings/.mcp.json" }),
     ]);
 
     const nestedDetail = await ctx.app.inject({
@@ -477,6 +509,10 @@ describe("plugin Skill routes", () => {
       expect.objectContaining({ path: "NOTICE" }),
       expect.objectContaining({ path: "README.md" }),
       expect.objectContaining({ path: "agents/editor.md" }),
+      expect.objectContaining({ path: "custom/context.md" }),
+      expect.objectContaining({ path: "output-format.md" }),
+      expect.objectContaining({ path: "output-formats/compact.md" }),
+      expect.objectContaining({ path: "references/install.md" }),
       expect.objectContaining({ path: "scripts/ste-lint.py" }),
     ]);
   });

@@ -396,6 +396,48 @@ describe("skill tool execution", () => {
           encoding: "utf8",
           mode: "100644",
         },
+        {
+          path: "skills/release/output-style.md",
+          content: "Prefer concise release notes.\n",
+          encoding: "utf8",
+          mode: "100644",
+        },
+        {
+          path: "skills/release/custom/context.dat",
+          content: "arbitrary adoptable context\n",
+          encoding: "utf8",
+          mode: "100644",
+        },
+        {
+          path: "skills/release/package.json",
+          content: '{"dependencies":{}}\n',
+          encoding: "utf8",
+          mode: "100644",
+        },
+        {
+          path: "skills/release/install.py",
+          content: "print('install')\n",
+          encoding: "utf8",
+          mode: "100755",
+        },
+        {
+          path: "skills/release/.claude-plugin/plugin.json",
+          content: "{}\n",
+          encoding: "utf8",
+          mode: "100644",
+        },
+        {
+          path: "skills/release/references/plugin.json",
+          content: '{"portable":true}\n',
+          encoding: "utf8",
+          mode: "100644",
+        },
+        {
+          path: "skills/release/tools/preinstall.js",
+          content: "process.exit(0);\n",
+          encoding: "utf8",
+          mode: "100755",
+        },
       ],
     };
     const plugin = await PluginModel.create({
@@ -427,6 +469,13 @@ describe("skill tool execution", () => {
     expect(textOf(activation)).toContain("Ship carefully.");
     expect(textOf(activation)).toContain("references/checklist.md");
     expect(textOf(activation)).toContain(".mcp.json");
+    expect(textOf(activation)).toContain("custom/context.dat");
+    expect(textOf(activation)).toContain("output-style.md");
+    expect(textOf(activation)).toContain("package.json");
+    expect(textOf(activation)).toContain("references/plugin.json");
+    expect(textOf(activation)).not.toContain("install.py");
+    expect(textOf(activation)).not.toContain("tools/preinstall.js");
+    expect(textOf(activation)).not.toContain(".claude-plugin/plugin.json");
     expect(textOf(activation)).not.toContain("hooks/hooks.json");
     await drainBackgroundWork();
     let usage = await PluginSkillUsageEventModel.getSummaries([
@@ -447,6 +496,20 @@ describe("skill tool execution", () => {
     );
     expect(mcpConfig.isError).toBe(false);
     expect(textOf(mcpConfig)).toContain("{}\n");
+    const outputStyle = await executeArchestraTool(
+      TOOL_LOAD_SKILL_FULL_NAME,
+      { name: loadName, path: "output-style.md" },
+      context,
+    );
+    expect(outputStyle.isError).toBe(false);
+    expect(textOf(outputStyle)).toContain("Prefer concise release notes.");
+    const arbitraryContext = await executeArchestraTool(
+      TOOL_LOAD_SKILL_FULL_NAME,
+      { name: loadName, path: "custom/context.dat" },
+      context,
+    );
+    expect(arbitraryContext.isError).toBe(false);
+    expect(textOf(arbitraryContext)).toContain("arbitrary adoptable context");
     const hookArtifact = await executeArchestraTool(
       TOOL_LOAD_SKILL_FULL_NAME,
       { name: loadName, path: "hooks/hooks.json" },

@@ -211,39 +211,23 @@ function skillRootOf(manifestPath: string): string {
   return index === -1 ? "" : manifestPath.slice(0, index);
 }
 
-const ADOPTABLE_SKILL_RESOURCE_DIRECTORIES = new Set([
-  "agents",
-  "assets",
-  "commands",
-  "licenses",
-  "lsp-config",
-  "output-styles",
-  "references",
-  "scripts",
+const PLUGIN_METADATA_DIRECTORY_NAMES = new Set([
+  ".claude-plugin",
+  ".codex-plugin",
+  ".cursor-plugin",
+  ".plugin",
 ]);
 
-const ADOPTABLE_PLUGIN_CONFIG_PATHS = new Set([
-  ".lsp.json",
-  ".mcp.json",
-  ".cursor/mcp.json",
-  ".copilot/mcp-config.json",
-  ".github/lsp.json",
-  ".github/mcp.json",
-  ".vscode/mcp.json",
-  "lsp.json",
-  "mcp.json",
-]);
+const PLUGIN_METADATA_DIRECTORY_PATHS = [".agents/plugins", ".github/plugin"];
 
-const ADOPTABLE_PLUGIN_CONTEXT_PREFIXES = [
-  ".claude/agents/",
-  ".claude/commands/",
-  ".claude/output-styles/",
-  ".codex/agents/",
-  ".cursor/agents/",
-  ".cursor/commands/",
-  ".github/agents/",
-  ".github/prompts/",
-];
+const INSTALLATION_DIRECTORY_NAMES = new Set([
+  "bootstrap",
+  "install",
+  "installation",
+  "installer",
+  "setup",
+  "uninstall",
+]);
 
 /** Keep Skill-owned resources and explicitly adoptable plugin context. */
 function resourcePathsOf(
@@ -267,19 +251,38 @@ function resourcePathsOf(
       return false;
     }
     const relativePath = root === "" ? path : path.slice(root.length + 1);
-    const resourceRoot = relativePath.split("/", 1)[0].toLowerCase();
-    const isRootFile = !relativePath.includes("/");
-    return (
-      ADOPTABLE_SKILL_RESOURCE_DIRECTORIES.has(resourceRoot) ||
-      ADOPTABLE_PLUGIN_CONFIG_PATHS.has(relativePath) ||
-      ADOPTABLE_PLUGIN_CONTEXT_PREFIXES.some((prefix) =>
-        relativePath.startsWith(prefix),
-      ) ||
-      (isRootFile && /^README(?:[._-].+)?$/i.test(relativePath)) ||
-      (isRootFile &&
-        /^(?:LICENSE|LICENCE|COPYING|NOTICE|COPYRIGHT)(?:[._-].+)?$/i.test(
-          relativePath,
-        ))
-    );
+    return !isPluginOnlyArtifact(relativePath);
   });
+}
+
+function isPluginOnlyArtifact(relativePath: string): boolean {
+  const lowerPath = relativePath.toLowerCase();
+  const segments = lowerPath.split("/");
+  const filename = segments.at(-1) ?? "";
+  if (segments.includes("hooks") || /^hooks?\.json$/.test(filename)) {
+    return true;
+  }
+  if (
+    segments.some((segment) => PLUGIN_METADATA_DIRECTORY_NAMES.has(segment)) ||
+    PLUGIN_METADATA_DIRECTORY_PATHS.some(
+      (path) =>
+        lowerPath === path ||
+        lowerPath.startsWith(`${path}/`) ||
+        lowerPath.includes(`/${path}/`),
+    ) ||
+    (segments.length === 1 && /^(?:plugin|marketplace)\.json$/.test(filename))
+  ) {
+    return true;
+  }
+  if (segments.some((segment) => INSTALLATION_DIRECTORY_NAMES.has(segment))) {
+    return true;
+  }
+  if (
+    /^(?:(?:pre|post)?install(?:er|ation)?|bootstrap(?:per)?|setup|uninstall)(?:[._-].+)?$/.test(
+      filename,
+    )
+  ) {
+    return !/\.(?:md|txt)$/i.test(filename);
+  }
+  return false;
 }

@@ -228,14 +228,20 @@ vi.mock("@/components/ui/dialog", () => ({
 }));
 
 vi.mock("@/components/ui/permission-button", () => ({
+  // `permissions`/`tooltip` are the component's own; everything else (notably
+  // aria-label, which names an icon-only button) belongs on the button.
   PermissionButton: ({
     children,
-    onClick,
-  }: {
-    children: React.ReactNode;
-    onClick?: () => void;
+    permissions: _permissions,
+    tooltip: _tooltip,
+    noPermissionHandle: _noPermissionHandle,
+    ...props
+  }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+    permissions?: unknown;
+    tooltip?: string;
+    noPermissionHandle?: string;
   }) => (
-    <button type="button" onClick={onClick}>
+    <button type="button" {...props}>
       {children}
     </button>
   ),
@@ -332,6 +338,20 @@ describe("ApiKeysPage", () => {
     });
   });
 
+  it("still offers subscriptions to a member who cannot read keys", () => {
+    // Their key query never runs, so the cards must state the offer rather than
+    // sit in a skeleton waiting on a query that will never resolve.
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    mockUseLlmProviderApiKeys.mockReturnValue({ data: [], isPending: true });
+
+    render(<ApiKeysPage />);
+
+    expect(screen.getAllByText("Connect")).toHaveLength(4);
+  });
+
   it("lets a default member open personal API-key creation", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: false,
@@ -346,7 +366,7 @@ describe("ApiKeysPage", () => {
     );
   });
 
-  it("always shows the personal subscription credentials from the registry", () => {
+  it("offers every registry subscription as a card above the table", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
       isPending: false,
@@ -354,14 +374,62 @@ describe("ApiKeysPage", () => {
 
     render(<ApiKeysPage />);
 
-    expect(screen.getByText("ChatGPT")).toBeInTheDocument();
-    expect(screen.getByText("GitHub Copilot")).toBeInTheDocument();
-    expect(screen.getByText("Microsoft 365 Copilot")).toBeInTheDocument();
-    expect(screen.getByText("X Premium (SuperGrok)")).toBeInTheDocument();
+    const cards = screen.getByTestId("subscription-provider-cards");
+    expect(cards).toHaveTextContent("ChatGPT");
+    expect(cards).toHaveTextContent("GitHub Copilot");
+    expect(cards).toHaveTextContent("Microsoft 365 Copilot");
+    expect(cards).toHaveTextContent("X Premium (SuperGrok)");
     expect(screen.getAllByText("Connect")).toHaveLength(4);
+    expect(screen.getAllByText("Not connected")).toHaveLength(4);
   });
 
-  it("keeps disconnected subscription offers and system keys out of bulk selection", () => {
+  it("hides a subscription whose provider the organization turned off", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useOrganization).mockReturnValue({
+      data: { modelProviderOverrides: { xai: { hidden: true } } },
+    } as unknown as ReturnType<typeof useOrganization>);
+
+    render(<ApiKeysPage />);
+
+    expect(
+      screen.getByTestId("subscription-provider-cards"),
+    ).not.toHaveTextContent("X Premium (SuperGrok)");
+    expect(screen.getAllByText("Connect")).toHaveLength(3);
+  });
+
+  it("keeps a turned-off provider's connected subscription key in the table", () => {
+    // The card is withdrawn with the provider, so the key it stood for has to
+    // fall back to a table row — otherwise an admin can no longer see or
+    // delete a credential that still exists.
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useOrganization).mockReturnValue({
+      data: { modelProviderOverrides: { xai: { hidden: true } } },
+    } as unknown as ReturnType<typeof useOrganization>);
+    mockUseLlmProviderApiKeys.mockReturnValue({
+      data: [
+        {
+          id: "x-premium-key",
+          name: "My SuperGrok",
+          provider: "xai",
+          scope: "personal",
+          subscriptionKind: "x-premium",
+        },
+      ],
+      isPending: false,
+    });
+
+    render(<ApiKeysPage />);
+
+    expect(screen.getByText("My SuperGrok")).toBeInTheDocument();
+  });
+
+  it("keeps system keys out of bulk selection", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
       isPending: false,
@@ -385,9 +453,10 @@ describe("ApiKeysPage", () => {
     expect(
       screen.getByRole("checkbox", { name: "Select System Gemini" }),
     ).toBeDisabled();
+    // Subscriptions are cards now, so they never reach the table's selection.
     expect(
-      screen.getByRole("checkbox", { name: "Select ChatGPT" }),
-    ).toBeDisabled();
+      screen.queryByRole("checkbox", { name: "Select ChatGPT" }),
+    ).not.toBeInTheDocument();
   });
 
   it("represents a connected subscription once and removes its connect action", () => {
@@ -413,7 +482,39 @@ describe("ApiKeysPage", () => {
     expect(
       screen.queryByText("Existing ChatGPT credential"),
     ).not.toBeInTheDocument();
+    expect(screen.getByText("Connected")).toBeInTheDocument();
     expect(screen.getAllByText("Connect")).toHaveLength(3);
+    expect(
+      screen.getByRole("button", { name: "Disconnect" }),
+    ).toBeInTheDocument();
+  });
+
+  it("disconnects a connected subscription through a subscription-worded dialog", async () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    mockUseLlmProviderApiKeys.mockReturnValue({
+      data: [
+        {
+          id: "copilot-key",
+          name: "GitHub Copilot",
+          provider: "github-copilot",
+          scope: "personal",
+        },
+      ],
+      isPending: false,
+    });
+
+    render(<ApiKeysPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
+
+    // "Delete API Key" would describe a credential the user never configured.
+    await waitFor(() => {
+      expect(screen.getByTestId("delete-dialog")).toHaveTextContent(
+        'Disconnect "GitHub Copilot"?',
+      );
+    });
   });
 
   it("does not classify an ordinary key from the mutable X Premium display name", () => {
@@ -435,7 +536,7 @@ describe("ApiKeysPage", () => {
 
     render(<ApiKeysPage />);
 
-    // The subscription row remains unconnected and the same-named ordinary key
+    // The subscription card remains unconnected and the same-named ordinary key
     // remains its own credential row.
     expect(screen.getAllByText("X Premium (SuperGrok)")).toHaveLength(2);
     expect(screen.getAllByText("Connect")).toHaveLength(4);
@@ -526,9 +627,7 @@ describe("ApiKeysPage", () => {
 
     // The owner is the point: the backend already joins userName, and before
     // this column showed only a generic scope word for every personal key.
-    // "Me" appears five times — the viewer's own key plus the four
-    // subscription rows, which are the viewer's own accounts by definition.
-    expect(screen.getAllByText("Me")).toHaveLength(5);
+    expect(screen.getAllByText("Me")).toHaveLength(1);
     expect(screen.getByText("Dana")).toBeInTheDocument();
     expect(screen.getByText("Organization")).toBeInTheDocument();
   });

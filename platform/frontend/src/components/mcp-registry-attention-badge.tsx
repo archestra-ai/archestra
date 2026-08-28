@@ -1,21 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { mcpRegistryFacetHref } from "@/app/mcp/registry/_parts/registry-list-controls";
 import { SidebarMenuAction } from "@/components/ui/sidebar";
 import { useMcpDeploymentStatuses } from "@/lib/mcp/mcp-server.query";
 import { useMcpServerIssues } from "@/lib/mcp/use-mcp-server-issues";
 
 /**
  * Sidebar count of MCP servers the viewer must act on (failed to start, not
- * running, needs re-authentication, reinstall, image approval), so problems
- * are visible from any page. Reads the same cached registry queries the
+ * running, needs re-authentication), so problems are visible from any page. Reads the same cached registry queries the
  * registry page uses; renders nothing while the fleet is clean.
  *
- * The count is a link to the list already narrowed to those servers, so it
- * lands on the two rows it is counting rather than on the whole registry. It
- * renders as a `SidebarMenuAction` — a sibling of the nav item's own link,
- * not a child of it — because an anchor may not contain another anchor.
+ * The count links to the rows it is counting. The registry's default Action
+ * required ordering also puts them first instead of hiding them behind
+ * pagination. It renders as a `SidebarMenuAction` — a sibling of the nav
+ * item's own link, not a child of it — because an anchor may not contain
+ * another anchor.
  *
  * It reads the same live deployment feed the registry page does. Runtime
  * faults (a crash-looping pod, an image that will not pull) exist only for a
@@ -41,7 +40,7 @@ export function McpRegistryAttentionBadge() {
       className="aspect-auto h-5 w-auto min-w-5 rounded-full bg-destructive px-1 text-[11px] font-semibold tabular-nums text-destructive-foreground hover:bg-destructive hover:text-destructive-foreground"
     >
       <Link
-        href={mcpRegistryFacetHref("you")}
+        href="/mcp/registry?status=needs-my-action"
         data-testid="sidebar-mcp-registry-attention-count"
       >
         {count}

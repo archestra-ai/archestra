@@ -26,6 +26,16 @@ An MCP server usually moves through this lifecycle:
 
 This separation lets admins curate a small approved catalog while still allowing each user or team to connect with their own credentials.
 
+## Finding Servers
+
+Cards and table rows use the same active sort. Choose **Action required** when you want flagged servers first.
+
+The scope filter narrows the list to **Personal**, **Team**, or **Organization**. An administrator can use **Other users** inside Personal to review another member's private entries and connections. Those oversight rows stay out of the default list.
+
+Cards and table rows identify their owner or shared scope with a visibility badge. The table keeps one continuous list and shows the same badge in **Accessible to**. A dot over each self-hosted server icon shows runtime status in both views. Hover it for pod counts or idle-hibernation details. The table's **Status** column shows installation state and active alerts.
+
+Selecting rows or cards replaces the filter controls with the matching bulk actions. Shift-click extends the selection across the visible range. The list does not move or reserve an empty action bar while nothing is selected.
+
 Entries that expose a UI carry an **App** badge. Each [owned MCP App](./platform-apps) is also backed by its own registry entry: it appears here as a read-only card (visible to users with `app:read`) whose pencil manages the app's server settings — visibility, environment, assigned tools, and deletion — while authoring stays at `/a/:id`.
 
 ## Server Configuration
@@ -99,15 +109,13 @@ Each registry card shows how many agents and gateways can reach the server. Hove
 
 ## Needs Attention
 
-> **Beta:** MCP server alerting is deployment-gated and off by default. Set `ARCHESTRA_MCP_SERVER_ALERTING_ENABLED=true` to enable attention facets, diagnostics, ownership guidance, and per-viewer dismissal. A blank value follows the `ARCHESTRA_BETA` master switch.
+> **Beta:** MCP server alerting is deployment-gated and off by default. Set `ARCHESTRA_MCP_SERVER_ALERTING_ENABLED=true` to enable attention ordering, diagnostics, ownership guidance, and per-viewer dismissal. A blank value follows the `ARCHESTRA_BETA` master switch.
 
 A server is flagged only when it cannot operate: its pod failed to start, it stopped running, or its stored credential was rejected. Pending installs, image approvals, and configuration changes that leave the running server untouched are never flagged.
 
-Flagged servers appear as facets on the registry list. **Action required** contains problems you can fix. For non-admin viewers, **Waiting action by _owner_** contains problems owned by another person; the owner is named only when your role may see that identity, otherwise the facet says **other user**. MCP installation admins can act across ownership and visibility boundaries, so every visible problem is included in **Action required**.
+The registry's **Action required** sort puts flagged servers first. The sidebar count opens a table-only attention view for the servers you can fix. Each row shows the issue and the connection owner or required admin role. Use the **Issue** filter to narrow the table to failed starts, stopped servers, or rejected credentials. Issue-specific remediation stays visible in the Actions column; a row leaves only when its health signal clears. **Re-authenticate** opens a compact credential-repair form for the affected connection directly on the server details page. **Manage credentials** remains the broader view for listing, adding, and revoking connections.
 
-Attention facets use a table-only triage view. Each row shows the issue and connection owner or required admin role. Use the **Issue** filter to narrow the table to failed starts, stopped servers, or rejected credentials. Issue-specific remediation stays visible in the Actions column; a row leaves only when its health signal clears. **Re-authenticate** opens a compact credential-repair form for the affected connection directly on the server details page. **Manage credentials** remains the broader view for listing, adding, and revoking connections.
-
-Every alert can be dismissed from your queue without hiding the problem from other viewers. You can optionally add a reason; the **Dismissed** facet shows it in the **Dismiss reason** column and lets you restore the alert. Select several servers to dismiss their alerts or remove their affected connections together. Bulk removal requires every selected row to identify connections you are allowed to remove and always asks for confirmation. A dismissal is pinned to one failure episode and expires automatically when the underlying failure changes.
+Every alert can be dismissed from your queue without hiding the problem from other viewers. You can optionally add a reason; the **Dismissed** view shows it in the **Dismiss reason** column and lets you restore the alert. Select several servers to dismiss their alerts or remove their affected connections together. Bulk removal requires every selected row to identify connections you are allowed to remove and always asks for confirmation. A dismissal is pinned to one failure episode and expires automatically when the underlying failure changes.
 
 ## Refreshing Tools
 

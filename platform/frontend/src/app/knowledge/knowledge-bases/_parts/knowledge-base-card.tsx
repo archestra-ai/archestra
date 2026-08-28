@@ -4,6 +4,7 @@ import type { archestraApiTypes } from "@archestra/shared";
 import { Bot, Database, FileText, Plug, Plus } from "lucide-react";
 import type { MouseEventHandler } from "react";
 import { ConnectorChip } from "@/app/knowledge/knowledge-bases/_parts/connector-chip";
+import { COLLECTION_CARD_HOVER_CLASSNAME } from "@/components/table-card-view";
 import {
   type TableRowAction,
   TableRowActions,
@@ -66,7 +67,9 @@ export function KnowledgeBaseCard({
     <div
       className={cn(
         "flex h-full flex-col gap-3 rounded-lg border p-4 transition-colors",
-        selected ? "border-primary bg-primary/5" : "hover:bg-muted/30",
+        selected
+          ? "border-primary bg-primary/5"
+          : COLLECTION_CARD_HOVER_CLASSNAME,
       )}
     >
       <div className="flex items-start gap-3">

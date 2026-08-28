@@ -1,5 +1,13 @@
+import type { RowSelectionState } from "@tanstack/react-table";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { FilterBar } from "@/components/filter-bar";
+import { BulkActions } from "@/components/ui/bulk-actions-bar";
+import { createSelectColumn } from "@/components/ui/bulk-select-column";
+import { DataTable } from "@/components/ui/data-table";
+import { useBulkRangeSelectionController } from "@/lib/bulk-range-selection-context";
+import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
 import {
   TableCard,
   TableCardList,
@@ -61,6 +69,113 @@ describe("TableCardView", () => {
     expect(screen.getByLabelText("View as table").closest("div")).toHaveClass(
       "hidden",
       "md:inline-flex",
+    );
+  });
+
+  it("keeps expensive layouts mounted when a caller opts into warm switching", () => {
+    render(
+      <TableCardView storageKey="warm-view" defaultMode="table">
+        <TableCardViewToggle />
+        <TableCardViewContent
+          keepMounted
+          table={<span>Warm table</span>}
+          cards={<span>Warm cards</span>}
+        />
+      </TableCardView>,
+    );
+
+    expect(screen.getByText("Warm table").parentElement).toHaveAttribute(
+      "data-active",
+      "true",
+    );
+    expect(screen.getByText("Warm cards").parentElement).toHaveAttribute(
+      "data-active",
+      "false",
+    );
+    fireEvent.click(screen.getByLabelText("View as cards"));
+    expect(screen.getByText("Warm table").parentElement).toHaveAttribute(
+      "data-active",
+      "false",
+    );
+    expect(screen.getByText("Warm cards").parentElement).toHaveAttribute(
+      "data-active",
+      "true",
+    );
+  });
+
+  it("navigates from the card shell without shadowing nested controls", () => {
+    const onNavigate = vi.fn();
+    const onAction = vi.fn();
+    const { container } = render(
+      <TableCard
+        title="Navigable card"
+        onNavigate={onNavigate}
+        actions={
+          <button type="button" onClick={onAction}>
+            Card action
+          </button>
+        }
+      />,
+    );
+    const card = container.firstElementChild;
+    expect(card).toBeInstanceOf(HTMLElement);
+    if (!(card instanceof HTMLElement)) throw new Error("Card did not render");
+
+    fireEvent.click(card);
+    expect(onNavigate).toHaveBeenCalledOnce();
+
+    fireEvent.click(screen.getByRole("button", { name: "Card action" }));
+    expect(onAction).toHaveBeenCalledOnce();
+    expect(onNavigate).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the Shift-range anchor when switching between table and cards", () => {
+    render(<SharedRangeView />);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select two" }));
+    fireEvent.click(screen.getByRole("button", { name: "View as cards" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select four" }), {
+      shiftKey: true,
+    });
+
+    for (const id of ["two", "three", "four"]) {
+      expect(
+        screen.getByRole("checkbox", { name: `Select ${id}` }),
+      ).toBeChecked();
+    }
+    expect(
+      screen.getByRole("checkbox", { name: "Select one" }),
+    ).not.toBeChecked();
+  });
+
+  it("replaces scoped filters with bulk actions without a separate reserved bar", async () => {
+    const { container } = render(<ScopedBulkActionsView />);
+
+    expect(
+      screen.getByRole("button", { name: "Filter by action" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Delete selected" }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Select a skill" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Delete selected" }),
+      ).toBeVisible(),
+    );
+    expect(
+      screen
+        .getByRole("button", { name: "Filter by action", hidden: true })
+        .closest('[data-slot="filter-controls"]'),
+    ).toHaveAttribute("inert");
+
+    const bars = container.querySelectorAll('[data-slot="bulk-actions-bar"]');
+    expect(bars).toHaveLength(1);
+    expect(bars[0]?.parentElement).toHaveAttribute(
+      "data-slot",
+      "contextual-actions",
     );
   });
 
@@ -144,6 +259,69 @@ function TestView() {
         table={<span>Table</span>}
         cards={<span>Cards</span>}
       />
+    </TableCardView>
+  );
+}
+
+const rangeRows = ["one", "two", "three", "four"].map((id) => ({ id }));
+
+function SharedRangeView() {
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const rangeSelection = useBulkRangeSelectionController();
+  const cardSelection = useBulkCardSelection({
+    rows: rangeRows,
+    getRowId: (row) => row.id,
+    rowSelection,
+    setRowSelection,
+    rangeSelection,
+  });
+
+  return (
+    <TableCardView storageKey="shared-range" defaultMode="table">
+      <TableCardViewToggle />
+      <TableCardViewContent
+        table={
+          <DataTable
+            columns={[
+              createSelectColumn<(typeof rangeRows)[number]>({
+                rowLabel: (row) => `Select ${row.id}`,
+              }),
+              { accessorKey: "id", header: "Name" },
+            ]}
+            data={rangeRows}
+            getRowId={(row) => row.id}
+            rowSelection={rowSelection}
+            onRowSelectionChange={setRowSelection}
+            rangeSelection={rangeSelection}
+          />
+        }
+        cards={rangeRows.map((row) => (
+          <TableCard
+            key={row.id}
+            title={row.id}
+            {...cardSelection(row)}
+            selectionLabel={`Select ${row.id}`}
+          />
+        ))}
+      />
+    </TableCardView>
+  );
+}
+
+function ScopedBulkActionsView() {
+  const [count, setCount] = useState(0);
+
+  return (
+    <TableCardView storageKey="scoped-bulk-actions-view">
+      <FilterBar>
+        <button type="button">Filter by action</button>
+      </FilterBar>
+      <BulkActions count={count} noun="skill">
+        <button type="button">Delete selected</button>
+      </BulkActions>
+      <button type="button" onClick={() => setCount(1)}>
+        Select a skill
+      </button>
     </TableCardView>
   );
 }

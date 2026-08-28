@@ -1,6 +1,7 @@
 "use client";
 
 import type { ResourceVisibilityScope } from "@archestra/shared";
+import type { RowSelectionState } from "@tanstack/react-table";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -12,7 +13,7 @@ import {
   PackageSearch,
   SearchX,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   GithubAuthConfigFields,
   type GithubAuthMethod,
@@ -50,6 +51,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { BulkRangeSelectionController } from "@/lib/bulk-range-selection";
 import { useGithubAppConfigs } from "@/lib/github-app-config.query";
 import { useCreateGithubPat, useGithubPats } from "@/lib/github-pat.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
@@ -121,6 +123,7 @@ export function ImportSkillsDialog({
   const [githubAppConfigId, setGithubAppConfigId] = useState("");
   const [discovered, setDiscovered] = useState<SelectStepSkill[] | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const rangeSelection = useRef(new BulkRangeSelectionController()).current;
   const [search, setSearch] = useState("");
   const [previewSkillPath, setPreviewSkillPath] = useState<string | null>(null);
   const [discoverError, setDiscoverError] = useState<string | null>(null);
@@ -280,15 +283,15 @@ export function ImportSkillsDialog({
     }
   };
 
-  const toggle = (skillPath: string) => {
+  const toggle = (skillPath: string, range: boolean) => {
     setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(skillPath)) {
-        next.delete(skillPath);
-      } else {
-        next.add(skillPath);
-      }
-      return next;
+      const next = rangeSelection.update({
+        current: toRowSelectionState(prev),
+        orderedIds: selectableFiltered.map((skill) => skill.skillPath),
+        targetId: skillPath,
+        range,
+      });
+      return toSelectionSet(next);
     });
   };
 
@@ -613,7 +616,10 @@ export function ImportSkillsDialog({
                             <Checkbox
                               id={`import-skill-${skill.skillPath}`}
                               checked={isSelected}
-                              onCheckedChange={() => toggle(skill.skillPath)}
+                              onClick={(event) => {
+                                event.preventDefault();
+                                toggle(skill.skillPath, event.shiftKey);
+                              }}
                               className="shrink-0"
                               aria-label={
                                 isSelected
@@ -897,5 +903,17 @@ export function ImportSkillsDialog({
         isLoading={isPreviewLoading}
       />
     </StandardDialog>
+  );
+}
+
+function toRowSelectionState(selected: Set<string>): RowSelectionState {
+  return Object.fromEntries([...selected].map((id) => [id, true]));
+}
+
+function toSelectionSet(selection: RowSelectionState): Set<string> {
+  return new Set(
+    Object.entries(selection)
+      .filter(([, selected]) => selected)
+      .map(([id]) => id),
   );
 }

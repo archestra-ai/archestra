@@ -197,7 +197,7 @@ function KnowledgeBasesList() {
   // re-pointing "all N" at a different N.
   const filterSignature = `${search}|${isDeletedView}`;
   const allMatchingActive = selectAllMatchingFor === filterSignature;
-  const { effectiveRowSelection, onRowSelectionChange } =
+  const { effectiveRowSelection, onRowSelectionChange, rangeSelection } =
     useControlledRowSelection({
       rowSelection,
       setRowSelection,
@@ -211,6 +211,7 @@ function KnowledgeBasesList() {
     getRowId: (knowledgeBase) => knowledgeBase.id,
     rowSelection: effectiveRowSelection,
     setRowSelection: onRowSelectionChange,
+    rangeSelection,
   });
   const { data: allMatching, isFetching: isFetchingAllMatching } =
     useAllMatchingKnowledgeBases(
@@ -449,9 +450,7 @@ function KnowledgeBasesList() {
     >
       <TableCardView storageKey="knowledge-bases-view">
         <div>
-          <div
-            className={`${!isDeletedView ? "mb-3" : "mb-6"} flex flex-col gap-2`}
-          >
+          <div className="mb-3 flex flex-col gap-2">
             <FilterBar
               actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
             >
@@ -526,6 +525,7 @@ function KnowledgeBasesList() {
                 onRowSelectionChange={
                   isDeletedView ? undefined : onRowSelectionChange
                 }
+                rangeSelection={rangeSelection}
                 hideSelectedCount
                 // The deleted view always counts as filtered (see hasActiveFilters),
                 // so its empty state is the filtered one below.

@@ -239,6 +239,7 @@ export function ExternalMcpSkillsSection({
               title={<Link href={externalSkillHref(skill)}>{skill.name}</Link>}
               description={skill.description || "No description"}
               actions={renderActions(skill)}
+              onNavigate={() => router.push(externalSkillHref(skill))}
               footer={
                 <div className="flex items-center justify-between gap-3">
                   <span>

@@ -40,6 +40,7 @@ import {
   TableCardView,
   TableCardViewContent,
   TableCardViewToggle,
+  useNavigableCard,
 } from "@/components/table-card-view";
 import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
@@ -252,9 +253,7 @@ function ProjectsList() {
         )}
         <div className="space-y-6">
           <FilterBar
-            className={
-              !isDeletedView && projects.length > 0 ? "!mb-3" : undefined
-            }
+            className={projects.length > 0 ? "!mb-3" : undefined}
             actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
           >
             {/* Hidden in the trash: the backend serves that slice whole, ignoring
@@ -388,6 +387,7 @@ function ProjectSection({
     clearSelection,
     selected: selectedProjects,
     selectAllMatching,
+    rangeSelection,
   } = useBulkSelection({
     rows: projects,
     getId: (project) => project.id,
@@ -401,6 +401,7 @@ function ProjectSection({
     rowSelection,
     setRowSelection,
     canSelect: canSelectProject,
+    rangeSelection,
   });
   const selectedForSharing = selectedProjects.filter(canShareProjectItem);
   const selectedForDelete = selectedProjects.filter(canDeleteProjectItem);
@@ -462,6 +463,7 @@ function ProjectSection({
             onRowSelectionChange={setRowSelection}
             onPageRowIdsChange={onPageRowIdsChange}
             canSelect={canSelectProject}
+            rangeSelection={rangeSelection}
           />
         }
         cards={
@@ -603,26 +605,27 @@ function ProjectCard({
 } & BulkCardSelectionProps) {
   const { data: isProjectAdmin } = useHasPermissions({ project: ["admin"] });
   const { data: canShareOrg } = useHasPermissions({ project: ["share-org"] });
+  const router = useRouter();
+  const navigation = useNavigableCard({
+    onNavigate: () => router.push(`/projects/${project.id}`),
+    selected,
+  });
   return (
-    // `relative` + the title link's stretched `::after` (after:inset-0) makes the
-    // whole card a single click target for the project. Interactive children
-    // (the actions menu) sit above it via `relative z-10`.
     <div
-      className={`relative rounded-lg border p-4 transition-colors ${
-        selected ? "border-primary bg-primary/5" : "hover:bg-muted/50"
-      }`}
+      {...navigation.props}
+      className={`rounded-lg border p-4 transition-colors ${navigation.className} ${selected ? "border-primary bg-primary/5" : ""}`}
     >
       <div className="flex items-center justify-between gap-2">
         <Link
           href={`/projects/${project.id}`}
-          className="flex min-w-0 items-center gap-2 after:absolute after:inset-0"
+          className="flex min-w-0 items-center gap-2"
         >
           <span className="shrink-0">
             <AgentIcon icon={project.icon} fallbackType="project" size={18} />
           </span>
           <span className="min-w-0 truncate font-medium">{project.name}</span>
         </Link>
-        <span className="relative z-10 flex shrink-0 items-center gap-1">
+        <span className="flex shrink-0 items-center gap-1">
           <Checkbox
             checked={selected}
             disabled={selectionDisabled}

@@ -250,6 +250,61 @@ describe("McpServerModel", () => {
 
       expect(visible.find((s) => s.id === mine.id)).toBeDefined();
     });
+
+    test("returns only visible local ids for deployment subscriptions", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeOrganization,
+      makeTeam,
+      makeTeamMember,
+      makeUser,
+    }) => {
+      const me = await makeUser();
+      const colleague = await makeUser();
+      const organization = await makeOrganization();
+      const team = await makeTeam(organization.id, me.id);
+      await makeTeamMember(team.id, me.id);
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: organization.id,
+        serverType: "local",
+      });
+      const visibleLocal = await makeMcpServer({
+        catalogId: catalog.id,
+        scope: "team",
+        ownerId: me.id,
+        teamId: team.id,
+      });
+      const remote = await makeMcpServer({
+        catalogId: catalog.id,
+        scope: "team",
+        ownerId: me.id,
+        teamId: team.id,
+      });
+      await db
+        .update(schema.mcpServersTable)
+        .set({ serverType: "remote" })
+        .where(eq(schema.mcpServersTable.id, remote.id));
+      const colleaguePersonal = await makeMcpServer({
+        catalogId: catalog.id,
+        scope: "personal",
+        ownerId: colleague.id,
+      });
+      await McpServerUserModel.assignUserToMcpServer(
+        colleaguePersonal.id,
+        colleague.id,
+      );
+
+      const ids = await McpServerModel.findVisibleLocalIds({
+        userId: me.id,
+        isMcpServerAdmin: false,
+        organizationId: organization.id,
+        isPredefinedAdmin: false,
+      });
+
+      expect(ids).toContain(visibleLocal.id);
+      expect(ids).not.toContain(remote.id);
+      expect(ids).not.toContain(colleaguePersonal.id);
+    });
   });
 
   describe("findAll", () => {

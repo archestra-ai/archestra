@@ -243,7 +243,7 @@ rl.on("line", (line) => {
     // ========================================
     // Click "view the logs" link in the error banner
     const viewLogsButton = adminPage.getByTestId(
-      `${E2eTestId.McpLogsViewButton}-${CATALOG_ITEM_NAME}-default`,
+      `${E2eTestId.McpLogsViewButton}-${CATALOG_ITEM_NAME}-issue`,
     );
     await viewLogsButton.click();
 
@@ -275,7 +275,7 @@ rl.on("line", (line) => {
     // ========================================
     // Click "edit your config" link in the error banner (opens settings dialog to Configuration page)
     const editConfigButton = adminPage.getByTestId(
-      `${E2eTestId.McpLogsEditConfigButton}-${CATALOG_ITEM_NAME}-default`,
+      `${E2eTestId.McpLogsEditConfigButton}-${CATALOG_ITEM_NAME}-issue`,
     );
     await editConfigButton.click();
 

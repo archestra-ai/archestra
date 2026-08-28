@@ -7,7 +7,13 @@ import {
   MoreHorizontal,
   Trash2,
 } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import {
+  type MouseEvent,
+  type ReactNode,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   type FileListItem,
   FileSection,
@@ -20,12 +26,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { BulkRangeSelectionController } from "@/lib/bulk-range-selection";
 import { downloadFiles } from "@/lib/chat/download-files";
 import {
   pruneSelectedIds,
   selectAllIds,
   selectionCheckState,
-  toggleSelectedId,
 } from "@/lib/chat/file-selection";
 import { cn } from "@/lib/utils";
 
@@ -84,8 +90,12 @@ export function SelectableFileList<T extends FileListItem>({
   renderItemActions?: (item: T) => ReactNode;
 }) {
   const managed = sections.flatMap((s) => s.items).filter(isManageable);
+  // This is the visual list order across section boundaries; rows without byte
+  // endpoints do not participate in selection or Shift ranges.
+  const managedIds = managed.map((file) => file.id);
   const managedCount = managed.length;
-  const managedKey = managed.map((f) => f.id).join("|");
+  const managedKey = managedIds.join("|");
+  const rangeSelection = useRef(new BulkRangeSelectionController()).current;
 
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -116,13 +126,36 @@ export function SelectableFileList<T extends FileListItem>({
   // that started the selection isn't lost.
   const enterSelectionWith = (id: string) => {
     setSelectionMode(true);
-    setSelectedIds(new Set([id]));
+    setSelectedIds(() =>
+      toSelectedIds(
+        rangeSelection.update({
+          current: {},
+          orderedIds: managedIds,
+          targetId: id,
+          range: false,
+        }),
+      ),
+    );
   };
   const selection = selectionMode
     ? {
         selectedIds,
-        onToggle: (id: string) =>
-          setSelectedIds((prev) => toggleSelectedId(prev, id)),
+        onToggle: (id: string, event: MouseEvent) => {
+          event.preventDefault();
+          event.stopPropagation();
+          setSelectedIds((prev) =>
+            toSelectedIds(
+              rangeSelection.update({
+                current: Object.fromEntries(
+                  [...prev].map((selectedId) => [selectedId, true]),
+                ),
+                orderedIds: managedIds,
+                targetId: id,
+                range: event.shiftKey,
+              }),
+            ),
+          );
+        },
         isSelectable: (id: string) => managed.some((f) => f.id === id),
       }
     : undefined;
@@ -270,6 +303,10 @@ export function SelectableFileList<T extends FileListItem>({
 /** A row has actions worth managing once it has a byte endpoint to act on. */
 function isManageable(item: FileListItem): boolean {
   return item.contentUrl !== "";
+}
+
+function toSelectedIds(selection: Record<string, boolean>): Set<string> {
+  return new Set(Object.keys(selection));
 }
 
 /**

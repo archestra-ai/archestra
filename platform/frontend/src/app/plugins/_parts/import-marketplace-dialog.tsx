@@ -5,6 +5,7 @@ import {
   POPULAR_PLUGIN_MARKETPLACES,
   type ResourceVisibilityScope,
 } from "@archestra/shared";
+import type { RowSelectionState } from "@tanstack/react-table";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -15,7 +16,7 @@ import {
   PackageSearch,
   SearchX,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ConnectionClientMultiSelect } from "@/app/connection/client-multi-select";
 import { CONNECT_CLIENTS, type ConnectClient } from "@/app/connection/clients";
 import {
@@ -56,6 +57,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { BulkRangeSelectionController } from "@/lib/bulk-range-selection";
 import { useGithubAppConfigs } from "@/lib/github-app-config.query";
 import { useCreateGithubPat, useGithubPats } from "@/lib/github-pat.query";
 import {
@@ -117,6 +119,7 @@ export function ImportMarketplaceDialog({
   const [marketplace, setMarketplace] =
     useState<GithubPluginMarketplace | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const rangeSelection = useRef(new BulkRangeSelectionController()).current;
   const [search, setSearch] = useState("");
   const [previewEntry, setPreviewEntry] = useState<MarketplaceEntry | null>(
     null,
@@ -326,15 +329,33 @@ export function ImportMarketplaceDialog({
     }
   };
 
-  const toggle = (name: string) => {
+  const toggle = (name: string, range: boolean) => {
     setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) {
-        next.delete(name);
-      } else if (next.size < PLUGIN_MARKETPLACE_IMPORT_LIMIT) {
-        next.add(name);
+      const current = toRowSelectionState(prev);
+      const orderedIds = selectableFiltered
+        .filter(
+          (entry) =>
+            prev.has(entry.name) || prev.size < PLUGIN_MARKETPLACE_IMPORT_LIMIT,
+        )
+        .map((entry) => entry.name);
+      const next = rangeSelection.update({
+        current,
+        orderedIds,
+        targetId: name,
+        range,
+      });
+
+      if (!current[name]) {
+        const additions = orderedIds.filter((id) => next[id] && !current[id]);
+        const remaining = Math.max(
+          0,
+          PLUGIN_MARKETPLACE_IMPORT_LIMIT - prev.size,
+        );
+        for (const id of additions.slice(remaining)) {
+          delete next[id];
+        }
       }
-      return next;
+      return toSelectionSet(next);
     });
   };
 
@@ -738,7 +759,7 @@ export function ImportMarketplaceDialog({
                       selectionDisabled={
                         selectionLimitReached && !selected.has(entry.name)
                       }
-                      onToggle={() => toggle(entry.name)}
+                      onToggle={(range) => toggle(entry.name, range)}
                       onPreview={() => handlePreview(entry)}
                     />
                   ))}
@@ -1020,7 +1041,7 @@ function MarketplaceEntryRow({
   exists: boolean;
   checked: boolean;
   selectionDisabled: boolean;
-  onToggle: () => void;
+  onToggle: (range: boolean) => void;
   onPreview: () => void;
 }) {
   const clientLabel = entry.clientType
@@ -1058,7 +1079,10 @@ function MarketplaceEntryRow({
             id={`import-plugin-${entry.name}`}
             checked={checked}
             disabled={selectionDisabled}
-            onCheckedChange={onToggle}
+            onClick={(event) => {
+              event.preventDefault();
+              onToggle(event.shiftKey);
+            }}
             className="shrink-0"
             aria-label={
               checked
@@ -1170,4 +1194,16 @@ function normalizeRepository(value: string): string {
     .replace(/^github\.com\//, "")
     .replace(/\/+$/, "")
     .replace(/\.git$/, "");
+}
+
+function toRowSelectionState(selected: Set<string>): RowSelectionState {
+  return Object.fromEntries([...selected].map((id) => [id, true]));
+}
+
+function toSelectionSet(selection: RowSelectionState): Set<string> {
+  return new Set(
+    Object.entries(selection)
+      .filter(([, selected]) => selected)
+      .map(([id]) => id),
+  );
 }

@@ -219,6 +219,7 @@ export function DefaultUserLimitsSection() {
           Add limit
         </PermissionButton>
       }
+      contentClassName="mt-3"
     >
       {limits.length === 0 ? (
         <p className="text-sm text-muted-foreground">

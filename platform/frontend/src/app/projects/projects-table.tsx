@@ -27,6 +27,7 @@ import { Badge } from "@/components/ui/badge";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { DataTable } from "@/components/ui/data-table";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import type { BulkRangeSelectionController } from "@/lib/bulk-range-selection";
 import { useIsGlobalAdmin } from "@/lib/organization.query";
 import {
   canDeleteProject,
@@ -48,6 +49,7 @@ export function ProjectsTable({
   onRowSelectionChange,
   onPageRowIdsChange,
   canSelect,
+  rangeSelection,
 }: {
   projects: ProjectListItem[];
   onTogglePin: (project: ProjectListItem) => void;
@@ -57,6 +59,7 @@ export function ProjectsTable({
   onRowSelectionChange: OnChangeFn<RowSelectionState>;
   onPageRowIdsChange: (ids: string[]) => void;
   canSelect: (project: ProjectListItem) => boolean;
+  rangeSelection: BulkRangeSelectionController;
 }) {
   const router = useRouter();
   const { data: isProjectAdmin } = useHasPermissions({ project: ["admin"] });
@@ -190,6 +193,7 @@ export function ProjectsTable({
       rowSelection={rowSelection}
       onRowSelectionChange={onRowSelectionChange}
       onPageRowIdsChange={onPageRowIdsChange}
+      rangeSelection={rangeSelection}
       hideSelectedCount
       onRowClick={(row) => router.push(`/projects/${row.id}`)}
       emptyIcon={FolderKanban}

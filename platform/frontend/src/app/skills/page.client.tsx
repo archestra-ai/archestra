@@ -928,6 +928,11 @@ function SkillsList() {
                             }
                             description={skill.description}
                             actions={renderSkillActions(skill)}
+                            onNavigate={
+                              isDeletedView
+                                ? undefined
+                                : () => router.push(`/skills/${skill.id}`)
+                            }
                             {...cardSelection(skill)}
                             selectionLabel={`Select ${skill.name}`}
                             footer={

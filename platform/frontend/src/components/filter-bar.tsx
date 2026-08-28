@@ -2,6 +2,10 @@
 
 import { ChevronDown, SlidersHorizontal, X } from "lucide-react";
 import { type ComponentProps, Fragment, type ReactNode } from "react";
+import {
+  ContextualActionsPortal,
+  useBulkActionsScope,
+} from "@/components/ui/bulk-actions-context";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -51,14 +55,15 @@ export type OverflowFilter = {
  * currently narrowing the table — a hidden active filter reads as an empty
  * table with no explanation.
  * @param actions - Trailing controls (sort, view toggle) pinned to the right.
- * @param leading - Set when the bar is the first thing under the page header.
- * `PageLayout` insets its content 24px below the header rule, which is right
- * for content but wrong for a control strip: the bar ended up sitting further
- * from the header it belongs to than from the table it filters, which reads as
- * a misalignment rather than as rhythm. This pulls it back onto the 16px the
- * surrounding `space-y-4` stack already uses below it, so the bar is evenly
- * spaced on both sides. Bars nested inside a tab body or a card are already
- * spaced by their own container and must leave this alone.
+ * @param contextualActions - Selection actions rendered in the same grid cell
+ * as the filters. Presenting them swaps the bar in place instead of reserving
+ * an empty slot or moving the collection once rows are ticked.
+ * @param contextualActionsClassName - Classes for the selection action rail.
+ * @param contextualActionsTargetId - A stable target for selection controls
+ * owned by the collection below. Use this when lifting selection into the page
+ * would make each checkbox rerender expensive queries and filters.
+ * @param leading - Pulls the first control strip below a page header into the
+ * surrounding vertical rhythm. Nested bars leave this disabled.
  *
  * The bar carries no outer margin: the surrounding stack owns the gap between
  * it and the table. It used to default to `mb-4`, which made "let my parent
@@ -71,6 +76,9 @@ export type OverflowFilter = {
 export function FilterBar({
   children,
   className,
+  contextualActions,
+  contextualActionsClassName,
+  contextualActionsTargetId,
   onClearFilters,
   moreFilters,
   actions,
@@ -78,83 +86,139 @@ export function FilterBar({
 }: {
   children: ReactNode;
   className?: string;
+  contextualActions?: ReactNode;
+  contextualActionsClassName?: string;
+  contextualActionsTargetId?: string;
   onClearFilters?: () => void;
   moreFilters?: OverflowFilter[];
   actions?: ReactNode;
   leading?: boolean;
 }) {
+  const bulkActionsScope = useBulkActionsScope();
+  const actionsTargetId =
+    contextualActionsTargetId ?? bulkActionsScope?.targetId;
   const appliedOverflow = moreFilters?.filter((filter) => filter.active) ?? [];
   const tuckedAway = moreFilters?.filter((filter) => !filter.active) ?? [];
 
   return (
     <div
       className={cn(
-        "flex flex-wrap items-center gap-1.5",
-        // Search boxes are the one control whose height isn't set by
-        // `filterControlClass` (callers render an <Input>, not a trigger
-        // button), so the bar pulls them down to the compact height itself
-        // rather than making every call site repeat `inputClassName="h-8"`.
-        "[&_[data-slot=input]]:h-8",
+        "grid",
+        actionsTargetId && "min-h-[42px]",
         leading && "-mt-2",
-        className,
       )}
     >
-      {children}
-      {appliedOverflow.map((filter) => (
-        // Fragment rather than a wrapper element: the control has to be the
-        // bar's own flex item for its sizing to behave like the inline ones'.
-        <Fragment key={filter.key}>{filter.control}</Fragment>
-      ))}
-      {tuckedAway.length > 0 && (
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="outline" className={filterControlClass()}>
-              <SlidersHorizontal aria-hidden className="h-3.5 w-3.5" />
-              <span>More filters</span>
-              <ChevronDown
-                aria-hidden
-                className="h-4 w-4 text-muted-foreground"
-              />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent align="start" className="w-72 space-y-3">
-            {tuckedAway.map((filter) => (
-              <div
-                key={filter.key}
-                // The control is the same compact trigger used in the bar,
-                // stretched to the popover width so this reads as a small form
-                // rather than a second filter bar. Scoped to the row's direct
-                // child so a control that renders buttons of its own inside
-                // itself keeps their widths, and matched by element rather than
-                // by `[data-slot=button]`: a trigger reaches its <button>
-                // through a Radix `asChild` wrapper, which overwrites Button's
-                // `data-slot` with its own (`popover-trigger`/`select-trigger`).
-                className="space-y-1.5 [&>button]:w-full [&>button]:max-w-none"
-              >
-                <span className="block text-xs font-medium">
-                  {filter.label}
-                </span>
-                {filter.control}
-              </div>
-            ))}
-          </PopoverContent>
-        </Popover>
-      )}
-      {onClearFilters && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onClearFilters}
-          className="h-8 gap-1.5 px-2"
+      <div
+        data-slot="filter-controls"
+        inert={contextualActions ? true : undefined}
+        className={cn(
+          "col-start-1 row-start-1 flex min-w-0 flex-wrap items-center gap-1.5 self-center transition-opacity duration-150 ease-out",
+          // Search boxes are the one control whose height isn't set by
+          // `filterControlClass` (callers render an <Input>, not a trigger
+          // button), so the bar pulls them down to the compact height itself
+          // rather than making every call site repeat `inputClassName="h-8"`.
+          "[&_[data-slot=input]]:h-8",
+          contextualActions && "pointer-events-none opacity-0",
+          className,
+        )}
+      >
+        {children}
+        {appliedOverflow.map((filter) => (
+          // Fragment rather than a wrapper element: the control has to be the
+          // bar's own flex item for its sizing to behave like the inline ones'.
+          <Fragment key={filter.key}>{filter.control}</Fragment>
+        ))}
+        {tuckedAway.length > 0 && (
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className={filterControlClass()}>
+                <SlidersHorizontal aria-hidden className="h-3.5 w-3.5" />
+                <span>More filters</span>
+                <ChevronDown
+                  aria-hidden
+                  className="h-4 w-4 text-muted-foreground"
+                />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-72 space-y-3">
+              {tuckedAway.map((filter) => (
+                <div
+                  key={filter.key}
+                  // The control is the same compact trigger used in the bar,
+                  // stretched to the popover width so this reads as a small form
+                  // rather than a second filter bar. Scoped to the row's direct
+                  // child so a control that renders buttons of its own inside
+                  // itself keeps their widths, and matched by element rather than
+                  // by `[data-slot=button]`: a trigger reaches its <button>
+                  // through a Radix `asChild` wrapper, which overwrites Button's
+                  // `data-slot` with its own (`popover-trigger`/`select-trigger`).
+                  className="space-y-1.5 [&>button]:w-full [&>button]:max-w-none"
+                >
+                  <span className="block text-xs font-medium">
+                    {filter.label}
+                  </span>
+                  {filter.control}
+                </div>
+              ))}
+            </PopoverContent>
+          </Popover>
+        )}
+        {onClearFilters && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onClearFilters}
+            className="h-8 gap-1.5 px-2"
+          >
+            <X className="h-3.5 w-3.5" />
+            <span>Clear</span>
+          </Button>
+        )}
+        {actions && (
+          <div className="ml-auto flex items-center gap-1.5">{actions}</div>
+        )}
+      </div>
+      {contextualActions ? (
+        <div
+          className={cn(
+            "col-start-1 row-start-1 flex min-w-0 items-center transition-opacity duration-150 ease-out",
+            contextualActionsClassName,
+          )}
         >
-          <X className="h-3.5 w-3.5" />
-          <span>Clear</span>
-        </Button>
-      )}
-      {actions && (
-        <div className="ml-auto flex items-center gap-1.5">{actions}</div>
-      )}
+          {contextualActions}
+        </div>
+      ) : null}
+      {actionsTargetId ? (
+        <div
+          id={actionsTargetId}
+          data-slot="contextual-actions"
+          className={cn(
+            "pointer-events-none col-start-1 row-start-1 flex min-w-0 items-center self-center opacity-0 transition-opacity duration-150 ease-out",
+            contextualActionsClassName,
+          )}
+        />
+      ) : null}
     </div>
+  );
+}
+
+/**
+ * Projects collection-owned controls into a FilterBar without lifting their
+ * fast-changing state into the page that computes the collection.
+ */
+export function FilterBarContextualActions({
+  targetId,
+  active,
+  children,
+}: {
+  targetId: string;
+  active: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <ContextualActionsPortal targetId={targetId} active={active}>
+      {children}
+    </ContextualActionsPortal>
   );
 }
 

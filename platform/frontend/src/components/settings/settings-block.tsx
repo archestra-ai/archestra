@@ -16,6 +16,7 @@ interface SettingsBlockProps {
   children?: ReactNode;
   /** Anchor for a link that points at this specific setting. */
   id?: string;
+  contentClassName?: string;
 }
 
 export function SettingsBlock({
@@ -25,6 +26,7 @@ export function SettingsBlock({
   notice,
   children,
   id,
+  contentClassName,
 }: SettingsBlockProps) {
   const hasControl = control != null;
 
@@ -52,7 +54,9 @@ export function SettingsBlock({
           </div>
         )}
       </div>
-      {children && <div className="mt-4">{children}</div>}
+      {children && (
+        <div className={cn("mt-4", contentClassName)}>{children}</div>
+      )}
     </section>
   );
 }

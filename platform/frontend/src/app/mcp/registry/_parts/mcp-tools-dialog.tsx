@@ -1,8 +1,9 @@
 "use client";
 
 import { E2eTestId, parseFullToolName } from "@archestra/shared";
+import type { RowSelectionState } from "@tanstack/react-table";
 import { Search, UserPlus, Users } from "lucide-react";
-import { useMemo, useState } from "react";
+import { type MouseEvent, useMemo, useRef, useState } from "react";
 import { StandardDialog } from "@/components/standard-dialog";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { BulkRangeSelectionController } from "@/lib/bulk-range-selection";
 
 interface McpToolsDialogProps {
   open: boolean;
@@ -66,6 +68,7 @@ export function McpToolsDialog({
 }: McpToolsDialogProps) {
   const [selectedToolIds, setSelectedToolIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const rangeSelection = useRef(new BulkRangeSelectionController());
 
   const filteredTools = useMemo(() => {
     if (!searchQuery.trim()) return tools;
@@ -100,12 +103,21 @@ export function McpToolsDialog({
     }
   };
 
-  const toggleTool = (toolId: string) => {
-    setSelectedToolIds((prev) =>
-      prev.includes(toolId)
-        ? prev.filter((id) => id !== toolId)
-        : [...prev, toolId],
-    );
+  const toggleTool = (toolId: string, event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    setSelectedToolIds((prev) => {
+      const current: RowSelectionState = Object.fromEntries(
+        prev.map((id) => [id, true]),
+      );
+      return Object.keys(
+        rangeSelection.current.update({
+          current,
+          orderedIds: filteredTools.map((tool) => tool.id),
+          targetId: toolId,
+          range: event.shiftKey,
+        }),
+      );
+    });
   };
 
   const handleBulkAssign = () => {
@@ -212,7 +224,7 @@ export function McpToolsDialog({
                   <TableCell>
                     <Checkbox
                       checked={selectedToolIds.includes(tool.id)}
-                      onCheckedChange={() => toggleTool(tool.id)}
+                      onClick={(event) => toggleTool(tool.id, event)}
                       aria-label={`Select ${tool.name}`}
                     />
                   </TableCell>

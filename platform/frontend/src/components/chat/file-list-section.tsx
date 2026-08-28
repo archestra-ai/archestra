@@ -13,7 +13,7 @@ import {
   FileVideo,
   type LucideIcon,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 
@@ -71,7 +71,7 @@ export function FileSection({
    */
   selection?: {
     selectedIds: Set<string>;
-    onToggle: (id: string) => void;
+    onToggle: (id: string, event: MouseEvent) => void;
     isSelectable?: (id: string) => boolean;
   };
 }) {
@@ -115,7 +115,7 @@ export function FileSection({
               {rowSelectable && (
                 <Checkbox
                   checked={isChecked}
-                  onCheckedChange={() => selection.onToggle(item.id)}
+                  onClick={(event) => selection.onToggle(item.id, event)}
                   aria-label={`Select ${item.name}`}
                   className="ml-3"
                 />
@@ -125,9 +125,9 @@ export function FileSection({
                   interactive elements. */}
               <button
                 type="button"
-                onClick={() =>
+                onClick={(event) =>
                   rowSelectable
-                    ? selection.onToggle(item.id)
+                    ? selection.onToggle(item.id, event)
                     : onSelect(item.id)
                 }
                 className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left"

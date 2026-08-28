@@ -2,6 +2,7 @@ import type { archestraApiTypes } from "@archestra/shared";
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { FilterBar } from "@/components/filter-bar";
 import { TableCardView } from "@/components/table-card-view";
 import { AppSection, matchesKind } from "./page.client";
 
@@ -187,6 +188,9 @@ describe("AppSection cards", () => {
 function renderAppSection(apps: AppListItem[] = [ownedApp, externalApp]) {
   return render(
     <TableCardView storageKey="apps-test-view" defaultMode="cards">
+      <FilterBar>
+        <span>Filters</span>
+      </FilterBar>
       <AppSection title="Apps" apps={apps} onOpenSettings={vi.fn()} />
     </TableCardView>,
   );

@@ -127,7 +127,7 @@ Plugins can contain one or more `SKILL.md` trees. Every valid Skill inside a plu
 
 The category does not filter by the plugin's client or operating system. Skill instructions are usually portable, so a Skill from a Claude Code plugin can still help in another client. The source client and platforms stay visible because bundled scripts and tool names may depend on them.
 
-Plugin Skills are read-only and remain managed by their source plugin. Archestra shares Skill resources plus readable context from README and license files, commands, agents, output styles, and MCP or LSP configuration. Client hooks, manifests, settings, installers, and runtime files remain private to the plugin. Anyone with access can load these files through the same `list_skills` and `load_skill` tools as other Skills. Activations contribute to the shared usage view. Archestra reads the source bytes directly instead of copying them into standalone Skills.
+Plugin Skills are read-only and remain managed by their source plugin. Archestra shares every file owned by the Skill tree except hooks, hook manifests, plugin or marketplace metadata, and installation files. Anyone with access can load the remaining files through the same `list_skills` and `load_skill` tools as other Skills. Activations contribute to the shared usage view. Archestra reads the source bytes directly instead of copying them into standalone Skills.
 
 ## Permissions and scope
 

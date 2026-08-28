@@ -211,7 +211,7 @@ export function ConnectorUserGroupsTable({
   return (
     <div>
       {groups.length > 0 && (
-        <FilterBar className="mb-4">
+        <FilterBar className="mb-3">
           <SearchInput
             value={search}
             syncQueryParams={false}

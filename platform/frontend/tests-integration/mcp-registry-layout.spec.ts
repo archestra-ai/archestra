@@ -239,6 +239,107 @@ test.describe("MCP Registry layout", () => {
     expect(spills).toEqual([]);
   });
 
+  test("mounts only the active registry layout", async ({
+    mcpRegistryPage,
+    mswControl,
+    page,
+  }) => {
+    await seed(mswControl);
+    await mcpRegistryPage.goto();
+    await expect(mcpRegistryPage.serverCards.first()).toBeVisible();
+
+    await page.getByRole("button", { name: "View as table" }).click();
+    await expect(page.locator("table")).toBeVisible();
+    await expect(mcpRegistryPage.serverCards).toHaveCount(0);
+
+    await page.getByRole("button", { name: "View as cards" }).click();
+    await expect(mcpRegistryPage.serverCards.first()).toBeVisible();
+    await expect(page.locator("table")).toHaveCount(0);
+  });
+
+  test("filters local registry search without a debounce pause", async ({
+    mcpRegistryPage,
+    mswControl,
+    page,
+  }) => {
+    await seed(mswControl);
+    await mcpRegistryPage.goto();
+
+    await page
+      .getByRole("textbox", { name: "Search MCP servers by name" })
+      .fill("not-installed");
+
+    await expect(mcpRegistryPage.cardForCatalogItem("org-crowded")).toHaveCount(
+      0,
+      { timeout: 200 },
+    );
+    await expect(
+      mcpRegistryPage.cardForCatalogItem("not-installed"),
+    ).toBeVisible();
+  });
+
+  test("keeps foreign personal servers out of All and reaches them through Other users", async ({
+    mcpRegistryPage,
+    mswControl,
+    page,
+  }) => {
+    await seed(mswControl);
+    await mcpRegistryPage.goto();
+
+    await expect(mcpRegistryPage.cardForCatalogItem("long-author")).toHaveCount(
+      0,
+    );
+
+    await page.getByRole("combobox", { name: "Filter by type" }).click();
+    await page.getByRole("option", { name: "Personal" }).click();
+    await page.getByRole("combobox", { name: "Filter by owner" }).click();
+    await page.getByRole("option", { name: "Other users" }).click();
+
+    await expect(
+      mcpRegistryPage.cardForCatalogItem("long-author"),
+    ).toBeVisible();
+    await expect(page.getByText(LONG_NAME)).toBeVisible();
+  });
+
+  test("keeps visibly flagged cards in the flat registry", async ({
+    mcpRegistryPage,
+    mswControl,
+  }) => {
+    await seed(mswControl);
+    await mcpRegistryPage.goto();
+
+    await expect(
+      mcpRegistryPage.cardForCatalogItem("needs-reauth"),
+    ).toBeVisible();
+  });
+
+  test("updates table bulk actions without moving the reserved toolbar rail", async ({
+    mcpRegistryPage,
+    mswControl,
+    page,
+  }) => {
+    await seed(mswControl);
+    await mcpRegistryPage.goto();
+    await page.getByRole("button", { name: "View as table" }).click();
+
+    const table = page.locator("table").first();
+    await expect(table).toBeVisible();
+    const before = await table.boundingBox();
+    expect(before).not.toBeNull();
+    const bulkBar = page.locator('[data-slot="bulk-actions-bar"]');
+    await expect(bulkBar).toBeVisible();
+
+    await page.getByRole("checkbox", { name: "Select org-crowded" }).click();
+
+    await expect(
+      bulkBar
+        .locator('[aria-hidden="true"]')
+        .filter({ hasText: "1 server selected" }),
+    ).toBeVisible();
+    const after = await table.boundingBox();
+    expect(after?.y).toBe(before?.y);
+  });
+
   test("offers only Uninstall as a table bulk action", async ({
     mcpRegistryPage,
     mswControl,

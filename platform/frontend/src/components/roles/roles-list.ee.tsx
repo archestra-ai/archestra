@@ -24,6 +24,7 @@ import {
   TableRowActions,
 } from "@/components/table-row-actions";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
+import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -419,9 +420,8 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
 
   return (
     <>
-      <div className="space-y-6">
+      <BulkActionsScope className="space-y-3">
         <FilterBar
-          className={isLoadingError ? undefined : "!mb-3"}
           onClearFilters={
             nameFilter
               ? () => updateQueryParams({ name: null, page: "1" })
@@ -527,7 +527,7 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
             )}
           </>
         )}
-      </div>
+      </BulkActionsScope>
 
       {/* Create Role Dialog */}
       <FormDialog

@@ -62,6 +62,7 @@ import {
  *   table's Actions cell.
  * - `details`: the registry table's expanded sub-row diagnosis. It is strictly
  *   informational; every action stays in the table's Actions cell.
+ * - `primary-action`: only the highest-priority remediation for a compact card.
  *
  * Every issue kind in the viewer's own bucket is explained, not just the worst
  * one: a server whose pod crashed and whose token was rejected has two
@@ -106,7 +107,7 @@ export function McpServerIssueNotice({
   facet?: McpServerAttentionFacet | null;
   /** On the server's own page the name is the page title already. */
   hideName?: boolean;
-  variant?: "panel" | "actions" | "details";
+  variant?: "panel" | "actions" | "details" | "primary-action";
   /** Detail pages already expose remediation in their header and sections. */
   panelActions?: "all" | "dismiss-only";
   className?: string;
@@ -480,6 +481,61 @@ export function McpServerIssueNotice({
           );
         })}
       </div>
+    );
+  }
+
+  if (variant === "primary-action") {
+    const action = actions.primary;
+    if (action) {
+      const compactLabel =
+        {
+          "Re-authenticate": "Auth",
+          "View logs": "Logs",
+        }[action.label] ?? action.label;
+      return (
+        <Button
+          variant={action.variant ?? "outline"}
+          size="sm"
+          className="shrink-0 gap-1 px-2 text-xs"
+          aria-label={action.label}
+          data-testid={action.testId}
+          onClick={action.onClick}
+        >
+          {action.icon}
+          <span>{compactLabel}</span>
+        </Button>
+      );
+    }
+    if (restoreTargets.length > 0) {
+      return (
+        <Button
+          variant="outline"
+          size="sm"
+          className="shrink-0 gap-1 px-2 text-xs"
+          disabled={restoreMutation.isPending}
+          onClick={() =>
+            restoreMutation.mutate(
+              { alerts: restoreTargets },
+              {
+                onSuccess: (result) => onTargetsCompleted?.(result.succeeded),
+              },
+            )
+          }
+        >
+          <Bell className="h-4 w-4" />
+          Restore
+        </Button>
+      );
+    }
+    return (
+      <Button
+        variant="outline"
+        size="sm"
+        className="shrink-0 gap-1 px-2 text-xs"
+        onClick={() => router.push(detailHref())}
+      >
+        Open
+      </Button>
     );
   }
 

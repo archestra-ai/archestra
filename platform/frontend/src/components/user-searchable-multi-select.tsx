@@ -15,6 +15,7 @@ export interface UserSearchableMultiSelectProps {
   placeholder?: string;
   searchPlaceholder?: string;
   className?: string;
+  contentClassName?: string;
   disabled?: boolean;
   disabledUserIds?: Set<string>;
   onSearchQueryChange?: (value: string) => void;
@@ -32,6 +33,7 @@ export function UserSearchableMultiSelect({
   placeholder = "Select users",
   searchPlaceholder = "Search users by name or email",
   className,
+  contentClassName,
   disabled = false,
   disabledUserIds,
   onSearchQueryChange,
@@ -55,6 +57,7 @@ export function UserSearchableMultiSelect({
       placeholder={placeholder}
       searchPlaceholder={searchPlaceholder}
       className={className}
+      contentClassName={contentClassName}
       disabled={disabled}
       onSearchQueryChange={onSearchQueryChange}
       items={items}

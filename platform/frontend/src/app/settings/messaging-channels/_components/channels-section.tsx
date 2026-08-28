@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { type MouseEvent, useCallback, useMemo, useRef, useState } from "react";
 import { AgentBadge } from "@/components/agent-badge";
 import Divider from "@/components/divider";
 import { EmptyState } from "@/components/empty-state";
@@ -57,6 +57,7 @@ import {
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useProfiles } from "@/lib/agent.query";
 import { useSession } from "@/lib/auth/auth.query";
+import { BulkRangeSelectionController } from "@/lib/bulk-range-selection";
 import {
   useBulkUpdateChatOpsBindings,
   useChatOpsBindings,
@@ -137,20 +138,12 @@ export function ChannelsSection({
   const refreshMutation = useRefreshChatOpsChannelDiscovery();
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const rangeSelection = useRef(new BulkRangeSelectionController());
   const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
   /** Binding whose instructions are open in the editor, if any. */
   const [instructionsBindingId, setInstructionsBindingId] = useState<
     string | null
   >(null);
-
-  const toggleSelected = useCallback((id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
 
   const toggleAll = useCallback((ids: string[], checked: boolean) => {
     setSelectedIds((prev) => {
@@ -354,6 +347,25 @@ export function ChannelsSection({
     selectableIds.every((id) => selectedIds.has(id));
   const someChecked =
     !allChecked && selectableIds.some((id) => selectedIds.has(id));
+  const handleSelectionClick = useCallback(
+    (id: string, event: MouseEvent<HTMLButtonElement>) => {
+      event.stopPropagation();
+      event.preventDefault();
+      setSelectedIds((current) => {
+        const selection = Object.fromEntries(
+          [...current].map((selectedId) => [selectedId, true]),
+        );
+        const next = rangeSelection.current.update({
+          current: selection,
+          orderedIds: selectableIds,
+          targetId: id,
+          range: event.shiftKey,
+        });
+        return new Set(Object.keys(next));
+      });
+    },
+    [selectableIds],
+  );
 
   const clearFilters = useCallback(() => {
     clearSelection();
@@ -366,7 +378,7 @@ export function ChannelsSection({
   }, [clearSelection, updateUrlParams]);
 
   return (
-    <section className="flex flex-col gap-4">
+    <section className="flex flex-col gap-3">
       <div>
         <div className="flex items-center gap-3">
           <h2 className="text-lg font-semibold relative">
@@ -590,7 +602,7 @@ export function ChannelsSection({
                     }
                     isUpdating={updateMutation.isPending}
                     selectedIds={selectedIds}
-                    onToggleSelected={toggleSelected}
+                    onSelectionClick={handleSelectionClick}
                     showVirtualDmRow={showVirtualDmRow}
                     dmDeepLink={dmDeepLink}
                     onDmAssignAgent={handleDmAssignAgent}
@@ -668,7 +680,7 @@ function ChannelRows({
   workspacesWithUnmentionedTraffic,
   isUpdating,
   selectedIds,
-  onToggleSelected,
+  onSelectionClick,
   showVirtualDmRow,
   dmDeepLink,
   onDmAssignAgent,
@@ -697,7 +709,7 @@ function ChannelRows({
   workspacesWithUnmentionedTraffic: Set<string>;
   isUpdating: boolean;
   selectedIds: Set<string>;
-  onToggleSelected: (id: string) => void;
+  onSelectionClick: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
   showVirtualDmRow: boolean;
   dmDeepLink: string | null;
   onDmAssignAgent: (agentId: string | null) => void;
@@ -714,7 +726,7 @@ function ChannelRows({
           <TableCell>
             <Checkbox
               checked={selectedIds.has(VIRTUAL_DM_ID)}
-              onCheckedChange={() => onToggleSelected(VIRTUAL_DM_ID)}
+              onClick={(event) => onSelectionClick(VIRTUAL_DM_ID, event)}
               aria-label="Select Direct Message"
             />
           </TableCell>
@@ -796,7 +808,7 @@ function ChannelRows({
             <TableCell>
               <Checkbox
                 checked={selectedIds.has(binding.id)}
-                onCheckedChange={() => onToggleSelected(binding.id)}
+                onClick={(event) => onSelectionClick(binding.id, event)}
                 aria-label={`Select ${binding.channelName ?? binding.channelId}`}
               />
             </TableCell>

@@ -45,7 +45,6 @@ import {
 } from "@/components/resource-scope-filter";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
-import { useSkillsPluginsNavTabs } from "@/components/skills-plugins-nav-tabs";
 import {
   TableCard,
   TableCardView,
@@ -160,7 +159,6 @@ export default function SkillsPage() {
 }
 
 function SkillsList() {
-  const tabs = useSkillsPluginsNavTabs();
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -768,7 +766,7 @@ function SkillsList() {
 
   if (isSkillsLoadError) {
     return (
-      <PageLayout title="Skills" description={SKILLS_DESCRIPTION} tabs={tabs}>
+      <PageLayout title="Skills" description={SKILLS_DESCRIPTION}>
         <QueryLoadError
           title="Couldn't load your skills"
           onRetry={() =>
@@ -784,7 +782,6 @@ function SkillsList() {
       <PageLayout
         title="Skills"
         description={SKILLS_DESCRIPTION}
-        tabs={tabs}
         actionButton={
           !showEmptyState && (
             <PermissionButton permissions={{ skill: ["create"] }} asChild>

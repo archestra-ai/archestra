@@ -34,7 +34,6 @@ import {
 } from "@/components/resource-scope-filter";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
-import { useSkillsPluginsNavTabs } from "@/components/skills-plugins-nav-tabs";
 import {
   TableCard,
   TableCardList,
@@ -110,7 +109,6 @@ export default function PluginsPage() {
 }
 
 function PluginsGate() {
-  const tabs = useSkillsPluginsNavTabs();
   const enabled = useFeature("plugins");
 
   // The feature flag arrives with the rest of the config; until it does this
@@ -126,7 +124,6 @@ function PluginsGate() {
       <PageLayout
         title="Plugins"
         description="Plugins are disabled for this deployment."
-        tabs={tabs}
       >
         <div />
       </PageLayout>
@@ -137,7 +134,6 @@ function PluginsGate() {
 }
 
 function PluginsList() {
-  const tabs = useSkillsPluginsNavTabs();
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -584,7 +580,7 @@ function PluginsList() {
 
   if (isLoadingError) {
     return (
-      <PageLayout title="Plugins" description={PLUGINS_DESCRIPTION} tabs={tabs}>
+      <PageLayout title="Plugins" description={PLUGINS_DESCRIPTION}>
         <QueryLoadError
           title="Couldn't load your plugins"
           onRetry={() => refetch()}
@@ -601,7 +597,6 @@ function PluginsList() {
       <PageLayout
         title="Plugins"
         description={PLUGINS_DESCRIPTION}
-        tabs={tabs}
         actionButton={
           !showEmptyState && (
             <PermissionButton

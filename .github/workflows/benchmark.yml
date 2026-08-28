@@ -175,7 +175,7 @@ jobs:
           # Scheduled runs carry no inputs and an empty dispatch field is falsy, so these fallbacks
           # are the single source of the daily selection.
           BENCH_ENVS: ${{ inputs.envs || 'basic' }}
-          BENCH_LANES: ${{ inputs.lanes || 'glm,deepseek-flash-0731,qwen37-plus,gemma-4-31b,gpt-56-luna,mimo-25,qwen36-35b-a3b,qwen36-27b,mimo-25-adv-deepseek-flash' }}
+          BENCH_LANES: ${{ inputs.lanes || 'glm,glm-flash,deepseek-flash-0731,qwen38-flash,gemma-4-31b,spark,gpt-56-luna,mimo-25,qwen36-35b-a3b,mimo-25-adv-deepseek-flash' }}
         run: |
           set -euo pipefail
           # Dispatch inputs are the only caller-controlled values on the envsubst allowlist, and they

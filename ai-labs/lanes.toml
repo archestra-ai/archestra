@@ -98,6 +98,14 @@ openrouter_model = "moonshotai/kimi-k2.7-code"
 [[lane]]
 name = "glm"
 provider = "anthropic"
+model = "glm-5.3"
+base_url = "https://api.z.ai/api/anthropic"
+api_key_env = "ZAI_API_KEY"
+openrouter_model = "z-ai/glm-5.3"
+
+[[lane]]
+name = "glm-flash"
+provider = "anthropic"
 model = "glm-5.3-flash"
 base_url = "https://api.z.ai/api/anthropic"
 api_key_env = "ZAI_API_KEY"

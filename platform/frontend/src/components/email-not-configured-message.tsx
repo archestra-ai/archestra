@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 
@@ -49,14 +48,8 @@ export function AgentEmailDisabledMessage({
 }: EmailNotConfiguredMessageProps) {
   return (
     <p className={className}>
-      Email invocation is not enabled for this agent. Enable it in the{" "}
-      <Link
-        href="/messaging-channels/email"
-        className="text-primary hover:underline"
-      >
-        agent trigger settings
-      </Link>{" "}
-      to allow triggering via email.
+      Email invocation is not enabled for this agent. Enable it from this
+      agent's Email Invocation section to allow triggering via email.
     </p>
   );
 }

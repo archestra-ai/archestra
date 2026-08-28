@@ -2,12 +2,10 @@
 
 import {
   type archestraApiTypes,
-  buildSlackSlashCommands,
   MESSAGING_CHANNEL_LABELS,
 } from "@archestra/shared";
 import { AlertTriangle, Cable, Globe, Info, Waypoints } from "lucide-react";
 import { useEffect, useState } from "react";
-import Divider from "@/components/divider";
 import { NgrokSetupDialog } from "@/components/ngrok-setup-dialog";
 import { SlackSetupDialog } from "@/components/slack-setup-dialog";
 import { Button } from "@/components/ui/button";
@@ -18,40 +16,14 @@ import { useConfig, usePublicBaseUrl } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { cn } from "@/lib/utils";
-import { ChannelsSection } from "../_components/channels-section";
-import { CollapsibleSetupSection } from "../_components/collapsible-setup-section";
 import { CredentialField } from "../_components/credential-field";
 import { LlmKeySetupStep } from "../_components/llm-key-setup-step";
 import { ModeTile } from "../_components/mode-tile";
 import { NgrokStatus } from "../_components/ngrok-status";
+import { SetupSection } from "../_components/setup-section";
 import { SetupStep } from "../_components/setup-step";
-import type { ProviderConfig } from "../_components/types";
 import { useReachabilityMode } from "../_components/use-reachability-mode";
 import { useTriggerStatuses } from "../_components/use-trigger-statuses";
-
-function useSlackProviderConfig(): ProviderConfig {
-  const appName = useAppName();
-  return {
-    provider: "slack",
-    providerLabel: MESSAGING_CHANNEL_LABELS.slack,
-    providerIcon: "/icons/slack.png",
-    webhookPath: "/api/webhooks/chatops/slack",
-    supportsAnswerAll: true,
-    docsUrl: getFrontendDocsUrl("platform-slack"),
-    slashCommand: buildSlackSlashCommands(appName).SELECT_AGENT,
-    buildDeepLink: (binding) => {
-      if (binding.workspaceId) {
-        return `slack://channel?team=${binding.workspaceId}&id=${binding.channelId}`;
-      }
-      return `slack://channel?id=${binding.channelId}`;
-    },
-    getDmDeepLink: (providerStatus) => {
-      const { botUserId, teamId } = providerStatus.dmInfo ?? {};
-      if (!botUserId || !teamId) return null;
-      return `slack://user?team=${teamId}&id=${botUserId}`;
-    },
-  };
-}
 
 type SlackConnectionMode = NonNullable<
   NonNullable<
@@ -61,7 +33,6 @@ type SlackConnectionMode = NonNullable<
 
 export default function SlackPage() {
   const appName = useAppName();
-  const slackProviderConfig = useSlackProviderConfig();
   const publicBaseUrl = usePublicBaseUrl();
   // The "I will expose myself" tile must show the instance's own origin, not
   // the ngrok tunnel URL that usePublicBaseUrl prefers when a tunnel is up.
@@ -105,7 +76,7 @@ export default function SlackPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <CollapsibleSetupSection
+      <SetupSection
         allStepsCompleted={allStepsCompleted}
         isLoading={setupDataLoading}
         providerLabel={channelLabel}
@@ -270,14 +241,7 @@ export default function SlackPage() {
             <CredentialField label="App ID" value={slackCreds?.appId} />
           </div>
         </SetupStep>
-      </CollapsibleSetupSection>
-
-      {allStepsCompleted && (
-        <>
-          <Divider />
-          <ChannelsSection providerConfig={slackProviderConfig} />
-        </>
-      )}
+      </SetupSection>
 
       <SlackSetupDialog
         open={slackSetupOpen}

@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import {
   keepPreviousData,
+  useInfiniteQuery,
   useMutation,
   useQuery,
   useQueryClient,
@@ -42,6 +43,41 @@ export function useChatOpsBindings(
       throwOnApiError(error, { toastOnError: false });
       return data;
     },
+  });
+}
+
+/**
+ * Load every channel visible to the current user for the agent assignment
+ * picker. The public list endpoint is capped at 100 rows, so the picker walks
+ * every page instead of silently making channels past the first page
+ * impossible to assign.
+ */
+export function useAllChatOpsBindings() {
+  const limit = 100;
+
+  return useInfiniteQuery({
+    queryKey: ["chatops", "bindings", "all"],
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }) => {
+      const { data, error } = await archestraApiSdk.listChatOpsBindings({
+        query: {
+          limit,
+          offset: pageParam,
+          sortBy: "channelName",
+          sortDirection: "asc",
+        },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data;
+    },
+    getNextPageParam: (lastPage) =>
+      lastPage?.pagination.hasNext
+        ? lastPage.pagination.currentPage * limit
+        : undefined,
+    select: (data) => ({
+      ...data,
+      bindings: data.pages.flatMap((page) => page?.data ?? []),
+    }),
   });
 }
 

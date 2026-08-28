@@ -5,7 +5,7 @@ import {
   DocsPage,
   getDocsUrl,
 } from "@archestra/shared";
-import { ChevronDown, Mail, MessageCircle, MessagesSquare } from "lucide-react";
+import { ChevronDown, Mail, MessageCircle } from "lucide-react";
 import Link from "next/link";
 import { useId, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -14,6 +14,8 @@ import {
   resolveCandidateBaseUrls,
 } from "@/app/connection/connection-flow.utils";
 import { ConnectionUrlStep } from "@/app/connection/connection-url-step";
+import { AgentEmailSettingsDialog } from "@/app/settings/messaging-channels/email/agent-email-settings-dialog";
+import { AgentChatApps } from "@/components/agent-chat-apps";
 import {
   CodeBlock,
   CodeBlockCopyButton,
@@ -23,6 +25,7 @@ import { CopyableCode } from "@/components/copyable-code";
 import { CurlExampleSection } from "@/components/curl-example-section";
 import { McpOauthManagement } from "@/components/mcp-oauth-management";
 import { getManageTokenLink } from "@/components/tokens/manage-token-link";
+import { Button } from "@/components/ui/button";
 import {
   Collapsible,
   CollapsibleContent,
@@ -79,6 +82,7 @@ export function A2AConnectionInstructions({
     agentTrigger: ["read"],
   });
   const incomingEmail = useFeature("incomingEmail");
+  const [emailSettingsOpen, setEmailSettingsOpen] = useState(false);
 
   const tokens = tokensData?.tokens;
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
@@ -419,25 +423,8 @@ curl -X POST "${a2aEndpoint}" \\
   // so the standalone A2A page doesn't repeat them here.
   const secondaryChannels = (
     <div className="space-y-6">
-      {/* Chat apps (ChatOps channels) */}
-      {canReadAgentTriggers && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <MessagesSquare className="h-4 w-4 text-muted-foreground" />
-            <Label className="text-sm font-medium">Chat Apps</Label>
-          </div>
-          <p className={CHANNEL_PROSE_CLASS}>
-            Talk to this agent from chat apps like Slack — set it up under{" "}
-            <Link
-              href="/messaging-channels"
-              className="underline hover:text-foreground"
-            >
-              Messaging Channels
-            </Link>
-            .
-          </p>
-        </div>
-      )}
+      {/* Chat app assignments live with the agent; provider credentials live in Settings. */}
+      {canReadAgentTriggers && <AgentChatApps agent={agent} />}
 
       {/*
         Email Invocation - always show, with configuration guidance when not
@@ -448,9 +435,21 @@ curl -X POST "${a2aEndpoint}" \\
         the loudest of the three.
       */}
       <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <Mail className="h-4 w-4 text-muted-foreground" />
-          <Label className="text-sm font-medium">Email Invocation</Label>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Mail className="h-4 w-4 text-muted-foreground" />
+            <Label className="text-sm font-medium">Email Invocation</Label>
+          </div>
+          {globalEmailEnabled && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setEmailSettingsOpen(true)}
+            >
+              {agentEmailEnabled ? "Edit settings" : "Enable email"}
+            </Button>
+          )}
         </div>
 
         {!globalEmailEnabled ? (
@@ -506,6 +505,12 @@ curl -X POST "${a2aEndpoint}" \\
           <AgentEmailDisabledMessage className={CHANNEL_PROSE_CLASS} />
         )}
       </div>
+      <AgentEmailSettingsDialog
+        agent={agent}
+        open={emailSettingsOpen}
+        onOpenChange={setEmailSettingsOpen}
+        providerEnabled={globalEmailEnabled}
+      />
     </div>
   );
 
@@ -765,15 +770,16 @@ curl -X POST "${a2aEndpoint}" \\
           </h3>
           {chatDeepLinkBlock}
           <div className="border-t pt-4">{secondaryChannels}</div>
-          <div className="space-y-3 border-t pt-4">
-            <div className="space-y-1">
-              <h4 className="text-sm font-medium">OAuth clients</h4>
-              <p className="text-xs text-muted-foreground">
-                Register applications that call this agent as themselves or on
-                behalf of signed-in users.
-              </p>
-            </div>
-            <McpOauthManagement resourceId={agent.id} resourceKind="agent" />
+          <div className="border-t pt-4">
+            <McpOauthManagement
+              resourceId={agent.id}
+              resourceKind="agent"
+              heading={{
+                title: "OAuth clients",
+                description:
+                  "Register applications that call this agent as themselves or on behalf of signed-in users.",
+              }}
+            />
           </div>
         </section>
       </div>

@@ -4,7 +4,6 @@ import { MESSAGING_CHANNEL_LABELS } from "@archestra/shared";
 import { Info } from "lucide-react";
 import Image from "next/image";
 import { useState } from "react";
-import Divider from "@/components/divider";
 import { TelegramSetupDialog } from "@/components/telegram-setup-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,80 +13,11 @@ import {
 import { useGenerateTelegramLinkCode } from "@/lib/chatops/chatops-config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { ChannelsSection } from "../_components/channels-section";
-import { CollapsibleSetupSection } from "../_components/collapsible-setup-section";
 import { CredentialField } from "../_components/credential-field";
 import { LlmKeySetupStep } from "../_components/llm-key-setup-step";
+import { SetupSection } from "../_components/setup-section";
 import { SetupStep } from "../_components/setup-step";
-import type { ProviderConfig } from "../_components/types";
 import { useTriggerStatuses } from "../_components/use-trigger-statuses";
-
-const telegramProviderConfig: ProviderConfig = {
-  provider: "telegram",
-  providerLabel: MESSAGING_CHANNEL_LABELS.telegram,
-  providerIcon: "/icons/telegram.png",
-  docsUrl: getFrontendDocsUrl("platform-telegram"),
-  slashCommand: "/select-agent",
-  channelsAppearNote: (
-    <>
-      <div>
-        <div className="font-medium text-foreground mb-0.5">New channels</div>
-        <p>
-          Groups appear here the moment the bot is added; your direct message
-          appears when you link your account.
-        </p>
-      </div>
-      <div>
-        <div className="font-medium text-foreground mb-0.5">Group Privacy</div>
-        <p>
-          For the bot to work in a group, either{" "}
-          <span className="font-medium text-foreground">
-            make it a group admin
-          </span>{" "}
-          or{" "}
-          <span className="font-medium text-foreground">
-            turn Group Privacy off
-          </span>
-          : open{" "}
-          <a
-            href="https://t.me/BotFather"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-primary underline underline-offset-2"
-          >
-            @BotFather
-          </a>
-          :{" "}
-          <span className="whitespace-nowrap">
-            <code className="bg-muted px-1 py-0.5 rounded text-xs">
-              /mybots
-            </code>{" "}
-            → your bot
-          </span>{" "}
-          <span className="whitespace-nowrap">→ Bot Settings</span>{" "}
-          <span className="whitespace-nowrap">→ Group Privacy</span>{" "}
-          <span className="whitespace-nowrap">→ Turn off</span>, then remove and
-          re-add the bot to the group (Telegram caches the setting per
-          membership). Otherwise Telegram doesn't deliver group messages to the
-          bot at all — not even @mentions, only{" "}
-          <code className="bg-muted px-1 py-0.5 rounded text-xs">
-            /commands
-          </code>{" "}
-          and replies to its messages.
-        </p>
-      </div>
-    </>
-  ),
-  // The DM binding is created by the account-linking step, not by assigning
-  // an agent to a placeholder row.
-  showVirtualDmRow: false,
-  // Telegram has no universal web link for private groups.
-  buildDeepLink: () => null,
-  getDmDeepLink: (providerStatus) => {
-    const botUsername = providerStatus.dmInfo?.botUsername;
-    return botUsername ? `https://t.me/${botUsername}` : null;
-  },
-};
 
 /**
  * The one interactive step that makes Telegram usable: tie this Telegram
@@ -189,7 +119,7 @@ export default function TelegramPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <CollapsibleSetupSection
+      <SetupSection
         allStepsCompleted={allStepsCompleted}
         isLoading={statusLoading}
         providerLabel={channelLabel}
@@ -217,19 +147,7 @@ export default function TelegramPage() {
             botUsername={telegram?.dmInfo?.botUsername}
           />
         )}
-      </CollapsibleSetupSection>
-
-      {allStepsCompleted && (
-        <>
-          <Divider />
-          <ChannelsSection
-            providerConfig={{
-              ...telegramProviderConfig,
-              providerLabel: channelLabel,
-            }}
-          />
-        </>
-      )}
+      </SetupSection>
 
       <TelegramSetupDialog open={setupOpen} onOpenChange={setSetupOpen} />
     </div>

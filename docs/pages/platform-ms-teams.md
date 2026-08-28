@@ -3,7 +3,7 @@ title: MS Teams
 category: Agents
 order: 8
 description: Connect Archestra agents to Microsoft Teams channels
-lastUpdated: 2026-08-26
+lastUpdated: 2026-08-28
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -18,7 +18,7 @@ Archestra can connect directly to Microsoft Teams channels. When users mention t
 
 ## Setup
 
-The setup wizard in Archestra guides you through the entire MS Teams configuration. Navigate to **Agent Triggers** → **MS Teams** → **Setup MS Teams** and follow the step-by-step instructions.
+The setup wizard in Archestra guides you through the entire MS Teams configuration. Navigate to **Settings** → **Messaging Channels** → **MS Teams** → **Setup MS Teams** and follow the step-by-step instructions.
 
 ![MS Teams Setup Wizard](/docs/setup-msteams.webp)
 
@@ -52,7 +52,7 @@ To stop the bot replying in a thread, send `mute` (you can address it by name wi
 
 ### Answering Every Message
 
-By default the bot answers only when @mentioned in a channel. You can switch a single channel to answer every message instead — no mention needed. On the **Agent Triggers** → **MS Teams** page, set that channel's **Replies to** toggle to **All messages**. Other channels stay mentions-only.
+By default the bot answers only when @mentioned in a channel. You can switch a single channel to answer every message instead — no mention needed. Open the assigned agent, find **Chat Apps**, and turn on **Reply to all messages** for that channel. Other channels stay mentions-only.
 
 Mute still works per thread: send `mute` in a thread to silence it until you @mention the bot there again. Direct messages and group chats already answer every message, so the toggle does not apply to them.
 
@@ -60,7 +60,7 @@ This needs the `ChannelMessage.Read.Group` permission, which the team owner cons
 
 ### Channel Instructions
 
-Each channel can carry its own instructions for the agent — free text you write on the **Messaging Channels** → **MS Teams** page, next to the agent assignment. Archestra sends them to the agent with every message in that channel, alongside the agent's own instructions. Where the two disagree, the channel's instructions win, so one agent can behave differently in each channel it answers in.
+Each channel can carry its own instructions for the agent — free text you write from **Chat Apps** on the assigned agent's page. Archestra sends them to the agent with every message in that channel, alongside the agent's own instructions. Where the two disagree, the channel's instructions win, so one agent can behave differently in each channel it answers in.
 
 Channel instructions add to what the agent does. They never take an ability away. Anything they don't mention, the agent handles as usual.
 
@@ -78,7 +78,7 @@ Write them as you would talk to the agent. "Every message in this channel is a t
 
 Each Teams channel requires a **default agent** to be assigned to it. This agent handles all messages in the channel by default. When you first mention the bot in a channel without a binding, you'll be prompted to select an agent from a dropdown.
 
-You can manage the default agent for each channel from the **Agent Triggers** → **MS Teams** page in Archestra.
+To manage default assignments in Archestra, open an agent and use **Chat Apps** → **Manage channels**. Selecting a channel moves its default assignment to that agent.
 
 ![MS Teams Agent Selection](/docs/select-agent-msteams.webp)
 

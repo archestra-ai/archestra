@@ -12,7 +12,6 @@ import {
   Database,
   Files,
   FolderKanban,
-  Inbox,
   KeyRound,
   type LucideIcon,
   MessageCircle,
@@ -23,7 +22,6 @@ import {
   Route,
   Settings,
   ShieldCheck,
-  ShieldUser,
   Sparkles,
   Waypoints,
 } from "lucide-react";
@@ -174,13 +172,6 @@ export const contentNavGroups: NavGroup[] = [
         customIsActive: (pathname: string) => pathname.startsWith("/plugins"),
         beta: true,
         badgeLabel: "Beta",
-      },
-      {
-        title: "Messaging Channels",
-        url: "/messaging-channels",
-        icon: Inbox,
-        customIsActive: (pathname: string) =>
-          pathname.startsWith("/messaging-channels"),
       },
     ],
   },

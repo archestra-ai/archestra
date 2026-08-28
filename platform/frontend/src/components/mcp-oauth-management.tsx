@@ -43,9 +43,14 @@ export function isMcpOauthClientApplicable(
 export function McpOauthManagement({
   resourceId,
   resourceKind,
+  heading,
 }: {
   resourceId: string;
   resourceKind: "agent" | "gateway";
+  heading?: {
+    title: string;
+    description: string;
+  };
 }) {
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
@@ -68,17 +73,40 @@ export function McpOauthManagement({
   const [revealed, setRevealed] = useState<CreatedCredentials | null>(null);
 
   if (canRead === false) return null;
+
+  const createButton =
+    canCreate && !query.isPending && !query.isLoadingError ? (
+      <Button variant="outline" size="sm" onClick={() => setCreating(true)}>
+        + Create OAuth client
+      </Button>
+    ) : null;
+  const sectionHeading = heading ? (
+    <div className="flex items-start justify-between gap-4">
+      <div className="space-y-1">
+        <h4 className="text-sm font-medium">{heading.title}</h4>
+        <p className="text-xs text-muted-foreground">{heading.description}</p>
+      </div>
+      {createButton}
+    </div>
+  ) : null;
+
   if (query.isLoadingError) {
     return (
-      <QueryLoadError
-        title="Couldn't load OAuth clients"
-        onRetry={() => query.refetch()}
-      />
+      <div className="space-y-3">
+        {sectionHeading}
+        <QueryLoadError
+          title="Couldn't load OAuth clients"
+          onRetry={() => query.refetch()}
+        />
+      </div>
     );
   }
   if (query.isPending)
     return (
-      <p className="text-xs text-muted-foreground">Loading OAuth clients…</p>
+      <div className="space-y-3">
+        {sectionHeading}
+        <p className="text-xs text-muted-foreground">Loading OAuth clients…</p>
+      </div>
     );
 
   // Authorization-code clients are dynamically granted after user consent;
@@ -89,6 +117,7 @@ export function McpOauthManagement({
 
   return (
     <div className="space-y-3">
+      {sectionHeading}
       {clients.length === 0 ? (
         <p className="text-xs text-muted-foreground">
           No OAuth clients for this {resourceKind} yet.
@@ -179,12 +208,8 @@ export function McpOauthManagement({
           </table>
         </div>
       )}
-      {canCreate && (
-        <div className="flex justify-end">
-          <Button variant="outline" size="sm" onClick={() => setCreating(true)}>
-            + Create OAuth client
-          </Button>
-        </div>
+      {!heading && createButton && (
+        <div className="flex justify-end">{createButton}</div>
       )}
       <CreateOAuthClientDialog
         open={creating}

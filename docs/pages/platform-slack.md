@@ -3,7 +3,7 @@ title: Slack
 category: Agents
 order: 7
 description: Connect Archestra agents to Slack channels
-lastUpdated: 2026-08-26
+lastUpdated: 2026-08-28
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -26,11 +26,11 @@ Archestra supports two modes for connecting to Slack:
 | **Best for** | Local development, firewalled environments, VPN setups | Production deployments with stable URLs |
 | **Credentials needed** | Bot Token + App-Level Token + App ID | Bot Token + Signing Secret + App ID |
 
-Choose the mode in the setup wizard (**Agent Triggers** → **Slack** → **Setup Slack**) or via environment variables.
+Choose the mode in the setup wizard (**Settings** → **Messaging Channels** → **Slack** → **Setup Slack**) or via environment variables.
 
 ## Setup
 
-The setup wizard in Archestra guides you through the entire Slack configuration. Navigate to **Agent Triggers** → **Slack** → **Setup Slack** and follow the step-by-step instructions.
+The setup wizard in Archestra guides you through the entire Slack configuration. Navigate to **Settings** → **Messaging Channels** → **Slack** → **Setup Slack** and follow the step-by-step instructions.
 
 ![Slack Setup Wizard](/docs/setup-slack.webp)
 
@@ -58,13 +58,13 @@ To stop the bot replying in a thread, send `mute` (you can address it by name wi
 
 ### Answering Every Message
 
-By default the bot answers only when @mentioned in a channel. You can switch a single channel to answer every message instead — no mention needed. On the **Agent Triggers** → **Slack** page, set that channel's **Replies to** toggle to **All messages**. Other channels stay mentions-only.
+By default the bot answers only when @mentioned in a channel. You can switch a single channel to answer every message instead — no mention needed. Open the assigned agent, find **Chat Apps**, and turn on **Reply to all messages** for that channel. Other channels stay mentions-only.
 
 Mute still works per thread: send `mute` in a thread to silence it until you @mention the bot there again. Direct messages already answer every message, so the toggle does not apply to them.
 
 ### Channel Instructions
 
-Each channel can carry its own instructions for the agent — free text you write on the **Messaging Channels** → **Slack** page, next to the agent assignment. Archestra sends them to the agent with every message in that channel, alongside the agent's own instructions. Where the two disagree, the channel's instructions win, so one agent can behave differently in each channel it answers in.
+Each channel can carry its own instructions for the agent — free text you write from **Chat Apps** on the assigned agent's page. Archestra sends them to the agent with every message in that channel, alongside the agent's own instructions. Where the two disagree, the channel's instructions win, so one agent can behave differently in each channel it answers in.
 
 Channel instructions add to what the agent does. They never take an ability away. Anything they don't mention, the agent handles as usual.
 
@@ -87,7 +87,7 @@ The command prefix is generated from the Slack app name in the setup wizard. The
 
 Each Slack channel requires a **default agent** to be assigned to it. This agent handles all messages in the channel by default. When you first mention the bot in a channel without a binding, you'll be prompted to select an agent from a dropdown.
 
-You can manage the default agent for each channel from the **Agent Triggers** → **Slack** page in Archestra.
+To manage default assignments in Archestra, open an agent and use **Chat Apps** → **Manage channels**. Selecting a channel moves its default assignment to that agent.
 
 ![Slack Agent Selection](/docs/select-agent-slack.webp)
 

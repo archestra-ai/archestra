@@ -1,11 +1,7 @@
 "use client";
 
 import { type archestraApiTypes, E2eTestId } from "@archestra/shared";
-import type {
-  ColumnDef,
-  RowSelectionState,
-  SortingState,
-} from "@tanstack/react-table";
+import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import {
   ArchiveRestore,
   BookOpen,
@@ -16,7 +12,9 @@ import {
   MessageSquare,
   Pencil,
   Plus,
+  Puzzle,
   RefreshCw,
+  Server,
   Sparkles,
   Trash2,
 } from "lucide-react";
@@ -31,6 +29,7 @@ import {
   filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
+import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { PageLayout } from "@/components/page-layout";
 import {
   PERMANENT_DELETE_LABEL,
@@ -78,16 +77,17 @@ import { useFeature } from "@/lib/config/config.query";
 import { ACTION_LABEL, notYoursToChange } from "@/lib/design/resource-lexicon";
 import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
 import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
-import { useControlledRowSelection } from "@/lib/hooks/use-bulk-selection";
+import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useIsGlobalAdmin } from "@/lib/organization.query";
 import {
-  useAllMatchingSkills,
+  type SkillUsageReference,
   useBulkDeleteSkills,
   useExternalMcpSkills,
   usePermanentlyDeleteSkill,
   usePluginSkills,
   useRestoreSkill,
   useSkillSourceRepos,
+  useSkillsList,
   useSkillsPaginated,
 } from "@/lib/skills/skill.query";
 import { parseRepoFromSourceRef } from "@/lib/skills/skill-source";
@@ -95,16 +95,9 @@ import { computeCanModifySkill } from "@/lib/skills/use-skill-access";
 import { useMyTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
+import { PluginSourceIcon } from "../plugins/_parts/plugin-source-icon";
 import { BulkVisibilityDialog } from "./_parts/bulk-visibility-dialog";
 import { DeleteSkillDialog } from "./_parts/delete-skill-dialog";
-import {
-  ExternalMcpSkillsSection,
-  filterExternalMcpSkills,
-} from "./_parts/external-mcp-skills-section";
-import {
-  filterPluginSkills,
-  PluginSkillsSection,
-} from "./_parts/plugin-skills-section";
 import {
   getSkillActionModel,
   skillAction,
@@ -115,10 +108,36 @@ import {
   SkillSortableHeader,
 } from "./_parts/skill-collection";
 import { skillEditHref, skillUsageHref } from "./_parts/skill-page-config";
+import { SkillUsageDialog } from "./_parts/skill-usage-dialog";
 import { SkillUsageSummary } from "./_parts/skill-usage-summary";
 import { SkillVersionHistoryDialog } from "./_parts/skill-version-history-dialog";
 
 type SkillItem = archestraApiTypes.GetSkillsResponses["200"]["data"][number];
+type ExternalSkill =
+  archestraApiTypes.GetExternalMcpSkillsResponses["200"][number];
+type PluginSkill = archestraApiTypes.GetPluginSkillsResponses["200"][number];
+type ListedSkill =
+  | {
+      source: "standalone";
+      key: string;
+      name: string;
+      usageCount: number;
+      skill: SkillItem;
+    }
+  | {
+      source: "external_mcp";
+      key: string;
+      name: string;
+      usageCount: number;
+      skill: ExternalSkill;
+    }
+  | {
+      source: "plugin";
+      key: string;
+      name: string;
+      usageCount: number;
+      skill: PluginSkill;
+    };
 type SkillKind = "all" | "standalone" | "mcp" | "plugin";
 
 const SYNC_INTERVAL_LABELS: Record<string, string> = {
@@ -164,39 +183,6 @@ function SkillsList() {
     (searchParams.get("sortBy") as SkillSortBy | null) || "usageCount";
   const sortDirection =
     (searchParams.get("sortDirection") as "asc" | "desc" | null) || "desc";
-
-  /**
-   * Everything that narrows the table, with the page itself left out — the
-   * visible page and "every matching skill" differ only by limit/offset.
-   */
-  const listFilters = {
-    search: search || undefined,
-    sourceRepo: sourceRepo || undefined,
-    scope: scopeFilter.scope,
-    teamIds: scopeFilter.teamIds,
-    authorIds: scopeFilter.authorIds,
-    excludeAuthorIds: scopeFilter.excludeAuthorIds,
-    excludeOtherPersonalSkills: scopeFilter.excludeOtherPersonal,
-    status: isDeletedView ? ("deleted" as const) : undefined,
-    sortBy,
-    sortDirection,
-  };
-
-  const {
-    data: skills,
-    isFetching,
-    isLoadingError: isSkillsLoadError,
-    refetch: refetchSkills,
-  } = useSkillsPaginated(
-    {
-      limit: pageSize,
-      offset: pageIndex * pageSize,
-      ...listFilters,
-    },
-    { toastOnError: false },
-  );
-  const { data: sourceReposData } = useSkillSourceRepos();
-  const sourceRepos = sourceReposData?.repos ?? [];
   const mcpSkillsEnabled = useFeature("mcpGatewaySkillsEnabled") === true;
   const pluginsEnabled = useFeature("plugins") === true;
   const { data: canReadPlugins } = useHasPermissions({ plugin: ["read"] });
@@ -221,6 +207,54 @@ function SkillsList() {
     pluginSkillsEnabled &&
     !isDeletedView &&
     (kind === "all" || kind === "plugin");
+
+  /**
+   * Everything that narrows the table, with the page itself left out — the
+   * visible page and "every matching skill" differ only by limit/offset.
+   */
+  const listFilters = {
+    search: search || undefined,
+    sourceRepo: sourceRepo || undefined,
+    scope: scopeFilter.scope,
+    teamIds: scopeFilter.teamIds,
+    authorIds: scopeFilter.authorIds,
+    excludeAuthorIds: scopeFilter.excludeAuthorIds,
+    excludeOtherPersonalSkills: scopeFilter.excludeOtherPersonal,
+    status: isDeletedView ? ("deleted" as const) : undefined,
+    sortBy,
+    sortDirection,
+  };
+
+  const {
+    data: skills,
+    isFetching: isDeletedSkillsFetching,
+    isLoadingError: isDeletedSkillsLoadError,
+    refetch: refetchSkills,
+  } = useSkillsPaginated(
+    {
+      limit: pageSize,
+      offset: pageIndex * pageSize,
+      ...listFilters,
+    },
+    { enabled: isDeletedView, toastOnError: false },
+  );
+  const {
+    data: activeSkills = [],
+    isFetching: isActiveSkillsFetching,
+    isLoadingError: isActiveSkillsLoadError,
+    refetch: refetchActiveSkills,
+  } = useSkillsList(listFilters, {
+    enabled: !isDeletedView && showStandaloneSkills,
+    toastOnError: false,
+  });
+  const isFetching = isDeletedView
+    ? isDeletedSkillsFetching
+    : isActiveSkillsFetching;
+  const isSkillsLoadError = isDeletedView
+    ? isDeletedSkillsLoadError
+    : isActiveSkillsLoadError;
+  const { data: sourceReposData } = useSkillSourceRepos();
+  const sourceRepos = sourceReposData?.repos ?? [];
   const { data: externalSkills = [], isFetching: isExternalSkillsFetching } =
     useExternalMcpSkills({
       enabled: showMcpSkills,
@@ -312,12 +346,15 @@ function SkillsList() {
   }, [editId, router]);
 
   const [deletingSkill, setDeletingSkill] = useState<SkillItem | null>(null);
-  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [bulkVisibilityOpen, setBulkVisibilityOpen] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [permanentlyDeletingSkill, setPermanentlyDeletingSkill] =
     useState<SkillItem | null>(null);
   const [historySkillId, setHistorySkillId] = useState<string | null>(null);
+  const [usageSkill, setUsageSkill] = useState<{
+    reference: SkillUsageReference;
+    name: string;
+  } | null>(null);
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   // Resolved once for the whole table, then applied per row: the scope check
@@ -330,10 +367,37 @@ function SkillsList() {
   const { data: userTeams } = useMyTeams({ enabled: !!canReadTeams });
   const userTeamIdSet = new Set((userTeams ?? []).map((team) => team.id));
 
-  const items = skills?.data ?? [];
+  const standaloneSkills = isDeletedView ? (skills?.data ?? []) : activeSkills;
+  const items: ListedSkill[] = [
+    ...(showStandaloneSkills
+      ? standaloneSkills.map((skill) => ({
+          source: "standalone" as const,
+          key: `standalone:${skill.id}`,
+          name: skill.name,
+          usageCount: skill.usageCount,
+          skill,
+        }))
+      : []),
+    ...(showMcpSkills
+      ? visibleExternalSkills.map((skill) => ({
+          source: "external_mcp" as const,
+          key: `external_mcp:${skill.mcpServerId}:${skill.id}`,
+          name: skill.name,
+          usageCount: skill.usageCount,
+          skill,
+        }))
+      : []),
+    ...(showPluginSkills
+      ? visiblePluginSkills.map((skill) => ({
+          source: "plugin" as const,
+          key: `plugin:${skill.pluginId}:${skill.skillPath}`,
+          name: skill.name,
+          usageCount: skill.usageCount,
+          skill,
+        }))
+      : []),
+  ];
   const bulkDeleteSkills = useBulkDeleteSkills();
-  // Derived from what is on screen rather than read straight out of
-  // `rowSelection`: the table is server-paginated, so a bulk action must only
   /**
    * An escalation is remembered as the filters it was made under, so changing
    * a filter drops it rather than silently re-pointing "all 203 skills" at a
@@ -342,54 +406,52 @@ function SkillsList() {
    * survived a filter change could otherwise claim more than it can act on.
    */
   const filterSignature = JSON.stringify(listFilters);
-  const [escalatedFor, setEscalatedFor] = useState<string | null>(null);
-  const allMatchingSelected = escalatedFor === filterSignature;
-  const { effectiveRowSelection, onRowSelectionChange } =
-    useControlledRowSelection({
-      rowSelection,
-      setRowSelection,
-      rows: items,
-      getRowId: (row) => row.id,
-      allMatchingSelected,
-      clearEscalation: () => setEscalatedFor(null),
-    });
-  const cardSelection = useBulkCardSelection({
+  const selection = useBulkSelection({
     rows: items,
-    getRowId: (row) => row.id,
-    rowSelection: effectiveRowSelection,
-    setRowSelection: onRowSelectionChange,
+    getId: (row) => row.key,
+    canSelect: canBulkActOnSkill,
+    filterSignature,
+    matchDescription: search
+      ? "match this search query"
+      : "match the current filters",
   });
-
-  const { data: allMatchingSkills, isFetching: isFetchingAllMatching } =
-    useAllMatchingSkills(listFilters, { enabled: allMatchingSelected });
-
-  // Only visible rows enter a manual selection. Escalation materializes the
-  // visible page so table and card controls stay checked until changed.
-  const pageSelection = isDeletedView
-    ? []
-    : items.filter((skill) => effectiveRowSelection[skill.id]);
-
-  const selectedSkills = allMatchingSelected
-    ? (allMatchingSkills ?? pageSelection)
-    : pageSelection;
-
-  const clearSelection = useCallback(() => {
-    setRowSelection({});
-    setEscalatedFor(null);
+  const [pageRowIds, setPageRowIds] = useState<string[]>([]);
+  const handlePageRowIdsChange = useCallback((ids: string[]) => {
+    setPageRowIds((current) =>
+      current.length === ids.length && current.every((id, i) => id === ids[i])
+        ? current
+        : ids,
+    );
   }, []);
+  const visibleRows = items.filter((item) => pageRowIds.includes(item.key));
+  const cardSelection = useBulkCardSelection({
+    rows: visibleRows,
+    getRowId: (row) => row.key,
+    rowSelection: selection.rowSelection,
+    setRowSelection: selection.setRowSelection,
+    canSelect: canBulkActOnSkill,
+    rangeSelection: selection.rangeSelection,
+  });
+  const selectedSkills = selection.selected
+    .filter((item) => item.source === "standalone")
+    .map((item) => item.skill);
+  const clearSelection = selection.clearSelection;
 
   // Deep-link support: /skills?openEdit=<name> opens the matching skill's page
   // (e.g. from the chat SkillPill). The name resolves to an id once the items
   // it was searched by have loaded.
   const openEdit = searchParams.get("openEdit");
   useEffect(() => {
-    if (!openEdit || items.length === 0) return;
-    const match = items.find((s) => s.name === openEdit);
+    if (!openEdit || standaloneSkills.length === 0) return;
+    const match = standaloneSkills.find((skill) => skill.name === openEdit);
     if (!match) return;
     router.replace(`/skills/${match.id}`);
-  }, [openEdit, items, router]);
+  }, [openEdit, standaloneSkills, router]);
   const pagination = skills?.pagination;
-  const totalSkills = pagination?.total ?? 0;
+  const totalStandaloneSkills = isDeletedView
+    ? (pagination?.total ?? 0)
+    : activeSkills.length;
+  const totalSkills = isDeletedView ? totalStandaloneSkills : items.length;
   const hasActiveFilters =
     !!search ||
     !!sourceRepo ||
@@ -399,7 +461,7 @@ function SkillsList() {
       !isDeletedView &&
       kind !== "all");
   const hasVisibleSkills =
-    (showStandaloneSkills && totalSkills > 0) ||
+    (showStandaloneSkills && totalStandaloneSkills > 0) ||
     (showMcpSkills && visibleExternalSkills.length > 0) ||
     (showPluginSkills && visiblePluginSkills.length > 0);
   const showEmptyState =
@@ -408,23 +470,6 @@ function SkillsList() {
     !(showPluginSkills && isPluginSkillsFetching) &&
     !hasVisibleSkills &&
     !hasActiveFilters;
-  const noVisibleFilterResults =
-    totalSkills === 0 &&
-    visibleExternalSkills.length === 0 &&
-    visiblePluginSkills.length === 0;
-  const showStandaloneSection =
-    showStandaloneSkills &&
-    (totalSkills > 0 ||
-      kind === "standalone" ||
-      isDeletedView ||
-      (kind === "all" && noVisibleFilterResults));
-  const showMcpSection =
-    showMcpSkills && (visibleExternalSkills.length > 0 || kind === "mcp");
-  const showPluginSection =
-    showPluginSkills && (visiblePluginSkills.length > 0 || kind === "plugin");
-  const showStandaloneHeading =
-    isDeletedView || mcpSkillsEnabled || pluginSkillsEnabled;
-
   const clearFilters = useCallback(() => {
     const params = new URLSearchParams(searchParams.toString());
     for (const key of [
@@ -443,15 +488,15 @@ function SkillsList() {
     router.push(`${pathname}?${params.toString()}`, { scroll: false });
   }, [pathname, router, searchParams]);
 
-  const handlePaginationChange = (newPagination: {
-    pageIndex: number;
-    pageSize: number;
-  }) => {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("page", String(newPagination.pageIndex + 1));
-    params.set("pageSize", String(newPagination.pageSize));
-    router.push(`${pathname}?${params.toString()}`, { scroll: false });
-  };
+  const handlePaginationChange = useCallback(
+    (newPagination: { pageIndex: number; pageSize: number }) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("page", String(newPagination.pageIndex + 1));
+      params.set("pageSize", String(newPagination.pageSize));
+      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
 
   const renderSkillActions = (skill: SkillItem) => {
     const actionModel = getSkillActionModel(skill.id);
@@ -541,7 +586,68 @@ function SkillsList() {
     );
   };
 
-  const columns: ColumnDef<SkillItem>[] = [
+  const renderListedSkillActions = (item: ListedSkill) => {
+    if (item.source === "standalone") return renderSkillActions(item.skill);
+
+    const skill = item.skill;
+    const usageReference: SkillUsageReference =
+      item.source === "external_mcp"
+        ? {
+            kind: "externalMcp",
+            mcpServerId: item.skill.mcpServerId,
+            uri: item.skill.uri,
+          }
+        : {
+            kind: "plugin",
+            pluginId: item.skill.pluginId,
+            skillPath: item.skill.skillPath,
+          };
+    const usageAction: TableRowAction = {
+      icon: <ChartColumn className="h-4 w-4" />,
+      label: "Usage",
+      permissions:
+        item.source === "external_mcp"
+          ? {
+              skill: ["read"],
+              mcpServerInstallation: ["read"],
+            }
+          : undefined,
+      onClick: () =>
+        setUsageSkill({
+          reference: usageReference,
+          name: skill.name,
+        }),
+    };
+    const actions: TableRowAction[] =
+      item.source === "external_mcp"
+        ? [
+            {
+              icon: <MessageSquare className="h-4 w-4" />,
+              label: "Chat",
+              permissions: { chat: ["read", "create"] },
+              href: externalSkillChatHref(item.skill),
+            },
+            usageAction,
+            {
+              icon: <Server className="h-4 w-4" />,
+              label: "Manage MCP server",
+              href: `/mcp/registry/${item.skill.catalogId}`,
+            },
+          ]
+        : [
+            usageAction,
+            {
+              icon: <Puzzle className="h-4 w-4" />,
+              label: "Manage plugin",
+              href: `/plugins/${item.skill.pluginId}`,
+              permissions: { plugin: ["admin"] },
+            },
+          ];
+
+    return <TableRowActions actions={actions} itemName={skill.name} />;
+  };
+
+  const columns: ColumnDef<ListedSkill>[] = [
     // A deleted row can only be restored or purged, neither of which this
     // selection drives, so the trash view keeps its rows unselectable rather
     // than offering a checkbox with nothing to apply.
@@ -557,116 +663,46 @@ function SkillsList() {
         />
       ),
       size: 420,
-      cell: ({ row }) => {
-        const skill = row.original;
-        const repo = parseRepoFromSourceRef(skill.sourceRef);
-        return (
-          <div className="flex min-w-0 items-center gap-3">
-            <SkillSourceIcon
-              repo={repo}
-              builtIn={skill.sourceType === "built_in"}
-              appIconLogo={appIconLogo}
-            />
-            <div className="min-w-0 flex-1">
-              <div className="flex items-baseline gap-2">
-                <span className="truncate font-medium">{skill.name}</span>
-                {skill.sourceType === "built_in" && (
-                  <Badge variant="secondary" className="shrink-0">
-                    {appName}
-                  </Badge>
-                )}
-                {repo && (
-                  <span className="truncate font-mono text-xs text-muted-foreground">
-                    {repo}
-                  </span>
-                )}
-                {skill.githubSyncInterval && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "shrink-0 gap-1",
-                          skill.lastSyncError && "text-destructive",
-                        )}
-                      >
-                        <RefreshCw className="h-3 w-3" />
-                        synced
-                      </Badge>
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-xs">
-                      {SYNC_INTERVAL_LABELS[skill.githubSyncInterval]} from
-                      GitHub; read-only until disconnected.
-                      {skill.lastSyncError
-                        ? ` Last sync failed: ${skill.lastSyncError}`
-                        : ` Last synced: ${formatRelativeTimeFromNow(
-                            skill.lastSyncedAt,
-                            { neverLabel: "not yet" },
-                          )}.`}
-                    </TooltipContent>
-                  </Tooltip>
-                )}
-              </div>
-              {skill.description && (
-                <div className="truncate text-xs text-muted-foreground">
-                  {skill.description}
-                </div>
-              )}
-            </div>
-            {skill.templated && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge variant="outline" className="gap-1">
-                    <Braces className="h-3 w-3" />
-                    templated
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent>
-                  Body is rendered with Handlebars at activation.
-                </TooltipContent>
-              </Tooltip>
-            )}
-            {skill.compatibility && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge variant="outline" className="gap-1">
-                    <Info className="h-3 w-3" />
-                    compatibility
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent>{skill.compatibility}</TooltipContent>
-              </Tooltip>
-            )}
-          </div>
-        );
-      },
+      cell: ({ row }) => (
+        <ListedSkillName
+          item={row.original}
+          appName={appName}
+          appIconLogo={appIconLogo}
+        />
+      ),
     },
     {
       id: "visibility",
       size: 130,
       header: "Visibility",
-      cell: ({ row }) => (
-        <ResourceVisibilityBadge
-          scope={row.original.scope}
-          teams={row.original.teams}
-          users={row.original.users}
-          authorId={row.original.authorId}
-          authorName={row.original.authorName}
-          currentUserId={currentUserId}
-          showSelfAsMe
-        />
-      ),
+      cell: ({ row }) => {
+        const item = row.original;
+        const standalone = item.source === "standalone" ? item.skill : null;
+        return (
+          <ResourceVisibilityBadge
+            scope={item.skill.scope}
+            teams={standalone?.teams}
+            users={standalone?.users}
+            authorId={standalone?.authorId ?? currentUserId}
+            authorName={standalone?.authorName ?? session?.user?.name}
+            currentUserId={currentUserId}
+            showSelfAsMe
+          />
+        );
+      },
     },
     {
       id: "files",
       size: 90,
       header: () => <div className="text-right">Files</div>,
-      cell: ({ row }) => (
-        <div className="text-right text-sm text-muted-foreground">
-          {row.original.fileCount}{" "}
-          {row.original.fileCount === 1 ? "file" : "files"}
-        </div>
-      ),
+      cell: ({ row }) => {
+        const fileCount = listedSkillFileCount(row.original);
+        return (
+          <div className="text-right text-sm text-muted-foreground">
+            {fileCount} {fileCount === 1 ? "file" : "files"}
+          </div>
+        );
+      },
     },
     {
       id: "usageCount",
@@ -688,11 +724,32 @@ function SkillsList() {
       cell: ({ row }) => (
         <div className="flex justify-end pr-6">
           <SkillUsageSummary
-            usageCount={row.original.usageCount}
-            usageUserCount={row.original.usageUserCount}
-            lastUsedAt={row.original.lastUsedAt}
-            label={`View usage for ${row.original.name}`}
-            onClick={() => router.push(skillUsageHref(row.original.id))}
+            usageCount={row.original.skill.usageCount}
+            usageUserCount={row.original.skill.usageUserCount}
+            lastUsedAt={row.original.skill.lastUsedAt}
+            label={`View usage for ${row.original.skill.name}`}
+            onClick={() => {
+              const item = row.original;
+              if (item.source === "standalone") {
+                router.push(skillUsageHref(item.skill.id));
+                return;
+              }
+              setUsageSkill({
+                reference:
+                  item.source === "external_mcp"
+                    ? {
+                        kind: "externalMcp",
+                        mcpServerId: item.skill.mcpServerId,
+                        uri: item.skill.uri,
+                      }
+                    : {
+                        kind: "plugin",
+                        pluginId: item.skill.pluginId,
+                        skillPath: item.skill.skillPath,
+                      },
+                name: item.skill.name,
+              });
+            }}
           />
         </div>
       ),
@@ -703,7 +760,7 @@ function SkillsList() {
       header: () => <div className="pl-4 text-right">Actions</div>,
       cell: ({ row }) => (
         <div className="flex justify-end pl-4">
-          {renderSkillActions(row.original)}
+          {renderListedSkillActions(row.original)}
         </div>
       ),
     },
@@ -714,7 +771,9 @@ function SkillsList() {
       <PageLayout title="Skills" description={SKILLS_DESCRIPTION} tabs={tabs}>
         <QueryLoadError
           title="Couldn't load your skills"
-          onRetry={() => refetchSkills()}
+          onRetry={() =>
+            isDeletedView ? refetchSkills() : refetchActiveSkills()
+          }
         />
       </PageLayout>
     );
@@ -846,181 +905,144 @@ function SkillsList() {
                 <ActiveFilterBadges adminPermission={{ skill: ["admin"] }} />
               </div>
 
-              <div className="space-y-6">
-                {showStandaloneSection && (
-                  <section
-                    className="space-y-3"
-                    aria-label={showStandaloneHeading ? undefined : "Skills"}
-                    aria-labelledby={
-                      showStandaloneHeading
-                        ? "standalone-skills-title"
-                        : undefined
-                    }
+              <section className="space-y-3" aria-label="Skills">
+                <BulkActions
+                  count={selectedSkills.length}
+                  noun="skill"
+                  countTestId={E2eTestId.SkillsBulkSelectionCount}
+                  onClear={clearSelection}
+                  selectAllMatching={selection.selectAllMatching}
+                >
+                  <PermissionButton
+                    permissions={{ skill: ["update"] }}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setBulkVisibilityOpen(true)}
                   >
-                    {showStandaloneHeading && (
-                      <h2
-                        id="standalone-skills-title"
-                        className="text-sm font-medium uppercase tracking-wide text-muted-foreground"
+                    <Pencil className="h-4 w-4" />
+                    <span>Edit visibility</span>
+                  </PermissionButton>
+                  <PermissionButton
+                    permissions={{ skill: ["delete"] }}
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setBulkDeleteOpen(true)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span>Delete</span>
+                  </PermissionButton>
+                </BulkActions>
+
+                <SkillCollection
+                  forceTable={isDeletedView}
+                  items={items}
+                  columns={columns}
+                  getRowId={(item) => item.key}
+                  renderCard={(item) => {
+                    const fileCount = listedSkillFileCount(item);
+                    const standalone =
+                      item.source === "standalone" ? item.skill : null;
+                    const href = listedSkillHref(item);
+                    return (
+                      <TableCard
+                        key={item.key}
+                        icon={
+                          <ListedSkillIcon
+                            item={item}
+                            appIconLogo={appIconLogo}
+                          />
+                        }
+                        title={
+                          <span className="flex min-w-0 items-center gap-2">
+                            <Link href={href} className="truncate">
+                              {item.skill.name}
+                            </Link>
+                            <ListedSkillSourceBadge
+                              item={item}
+                              appName={appName}
+                            />
+                          </span>
+                        }
+                        description={item.skill.description}
+                        actions={renderListedSkillActions(item)}
+                        onNavigate={
+                          isDeletedView
+                            ? undefined
+                            : () => router.push(listedSkillHref(item))
+                        }
+                        {...cardSelection(item)}
+                        selectionLabel={`Select ${item.skill.name}`}
+                        footer={
+                          <div className="flex items-center justify-between gap-3">
+                            <span>
+                              {fileCount} {fileCount === 1 ? "file" : "files"}
+                            </span>
+                            <span>
+                              {item.skill.usageCount}{" "}
+                              {item.skill.usageCount === 1 ? "use" : "uses"}
+                            </span>
+                          </div>
+                        }
                       >
-                        {isDeletedView ? "Deleted skills" : "Standalone skills"}
-                      </h2>
-                    )}
-
-                    <BulkActions
-                      count={selectedSkills.length}
-                      noun="skill"
-                      countTestId={E2eTestId.SkillsBulkSelectionCount}
-                      onClear={clearSelection}
-                      busy={isFetchingAllMatching}
-                      selectAllMatching={{
-                        total: totalSkills,
-                        pageFullySelected:
-                          items.length > 0 &&
-                          pageSelection.length === items.length,
-                        active: allMatchingSelected,
-                        onSelectAll: () => setEscalatedFor(filterSignature),
-                        matchDescription: search
-                          ? "match this search query"
-                          : "match the current filters",
-                      }}
-                    >
-                      <PermissionButton
-                        permissions={{ skill: ["update"] }}
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setBulkVisibilityOpen(true)}
-                      >
-                        <Pencil className="h-4 w-4" />
-                        <span>Edit visibility</span>
-                      </PermissionButton>
-                      <PermissionButton
-                        permissions={{ skill: ["delete"] }}
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => setBulkDeleteOpen(true)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        <span>Delete</span>
-                      </PermissionButton>
-                    </BulkActions>
-
-                    <SkillCollection
-                      forceTable={isDeletedView}
-                      items={items}
-                      columns={columns}
-                      getRowId={(skill) => skill.id}
-                      renderCard={(skill) => {
-                        const repo = parseRepoFromSourceRef(skill.sourceRef);
-                        return (
-                          <TableCard
-                            key={skill.id}
-                            icon={
-                              <SkillSourceIcon
-                                repo={repo}
-                                builtIn={skill.sourceType === "built_in"}
-                                appIconLogo={appIconLogo}
-                              />
+                        <div className="flex flex-wrap items-center gap-2">
+                          <ResourceVisibilityBadge
+                            scope={item.skill.scope}
+                            teams={standalone?.teams}
+                            users={standalone?.users}
+                            authorId={standalone?.authorId ?? currentUserId}
+                            authorName={
+                              standalone?.authorName ?? session?.user?.name
                             }
-                            title={
-                              <Link href={`/skills/${skill.id}`}>
-                                {skill.name}
-                              </Link>
-                            }
-                            description={skill.description}
-                            actions={renderSkillActions(skill)}
-                            onNavigate={
-                              isDeletedView
-                                ? undefined
-                                : () => router.push(`/skills/${skill.id}`)
-                            }
-                            {...cardSelection(skill)}
-                            selectionLabel={`Select ${skill.name}`}
-                            footer={
-                              <div className="flex items-center justify-between gap-3">
-                                <span>
-                                  {skill.fileCount}{" "}
-                                  {skill.fileCount === 1 ? "file" : "files"}
-                                </span>
-                                <span>
-                                  {skill.usageCount}{" "}
-                                  {skill.usageCount === 1 ? "use" : "uses"}
-                                </span>
-                              </div>
-                            }
-                          >
-                            <div className="flex flex-wrap items-center gap-2">
-                              <ResourceVisibilityBadge
-                                scope={skill.scope}
-                                teams={skill.teams}
-                                users={skill.users}
-                                authorId={skill.authorId}
-                                authorName={skill.authorName}
-                                currentUserId={currentUserId}
-                                showSelfAsMe
-                              />
-                              {skill.templated ? (
-                                <Badge variant="outline">
-                                  <Braces className="mr-1 h-3 w-3" />
-                                  <span>templated</span>
-                                </Badge>
-                              ) : null}
-                            </div>
-                          </TableCard>
-                        );
-                      }}
-                      isLoading={isFetching}
-                      emptyIcon={Sparkles}
-                      emptyMessage="No standalone skills yet."
-                      hasActiveFilters={hasActiveFilters}
-                      filteredEmptyMessage={
-                        isDeletedView
-                          ? "No deleted skills found."
-                          : "No standalone skills match the current filters."
-                      }
-                      onClearFilters={clearFilters}
-                      manualPagination
-                      manualSorting
-                      sorting={sorting}
-                      onSortingChange={handleSortingChange}
-                      pagination={{
-                        pageIndex,
-                        pageSize,
-                        total: totalSkills,
-                      }}
-                      onPaginationChange={handlePaginationChange}
-                      onRowClick={
-                        isDeletedView
-                          ? undefined
-                          : (skill) => router.push(`/skills/${skill.id}`)
-                      }
-                      rowSelection={effectiveRowSelection}
-                      onRowSelectionChange={onRowSelectionChange}
-                      fixedWidthColumnIds={[
-                        "visibility",
-                        "files",
-                        "usageCount",
-                      ]}
-                      flexibleColumnIds={["name"]}
-                    />
-                  </section>
-                )}
-
-                {showMcpSection && (
-                  <ExternalMcpSkillsSection
-                    skills={visibleExternalSkills}
-                    showWhenEmpty={kind === "mcp"}
-                    isLoading={isExternalSkillsFetching}
-                  />
-                )}
-
-                {showPluginSection && (
-                  <PluginSkillsSection
-                    skills={visiblePluginSkills}
-                    showWhenEmpty={kind === "plugin"}
-                    isLoading={isPluginSkillsFetching}
-                  />
-                )}
-              </div>
+                            currentUserId={currentUserId}
+                            showSelfAsMe
+                          />
+                          {standalone?.templated ? (
+                            <Badge variant="outline">
+                              <Braces className="mr-1 h-3 w-3" />
+                              <span>templated</span>
+                            </Badge>
+                          ) : null}
+                          {item.source === "plugin" &&
+                          !item.skill.pluginEnabled ? (
+                            <Badge variant="outline">Plugin disabled</Badge>
+                          ) : null}
+                        </div>
+                      </TableCard>
+                    );
+                  }}
+                  isLoading={
+                    isFetching ||
+                    (showMcpSkills && isExternalSkillsFetching) ||
+                    (showPluginSkills && isPluginSkillsFetching)
+                  }
+                  emptyIcon={Sparkles}
+                  emptyMessage="No skills yet."
+                  hasActiveFilters={hasActiveFilters}
+                  filteredEmptyMessage={
+                    isDeletedView
+                      ? "No deleted skills found."
+                      : "No skills match the current filters."
+                  }
+                  onClearFilters={clearFilters}
+                  manualPagination={isDeletedView}
+                  manualSorting={isDeletedView}
+                  sorting={sorting}
+                  onSortingChange={handleSortingChange}
+                  pagination={{ pageIndex, pageSize, total: totalSkills }}
+                  onPaginationChange={handlePaginationChange}
+                  onRowClick={
+                    isDeletedView
+                      ? undefined
+                      : (item) => router.push(listedSkillHref(item))
+                  }
+                  rowSelection={selection.rowSelection}
+                  onRowSelectionChange={selection.setRowSelection}
+                  onPageRowIdsChange={handlePageRowIdsChange}
+                  rangeSelection={selection.rangeSelection}
+                  fixedWidthColumnIds={["visibility", "files", "usageCount"]}
+                  flexibleColumnIds={["name"]}
+                />
+              </section>
             </>
           )}
         </TableCardView>
@@ -1084,14 +1106,295 @@ function SkillsList() {
           onOpenChange={(open) => !open && setHistorySkillId(null)}
         />
       )}
+
+      {usageSkill && (
+        <SkillUsageDialog
+          skillRef={usageSkill.reference}
+          skillName={usageSkill.name}
+          open
+          onOpenChange={(open) => !open && setUsageSkill(null)}
+        />
+      )}
     </>
   );
 }
 
-const selectColumn = createSelectColumn<SkillItem>({
-  rowLabel: (row) => `Select ${row.name}`,
+const selectColumn = createSelectColumn<ListedSkill>({
+  rowLabel: (row) => `Select ${row.skill.name}`,
   allLabel: "Select all skills on this page",
+  canSelect: canBulkActOnSkill,
+  disabledReason: (row) =>
+    row.source === "external_mcp"
+      ? "MCP skills are managed through their MCP server"
+      : "Plugin skills are managed through their plugin",
 });
+
+function canBulkActOnSkill(item: ListedSkill) {
+  return item.source === "standalone";
+}
+
+function filterExternalMcpSkills({
+  skills,
+  search,
+  scope,
+}: {
+  skills: ExternalSkill[];
+  search?: string;
+  scope?: "personal" | "team" | "org";
+}) {
+  const needle = search?.trim().toLowerCase();
+  return skills.filter(
+    (skill) =>
+      (!scope || skill.scope === scope) &&
+      (!needle ||
+        skill.name.toLowerCase().includes(needle) ||
+        skill.description.toLowerCase().includes(needle) ||
+        skill.serverName.toLowerCase().includes(needle)),
+  );
+}
+
+function filterPluginSkills({
+  skills,
+  search,
+  scope,
+}: {
+  skills: PluginSkill[];
+  search?: string;
+  scope?: "personal" | "team" | "org";
+}) {
+  const needle = search?.trim().toLowerCase();
+  return skills.filter(
+    (skill) =>
+      (!scope || skill.scope === scope) &&
+      (!needle ||
+        skill.name.toLowerCase().includes(needle) ||
+        skill.description.toLowerCase().includes(needle) ||
+        skill.pluginName.toLowerCase().includes(needle)),
+  );
+}
+
+function listedSkillHref(item: ListedSkill) {
+  if (item.source === "standalone") return `/skills/${item.skill.id}`;
+  if (item.source === "external_mcp") {
+    return `/skills/external/${item.skill.id}?mcpServerId=${item.skill.mcpServerId}`;
+  }
+  const query = item.skill.skillPath
+    ? `?skillPath=${encodeURIComponent(item.skill.skillPath)}`
+    : "";
+  return `/skills/plugins/${item.skill.pluginId}${query}`;
+}
+
+function externalSkillChatHref(skill: ExternalSkill) {
+  const params = new URLSearchParams({
+    mcp_skill_id: skill.id,
+    mcp_server_id: skill.mcpServerId,
+    mcp_skill_uri: skill.uri,
+    mcp_skill_name: skill.name,
+    mcp_server_name: skill.serverName,
+    mcp_skill_display_name: `${skill.serverName} [${skill.scope}:${skill.mcpServerId.slice(0, 8)}] / ${skill.name}`,
+  });
+  return `/chat/new?${params.toString()}`;
+}
+
+function listedSkillFileCount(item: ListedSkill) {
+  return item.source === "external_mcp"
+    ? (item.skill.resources?.length ?? 1)
+    : item.skill.fileCount;
+}
+
+function ListedSkillName({
+  item,
+  appName,
+  appIconLogo,
+}: {
+  item: ListedSkill;
+  appName: string;
+  appIconLogo: string;
+}) {
+  const standalone = item.source === "standalone" ? item.skill : null;
+  const compatibility =
+    item.source === "standalone" || item.source === "plugin"
+      ? item.skill.compatibility
+      : null;
+
+  return (
+    <div className="flex min-w-0 items-center gap-3">
+      <ListedSkillIcon item={item} appIconLogo={appIconLogo} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-2">
+          <span className="truncate font-medium">{item.skill.name}</span>
+          <ListedSkillSourceBadge item={item} appName={appName} />
+          {standalone?.githubSyncInterval && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "shrink-0 gap-1",
+                    standalone.lastSyncError && "text-destructive",
+                  )}
+                >
+                  <RefreshCw className="h-3 w-3" />
+                  synced
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs">
+                {SYNC_INTERVAL_LABELS[standalone.githubSyncInterval]} from
+                GitHub; read-only until disconnected.
+                {standalone.lastSyncError
+                  ? ` Last sync failed: ${standalone.lastSyncError}`
+                  : ` Last synced: ${formatRelativeTimeFromNow(
+                      standalone.lastSyncedAt,
+                      { neverLabel: "not yet" },
+                    )}.`}
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </div>
+        {item.skill.description && (
+          <div className="truncate text-xs text-muted-foreground">
+            {item.skill.description}
+          </div>
+        )}
+      </div>
+      {standalone?.templated && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge variant="outline" className="gap-1">
+              <Braces className="h-3 w-3" />
+              templated
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent>
+            Body is rendered with Handlebars at activation.
+          </TooltipContent>
+        </Tooltip>
+      )}
+      {item.source === "plugin" && !item.skill.pluginEnabled && (
+        <Badge variant="outline" className="shrink-0">
+          Disabled
+        </Badge>
+      )}
+      {compatibility && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge variant="outline" className="gap-1">
+              <Info className="h-3 w-3" />
+              compatibility
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent>{compatibility}</TooltipContent>
+        </Tooltip>
+      )}
+    </div>
+  );
+}
+
+function ListedSkillSourceBadge({
+  item,
+  appName,
+}: {
+  item: ListedSkill;
+  appName: string;
+}) {
+  if (item.source === "external_mcp") {
+    return (
+      <Badge
+        variant="secondary"
+        title={`${item.skill.serverName} · MCP`}
+        className="inline-flex max-w-56 shrink items-center gap-1 overflow-hidden font-normal"
+      >
+        <span className="truncate">{item.skill.serverName}</span>
+        <span aria-hidden className="shrink-0 text-muted-foreground">
+          ·
+        </span>
+        <span className="shrink-0">MCP</span>
+      </Badge>
+    );
+  }
+  if (item.source === "plugin") {
+    const repo =
+      item.skill.sourceMarketplaceRepo ?? item.skill.sourceRepo ?? null;
+    const isOpenAppa =
+      item.skill.pluginName.toLowerCase() === "openappa" &&
+      repo?.toLowerCase() === "archestra-ai/openappa";
+    if (isOpenAppa) {
+      return (
+        <Badge
+          variant="secondary"
+          title="OpenAPPA"
+          className="inline-flex max-w-48 shrink items-center overflow-hidden font-normal"
+        >
+          <span className="truncate">OpenAPPA</span>
+        </Badge>
+      );
+    }
+    return (
+      <Badge
+        variant="secondary"
+        title={`${item.skill.pluginName} · Plugin`}
+        className="inline-flex max-w-56 shrink items-center gap-1 overflow-hidden font-normal"
+      >
+        <span className="truncate">{item.skill.pluginName}</span>
+        <span aria-hidden className="shrink-0 text-muted-foreground">
+          ·
+        </span>
+        <span className="shrink-0">Plugin</span>
+      </Badge>
+    );
+  }
+  if (item.skill.sourceType === "built_in") {
+    return (
+      <Badge
+        variant="secondary"
+        title={appName}
+        className="shrink-0 font-normal"
+      >
+        <span>{appName}</span>
+      </Badge>
+    );
+  }
+  const repo = parseRepoFromSourceRef(item.skill.sourceRef);
+  return repo ? (
+    <Badge
+      variant="secondary"
+      title={repo}
+      className="inline-flex max-w-48 shrink overflow-hidden font-normal"
+    >
+      <span className="truncate font-mono">{repo}</span>
+    </Badge>
+  ) : null;
+}
+
+function ListedSkillIcon({
+  item,
+  appIconLogo,
+}: {
+  item: ListedSkill;
+  appIconLogo: string;
+}) {
+  if (item.source === "external_mcp") {
+    return (
+      <span className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted/30">
+        <McpCatalogIcon
+          icon={item.skill.icon}
+          catalogId={item.skill.catalogId}
+          size={20}
+        />
+      </span>
+    );
+  }
+  if (item.source === "plugin") {
+    return <PluginSourceIcon plugin={item.skill} />;
+  }
+  return (
+    <SkillSourceIcon
+      repo={parseRepoFromSourceRef(item.skill.sourceRef)}
+      builtIn={item.skill.sourceType === "built_in"}
+      appIconLogo={appIconLogo}
+    />
+  );
+}
 
 function SkillSourceIcon({
   repo,

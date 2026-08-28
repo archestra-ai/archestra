@@ -9,10 +9,12 @@ import { ChevronDown, ChevronUp, type LucideIcon } from "lucide-react";
 import { type MouseEvent, type ReactNode, useEffect, useState } from "react";
 import {
   TableCardList,
+  TableCardSelectionScope,
   TableCardViewContent,
 } from "@/components/table-card-view";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
+import type { BulkRangeSelectionController } from "@/lib/bulk-range-selection";
 
 type Pagination = {
   pageIndex: number;
@@ -40,6 +42,8 @@ export function SkillCollection<TData>({
   onRowClick,
   rowSelection,
   onRowSelectionChange,
+  onPageRowIdsChange,
+  rangeSelection,
   forceTable = false,
   fixedWidthColumnIds,
   flexibleColumnIds,
@@ -63,6 +67,8 @@ export function SkillCollection<TData>({
   onRowClick?: (item: TData, event: MouseEvent) => void;
   rowSelection?: RowSelectionState;
   onRowSelectionChange?: (selection: RowSelectionState) => void;
+  onPageRowIdsChange?: (ids: string[]) => void;
+  rangeSelection?: BulkRangeSelectionController;
   forceTable?: boolean;
   fixedWidthColumnIds?: string[];
   flexibleColumnIds?: string[];
@@ -78,18 +84,33 @@ export function SkillCollection<TData>({
   const handlePaginationChange = onPaginationChange ?? setClientPagination;
 
   useEffect(() => {
-    if (pagination || isLoading) return;
+    if (
+      isLoading ||
+      manualPagination ||
+      (pagination !== undefined && onPaginationChange === undefined)
+    ) {
+      return;
+    }
     const maxPageIndex = Math.max(
-      Math.ceil(items.length / clientPagination.pageSize) - 1,
+      Math.ceil(items.length / resolvedPagination.pageSize) - 1,
       0,
     );
-    if (clientPagination.pageIndex > maxPageIndex) {
-      setClientPagination((current) => ({
-        ...current,
+    if (resolvedPagination.pageIndex > maxPageIndex) {
+      handlePaginationChange({
         pageIndex: maxPageIndex,
-      }));
+        pageSize: resolvedPagination.pageSize,
+      });
     }
-  }, [clientPagination, isLoading, items.length, pagination]);
+  }, [
+    handlePaginationChange,
+    isLoading,
+    items.length,
+    manualPagination,
+    onPaginationChange,
+    pagination,
+    resolvedPagination.pageIndex,
+    resolvedPagination.pageSize,
+  ]);
 
   const cardPageStart =
     resolvedPagination.pageIndex * resolvedPagination.pageSize;
@@ -104,19 +125,24 @@ export function SkillCollection<TData>({
     <TableCardViewContent
       forceTable={forceTable}
       cards={
-        <TableCardList
-          itemCount={cardItems.length}
-          isLoading={isLoading}
-          emptyIcon={emptyIcon}
-          emptyMessage={emptyMessage}
-          hasActiveFilters={hasActiveFilters}
-          filteredEmptyMessage={filteredEmptyMessage}
-          onClearFilters={onClearFilters}
-          pagination={resolvedPagination}
-          onPaginationChange={handlePaginationChange}
+        <TableCardSelectionScope
+          rowIds={cardItems.map((item, index) => getRowId(item, index))}
+          onVisibleRowIdsChange={onPageRowIdsChange ?? noop}
         >
-          {cardItems.map(renderCard)}
-        </TableCardList>
+          <TableCardList
+            itemCount={cardItems.length}
+            isLoading={isLoading}
+            emptyIcon={emptyIcon}
+            emptyMessage={emptyMessage}
+            hasActiveFilters={hasActiveFilters}
+            filteredEmptyMessage={filteredEmptyMessage}
+            onClearFilters={onClearFilters}
+            pagination={resolvedPagination}
+            onPaginationChange={handlePaginationChange}
+          >
+            {cardItems.map(renderCard)}
+          </TableCardList>
+        </TableCardSelectionScope>
       }
       table={
         <DataTable
@@ -138,6 +164,8 @@ export function SkillCollection<TData>({
           onRowClick={onRowClick}
           rowSelection={rowSelection}
           onRowSelectionChange={onRowSelectionChange}
+          onPageRowIdsChange={onPageRowIdsChange}
+          rangeSelection={rangeSelection}
           isLoading={isLoading}
           tableClassName="[&_td]:py-1.5"
           fixedWidthColumnIds={fixedWidthColumnIds}
@@ -147,6 +175,8 @@ export function SkillCollection<TData>({
     />
   );
 }
+
+function noop() {}
 
 export function SkillSortableHeader({
   label,

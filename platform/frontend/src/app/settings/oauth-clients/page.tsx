@@ -35,6 +35,7 @@ import { PermissionButton } from "@/components/ui/permission-button";
 import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { copyToClipboard } from "@/lib/clipboard";
+import { ALL_MATCHING_PAGE_SIZE } from "@/lib/hooks/use-all-matching";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import {
@@ -82,11 +83,10 @@ export default function OauthClientsPage() {
   );
 }
 
-// Both endpoints are asked for everything and merged here: the LLM half
-// paginates server-side and the MCP half does not, so there is no shared
-// cursor to page against. Fine at the scale a single organization registers
-// clients at; a deployment that outgrows it wants one endpoint over both.
-const ALL_CLIENTS_LIMIT = 200;
+// The LLM endpoint uses the shared pagination schema, so requesting more than
+// its per-page ceiling rejects the whole page. Use the shared ceiling while
+// the unified list still merges two endpoints without a common cursor.
+const ALL_CLIENTS_LIMIT = ALL_MATCHING_PAGE_SIZE;
 
 function OauthClientsTable() {
   const setActionButton = useSetSettingsAction();

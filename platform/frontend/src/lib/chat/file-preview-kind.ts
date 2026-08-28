@@ -2,12 +2,17 @@ export type FilePreviewKind =
   | "markdown"
   | "html"
   | "image"
+  | "svg"
   | "text"
   | "csv"
   | "pdf"
   | "unsupported";
 
-/** Image mimes the backend serves inline; only these can render via <img>. */
+/**
+ * Image mimes the backend serves inline, so an <img> can point straight at the
+ * byte endpoint. SVG is deliberately not here: it is served download-only and
+ * rendered from a client-built data: URL instead (see the `svg` kind).
+ */
 const INLINE_IMAGE_MIMES = new Set([
   "image/png",
   "image/jpeg",
@@ -35,6 +40,7 @@ export function getFilePreviewKind(
   ) {
     return "html";
   }
+  if (mime === "image/svg+xml" || lowerName.endsWith(".svg")) return "svg";
   if (INLINE_IMAGE_MIMES.has(mime)) return "image";
   // Rendered via an iframe pointing at the byte endpoint, which serves PDFs
   // inline — the browser's own viewer does the work.

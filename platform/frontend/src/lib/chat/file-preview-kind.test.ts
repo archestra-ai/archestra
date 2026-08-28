@@ -9,12 +9,18 @@ describe("getFilePreviewKind", () => {
     );
   });
 
-  it("renders only the inline-safe image whitelist", () => {
+  it("renders only the inline-safe image whitelist as image", () => {
     for (const m of ["image/png", "image/jpeg", "image/webp", "image/gif"]) {
       expect(getFilePreviewKind(m, "x")).toBe("image");
     }
-    // Not inline-safe → backend serves octet-stream → cannot <img>.
-    expect(getFilePreviewKind("image/svg+xml", "x.svg")).toBe("unsupported");
+    expect(getFilePreviewKind("image/bmp", "x.bmp")).toBe("unsupported");
+  });
+
+  it("treats svg by mime or .svg extension", () => {
+    expect(getFilePreviewKind("image/svg+xml", "x")).toBe("svg");
+    expect(getFilePreviewKind("application/octet-stream", "logo.svg")).toBe(
+      "svg",
+    );
   });
 
   it("detects html by mime or extension, before generic text", () => {

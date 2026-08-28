@@ -7,6 +7,7 @@ import {
   geminiAdapterFactory,
   restToSdkGenerateContentParams,
 } from "./gemini";
+import { GeminiToolNameCodec } from "./gemini-tool-names";
 
 type GeminiStreamChunk = GenerateContentResponse;
 
@@ -617,6 +618,111 @@ describe("GeminiRequestAdapter", () => {
 });
 
 describe("geminiAdapterFactory", () => {
+  test("uses provider-compatible tool names and restores client names", async () => {
+    const clientToolName = "1 report/tool";
+    let providerToolName = "";
+    let providerParams: Record<string, unknown> = {};
+    const client = {
+      models: {
+        generateContent: vi.fn(async (params: Record<string, unknown>) => {
+          providerParams = params;
+          const config = params.config as {
+            tools: Array<{
+              functionDeclarations: Array<{ name: string }>;
+            }>;
+          };
+          providerToolName = config.tools[0].functionDeclarations[0].name;
+          return createMockResponse([
+            {
+              functionCall: {
+                name: providerToolName,
+                id: "call_123",
+                args: { reportId: "weekly" },
+              },
+            },
+          ]) as unknown as GenerateContentResponse;
+        }),
+      },
+    };
+    const request = createMockRequest(
+      [
+        { role: "user", parts: [{ text: "Create the report" }] },
+        {
+          role: "model",
+          parts: [
+            {
+              functionCall: {
+                name: clientToolName,
+                id: "call_previous",
+                args: { reportId: "daily" },
+              },
+            },
+          ],
+        },
+        {
+          role: "user",
+          parts: [
+            {
+              functionResponse: {
+                name: clientToolName,
+                id: "call_previous",
+                response: { status: "complete" },
+              },
+            },
+          ],
+        },
+      ],
+      {
+        tools: [
+          {
+            functionDeclarations: [
+              {
+                name: clientToolName,
+                description: "Create a report",
+                parameters: { type: "object" },
+              },
+            ],
+          },
+        ],
+        toolConfig: {
+          functionCallingConfig: {
+            mode: "ANY",
+            allowedFunctionNames: [clientToolName],
+          },
+        },
+      },
+    );
+
+    const response = await geminiAdapterFactory.execute(client, request);
+    const toolCalls = geminiAdapterFactory
+      .createResponseAdapter(response)
+      .getToolCalls();
+
+    expect(providerToolName).toMatch(/^[A-Za-z_][A-Za-z0-9_.:-]{0,127}$/);
+    expect(providerToolName).not.toBe(clientToolName);
+    const providerContents = providerParams.contents as Array<{
+      parts: Array<{
+        functionCall?: { name: string };
+        functionResponse?: { name: string };
+      }>;
+    }>;
+    expect(providerContents[1].parts[0].functionCall?.name).toBe(
+      providerToolName,
+    );
+    expect(providerContents[2].parts[0].functionResponse?.name).toBe(
+      providerToolName,
+    );
+    const providerConfig = providerParams.config as {
+      toolConfig: {
+        functionCallingConfig: { allowedFunctionNames: string[] };
+      };
+    };
+    expect(
+      providerConfig.toolConfig.functionCallingConfig.allowedFunctionNames,
+    ).toEqual([providerToolName]);
+    expect(toolCalls[0].name).toBe(clientToolName);
+  });
+
   describe("extractApiKey", () => {
     test("returns x-goog-api-key header", () => {
       const headers = { "x-goog-api-key": "test-api-key-123" };
@@ -751,6 +857,60 @@ describe("GeminiStreamAdapter", () => {
       expect(result.isToolCallChunk).toBe(true);
       expect(adapter.state.toolCalls).toHaveLength(1);
       expect(adapter.state.toolCalls[0].name).toBe("test_tool");
+    });
+
+    test("restores client tool names in streamed calls", () => {
+      const clientToolName = "1 report/tool";
+      const request = createMockRequest(
+        [{ role: "user", parts: [{ text: "Create the report" }] }],
+        {
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: clientToolName,
+                  description: "Create a report",
+                  parameters: { type: "object" },
+                },
+              ],
+            },
+          ],
+        },
+      );
+      const providerRequest = new GeminiToolNameCodec(request).encodeRequest(
+        request,
+      );
+      const providerTools = Array.isArray(providerRequest.tools)
+        ? providerRequest.tools
+        : [providerRequest.tools];
+      const providerToolName =
+        providerTools[0]?.functionDeclarations?.[0]?.name ?? "";
+      const adapter = geminiAdapterFactory.createStreamAdapter(request);
+
+      adapter.processChunk({
+        candidates: [
+          {
+            content: {
+              role: "model",
+              parts: [
+                {
+                  functionCall: {
+                    name: providerToolName,
+                    id: "call_123",
+                    args: { reportId: "weekly" },
+                  },
+                },
+              ],
+            },
+            index: 0,
+          },
+        ],
+        modelVersion: "gemini-2.5-pro",
+        responseId: "test-response",
+      } as unknown as GeminiStreamChunk);
+
+      expect(adapter.state.toolCalls[0].name).toBe(clientToolName);
+      expect(adapter.getRawToolCallEvents()[0]).toContain(clientToolName);
     });
 
     test("updates usage metadata", () => {

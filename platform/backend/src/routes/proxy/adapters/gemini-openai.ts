@@ -15,6 +15,7 @@ import {
   geminiUsageViewToOpenai,
   mapGeminiFinishReason,
 } from "./gemini-openai-translator";
+import { GeminiToolNameCodec } from "./gemini-tool-names";
 import {
   formatOpenAiChunkSse,
   type OpenAiStreamUsage,
@@ -135,11 +136,13 @@ class GeminiOpenaiStreamAdapter
   readonly provider = "gemini" as const;
   private inner: LLMStreamAdapter<GeminiStreamChunk, GeminiResponse>;
   private ctx: GeminiOpenaiContext;
+  private toolNameCodec: GeminiToolNameCodec;
   private pendingToolCallEvents: string[] = [];
 
-  constructor(ctx: GeminiOpenaiContext) {
+  constructor(ctx: GeminiOpenaiContext, request?: GeminiRequest) {
     this.inner = geminiAdapterFactory.createStreamAdapter();
     this.ctx = ctx;
+    this.toolNameCodec = new GeminiToolNameCodec(request);
   }
 
   get state(): StreamAccumulatorState {
@@ -147,8 +150,9 @@ class GeminiOpenaiStreamAdapter
   }
 
   processChunk(chunk: GeminiStreamChunk) {
-    const innerResult = this.inner.processChunk(chunk);
-    const sseData = this.toOpenaiSse(chunk);
+    const decodedChunk = this.toolNameCodec.decodeResponse(chunk);
+    const innerResult = this.inner.processChunk(decodedChunk);
+    const sseData = this.toOpenaiSse(decodedChunk);
 
     if (innerResult.isToolCallChunk && sseData) {
       this.pendingToolCallEvents.push(sseData);
@@ -302,8 +306,8 @@ export function makeGeminiOpenaiAdapterFactory(
     createResponseAdapter(response) {
       return new GeminiOpenaiResponseAdapter(response, ctx);
     },
-    createStreamAdapter() {
-      return new GeminiOpenaiStreamAdapter(ctx);
+    createStreamAdapter(request) {
+      return new GeminiOpenaiStreamAdapter(ctx, request);
     },
   };
 }

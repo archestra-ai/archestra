@@ -254,6 +254,13 @@ describe("AgentSettingsPage", () => {
       screen.getByText("registry.example.test/agent:latest"),
     ).toBeInTheDocument();
     expect(screen.getByText("72 hours")).toBeInTheDocument();
+
+    const messagingChannels = screen.getByText("Available messaging channels");
+    const executionBackend = screen.getByText("Execution Backend");
+    expect(
+      messagingChannels.compareDocumentPosition(executionBackend) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("lets users reset the org default model selection", async () => {

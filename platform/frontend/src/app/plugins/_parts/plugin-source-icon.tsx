@@ -1,4 +1,4 @@
-import { Braces } from "lucide-react";
+import { Puzzle } from "lucide-react";
 import { RepositoryOwnerIcon } from "@/components/repository-owner-icon";
 
 export function PluginSourceIcon({
@@ -19,7 +19,7 @@ export function PluginSourceIcon({
       {repo ? (
         <RepositoryOwnerIcon repo={repo} className="size-6" />
       ) : (
-        <Braces className="size-4" />
+        <Puzzle className="size-4" />
       )}
     </span>
   );

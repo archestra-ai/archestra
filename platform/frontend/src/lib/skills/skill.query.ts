@@ -121,6 +121,39 @@ export function useSkillsPaginated(
 }
 
 /**
+ * Every standalone skill matching a visible collection's filters. Mixed-source
+ * skill views need the complete set in memory because MCP and plugin skills are
+ * also returned as complete lists and all three sources share one pagination.
+ */
+export function useSkillsList(
+  params: Omit<SkillsPaginatedParams, "limit" | "offset">,
+  options?: { enabled?: boolean; toastOnError?: boolean },
+) {
+  const toastOnError = options?.toastOnError;
+  return useQuery({
+    queryKey: ["skills", "list", params],
+    enabled: options?.enabled ?? true,
+    placeholderData: (previousData) => previousData,
+    queryFn: async () => {
+      const skills: archestraApiTypes.GetSkillsResponses["200"]["data"] = [];
+      let offset = 0;
+
+      while (true) {
+        const { data, error } = await getSkills({
+          query: { ...params, limit: 100, offset },
+        });
+        throwOnApiError(error, { toastOnError });
+        if (!data) return skills;
+
+        skills.push(...data.data);
+        if (!data.pagination.hasNext || data.data.length === 0) return skills;
+        offset += data.data.length;
+      }
+    },
+  });
+}
+
+/**
  * Every skill matching `params`, not just the page in view — what backs the
  * table's "select all N skills that match this search query".
  *

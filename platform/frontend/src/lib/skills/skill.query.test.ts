@@ -9,6 +9,7 @@ import {
   useBulkUpdateSkillsVisibility,
   useExternalMcpSkill,
   useRestoreSkillVersion,
+  useSkillsList,
   useSkillVersion,
   useSkillVersions,
   useUpdateSkill,
@@ -121,6 +122,46 @@ const restoreArgs = {
   version: 6,
   baseVersion: 12,
 };
+
+describe("useSkillsList", () => {
+  it("loads every page for a mixed-source collection", async () => {
+    const firstPage = Array.from({ length: 100 }, (_, index) => ({
+      id: `skill-${index}`,
+      name: `skill-${index}`,
+    }));
+    sdk.getSkills
+      .mockResolvedValueOnce({
+        data: {
+          data: firstPage,
+          pagination: { hasNext: true },
+        },
+        error: undefined,
+      } as never)
+      .mockResolvedValueOnce({
+        data: {
+          data: [{ id: "skill-100", name: "skill-100" }],
+          pagination: { hasNext: false },
+        },
+        error: undefined,
+      } as never);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(QueryClientProvider, { client: queryClient }, children);
+
+    const { result } = renderHook(() => useSkillsList({}), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toHaveLength(101);
+    expect(sdk.getSkills).toHaveBeenNthCalledWith(1, {
+      query: { limit: 100, offset: 0 },
+    });
+    expect(sdk.getSkills).toHaveBeenNthCalledWith(2, {
+      query: { limit: 100, offset: 100 },
+    });
+  });
+});
 
 describe("useExternalMcpSkill", () => {
   it("clears a removed external Skill when its refetch returns not found", async () => {

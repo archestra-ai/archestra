@@ -160,7 +160,7 @@ describe("McpServerTable uninstall permission", () => {
     const { container } = renderTable(table);
 
     expect(container.querySelector("table")).toHaveStyle({
-      minWidth: "1068px",
+      minWidth: "1060px",
     });
     expect(container.querySelector('th[data-column-id="name"]')).toHaveStyle({
       width: "360px",

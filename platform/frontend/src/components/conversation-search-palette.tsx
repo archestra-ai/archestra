@@ -80,11 +80,11 @@ function extractTextFromMessages(
  * optional: a page without an entry is still found by its name.
  */
 const NAVIGATION_KEYWORDS: Record<string, string> = {
-  "/agents": "agent bot ai",
+  "/agents": "agent bot ai a2a api invocation",
   "/skills": "skills abilities",
   "/plugins": "plugins extensions",
-  "/messaging-channels":
-    "messaging channels triggers automation webhooks slack ms teams email a2a",
+  "/settings/messaging-channels":
+    "messaging channels triggers automation webhooks slack ms teams email",
   "/mcp/registry": "mcp catalog registry servers",
   "/mcp/gateways": "gateways security mcp",
   "/mcp/tool-guardrails": "tools guardrails policies permissions security",

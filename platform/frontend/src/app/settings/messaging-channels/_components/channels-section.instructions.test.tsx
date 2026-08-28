@@ -73,7 +73,7 @@ beforeEach(() => {
   vi.mocked(useRouter).mockReturnValue({
     push: vi.fn(),
   } as unknown as ReturnType<typeof useRouter>);
-  vi.mocked(usePathname).mockReturnValue("/messaging-channels/slack");
+  vi.mocked(usePathname).mockReturnValue("/settings/messaging-channels/slack");
   vi.mocked(useSearchParams).mockReturnValue(
     new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
   );

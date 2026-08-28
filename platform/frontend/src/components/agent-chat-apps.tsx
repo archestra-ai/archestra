@@ -7,7 +7,7 @@ import {
 import { MessageSquareText, MessagesSquare } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ChannelInstructionsDialog } from "@/app/messaging-channels/_components/channel-instructions-dialog";
+import { ChannelInstructionsDialog } from "@/app/settings/messaging-channels/_components/channel-instructions-dialog";
 import { ChannelIcon } from "@/components/channel-icon";
 import { QueryLoadError } from "@/components/query-load-error";
 import { StandardDialog } from "@/components/standard-dialog";

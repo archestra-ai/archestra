@@ -3,7 +3,7 @@ title: Telegram
 category: Agents
 order: 7
 description: Connect Archestra agents to Telegram chats and groups
-lastUpdated: 2026-08-27
+lastUpdated: 2026-08-28
 ---
 
 Archestra connects to Telegram through a bot. Messages sent to the bot — in direct messages or group chats — are routed to the configured agent, and responses appear back in the chat.

@@ -10,7 +10,6 @@ import {
   Inbox,
   MessageSquareText,
   Plus,
-  Search,
   TriangleAlert,
   X,
 } from "lucide-react";

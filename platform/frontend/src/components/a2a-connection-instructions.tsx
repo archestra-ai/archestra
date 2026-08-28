@@ -14,7 +14,7 @@ import {
   resolveCandidateBaseUrls,
 } from "@/app/connection/connection-flow.utils";
 import { ConnectionUrlStep } from "@/app/connection/connection-url-step";
-import { AgentEmailSettingsDialog } from "@/app/messaging-channels/email/agent-email-settings-dialog";
+import { AgentEmailSettingsDialog } from "@/app/settings/messaging-channels/email/agent-email-settings-dialog";
 import { AgentChatApps } from "@/components/agent-chat-apps";
 import {
   CodeBlock,

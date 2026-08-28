@@ -3,7 +3,7 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, invocation paths, knowledge sources, and prompt templating
-lastUpdated: 2026-08-27
+lastUpdated: 2026-08-28
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

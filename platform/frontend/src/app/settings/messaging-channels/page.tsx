@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { useTriggerStatuses } from "@/app/messaging-channels/_components/use-trigger-statuses";
+import { useTriggerStatuses } from "./_components/use-trigger-statuses";
 
 export default function MessagingChannelSettingsPage() {
   const router = useRouter();
@@ -10,12 +10,7 @@ export default function MessagingChannelSettingsPage() {
 
   useEffect(() => {
     if (isLoading || !firstProviderHref) return;
-    router.replace(
-      firstProviderHref.replace(
-        "/messaging-channels",
-        "/settings/messaging-channels",
-      ),
-    );
+    router.replace(firstProviderHref);
   }, [firstProviderHref, isLoading, router]);
 
   return null;

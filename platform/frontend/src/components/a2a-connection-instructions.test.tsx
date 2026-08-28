@@ -38,9 +38,12 @@ vi.mock("@/components/agent-chat-apps", () => ({
     </div>
   ),
 }));
-vi.mock("@/app/messaging-channels/email/agent-email-settings-dialog", () => ({
-  AgentEmailSettingsDialog: () => null,
-}));
+vi.mock(
+  "@/app/settings/messaging-channels/email/agent-email-settings-dialog",
+  () => ({
+    AgentEmailSettingsDialog: () => null,
+  }),
+);
 
 type Agent = archestraApiTypes.GetAllAgentsResponses["200"][number];
 

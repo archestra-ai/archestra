@@ -2077,10 +2077,6 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // Agents
   "/agents": { agent: ["read"] },
   "/agents/new": { agent: ["create"] },
-  "/messaging-channels": { agentTrigger: ["read"] },
-  "/messaging-channels/slack": { agentTrigger: ["read"] },
-  "/messaging-channels/ms-teams": { agentTrigger: ["read"] },
-  "/messaging-channels/email": { agentTrigger: ["read"] },
   "/skills": { skill: ["read"] },
   "/skills/new": { skill: ["create"] },
   "/plugins": { plugin: ["read"] },

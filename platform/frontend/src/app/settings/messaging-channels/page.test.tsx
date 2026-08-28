@@ -6,7 +6,7 @@ import MessagingChannelSettingsPage from "./page";
 vi.mock("next/navigation");
 
 const useTriggerStatuses = vi.fn();
-vi.mock("@/app/messaging-channels/_components/use-trigger-statuses", () => ({
+vi.mock("./_components/use-trigger-statuses", () => ({
   useTriggerStatuses: () => useTriggerStatuses(),
 }));
 
@@ -21,7 +21,7 @@ describe("messaging channel settings index", () => {
   it("lands on the first available provider inside Settings", () => {
     useTriggerStatuses.mockReturnValue({
       isLoading: false,
-      firstProviderHref: "/messaging-channels/slack",
+      firstProviderHref: "/settings/messaging-channels/slack",
     });
 
     render(<MessagingChannelSettingsPage />);
@@ -32,7 +32,7 @@ describe("messaging channel settings index", () => {
   it("waits until provider availability has loaded", () => {
     useTriggerStatuses.mockReturnValue({
       isLoading: true,
-      firstProviderHref: "/messaging-channels/slack",
+      firstProviderHref: "/settings/messaging-channels/slack",
     });
 
     render(<MessagingChannelSettingsPage />);

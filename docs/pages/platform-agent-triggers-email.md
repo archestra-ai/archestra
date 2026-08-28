@@ -3,7 +3,7 @@ title: Incoming Email
 category: Agents
 order: 9
 description: Invoke agents by sending emails to auto-generated addresses
-lastUpdated: 2026-08-27
+lastUpdated: 2026-08-28
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

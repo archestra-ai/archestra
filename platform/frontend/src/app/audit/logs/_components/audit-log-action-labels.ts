@@ -26,6 +26,11 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "agent.restored": "Agent restored",
   "agent.purged": "Agent permanently deleted",
   "agent.imported": "Agent imported",
+  // Agent execution
+  "agentExecution.created": "Agent execution started",
+  "agentExecution.canceled": "Agent execution canceled",
+  "agentExecution.updated": "Agent execution renamed",
+  "agentExecution.deleted": "Agent execution deleted",
   // Agent tool assignment
   "agentTool.created": "Agent tool added",
   "agentTool.updated": "Agent tool updated",

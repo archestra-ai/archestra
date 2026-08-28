@@ -460,6 +460,12 @@ export const RouteId = {
   DeleteAgentBackgroundExecutionCredential:
     "deleteAgentBackgroundExecutionCredential",
   GetAgentExecutions: "getAgentExecutions",
+  StartAgentExecution: "startAgentExecution",
+  GetMyAgentExecutions: "getMyAgentExecutions",
+  GetMyAgentExecution: "getMyAgentExecution",
+  UpdateAgentExecution: "updateAgentExecution",
+  CancelAgentExecution: "cancelAgentExecution",
+  DeleteAgentExecution: "deleteAgentExecution",
 
   // Virtual API Key Routes
   GetAllVirtualApiKeys: "getAllVirtualApiKeys",

@@ -1,8 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { Writable } from "node:stream";
+import { toPlaceholderTitle } from "@archestra/shared";
 import type { A2AExecuteResult } from "@/agents/a2a-executor";
 import logger from "@/logging";
-import { AgentRunModel, EnvironmentModel, OrganizationModel } from "@/models";
+import {
+  AgentExecutionInputModel,
+  AgentRunModel,
+  EnvironmentModel,
+  OrganizationModel,
+} from "@/models";
 import {
   reportRunnerProvisioned,
   reportRunnerStarted,
@@ -13,6 +19,7 @@ import type { Agent, AgentDeployment, AgentRun } from "@/types";
 import { ApiError } from "@/types";
 import { type RunnerBackend, resolveRunnerBackend } from "./backends";
 import { buildRunnerLaunchSpec } from "./launch-spec";
+import { generateAgentExecutionTitle } from "./title";
 
 /**
  * Start one delegated A2A task through its configured execution backend.
@@ -35,6 +42,9 @@ async function startBackgroundSession(params: {
   chatOpsBindingId?: string;
   chatOpsThreadId?: string;
   task?: string | null;
+  modelId: string | null;
+  llmApiKeyId: string | null;
+  titleUserId?: string;
 }): Promise<AgentRun> {
   const backend = resolveRunnerBackend(params.deployment.backend);
 
@@ -55,6 +65,7 @@ async function startBackgroundSession(params: {
     environmentNetworkPolicy: environment?.networkPolicy,
     defaultNetworkPolicy: organization?.defaultNetworkPolicy,
   });
+  const inputFiles = await AgentExecutionInputModel.findByTaskId(params.taskId);
 
   const { spec, virtualApiKeyId } = await buildRunnerLaunchSpec({
     deployment: params.deployment,
@@ -65,15 +76,18 @@ async function startBackgroundSession(params: {
     runtimeScope,
     effectiveNetworkPolicy,
     task: params.task,
+    inputFiles,
   });
 
   // The row lands before the workload: it is what teardown reads to find the
   // objects, so a crash between the two must leave a record, not an orphan.
+  const placeholderTitle = toPlaceholderTitle(params.task ?? "Execution");
   const session = await AgentRunModel.create({
     organizationId: params.organizationId,
     taskId: params.taskId,
     agentId: params.deployment.agentId,
     actorUserId: params.actorUserId,
+    title: placeholderTitle,
     deploymentName: spec.frozenName,
     backend: backend.name,
     runtimeScope,
@@ -82,8 +96,31 @@ async function startBackgroundSession(params: {
     chatOpsThreadId: params.chatOpsThreadId,
   });
 
+  void generateAgentExecutionTitle({
+    taskId: params.taskId,
+    prompt: params.task ?? "Execution",
+    organizationId: params.organizationId,
+    userId: params.titleUserId,
+    modelId: params.modelId,
+    llmApiKeyId: params.llmApiKeyId,
+  })
+    .then((title) =>
+      AgentRunModel.updateTitleIfCurrent({
+        taskId: params.taskId,
+        expectedTitle: placeholderTitle,
+        title,
+      }),
+    )
+    .catch((error) => {
+      logger.warn(
+        { error, taskId: params.taskId },
+        "Could not generate an Agent execution title",
+      );
+    });
+
   try {
     await backend.launch(spec);
+    await backend.stageInputs({ session, inputs: inputFiles });
   } catch (error) {
     // Nothing was scheduled, but a Secret holding the actor's personal
     // credentials may already exist. Close the session so the reconciler does
@@ -146,6 +183,9 @@ export async function runTaskInBackground(params: {
   chatOpsBindingId?: string;
   chatOpsThreadId?: string;
   task?: string | null;
+  modelId: string | null;
+  llmApiKeyId: string | null;
+  titleUserId?: string;
   onTextDelta?: (delta: string) => void;
   abortSignal?: AbortSignal;
 }): Promise<A2AExecuteResult> {

@@ -1,6 +1,6 @@
 {
-  "id": "b1ee52c9-91b9-4ba1-a0f0-4f493b134719",
-  "prevId": "361f4d84-2b3b-47c1-b35d-15c394edd83f",
+  "id": "db4e273a-0b3f-465c-a748-2dc1eaf103e7",
+  "prevId": "b1ee52c9-91b9-4ba1-a0f0-4f493b134719",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1396,6 +1396,160 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.agent_execution_inputs": {
+      "name": "agent_execution_inputs",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "task_id": {
+          "name": "task_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "uploaded_by_user_id": {
+          "name": "uploaded_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "original_name": {
+          "name": "original_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "runtime_path": {
+          "name": "runtime_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "mime_type": {
+          "name": "mime_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "file_size": {
+          "name": "file_size",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "file_data": {
+          "name": "file_data",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "agent_execution_inputs_task_id_idx": {
+          "name": "agent_execution_inputs_task_id_idx",
+          "columns": [
+            {
+              "expression": "task_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "agent_execution_inputs_organization_id_idx": {
+          "name": "agent_execution_inputs_organization_id_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "agent_execution_inputs_task_path_uidx": {
+          "name": "agent_execution_inputs_task_path_uidx",
+          "columns": [
+            {
+              "expression": "task_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "runtime_path",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "agent_execution_inputs_task_id_a2a_task_id_fk": {
+          "name": "agent_execution_inputs_task_id_a2a_task_id_fk",
+          "tableFrom": "agent_execution_inputs",
+          "tableTo": "a2a_task",
+          "columnsFrom": [
+            "task_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "agent_execution_inputs_uploaded_by_user_id_user_id_fk": {
+          "name": "agent_execution_inputs_uploaded_by_user_id_user_id_fk",
+          "tableFrom": "agent_execution_inputs",
+          "tableTo": "user",
+          "columnsFrom": [
+            "uploaded_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.agent_knowledge_base": {
       "name": "agent_knowledge_base",
       "schema": "",
@@ -1614,6 +1768,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'Execution'"
         },
         "deployment_name": {
           "name": "deployment_name",
@@ -13556,6 +13717,12 @@
         "user_id": {
           "name": "user_id",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "execution_id": {
+          "name": "execution_id",
+          "type": "varchar",
           "primaryKey": false,
           "notNull": false
         },

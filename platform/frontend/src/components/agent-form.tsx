@@ -2514,6 +2514,7 @@ export function AgentForm({
                       icon={icon}
                       onIconChange={setIcon}
                       fallbackType={defaultIconType}
+                      showLogos={agentType === "agent"}
                     >
                       <div className="space-y-2">
                         <Label htmlFor="agentName">Name *</Label>

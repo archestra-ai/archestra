@@ -262,7 +262,7 @@ export class A2AManager {
     onDetachedTaskRun?: (info: {
       taskId: string;
       followFromSeq: number;
-    }) => void;
+    }) => void | Promise<void>;
   }): Promise<A2AProtocolSendMessageResponse> {
     // Set once an approval resume has CAS'd the task to WORKING: if anything
     // between that point and the run lifecycle taking ownership throws
@@ -559,8 +559,8 @@ export class A2AManager {
           : [],
       ]);
       // Background execution belongs to the Agent itself. It is considered
-      // only by the durable task path below; direct chat always stays in the
-      // foreground platform loop.
+      // only by the durable task path below; a synchronous A2A message stays
+      // in the foreground platform loop.
       const deployment = resolveAgentDeployment(agent);
 
       const executeRun = (runOpts: {
@@ -596,6 +596,9 @@ export class A2AManager {
                 chatOpsBindingId: systemParams?.chatOpsBindingId,
                 chatOpsThreadId: systemParams?.chatOpsThreadId,
                 task: executedTurnText,
+                modelId: agent.modelId,
+                llmApiKeyId: agent.llmApiKeyId,
+                titleUserId: actor.kind === "user" ? actor.id : undefined,
                 onTextDelta: runOpts.onTextDelta,
                 abortSignal: runOpts.abortSignal,
               });
@@ -671,7 +674,7 @@ export class A2AManager {
 
         if (params.taskRun?.detached) {
           const snapshot = A2ATaskManager.toProtocolTask(runTask);
-          params.onDetachedTaskRun?.({
+          await params.onDetachedTaskRun?.({
             taskId: runTask.id,
             followFromSeq: task ? resumeWatermark : 0,
           });

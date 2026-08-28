@@ -34,12 +34,17 @@ interface AgentRunAttachSubscription {
   stdin: PassThrough;
   stdout: PassThrough;
   stderr: PassThrough;
+  inputPaused: boolean;
   socket: {
     readyState: number;
     close: () => void;
     send: (data: Buffer) => void;
   };
 }
+
+type PausableWebSocket = WebSocket & {
+  _socket?: { pause: () => void; resume: () => void };
+};
 
 interface AgentRunLogsSubscription {
   runId: string;
@@ -201,7 +206,16 @@ class WebSocketService {
       if (message.type !== "agent_run_attach_input") return;
       const subscription = this.agentRunAttachSubscriptions.get(ws);
       if (subscription?.runId !== message.payload.runId) return;
-      subscription.stdin.write(message.payload.data);
+      const accepted = subscription.stdin.write(message.payload.data);
+      if (!accepted && !subscription.inputPaused) {
+        subscription.inputPaused = true;
+        const transport = (ws as PausableWebSocket)._socket;
+        transport?.pause();
+        subscription.stdin.once("drain", () => {
+          subscription.inputPaused = false;
+          transport?.resume();
+        });
+      }
     },
     agent_run_attach_resize: (ws, message) => {
       if (message.type !== "agent_run_attach_resize") return;
@@ -570,6 +584,7 @@ class WebSocketService {
         stdin,
         stdout,
         stderr,
+        inputPaused: false,
         socket: socket as unknown as AgentRunAttachSubscription["socket"],
       });
 

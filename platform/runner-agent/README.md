@@ -38,13 +38,16 @@ fails at startup rather than silently pointing the agent somewhere else.
 | Variable | Meaning |
 | --- | --- |
 | `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_AGENT_ID`, `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_AGENT_NAME` | Agent identity for this run |
+| `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID` | Durable execution id, attached to LLM and MCP requests for log and trace correlation |
 | `ARCHESTRA_LLM_PROXY_URL`, `ARCHESTRA_LLM_PROXY_PROTOCOL`, `ARCHESTRA_VIRTUAL_KEY` | The Agent-scoped proxy, its Responses, Chat Completions, or Anthropic Messages wire protocol, and the execution's short-lived personal virtual key |
 | `ARCHESTRA_MCP_GATEWAY_URL`, `ARCHESTRA_MCP_GATEWAY_TOKEN` | Tool access, as the invoking user |
 | `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK` | Initial instruction, when started with one |
+| `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ATTACHMENTS_DIR`, `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ATTACHMENTS_MANIFEST` | Files attached to the initial instruction and their JSON metadata |
 | `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_STEER_FIFO` | Where steer messages arrive |
 | `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL`, `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL`, `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MAX_STEPS` | Provider-qualified model for the generic runner, native model slug for catalog CLIs, and step cap |
 
 The runtime also exposes the virtual key through the conventional
 `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `ANTHROPIC_AUTH_TOKEN` names for
 maintained third-party Agent images. Those aliases all point to Archestra,
-never to an upstream provider credential.
+never to an upstream provider credential. The optional Claude Code subscription
+path is an explicit exception implemented only by that maintained wrapper.

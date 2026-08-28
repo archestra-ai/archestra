@@ -1,28 +1,13 @@
 import { convertToModelMessages } from "ai";
 import { HttpResponse, http } from "msw";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { useMswServer } from "@/test/msw";
 
-// Boundary-mock the provider HTTP endpoint instead of the `ai` module: the real
-// generateText runs and only the network is faked (MSW). createLLMModel still
-// resolves to a fake model, but a REAL @ai-sdk/openai model bound to the
-// MSW-served base URL — so the title flow exercises real request serialization
-// and error mapping. createLLMModel stays a spy so its resolved-args assertion
-// still holds.
-const TITLE_COMPLETIONS_URL = "https://llm.test/v1/chat/completions";
-
-vi.mock("@/clients/llm-client", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/clients/llm-client")>();
-  const { createOpenAI } = await import("@ai-sdk/openai");
-  const model = createOpenAI({
-    baseURL: "https://llm.test/v1",
-    apiKey: "test-key",
-  }).chat("gpt-4o-mini");
-  return {
-    ...actual,
-    createLLMModel: vi.fn(() => model),
-  };
-});
+// Boundary-mock the internal LLM proxy endpoint rather than the AI SDK. The
+// title flow still exercises the real model adapter, request serialization,
+// normalization, and error mapping.
+const TITLE_COMPLETIONS_URL =
+  "http://127.0.0.1:9000/v1/openai/title-agent-id/chat/completions";
 
 // A minimal, schema-valid OpenAI /chat/completions response carrying `content`.
 function openAiCompletion(content: string) {
@@ -56,19 +41,20 @@ function messageText(
     .join("");
 }
 
-import { createLLMModel } from "@/clients/llm-client";
 import { ToolCallRepeatTracker } from "@/clients/tool-call-repeat-tracker";
 import ConversationModel from "@/models/conversation";
 import MessageModel from "@/models/message";
+import {
+  buildTitlePrompt,
+  generateConversationTitle,
+} from "@/services/title-generation";
 import { test } from "@/test";
 import type { ChatMessage } from "@/types";
 import { __test as __prepareTest } from "./prepare-model-messages";
 import {
   __test,
   buildChatStopConditions,
-  buildTitlePrompt,
   extractFirstMessages,
-  generateConversationTitle,
   resolveTitleUserInput,
 } from "./routes";
 
@@ -1496,13 +1482,13 @@ describe("generateConversationTitle", () => {
     );
 
     const result = await generateConversationTitle({
-      provider: "anthropic",
+      provider: "openai",
       apiKey: "test-key",
       modelName: "claude-test",
       baseUrl: null,
       agentId: "title-agent-id",
       userId: "user-id",
-      conversationId: "conversation-id",
+      sessionId: "conversation-id",
       systemPrompt: "Generate a title.",
       firstUserMessage: "Hello",
       firstAssistantMessage: "Hi there!",
@@ -1525,7 +1511,7 @@ describe("generateConversationTitle", () => {
       baseUrl: null,
       agentId: "title-agent-id",
       userId: "user-id",
-      conversationId: "conversation-id",
+      sessionId: "conversation-id",
       systemPrompt: "Generate a title.",
       firstUserMessage: "Test",
       firstAssistantMessage: "",
@@ -1549,28 +1535,19 @@ describe("generateConversationTitle", () => {
     );
 
     const result = await generateConversationTitle({
-      provider: "anthropic",
+      provider: "openai",
       apiKey: "test-key",
       modelName: "configured-title-model",
       baseUrl: null,
       agentId: "title-agent-id",
       userId: "user-id",
-      conversationId: "conversation-id",
+      sessionId: "conversation-id",
       systemPrompt: "Return only a title.",
       firstUserMessage: "Hello",
       firstAssistantMessage: "Hi!",
     });
 
     expect(result).toBe("Configured Model Title");
-    expect(createLLMModel).toHaveBeenCalledWith(
-      expect.objectContaining({
-        agentId: "title-agent-id",
-        modelName: "configured-title-model",
-        userId: "user-id",
-        sessionId: "conversation-id",
-        source: "chat:title_generation",
-      }),
-    );
     // The former `generateText` call-args assertion, now checked at the wire:
     // the resolved system prompt and the built title prompt reach the provider.
     if (!capturedBody) throw new Error("title request was never sent");
@@ -1591,13 +1568,13 @@ describe("generateConversationTitle", () => {
     );
 
     await generateConversationTitle({
-      provider: "anthropic",
+      provider: "openai",
       apiKey: "test-key",
       modelName: "claude-test",
       baseUrl: null,
       agentId: "title-agent-id",
       userId: "user-id",
-      conversationId: "conversation-id",
+      sessionId: "conversation-id",
       systemPrompt: "Generate a title.",
       firstUserMessage: "Hello",
       firstAssistantMessage: "Hi!",
@@ -1629,7 +1606,7 @@ describe("generateConversationTitle", () => {
       baseUrl: null,
       agentId: "title-agent-id",
       userId: "user-id",
-      conversationId: "conversation-id",
+      sessionId: "conversation-id",
       systemPrompt: "Generate a title.",
       firstUserMessage: "Hello",
       firstAssistantMessage: "Hi!",
@@ -1652,7 +1629,7 @@ describe("generateConversationTitle", () => {
       baseUrl: null,
       agentId: "title-agent-id",
       userId: "user-id",
-      conversationId: "conversation-id",
+      sessionId: "conversation-id",
       systemPrompt: "Generate a title.",
       firstUserMessage: "Hello",
       firstAssistantMessage: "Hi!",
@@ -1677,7 +1654,7 @@ describe("generateConversationTitle", () => {
       baseUrl: null,
       agentId: "title-agent-id",
       userId: "user-id",
-      conversationId: "conversation-id",
+      sessionId: "conversation-id",
       systemPrompt: "Generate a title.",
       firstUserMessage: "Hello",
       firstAssistantMessage: "Hi!",

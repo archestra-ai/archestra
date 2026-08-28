@@ -1,11 +1,12 @@
 -- drizzle-migration-linter: allow-breaking
--- drizzle-migration-linter: reason=agent_runs and user_credentials are introduced empty in this migration, so their foreign keys and indexes validate without locking populated tables. The Agent columns are nullable with no defaults, so existing rows and older writers remain valid; ON DELETE behavior deliberately removes execution/credential rows with their owning Agent or user and preserves execution history when a short-lived virtual key is revoked.
+-- drizzle-migration-linter: reason=agent_runs, agent_execution_inputs, and user_credentials are introduced empty in this migration, so their foreign keys and indexes validate without locking populated tables. The Agent and MCP execution-id columns are nullable with no defaults, so existing rows and older writers remain valid; ON DELETE behavior deliberately removes execution/input/credential rows with their owning task, Agent, or user and preserves execution history when a short-lived virtual key is revoked.
 CREATE TABLE "agent_runs" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"organization_id" text NOT NULL,
 	"task_id" uuid NOT NULL,
 	"agent_id" uuid NOT NULL,
 	"actor_user_id" text NOT NULL,
+	"title" text DEFAULT 'Execution' NOT NULL,
 	"deployment_name" text NOT NULL,
 	"backend" text NOT NULL,
 	"runtime_scope" text NOT NULL,
@@ -47,4 +48,24 @@ CREATE INDEX "agent_runs_actor_user_id_idx" ON "agent_runs" USING btree ("actor_
 CREATE INDEX "user_credentials_user_id_idx" ON "user_credentials" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "user_credentials_agent_id_idx" ON "user_credentials" USING btree ("agent_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "user_credentials_org_user_agent_key_uidx" ON "user_credentials" USING btree ("organization_id","user_id","agent_id","key");--> statement-breakpoint
-ALTER TABLE "agents" ADD CONSTRAINT "agents_background_execution_secret_id_secret_id_fk" FOREIGN KEY ("background_execution_secret_id") REFERENCES "public"."secret"("id") ON DELETE set null ON UPDATE no action;
+ALTER TABLE "agents" ADD CONSTRAINT "agents_background_execution_secret_id_secret_id_fk" FOREIGN KEY ("background_execution_secret_id") REFERENCES "public"."secret"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "mcp_tool_calls" ADD COLUMN "execution_id" varchar;
+--> statement-breakpoint
+CREATE TABLE "agent_execution_inputs" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"organization_id" text NOT NULL,
+	"task_id" uuid NOT NULL,
+	"uploaded_by_user_id" text NOT NULL,
+	"original_name" text NOT NULL,
+	"runtime_path" text NOT NULL,
+	"mime_type" text NOT NULL,
+	"file_size" integer NOT NULL,
+	"file_data" "bytea" NOT NULL,
+	"created_at" timestamp DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+ALTER TABLE "agent_execution_inputs" ADD CONSTRAINT "agent_execution_inputs_task_id_a2a_task_id_fk" FOREIGN KEY ("task_id") REFERENCES "public"."a2a_task"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "agent_execution_inputs" ADD CONSTRAINT "agent_execution_inputs_uploaded_by_user_id_user_id_fk" FOREIGN KEY ("uploaded_by_user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "agent_execution_inputs_task_id_idx" ON "agent_execution_inputs" USING btree ("task_id");--> statement-breakpoint
+CREATE INDEX "agent_execution_inputs_organization_id_idx" ON "agent_execution_inputs" USING btree ("organization_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "agent_execution_inputs_task_path_uidx" ON "agent_execution_inputs" USING btree ("task_id","runtime_path");

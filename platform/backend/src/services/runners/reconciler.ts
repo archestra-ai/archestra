@@ -2,7 +2,12 @@ import { A2AManager } from "@/agents/a2a/a2a-manager";
 import { watchChatOpsTask } from "@/agents/chatops/chatops-task-watcher";
 import config from "@/config";
 import logger from "@/logging";
-import { A2ATaskModel, AgentModel, AgentRunModel } from "@/models";
+import {
+  A2ATaskModel,
+  AgentExecutionInputModel,
+  AgentModel,
+  AgentRunModel,
+} from "@/models";
 import { isTerminalA2ATaskState } from "@/types/a2a-task";
 import { isAnyRunnerBackendEnabled, resolveRunnerBackend } from "./backends";
 import { cleanupBackgroundTask } from "./pod-execution";
@@ -16,6 +21,7 @@ class AgentExecutionReconciler {
   private readonly a2aManager = new A2AManager({ taskMode: "full" });
   private readonly inFlight = new Set<string>();
   private timer: NodeJS.Timeout | null = null;
+  private isReconciling = false;
 
   start(): void {
     if (this.timer || !isAnyRunnerBackendEnabled()) return;
@@ -28,16 +34,22 @@ class AgentExecutionReconciler {
   }
 
   async reconcile(): Promise<void> {
-    const sessions = await AgentRunModel.listOpen();
-    for (const session of sessions) {
-      if (this.inFlight.has(session.id)) continue;
-      void this.reconcileSession(session);
-    }
-    const pendingNotifications =
-      await AgentRunModel.listPendingChatOpsNotifications();
-    for (const session of pendingNotifications) {
-      if (this.inFlight.has(session.id)) continue;
-      void this.notifySettledSession(session);
+    if (this.isReconciling) return;
+    this.isReconciling = true;
+    try {
+      const sessions = await AgentRunModel.listOpen();
+      for (const session of sessions) {
+        if (this.inFlight.has(session.id)) continue;
+        void this.reconcileSession(session);
+      }
+      const pendingNotifications =
+        await AgentRunModel.listPendingChatOpsNotifications();
+      for (const session of pendingNotifications) {
+        if (this.inFlight.has(session.id)) continue;
+        void this.notifySettledSession(session);
+      }
+    } finally {
+      this.isReconciling = false;
     }
   }
 
@@ -86,6 +98,10 @@ class AgentExecutionReconciler {
           "Re-adopting Agent background execution after owner restart",
         );
         try {
+          await backend.stageInputs({
+            session,
+            inputs: await AgentExecutionInputModel.findByTaskId(session.taskId),
+          });
           await this.a2aManager.adoptBackgroundTask({
             taskId: session.taskId,
             session,

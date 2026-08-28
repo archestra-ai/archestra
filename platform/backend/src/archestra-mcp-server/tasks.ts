@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import {
   TOOL_CANCEL_TASK_SHORT_NAME,
   TOOL_GET_TASK_SHORT_NAME,
@@ -8,8 +7,6 @@ import {
 } from "@archestra/shared";
 import { z } from "zod";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
-import type { A2AManager } from "@/agents/a2a/a2a-manager";
-import { A2AProtocolRole } from "@/agents/a2a/a2a-protocol";
 import { watchChatOpsTask } from "@/agents/chatops/chatops-task-watcher";
 import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
@@ -23,6 +20,10 @@ import {
 import { resolveRunnerBackend } from "@/services/runners/backends";
 import { preflightAgentDeploymentCredentials } from "@/services/runners/credentials";
 import { resolveAgentDeployment } from "@/services/runners/pod-execution";
+import {
+  cancelDetachedAgentTask,
+  startDetachedAgentTask,
+} from "@/services/runners/start-task";
 import { AGENT_DEPLOYMENT_CREDENTIALS_REQUIRED_CODE } from "@/types";
 import {
   catchError,
@@ -34,14 +35,114 @@ import {
 import type { ArchestraContext } from "./types";
 
 /**
+ * Start a durable delegated task through the same lifecycle used by the MCP
+ * task tool. Agent delegation uses this when the target has Background
+ * execution configured, so every delegation surface selects the same runtime.
+ */
+export async function startDelegatedTask(params: {
+  agentId: string;
+  message: string;
+  context: ArchestraContext;
+}) {
+  const { agentId, message, context } = params;
+  try {
+    const actor = requireActor(context);
+    const agent = await AgentModel.findById(agentId);
+    if (!agent || agent.organizationId !== actor.organizationId) {
+      return errorResult("Agent not found");
+    }
+    const isAgentAdmin = await userHasPermission(
+      actor.id,
+      actor.organizationId,
+      "agent",
+      "admin",
+    );
+    if (
+      !(await AgentTeamModel.userHasAgentAccess(
+        actor.id,
+        agent.id,
+        isAgentAdmin,
+        agent,
+      ))
+    ) {
+      return errorResult("Agent not found");
+    }
+
+    const deployment = resolveAgentDeployment(agent);
+    if (deployment) resolveRunnerBackend(deployment.backend);
+
+    // Refuse before creating a task when the caller can already fix the
+    // missing credential. Otherwise the detached task fails after its handle
+    // has been returned and the user only discovers the problem by polling.
+    if (deployment) {
+      const preflight = await preflightAgentDeploymentCredentials({
+        deployment,
+        organizationId: actor.organizationId,
+        userId: actor.id,
+      });
+      if (preflight.missing.length > 0) {
+        return credentialsNeededResult(agent.id, preflight.missing);
+      }
+      if (preflight.misconfigured.length > 0) {
+        return errorResult(
+          `Agent "${agent.name}" is missing shared Background execution credentials an administrator must configure: ${preflight.misconfigured
+            .map((entry) => entry.label)
+            .join(", ")}`,
+        );
+      }
+    }
+
+    const taskRow = await startDetachedAgentTask({
+      actor,
+      agentId: agent.id,
+      message,
+      systemParams: {
+        sessionId:
+          context.sessionId || context.conversationId || context.isolationKey,
+        chatOpsBindingId: context.chatOpsBindingId,
+        chatOpsThreadId: context.chatOpsThreadId,
+      },
+    });
+
+    // Work started from a chat thread reports back to that thread when it
+    // settles. The callback coordinates are also persisted on the Agent run,
+    // so the reconciler can recover delivery after a restart.
+    if (context.chatOpsBindingId && context.chatOpsThreadId) {
+      void watchChatOpsTask({
+        taskId: taskRow.id,
+        bindingId: context.chatOpsBindingId,
+        threadId: context.chatOpsThreadId,
+        agentName: agent.name,
+      });
+    }
+
+    return structuredSuccessResult(
+      {
+        task: taskRowSummary(taskRow),
+        execution: deployment ? "background" : "foreground",
+      },
+      `Task ${taskRow.id} started on ${agent.name}` +
+        (deployment ? " (Background execution)" : " (foreground)") +
+        ". Poll get_task for progress.",
+    );
+  } catch (error) {
+    const needed = missingCredentialsFrom(error);
+    if (needed) {
+      return credentialsNeededResult(needed.agentId, needed.missing);
+    }
+    return catchError(error, "starting the task");
+  }
+}
+
+/**
  * The MCP face of the A2A task lifecycle: start long-running work on another
  * agent, then observe, steer and cancel it — the same durable machinery the
  * A2A v2 protocol drives, so a client speaking either surface sees the same
  * tasks in the same states.
  *
  * When the target Agent has Background execution configured, delegated work
- * runs in its deployment; otherwise it runs in-process. Direct chat is always
- * foreground and never reaches this detached task path.
+ * runs in its deployment; otherwise it runs in-process. This task interface is
+ * independent of foreground message handling.
  */
 
 const TaskSummarySchema = z.object({
@@ -110,112 +211,12 @@ const registry = defineArchestraTools([
         .describe("What the agent should do."),
     }),
     outputSchema: StartTaskOutputSchema,
-    handler: async ({ args, context }) => {
-      try {
-        const actor = requireActor(context);
-        const agent = await AgentModel.findById(args.agent_id);
-        if (!agent || agent.organizationId !== actor.organizationId) {
-          return errorResult("Agent not found");
-        }
-        const isAgentAdmin = await userHasPermission(
-          actor.id,
-          actor.organizationId,
-          "agent",
-          "admin",
-        );
-        if (
-          !(await AgentTeamModel.userHasAgentAccess(
-            actor.id,
-            agent.id,
-            isAgentAdmin,
-            agent,
-          ))
-        ) {
-          return errorResult("Agent not found");
-        }
-
-        const deployment = resolveAgentDeployment(agent);
-        if (deployment) resolveRunnerBackend(deployment.backend);
-
-        // Preflight the caller's credentials BEFORE the task exists. The
-        // lifecycle would refuse anyway — but asynchronously, after this tool
-        // already returned a task id, leaving the caller to discover the
-        // refusal by polling. A missing personal credential is known right
-        // now, so it comes back right now, as a link to fix it.
-        if (deployment) {
-          const preflight = await preflightAgentDeploymentCredentials({
-            deployment,
-            organizationId: actor.organizationId,
-            userId: actor.id,
-          });
-          if (preflight.missing.length > 0) {
-            return credentialsNeededResult(agent.id, preflight.missing);
-          }
-          if (preflight.misconfigured.length > 0) {
-            return errorResult(
-              `Agent "${agent.name}" is missing shared Background execution credentials an administrator must configure: ${preflight.misconfigured
-                .map((entry) => entry.label)
-                .join(", ")}`,
-            );
-          }
-        }
-
-        const response = await (await taskManager.get()).sendMessage({
-          actor,
-          agentId: agent.id,
-          request: {
-            message: {
-              messageId: randomUUID(),
-              role: A2AProtocolRole.User,
-              parts: [{ text: args.message }],
-            },
-          },
-          taskRun: { createTask: true, detached: true },
-        });
-        if (!response.task) {
-          return errorResult(
-            "The agent answered synchronously instead of starting a task",
-          );
-        }
-
-        // Work started from a chat thread reports back to that thread when it
-        // settles — otherwise "I'll follow up when it's done" is a promise
-        // nobody keeps. In-process watcher: a backend restart drops it, which
-        // matches every other chatops run's lifetime today.
-        if (context.chatOpsBindingId && context.chatOpsThreadId) {
-          void watchChatOpsTask({
-            taskId: response.task.id,
-            bindingId: context.chatOpsBindingId,
-            threadId: context.chatOpsThreadId,
-            agentName: agent.name,
-          });
-        }
-
-        const taskRow = await A2ATaskModel.findById(response.task.id);
-        if (!taskRow) {
-          throw new Error("Started task was not persisted");
-        }
-        return structuredSuccessResult(
-          {
-            task: taskRowSummary(taskRow),
-            execution: deployment ? "background" : "foreground",
-          },
-          `Task ${response.task.id} started on ${agent.name}` +
-            (deployment ? " (Background execution)" : " (foreground)") +
-            ". Poll get_task for progress.",
-        );
-      } catch (error) {
-        // A refusal for want of the caller's own credentials is not a fault —
-        // it is a prompt. Hand back the exact keys and a link into the
-        // platform where this person deposits them, so the client can show
-        // "add your token here" instead of an opaque failure.
-        const needed = missingCredentialsFrom(error);
-        if (needed) {
-          return credentialsNeededResult(needed.agentId, needed.missing);
-        }
-        return catchError(error, "starting the task");
-      }
-    },
+    handler: ({ args, context }) =>
+      startDelegatedTask({
+        agentId: args.agent_id,
+        message: args.message,
+        context,
+      }),
   }),
 
   defineArchestraTool({
@@ -380,10 +381,10 @@ const registry = defineArchestraTools([
           return errorResult("This task has no agent to cancel against.");
         }
 
-        const canceled = await (await taskManager.get()).cancelTask({
+        const canceled = await cancelDetachedAgentTask({
           actor,
           agentId: task.row.agentId,
-          request: { id: task.row.id },
+          taskId: task.row.id,
         });
         const canceledRow = await A2ATaskModel.findById(task.row.id);
         if (!canceledRow) {
@@ -406,24 +407,6 @@ export const toolEntries = registry.toolEntries;
 export const tools = registry.tools;
 
 // === Internal helpers ===
-
-/**
- * Importing A2AManager eagerly creates a cycle through AgentModel's MCP client
- * and this tool registry. Defer the runtime import until a task tool executes.
- */
-class LazyTaskManager {
-  private managerPromise: Promise<A2AManager> | null = null;
-
-  async get(): Promise<A2AManager> {
-    this.managerPromise ??= import("@/agents/a2a/a2a-manager").then(
-      ({ A2AManager }) => new A2AManager({ taskMode: "full" }),
-    );
-    return this.managerPromise;
-  }
-}
-
-/** One lazily-created manager for the whole tool group. */
-const taskManager = new LazyTaskManager();
 
 /**
  * The refusal as a prompt: the exact keys still needed, and a deep link into

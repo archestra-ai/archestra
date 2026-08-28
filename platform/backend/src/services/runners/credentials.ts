@@ -244,7 +244,8 @@ async function replaceSharedBag(params: {
       secretId: null,
     });
     if (!updated) {
-      throw new Error(
+      throw new ApiError(
+        500,
         "Agent disappeared while clearing deployment credentials",
       );
     }
@@ -261,7 +262,8 @@ async function replaceSharedBag(params: {
       secretId: created.id,
     });
     if (!updated) {
-      throw new Error(
+      throw new ApiError(
+        500,
         "Agent disappeared while updating deployment credentials",
       );
     }

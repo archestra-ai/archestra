@@ -150,6 +150,19 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
     onlyWhenChanged: true,
   },
+  "/api/agents/:id/executions": {
+    resourceType: "agentExecution",
+    action: "agentExecution.created",
+  },
+  "/api/agent-executions/:taskId/cancel": {
+    resourceType: "agentExecution",
+    resourceIdParam: "taskId",
+    action: "agentExecution.canceled",
+  },
+  "/api/agent-executions/:taskId": {
+    resourceType: "agentExecution",
+    resourceIdParam: "taskId",
+  },
   "/api/agents/:id/restore": {
     resourceType: "agent",
     action: "agent.restored",

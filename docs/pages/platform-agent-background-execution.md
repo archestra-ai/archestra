@@ -28,12 +28,17 @@ that same backend even if the Agent configuration changes later. This boundary
 also allows VM and managed-sandbox backends to implement the same lifecycle in
 the future without changing Agents, delegation, or the Executions UI.
 
-The execution rule is simple:
+Invocation is explicit and surface-specific:
 
-- **Direct conversations stay in the foreground.** Chatting with the Agent in Archestra Chat, Slack, MS Teams, Telegram, email, or through its A2A endpoint uses the normal Archestra Agent loop. The messaging-channel 🦀 shortcut described below is an explicit delegation request, not an ordinary direct message.
-- **Delegated tasks can run in the background.** When another Agent starts a durable task for this Agent, Archestra uses the Agent's deployment if Background execution is configured. Without it, the delegated task uses the foreground Agent loop.
+- **Archestra Chat uses execution mode for a Background-enabled Agent.** Selecting that Agent from the composer or choosing **Chat** on its detail page changes the composer into an execution launcher. The first message starts the isolated deployment and opens its live terminal.
+- **Ordinary messaging-channel and A2A messages stay in the foreground.** They use the normal Archestra Agent loop unless the caller explicitly starts or delegates a durable task.
+- **Delegation selects the configured runtime.** When another Agent delegates to this Agent, Archestra starts a durable task in the Agent's deployment if Background execution is configured. Without it, the delegation uses the foreground Agent loop.
 
-This lets a coordinator Agent stay responsive in a messaging channel while a specialist Agent handles durable work in its own container. You can also chat directly with the specialist; that direct conversation still stays in the foreground.
+This lets a coordinator Agent stay responsive in a messaging channel while a specialist Agent handles durable work in its own container. It also lets a user start and supervise the same specialist directly from Chat without inventing a separate Agent or permission model.
+
+## Execution Backend
+
+Kubernetes is currently the only supported execution backend. Support for additional backends is planned.
 
 ## Configure Background Execution
 
@@ -60,25 +65,49 @@ does not create a different resource type: it supplies a name, instructions,
 image, command, inference protocol, and credential declarations to the same
 form used by **Start from scratch**.
 
-The built-in Archestra Agent includes a command tool for its isolated pod
-workspace. It can perform repository operations, edit files, and run local
-verification without bypassing the LLM proxy or receiving remote tool access
-outside the Agent's MCP gateway.
-
 The image field starts with the installation's default Background execution image. The Agent's [environment](/docs/platform-environments) also applies to its deployment, including network egress policy and registry access. Use a purpose-built image for the work the Agent performs. For example, a coding Agent's image can include Git, a language toolchain, and repository tooling.
 
 Leave **Command** blank to use the built-in Agent loop supplied by the default image. A custom image can override the command and arguments. Background execution images must include a POSIX shell and `tmux`, which keep the live process attachable from the Executions tab.
 
 The deployment uses the same Agent system prompt and tool access as foreground execution. Keep the Agent's instructions focused on the specialist role you want it to perform in either mode.
 
+### Built-in Archestra Agent
+
+The **Archestra Agent** catalog option uses Archestra's maintained background
+loop. It supports all three inference APIs, exposes a shell command tool rooted
+in the pod workspace, loads the Agent's assigned MCP tools, applies the Agent's
+system prompt, and accepts follow-up instructions at turn boundaries. It is the
+default choice for custom workflows that do not require the behavior of a
+specific third-party CLI.
+
+The loop is intentionally small. Model routing, provider credentials, remote
+tools, authorization, policy enforcement, limits, and audit logs stay in the
+Archestra control plane.
+
 ### Model inference and MCP tools
 
 The selected Agent model remains the source of truth for background work. At
 the start of each execution, Archestra resolves that model and a provider
-credential the initiating user may use, then issues a short-lived personal
-virtual key. The pod receives the virtual key and an Agent-scoped LLM proxy URL;
-it never receives the upstream provider credential. Calls therefore retain the
-Agent's attribution, provider routing, policies, cost limits, and logs.
+credential the initiating user may use, then issues a personal virtual key for
+that execution. The pod receives the virtual key and an Agent-scoped LLM proxy
+URL; the upstream provider credential remains server-side. Calls therefore
+retain the Agent's attribution, provider routing, policies, cost limits, and
+logs.
+
+Personal subscription credentials are resolved for the person who started the
+execution. For example, a ChatGPT account connected once can be used by that
+person in both Archestra Chat and the Codex background image. A teammate who
+starts the same Agent uses their own connected account; Archestra never shares
+one user's subscription credential with another user.
+
+Claude Code subscriptions are deliberately narrower. The **Claude Code**
+catalog option declares an optional per-user `CLAUDE_CODE_OAUTH_TOKEN`. Each
+user generates it with `claude setup-token` and saves it from the Agent's
+Overview after the Agent is created. Archestra injects it only into the
+official Claude Code background image. It is not registered as a general
+Anthropic provider credential and cannot be used by Archestra Chat, Hermes,
+OpenClaw, or a custom runtime. Without that token, Claude Code uses the normal
+metered Anthropic credential selected on the Agent.
 
 The **Inference API** setting describes the wire protocol expected by the
 image. Choose **OpenAI Responses** for clients such as Codex and OpenClaw.
@@ -92,6 +121,82 @@ from these values on every start. Consequently, tools selected in the Agent
 editor are available in the pod automatically, with the same user permissions
 and tool policies as foreground execution. Adding a tool to an Agent does not
 require rebuilding its image.
+
+## Bring Your Own Image
+
+A custom image implements a small process contract. It does not implement task
+scheduling, identity, credential lookup, or Kubernetes lifecycle. Archestra
+resolves those concerns before the backend starts the image.
+
+### Image requirements
+
+| Requirement | Contract |
+| --- | --- |
+| Shell | `/bin/sh` must exist. Archestra uses it for the bootstrap and configured command. |
+| Live session | `tmux` must be on `PATH`. The process runs in one tmux session so the execution can accept terminal input and a user can attach from the Executions tab. |
+| Command | Set **Command** and **Arguments** to the executable and arguments for the Agent client. If Command is blank, `archestra-runner-agent` must be on `PATH`. |
+| Initialization | An optional `archestra-agent-init` executable is called immediately before the Agent command. Use it for runtime-only setup such as Git credential configuration. |
+| Output | Write progress and the final result to stdout or stderr. Archestra streams and retains that output as the execution log. Do not print credentials. |
+| Completion | Exit `0` only after the task is complete. Any non-zero exit marks the execution failed. The Kubernetes Job is not retried, because replaying an Agent process could repeat side effects. |
+| Storage | Treat the filesystem as ephemeral. Commit, upload, or otherwise persist durable results before exiting. |
+
+The initial task is supplied in
+`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK`. The Agent system prompt is
+supplied in `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_SYSTEM_PROMPT`. A custom
+client decides how to combine them.
+
+### Input files
+
+Files attached to the execution's first Chat message are staged before the
+Agent command starts. Each execution receives a fresh input directory at
+`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ATTACHMENTS_DIR`. The task text lists
+the absolute path of every attached file, and
+`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ATTACHMENTS_MANIFEST` points to a JSON
+array containing each file's original name, absolute path, media type, and
+size. Filenames are reduced to safe path segments and collisions are renamed.
+
+The files are task inputs, not shell keystrokes and not model-provider
+attachments. The Agent reads them from disk with its normal file or shell
+tools. Kubernetes holds the Agent entrypoint until every file and the manifest
+have been written. If the control plane restarts during staging, reconciliation
+finishes the same durable inputs before releasing the command.
+
+For **Turn boundary** steering, read newline-delimited messages from the FIFO
+at `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_STEER_FIFO` and consume them only
+between model turns. For **Terminal input**, Archestra sends keystrokes to the
+tmux session; the process must expose an interactive input loop. A custom
+client that supports neither mode can still run one-shot tasks, but cannot
+accept useful follow-up instructions.
+
+### Runtime environment
+
+| Variable | Purpose |
+| --- | --- |
+| `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_AGENT_ID`, `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_AGENT_NAME` | Durable Agent identity. |
+| `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID` | Durable execution identifier. |
+| `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK`, `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_SYSTEM_PROMPT` | Initial task and Agent instructions. |
+| `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ATTACHMENTS_DIR` | Directory containing files attached to the initial execution message. |
+| `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ATTACHMENTS_MANIFEST` | JSON manifest containing each input file's name, path, media type, and size. |
+| `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL` | Provider-qualified model ID for generic clients. |
+| `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL` | Provider-native model slug for clients that configure their provider separately. |
+| `ARCHESTRA_LLM_PROXY_URL`, `ARCHESTRA_LLM_PROXY_PROTOCOL` | Agent-scoped inference endpoint and its `openai_responses`, `openai_chat`, or `anthropic` protocol. |
+| `ARCHESTRA_VIRTUAL_KEY` | Personal virtual key for the execution. |
+| `OPENAI_BASE_URL`, `ANTHROPIC_BASE_URL` | Native client aliases for the Agent-scoped proxy. |
+| `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` | Native client aliases for the virtual key on the standard provider path. These are omitted when the official Claude Code image uses its execution-scoped subscription token. |
+| `ARCHESTRA_MCP_GATEWAY_URL`, `ARCHESTRA_MCP_GATEWAY_TOKEN` | Agent-scoped MCP endpoint and the initiating user's bearer token. |
+| `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_STEER_FIFO` | Turn-boundary steering channel. |
+| `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_IDLE_TIMEOUT_SECONDS` | How long a completed turn may wait for follow-up work before the execution exits. |
+
+Send `X-Archestra-Execution-Id` and `X-Archestra-Session-Id`, both set to
+`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID`, on every LLM proxy and MCP
+gateway request. This groups model interactions and tool calls with the
+execution in logs and traces. The maintained catalog images configure these
+headers automatically.
+
+Do not send model requests directly to a provider or connect directly to an
+MCP server. Doing so bypasses Archestra's authentication, authorization,
+policies, cost controls, logs, and traces. Use the injected proxy and gateway
+endpoints instead.
 
 ### Configuration and secrets
 
@@ -114,11 +219,29 @@ When external Vault storage is enabled, the credential control uses the same Vau
 
 With the Kubernetes backend, each delegated task starts in a fresh pod. Task state, events, logs, and the final response remain attached to the execution. The container filesystem is removed when the execution ends. Keep durable outputs in a repository or an external artifact store.
 
+## Logs and Observability
+
+Container stdout and stderr are the execution transcript shown on the Agent's
+**Executions** tab. They are separate from model and tool audit logs.
+
+- **LLM Proxy Logs** record model requests with the Agent, initiating user,
+  provider and model, authentication and billing mode, token usage, cost, and
+  execution ID.
+- **MCP Gateway Logs** record gateway handshakes and tool calls with the Agent,
+  initiating user, MCP server, tool, result, and execution ID.
+- OpenTelemetry spans and Prometheus metrics continue to use the existing LLM
+  and MCP dimensions. The execution ID links the requests belonging to one
+  background task without adding a high-cardinality execution label to
+  aggregate metrics.
+
+These records exist only when the image uses the injected LLM proxy and MCP
+gateway and sends the execution headers described above.
+
 ## Delegate Work
 
-Give the coordinator Agent access to the specialist under **Tools & Knowledge → Subagents**, and assign the task tools it needs. The coordinator uses `start_task` for durable work and can use `get_task`, `list_tasks`, `steer_task`, and `cancel_task` to manage it.
+Give the coordinator Agent access to the specialist under **Tools & Knowledge → Subagents**. The coordinator delegates through the specialist's ordinary Agent tool. If the specialist has Background execution configured, Archestra automatically turns that delegation into a durable task in its deployment and returns immediately. There is no separate invocation syntax.
 
-`start_task` returns immediately. If the target Agent has Background execution configured, the task starts in that Agent's deployment. Otherwise, it runs through the foreground Agent loop. The coordinator can continue answering other messages while the task works.
+Assign the task tools when the coordinator also needs explicit lifecycle control. `start_task` creates a durable task directly; `get_task`, `list_tasks`, `steer_task`, and `cancel_task` inspect or control it. These tools are also the generic interface for external Agent clients. The coordinator can continue answering other messages while the task works.
 
 ### External Agent clients
 
@@ -129,15 +252,49 @@ An Agent running on a developer machine or another system uses the same task int
 3. `get_task` or `list_tasks` to read status and results.
 4. `steer_task` or `cancel_task` when the task needs intervention.
 
-These tools use Archestra's A2A task state machine underneath. A client that supports A2A can drive the same lifecycle directly. The client never needs a Claude-to-Claude, Codex-to-Codex, or other runtime-specific integration: it asks Archestra to run an Agent, and Archestra selects that Agent's configured runtime. A direct synchronous message still uses the foreground Agent loop; a durable task uses Background execution when configured.
+These tools use Archestra's A2A task state machine underneath. A client that supports A2A can drive the same lifecycle directly. The client never needs a Claude-to-Claude, Codex-to-Codex, or other runtime-specific integration: it asks Archestra to run an Agent, and Archestra selects that Agent's configured runtime. A direct synchronous A2A message still uses the foreground Agent loop; a durable task uses Background execution when configured.
 
 ### Messaging channels
 
-For a lightweight coding-task channel, assign a foreground coordinator Agent and give it exactly one subagent with Background execution configured. A message beginning with 🦀 (or `:crab:`) is routed straight to that Background execution Agent. The channel receives one short task-started reply, followed by the pull request link when it is available.
+Assign a foreground coordinator Agent to the channel and give it access to one
+or more specialist Agents under **Tools & Knowledge → Subagents**. Users send
+ordinary messages. The coordinator's instructions determine which requests it
+handles directly and when it delegates to a specialist. If that specialist has
+Background execution configured, the ordinary delegation starts a durable task
+in its deployment. There is no special emoji, prefix, or channel-specific
+protocol.
 
-Users do not need to name tools, copy Agent IDs, or describe the delegation mechanism. Messages without the marker continue through the coordinator's normal foreground conversation.
+When the coordinator starts a task, its foreground reply contains the task ID
+and returns immediately. Archestra records the originating channel binding and
+thread on the execution. When the task settles, Archestra posts the result
+asynchronously into that same thread. The message footer identifies the
+specialist Agent that produced it, for example **🤖 Codex**. Delivery is
+durable: if the control plane restarts while a Kubernetes job is running, it
+re-adopts the job and retries the pending thread notification.
 
-## View Executions
+Users can name a specialist when they want a specific one, but they do not need
+to know Agent IDs or task-tool syntax. If the coordinator does not delegate,
+the message remains an ordinary foreground conversation.
+
+## Work with Executions in Chat
+
+When a Background-enabled Agent is selected in Chat, the composer clearly
+identifies execution mode. Sending the first task creates a durable execution
+and replaces the composer with the Agent's live terminal. While Kubernetes is
+starting the pod, Chat shows the startup state instead of an empty terminal.
+Files attached before sending are copied into the execution input directory
+before the Agent process starts.
+
+Executions appear in the Chat sidebar alongside foreground conversations. A
+small terminal indicator distinguishes them and shows whether the execution is
+starting, running, finished, or failed. Navigating elsewhere does not stop the
+execution; reopening the sidebar item restores the live terminal or the
+retained transcript. Archestra generates a concise title from the opening task.
+You can rename any session from its sidebar menu. The same menu stops an active
+session or deletes a finished one. Stopping removes the deployment and keeps
+the output produced before cancellation.
+
+## View Executions from an Agent
 
 An Agent with Background execution configured has an **Executions** tab. Use it to:
 

@@ -44,6 +44,7 @@ jq -n \
   --arg base_url "${openclaw_base_url}" \
   --arg api_key "${OPENAI_API_KEY:?}" \
   --arg model "${model}" \
+  --arg task_id "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID:?}" \
   --arg mcp_url "${openclaw_mcp_url}" \
   --arg workspace "${PWD}" \
   '{
@@ -54,6 +55,10 @@ jq -n \
           baseUrl:$base_url,
           apiKey:$api_key,
           api:"openai-responses",
+          headers:{
+            "X-Archestra-Execution-Id":$task_id,
+            "X-Archestra-Session-Id":$task_id
+          },
           models:[{id:$model,name:$model}]
         }
       }
@@ -64,7 +69,11 @@ jq -n \
         archestra:{
           url:$mcp_url,
           transport:"streamable-http",
-          headers:{Authorization:"Bearer ${ARCHESTRA_MCP_GATEWAY_TOKEN}"}
+          headers:{
+            Authorization:"Bearer ${ARCHESTRA_MCP_GATEWAY_TOKEN}",
+            "X-Archestra-Execution-Id":$task_id,
+            "X-Archestra-Session-Id":$task_id
+          }
         }
       }
     }

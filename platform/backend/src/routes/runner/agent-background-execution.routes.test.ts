@@ -4,13 +4,26 @@ import { A2AProtocolRole } from "@/agents/a2a/a2a-protocol";
 import db, { schema } from "@/database";
 import { runnerRuntimeManager } from "@/k8s/runner-runtime";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
-import { A2AContextModel, A2ATaskModel, AgentRunModel } from "@/models";
+import {
+  A2AContextModel,
+  A2AMessageModel,
+  A2ATaskModel,
+  AgentRunModel,
+} from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
+import {
+  cancelDetachedAgentTask,
+  startDetachedAgentTask,
+} from "@/services/runners/start-task";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { Agent, User } from "@/types";
 
 vi.mock("@/observability");
+vi.mock("@/services/runners/start-task", () => ({
+  cancelDetachedAgentTask: vi.fn(),
+  startDetachedAgentTask: vi.fn(),
+}));
 
 describe("Agent Background execution routes", () => {
   let app: FastifyInstanceWithZod;
@@ -140,6 +153,289 @@ describe("Agent Background execution routes", () => {
         statusReason: "The execution process exited with status 1",
       }),
     ]);
+  });
+
+  test("starts a durable execution as the signed-in user", async () => {
+    await app.inject({
+      method: "PUT",
+      url: `/api/agents/${agent.id}/background-execution/credentials/SHARED_TOKEN`,
+      payload: { value: "shared-value" },
+    });
+    await app.inject({
+      method: "PUT",
+      url: `/api/agents/${agent.id}/background-execution/credentials/PERSONAL_TOKEN`,
+      payload: { value: "personal-value" },
+    });
+    const task = await createTask(agent.id);
+    vi.mocked(startDetachedAgentTask).mockResolvedValue(task);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${agent.id}/executions`,
+      payload: {
+        message: "Implement the requested change.",
+        attachments: [
+          {
+            name: "requirements.txt",
+            contentType: "text/plain",
+            contentBase64: Buffer.from("fastify").toString("base64"),
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      taskId: task.id,
+      agentId: agent.id,
+      agentName: agent.name,
+      prompt: "Implement the requested change.",
+      state: "TASK_STATE_SUBMITTED",
+    });
+    expect(startDetachedAgentTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actor: {
+          id: user.id,
+          kind: "user",
+          organizationId,
+        },
+        agentId: agent.id,
+        message: "Implement the requested change.",
+        attachments: [
+          {
+            name: "requirements.txt",
+            contentType: "text/plain",
+            contentBase64: Buffer.from("fastify").toString("base64"),
+          },
+        ],
+      }),
+    );
+    const [audit] = await db
+      .select({
+        action: schema.auditLogsTable.action,
+        resourceId: schema.auditLogsTable.resourceId,
+        before: schema.auditLogsTable.before,
+        after: schema.auditLogsTable.after,
+      })
+      .from(schema.auditLogsTable)
+      .where(
+        and(
+          eq(schema.auditLogsTable.action, "agentExecution.created"),
+          eq(schema.auditLogsTable.resourceId, task.id),
+        ),
+      );
+    expect(audit).toMatchObject({
+      action: "agentExecution.created",
+      resourceId: task.id,
+      before: null,
+      after: {
+        taskId: task.id,
+        agentId: agent.id,
+        state: "TASK_STATE_SUBMITTED",
+        attachmentCount: 1,
+      },
+    });
+    expect(JSON.stringify(audit)).not.toContain(
+      "Implement the requested change",
+    );
+    expect(JSON.stringify(audit)).not.toContain("requirements.txt");
+  });
+
+  test("lists only the current user's execution sessions with their prompt", async ({
+    makeAdmin,
+    makeMember,
+  }) => {
+    const ownTask = await createTask(agent.id);
+    await A2AMessageModel.create({
+      contextId: ownTask.contextId,
+      taskId: ownTask.id,
+      role: A2AProtocolRole.User,
+      parts: [{ text: "Create a compact status page." }],
+      content: {
+        id: crypto.randomUUID(),
+        role: "user",
+        parts: [{ type: "text", text: "Create a compact status page." }],
+      },
+    });
+    await AgentRunModel.create({
+      organizationId,
+      taskId: ownTask.id,
+      agentId: agent.id,
+      actorUserId: user.id,
+      deploymentName: `agent-run-${ownTask.id}`,
+      backend: "kubernetes",
+      runtimeScope: "archestra-dev",
+      virtualApiKeyId: null,
+    });
+
+    const colleague = await makeAdmin();
+    await makeMember(colleague.id, organizationId, { role: "admin" });
+    const colleagueTask = await createTask(agent.id);
+    await AgentRunModel.create({
+      organizationId,
+      taskId: colleagueTask.id,
+      agentId: agent.id,
+      actorUserId: colleague.id,
+      deploymentName: `agent-run-${colleagueTask.id}`,
+      backend: "kubernetes",
+      runtimeScope: "archestra-dev",
+      virtualApiKeyId: null,
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/agent-executions",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual([
+      expect.objectContaining({
+        taskId: ownTask.id,
+        prompt: "Create a compact status page.",
+        agent: {
+          id: agent.id,
+          name: agent.name,
+          icon: agent.icon,
+        },
+      }),
+    ]);
+  });
+
+  test("lets only the initiating user cancel an active execution and audits the transition", async ({
+    makeAdmin,
+    makeMember,
+  }) => {
+    const task = await createTask(agent.id);
+    await AgentRunModel.create({
+      organizationId,
+      taskId: task.id,
+      agentId: agent.id,
+      actorUserId: user.id,
+      deploymentName: `agent-run-${task.id}`,
+      backend: "kubernetes",
+      runtimeScope: "archestra-dev",
+      virtualApiKeyId: null,
+    });
+    vi.mocked(cancelDetachedAgentTask).mockResolvedValue({
+      id: task.id,
+      contextId: task.contextId,
+      status: { state: "TASK_STATE_CANCELED" },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agent-executions/${task.id}/cancel`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      taskId: task.id,
+      state: "TASK_STATE_CANCELED",
+    });
+    expect(cancelDetachedAgentTask).toHaveBeenCalledWith({
+      actor: { id: user.id, kind: "user", organizationId },
+      agentId: agent.id,
+      taskId: task.id,
+    });
+
+    const [audit] = await db
+      .select({
+        action: schema.auditLogsTable.action,
+        resourceId: schema.auditLogsTable.resourceId,
+        before: schema.auditLogsTable.before,
+        after: schema.auditLogsTable.after,
+      })
+      .from(schema.auditLogsTable)
+      .where(
+        and(
+          eq(schema.auditLogsTable.action, "agentExecution.canceled"),
+          eq(schema.auditLogsTable.resourceId, task.id),
+        ),
+      );
+    expect(audit).toEqual({
+      action: "agentExecution.canceled",
+      resourceId: task.id,
+      before: {
+        taskId: task.id,
+        agentId: agent.id,
+        state: "TASK_STATE_SUBMITTED",
+      },
+      after: {
+        taskId: task.id,
+        agentId: agent.id,
+        state: "TASK_STATE_CANCELED",
+      },
+    });
+
+    const otherUser = await makeAdmin();
+    await makeMember(otherUser.id, organizationId, { role: "admin" });
+    user = otherUser;
+    const forbidden = await app.inject({
+      method: "POST",
+      url: `/api/agent-executions/${task.id}/cancel`,
+    });
+    expect(forbidden.statusCode).toBe(404);
+  });
+
+  test("lets the initiating user rename and delete a finished execution", async () => {
+    const task = await createTask(agent.id);
+    const run = await AgentRunModel.create({
+      organizationId,
+      taskId: task.id,
+      agentId: agent.id,
+      actorUserId: user.id,
+      title: "Opening request",
+      deploymentName: `agent-run-${task.id}`,
+      backend: "kubernetes",
+      runtimeScope: "archestra-dev",
+      virtualApiKeyId: null,
+    });
+
+    const renamed = await app.inject({
+      method: "PATCH",
+      url: `/api/agent-executions/${task.id}`,
+      payload: { title: "Concise session title" },
+    });
+    expect(renamed.statusCode).toBe(200);
+    expect(renamed.json().title).toBe("Concise session title");
+
+    const activeDelete = await app.inject({
+      method: "DELETE",
+      url: `/api/agent-executions/${task.id}`,
+    });
+    expect(activeDelete.statusCode).toBe(409);
+
+    await AgentRunModel.close({ id: run.id });
+    const deleted = await app.inject({
+      method: "DELETE",
+      url: `/api/agent-executions/${task.id}`,
+    });
+    expect(deleted.statusCode).toBe(200);
+    expect(await A2ATaskModel.findById(task.id)).toBeNull();
+
+    const audits = await db
+      .select({
+        action: schema.auditLogsTable.action,
+        resourceId: schema.auditLogsTable.resourceId,
+        before: schema.auditLogsTable.before,
+        after: schema.auditLogsTable.after,
+      })
+      .from(schema.auditLogsTable)
+      .where(eq(schema.auditLogsTable.resourceId, task.id));
+    expect(audits).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          action: "agentExecution.updated",
+          before: expect.objectContaining({ title: "Opening request" }),
+          after: expect.objectContaining({ title: "Concise session title" }),
+        }),
+        expect.objectContaining({
+          action: "agentExecution.deleted",
+          before: expect.objectContaining({ title: "Concise session title" }),
+          after: { deleted: true },
+        }),
+      ]),
+    );
   });
 
   test("preflight distinguishes missing personal credentials from missing shared configuration", async () => {

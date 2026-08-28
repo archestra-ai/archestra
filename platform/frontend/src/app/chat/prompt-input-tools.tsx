@@ -77,6 +77,8 @@ export interface ChatPromptInputToolsProps {
    * `lockedChatEnabled` feature flag it enables the locked-chat toggle.
    */
   onLockedChatChange?: (lockedChat: boolean) => void;
+  /** The composer launches an isolated Agent execution, not a chat turn. */
+  executionMode?: boolean;
   /** Whether the agent has a code sandbox available (allows any file type) */
   sandboxAvailable?: boolean;
   /** Whether models are still loading - passed to API key selector */
@@ -169,6 +171,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   allowFileUploads = false,
   lockedChat = false,
   onLockedChatChange,
+  executionMode = false,
   sandboxAvailable = false,
   isModelsLoading = false,
   tokensUsed = 0,
@@ -235,9 +238,11 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   // and surfaced in the conversation's Files panel (and staged into the
   // sandbox when one is available), so the only gate is the org-level toggle.
   const showFileUploadButton = allowFileUploads;
-  const supportedTypesDescription = sandboxAvailable
-    ? "any file type"
-    : "any file type (files this model can't read are saved to the chat's Files panel)";
+  const supportedTypesDescription = executionMode
+    ? "files are staged into the isolated execution before the Agent starts"
+    : sandboxAvailable
+      ? "any file type"
+      : "any file type (files this model can't read are saved to the chat's Files panel)";
 
   // Check if user can update agent settings (to show settings link in tooltip)
   const { data: canUpdateAgentSettings } = useHasPermissions({
@@ -250,7 +255,10 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   const lockedChatEnabled = useFeature("lockedChatEnabled") ?? false;
   const { altKey } = usePlatform();
   const showLockedChatToggle =
-    lockedChatEnabled && !conversationId && !!onLockedChatChange;
+    !executionMode &&
+    lockedChatEnabled &&
+    !conversationId &&
+    !!onLockedChatChange;
 
   // Files staged before the toggle survive it: a locked chat stores its
   // attachments sealed under the conversation key, so the first message can
@@ -284,6 +292,8 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   const { data: canSeeProviderSettings } = useHasPermissions({
     chatProviderSettings: ["enable"],
   });
+  const canShowProviderSettings =
+    !executionMode && canSeeProviderSettings === true;
 
   const handleModelSelectorOpenChange = useCallback(
     (open: boolean) => {
@@ -298,7 +308,8 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
 
   return (
     <PromptInputTools ref={toolbarRef} className="gap-0.5">
-      {canSeeProviderSettings === false &&
+      {!executionMode &&
+        canSeeProviderSettings === false &&
         subscriptionConnectRequired &&
         (conversationId || onApiKeyChange) && (
           <div className="hidden">
@@ -362,7 +373,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                       />
                     </div>
                   )}
-                {canSeeProviderSettings && (
+                {canShowProviderSettings && (
                   <>
                     {modelSource && !subscriptionConnectRequired && (
                       <div className="flex items-center gap-1.5">
@@ -453,7 +464,8 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                     )}
                   </>
                 )}
-                {canSeeProviderSettings === false &&
+                {!executionMode &&
+                  canSeeProviderSettings === false &&
                   subscriptionConnectRequired &&
                   onSubscriptionConnect && (
                     <Button
@@ -505,7 +517,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
           warning that only exists inside a popover — or only for users who can
           see provider settings — is a warning most narrow-viewport users never
           get. The wide toolbar renders its own copy below. */}
-      {isNarrow && notRecommendedForAgents && (
+      {!executionMode && isNarrow && notRecommendedForAgents && (
         <NotRecommendedForAgentsNoticeBadge />
       )}
 
@@ -606,7 +618,8 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                 onAgentChange={onAgentChange}
               />
             )}
-          {canSeeProviderSettings === false &&
+          {!executionMode &&
+            canSeeProviderSettings === false &&
             subscriptionConnectRequired &&
             onSubscriptionConnect && (
               <Button
@@ -619,7 +632,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                 {subscriptionSignInTitle}
               </Button>
             )}
-          {!canSeeProviderSettings ? null : showDefaultLogo &&
+          {!canShowProviderSettings ? null : showDefaultLogo &&
             logoProvider &&
             !subscriptionConnectRequired &&
             (modelSource === "agent" || modelSource === "organization") ? (
@@ -717,8 +730,10 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
               )}
             </div>
           )}
-          {toolsUnavailable && <NoToolsModelBadge />}
-          {notRecommendedForAgents && <NotRecommendedForAgentsNoticeBadge />}
+          {!executionMode && toolsUnavailable && <NoToolsModelBadge />}
+          {!executionMode && notRecommendedForAgents && (
+            <NotRecommendedForAgentsNoticeBadge />
+          )}
           {tokensUsed > 0 && maxContextLength && (
             <ContextWindowDialog
               breakdown={contextWindow ?? null}

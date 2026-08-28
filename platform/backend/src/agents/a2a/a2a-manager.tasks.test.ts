@@ -178,6 +178,7 @@ describe("A2AManager full task mode", () => {
       taskId: task.id,
       agentId: agent.id,
       actorUserId: actor.id,
+      title: "Recovered task",
       deploymentName: "runner-background-agent-recovery",
       backend: "kubernetes",
       runtimeScope: "archestra-dev",
@@ -223,7 +224,7 @@ describe("A2AManager full task mode", () => {
     ]);
   });
 
-  test("an Agent deployment is used for a tasked run, while direct chat stays in the foreground", async ({
+  test("an Agent deployment is used for a task, while a synchronous A2A message stays foreground", async ({
     makeAgent,
   }) => {
     const agent = await makeAgent({

@@ -3,6 +3,7 @@ import { BackgroundExecutionAgentConfigError, readConfig } from "./config.js";
 
 const COMPLETE = {
   ARCHESTRA_AGENT_BACKGROUND_EXECUTION_AGENT_ID: "agent-1",
+  ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID: "task-1",
   ARCHESTRA_LLM_PROXY_URL: "http://archestra:9000/v1/model-router/agent-1",
   ARCHESTRA_LLM_PROXY_PROTOCOL: "openai_responses",
   ARCHESTRA_VIRTUAL_KEY: "arch_key",

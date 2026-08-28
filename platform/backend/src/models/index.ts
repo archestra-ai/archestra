@@ -12,6 +12,7 @@ export { default as AgentExcludedConnectorModel } from "./agent-excluded-connect
 export { default as AgentExcludedSkillModel } from "./agent-excluded-skill";
 export { default as AgentExcludedSubagentModel } from "./agent-excluded-subagent";
 export { default as AgentExcludedToolModel } from "./agent-excluded-tool";
+export { default as AgentExecutionInputModel } from "./agent-execution-input";
 export { default as AgentKnowledgeBaseModel } from "./agent-knowledge-base";
 export { default as AgentLabelModel } from "./agent-label";
 export { default as AgentRunModel } from "./agent-run";

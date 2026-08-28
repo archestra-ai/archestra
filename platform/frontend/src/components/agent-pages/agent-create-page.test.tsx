@@ -6,11 +6,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentFormProps } from "@/components/agent-form";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
+import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
 import { AgentCreatePage } from "./agent-create-page";
 
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
+vi.mock("@/lib/hooks/use-app-name");
 
 // The form itself is covered by agent-form.test.tsx; here it is a stub whose
 // props are what the page is expected to hand it, plus a way to fire
@@ -61,6 +63,8 @@ describe("AgentCreatePage", () => {
     vi.clearAllMocks();
     mockPermissions({ canRead: true });
     vi.mocked(useFeature).mockReturnValue(false);
+    vi.mocked(useAppName).mockReturnValue("Archestra");
+    vi.mocked(useAppIconLogo).mockReturnValue("/logo-icon.svg");
     vi.mocked(useRouter).mockReturnValue({
       push,
       replace: vi.fn(),
@@ -102,14 +106,77 @@ describe("AgentCreatePage", () => {
       expect.objectContaining({
         initialValues: expect.objectContaining({
           name: "Codex",
+          icon: "/model-logos/openai.svg",
           backgroundExecution: expect.objectContaining({
             command: ["archestra-codex"],
             image: "agent-codex:dev",
+            credentials: expect.arrayContaining([
+              expect.objectContaining({
+                key: "GITHUB_TOKEN",
+                required: false,
+              }),
+            ]),
           }),
         }),
       }),
     );
     expect(screen.getByRole("button", { name: "Catalog" })).toBeInTheDocument();
+  });
+
+  it("uses the configured product name and sidebar icon for the built-in Agent", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useFeature).mockImplementation((feature) =>
+      feature === "agentBackgroundExecution" ? true : undefined,
+    );
+    vi.mocked(useAppName).mockReturnValue("Acme AI");
+    vi.mocked(useAppIconLogo).mockReturnValue("/custom-app-icon.svg");
+
+    const { container } = render(<AgentCreatePage kind="agent" />);
+
+    expect(
+      screen.getByRole("button", { name: /acme ai agent/i }),
+    ).toHaveTextContent("Acme AI's lightweight agent loop");
+    expect(
+      container.querySelector('img[src="/custom-app-icon.svg"]'),
+    ).not.toBeNull();
+    expect(screen.queryByText(/archestra agent/i)).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /acme ai agent/i }));
+    expect(formProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        initialValues: expect.objectContaining({
+          name: "Acme AI Agent",
+          icon: "/custom-app-icon.svg",
+        }),
+      }),
+    );
+  });
+
+  it("prefills Claude Code with its runtime-scoped personal subscription token", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useFeature).mockImplementation((feature) =>
+      feature === "agentBackgroundExecution" ? true : undefined,
+    );
+
+    render(<AgentCreatePage kind="agent" />);
+    await user.click(screen.getByRole("button", { name: /claude code/i }));
+
+    expect(formProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        initialValues: expect.objectContaining({
+          backgroundExecution: expect.objectContaining({
+            command: ["archestra-claude-code"],
+            credentials: expect.arrayContaining([
+              expect.objectContaining({
+                key: "CLAUDE_CODE_OAUTH_TOKEN",
+                scope: "per_user",
+                required: false,
+              }),
+            ]),
+          }),
+        }),
+      }),
+    );
   });
 
   it("mounts the whole form once, showing the first step, and only the last step may submit", async () => {

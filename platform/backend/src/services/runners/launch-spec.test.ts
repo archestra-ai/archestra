@@ -222,6 +222,125 @@ describe("buildRunnerLaunchSpec", () => {
     expect(spec.secretEnv.GITHUB_TOKEN).toBe("github-token");
     expect(spec.secretEnv.GH_TOKEN).toBe("github-token");
   });
+
+  test("scopes a personal Claude subscription token to the Claude Code runtime", async ({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeAgent,
+  }) => {
+    const setup = await makeConfiguredAgent({
+      provider: "anthropic",
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    });
+    const configuredDeployment = deployment(setup.agent, "anthropic");
+    configuredDeployment.command = ["archestra-claude-code"];
+    configuredDeployment.credentials = [
+      {
+        key: "CLAUDE_CODE_OAUTH_TOKEN",
+        scope: "per_user",
+        label: "Claude Code subscription token",
+        required: false,
+      },
+    ];
+    await UserCredentialModel.upsert({
+      organizationId: setup.agent.organizationId,
+      userId: setup.user.id,
+      agentId: setup.agent.id,
+      key: "CLAUDE_CODE_OAUTH_TOKEN",
+      value: "claude-subscription-token",
+    });
+    const taskId = crypto.randomUUID();
+
+    const { spec, virtualApiKeyId } = await buildRunnerLaunchSpec({
+      deployment: configuredDeployment,
+      taskId,
+      agentId: setup.agent.id,
+      actorUserId: setup.user.id,
+      organizationId: setup.agent.organizationId,
+      runtimeScope: "agent-tests",
+      effectiveNetworkPolicy: { source: "built_in", policy: null },
+    });
+
+    expect(spec.secretEnv.CLAUDE_CODE_OAUTH_TOKEN).toBe(
+      "claude-subscription-token",
+    );
+    expect(spec.secretEnv).not.toHaveProperty("ANTHROPIC_API_KEY");
+    expect(spec.secretEnv).not.toHaveProperty("ANTHROPIC_AUTH_TOKEN");
+    expect(spec.secretEnv).not.toHaveProperty("OPENAI_API_KEY");
+    expect(spec.secretEnv.ANTHROPIC_CUSTOM_HEADERS).toContain(
+      `X-Archestra-Execution-Id: ${taskId}`,
+    );
+    expect(spec.secretEnv.ANTHROPIC_CUSTOM_HEADERS).toContain(
+      `X-Archestra-Session-Id: ${taskId}`,
+    );
+    expect(spec.secretEnv.ANTHROPIC_CUSTOM_HEADERS).toMatch(
+      /X-Archestra-Virtual-Key: arch_/,
+    );
+
+    const virtualKey = await VirtualApiKeyModel.findById(virtualApiKeyId);
+    expect(virtualKey?.keyType).toBe("passthrough");
+    expect(virtualKey?.scope).toBe("personal");
+    expect(virtualKey?.authorId).toBe(setup.user.id);
+  });
+
+  test("does not inject a Claude subscription token into a custom runtime", async ({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeAgent,
+  }) => {
+    const setup = await makeConfiguredAgent({
+      provider: "anthropic",
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    });
+    const configuredDeployment = deployment(setup.agent, "anthropic");
+    configuredDeployment.command = ["custom-agent"];
+    configuredDeployment.credentials = [
+      {
+        key: "CLAUDE_CODE_OAUTH_TOKEN",
+        scope: "per_user",
+        label: "Claude Code subscription token",
+        required: false,
+      },
+    ];
+    await UserCredentialModel.upsert({
+      organizationId: setup.agent.organizationId,
+      userId: setup.user.id,
+      agentId: setup.agent.id,
+      key: "CLAUDE_CODE_OAUTH_TOKEN",
+      value: "claude-subscription-token",
+    });
+
+    await expect(
+      buildRunnerLaunchSpec({
+        deployment: configuredDeployment,
+        taskId: crypto.randomUUID(),
+        agentId: setup.agent.id,
+        actorUserId: setup.user.id,
+        organizationId: setup.agent.organizationId,
+        runtimeScope: "agent-tests",
+        effectiveNetworkPolicy: { source: "built_in", policy: null },
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      message: expect.stringContaining("only be injected"),
+    });
+  });
 });
 
 async function makeConfiguredAgent(params: {

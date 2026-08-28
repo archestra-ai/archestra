@@ -23,9 +23,11 @@ const SPEC: KubernetesRunnerLaunchSpec = {
   },
   secretEnv: { ARCHESTRA_MCP_GATEWAY_TOKEN: "arch_secret" },
   activeDeadlineSeconds: 3600,
+  ephemeralStorageLimit: "10Gi",
   imagePullSecrets: [],
   ownerReferences: undefined,
   effectiveNetworkPolicy: { source: "built_in", policy: null },
+  inputFileCount: 0,
 };
 
 describe("buildRunnerJob", () => {
@@ -56,6 +58,26 @@ describe("buildRunnerJob", () => {
     );
   });
 
+  it("holds the entrypoint until declared input files are staged", () => {
+    const container = buildRunnerJob({ ...SPEC, inputFileCount: 2 }).spec
+      ?.template.spec?.containers[0];
+    expect(container?.env).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_INPUT_FILE_COUNT",
+          value: "2",
+        }),
+        expect.objectContaining({
+          name: "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ATTACHMENTS_DIR",
+          value: "/var/run/archestra/attachments",
+        }),
+      ]),
+    );
+    expect(container?.command?.join("\n")).toContain(
+      "/var/run/archestra/inputs-ready",
+    );
+  });
+
   it("omits envFrom entirely when there are no secrets to mount", () => {
     const job = buildRunnerJob({ ...SPEC, secretEnv: {} });
     expect(job.spec?.template.spec?.containers[0]?.envFrom).toBeUndefined();
@@ -76,11 +98,18 @@ describe("buildRunnerJob", () => {
   it("only grants privilege when the agent explicitly asked for it", () => {
     expect(
       buildRunnerJob(SPEC).spec?.template.spec?.containers[0]?.securityContext,
-    ).toBeUndefined();
+    ).toEqual({ allowPrivilegeEscalation: false });
     expect(
       buildRunnerJob({ ...SPEC, privileged: true }).spec?.template.spec
         ?.containers[0]?.securityContext?.privileged,
     ).toBe(true);
+  });
+
+  it("bounds writable execution scratch space", () => {
+    expect(
+      buildRunnerJob(SPEC).spec?.template.spec?.volumes?.[0]?.emptyDir
+        ?.sizeLimit,
+    ).toBe("10Gi");
   });
 
   it("quotes a configured command so arguments cannot break out", () => {

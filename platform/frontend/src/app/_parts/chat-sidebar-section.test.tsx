@@ -2,7 +2,7 @@ import {
   getChatItemGeneratingIndicatorTestId,
   getChatItemUnreadIndicatorTestId,
 } from "@archestra/shared";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { format, subDays } from "date-fns";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -80,6 +80,24 @@ let mockApps: Array<{
   icon?: string | null;
   pinnedAt: string | null;
 }> = [];
+
+let mockExecutions: Array<Record<string, unknown>> = [];
+
+vi.mock("@/lib/agent-background-execution.query", () => ({
+  useMyAgentExecutions: () => ({
+    data: mockExecutions,
+    isLoading: false,
+  }),
+  useUpdateAgentExecution: () => ({ mutateAsync: vi.fn() }),
+  useCancelAgentExecution: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
+  useDeleteAgentExecution: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
+}));
 
 vi.mock("@/lib/chat/chat.query", () => ({
   useConversations: () => ({
@@ -218,7 +236,9 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
   ),
   DropdownMenuContent: () => null,
   DropdownMenuItem: () => null,
-  DropdownMenuTrigger: () => null,
+  DropdownMenuTrigger: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
 }));
 
 vi.mock("@/components/ui/input", () => ({
@@ -322,6 +342,7 @@ describe("ChatSidebarSection", () => {
     mockConversations = [];
     mockProjects = [];
     mockApps = [];
+    mockExecutions = [];
     mockChatState.pathname = "/chat";
     mockChatState.sessionStatusById = {};
   });
@@ -330,6 +351,44 @@ describe("ChatSidebarSection", () => {
     mockConversations = [];
     const { container } = render(<ChatSidebarSection fadeIn={fadeIn} />);
     expect(container.innerHTML).toBe("");
+  });
+
+  it("interweaves a durable execution with chats and opens its terminal", () => {
+    mockConversations = [
+      makeConv("c1", "Earlier chat", {
+        updatedAt: "2026-07-16T09:00:00Z",
+        lastMessageAt: "2026-07-16T09:00:00Z",
+      }),
+    ];
+    mockExecutions = [
+      {
+        id: "run-1",
+        taskId: "task-1",
+        agentId: "agent-1",
+        organizationId: "org-1",
+        actorUserId: "user-1",
+        title: "Add export command",
+        deploymentName: "agent-agent-1-task-1",
+        backend: "kubernetes",
+        runtimeScope: "archestra-dev",
+        virtualApiKeyId: null,
+        startedAt: "2026-07-16T10:00:00Z",
+        endedAt: null,
+        state: "TASK_STATE_WORKING",
+        stateChangedAt: "2026-07-16T10:00:00Z",
+        statusReason: null,
+        prompt: "Add the export command",
+        agent: { id: "agent-1", name: "Codex", icon: null },
+      },
+    ];
+
+    render(<ChatSidebarSection fadeIn={fadeIn} />);
+
+    expect(screen.getByText("Add export command")).toBeInTheDocument();
+    expect(screen.getByLabelText("Execution running")).toBeInTheDocument();
+    expect(screen.getByLabelText("Execution actions")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Add export command"));
+    expect(mockRouterPush).toHaveBeenCalledWith("/chat/executions/task-1");
   });
 
   it("shows 3 recent chats when no chats are pinned", () => {
@@ -649,6 +708,7 @@ describe("ChatSidebarSection status indicators", () => {
     mockConversations = [];
     mockProjects = [];
     mockApps = [];
+    mockExecutions = [];
     mockChatState.pathname = "/chat";
     mockChatState.sessionStatusById = {};
   });

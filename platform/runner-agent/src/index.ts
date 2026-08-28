@@ -150,17 +150,20 @@ async function main(): Promise<number> {
 }
 
 function createModel(config: BackgroundExecutionAgentConfig) {
+  const headers = executionHeaders(config.taskId);
   if (config.proxyProtocol === "anthropic") {
     return createAnthropic({
       // Claude-compatible clients append `/v1/messages`; the AI SDK appends
       // only `/messages`, so supply its `/v1` segment here.
       baseURL: `${config.proxyBaseUrl}/v1`,
       apiKey: config.apiKey,
+      headers,
     })(config.model);
   }
   const openai = createOpenAI({
     baseURL: config.proxyBaseUrl,
     apiKey: config.apiKey,
+    headers,
   });
   return config.proxyProtocol === "openai_chat"
     ? openai.chat(config.model)
@@ -179,7 +182,10 @@ async function connectGateway(
     new URL(config.gatewayUrl),
     {
       requestInit: {
-        headers: { Authorization: `Bearer ${config.gatewayToken}` },
+        headers: {
+          Authorization: `Bearer ${config.gatewayToken}`,
+          ...executionHeaders(config.taskId),
+        },
       },
     },
   );
@@ -189,6 +195,13 @@ async function connectGateway(
   });
   await client.connect(transport);
   return client;
+}
+
+function executionHeaders(taskId: string): Record<string, string> {
+  return {
+    "X-Archestra-Execution-Id": taskId,
+    "X-Archestra-Session-Id": taskId,
+  };
 }
 
 function write(line: string): void {

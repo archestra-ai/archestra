@@ -864,6 +864,9 @@ Background execution runs delegated Agent tasks in dedicated Kubernetes pods. Yo
 - **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_CPU_REQUEST`**, **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MEMORY_REQUEST`**, **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MEMORY_LIMIT`** - Pod resources for a run whose Agent sets none. There is no CPU limit by default: throttling an agent mid-turn reads as a hang rather than back-pressure.
   - Defaults: `500m`, `1Gi`, `4Gi`
 
+- **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_EPHEMERAL_STORAGE_LIMIT`** - Maximum writable scratch space for one execution. Kubernetes enforces the limit on the run's `emptyDir` volume.
+  - Default: `10Gi`
+
 - **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_PLATFORM_POD_SELECTOR`** - Label selector matching the platform's own API pods, written as `key=value` pairs. Background pods get an egress policy allowing exactly that destination. Override it when your deployment labels the platform differently.
   - Default: `archestra.io/p4-shim-client=true`
 

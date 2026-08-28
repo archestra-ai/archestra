@@ -168,9 +168,32 @@ export const SelectAgentExecutionSchema = SelectAgentRunSchema.omit({
   stateChangedAt: z.date().nullable(),
 });
 
+/** A user's durable execution session as rendered in Chat and its sidebar. */
+export const SelectAgentExecutionSessionSchema =
+  SelectAgentExecutionSchema.extend({
+    prompt: z.string(),
+    agent: z.object({
+      id: z.string().uuid(),
+      name: z.string(),
+      icon: z.string().nullable(),
+    }),
+  });
+
+export const StartAgentExecutionResponseSchema = z.object({
+  taskId: z.string().uuid(),
+  state: A2ATaskStateSchema,
+  agentId: z.string().uuid(),
+  agentName: z.string(),
+  prompt: z.string(),
+  createdAt: z.date(),
+});
+
 export type AgentRun = z.infer<typeof SelectAgentRunSchema>;
 export type InsertAgentRun = z.infer<typeof InsertAgentRunSchema>;
 export type AgentExecution = z.infer<typeof SelectAgentExecutionSchema>;
+export type AgentExecutionSession = z.infer<
+  typeof SelectAgentExecutionSessionSchema
+>;
 
 export const SelectUserCredentialSchema = createSelectSchema(
   schema.userCredentialsTable,

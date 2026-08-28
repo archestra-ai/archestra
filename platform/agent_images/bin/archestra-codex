@@ -26,9 +26,17 @@ base_url = "${OPENAI_BASE_URL:?}"
 env_key = "OPENAI_API_KEY"
 wire_api = "responses"
 
+[model_providers.archestra.http_headers]
+"X-Archestra-Execution-Id" = "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID:?}"
+"X-Archestra-Session-Id" = "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID:?}"
+
 [mcp_servers.archestra]
 url = "${ARCHESTRA_MCP_GATEWAY_URL:?}"
 bearer_token_env_var = "ARCHESTRA_MCP_GATEWAY_TOKEN"
+
+[mcp_servers.archestra.http_headers]
+"X-Archestra-Execution-Id" = "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID:?}"
+"X-Archestra-Session-Id" = "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID:?}"
 EOF
 chmod 0600 "${CODEX_HOME}/config.toml"
 

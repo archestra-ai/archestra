@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { copyToClipboard } from "@/lib/clipboard";
+import { isUsableTerminalDimensions } from "./exec-terminal.utils";
 
 type ConnectionStatus =
   | "idle"
@@ -159,7 +160,7 @@ export function ExecTerminal({
           setStatus("connected");
           setCommand(startedCommand);
           const dims = fitAddon.proposeDimensions();
-          if (dims?.cols != null && dims?.rows != null) {
+          if (isUsableTerminalDimensions(dims)) {
             transportRef.current.sendResize(dims.cols, dims.rows);
           }
         },
@@ -189,7 +190,7 @@ export function ExecTerminal({
         try {
           fitAddon.fit();
           const dims = fitAddon.proposeDimensions();
-          if (dims?.cols != null && dims?.rows != null) {
+          if (isUsableTerminalDimensions(dims)) {
             transportRef.current.sendResize(dims.cols, dims.rows);
           }
         } catch {

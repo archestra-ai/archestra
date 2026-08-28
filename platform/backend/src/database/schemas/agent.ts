@@ -128,8 +128,8 @@ const agentsTable = softDeletablePgTable(
     ),
 
     /**
-     * Optional deployment used for delegated/background work. Direct chat
-     * stays in the foreground platform loop even when this is configured.
+     * Optional deployment used for durable/background work. Invocation
+     * surfaces decide whether to request a foreground message or durable task.
      */
     backgroundExecution: jsonb(
       "background_execution",

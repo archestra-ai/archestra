@@ -25,7 +25,21 @@ image or written to the workspace. Every model request goes to the Agent-scoped
 LLM proxy endpoint and every MCP request goes to the Agent-scoped gateway, so
 the platform applies the same model selection, limits, policies, tool grants,
 and logs as it does for foreground execution. The pod receives a short-lived
-virtual key; it never receives the upstream provider credential.
+virtual key on the standard provider path; it never receives the upstream
+provider credential. The one exception is an optional per-user Claude Code
+OAuth token. It is injected only into the official Claude Code target, while a
+separate passthrough virtual key authenticates and attributes its proxied
+requests.
+
+All maintained clients send the task ID as both `X-Archestra-Execution-Id`
+and `X-Archestra-Session-Id` on LLM and MCP requests. Do the same in any new
+wrapper so the platform can group interactions and tool calls with the run.
+
+Files attached to the initial Chat instruction are written under
+`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ATTACHMENTS_DIR` before the client
+starts. The task names their absolute paths, and
+`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ATTACHMENTS_MANIFEST` contains their
+original names, paths, media types, and sizes.
 
 The generic Archestra loop receives a provider-qualified model id. Native
 clients receive the provider's own model slug so their built-in model metadata

@@ -4,6 +4,7 @@ import type {
   AgentDeploymentBackend,
   AgentDeploymentResources,
   AgentDeploymentSteerMode,
+  AgentExecutionInput,
   AgentRun,
   EffectiveNetworkPolicy,
 } from "@/types";
@@ -29,8 +30,12 @@ export type RunnerLaunchSpec = {
   env: Record<string, string>;
   secretEnv: Record<string, string>;
   activeDeadlineSeconds: number | null;
+  /** Writable scratch-space ceiling enforced by the execution backend. */
+  ephemeralStorageLimit: string;
   imagePullSecrets: string[];
   effectiveNetworkPolicy: EffectiveNetworkPolicy;
+  /** Number of durable input files the backend must stage before entrypoint. */
+  inputFileCount: number;
 };
 
 /**
@@ -65,6 +70,12 @@ export interface RunnerBackend {
 
   /** Schedule the workload. Returns once accepted, not once running. */
   launch(spec: RunnerLaunchSpec): Promise<void>;
+
+  /** Materialize durable task inputs before the Agent command is released. */
+  stageInputs(params: {
+    session: AgentRun;
+    inputs: AgentExecutionInput[];
+  }): Promise<void>;
 
   /**
    * Resolve once the session is doing work, or throw if it never gets there.

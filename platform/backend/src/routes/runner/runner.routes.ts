@@ -5,7 +5,8 @@ import {
   getAgentTypePermissionChecker,
   requireAgentModifyPermission,
 } from "@/auth";
-import { AgentModel, AgentRunModel, TeamModel } from "@/models";
+import config from "@/config";
+import { A2ATaskModel, AgentModel, AgentRunModel, TeamModel } from "@/models";
 import {
   isAnyRunnerBackendEnabled,
   resolveRunnerBackend,
@@ -17,12 +18,18 @@ import {
 } from "@/services/runners/credentials";
 import { resolveAgentDeployment } from "@/services/runners/pod-execution";
 import {
+  cancelDetachedAgentTask,
+  startDetachedAgentTask,
+} from "@/services/runners/start-task";
+import {
   type Agent,
   type AgentDeployment,
   ApiError,
   constructResponseSchema,
   MissingAgentDeploymentCredentialSchema,
   SelectAgentExecutionSchema,
+  SelectAgentExecutionSessionSchema,
+  StartAgentExecutionResponseSchema,
 } from "@/types";
 
 const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
@@ -166,6 +173,275 @@ const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
       );
     },
   );
+
+  fastify.post(
+    "/api/agents/:id/executions",
+    {
+      schema: {
+        operationId: RouteId.StartAgentExecution,
+        description:
+          "Start a durable Background execution session with this Agent",
+        tags: ["Agents"],
+        params: z.object({ id: z.string().uuid() }),
+        body: z.object({
+          message: z.string().trim().min(1).max(100_000),
+          attachments: z
+            .array(
+              z
+                .object({
+                  name: z.string().trim().min(1).max(255),
+                  contentType: z.string().trim().min(1).max(255),
+                  contentBase64: z
+                    .string()
+                    .min(1)
+                    .refine(
+                      isCanonicalBase64,
+                      "Attachment content is not valid base64",
+                    ),
+                })
+                .superRefine((attachment, context) => {
+                  const bytes = Buffer.from(attachment.contentBase64, "base64");
+                  if (bytes.byteLength === 0) {
+                    context.addIssue({
+                      code: "custom",
+                      message: "Attachment content is not valid base64",
+                    });
+                  }
+                  if (
+                    bytes.byteLength > config.chat.attachmentStorageBytesLimit
+                  ) {
+                    context.addIssue({
+                      code: "custom",
+                      message: `Attachments may not exceed ${config.chat.attachmentStorageBytesLimit} bytes`,
+                    });
+                  }
+                }),
+            )
+            .max(20)
+            .optional(),
+        }),
+        response: constructResponseSchema(StartAgentExecutionResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      const { agent, deployment } =
+        await requireReadableDeploymentWithAgent(request);
+      const preflight = await preflightAgentDeploymentCredentials({
+        deployment,
+        organizationId: request.organizationId,
+        userId: request.user.id,
+      });
+      if (preflight.missing.length > 0) {
+        throw new ApiError(
+          409,
+          `Add your required credentials before starting this execution: ${preflight.missing
+            .map((entry) => entry.label)
+            .join(", ")}`,
+        );
+      }
+      if (preflight.misconfigured.length > 0) {
+        throw new ApiError(
+          409,
+          `An Agent administrator must configure: ${preflight.misconfigured
+            .map((entry) => entry.label)
+            .join(", ")}`,
+        );
+      }
+
+      const task = await startDetachedAgentTask({
+        actor: {
+          id: request.user.id,
+          kind: "user",
+          organizationId: request.organizationId,
+        },
+        agentId: agent.id,
+        message: request.body.message,
+        attachments: request.body.attachments,
+        systemParams: { sessionId: crypto.randomUUID(), source: "chat" },
+      });
+      request.auditResourceId = { value: task.id };
+      request.auditAfter = {
+        taskId: task.id,
+        agentId: agent.id,
+        state: task.state,
+        attachmentCount: request.body.attachments?.length ?? 0,
+      };
+      return reply.send({
+        taskId: task.id,
+        state: task.state,
+        agentId: agent.id,
+        agentName: agent.name,
+        prompt: request.body.message,
+        createdAt: task.createdAt,
+      });
+    },
+  );
+
+  fastify.get(
+    "/api/agent-executions",
+    {
+      schema: {
+        operationId: RouteId.GetMyAgentExecutions,
+        description: "List Background execution sessions started by this user",
+        tags: ["Agents"],
+        response: constructResponseSchema(
+          z.array(SelectAgentExecutionSessionSchema),
+        ),
+      },
+    },
+    async (request, reply) => {
+      if (!isAnyRunnerBackendEnabled()) throw new ApiError(404, "Not found");
+      return reply.send(
+        await AgentRunModel.listForActor({
+          actorUserId: request.user.id,
+          organizationId: request.organizationId,
+        }),
+      );
+    },
+  );
+
+  fastify.get(
+    "/api/agent-executions/:taskId",
+    {
+      schema: {
+        operationId: RouteId.GetMyAgentExecution,
+        description:
+          "Get one Background execution session started by this user",
+        tags: ["Agents"],
+        params: z.object({ taskId: z.string().uuid() }),
+        response: constructResponseSchema(SelectAgentExecutionSessionSchema),
+      },
+    },
+    async (request, reply) => {
+      if (!isAnyRunnerBackendEnabled()) throw new ApiError(404, "Not found");
+      const execution = await AgentRunModel.findForActorByTaskId({
+        taskId: request.params.taskId,
+        actorUserId: request.user.id,
+        organizationId: request.organizationId,
+      });
+      if (!execution) throw new ApiError(404, "Execution not found");
+      return reply.send(execution);
+    },
+  );
+
+  fastify.patch(
+    "/api/agent-executions/:taskId",
+    {
+      schema: {
+        operationId: RouteId.UpdateAgentExecution,
+        description:
+          "Rename one Background execution session started by this user",
+        tags: ["Agents"],
+        params: z.object({ taskId: z.string().uuid() }),
+        body: z.object({ title: z.string().trim().min(1).max(100) }),
+        response: constructResponseSchema(SelectAgentExecutionSessionSchema),
+      },
+    },
+    async (request, reply) => {
+      if (!isAnyRunnerBackendEnabled()) throw new ApiError(404, "Not found");
+      const execution = await requireOwnedExecution(request);
+      request.auditResourceId = { value: execution.taskId };
+      request.auditBefore = {
+        taskId: execution.taskId,
+        agentId: execution.agentId,
+        title: execution.title,
+      };
+      const updated = await AgentRunModel.updateTitleForActor({
+        taskId: execution.taskId,
+        actorUserId: request.user.id,
+        organizationId: request.organizationId,
+        title: request.body.title,
+      });
+      if (!updated) throw new ApiError(404, "Execution not found");
+      request.auditAfter = {
+        taskId: updated.taskId,
+        agentId: updated.agentId,
+        title: updated.title,
+      };
+      return reply.send(updated);
+    },
+  );
+
+  fastify.post(
+    "/api/agent-executions/:taskId/cancel",
+    {
+      schema: {
+        operationId: RouteId.CancelAgentExecution,
+        description:
+          "Cancel one active Background execution session started by this user",
+        tags: ["Agents"],
+        params: z.object({ taskId: z.string().uuid() }),
+        response: constructResponseSchema(
+          z.object({
+            taskId: z.string().uuid(),
+            state: z.literal("TASK_STATE_CANCELED"),
+          }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      if (!isAnyRunnerBackendEnabled()) throw new ApiError(404, "Not found");
+      const execution = await requireOwnedExecution(request);
+      request.auditResourceId = { value: execution.taskId };
+      request.auditBefore = {
+        taskId: execution.taskId,
+        agentId: execution.agentId,
+        state: execution.state,
+      };
+
+      const canceled = await cancelDetachedAgentTask({
+        actor: {
+          id: request.user.id,
+          kind: "user",
+          organizationId: request.organizationId,
+        },
+        agentId: execution.agentId,
+        taskId: execution.taskId,
+      });
+      request.auditAfter = {
+        taskId: execution.taskId,
+        agentId: execution.agentId,
+        state: canceled.status.state,
+      };
+      return reply.send({
+        taskId: execution.taskId,
+        state: "TASK_STATE_CANCELED" as const,
+      });
+    },
+  );
+
+  fastify.delete(
+    "/api/agent-executions/:taskId",
+    {
+      schema: {
+        operationId: RouteId.DeleteAgentExecution,
+        description:
+          "Delete one finished Background execution session started by this user",
+        tags: ["Agents"],
+        params: z.object({ taskId: z.string().uuid() }),
+        response: constructResponseSchema(
+          z.object({ deleted: z.literal(true) }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      if (!isAnyRunnerBackendEnabled()) throw new ApiError(404, "Not found");
+      const execution = await requireOwnedExecution(request);
+      if (!execution.endedAt) {
+        throw new ApiError(409, "Stop the execution before deleting it");
+      }
+      request.auditResourceId = { value: execution.taskId };
+      request.auditBefore = {
+        taskId: execution.taskId,
+        agentId: execution.agentId,
+        title: execution.title,
+        state: execution.state,
+      };
+      await A2ATaskModel.delete(execution.taskId);
+      request.auditAfter = { deleted: true };
+      return reply.send({ deleted: true as const });
+    },
+  );
 };
 
 export default agentBackgroundExecutionRoutes;
@@ -177,6 +453,22 @@ type AgentRequest = {
   user: { id: string };
   organizationId: string;
 };
+
+type OwnedExecutionRequest = {
+  params: { taskId: string };
+  user: { id: string };
+  organizationId: string;
+};
+
+async function requireOwnedExecution(request: OwnedExecutionRequest) {
+  const execution = await AgentRunModel.findForActorByTaskId({
+    taskId: request.params.taskId,
+    actorUserId: request.user.id,
+    organizationId: request.organizationId,
+  });
+  if (!execution) throw new ApiError(404, "Execution not found");
+  return execution;
+}
 
 async function requireReadableDeployment(
   request: AgentRequest,
@@ -269,4 +561,10 @@ function requireCredentialDeclaration(
     );
   }
   return declaration;
+}
+
+function isCanonicalBase64(value: string): boolean {
+  if (value.length === 0 || value.length % 4 !== 0) return false;
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(value)) return false;
+  return Buffer.from(value, "base64").toString("base64") === value;
 }

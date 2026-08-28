@@ -594,6 +594,11 @@ export const AUDIT_DECISIONS = {
     reason:
       "records which pod carries an A2A task; the task's own state machine and event log are the record of the work",
   },
+  agentExecutionInputsTable: {
+    audited: false,
+    reason:
+      "task-owned runtime inputs; the execution start event records the file count without logging file names or content",
+  },
   userCredentialsTable: {
     audited: false,
     reason:

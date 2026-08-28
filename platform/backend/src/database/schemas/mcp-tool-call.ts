@@ -61,6 +61,8 @@ const mcpToolCallsTable = pgTable(
     userId: text("user_id").references(() => usersTable.id, {
       onDelete: "set null",
     }),
+    /** Background task or external execution that issued this gateway call. */
+    executionId: varchar("execution_id"),
     authMethod: varchar("auth_method", {
       length: 50,
     }).$type<MCPGatewayAuthMethod>(),

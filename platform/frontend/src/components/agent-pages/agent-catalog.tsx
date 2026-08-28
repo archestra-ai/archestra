@@ -1,9 +1,11 @@
-import { Bot, Shell, Sparkles } from "lucide-react";
+import { Bot } from "lucide-react";
+import Image from "next/image";
 import type { AgentFormInitialValues } from "@/components/agent-form";
 import { CatalogSourceCard } from "@/components/catalog-source-card";
 import { ProviderIcon } from "@/components/provider-icon";
 import { Badge } from "@/components/ui/badge";
 import { useFeature } from "@/lib/config/config.query";
+import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
 
 export interface AgentCatalogTemplate {
   id: "archestra" | "claude-code" | "codex" | "hermes" | "openclaw";
@@ -15,14 +17,17 @@ export interface AgentCatalogTemplate {
 
 export function getAgentCatalogTemplates(
   archestraImage: string,
+  // white-label-ok: test/helper fallback only; shipped UI always passes useAppName().
+  appName = "Archestra",
+  appIconLogo = "/logo-icon.svg",
 ): readonly AgentCatalogTemplate[] {
   return [
     template({
       id: "archestra",
-      name: "Archestra Agent",
-      icon: "🏛️",
-      description:
-        "Archestra's lightweight agent loop with model inference and MCP tools managed by the platform.",
+      name: `${appName} Agent`,
+      icon: appIconLogo,
+      description: `${appName}'s lightweight agent loop with model inference and MCP tools managed by the platform.`,
+      platformName: appName,
       image: image(archestraImage, "archestra"),
       command: null,
       inferenceProtocol: "openai_responses",
@@ -31,20 +36,30 @@ export function getAgentCatalogTemplates(
     template({
       id: "claude-code",
       name: "Claude Code",
-      icon: "🟠",
-      description:
-        "Anthropic's coding agent, preconfigured to use the Archestra LLM proxy and MCP gateway.",
+      icon: "/model-logos/anthropic.svg",
+      description: `Anthropic's coding agent, preconfigured to use the ${appName} LLM proxy and MCP gateway.`,
+      platformName: appName,
       image: image(archestraImage, "claude-code"),
       command: ["archestra-claude-code"],
       inferenceProtocol: "anthropic",
       steerMode: "tmux_keys",
+      additionalCredentials: [
+        {
+          key: "CLAUDE_CODE_OAUTH_TOKEN",
+          scope: "per_user",
+          label: "Claude Code subscription token",
+          description:
+            "Optional. Run `claude setup-token` locally. This token is available only to the official Claude Code background runtime, never foreground chat or other Agents.",
+          required: false,
+        },
+      ],
     }),
     template({
       id: "codex",
       name: "Codex",
-      icon: "🟢",
-      description:
-        "OpenAI's coding agent, preconfigured to use the Archestra LLM proxy and MCP gateway.",
+      icon: "/model-logos/openai.svg",
+      description: `OpenAI's coding agent, preconfigured to use the ${appName} LLM proxy and MCP gateway.`,
+      platformName: appName,
       image: image(archestraImage, "codex"),
       command: ["archestra-codex"],
       inferenceProtocol: "openai_responses",
@@ -53,9 +68,9 @@ export function getAgentCatalogTemplates(
     template({
       id: "hermes",
       name: "Hermes",
-      icon: "⚕️",
-      description:
-        "The Hermes coding agent with its model and remote MCP tools supplied by Archestra.",
+      icon: "/agent-logos/hermes.png",
+      description: `The Hermes coding agent with its model and remote MCP tools supplied by ${appName}.`,
+      platformName: appName,
       image: image(archestraImage, "hermes"),
       command: ["archestra-hermes"],
       inferenceProtocol: "openai_chat",
@@ -64,9 +79,9 @@ export function getAgentCatalogTemplates(
     template({
       id: "openclaw",
       name: "OpenClaw",
-      icon: "🦞",
-      description:
-        "OpenClaw in an isolated task pod, with inference and MCP access kept behind Archestra.",
+      icon: "/agent-logos/openclaw.svg",
+      description: `OpenClaw in an isolated task pod, with inference and MCP access kept behind ${appName}.`,
+      platformName: appName,
       image: image(archestraImage, "openclaw"),
       command: ["archestra-openclaw"],
       inferenceProtocol: "openai_responses",
@@ -83,10 +98,14 @@ export function AgentCatalog({
   onSelect: (template: AgentCatalogTemplate) => void;
 }) {
   const configuredImage = useFeature("agentBackgroundExecutionBaseImage");
+  const appName = useAppName();
+  const appIconLogo = useAppIconLogo();
   const templates = getAgentCatalogTemplates(
     typeof configuredImage === "string"
       ? configuredImage
       : DEFAULT_ARCHESTRA_AGENT_IMAGE,
+    appName,
+    appIconLogo,
   );
   return (
     <div className="mx-auto max-w-4xl space-y-8">
@@ -103,15 +122,12 @@ export function AgentCatalog({
       </div>
 
       <div className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-base font-semibold">Popular agents</h2>
-          <Badge variant="secondary">{templates.length}</Badge>
-        </div>
+        <h2 className="text-base font-semibold">Popular agents</h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {templates.map((item) => (
             <CatalogSourceCard
               key={item.id}
-              icon={<CatalogAgentIcon id={item.id} />}
+              icon={<CatalogAgentIcon id={item.id} appIconLogo={appIconLogo} />}
               title={item.name}
               description={item.description}
               badge={
@@ -128,18 +144,48 @@ export function AgentCatalog({
   );
 }
 
-function CatalogAgentIcon({ id }: { id: AgentCatalogTemplate["id"] }) {
+function CatalogAgentIcon({
+  id,
+  appIconLogo,
+}: {
+  id: AgentCatalogTemplate["id"];
+  appIconLogo: string;
+}) {
   switch (id) {
     case "archestra":
-      return <ProviderIcon provider="archestra" size={22} />;
+      return (
+        <Image
+          src={appIconLogo}
+          alt=""
+          width={22}
+          height={22}
+          className="size-[22px] rounded-sm object-contain"
+        />
+      );
     case "claude-code":
       return <ProviderIcon provider="anthropic" size={22} />;
     case "codex":
       return <ProviderIcon provider="openai" size={22} />;
     case "hermes":
-      return <Sparkles className="size-5" />;
+      return (
+        <Image
+          src="/agent-logos/hermes.png"
+          alt=""
+          width={30}
+          height={30}
+          className="size-[30px] rounded-md object-contain"
+        />
+      );
     case "openclaw":
-      return <Shell className="size-5" />;
+      return (
+        <Image
+          src="/agent-logos/openclaw.svg"
+          alt=""
+          width={22}
+          height={22}
+          className="size-[22px] object-contain"
+        />
+      );
     default:
       return <Bot className="size-5" />;
   }
@@ -150,10 +196,14 @@ function template(params: {
   name: string;
   description: string;
   icon: string;
+  platformName: string;
   image: string;
   command: string[] | null;
   inferenceProtocol: "openai_responses" | "openai_chat" | "anthropic";
   steerMode: "pipe" | "tmux_keys";
+  additionalCredentials?: NonNullable<
+    NonNullable<AgentFormInitialValues["backgroundExecution"]>["credentials"]
+  >;
 }): AgentCatalogTemplate {
   return {
     id: params.id,
@@ -164,7 +214,7 @@ function template(params: {
       name: params.name,
       icon: params.icon,
       description: params.description,
-      systemPrompt: `You are ${params.name}, an autonomous coding agent. Complete delegated tasks carefully, use the tools available through Archestra, verify your work, and report the concrete result.`,
+      systemPrompt: `You are ${params.name}, an autonomous coding agent. Complete delegated tasks carefully, use the tools available through ${params.platformName}, verify your work, and report the concrete result.`,
       accessAllTools: true,
       backgroundExecution: {
         image: params.image,
@@ -182,8 +232,9 @@ function template(params: {
             label: "GitHub token",
             description:
               "A token that can clone repositories, push branches, and open pull requests.",
-            required: true,
+            required: false,
           },
+          ...(params.additionalCredentials ?? []),
         ],
         ttlHours: null,
         maxCostUsd: null,

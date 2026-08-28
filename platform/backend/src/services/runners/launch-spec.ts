@@ -1,9 +1,13 @@
 import {
+  CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY,
+  EXECUTION_ID_HEADER,
   MODEL_ROUTER_SUPPORTED_PROVIDERS,
   providerDisplayNames,
   requiresOpenAiResponsesApi,
   requiresResponsesApi,
+  SESSION_ID_HEADER,
   type SupportedProvider,
+  VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import config from "@/config";
 import {
@@ -11,19 +15,21 @@ import {
   LimitModel,
   LlmProviderApiKeyModel,
   ModelModel,
-  TeamModel,
   UserTokenModel,
   VirtualApiKeyModel,
 } from "@/models";
 import type {
   AgentDeployment,
+  AgentExecutionInput,
   EffectiveNetworkPolicy,
   MissingAgentDeploymentCredential,
 } from "@/types";
 import { AGENT_DEPLOYMENT_CREDENTIALS_REQUIRED_CODE, ApiError } from "@/types";
+import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
 import type { RunnerLaunchSpec } from "./backends";
 import { resolveAgentDeploymentCredentials } from "./credentials";
+import { taskWithAgentExecutionInputs } from "./input-files";
 import {
   constructStableExecutionName,
   RUNNER_STEER_FIFO,
@@ -73,6 +79,7 @@ export async function buildRunnerLaunchSpec(params: {
   effectiveNetworkPolicy: EffectiveNetworkPolicy;
   /** The first instruction, when the task started with one. */
   task?: string | null;
+  inputFiles?: AgentExecutionInput[];
   imagePullSecrets?: string[];
 }): Promise<{ spec: RunnerLaunchSpec; virtualApiKeyId: string }> {
   const platformBaseUrl =
@@ -140,39 +147,44 @@ export async function buildRunnerLaunchSpec(params: {
       : null,
   });
 
-  // The virtual key must carry the provider selected for this Agent. It is an
-  // indirection to the actor's accessible provider credential, not a provider
-  // credential itself. The execution never receives the upstream secret.
-  const userTeamIds = await TeamModel.getUserTeamIds(params.actorUserId);
-  const providerApiKey = await LlmProviderApiKeyModel.getCurrentApiKey({
-    organizationId: params.organizationId,
-    userId: params.actorUserId,
-    userTeamIds,
-    provider: llm.selectedProvider,
-    conversationId: null,
-    agentLlmApiKeyId: agent.llmApiKeyId ?? undefined,
-  });
-  if (!providerApiKey) {
+  const claudeCodeSubscriptionToken =
+    credentials.env.CLAUDE_CODE_OAUTH_TOKEN?.trim();
+  const usesClaudeCodeSubscription = Boolean(claudeCodeSubscriptionToken);
+  if (
+    usesClaudeCodeSubscription &&
+    params.deployment.command?.[0] !== "archestra-claude-code"
+  ) {
     throw new ApiError(
       409,
-      `No ${providerDisplayNames[llm.selectedProvider]} credential is available for this Agent and user, so the background run cannot use its selected model.`,
+      "A Claude Code subscription token can only be injected into the Claude Code catalog runtime.",
     );
   }
 
-  const virtualKey = await VirtualApiKeyModel.create({
-    organizationId: params.organizationId,
-    name: `background-task-${params.taskId.slice(0, 8)}`,
-    // Personal scope is what attributes the session's LLM spend to the human
-    // it acts as rather than to the organization at large.
-    scope: "personal",
-    authorId: params.actorUserId,
-    providerApiKeys: [
-      {
+  // Most runtimes receive a standard virtual key mapped to the provider/model
+  // selected on the Agent. The resolver substitutes the acting user's own
+  // matching subscription (for example ChatGPT/Codex) when the selected key
+  // belongs to somebody else, so connecting once covers chat and execution.
+  //
+  // Claude Code subscriptions are intentionally narrower. The official CLI
+  // keeps its own OAuth token and sends it through the Anthropic proxy; a
+  // passthrough virtual key in a separate header authenticates and attributes
+  // that request without turning the OAuth token into a generic provider key.
+  const virtualKey = usesClaudeCodeSubscription
+    ? await VirtualApiKeyModel.create({
+        organizationId: params.organizationId,
+        name: `background-task-${params.taskId.slice(0, 8)}`,
+        keyType: "passthrough",
+        scope: "personal",
+        authorId: params.actorUserId,
+      })
+    : await createProviderBackedVirtualKey({
+        organizationId: params.organizationId,
+        actorUserId: params.actorUserId,
+        taskId: params.taskId,
         provider: llm.selectedProvider,
-        providerApiKeyId: providerApiKey.id,
-      },
-    ],
-  });
+        model: llm.selectedModel,
+        agentLlmApiKeyId: agent.llmApiKeyId,
+      });
   if (params.deployment.maxCostUsd) {
     try {
       await LimitModel.create({
@@ -233,24 +245,44 @@ export async function buildRunnerLaunchSpec(params: {
     ARCHESTRA_MCP_GATEWAY_URL: `${platformBaseUrl}/v1/mcp/${params.agentId}`,
   };
 
+  const task = taskWithAgentExecutionInputs({
+    task: params.task,
+    inputs: params.inputFiles ?? [],
+  });
   const secretEnv: Record<string, string> = {
     ARCHESTRA_MCP_GATEWAY_TOKEN: gatewayToken,
     ARCHESTRA_VIRTUAL_KEY: virtualKey.value,
-    // Both the Archestra runner-agent and bring-your-own CLIs read the provider
-    // variables, so the virtual key is presented that way too.
-    ANTHROPIC_API_KEY: virtualKey.value,
-    ANTHROPIC_AUTH_TOKEN: virtualKey.value,
-    OPENAI_API_KEY: virtualKey.value,
+    ...(!usesClaudeCodeSubscription
+      ? {
+          // Both the Archestra runner-agent and bring-your-own CLIs read the
+          // provider variables, so the standard virtual key is presented in
+          // each native shape. The upstream provider secret stays server-side.
+          ANTHROPIC_API_KEY: virtualKey.value,
+          ANTHROPIC_AUTH_TOKEN: virtualKey.value,
+          OPENAI_API_KEY: virtualKey.value,
+        }
+      : {}),
     ...(agent.systemPrompt
       ? {
           ARCHESTRA_AGENT_BACKGROUND_EXECUTION_SYSTEM_PROMPT:
             agent.systemPrompt,
         }
       : {}),
-    ...(params.task
-      ? { ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK: params.task }
-      : {}),
+    ...(task ? { ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK: task } : {}),
     ...withNativeClientCredentialAliases(credentials.env),
+    ...(params.deployment.command?.[0] === "archestra-claude-code"
+      ? {
+          // Claude Code accepts only one custom-header variable. Keep run
+          // correlation on both auth paths, and add the passthrough identity
+          // only when the CLI supplies its own subscription credential.
+          [CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY]: claudeCodeCustomHeaders({
+            taskId: params.taskId,
+            passthroughVirtualKey: usesClaudeCodeSubscription
+              ? virtualKey.value
+              : null,
+          }),
+        }
+      : {}),
   };
 
   return {
@@ -275,10 +307,75 @@ export async function buildRunnerLaunchSpec(params: {
           config.agentBackgroundExecution.defaultTtlHours) *
         60 *
         60,
+      ephemeralStorageLimit:
+        config.agentBackgroundExecution.ephemeralStorageLimit,
       imagePullSecrets: params.imagePullSecrets ?? [],
       effectiveNetworkPolicy: params.effectiveNetworkPolicy,
+      inputFileCount: params.inputFiles?.length ?? 0,
     },
   };
+}
+
+function claudeCodeCustomHeaders(params: {
+  taskId: string;
+  passthroughVirtualKey: string | null;
+}): string {
+  return [
+    `${EXECUTION_ID_HEADER}: ${params.taskId}`,
+    `${SESSION_ID_HEADER}: ${params.taskId}`,
+    ...(params.passthroughVirtualKey
+      ? [`${VIRTUAL_KEY_HEADER}: ${params.passthroughVirtualKey}`]
+      : []),
+  ].join("\n");
+}
+
+async function createProviderBackedVirtualKey(params: {
+  organizationId: string;
+  actorUserId: string;
+  taskId: string;
+  provider: SupportedProvider;
+  model: string;
+  agentLlmApiKeyId: string | null;
+}): Promise<Awaited<ReturnType<typeof VirtualApiKeyModel.create>>> {
+  const resolvedProviderCredential = await resolveProviderApiKey({
+    organizationId: params.organizationId,
+    userId: params.actorUserId,
+    provider: params.provider,
+    agentLlmApiKeyId: params.agentLlmApiKeyId ?? undefined,
+    modelName: params.model,
+  });
+  if (resolvedProviderCredential.authRequired) {
+    throw new ApiError(
+      409,
+      `Connect your own ${resolvedProviderCredential.authRequired.providerLabel} before starting this Agent's background execution. Subscription credentials are never shared between users.`,
+    );
+  }
+  const providerApiKey = resolvedProviderCredential.chatApiKeyId
+    ? await LlmProviderApiKeyModel.findById(
+        resolvedProviderCredential.chatApiKeyId,
+      )
+    : null;
+  if (!providerApiKey) {
+    throw new ApiError(
+      409,
+      `No ${providerDisplayNames[params.provider]} credential is available for this Agent and user, so the background run cannot use its selected model.`,
+    );
+  }
+
+  return VirtualApiKeyModel.create({
+    organizationId: params.organizationId,
+    name: `background-task-${params.taskId.slice(0, 8)}`,
+    // Personal scope is what attributes the session's LLM spend to the human
+    // it acts as rather than to the organization at large.
+    scope: "personal",
+    authorId: params.actorUserId,
+    providerApiKeys: [
+      {
+        provider: params.provider,
+        providerApiKeyId: providerApiKey.id,
+      },
+    ],
+  });
 }
 
 function withNativeClientCredentialAliases(

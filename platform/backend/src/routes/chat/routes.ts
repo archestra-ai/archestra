@@ -15,11 +15,8 @@ import {
   RouteId,
   requiresOpenAiResponsesApi,
   requiresPerplexityAgentApi,
-  type SupportedProvider,
   TimeInMs,
-  type TitleRejectionReason,
   type TokenUsage,
-  toConversationTitle,
   toPlaceholderTitle,
   truncateChars,
 } from "@archestra/shared";
@@ -27,7 +24,6 @@ import {
   createUIMessageStream,
   createUIMessageStreamResponse,
   generateId,
-  generateText,
   type ModelMessage,
   stepCountIs,
   type streamText,
@@ -64,11 +60,7 @@ import {
   applyDualLlmAnalysesToMessages,
   createDualLlmAnalysisStreamBridge,
 } from "@/clients/dual-llm-analysis-stream";
-import {
-  createLLMModel,
-  createLLMModelForAgent,
-  isApiKeyRequired,
-} from "@/clients/llm-client";
+import { createLLMModelForAgent, isApiKeyRequired } from "@/clients/llm-client";
 import {
   applySubagentToolCallsToMessages,
   createSubagentToolStreamBridge,
@@ -132,6 +124,7 @@ import {
 } from "@/services/apps/opened-app-context";
 import { conversationFilesService } from "@/services/conversation-files";
 import { projectService } from "@/services/project";
+import { generateConversationTitle } from "@/services/title-generation";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { fileStore } from "@/skills-sandbox/file-store";
 import { resolveProjectFileScope } from "@/skills-sandbox/project-file-scope";
@@ -3718,7 +3711,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ...titleLlm,
         agentId: titleAgent?.id ?? id,
         userId: user.id,
-        conversationId: id,
+        sessionId: id,
         systemPrompt,
         firstUserMessage: titleUserInput,
         firstAssistantMessage,
@@ -4216,163 +4209,6 @@ export function buildChatStopConditions(repeatTracker: ToolCallRepeatTracker) {
     stepCountIs(MAX_AGENT_STEPS),
     repeatCeilingStopCondition(repeatTracker),
   ];
-}
-
-/**
- * Builds the prompt for title generation based on extracted messages.
- */
-export function buildTitlePrompt(
-  firstUserMessage: string,
-  firstAssistantMessage: string,
-): string {
-  // By code point, so the cut cannot split a surrogate pair and send an
-  // unpaired surrogate to the provider.
-  const user = truncateChars(firstUserMessage, TITLE_PROMPT_EXCERPT_MAX_CHARS);
-  const assistant = truncateChars(
-    firstAssistantMessage,
-    TITLE_PROMPT_EXCERPT_MAX_CHARS,
-  );
-
-  const contextMessages = assistant
-    ? `User: ${user}\n\nAssistant: ${assistant}`
-    : `User: ${user}`;
-
-  return `Chat conversation messages:
-
-${contextMessages}`;
-}
-
-/**
- * Parameters for generating a conversation title
- */
-export interface GenerateTitleParams {
-  provider: SupportedProvider;
-  apiKey: string | undefined;
-  modelName: string;
-  baseUrl: string | null;
-  /** Key row that supplied `apiKey` — forwarded so per-key proxy state (codex refresh-token rotation) binds to the right row. */
-  chatApiKeyId?: string;
-  agentId: string;
-  userId: string;
-  conversationId: string;
-  systemPrompt: string;
-  firstUserMessage: string;
-  firstAssistantMessage: string;
-}
-
-/**
- * Reasoning models spend this budget on hidden thinking before writing anything
- * visible, so a tight cap is exhausted mid-thought and the call returns empty
- * text. Generous on purpose — it is a ceiling, not a reservation.
- */
-const TITLE_MAX_OUTPUT_TOKENS = 4096;
-
-/**
- * Enough of a message to name its topic. The opening turn can be a pasted log
- * or a long answer, and forwarding it whole makes the call slow and expensive
- * while giving the model more to answer rather than title.
- */
-const TITLE_PROMPT_EXCERPT_MAX_CHARS = 1000;
-
-/**
- * What each rejected title generation response means, said in full so an
- * operator reading the log does not have to know how title generation is
- * prompted to understand why a conversation kept its opening words.
- */
-const TITLE_REJECTION_MESSAGES: Record<TitleRejectionReason, string> = {
-  empty_response:
-    "Title generation: the model wrote no visible text. A reasoning model can spend the entire output ceiling on hidden thinking and finish before writing a title. Falling back to the conversation's opening words.",
-  not_a_title:
-    "Title generation: the model answered the conversation instead of naming it — the response is far longer than a title can be. Discarding it and falling back to the conversation's opening words.",
-};
-
-/**
- * Generates a conversation title using the specified provider.
- *
- * Returns null when no title came back — the provider call failed, or it
- * answered with something {@link toConversationTitle} won't accept as a title.
- * Each case is logged with its cause here; the caller only needs to know it has
- * to fall back.
- */
-export async function generateConversationTitle(
-  params: GenerateTitleParams,
-): Promise<string | null> {
-  const {
-    provider,
-    apiKey,
-    modelName,
-    baseUrl,
-    agentId,
-    userId,
-    conversationId,
-    systemPrompt,
-    firstUserMessage,
-    firstAssistantMessage,
-  } = params;
-
-  const titlePrompt = buildTitlePrompt(firstUserMessage, firstAssistantMessage);
-
-  logger.debug(
-    { provider, modelName, hasApiKey: !!apiKey, baseUrl },
-    "Title generation: creating logged LLM model",
-  );
-
-  const model = createLLMModel({
-    provider,
-    apiKey,
-    agentId,
-    modelName,
-    userId,
-    sessionId: conversationId,
-    source: "chat:title_generation",
-    baseUrl,
-    chatApiKeyId: params.chatApiKeyId,
-  });
-
-  try {
-    logger.debug(
-      { provider, modelName },
-      "Title generation: calling generateText",
-    );
-    const result = await generateText({
-      model,
-      system: systemPrompt,
-      prompt: titlePrompt,
-      maxOutputTokens: TITLE_MAX_OUTPUT_TOKENS,
-    });
-
-    const outcome = toConversationTitle(result.text);
-
-    if (outcome.title === null) {
-      // Warn, not error: the provider answered, we just can't use what it said.
-      // `finishReason: "length"` alongside an empty response is the reasoning
-      // model case — it ran out of ceiling before writing anything visible.
-      logger.warn(
-        {
-          provider,
-          modelName,
-          conversationId,
-          rejectionReason: outcome.reason,
-          finishReason: result.finishReason,
-          responseChars: result.text.length,
-        },
-        TITLE_REJECTION_MESSAGES[outcome.reason],
-      );
-      return null;
-    }
-
-    logger.debug(
-      { provider, modelName, conversationId, generatedTitle: outcome.title },
-      "Title generation: the model returned a usable title",
-    );
-    return outcome.title;
-  } catch (error) {
-    logger.error(
-      { error, provider, modelName, baseUrl, conversationId },
-      "Title generation: the provider call failed. Falling back to the conversation's opening words.",
-    );
-    return null;
-  }
 }
 
 // ============================================================================

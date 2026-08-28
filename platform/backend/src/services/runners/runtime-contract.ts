@@ -1,6 +1,10 @@
 /** Filesystem contract shared by maintained execution images and backends. */
 export const RUNNER_RUNTIME_DIR = "/var/run/archestra";
 export const RUNNER_STEER_FIFO = `${RUNNER_RUNTIME_DIR}/steer`;
+/** Stable input location shared by every execution backend and Agent image. */
+export const RUNNER_ATTACHMENTS_DIR = `${RUNNER_RUNTIME_DIR}/attachments`;
+export const RUNNER_ATTACHMENTS_MANIFEST = `${RUNNER_RUNTIME_DIR}/attachments.json`;
+export const RUNNER_INPUTS_READY_FILE = `${RUNNER_RUNTIME_DIR}/inputs-ready`;
 
 /**
  * Stable, portable execution name: `runner-<slug40>-<id8>`.

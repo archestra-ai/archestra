@@ -14,6 +14,8 @@ import {
   Pin,
   PinOff,
   Sparkles,
+  Square,
+  TerminalSquare,
   Trash2,
   UsersRound,
 } from "lucide-react";
@@ -56,6 +58,12 @@ import {
 } from "@/components/ui/tooltip";
 import { TypingText } from "@/components/ui/typing-text";
 import {
+  useCancelAgentExecution,
+  useDeleteAgentExecution,
+  useMyAgentExecutions,
+  useUpdateAgentExecution,
+} from "@/lib/agent-background-execution.query";
+import {
   useApps,
   useOpenAppInChat,
   useOpenExternalAppInChat,
@@ -78,6 +86,7 @@ import { useGlobalChat } from "@/lib/chat/global-chat.context";
 import { groupConversationsByDay } from "@/lib/chat/group-conversations-by-date";
 import { isActionAvailableForConversation } from "@/lib/chat/locked-chat";
 import { buildPinnedSidebarItems } from "@/lib/chat/pinned-sidebar-items";
+import { useFeature } from "@/lib/config/config.query";
 import type { Once } from "@/lib/hooks/use-once";
 import { canCreateProjectFromChat } from "@/lib/projects/can-create-project-from-chat";
 import { usePinProject, useProjects } from "@/lib/projects/projects.query";
@@ -133,6 +142,17 @@ export function ChatSidebarSection({
   const { data: conversations = [], isLoading } = useConversations({
     enabled: isAuthenticated && canReadConversation === true,
   });
+  const backgroundExecutionEnabled =
+    useFeature("agentBackgroundExecution") === true;
+  const { data: executionSessions = [], isLoading: executionsLoading } =
+    useMyAgentExecutions(
+      isAuthenticated &&
+        canReadConversation === true &&
+        backgroundExecutionEnabled,
+    );
+  const updateExecutionMutation = useUpdateAgentExecution();
+  const cancelExecutionMutation = useCancelAgentExecution();
+  const deleteExecutionMutation = useDeleteAgentExecution();
   const updateConversationMutation = useUpdateConversation();
   const deleteConversationMutation = useDeleteConversation();
   const generateTitleMutation = useGenerateConversationTitle();
@@ -142,6 +162,14 @@ export function ChatSidebarSection({
   const [editingTitle, setEditingTitle] = useState("");
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [editingExecutionId, setEditingExecutionId] = useState<string | null>(
+    null,
+  );
+  const [editingExecutionTitle, setEditingExecutionTitle] = useState("");
+  const [stopExecutionId, setStopExecutionId] = useState<string | null>(null);
+  const [deleteExecutionId, setDeleteExecutionId] = useState<string | null>(
+    null,
+  );
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { data: canUpdateConversation } = useHasPermissions({
@@ -167,7 +195,11 @@ export function ChatSidebarSection({
 
   const { isMobile, setOpenMobile } = useSidebar();
 
-  const currentConversationId = pathname.startsWith("/chat/")
+  const currentConversationId =
+    pathname.startsWith("/chat/") && !pathname.startsWith("/chat/executions/")
+      ? (pathname.split("/").at(-1) ?? null)
+      : null;
+  const currentExecutionTaskId = pathname.startsWith("/chat/executions/")
     ? (pathname.split("/").at(-1) ?? null)
     : null;
 
@@ -196,11 +228,11 @@ export function ChatSidebarSection({
   });
 
   useEffect(() => {
-    if (editingId && inputRef.current) {
+    if ((editingId || editingExecutionId) && inputRef.current) {
       inputRef.current.focus();
       inputRef.current.select();
     }
-  }, [editingId]);
+  }, [editingId, editingExecutionId]);
 
   const handleSelectConversation = (id: string) => {
     if (isMobile) {
@@ -237,6 +269,22 @@ export function ChatSidebarSection({
   const handleCancelEdit = () => {
     setEditingId(null);
     setEditingTitle("");
+  };
+
+  const handleSaveExecutionTitle = async (taskId: string) => {
+    const title = editingExecutionTitle.trim();
+    if (!title) {
+      setEditingExecutionId(null);
+      setEditingExecutionTitle("");
+      return;
+    }
+    try {
+      await updateExecutionMutation.mutateAsync({ taskId, title });
+      setEditingExecutionId(null);
+      setEditingExecutionTitle("");
+    } catch {
+      // Error is handled by the mutation's onError callback.
+    }
   };
 
   const handleDeleteConversation = async (id: string) => {
@@ -633,6 +681,121 @@ export function ChatSidebarSection({
     );
   };
 
+  const renderExecutionItem = (
+    execution: (typeof executionSessions)[number],
+  ) => {
+    const active = currentExecutionTaskId === execution.taskId;
+    const terminalState = executionStateIcon(execution.state);
+    const menuKey = `execution:${execution.taskId}`;
+    const isMenuOpen = openMenuId === menuKey;
+    const isEditing = editingExecutionId === execution.taskId;
+    const live = execution.endedAt === null;
+    return (
+      <SidebarMenuSubItem key={menuKey}>
+        <div className="flex w-full items-center justify-between gap-1">
+          {isEditing ? (
+            <Input
+              ref={inputRef}
+              aria-label="Execution title"
+              value={editingExecutionTitle}
+              onChange={(event) => setEditingExecutionTitle(event.target.value)}
+              onBlur={() => handleSaveExecutionTitle(execution.taskId)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  handleSaveExecutionTitle(execution.taskId);
+                } else if (event.key === "Escape") {
+                  setEditingExecutionId(null);
+                  setEditingExecutionTitle("");
+                }
+              }}
+              className="h-7 flex-1 text-sm"
+            />
+          ) : (
+            <SidebarMenuButton
+              onClick={() => {
+                if (isMobile) setOpenMobile(false);
+                router.push(`/chat/executions/${execution.taskId}`);
+              }}
+              isActive={active}
+              className="cursor-pointer flex-1"
+            >
+              <span className="flex min-w-0 flex-1 items-center gap-2">
+                {terminalState.spinning ? (
+                  <Loader2
+                    aria-label={terminalState.label}
+                    className={cn(
+                      "size-3.5 shrink-0 animate-spin",
+                      terminalState.className,
+                    )}
+                  />
+                ) : (
+                  <TerminalSquare
+                    aria-label={terminalState.label}
+                    className={cn("size-3.5 shrink-0", terminalState.className)}
+                  />
+                )}
+                <TruncatedText
+                  message={execution.title}
+                  maxLength={MAX_TITLE_LENGTH}
+                  className="truncate"
+                  showTooltip={false}
+                />
+              </span>
+            </SidebarMenuButton>
+          )}
+          {!isEditing && (
+            <DropdownMenu
+              open={isMenuOpen}
+              onOpenChange={(open) => setOpenMenuId(open ? menuKey : null)}
+            >
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Execution actions"
+                  className={cn(
+                    "shrink-0 transition-opacity",
+                    isMenuOpen
+                      ? "opacity-100"
+                      : "opacity-0 group-hover/menu-sub-item:opacity-100 focus-visible:opacity-100",
+                  )}
+                >
+                  <MoreHorizontal className="size-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" side="right">
+                <DropdownMenuItem
+                  onClick={() => {
+                    setEditingExecutionId(execution.taskId);
+                    setEditingExecutionTitle(execution.title);
+                  }}
+                >
+                  <Pencil className="mr-2 size-4" />
+                  Rename
+                </DropdownMenuItem>
+                {live ? (
+                  <DropdownMenuItem
+                    onClick={() => setStopExecutionId(execution.taskId)}
+                  >
+                    <Square className="mr-2 size-4" />
+                    Stop
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onClick={() => setDeleteExecutionId(execution.taskId)}
+                  >
+                    <Trash2 className="mr-2 size-4" />
+                    Delete
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
+      </SidebarMenuSubItem>
+    );
+  };
+
   const renderProjectItem = (project: (typeof pinnedProjects)[number]) => {
     const isActive = pathname === `/projects/${project.id}`;
     const menuKey = `project:${project.id}`;
@@ -774,7 +937,9 @@ export function ChatSidebarSection({
 
   if (
     !isLoading &&
+    !executionsLoading &&
     conversations.length === 0 &&
+    executionSessions.length === 0 &&
     pinnedProjects.length === 0 &&
     pinnedApps.length === 0
   ) {
@@ -782,18 +947,37 @@ export function ChatSidebarSection({
   }
 
   const subClass = flat ? "mx-0 border-l-0 px-0" : "mx-0 ml-3.5 px-0 pl-2.5";
+  const recentItems = [
+    ...recentUnpinnedChats.map((item) => ({
+      kind: "conversation" as const,
+      item,
+      timestamp: item.lastMessageAt,
+    })),
+    ...executionSessions.map((item) => ({
+      kind: "execution" as const,
+      item,
+      timestamp: item.stateChangedAt ?? item.startedAt,
+    })),
+  ].sort(
+    (left, right) =>
+      new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime(),
+  );
+  // Executions are operational sessions, so do not hide them behind the
+  // conversation-only search palette. Keep the usual number of chat rows and
+  // add every execution row, still sorted as one timeline.
+  const visibleSlots = slots + executionSessions.length;
   const showMore = recentUnpinnedChats.length > slots;
 
   // The list arrives sorted by lastMessageAt desc, so grouping the visible
   // slice by the same timestamp yields contiguous date sections.
   const recentChatGroups = groupConversationsByDay(
-    recentUnpinnedChats.slice(0, slots),
-    (c) => c.lastMessageAt,
+    recentItems.slice(0, visibleSlots),
+    (entry) => entry.timestamp,
   );
 
   return (
     <>
-      {isLoading ? (
+      {isLoading || executionsLoading ? (
         <ChatListSkeleton subClass={subClass} />
       ) : (
         <ChatListFadeIn fadeIn={fadeIn}>
@@ -829,7 +1013,11 @@ export function ChatSidebarSection({
                 <SidebarMenu>
                   <SidebarMenuItem>
                     <SidebarMenuSub className={subClass}>
-                      {group.chats.map((conv) => renderConversationItem(conv))}
+                      {group.chats.map((entry) =>
+                        entry.kind === "conversation"
+                          ? renderConversationItem(entry.item)
+                          : renderExecutionItem(entry.item),
+                      )}
                       {showMore &&
                         groupIndex === recentChatGroups.length - 1 && (
                           <SidebarMenuSubItem>
@@ -867,6 +1055,39 @@ export function ChatSidebarSection({
         pendingLabel="Deleting..."
       />
 
+      <DeleteConfirmDialog
+        open={stopExecutionId !== null}
+        onOpenChange={(open) => !open && setStopExecutionId(null)}
+        title="Stop this execution?"
+        description="The Agent process will stop and its terminal output will be retained."
+        isPending={cancelExecutionMutation.isPending}
+        confirmLabel="Stop execution"
+        pendingLabel="Stopping…"
+        onConfirm={async () => {
+          if (!stopExecutionId) return;
+          await cancelExecutionMutation.mutateAsync(stopExecutionId);
+          setStopExecutionId(null);
+        }}
+      />
+
+      <DeleteConfirmDialog
+        open={deleteExecutionId !== null}
+        onOpenChange={(open) => !open && setDeleteExecutionId(null)}
+        title="Delete execution?"
+        description="This removes the session and its retained output. This action cannot be undone."
+        isPending={deleteExecutionMutation.isPending}
+        confirmLabel="Delete"
+        pendingLabel="Deleting…"
+        onConfirm={async () => {
+          if (!deleteExecutionId) return;
+          if (currentExecutionTaskId === deleteExecutionId) {
+            router.push("/chat");
+          }
+          await deleteExecutionMutation.mutateAsync(deleteExecutionId);
+          setDeleteExecutionId(null);
+        }}
+      />
+
       <CreateProjectFromChatDialog
         conversationId={createProjectConv?.id ?? null}
         defaultName={createProjectConv?.title ?? ""}
@@ -875,4 +1096,39 @@ export function ChatSidebarSection({
       />
     </>
   );
+}
+
+function executionStateIcon(state: string): {
+  label: string;
+  className: string;
+  spinning: boolean;
+} {
+  switch (state) {
+    case "TASK_STATE_SUBMITTED":
+      return {
+        label: "Execution starting",
+        className: "text-amber-500",
+        spinning: true,
+      };
+    case "TASK_STATE_WORKING":
+    case "TASK_STATE_INPUT_REQUIRED":
+      return {
+        label: "Execution running",
+        className: "text-emerald-500",
+        spinning: false,
+      };
+    case "TASK_STATE_FAILED":
+    case "TASK_STATE_REJECTED":
+      return {
+        label: "Execution failed",
+        className: "text-destructive",
+        spinning: false,
+      };
+    default:
+      return {
+        label: "Execution finished",
+        className: "text-muted-foreground",
+        spinning: false,
+      };
+  }
 }

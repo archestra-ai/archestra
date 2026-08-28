@@ -11,7 +11,16 @@ mcp_config="${runtime_dir}/claude-mcp.json"
 jq -n \
   --arg url "${ARCHESTRA_MCP_GATEWAY_URL:?}" \
   --arg token "${ARCHESTRA_MCP_GATEWAY_TOKEN:?}" \
-  '{mcpServers:{archestra:{type:"http",url:$url,headers:{Authorization:("Bearer " + $token)}}}}' \
+  --arg task_id "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID:?}" \
+  '{mcpServers:{archestra:{
+    type:"http",
+    url:$url,
+    headers:{
+      Authorization:("Bearer " + $token),
+      "X-Archestra-Execution-Id":$task_id,
+      "X-Archestra-Session-Id":$task_id
+    }
+  }}}' \
   > "${mcp_config}"
 chmod 0600 "${mcp_config}"
 

@@ -9,6 +9,7 @@ import { z } from "zod";
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import { DelegationLoopError } from "@/agents/errors";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import { startDelegatedTask } from "@/archestra-mcp-server/tasks";
 import { userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
 import {
@@ -18,6 +19,7 @@ import {
   ToolModel,
 } from "@/models";
 import { ProviderError, SubagentProviderError } from "@/routes/chat/errors";
+import { resolveAgentDeployment } from "@/services/runners/pod-execution";
 import type { Agent } from "@/types";
 import { errorResult, isAbortLikeError, successResult } from "./helpers";
 import type { ArchestraContext } from "./types";
@@ -179,6 +181,30 @@ export async function handleDelegation(
 
   if ("error" in target) {
     return target.error;
+  }
+
+  // Background execution is a capability of the target Agent, not a separate
+  // invocation syntax. The ordinary agent__* delegation tool therefore turns
+  // into a detached durable task whenever that target has a deployment. A
+  // direct conversation with the same Agent never enters this path and stays
+  // in the foreground loop.
+  const targetAgent = await AgentModel.findById(target.id);
+  if (targetAgent && resolveAgentDeployment(targetAgent)) {
+    logger.info(
+      {
+        agentId,
+        targetAgentId: target.id,
+        targetAgentName: target.name,
+        organizationId,
+        userId: userId || "system",
+      },
+      "Starting background task from agent delegation",
+    );
+    return startDelegatedTask({
+      agentId: target.id,
+      message,
+      context,
+    });
   }
 
   // The caller's ancestor path, which the executor checks for cycles. A root

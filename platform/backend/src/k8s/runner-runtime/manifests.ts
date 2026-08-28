@@ -5,6 +5,9 @@ import {
 } from "@/k8s/mcp-server-runtime/network-policy";
 import type { RunnerLaunchSpec } from "@/services/runners/backends";
 import {
+  RUNNER_ATTACHMENTS_DIR,
+  RUNNER_ATTACHMENTS_MANIFEST,
+  RUNNER_INPUTS_READY_FILE,
   RUNNER_RUNTIME_DIR,
   RUNNER_STEER_FIFO,
 } from "@/services/runners/runtime-contract";
@@ -64,6 +67,15 @@ function buildRunnerBootstrapScript(): string {
   return [
     "set -eu",
     `mkdir -p ${RUNNER_RUNTIME_DIR}`,
+    `mkdir -p ${RUNNER_ATTACHMENTS_DIR}`,
+    'if [ "$ARCHESTRA_AGENT_BACKGROUND_EXECUTION_INPUT_FILE_COUNT" -gt 0 ]; then',
+    `  echo "[archestra] staging $ARCHESTRA_AGENT_BACKGROUND_EXECUTION_INPUT_FILE_COUNT input file(s)"`,
+    `  attempts=0; while [ ! -f ${RUNNER_INPUTS_READY_FILE} ]; do`,
+    "    attempts=$((attempts + 1))",
+    '    if [ "$attempts" -gt 300 ]; then echo "archestra: timed out while staging execution inputs" >&2; exit 74; fi',
+    "    sleep 1",
+    "  done",
+    "fi",
     `[ -p "${RUNNER_STEER_FIFO}" ] || mkfifo -m 600 "${RUNNER_STEER_FIFO}"`,
     "if ! command -v tmux >/dev/null 2>&1; then",
     '  echo "archestra: this image has no tmux, which runners require for attach and steering" >&2',
@@ -126,7 +138,12 @@ export function buildRunnerJob(spec: KubernetesRunnerLaunchSpec): k8s.V1Job {
           // The agent authenticates to the platform with credentials mounted
           // from a Secret; it has no business reading the cluster's API.
           automountServiceAccountToken: false,
-          volumes: [{ name: "archestra-run", emptyDir: {} }],
+          volumes: [
+            {
+              name: "archestra-run",
+              emptyDir: { sizeLimit: spec.ephemeralStorageLimit },
+            },
+          ],
           containers: [
             {
               name: RUNNER_CONTAINER_NAME,
@@ -141,6 +158,18 @@ export function buildRunnerJob(spec: KubernetesRunnerLaunchSpec): k8s.V1Job {
                   name: "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ENTRYPOINT",
                   value: resolveEntrypoint(spec.command),
                 },
+                {
+                  name: "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_INPUT_FILE_COUNT",
+                  value: String(spec.inputFileCount),
+                },
+                {
+                  name: "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ATTACHMENTS_DIR",
+                  value: RUNNER_ATTACHMENTS_DIR,
+                },
+                {
+                  name: "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ATTACHMENTS_MANIFEST",
+                  value: RUNNER_ATTACHMENTS_MANIFEST,
+                },
               ],
               ...(Object.keys(spec.secretEnv).length > 0
                 ? {
@@ -153,7 +182,7 @@ export function buildRunnerJob(spec: KubernetesRunnerLaunchSpec): k8s.V1Job {
               ],
               ...(spec.privileged
                 ? { securityContext: { privileged: true } }
-                : {}),
+                : { securityContext: { allowPrivilegeEscalation: false } }),
             },
           ],
         },

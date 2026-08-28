@@ -54,6 +54,7 @@ export { default as agentExcludedConnectorsTable } from "./agent-excluded-connec
 export { default as agentExcludedSkillsTable } from "./agent-excluded-skill";
 export { default as agentExcludedSubagentsTable } from "./agent-excluded-subagent";
 export { default as agentExcludedToolsTable } from "./agent-excluded-tool";
+export { default as agentExecutionInputsTable } from "./agent-execution-input";
 export { default as agentKnowledgeBasesTable } from "./agent-knowledge-base";
 export { default as agentLabelsTable } from "./agent-label";
 export { default as agentRunsTable } from "./agent-run";

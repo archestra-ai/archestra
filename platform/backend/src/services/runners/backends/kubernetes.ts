@@ -2,7 +2,11 @@ import type { Readable, Writable } from "node:stream";
 import type WebSocket from "ws";
 import config from "@/config";
 import { runnerRuntimeManager } from "@/k8s/runner-runtime";
-import type { AgentDeploymentSteerMode, AgentRun } from "@/types";
+import type {
+  AgentDeploymentSteerMode,
+  AgentExecutionInput,
+  AgentRun,
+} from "@/types";
 import { ApiError } from "@/types";
 import type {
   RunnerAttachment,
@@ -39,6 +43,13 @@ class KubernetesRunnerBackend implements RunnerBackend {
 
   async launch(spec: RunnerLaunchSpec): Promise<void> {
     await runnerRuntimeManager.launch(spec);
+  }
+
+  async stageInputs(params: {
+    session: AgentRun;
+    inputs: AgentExecutionInput[];
+  }): Promise<void> {
+    await runnerRuntimeManager.stageInputs(params);
   }
 
   async waitUntilRunning(params: {

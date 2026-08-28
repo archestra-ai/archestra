@@ -7,6 +7,8 @@
 export type BackgroundExecutionAgentConfig = {
   agentId: string;
   agentName: string;
+  /** Durable task id used to correlate proxy interactions for this run. */
+  taskId: string;
   /** Archestra LLM proxy base, already scoped to the agent. */
   proxyBaseUrl: string;
   /** Virtual key authenticating this session to the proxy. */
@@ -40,6 +42,7 @@ export function readConfig(
     agentId: requireBackgroundExecutionValue(env, "AGENT_ID"),
     agentName:
       readBackgroundExecutionValue(env, "AGENT_NAME")?.trim() || "agent",
+    taskId: requireBackgroundExecutionValue(env, "TASK_ID"),
     proxyBaseUrl: stripTrailingSlash(
       requireValue(env, "ARCHESTRA_LLM_PROXY_URL"),
     ),

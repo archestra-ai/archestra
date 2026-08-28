@@ -1,26 +1,11 @@
 "use client";
 
-import type {
-  AgentRunAttachClosedMessage,
-  AgentRunAttachErrorMessage,
-  AgentRunAttachOutputMessage,
-  AgentRunAttachStartedMessage,
-  AgentRunLogsEndedMessage,
-  AgentRunLogsErrorMessage,
-  AgentRunLogsMessage,
-} from "@archestra/shared";
 import { formatDistanceToNow } from "date-fns";
 import { TerminalSquare } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import {
-  DeploymentConsoleTabs,
-  DeploymentLogPanel,
-  useDeploymentLogAutoScroll,
-} from "@/components/deployment-console";
-import {
-  type ExecSessionTransport,
-  ExecTerminal,
-} from "@/components/exec/exec-terminal";
+import { useState } from "react";
+import { AgentExecutionLogs } from "@/components/agent-execution-logs";
+import { AgentExecutionTerminal } from "@/components/agent-execution-terminal";
+import { DeploymentConsoleTabs } from "@/components/deployment-console";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -40,7 +25,6 @@ import {
 } from "@/lib/agent-background-execution.query";
 import { useSession } from "@/lib/auth/auth.query";
 import { cn } from "@/lib/utils";
-import websocketService from "@/lib/websocket/websocket";
 
 export function AgentExecutions({ agentId }: { agentId: string }) {
   const { data: session } = useSession();
@@ -192,13 +176,13 @@ function ExecutionDetails({
             value="logs"
             className="flex min-h-0 flex-1 flex-col pt-4"
           >
-            <ExecutionLogs execution={execution} />
+            <AgentExecutionLogs execution={execution} />
           </TabsContent>
           <TabsContent
             value="shell"
             className="flex min-h-0 flex-1 flex-col pt-4"
           >
-            <ExecutionTerminal
+            <AgentExecutionTerminal
               taskId={execution.taskId}
               active={tab === "shell" && active && canAttach}
             />
@@ -206,175 +190,6 @@ function ExecutionDetails({
         </DeploymentConsoleTabs>
       </div>
     </Card>
-  );
-}
-
-function ExecutionLogs({ execution }: { execution: AgentExecution }) {
-  const [content, setContent] = useState("");
-  const [error, setError] = useState<string>();
-  const [isStreaming, setIsStreaming] = useState(!execution.endedAt);
-  const {
-    scrollAreaRef,
-    showScrollToBottom,
-    scrollToBottom,
-    followNewOutput,
-    reset: resetAutoScroll,
-  } = useDeploymentLogAutoScroll();
-
-  useEffect(() => {
-    setContent("");
-    setError(undefined);
-    setIsStreaming(!execution.endedAt);
-    resetAutoScroll();
-    websocketService.connect();
-    const subscriptions = [
-      websocketService.subscribe(
-        "agent_run_logs",
-        (message: AgentRunLogsMessage) => {
-          if (message.payload.runId === execution.taskId) {
-            setContent((value) => value + message.payload.logs);
-            followNewOutput();
-          }
-        },
-      ),
-      websocketService.subscribe(
-        "agent_run_logs_error",
-        (message: AgentRunLogsErrorMessage) => {
-          if (message.payload.runId === execution.taskId) {
-            setError(message.payload.error);
-            setIsStreaming(false);
-          }
-        },
-      ),
-      websocketService.subscribe(
-        "agent_run_logs_ended",
-        (message: AgentRunLogsEndedMessage) => {
-          if (message.payload.runId === execution.taskId) {
-            setIsStreaming(false);
-          }
-        },
-      ),
-    ];
-    websocketService.send({
-      type: "subscribe_agent_run_logs",
-      payload: { runId: execution.taskId },
-    });
-    return () => {
-      for (const unsubscribe of subscriptions) unsubscribe();
-      websocketService.send({
-        type: "unsubscribe_agent_run_logs",
-        payload: { runId: execution.taskId },
-      });
-    };
-  }, [execution.endedAt, execution.taskId, followNewOutput, resetAutoScroll]);
-
-  return (
-    <DeploymentLogPanel
-      title="Container Logs"
-      detail={execution.deploymentName}
-      content={content}
-      error={error}
-      scrollAreaRef={scrollAreaRef}
-      showScrollToBottom={showScrollToBottom}
-      onScrollToBottom={scrollToBottom}
-      emptyMessage={
-        execution.endedAt
-          ? "No container output was recorded for this execution."
-          : "Waiting for container output…"
-      }
-      status={
-        isStreaming ? (
-          <div className="flex items-center gap-1.5 font-mono text-xs text-red-400">
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
-            </span>
-            Streaming
-          </div>
-        ) : content ? (
-          <div className="flex items-center gap-1.5 font-mono text-xs text-slate-500">
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-slate-600" />
-            Retained
-          </div>
-        ) : null
-      }
-    />
-  );
-}
-
-function ExecutionTerminal({
-  taskId,
-  active,
-}: {
-  taskId: string;
-  active: boolean;
-}) {
-  const transport = useMemo<ExecSessionTransport>(
-    () => ({
-      open: (handlers) => {
-        websocketService.connect();
-        const subscriptions = [
-          websocketService.subscribe(
-            "agent_run_attach_started",
-            (message: AgentRunAttachStartedMessage) => {
-              if (message.payload.runId === taskId) {
-                handlers.onStarted(message.payload.command);
-              }
-            },
-          ),
-          websocketService.subscribe(
-            "agent_run_attach_output",
-            (message: AgentRunAttachOutputMessage) => {
-              if (message.payload.runId === taskId) {
-                handlers.onOutput(message.payload.data);
-              }
-            },
-          ),
-          websocketService.subscribe(
-            "agent_run_attach_error",
-            (message: AgentRunAttachErrorMessage) => {
-              if (message.payload.runId === taskId) {
-                handlers.onError(message.payload.error);
-              }
-            },
-          ),
-          websocketService.subscribe(
-            "agent_run_attach_closed",
-            (message: AgentRunAttachClosedMessage) => {
-              if (message.payload.runId === taskId) {
-                handlers.onClosed(message.payload.reason ?? null);
-              }
-            },
-          ),
-        ];
-        websocketService.send({
-          type: "subscribe_agent_run_attach",
-          payload: { runId: taskId },
-        });
-        return () => {
-          for (const unsubscribe of subscriptions) unsubscribe();
-          websocketService.send({
-            type: "unsubscribe_agent_run_attach",
-            payload: { runId: taskId },
-          });
-        };
-      },
-      sendInput: (data) =>
-        websocketService.send({
-          type: "agent_run_attach_input",
-          payload: { runId: taskId, data },
-        }),
-      sendResize: (cols, rows) =>
-        websocketService.send({
-          type: "agent_run_attach_resize",
-          payload: { runId: taskId, cols, rows },
-        }),
-    }),
-    [taskId],
-  );
-
-  return (
-    <ExecTerminal sessionKey={taskId} transport={transport} isActive={active} />
   );
 }
 

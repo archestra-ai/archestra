@@ -194,6 +194,14 @@ function McpToolCallDetail({
           },
         ]
       : []),
+    ...(mcpToolCall.executionId
+      ? [
+          {
+            label: "Execution ID",
+            value: <span className="font-mono">{mcpToolCall.executionId}</span>,
+          },
+        ]
+      : []),
     ...(executedAs
       ? [
           {

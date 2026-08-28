@@ -37,6 +37,8 @@ const agentRunsTable = pgTable(
     actorUserId: text("actor_user_id")
       .notNull()
       .references(() => usersTable.id, { onDelete: "cascade" }),
+    /** Concise, user-editable label shown beside foreground conversations. */
+    title: text("title").notNull().default("Execution"),
     /** Frozen at creation so a rename can never orphan the workload. */
     deploymentName: text("deployment_name").notNull(),
     /** Frozen because a restart must re-adopt through the original backend. */

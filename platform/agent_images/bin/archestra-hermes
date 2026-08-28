@@ -12,6 +12,7 @@ mkdir -p "${HERMES_HOME}"
 jq -n \
   --arg base_url "${OPENAI_BASE_URL:?}" \
   --arg model "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL:?}" \
+  --arg task_id "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID:?}" \
   --arg mcp_url "${ARCHESTRA_MCP_GATEWAY_URL:?}" \
   --arg gateway_token "${ARCHESTRA_MCP_GATEWAY_TOKEN:?}" \
   --arg system_prompt "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_SYSTEM_PROMPT:-}" \
@@ -24,10 +25,21 @@ jq -n \
       transport:"openai_chat"
     }},
     agent:{system_prompt:$system_prompt},
-    model:{max_tokens:16384,context_length:1047576},
+    model:{
+      max_tokens:16384,
+      context_length:1047576,
+      default_headers:{
+        "X-Archestra-Execution-Id":$task_id,
+        "X-Archestra-Session-Id":$task_id
+      }
+    },
     mcp_servers:{archestra:{
       url:$mcp_url,
-      headers:{Authorization:("Bearer " + $gateway_token)}
+      headers:{
+        Authorization:("Bearer " + $gateway_token),
+        "X-Archestra-Execution-Id":$task_id,
+        "X-Archestra-Session-Id":$task_id
+      }
     }}
   }' > "${HERMES_HOME}/config.yaml"
 chmod 0600 "${HERMES_HOME}/config.yaml"

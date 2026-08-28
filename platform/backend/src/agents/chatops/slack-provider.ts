@@ -294,19 +294,10 @@ class SlackProvider implements ChatOpsProvider {
 
     const event = body.event;
 
-    // Reactions are explicit user actions: 🔇/🤫 mutes the containing thread,
-    // while 🦀 delegates the reacted-to message as a background execution.
+    // Reaction-based mute: a 🔇/🤫 reaction on any message in a channel thread
+    // mutes that thread. Pure side effect — never forwarded to the agent.
     if (event.type === "reaction_added") {
-      if (isMuteReaction(event.reaction ?? "")) {
-        await this.handleMuteReaction(event, body.team_id ?? null);
-        return null;
-      }
-      if (event.reaction === "crab") {
-        return await this.parseBackgroundExecutionReaction(
-          event,
-          body.team_id ?? null,
-        );
-      }
+      await this.handleMuteReaction(event, body.team_id ?? null);
       return null;
     }
 
@@ -1552,93 +1543,6 @@ class SlackProvider implements ChatOpsProvider {
   }
 
   /**
-   * Turn a 🦀 reaction into the same incoming message shape as a textual
-   * `:crab:` request. The person adding the reaction is the initiator: their
-   * Archestra identity controls authorization, credentials, and shell access.
-   * The reacted-to message supplies only the task text and attachments.
-   */
-  private async parseBackgroundExecutionReaction(
-    event: SlackReactionEvent,
-    teamId: string | null,
-  ): Promise<IncomingChatMessage | null> {
-    if (
-      !this.client ||
-      event.item?.type !== "message" ||
-      !event.user ||
-      event.user === this.botUserId ||
-      event.item_user === this.botUserId
-    ) {
-      return null;
-    }
-
-    const { channel: channelId, ts: messageTs } = event.item;
-    try {
-      const result = await this.client.conversations.history({
-        channel: channelId,
-        latest: messageTs,
-        inclusive: true,
-        limit: 1,
-      });
-      const message = result.messages?.find(
-        (candidate) => candidate.ts === messageTs,
-      );
-      // A human may deliberately delegate a message posted through another
-      // Slack app (including Slack's own MCP app). The reaction is the explicit
-      // authorization boundary, so only our own bot's output is excluded to
-      // prevent feedback loops.
-      if (!message || message.user === this.botUserId) {
-        return null;
-      }
-
-      const originalText = message.text || "";
-      const outcomes = await this.downloadSlackFiles(
-        message.files as SlackFile[] | undefined,
-      );
-      const attachments = outcomes.flatMap((outcome) =>
-        outcome.status === "delivered" ? [outcome.attachment] : [],
-      );
-      const skipped = outcomes.flatMap((outcome) =>
-        outcome.status === "skipped" ? [outcome.skipped] : [],
-      );
-      if (!originalText && attachments.length === 0 && skipped.length === 0) {
-        return null;
-      }
-
-      const names = await this.resolveUserNames([event.user]);
-      const senderName = names.get(event.user) ?? event.user;
-      const isDM = isSlackDmChannel(channelId);
-      const taskText = `:crab: ${originalText}`.trimEnd();
-
-      return {
-        messageId: messageTs,
-        channelId,
-        workspaceId: teamId ?? this.teamId,
-        threadId: messageTs,
-        senderId: event.user,
-        senderName,
-        text: taskText,
-        rawText: taskText,
-        timestamp: new Date(Number.parseFloat(messageTs) * 1000),
-        isThreadReply: false,
-        metadata: {
-          eventType: event.type,
-          channelType: isDM ? "im" : "channel",
-          conversationType: isDM ? "personal" : "channel",
-          botMentioned: false,
-        },
-        ...(attachments.length > 0 && { attachments }),
-        ...(skipped.length > 0 && { skippedAttachments: skipped }),
-      };
-    } catch (error) {
-      logger.warn(
-        { error: errorMessage(error), channelId, messageTs },
-        "[SlackProvider] Failed to resolve message for background execution reaction",
-      );
-      return null;
-    }
-  }
-
-  /**
    * Resolve the thread root ts a message belongs to — the value the activation
    * key was written with. conversations.replies returns the thread's parent as
    * messages[0]; its ts (or thread_ts) is the root. Returns null on failure so
@@ -2652,7 +2556,6 @@ interface SlackEventPayload {
     files?: SlackFile[];
     // reaction_added fields (channel/ts live under `item`, not at the top level)
     reaction?: string;
-    item_user?: string;
     item?: { type?: string; channel: string; ts: string };
   };
   challenge?: string;

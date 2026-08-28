@@ -1,4 +1,5 @@
 import type { Readable, Writable } from "node:stream";
+import { Readable as NodeReadable } from "node:stream";
 import type * as k8s from "@kubernetes/client-node";
 import type WebSocket from "ws";
 import config from "@/config";
@@ -18,7 +19,16 @@ import McpDeploymentLeaseModel, {
 } from "@/models/mcp-deployment-lease";
 import { reportRunnerSteer } from "@/observability/metrics/runner";
 import type { RunnerLaunchSpec } from "@/services/runners/backends";
-import type { AgentDeploymentSteerMode, AgentRun } from "@/types";
+import {
+  RUNNER_ATTACHMENTS_DIR,
+  RUNNER_ATTACHMENTS_MANIFEST,
+  RUNNER_INPUTS_READY_FILE,
+} from "@/services/runners/runtime-contract";
+import type {
+  AgentDeploymentSteerMode,
+  AgentExecutionInput,
+  AgentRun,
+} from "@/types";
 import {
   buildRunnerEnvironmentEgressPolicy,
   buildRunnerJob,
@@ -130,6 +140,76 @@ class RunnerRuntimeManager {
   }
 
   /**
+   * Copy durable inputs into the shared runtime volume, then atomically release
+   * the bootstrap. The ready marker makes retries and reconciler adoption
+   * idempotent: a control-plane restart cannot launch the Agent against a
+   * half-written file set.
+   */
+  async stageInputs(params: {
+    session: AgentRun;
+    inputs: AgentExecutionInput[];
+  }): Promise<void> {
+    if (params.inputs.length === 0) return;
+    const pod = await this.waitForRunningPod({
+      session: params.session,
+      timeoutMessage:
+        "Timed out waiting for the Agent pod to accept input files",
+    });
+    if (!pod) {
+      throw new Error("This session ended before its input files were staged");
+    }
+    const alreadyReady = await this.execInPod({
+      session: params.session,
+      podName: pod,
+      command: ["/bin/sh", "-c", `test -f ${RUNNER_INPUTS_READY_FILE}`],
+    })
+      .then(() => true)
+      .catch(() => false);
+    if (alreadyReady) return;
+
+    for (const input of params.inputs) {
+      await this.execInPod({
+        session: params.session,
+        podName: pod,
+        command: [
+          "/bin/sh",
+          "-c",
+          'umask 077; mkdir -p "$1"; cat > "$2"',
+          "archestra-stage-input",
+          RUNNER_ATTACHMENTS_DIR,
+          input.runtimePath,
+        ],
+        stdin: NodeReadable.from([input.fileData]),
+      });
+    }
+
+    const manifest = Buffer.from(
+      JSON.stringify(
+        params.inputs.map((input) => ({
+          name: input.originalName,
+          path: input.runtimePath,
+          mediaType: input.mimeType,
+          size: input.fileSize,
+        })),
+      ),
+      "utf8",
+    );
+    await this.execInPod({
+      session: params.session,
+      podName: pod,
+      command: [
+        "/bin/sh",
+        "-c",
+        'umask 077; cat > "$1" && touch "$2"',
+        "archestra-stage-input",
+        RUNNER_ATTACHMENTS_MANIFEST,
+        RUNNER_INPUTS_READY_FILE,
+      ],
+      stdin: NodeReadable.from([manifest]),
+    });
+  }
+
+  /**
    * Deliver a message into a live session.
    *
    * `pipe` writes to the FIFO the runner-agent reads, so the message lands at a
@@ -188,7 +268,15 @@ class RunnerRuntimeManager {
     onStatus?: (status: k8s.V1Status) => void;
   }): Promise<{ podName: string; command: string; socket: WebSocket }> {
     const clients = this.requireClients();
-    const podName = await this.findPodName(params.session);
+    // A2A marks the durable task working before Kubernetes necessarily has a
+    // Running pod. Chat can therefore open the terminal during image pull or
+    // scheduling; wait for that normal transition instead of turning it into
+    // a sticky attach error that requires the user to reload.
+    const podName = await this.waitForRunningPod({
+      session: params.session,
+      timeoutMessage:
+        "Timed out waiting for the Agent pod to accept a terminal",
+    });
     if (!podName) {
       throw new Error("This session has no running pod to attach to");
     }
@@ -469,6 +557,7 @@ class RunnerRuntimeManager {
     session: AgentRun;
     podName: string;
     command: string[];
+    stdin?: Readable;
   }): Promise<void> {
     const clients = this.requireClients();
     const { PassThrough } = await import("node:stream");
@@ -485,7 +574,7 @@ class RunnerRuntimeManager {
           params.command,
           null,
           stderr,
-          null,
+          params.stdin ?? null,
           false,
           (status) => {
             if (status.status === "Success") {
@@ -505,6 +594,22 @@ class RunnerRuntimeManager {
         )
         .catch(reject);
     });
+  }
+
+  private async waitForRunningPod(params: {
+    session: AgentRun;
+    timeoutMessage: string;
+  }): Promise<string | null> {
+    const deadline = Date.now() + RUNNER_INPUT_STAGING_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      const pod = await this.findPodPhase(params.session);
+      if (pod?.phase === "Running") return pod.name;
+      if (pod && (pod.phase === "Succeeded" || pod.phase === "Failed")) {
+        return null;
+      }
+      await delay(RUNNER_INPUT_STAGING_POLL_MS);
+    }
+    throw new Error(params.timeoutMessage);
   }
 
   /**
@@ -552,6 +657,8 @@ export default new RunnerRuntimeManager();
  * task does not sit idle before the lifecycle settles it.
  */
 const RUNNER_COMPLETION_POLL_MS = 5_000;
+const RUNNER_INPUT_STAGING_POLL_MS = 500;
+const RUNNER_INPUT_STAGING_TIMEOUT_MS = 5 * 60_000;
 
 /** Sleep that wakes early on abort, so cancellation is not delayed a full poll. */
 function delay(ms: number, signal?: AbortSignal): Promise<void> {

@@ -51,7 +51,12 @@ interface AgentRunAttachSubscription {
   stdin: PassThrough;
   stdout: PassThrough;
   stderr: PassThrough;
-  socket: { readyState: number; close: () => void };
+  inputPaused: boolean;
+  socket: {
+    readyState: number;
+    close: () => void;
+    send: (data: Buffer) => void;
+  };
 }
 
 interface AgentRunLogsSubscription {
@@ -491,7 +496,8 @@ describe("websocket Agent run authorization and cleanup", () => {
       stdin: new PassThrough(),
       stdout: new PassThrough(),
       stderr: new PassThrough(),
-      socket: { readyState: WS.OPEN, close: vi.fn() },
+      inputPaused: false,
+      socket: { readyState: WS.OPEN, close: vi.fn(), send: vi.fn() },
     };
     const logs = {
       runId: attach.runId,
@@ -511,6 +517,49 @@ describe("websocket Agent run authorization and cleanup", () => {
     expect(logs.stream.destroyed).toBe(true);
     expect(service.agentRunAttachSubscriptions.has(ws)).toBe(false);
     expect(service.agentRunLogsSubscriptions.has(ws)).toBe(false);
+  });
+
+  test("pauses Agent terminal input when stdin applies backpressure", async () => {
+    const stdin = new PassThrough();
+    vi.spyOn(stdin, "write").mockReturnValue(false);
+    const pause = vi.fn();
+    const resume = vi.fn();
+    const runId = crypto.randomUUID();
+    const ws = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+      _socket: { pause, resume },
+    } as unknown as WS;
+    service.clientContexts.set(ws, {
+      userId: "user-1",
+      organizationId: "org-1",
+      userIsMcpServerAdmin: false,
+    });
+    const subscription: AgentRunAttachSubscription = {
+      runId,
+      stdin,
+      stdout: new PassThrough(),
+      stderr: new PassThrough(),
+      inputPaused: false,
+      socket: { readyState: WS.OPEN, close: vi.fn(), send: vi.fn() },
+    };
+    service.agentRunAttachSubscriptions.set(ws, subscription);
+
+    await service.handleMessage(
+      {
+        type: "agent_run_attach_input",
+        payload: { runId, data: "large terminal input" },
+      },
+      ws,
+    );
+
+    expect(pause).toHaveBeenCalledOnce();
+    expect(subscription.inputPaused).toBe(true);
+
+    stdin.emit("drain");
+    expect(resume).toHaveBeenCalledOnce();
+    expect(subscription.inputPaused).toBe(false);
   });
 });
 

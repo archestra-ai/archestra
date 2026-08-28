@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useFeature } from "@/lib/config/config.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 
 export type BackgroundExecutionConfig = {
   image: string;
@@ -69,6 +70,7 @@ export function AgentBackgroundExecutionFields({
   onChange: (value: BackgroundExecutionConfig | null) => void;
 }) {
   const enabledId = useId();
+  const appName = useAppName();
   const runtimeEnabled = useFeature("agentBackgroundExecution");
   const configuredDefaultImage = useFeature(
     "agentBackgroundExecutionBaseImage",
@@ -87,8 +89,9 @@ export function AgentBackgroundExecutionFields({
         <div className="space-y-1">
           <Label htmlFor={enabledId}>Background execution</Label>
           <p className="text-sm text-muted-foreground">
-            Run delegated tasks in an isolated deployment. Direct chat stays in
-            the foreground.
+            Run durable tasks in an isolated deployment. Selecting this Agent in
+            Chat opens an interactive execution instead of a foreground
+            conversation.
           </p>
         </div>
         <Switch
@@ -204,7 +207,7 @@ export function AgentBackgroundExecutionFields({
                 </Select>
                 <p className="text-xs text-muted-foreground">
                   Choose the API protocol the container&apos;s Agent client
-                  expects. Every option stays behind the Archestra LLM proxy.
+                  expects. Every option stays behind the {appName} LLM proxy.
                 </p>
               </div>
               <div className="space-y-2">

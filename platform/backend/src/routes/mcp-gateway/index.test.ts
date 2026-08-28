@@ -32,6 +32,7 @@ import {
   AgentModel,
   AppModel,
   McpServerModel,
+  McpToolCallModel,
   SkillModel,
   TeamTokenModel,
   ToolModel,
@@ -191,6 +192,56 @@ describe("MCP Gateway (stateless mode)", () => {
       [MCP_ENTERPRISE_AUTH_EXTENSION_ID]: {},
       [MCP_OAUTH_CLIENT_CREDENTIALS_EXTENSION_ID]: {},
     });
+  });
+
+  test("records the background execution id on gateway audit rows", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const agent = await makeAgent({ organizationId: organization.id });
+    const token = await TeamTokenModel.create({
+      organizationId: organization.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+    const executionId = crypto.randomUUID();
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: {
+        ...makeMcpHeaders(token.value),
+        "x-archestra-execution-id": executionId,
+      },
+      payload: {
+        jsonrpc: "2.0",
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: {},
+          clientInfo: { name: "background-agent", version: "1.0.0" },
+        },
+        id: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const rows = await McpToolCallModel.findAllPaginated(
+      { limit: 10, offset: 0 },
+      undefined,
+      undefined,
+      undefined,
+      { search: executionId },
+    );
+    expect(rows.data).toEqual([
+      expect.objectContaining({
+        agentId: agent.id,
+        method: "initialize",
+        executionId,
+      }),
+    ]);
   });
 
   test("reserves the skill://archestra namespace while the skills surface is off", async ({

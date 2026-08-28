@@ -52,6 +52,7 @@ function buildMcpToolCallSearchCondition(search: string) {
   return or(
     ilike(schema.mcpToolCallsTable.mcpServerName, searchPattern),
     ilike(schema.mcpToolCallsTable.method, searchPattern),
+    ilike(schema.mcpToolCallsTable.executionId, searchPattern),
     ...(searchContent
       ? [
           sql`${schema.mcpToolCallsTable.toolCall}->>'name' ILIKE ${searchPattern}`,

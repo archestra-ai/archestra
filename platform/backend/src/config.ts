@@ -2280,6 +2280,14 @@ const config = {
         process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MEMORY_LIMIT?.trim() ||
         "4Gi",
     },
+    ephemeralStorageLimit: parseK8sResourceQuantity({
+      envName: "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_EPHEMERAL_STORAGE_LIMIT",
+      value:
+        process.env
+          .ARCHESTRA_AGENT_BACKGROUND_EXECUTION_EPHEMERAL_STORAGE_LIMIT,
+      validator: isValidK8sMemoryQuantity,
+      defaultValue: "10Gi",
+    }),
     /**
      * Base URL a background execution pod uses to reach this deployment's LLM
      * proxy and MCP gateway. Must be reachable from inside the cluster, so it

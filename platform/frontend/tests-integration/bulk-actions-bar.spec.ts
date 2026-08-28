@@ -129,23 +129,28 @@ test.describe("Bulk actions bar", () => {
     page,
     mswControl,
   }) => {
-    // A page that holds less than what matches, which is the only situation
-    // where reaching past the page means anything.
+    const matchingSkills = Array.from({ length: 7 }, (_, index) => ({
+      ...shareableSkillsSeed.data[index % shareableSkillsSeed.data.length],
+      id: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+      name: `skill-${index + 1}`,
+    }));
     await mswControl.use({
       method: "get",
       url: "/api/skills",
       body: {
         ...shareableSkillsSeed,
+        data: matchingSkills,
         pagination: {
           ...shareableSkillsSeed.pagination,
-          limit: 2,
+          limit: 100,
           total: 7,
-          totalPages: 4,
-          hasNext: true,
+          totalPages: 1,
+          hasNext: false,
         },
       },
     });
-    await page.goto("/skills");
+    // The collection loads all sources once, then applies its shared page size.
+    await page.goto("/skills?pageSize=2");
 
     await page
       .getByRole("checkbox", { name: "Select all skills on this page" })

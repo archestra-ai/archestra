@@ -71,7 +71,6 @@ import {
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { formatPricePerMillion } from "@/lib/model-price-format";
 import { formatContextLength } from "@/lib/utils";
-import { MODEL_NAV_TABS } from "../model-nav-tabs";
 import { EditModelDialog } from "./_parts/edit-model-dialog";
 import {
   canFilterFreeModelsForApiKey,
@@ -506,7 +505,6 @@ export default function ModelsPage() {
       <PageLayout
         title="Models"
         description='Models available from your configured providers. Use "Refresh Models" to re-fetch models and capabilities from providers.'
-        tabs={MODEL_NAV_TABS}
         actionButton={refreshModelsButton}
       >
         <QueryLoadError
@@ -521,7 +519,6 @@ export default function ModelsPage() {
     <PageLayout
       title="Models"
       description='Models available from your configured providers. Use "Refresh Models" to re-fetch models and capabilities from providers.'
-      tabs={MODEL_NAV_TABS}
       actionButton={refreshModelsButton}
     >
       <BulkActionsScope className="space-y-3">

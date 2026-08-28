@@ -3,7 +3,7 @@ title: Overview
 category: LLM Proxy
 order: 1
 description: Secure proxy for LLM provider interactions
-lastUpdated: 2026-08-24
+lastUpdated: 2026-08-28
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -13,10 +13,10 @@ LLM Proxy is Archestra's security layer that sits between AI agents and LLM prov
 ## To use LLM Proxy
 
 1. Go to **LLM Proxy** in the sidebar.
-2. On the **LLM Proxy** tab, choose the LLM provider you are using, and copy the provided URL — `https://<your-archestra-host>/v1/<provider>`.
+2. On the **LLM Proxy** page, choose the LLM provider you are using. Copy the provided URL — `https://<your-archestra-host>/v1/<provider>`.
 3. Use this URL when calling your LLM provider instead of the provider's original endpoint.
 
-The page has two more tabs. **Virtual Keys** lists your virtual API keys — search, filter, and delete them in bulk. **OAuth Clients** manages LLM OAuth clients the same way. See [Authentication](/docs/platform-llm-proxy-authentication) for when to use each.
+Use **Virtual Keys** in the sidebar to manage virtual API keys. Go to **Settings → OAuth Clients** to manage LLM OAuth clients. See [Authentication](/docs/platform-llm-proxy-authentication) for when to use each.
 
 ```mermaid
 graph TB

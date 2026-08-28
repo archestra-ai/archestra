@@ -73,6 +73,146 @@ describe("Gemini streaming format", () => {
   });
 });
 
+describe("Gemini dispatch rewrite signatures", () => {
+  let app: FastifyInstance;
+
+  beforeEach(() => {
+    app = createGeminiProxyTestApp();
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await app.close();
+  });
+
+  test("keeps a rewritten tool-call signature usable on the next turn", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "Gemini Dispatch Follow-up Agent" });
+    const providerRequests: GeminiSdkRequest[] = [];
+
+    stubGeminiStreamClient((request) => {
+      providerRequests.push(request);
+      return providerRequests.length === 1
+        ? [
+            geminiToolCallChunk([
+              {
+                id: "call_read",
+                name: "inventory__read",
+                args: { itemId: "item-1" },
+                thoughtSignature: "opaque-thought-signature",
+              },
+            ]),
+          ]
+        : [geminiTextChunk("Done")];
+    });
+
+    await app.register(geminiProxyRoutes);
+
+    const firstResponse = await app.inject({
+      method: "POST",
+      url: `/v1/gemini/${agent.id}/v1beta/models/gemini-3.7-flash:streamGenerateContent`,
+      headers: geminiTestHeaders(),
+      payload: geminiDispatchRequest("Read item 1"),
+    });
+
+    expect(firstResponse.statusCode, firstResponse.body).toBe(200);
+    const rewrittenPart = findStreamedFunctionCallPart(firstResponse.body);
+    expect(rewrittenPart).toMatchObject({
+      functionCall: {
+        id: "call_read",
+        name: "archestra__run_tool",
+        args: {
+          tool_name: "inventory__read",
+          tool_args: { itemId: "item-1" },
+        },
+      },
+      thoughtSignature: "opaque-thought-signature",
+    });
+
+    const secondResponse = await app.inject({
+      method: "POST",
+      url: `/v1/gemini/${agent.id}/v1beta/models/gemini-3.7-flash:streamGenerateContent`,
+      headers: geminiTestHeaders(),
+      payload: {
+        ...geminiDispatchRequest("Read item 1"),
+        contents: [
+          { role: "user", parts: [{ text: "Read item 1" }] },
+          { role: "model", parts: [rewrittenPart] },
+          {
+            role: "user",
+            parts: [
+              {
+                functionResponse: {
+                  id: "call_read",
+                  name: "archestra__run_tool",
+                  response: { result: "available" },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(secondResponse.statusCode, secondResponse.body).toBe(200);
+    expect(secondResponse.body).toContain("Done");
+    expect(providerRequests[1]?.contents[1]?.parts[0]?.thoughtSignature).toBe(
+      "opaque-thought-signature",
+    );
+  });
+
+  test("keeps parallel rewritten signatures paired by position", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "Gemini Parallel Dispatch Agent" });
+
+    stubGeminiStreamClient(() => [
+      geminiToolCallChunk([
+        {
+          id: "call_read",
+          name: "inventory__read",
+          args: { itemId: "item-1" },
+          thoughtSignature: "signature-read",
+        },
+        {
+          id: "call_write",
+          name: "inventory__write",
+          args: { itemId: "item-2" },
+          thoughtSignature: "signature-write",
+        },
+      ]),
+    ]);
+
+    await app.register(geminiProxyRoutes);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/gemini/${agent.id}/v1beta/models/gemini-3.7-flash:streamGenerateContent`,
+      headers: geminiTestHeaders(),
+      payload: geminiDispatchRequest("Read one item and update another"),
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    const functionCallParts = streamedFunctionCallParts(response.body);
+    expect(
+      functionCallParts.map((part) => ({
+        target: part.functionCall.args.tool_name,
+        thoughtSignature: part.thoughtSignature,
+      })),
+    ).toEqual([
+      {
+        target: "inventory__read",
+        thoughtSignature: "signature-read",
+      },
+      {
+        target: "inventory__write",
+        thoughtSignature: "signature-write",
+      },
+    ]);
+  });
+});
+
 describe("Gemini cost tracking", () => {
   beforeEach(() => {
     vi.spyOn(geminiAdapterFactory, "createClient").mockImplementation(
@@ -524,3 +664,161 @@ describe("Gemini non-streaming mode", () => {
     expect(interaction.outputTokens).toBe(17);
   });
 });
+
+type StreamedFunctionCallPart = {
+  functionCall: {
+    id: string;
+    name: string;
+    args: Record<string, unknown> & { tool_name: string };
+  };
+  thoughtSignature?: string;
+};
+
+type GeminiSdkRequest = {
+  contents: Array<{
+    role: string;
+    parts: Array<{ thoughtSignature?: string }>;
+  }>;
+};
+
+function createGeminiProxyTestApp() {
+  const app = Fastify().withTypeProvider<ZodTypeProvider>();
+  app.setValidatorCompiler(validatorCompiler);
+  app.setSerializerCompiler(serializerCompiler);
+  return app;
+}
+
+function geminiTestHeaders() {
+  return {
+    "content-type": "application/json",
+    "x-goog-api-key": "test-key",
+  };
+}
+
+function geminiDispatchRequest(prompt: string) {
+  return {
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    tools: [
+      {
+        functionDeclarations: [
+          {
+            name: "archestra__search_tools",
+            description: "Find tools by capability",
+            parameters: {
+              type: "object",
+              properties: { query: { type: "string" } },
+              required: ["query"],
+            },
+          },
+          {
+            name: "archestra__run_tool",
+            description: "Run a tool by exact name",
+            parameters: {
+              type: "object",
+              properties: {
+                tool_name: { type: "string" },
+                tool_args: { type: "object" },
+              },
+              required: ["tool_name"],
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
+function geminiStream(chunks: unknown[]) {
+  return {
+    async *[Symbol.asyncIterator]() {
+      yield* chunks;
+    },
+  };
+}
+
+function stubGeminiStreamClient(
+  getChunks: (request: GeminiSdkRequest) => unknown[],
+) {
+  vi.spyOn(geminiAdapterFactory, "createClient").mockImplementation(
+    () =>
+      ({
+        models: {
+          generateContentStream: async (request: GeminiSdkRequest) =>
+            geminiStream(getChunks(request)),
+        },
+      }) as never,
+  );
+}
+
+function geminiToolCallChunk(
+  calls: Array<{
+    id: string;
+    name: string;
+    args: Record<string, unknown>;
+    thoughtSignature: string;
+  }>,
+) {
+  return {
+    candidates: [
+      {
+        content: {
+          role: "model",
+          parts: calls.map(({ thoughtSignature, ...functionCall }) => ({
+            functionCall,
+            thoughtSignature,
+          })),
+        },
+        finishReason: "STOP",
+        index: 0,
+      },
+    ],
+    usageMetadata: {
+      promptTokenCount: 12,
+      candidatesTokenCount: 10,
+      totalTokenCount: 22,
+    },
+    modelVersion: "gemini-3.7-flash",
+    responseId: "gemini-dispatch-test",
+  };
+}
+
+function geminiTextChunk(text: string) {
+  return {
+    candidates: [
+      {
+        content: { role: "model", parts: [{ text }] },
+        finishReason: "STOP",
+        index: 0,
+      },
+    ],
+    usageMetadata: {
+      promptTokenCount: 24,
+      candidatesTokenCount: 2,
+      totalTokenCount: 26,
+    },
+    modelVersion: "gemini-3.7-flash",
+    responseId: "gemini-follow-up-test",
+  };
+}
+
+function streamedFunctionCallParts(body: string): StreamedFunctionCallPart[] {
+  return body
+    .split("\n")
+    .filter((line) => line.startsWith("data: "))
+    .map((line) => line.slice("data: ".length))
+    .filter((payload) => payload !== "[DONE]")
+    .map((payload) => JSON.parse(payload))
+    .flatMap((event) => event.candidates?.[0]?.content?.parts ?? [])
+    .filter(
+      (part): part is StreamedFunctionCallPart =>
+        part.functionCall !== undefined,
+    );
+}
+
+function findStreamedFunctionCallPart(body: string): StreamedFunctionCallPart {
+  const [part] = streamedFunctionCallParts(body);
+  if (!part) {
+    throw new Error("Expected a streamed Gemini function call");
+  }
+  return part;
+}

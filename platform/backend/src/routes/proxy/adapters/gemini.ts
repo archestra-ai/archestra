@@ -831,13 +831,17 @@ class GeminiStreamAdapter
       candidates: [
         {
           content: {
-            parts: toolCalls.map((toolCall) => ({
-              functionCall: {
-                id: toolCall.id,
-                name: toolCall.name,
-                args: parseArgs(toolCall.arguments),
-              },
-            })),
+            parts: toolCalls.map((toolCall, index) => {
+              const thoughtSignature = this.toolCallSignatures.get(index);
+              return {
+                functionCall: {
+                  id: toolCall.id,
+                  name: toolCall.name,
+                  args: parseArgs(toolCall.arguments),
+                },
+                ...(thoughtSignature ? { thoughtSignature } : {}),
+              };
+            }),
             role: "model",
           },
           index: 0,

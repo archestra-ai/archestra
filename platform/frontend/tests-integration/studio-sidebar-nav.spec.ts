@@ -22,7 +22,6 @@ import type { MswControl } from "./helpers/msw-control";
 const STUDIO_NAV = [
   "Agents",
   "Skills",
-  "Messaging Channels",
   "MCP Registry",
   "MCP Gateways",
   "LLM Proxy",
@@ -134,21 +133,58 @@ test.describe("studio sidebar navigation", () => {
     // opens for a reader who may not see both — is the test below.
   });
 
+  test("does not repeat sidebar destinations in page headers", async ({
+    page,
+    mswControl,
+    request,
+  }) => {
+    await enablePlugins({ mswControl, request });
+    await mswControl.use({ method: "get", url: "/api/plugins", body: [] });
+
+    for (const { href, title, sibling } of [
+      {
+        href: "/llm/model-providers",
+        title: "Model Providers",
+        sibling: /^Models$/,
+      },
+      {
+        href: "/llm/models",
+        title: "Models",
+        sibling: /^Model Providers$/,
+      },
+      {
+        href: "/llm/proxy",
+        title: "LLM Proxy",
+        sibling: /^Virtual Keys$/,
+      },
+      {
+        href: "/llm/proxy/virtual-keys",
+        title: "Virtual Keys",
+        sibling: /^LLM Proxy$/,
+      },
+      { href: "/skills", title: "Skills", sibling: /^Plugins/ },
+      { href: "/plugins", title: "Plugins", sibling: /^Skills/ },
+    ]) {
+      await page.goto(href);
+
+      await expect(
+        page.getByRole("heading", { level: 1, name: title }),
+      ).toBeVisible();
+      // The sibling remains available once, in the sidebar. A repeated
+      // desktop/mobile page-header tab bar would add two more copies.
+      await expect(page.getByRole("link", { name: sibling })).toHaveCount(1);
+    }
+  });
+
   test("points the one shared row at the page its reader may open", async ({
     page,
     mswControl,
   }) => {
-    const row = page.getByRole("link", { name: /^Costs & Limits/ });
-
-    // Both readable: the row opens Costs, the first of the two.
-    await page.goto("/agents");
-    await expect(row).toHaveAttribute("href", "/llm/costs");
-
-    // The shared Costs & Limits route remains the stable destination even
-    // when one of its underlying pages is not readable.
     await setPermissions({ mswControl }, { llmCost: [] });
     await page.goto("/agents");
-    await expect(row).toHaveAttribute("href", "/llm/costs");
+
+    const row = page.getByRole("link", { name: /^Costs & Limits/ });
+    await expect(row).toHaveAttribute("href", "/llm/limits");
   });
 
   test("drops a row the reader may not open, and the group with the last of them", async ({

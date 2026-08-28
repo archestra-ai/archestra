@@ -92,7 +92,6 @@ import {
 import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
 import { useAllVirtualApiKeys } from "@/lib/virtual-api-keys.query";
-import { MODEL_NAV_TABS } from "../model-nav-tabs";
 import {
   buildSubscriptionOffers,
   type SubscriptionOffer,
@@ -654,7 +653,6 @@ export default function ApiKeysPage() {
     <PageLayout
       title="Model Providers"
       description="Connect credentials for the LLM providers used in Chat and the LLM Proxy."
-      tabs={MODEL_NAV_TABS}
       actionButton={addApiKeyButton}
     >
       <div className="space-y-4">

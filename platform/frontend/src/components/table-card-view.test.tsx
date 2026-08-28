@@ -192,7 +192,6 @@ describe("TableCardView", () => {
     );
 
     const selectionControl = screen.getByLabelText("Select Knowledge source");
-    expect(selectionControl).toHaveClass("size-11");
     fireEvent.click(selectionControl);
 
     expect(onSelectedChange).toHaveBeenCalledWith(true);

@@ -328,10 +328,10 @@ export function TableCard({
         className,
       )}
     >
-      <div className="flex items-start">
+      <div className="flex items-start gap-3">
         {selectable ? (
           <Checkbox
-            className={CARD_SELECTION_CHECKBOX_CLASSNAME}
+            className="mt-1"
             checked={selected}
             disabled={selectionDisabled}
             onCheckedChange={
@@ -347,11 +347,9 @@ export function TableCard({
           />
         ) : null}
         {icon ? (
-          <span className="flex size-11 shrink-0 items-center justify-center text-muted-foreground">
-            {icon}
-          </span>
+          <span className="mt-0.5 shrink-0 text-muted-foreground">{icon}</span>
         ) : null}
-        <div className={cn("min-w-0 flex-1", icon && "ml-3")}>
+        <div className="min-w-0 flex-1">
           <h3 className="truncate font-medium">{title}</h3>
           {description ? (
             <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">
@@ -406,9 +404,6 @@ export function useNavigableCard({
       : {},
   };
 }
-
-const CARD_SELECTION_CHECKBOX_CLASSNAME =
-  "relative size-11 cursor-pointer border-0 bg-transparent shadow-none before:absolute before:size-4 before:rounded-[4px] before:border before:border-input before:bg-background data-[state=checked]:border-0 data-[state=checked]:bg-transparent data-[state=checked]:text-primary-foreground data-[state=checked]:before:border-primary data-[state=checked]:before:bg-primary dark:data-[state=checked]:bg-transparent [&_[data-slot=checkbox-indicator]]:relative";
 
 const VIEW_LABELS: Record<TableCardViewMode, string> = {
   cards: "View as cards",

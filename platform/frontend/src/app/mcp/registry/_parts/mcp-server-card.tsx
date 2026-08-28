@@ -574,6 +574,7 @@ export function McpServerCard({
 
   const selectionCheckbox = selection ? (
     <Checkbox
+      className="mt-1"
       checked={selection.selected}
       disabled={selection.disabled}
       aria-label={`Select ${item.name}`}
@@ -1061,67 +1062,71 @@ export function McpServerCard({
       data-testid={`${E2eTestId.McpServerCard}-${item.name}`}
     >
       <CardHeader className="gap-0">
-        <div className="flex items-start justify-between gap-4 overflow-hidden">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 mb-1 overflow-hidden w-full">
-              <Link
-                href={`/mcp/registry/${item.id}`}
-                className="flex min-w-0 items-center gap-2 rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <span className="relative inline-flex shrink-0">
-                  <McpCatalogIcon
-                    icon={item.icon}
-                    catalogId={item.id}
-                    size={20}
-                  />
-                  {deploymentStatusIndicator}
-                </span>
-                <TruncatedTooltip content={item.name}>
-                  <span className="line-clamp-2 break-words text-lg font-semibold leading-5">
-                    {item.name}
-                  </span>
-                </TruncatedTooltip>
-              </Link>
-              {environmentLabel && (
-                <Badge
-                  variant="outline"
-                  className="shrink-0 text-muted-foreground"
+        <div className="flex items-start gap-3 overflow-hidden">
+          {selectionControl}
+          <div className="flex min-w-0 flex-1 items-start justify-between gap-4 overflow-hidden">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 mb-1 overflow-hidden w-full">
+                <Link
+                  href={`/mcp/registry/${item.id}`}
+                  className="flex min-w-0 items-center gap-2 rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  <span className="max-w-32 truncate">{environmentLabel}</span>
-                </Badge>
-              )}
-            </div>
-            {(statusIssue || item.description) && (
-              <div className="flex min-w-0 flex-col items-start gap-1">
-                {statusIssue && (
-                  <span
-                    className="shrink-0"
-                    data-testid={
-                      statusIssue.kind === "failed-to-start"
-                        ? `${E2eTestId.McpServerError}-${item.name}-default`
-                        : undefined
-                    }
-                  >
-                    <McpServerIssueBadge issue={statusIssue} />
+                  <span className="relative inline-flex shrink-0">
+                    <McpCatalogIcon
+                      icon={item.icon}
+                      catalogId={item.id}
+                      size={20}
+                    />
+                    {deploymentStatusIndicator}
                   </span>
-                )}
-                {item.description && (
-                  <p className="min-w-0 text-xs text-muted-foreground line-clamp-2">
-                    {item.description}
-                  </p>
+                  <TruncatedTooltip content={item.name}>
+                    <span className="line-clamp-2 break-words text-lg font-semibold leading-5">
+                      {item.name}
+                    </span>
+                  </TruncatedTooltip>
+                </Link>
+                {environmentLabel && (
+                  <Badge
+                    variant="outline"
+                    className="shrink-0 text-muted-foreground"
+                  >
+                    <span className="max-w-32 truncate">
+                      {environmentLabel}
+                    </span>
+                  </Badge>
                 )}
               </div>
-            )}
-            <McpCapabilityBadges
-              providesUi={item.providesUi}
-              providesSkills={item.providesSkills}
-              skillCount={item.skillCount}
-              className="mt-2"
-            />
-          </div>
-          <div className="flex shrink-0 items-center gap-1">
-            {selectionControl}
-            {canEditCatalog && settingsButton}
+              {(statusIssue || item.description) && (
+                <div className="flex min-w-0 flex-col items-start gap-1">
+                  {statusIssue && (
+                    <span
+                      className="shrink-0"
+                      data-testid={
+                        statusIssue.kind === "failed-to-start"
+                          ? `${E2eTestId.McpServerError}-${item.name}-default`
+                          : undefined
+                      }
+                    >
+                      <McpServerIssueBadge issue={statusIssue} />
+                    </span>
+                  )}
+                  {item.description && (
+                    <p className="min-w-0 text-xs text-muted-foreground line-clamp-2">
+                      {item.description}
+                    </p>
+                  )}
+                </div>
+              )}
+              <McpCapabilityBadges
+                providesUi={item.providesUi}
+                providesSkills={item.providesSkills}
+                skillCount={item.skillCount}
+                className="mt-2"
+              />
+            </div>
+            <div className="flex shrink-0 items-center gap-1">
+              {canEditCatalog && settingsButton}
+            </div>
           </div>
         </div>
       </CardHeader>

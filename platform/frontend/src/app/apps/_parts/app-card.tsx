@@ -88,7 +88,7 @@ function CardSelectionCheckbox({
 }) {
   const checkbox = (
     <Checkbox
-      className={cn("relative z-10 mt-0.5", disabled && "pointer-events-none")}
+      className={cn("mt-1", disabled && "pointer-events-none")}
       checked={selection?.selected ?? false}
       onCheckedChange={(value) => selection?.onSelectedChange(!!value)}
       onClick={(event) => {
@@ -273,8 +273,8 @@ function OwnedAppCard({
 
         {/* Header row mirrors the project card: icon + title on one line at the
             left, the scope pill / owner badge / overflow menu at the right. */}
-        <div className="mb-1 flex items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-2">
+        <div className="mb-1 flex items-start justify-between gap-2">
+          <div className="flex min-w-0 items-start gap-3">
             {selection ? (
               <CardSelectionCheckbox
                 label={`Select ${app.name}`}
@@ -440,8 +440,8 @@ function ExternalAppCard({
 
       {/* Header row mirrors the project card: icon + title on one line at the
           left, the scope pill / overflow menu at the right. */}
-      <div className="mb-1 flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
+      <div className="mb-1 flex items-start justify-between gap-2">
+        <div className="flex min-w-0 items-start gap-3">
           {showDisabledSelection ? (
             <CardSelectionCheckbox label={`Select ${app.name}`} disabled />
           ) : null}

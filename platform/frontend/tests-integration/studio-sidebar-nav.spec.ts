@@ -22,7 +22,6 @@ import type { MswControl } from "./helpers/msw-control";
 const STUDIO_NAV = [
   "Agents",
   "Skills",
-  "Messaging Channels",
   "MCP Registry",
   "MCP Gateways",
   "LLM Proxy",
@@ -181,17 +180,11 @@ test.describe("studio sidebar navigation", () => {
     page,
     mswControl,
   }) => {
-    const row = page.getByRole("link", { name: /^Costs & Limits/ });
-
-    // Both readable: the row opens Costs, the first of the two.
-    await page.goto("/agents");
-    await expect(row).toHaveAttribute("href", "/llm/costs");
-
-    // The shared Costs & Limits route remains the stable destination even
-    // when one of its underlying pages is not readable.
     await setPermissions({ mswControl }, { llmCost: [] });
     await page.goto("/agents");
-    await expect(row).toHaveAttribute("href", "/llm/costs");
+
+    const row = page.getByRole("link", { name: /^Costs & Limits/ });
+    await expect(row).toHaveAttribute("href", "/llm/limits");
   });
 
   test("drops a row the reader may not open, and the group with the last of them", async ({

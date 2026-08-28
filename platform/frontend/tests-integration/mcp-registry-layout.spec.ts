@@ -187,6 +187,27 @@ test.describe("MCP Registry layout", () => {
     expect(spills).toEqual([]);
   });
 
+  test("keeps cards at a usable width below the supported viewport", async ({
+    mcpRegistryPage,
+    mswControl,
+    page,
+  }) => {
+    await page.setViewportSize({ width: 320, height: 800 });
+    await seed(mswControl);
+    await mcpRegistryPage.goto();
+
+    const card = mcpRegistryPage.cardForCatalogItem("org-crowded");
+    await expect(card).toBeVisible();
+
+    const box = await card.boundingBox();
+    expect(box?.width).toBeGreaterThanOrEqual(320);
+    expect(
+      await page
+        .locator("main")
+        .evaluate((main) => main.scrollWidth > main.clientWidth),
+    ).toBe(true);
+  });
+
   test("a card names the team scope instead of listing every team", async ({
     mcpRegistryPage,
     mswControl,

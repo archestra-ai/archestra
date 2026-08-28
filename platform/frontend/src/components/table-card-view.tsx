@@ -355,7 +355,7 @@ export function TableCard({
       {...navigation.props}
       data-testid={testId}
       className={cn(
-        "flex h-full flex-col rounded-lg border p-4 transition-colors",
+        "flex h-full min-w-80 flex-col rounded-lg border p-4 transition-colors",
         compact ? "gap-2" : "gap-3",
         selected
           ? cn("border-primary bg-primary/5", navigation.className)

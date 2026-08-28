@@ -84,6 +84,8 @@ interface DataTableProps<TData, TValue> {
   emptyMessage?: string;
   /** Muted line under `emptyMessage`. */
   emptyDescription?: string;
+  /** Call to action shown only for the unfiltered empty state. */
+  emptyAction?: React.ReactNode;
   /**
    * The page's own icon — pass the one its sidebar entry uses, so the panel
    * reads as part of the page. Defaults to a magnifying glass while filters
@@ -138,6 +140,7 @@ export function DataTable<TData, TValue>({
   isLoading = false,
   emptyMessage = "No results",
   emptyDescription,
+  emptyAction,
   emptyIcon,
   hasActiveFilters = false,
   filteredEmptyMessage = "No results match your filters",
@@ -449,6 +452,7 @@ export function DataTable<TData, TValue>({
                               ? filteredEmptyDescription
                               : emptyDescription
                           }
+                          action={hasActiveFilters ? undefined : emptyAction}
                           onClearFilters={
                             hasActiveFilters ? onClearFilters : undefined
                           }

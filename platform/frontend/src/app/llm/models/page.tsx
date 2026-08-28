@@ -13,6 +13,7 @@ import {
   EyeOff,
   Fingerprint,
   Pencil,
+  Plus,
   RefreshCw,
   Server,
   UserRoundCheck,
@@ -21,6 +22,7 @@ import {
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import {
   FilterBar,
   FilterSelect,
@@ -92,6 +94,8 @@ export default function ModelsPage() {
   const syncModelsMutation = useSyncLlmModels();
   const updateModel = useUpdateModel();
   const [isRefreshingModels, setIsRefreshingModels] = useState(false);
+  const [isCreateApiKeyDialogOpen, setIsCreateApiKeyDialogOpen] =
+    useState(false);
   const [search, setSearch] = useState("");
   const [apiKeyFilter, setApiKeyFilter] = useState<string>("all");
   const [apiKeyFilterOpen, setApiKeyFilterOpen] = useState(false);
@@ -680,12 +684,30 @@ export default function ModelsPage() {
           }}
           emptyIcon={Boxes}
           emptyMessage={
+            apiKeys.length === 0 ? "No models available" : "No models found"
+          }
+          emptyDescription={
             apiKeys.length === 0
-              ? "No models available. Add an API key to see available models."
-              : "No models found"
+              ? "Add an API key to see available models."
+              : undefined
+          }
+          emptyAction={
+            apiKeys.length === 0 ? (
+              <Button onClick={() => setIsCreateApiKeyDialogOpen(true)}>
+                <Plus className="h-4 w-4" />
+                <span>Add API Key</span>
+              </Button>
+            ) : undefined
           }
         />
       </BulkActionsScope>
+
+      <CreateLlmProviderApiKeyDialog
+        open={isCreateApiKeyDialogOpen}
+        onOpenChange={setIsCreateApiKeyDialogOpen}
+        title="Add API Key"
+        description="Add a new LLM provider API key to load its available models."
+      />
 
       {editingModel && (
         <EditModelDialog

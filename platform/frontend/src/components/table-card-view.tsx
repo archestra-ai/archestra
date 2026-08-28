@@ -298,6 +298,7 @@ export function TableCard({
   className,
   onNavigate,
   testId,
+  density = "default",
 }: {
   title: ReactNode;
   description?: ReactNode;
@@ -314,10 +315,12 @@ export function TableCard({
   className?: string;
   onNavigate?: () => void;
   testId?: string;
+  density?: "default" | "compact";
 }) {
   const selectable =
     onSelectedChange !== undefined || onSelectionClick !== undefined;
   const navigation = useNavigableCard({ onNavigate, selected });
+  const compact = density === "compact";
   const selectionControl = selectable ? (
     <Checkbox
       className="mt-1"
@@ -352,7 +355,8 @@ export function TableCard({
       {...navigation.props}
       data-testid={testId}
       className={cn(
-        "flex h-full flex-col gap-3 rounded-lg border p-4 transition-colors",
+        "flex h-full flex-col rounded-lg border p-4 transition-colors",
+        compact ? "gap-2" : "gap-3",
         selected
           ? cn("border-primary bg-primary/5", navigation.className)
           : onNavigate
@@ -378,7 +382,12 @@ export function TableCard({
       </div>
       {children ? <div className="text-sm">{children}</div> : null}
       {footer ? (
-        <div className="mt-auto border-t pt-3 text-xs text-muted-foreground">
+        <div
+          className={cn(
+            "mt-auto border-t text-xs text-muted-foreground",
+            compact ? "pt-2 [&_button]:h-7 [&_button]:text-xs" : "pt-3",
+          )}
+        >
           {footer}
         </div>
       ) : null}

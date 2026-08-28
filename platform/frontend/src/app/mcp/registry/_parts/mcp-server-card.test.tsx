@@ -322,6 +322,32 @@ describe("McpServerCard uninstall permission", () => {
     expect(screen.queryByText("Uninstall MCP Server")).not.toBeInTheDocument();
   });
 
+  it("keeps image approval in the shared metadata and action layout", async () => {
+    const user = userEvent.setup();
+    useMcpServersMock.mockReturnValue({ data: [] });
+    renderCard(
+      <McpServerCard
+        variant="local"
+        item={{
+          ...item,
+          serverType: "local",
+          imageApprovalRequired: true,
+        }}
+        installingItemId={null}
+        deploymentStatuses={{}}
+        deploymentFeedState="ready"
+        onInstallRemoteServer={vi.fn()}
+        onInstallLocalServer={vi.fn()}
+        onReinstall={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Image needs approval")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Review config" }));
+
+    expect(routerPush).toHaveBeenCalledWith("/mcp/registry/cat-1/edit");
+  });
+
   it("hides OAuth failure diagnostics while MCP alerting is disabled", () => {
     useMcpServersMock.mockReturnValue({
       data: [

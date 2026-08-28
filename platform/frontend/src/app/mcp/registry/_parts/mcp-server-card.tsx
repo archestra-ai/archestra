@@ -619,6 +619,7 @@ export function McpServerCard({
   // Cards are one mixed list. Like Apps and Projects, every row names its
   // visibility so personal entries never rely on a removed ownership heading.
   const showScopeBadge = Boolean(item.scope);
+  const showApprovalPanel = item.imageApprovalRequired === true;
 
   /** Who is connected and whether a connection needs attention. */
   const hasTrailingCluster =
@@ -630,8 +631,16 @@ export function McpServerCard({
   /** Whether anything follows the badge in the row. */
   const hasCompactInfoAfterScopeBadge =
     toolsCount > 0 || totalAgentCount > 0 || hasTrailingCluster;
+  const hasCardMetadata = Boolean(
+    environmentLabel ||
+      statusIssue ||
+      item.providesUi ||
+      item.providesSkills ||
+      showApprovalPanel,
+  );
 
-  const hasCompactInfoContent = showScopeBadge || hasCompactInfoAfterScopeBadge;
+  const hasCompactInfoContent =
+    hasCardMetadata || showScopeBadge || hasCompactInfoAfterScopeBadge;
 
   /*
     One line, and it has to stay one line at the grid's card width — which
@@ -649,6 +658,34 @@ export function McpServerCard({
   */
   const compactInfoRow = hasCompactInfoContent ? (
     <div className="flex min-w-0 items-center gap-3 text-sm text-muted-foreground">
+      {environmentLabel && (
+        <Badge variant="outline" className="shrink-0 text-muted-foreground">
+          <span className="max-w-32 truncate">{environmentLabel}</span>
+        </Badge>
+      )}
+      {statusIssue && (
+        <span
+          className="shrink-0"
+          data-testid={
+            statusIssue.kind === "failed-to-start"
+              ? `${E2eTestId.McpServerError}-${item.name}-default`
+              : undefined
+          }
+        >
+          <McpServerIssueBadge issue={statusIssue} />
+        </span>
+      )}
+      <McpCapabilityBadges
+        providesUi={item.providesUi}
+        providesSkills={item.providesSkills}
+        skillCount={item.skillCount}
+        className="shrink-0"
+      />
+      {showApprovalPanel && (
+        <Badge variant="outline" className="shrink-0">
+          Image needs approval
+        </Badge>
+      )}
       {showScopeBadge && (
         <div className="flex min-w-0 items-center">
           <ResourceVisibilityBadge
@@ -842,11 +879,6 @@ export function McpServerCard({
     </PermissionButton>
   );
 
-  // The trusted-image-registry policy holds this catalog's image until an admin
-  // approves it. Declared before the card-content variants since they gate the
-  // reinstall button on it.
-  const showApprovalPanel = item.imageApprovalRequired === true;
-
   const remoteCardContent = (
     <>
       <div className="flex flex-nowrap gap-2 [&>*]:min-w-0">
@@ -1017,113 +1049,49 @@ export function McpServerCard({
     </>
   );
 
+  const approvalAction = showApprovalPanel ? (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      className="w-full"
+      onClick={
+        isInstallAdmin
+          ? () => router.push(`/mcp/registry/${item.id}/edit`)
+          : copyApprovalLink
+      }
+    >
+      {isInstallAdmin ? <FileSearch /> : <Copy />}
+      <span>{isInstallAdmin ? "Review config" : "Copy approval link"}</span>
+    </Button>
+  ) : null;
+  const cardActions =
+    approvalAction ??
+    (isBuiltinVariant
+      ? builtinCardContent
+      : isPlaywrightVariant
+        ? playwrightCardContent
+        : isRemoteVariant
+          ? remoteCardContent
+          : localCardContent);
   const hasCardBody = Boolean(
-    environmentLabel ||
-      statusIssue ||
-      item.providesUi ||
-      item.providesSkills ||
-      showApprovalPanel ||
-      (variant === "local" && isInstalling),
+    compactInfoRow || (variant === "local" && isInstalling),
   );
   const cardBody = hasCardBody ? (
     <div className="space-y-3">
-      {(environmentLabel ||
-        statusIssue ||
-        item.providesUi ||
-        item.providesSkills) && (
-        <div className="flex flex-wrap items-center gap-1">
-          {environmentLabel && (
-            <Badge variant="outline" className="text-muted-foreground">
-              <span className="max-w-32 truncate">{environmentLabel}</span>
-            </Badge>
-          )}
-          {statusIssue && (
-            <span
-              data-testid={
-                statusIssue.kind === "failed-to-start"
-                  ? `${E2eTestId.McpServerError}-${item.name}-default`
-                  : undefined
-              }
-            >
-              <McpServerIssueBadge issue={statusIssue} />
-            </span>
-          )}
-          <McpCapabilityBadges
-            providesUi={item.providesUi}
-            providesSkills={item.providesSkills}
-            skillCount={item.skillCount}
-          />
-        </div>
-      )}
-      {showApprovalPanel && (
-        <div className="space-y-1 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2.5">
-          <div className="flex items-center gap-2 text-sm font-medium text-amber-800 dark:text-amber-500">
-            <span>
-              {isInstallAdmin
-                ? "Image needs approval"
-                : "Admin review required"}
-            </span>
-            {isInstallAdmin ? (
-              <button
-                type="button"
-                onClick={() => router.push(`/mcp/registry/${item.id}/edit`)}
-                title="Review config"
-                aria-label="Review config"
-                className="shrink-0 rounded p-0.5 hover:bg-amber-500/10"
-              >
-                <FileSearch className="h-4 w-4" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={copyApprovalLink}
-                title="Copy link"
-                aria-label="Copy link"
-                className="shrink-0 rounded p-0.5 hover:bg-amber-500/10"
-              >
-                <Copy className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {allServersForCatalog.length > 0
-              ? "The Docker image was changed to one that isn't from a trusted registry. Existing connections keep running the previous image until an admin approves."
-              : isInstallAdmin
-                ? "This MCP server Docker image isn't from a trusted image registry. Review and approve configuration to allow installs."
-                : "This MCP server Docker image isn't from a trusted image registry. An admin must approve it before it can be installed."}
-          </p>
-        </div>
-      )}
+      {compactInfoRow}
       {variant === "local" && isInstalling && (
-        <div className="overflow-hidden rounded-md bg-muted/50">
-          <div className="px-3 py-2">
-            <InstallationProgress
-              status={
-                installationStatus === "error"
-                  ? null
-                  : (installationStatus ?? null)
-              }
-              serverId={installedServer?.id}
-              deploymentStatuses={deploymentStatuses}
-              onMoreDetails={() => goToItemPage("logs", installedServer?.id)}
-            />
-          </div>
-        </div>
+        <InstallationProgress
+          status={
+            installationStatus === "error" ? null : (installationStatus ?? null)
+          }
+          serverId={installedServer?.id}
+          deploymentStatuses={deploymentStatuses}
+          onMoreDetails={() => goToItemPage("logs", installedServer?.id)}
+        />
       )}
     </div>
   ) : undefined;
-  const cardFooter = (
-    <div className="space-y-3">
-      {compactInfoRow}
-      {isBuiltinVariant
-        ? builtinCardContent
-        : isPlaywrightVariant
-          ? playwrightCardContent
-          : isRemoteVariant
-            ? remoteCardContent
-            : localCardContent}
-    </div>
-  );
 
   return (
     <>
@@ -1145,7 +1113,8 @@ export function McpServerCard({
         onSelectionClick={selection?.onSelectionClick}
         selectionLabel={selection ? `Select ${item.name}` : undefined}
         onNavigate={() => goToItemPage()}
-        footer={cardFooter}
+        footer={cardActions}
+        density="compact"
       >
         {cardBody}
       </TableCard>

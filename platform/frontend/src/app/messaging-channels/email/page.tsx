@@ -13,9 +13,9 @@ import config from "@/lib/config/config";
 import { useConfig, usePublicBaseUrl } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { CollapsibleSetupSection } from "../_components/collapsible-setup-section";
 import { CredentialField } from "../_components/credential-field";
 import { ExternalDocsLink } from "../_components/external-docs-link";
+import { SetupSection } from "../_components/setup-section";
 import { SetupStep } from "../_components/setup-step";
 import { useTriggerStatuses } from "../_components/use-trigger-statuses";
 import { EmailSetupDialog } from "./email-setup-dialog";
@@ -45,7 +45,7 @@ export default function EmailPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <CollapsibleSetupSection
+      <SetupSection
         allStepsCompleted={allStepsCompleted}
         isLoading={isLoading}
         providerLabel={channelLabel}
@@ -163,7 +163,7 @@ export default function EmailPage() {
             </div>
           )}
         </SetupStep>
-      </CollapsibleSetupSection>
+      </SetupSection>
 
       <EmailSetupDialog
         open={setupOpen}

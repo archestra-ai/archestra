@@ -16,11 +16,11 @@ import { useConfig, usePublicBaseUrl } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { cn } from "@/lib/utils";
-import { CollapsibleSetupSection } from "../_components/collapsible-setup-section";
 import { CredentialField } from "../_components/credential-field";
 import { LlmKeySetupStep } from "../_components/llm-key-setup-step";
 import { ModeTile } from "../_components/mode-tile";
 import { NgrokStatus } from "../_components/ngrok-status";
+import { SetupSection } from "../_components/setup-section";
 import { SetupStep } from "../_components/setup-step";
 import { useReachabilityMode } from "../_components/use-reachability-mode";
 import { useTriggerStatuses } from "../_components/use-trigger-statuses";
@@ -76,7 +76,7 @@ export default function SlackPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <CollapsibleSetupSection
+      <SetupSection
         allStepsCompleted={allStepsCompleted}
         isLoading={setupDataLoading}
         providerLabel={channelLabel}
@@ -241,7 +241,7 @@ export default function SlackPage() {
             <CredentialField label="App ID" value={slackCreds?.appId} />
           </div>
         </SetupStep>
-      </CollapsibleSetupSection>
+      </SetupSection>
 
       <SlackSetupDialog
         open={slackSetupOpen}

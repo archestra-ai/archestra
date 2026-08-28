@@ -10,11 +10,11 @@ import config from "@/lib/config/config";
 import { useConfig, usePublicBaseUrl } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { CollapsibleSetupSection } from "../_components/collapsible-setup-section";
 import { CredentialField } from "../_components/credential-field";
 import { LlmKeySetupStep } from "../_components/llm-key-setup-step";
 import { ModeTile } from "../_components/mode-tile";
 import { NgrokStatus } from "../_components/ngrok-status";
+import { SetupSection } from "../_components/setup-section";
 import { SetupStep } from "../_components/setup-step";
 import { useReachabilityMode } from "../_components/use-reachability-mode";
 import { useTriggerStatuses } from "../_components/use-trigger-statuses";
@@ -44,7 +44,7 @@ export default function MsTeamsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <CollapsibleSetupSection
+      <SetupSection
         allStepsCompleted={allStepsCompleted}
         isLoading={setupDataLoading}
         providerLabel={channelLabel}
@@ -134,7 +134,7 @@ export default function MsTeamsPage() {
             />
           </div>
         </SetupStep>
-      </CollapsibleSetupSection>
+      </SetupSection>
 
       <MsTeamsSetupDialog
         open={msTeamsSetupOpen}

@@ -770,15 +770,16 @@ curl -X POST "${a2aEndpoint}" \\
           </h3>
           {chatDeepLinkBlock}
           <div className="border-t pt-4">{secondaryChannels}</div>
-          <div className="space-y-3 border-t pt-4">
-            <div className="space-y-1">
-              <h4 className="text-sm font-medium">OAuth clients</h4>
-              <p className="text-xs text-muted-foreground">
-                Register applications that call this agent as themselves or on
-                behalf of signed-in users.
-              </p>
-            </div>
-            <McpOauthManagement resourceId={agent.id} resourceKind="agent" />
+          <div className="border-t pt-4">
+            <McpOauthManagement
+              resourceId={agent.id}
+              resourceKind="agent"
+              heading={{
+                title: "OAuth clients",
+                description:
+                  "Register applications that call this agent as themselves or on behalf of signed-in users.",
+              }}
+            />
           </div>
         </section>
       </div>

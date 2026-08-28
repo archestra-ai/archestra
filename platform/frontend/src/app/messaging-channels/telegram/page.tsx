@@ -13,9 +13,9 @@ import {
 import { useGenerateTelegramLinkCode } from "@/lib/chatops/chatops-config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { CollapsibleSetupSection } from "../_components/collapsible-setup-section";
 import { CredentialField } from "../_components/credential-field";
 import { LlmKeySetupStep } from "../_components/llm-key-setup-step";
+import { SetupSection } from "../_components/setup-section";
 import { SetupStep } from "../_components/setup-step";
 import { useTriggerStatuses } from "../_components/use-trigger-statuses";
 
@@ -119,7 +119,7 @@ export default function TelegramPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <CollapsibleSetupSection
+      <SetupSection
         allStepsCompleted={allStepsCompleted}
         isLoading={statusLoading}
         providerLabel={channelLabel}
@@ -147,7 +147,7 @@ export default function TelegramPage() {
             botUsername={telegram?.dmInfo?.botUsername}
           />
         )}
-      </CollapsibleSetupSection>
+      </SetupSection>
 
       <TelegramSetupDialog open={setupOpen} onOpenChange={setSetupOpen} />
     </div>

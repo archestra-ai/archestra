@@ -175,7 +175,9 @@ export function FilterBar({
           </Button>
         )}
         {actions && (
-          <div className="ml-auto flex items-center gap-1.5">{actions}</div>
+          <div className="flex basis-full items-center justify-start gap-1.5 md:ml-auto md:basis-auto">
+            {actions}
+          </div>
         )}
       </div>
       {contextualActions ? (
@@ -258,7 +260,7 @@ export function filterControlClass({
  * LLM logs page its "not a session ID" hint, against that positioned ancestor.
  */
 export const filterSearchClass =
-  "relative w-full min-w-[12rem] flex-1 sm:w-auto sm:max-w-[20rem]";
+  "relative w-full min-w-[12rem] basis-full md:w-auto md:max-w-[20rem] md:basis-auto md:flex-1";
 
 /**
  * A {@link SearchableSelect} dressed as a filter-bar control: compact, sized to

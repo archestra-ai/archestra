@@ -643,21 +643,20 @@ export function McpServerCard({
     hasCardMetadata || showScopeBadge || hasCompactInfoAfterScopeBadge;
 
   /*
-    One line, and it has to stay one line at the grid's card width — which
-    leaves it roughly 250-300px to seat a scope badge, two counts, a deployment
-    state and a stack of connection avatars. Two rules keep it there.
+    This usually fits on one line at the grid's card width, but operational
+    states can add several badges and connection avatars at once. Let those
+    fixed items wrap rather than paint outside a single-column card.
 
     Fixed items are `shrink-0` and the badge is the single elastic cell, so
     pressure lands on the one thing that can absorb it — a long author or team
-    name truncates (its `title` keeps it readable) instead of every item
-    refusing to shrink and the row spilling over the card edge.
+    name truncates (its `title` keeps it readable) before the row wraps.
 
     Nothing separates the items but the gap. The 1px rules that used to sit
     between them cost ~21px each once their two gaps are counted — around a
     fifth of the row — which is most of what a name has to truncate into.
   */
   const compactInfoRow = hasCompactInfoContent ? (
-    <div className="flex min-w-0 items-center gap-3 text-sm text-muted-foreground">
+    <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground">
       {environmentLabel && (
         <Badge variant="outline" className="shrink-0 text-muted-foreground">
           <span className="max-w-32 truncate">{environmentLabel}</span>
@@ -891,7 +890,7 @@ export function McpServerCard({
             disabled={showApprovalPanel}
             size="sm"
             variant="outline"
-            className="shrink-0 text-destructive border-destructive/30 hover:bg-destructive/10 sm:flex-1"
+            className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10"
           >
             <RefreshCw className="h-4 w-4" />
             Reinstall
@@ -966,7 +965,7 @@ export function McpServerCard({
             disabled={reinstallCatalogMutation.isPending || showApprovalPanel}
             size="sm"
             variant="outline"
-            className="shrink-0 text-destructive border-destructive/30 hover:bg-destructive/10 sm:flex-1"
+            className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10"
           >
             <RefreshCw className="h-4 w-4" />
             Reinstall
@@ -994,7 +993,7 @@ export function McpServerCard({
             disabled={showApprovalPanel}
             size="sm"
             variant="outline"
-            className="shrink-0 text-destructive border-destructive/30 hover:bg-destructive/10 sm:flex-1"
+            className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10"
           >
             <RefreshCw className="h-4 w-4" />
             Reinstall

@@ -140,6 +140,26 @@ test.describe("studio sidebar navigation", () => {
   }) => {
     await enablePlugins({ mswControl, request });
     await mswControl.use({ method: "get", url: "/api/plugins", body: [] });
+    await mswControl.use({
+      method: "get",
+      url: "/api/knowledge-directories",
+      body: [],
+    });
+    await mswControl.use({
+      method: "get",
+      url: "/api/knowledge-files",
+      body: {
+        data: [],
+        pagination: {
+          currentPage: 1,
+          limit: 10,
+          total: 0,
+          totalPages: 0,
+          hasNext: false,
+          hasPrev: false,
+        },
+      },
+    });
 
     for (const { href, title, sibling } of [
       {

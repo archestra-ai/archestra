@@ -413,15 +413,9 @@ function SkillsList() {
       ? "match this search query"
       : "match the current filters",
   });
-  const [pageRowIds, setPageRowIds] = useState<string[]>([]);
-  const handlePageRowIdsChange = useCallback((ids: string[]) => {
-    setPageRowIds((current) =>
-      current.length === ids.length && current.every((id, i) => id === ids[i])
-        ? current
-        : ids,
-    );
-  }, []);
-  const visibleRows = items.filter((item) => pageRowIds.includes(item.key));
+  const visibleRows = items.filter((item) =>
+    selection.pageRowIds.includes(item.key),
+  );
   const cardSelection = useBulkCardSelection({
     rows: visibleRows,
     getRowId: (row) => row.key,
@@ -1034,7 +1028,7 @@ function SkillsList() {
                   }
                   rowSelection={selection.rowSelection}
                   onRowSelectionChange={selection.setRowSelection}
-                  onPageRowIdsChange={handlePageRowIdsChange}
+                  onPageRowIdsChange={selection.onPageRowIdsChange}
                   rangeSelection={selection.rangeSelection}
                   fixedWidthColumnIds={["visibility", "files", "usageCount"]}
                   flexibleColumnIds={["name"]}

@@ -100,6 +100,7 @@ export function useBulkSelection<T>({
     selected,
     selectAllMatching,
     rangeSelection,
+    pageRowIds,
   };
 }
 

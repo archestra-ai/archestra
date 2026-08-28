@@ -23,6 +23,8 @@ describe("useBulkSelection", () => {
       result.current.onPageRowIdsChange(["one", "two"]);
       result.current.setRowSelection({ one: true, two: true });
     });
+    expect(result.current.pageRowIds).toEqual(["one", "two"]);
+    expect(result.current.selectAllMatching.pageFullySelected).toBe(true);
     act(() => result.current.selectAllMatching.onSelectAll());
 
     expect(result.current.selectAllMatching.active).toBe(true);

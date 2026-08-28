@@ -19,6 +19,7 @@ import { type LucideIcon, Search } from "lucide-react";
 import React, { useState } from "react";
 
 import { EmptyState } from "@/components/empty-state";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -252,19 +253,6 @@ export function DataTable<TData, TValue>({
     }
   }, [isLoading, pageCount, pageIndex, table]);
 
-  if (!isLoading && table.getRowModel().rows.length === 0) {
-    return (
-      <EmptyState
-        icon={emptyIcon ?? (hasActiveFilters ? Search : undefined)}
-        title={hasActiveFilters ? filteredEmptyMessage : emptyMessage}
-        description={
-          hasActiveFilters ? filteredEmptyDescription : emptyDescription
-        }
-        onClearFilters={hasActiveFilters ? onClearFilters : undefined}
-      />
-    );
-  }
-
   const visibleColumns = table.getVisibleLeafColumns();
   const selectColumn = visibleColumns.find(
     (column) => column.id === SELECT_COLUMN_ID,
@@ -432,9 +420,31 @@ export function DataTable<TData, TValue>({
                     {/* An empty body while a fetch is still out is not an empty
                       result, so it says nothing: announcing "No Data" and then
                       replacing it with rows a moment later is the flash this
-                      area used to produce. The row keeps its height so the
-                      results arrive without shifting the pagination controls. */}
-                    <div className="min-h-[164px]" />
+                      area used to produce. The row keeps its height either
+                      way, so the rows arrive without shifting the pagination
+                      controls underneath. */}
+                    <div className="flex min-h-[164px] flex-col items-center justify-center text-center">
+                      {!isLoading && (
+                        <EmptyState
+                          icon={
+                            emptyIcon ?? (hasActiveFilters ? Search : undefined)
+                          }
+                          title={
+                            hasActiveFilters
+                              ? filteredEmptyMessage
+                              : emptyMessage
+                          }
+                          description={
+                            hasActiveFilters
+                              ? filteredEmptyDescription
+                              : emptyDescription
+                          }
+                          onClearFilters={
+                            hasActiveFilters ? onClearFilters : undefined
+                          }
+                        />
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               )}

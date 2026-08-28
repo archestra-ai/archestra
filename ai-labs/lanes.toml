@@ -33,9 +33,9 @@ provider = "openrouter"
 model = "deepseek/deepseek-v4-flash-0731"
 
 [[lane]]
-name = "qwen37-plus"
+name = "qwen38-flash"
 provider = "openrouter"
-model = "qwen/qwen3.7-plus"
+model = "qwen/qwen3.8-flash"
 
 [[lane]]
 name = "gemma-4-31b"
@@ -83,6 +83,11 @@ provider = "openrouter"
 model = "openai/gpt-oss-120b"
 
 [[lane]]
+name = "spark"
+provider = "openrouter"
+model = "meta/muse-spark-1.2-contributor"
+
+[[lane]]
 name = "kimi"
 provider = "anthropic"
 model = "kimi-for-coding"
@@ -93,10 +98,10 @@ openrouter_model = "moonshotai/kimi-k2.7-code"
 [[lane]]
 name = "glm"
 provider = "anthropic"
-model = "glm-5.3"
+model = "glm-5.3-flash"
 base_url = "https://api.z.ai/api/anthropic"
 api_key_env = "ZAI_API_KEY"
-openrouter_model = "z-ai/glm-5.2"
+openrouter_model = "z-ai/glm-5.3-flash"
 
 [[lane]]
 name = "mimo-25-adv-deepseek-flash"

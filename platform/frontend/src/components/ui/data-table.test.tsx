@@ -189,7 +189,10 @@ describe("DataTable column widths", () => {
       minWidth: `${DATA_TABLE_SELECT_COLUMN_SIZE}px`,
       maxWidth: `${DATA_TABLE_SELECT_COLUMN_SIZE}px`,
     });
-    expect(select).toHaveClass("!p-0");
+    expect(select).toHaveClass("!h-12", "!p-0");
+    expect(container.querySelector('th[data-column-id="name"]')).toHaveClass(
+      "!pl-0",
+    );
   });
 
   it("keeps utility columns fixed and lets the server column grow past its minimum", () => {
@@ -211,7 +214,7 @@ describe("DataTable column widths", () => {
 
     expect(container.querySelector("table")).toHaveClass("w-full");
     expect(container.querySelector("table")).toHaveStyle({
-      minWidth: "1196px",
+      minWidth: "1188px",
     });
     expect(
       (container.querySelector('th[data-column-id="name"]') as HTMLElement)
@@ -255,7 +258,7 @@ describe("DataTable selection cells", () => {
       'td[data-column-id="select"]',
     );
     if (!selectionCell) throw new Error("Selection cell not rendered");
-    expect(selectionCell).toHaveClass("!p-0");
+    expect(selectionCell).toHaveClass("!h-12", "!p-0");
     expect(selectionCell).toHaveStyle({
       width: `${DATA_TABLE_SELECT_COLUMN_SIZE}px`,
       minWidth: `${DATA_TABLE_SELECT_COLUMN_SIZE}px`,
@@ -268,6 +271,7 @@ describe("DataTable selection cells", () => {
 
     const nameCell = container.querySelector('td[data-column-id="name"]');
     if (!nameCell) throw new Error("Name cell not rendered");
+    expect(nameCell).toHaveClass("!pl-0");
     fireEvent.click(nameCell);
     expect(onRowClick).toHaveBeenCalledTimes(1);
   });

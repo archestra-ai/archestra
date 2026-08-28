@@ -317,7 +317,7 @@ export function DataTable<TData, TValue>({
                     key={headerGroup.id}
                     className="hover:bg-transparent"
                   >
-                    {headerGroup.headers.map((header) => {
+                    {headerGroup.headers.map((header, index) => {
                       const sorted = header.column.getIsSorted();
                       return (
                         <TableHead
@@ -332,7 +332,10 @@ export function DataTable<TData, TValue>({
                                   : "none"
                               : undefined
                           }
-                          className={getColumnClassName(header.column.id)}
+                          className={getColumnClassName(
+                            header.column.id,
+                            headerGroup.headers[index - 1]?.column.id,
+                          )}
                           style={getColumnStyle({
                             columnId: header.column.id,
                             configuredSize: header.column.columnDef.size,
@@ -383,7 +386,7 @@ export function DataTable<TData, TValue>({
                       )}
                       onClick={(e) => onRowClick?.(row.original, e)}
                     >
-                      {row.getVisibleCells().map((cell) => (
+                      {row.getVisibleCells().map((cell, index, cells) => (
                         <TableCell
                           key={cell.id}
                           data-column-id={cell.column.id}
@@ -392,7 +395,10 @@ export function DataTable<TData, TValue>({
                               ? handleSelectCellClick
                               : undefined
                           }
-                          className={getColumnClassName(cell.column.id)}
+                          className={getColumnClassName(
+                            cell.column.id,
+                            cells[index - 1]?.column.id,
+                          )}
                           style={getColumnStyle({
                             columnId: cell.column.id,
                             configuredSize: cell.column.columnDef.size,
@@ -503,20 +509,23 @@ function TableLoadingBar() {
   );
 }
 
-function getColumnClassName(columnId: string) {
+function getColumnClassName(columnId: string, previousColumnId?: string) {
   if (columnId === SELECT_COLUMN_ID) {
-    return "!p-0 text-center [&>[role=checkbox]]:translate-y-0";
+    return "!h-12 !p-0 cursor-pointer text-center [&>[role=checkbox]]:translate-y-0";
   }
 
+  const adjacentToSelection =
+    previousColumnId === SELECT_COLUMN_ID ? "!pl-0" : undefined;
+
   if (COMPACT_ICON_COLUMN_IDS.has(columnId)) {
-    return "w-0 px-2 md:px-2";
+    return cn(adjacentToSelection, "w-0 px-2 md:px-2");
   }
 
   if (columnId === ACTIONS_COLUMN_ID) {
-    return "whitespace-nowrap";
+    return cn(adjacentToSelection, "whitespace-nowrap");
   }
 
-  return undefined;
+  return adjacentToSelection;
 }
 
 function handleSelectCellClick(

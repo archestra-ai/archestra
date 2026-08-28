@@ -1,1 +1,1 @@
-export const DATA_TABLE_SELECT_COLUMN_SIZE = 56;
+export const DATA_TABLE_SELECT_COLUMN_SIZE = 48;

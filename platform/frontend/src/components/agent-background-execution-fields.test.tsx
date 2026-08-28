@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { useFeature } from "@/lib/config/config.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   AgentBackgroundExecutionFields,
   type BackgroundExecutionConfig,
@@ -11,9 +12,11 @@ import {
 vi.mock("@/lib/config/config.query", () => ({
   useFeature: vi.fn(),
 }));
+vi.mock("@/lib/hooks/use-app-name");
 
 describe("AgentBackgroundExecutionFields", () => {
   it("starts with the configured image and preserves explicit run controls", async () => {
+    vi.mocked(useAppName).mockReturnValue("Archestra");
     vi.mocked(useFeature).mockImplementation((flag) => {
       if (flag === "agentBackgroundExecution") return true;
       if (flag === "agentBackgroundExecutionBaseImage") {

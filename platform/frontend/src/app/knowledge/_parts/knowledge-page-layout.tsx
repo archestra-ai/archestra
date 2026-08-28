@@ -45,7 +45,6 @@ export function KnowledgePageLayout({
         }
         documentTitle={title}
         description={description}
-        tabs={KNOWLEDGE_TABS}
         actionButton={
           <div className="flex items-center gap-2">
             {extraActions}
@@ -69,12 +68,3 @@ export function KnowledgePageLayout({
     </LoadingWrapper>
   );
 }
-
-// Connectors come first: they are the prerequisite (a knowledge base is empty
-// until a connector syncs data), so they are also the landing tab (see the
-// bare /knowledge redirect page).
-const KNOWLEDGE_TABS = [
-  { label: "Connectors", href: "/knowledge/connectors" },
-  { label: "Files", href: "/knowledge/files" },
-  { label: "Knowledge Bases", href: "/knowledge/knowledge-bases" },
-];

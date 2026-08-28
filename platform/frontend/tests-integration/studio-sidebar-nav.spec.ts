@@ -164,6 +164,21 @@ test.describe("studio sidebar navigation", () => {
       },
       { href: "/skills", title: "Skills", sibling: /^Plugins/ },
       { href: "/plugins", title: "Plugins", sibling: /^Skills/ },
+      {
+        href: "/knowledge/connectors",
+        title: "Connectors",
+        sibling: /^Files$/,
+      },
+      {
+        href: "/knowledge/files",
+        title: "Files",
+        sibling: /^Connectors$/,
+      },
+      {
+        href: "/knowledge/knowledge-bases",
+        title: "Knowledge Bases",
+        sibling: /^Connectors$/,
+      },
     ]) {
       await page.goto(href);
 

@@ -727,34 +727,38 @@ function ToolReviewCard({
   return (
     <div className="rounded-lg border">
       <div className="flex flex-wrap items-start justify-between gap-4 p-4">
-        <Checkbox
-          aria-label={`Select ${displayName}`}
-          className="mt-0.5"
-          checked={selected}
-          onClick={onSelectionClick}
-        />
-        <div className="min-w-0 flex-1 space-y-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <code className="text-sm font-semibold">{displayName}</code>
-            {annotationBadges.map(({ key, label, destructive }) => (
-              <Badge
-                key={key}
-                variant={destructive ? "destructive" : "outline"}
-                className="font-normal"
-              >
-                {label}
-              </Badge>
-            ))}
-            {tool.assignmentCount > 0 && (
-              <Badge variant="secondary" className="font-normal">
-                {tool.assignmentCount}{" "}
-                {tool.assignmentCount === 1 ? "assignment" : "assignments"}
-              </Badge>
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <Checkbox
+            aria-label={`Select ${displayName}`}
+            className="mt-1"
+            checked={selected}
+            onClick={onSelectionClick}
+          />
+          <div className="min-w-0 flex-1 space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <code className="text-sm font-semibold">{displayName}</code>
+              {annotationBadges.map(({ key, label, destructive }) => (
+                <Badge
+                  key={key}
+                  variant={destructive ? "destructive" : "outline"}
+                  className="font-normal"
+                >
+                  {label}
+                </Badge>
+              ))}
+              {tool.assignmentCount > 0 && (
+                <Badge variant="secondary" className="font-normal">
+                  {tool.assignmentCount}{" "}
+                  {tool.assignmentCount === 1 ? "assignment" : "assignments"}
+                </Badge>
+              )}
+            </div>
+            {tool.description && (
+              <p className="text-sm text-muted-foreground">
+                {tool.description}
+              </p>
             )}
           </div>
-          {tool.description && (
-            <p className="text-sm text-muted-foreground">{tool.description}</p>
-          )}
         </div>
 
         <WithPermissions

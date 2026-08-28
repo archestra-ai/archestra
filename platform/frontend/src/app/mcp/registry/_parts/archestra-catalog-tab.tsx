@@ -146,7 +146,7 @@ export function ArchestraCatalogTab({
   );
 
   return (
-    <div className="w-full space-y-2">
+    <div className="w-full space-y-3">
       <FilterBar
         className="ml-1"
         onClearFilters={

@@ -289,6 +289,7 @@ export function TableCard({
   actions,
   selected,
   selectionDisabled,
+  selectionDisabledTooltip,
   onSelectedChange,
   onSelectionClick,
   selectionLabel,
@@ -296,6 +297,8 @@ export function TableCard({
   footer,
   className,
   onNavigate,
+  testId,
+  density = "default",
 }: {
   title: ReactNode;
   description?: ReactNode;
@@ -303,6 +306,7 @@ export function TableCard({
   actions?: ReactNode;
   selected?: boolean;
   selectionDisabled?: boolean;
+  selectionDisabledTooltip?: ReactNode;
   onSelectedChange?: (selected: boolean) => void;
   onSelectionClick?: MouseEventHandler<HTMLButtonElement>;
   selectionLabel?: string;
@@ -310,16 +314,49 @@ export function TableCard({
   footer?: ReactNode;
   className?: string;
   onNavigate?: () => void;
+  testId?: string;
+  density?: "default" | "compact";
 }) {
   const selectable =
     onSelectedChange !== undefined || onSelectionClick !== undefined;
   const navigation = useNavigableCard({ onNavigate, selected });
+  const compact = density === "compact";
+  const selectionControl = selectable ? (
+    <Checkbox
+      className="mt-1"
+      checked={selected}
+      disabled={selectionDisabled}
+      onCheckedChange={
+        onSelectedChange ? (value) => onSelectedChange(!!value) : undefined
+      }
+      onClick={(event) => {
+        event.stopPropagation();
+        onSelectionClick?.(event);
+      }}
+      aria-label={selectionLabel}
+    />
+  ) : null;
+  const renderedSelectionControl =
+    selectionDisabled && selectionDisabledTooltip && selectionControl ? (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex cursor-not-allowed">
+            {selectionControl}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>{selectionDisabledTooltip}</TooltipContent>
+      </Tooltip>
+    ) : (
+      selectionControl
+    );
 
   return (
     <div
       {...navigation.props}
+      data-testid={testId}
       className={cn(
-        "flex h-full flex-col gap-3 rounded-lg border p-4 transition-colors",
+        "flex h-full flex-col rounded-lg border p-4 transition-colors",
+        compact ? "gap-2" : "gap-3",
         selected
           ? cn("border-primary bg-primary/5", navigation.className)
           : onNavigate
@@ -328,30 +365,12 @@ export function TableCard({
         className,
       )}
     >
-      <div className="flex items-start">
-        {selectable ? (
-          <Checkbox
-            className={CARD_SELECTION_CHECKBOX_CLASSNAME}
-            checked={selected}
-            disabled={selectionDisabled}
-            onCheckedChange={
-              onSelectedChange
-                ? (value) => onSelectedChange(!!value)
-                : undefined
-            }
-            onClick={(event) => {
-              event.stopPropagation();
-              onSelectionClick?.(event);
-            }}
-            aria-label={selectionLabel}
-          />
-        ) : null}
+      <div className="flex items-start gap-3">
+        {renderedSelectionControl}
         {icon ? (
-          <span className="flex size-11 shrink-0 items-center justify-center text-muted-foreground">
-            {icon}
-          </span>
+          <span className="mt-0.5 shrink-0 text-muted-foreground">{icon}</span>
         ) : null}
-        <div className={cn("min-w-0 flex-1", icon && "ml-3")}>
+        <div className="min-w-0 flex-1">
           <h3 className="truncate font-medium">{title}</h3>
           {description ? (
             <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">
@@ -363,7 +382,12 @@ export function TableCard({
       </div>
       {children ? <div className="text-sm">{children}</div> : null}
       {footer ? (
-        <div className="mt-auto border-t pt-3 text-xs text-muted-foreground">
+        <div
+          className={cn(
+            "mt-auto border-t text-xs text-muted-foreground",
+            compact ? "pt-2 [&_button]:h-7 [&_button]:text-xs" : "pt-3",
+          )}
+        >
           {footer}
         </div>
       ) : null}
@@ -406,9 +430,6 @@ export function useNavigableCard({
       : {},
   };
 }
-
-const CARD_SELECTION_CHECKBOX_CLASSNAME =
-  "relative size-11 cursor-pointer border-0 bg-transparent shadow-none before:absolute before:size-4 before:rounded-[4px] before:border before:border-input before:bg-background data-[state=checked]:border-0 data-[state=checked]:bg-transparent data-[state=checked]:text-primary-foreground data-[state=checked]:before:border-primary data-[state=checked]:before:bg-primary dark:data-[state=checked]:bg-transparent [&_[data-slot=checkbox-indicator]]:relative";
 
 const VIEW_LABELS: Record<TableCardViewMode, string> = {
   cards: "View as cards",

@@ -427,7 +427,7 @@ export function ChannelsSection({
           onRetry={() => refetchBindings()}
         />
       ) : hasAnyChannels ? (
-        <>
+        <div className="space-y-3">
           {/* Search + filters + bulk assign */}
           <FilterBar
             onClearFilters={hasActiveFilters ? clearFilters : undefined}
@@ -629,7 +629,7 @@ export function ChannelsSection({
               }
             />
           )}
-        </>
+        </div>
       ) : (
         <ChannelsEmptyState
           onRefresh={() => refreshMutation.mutate(providerConfig.provider)}

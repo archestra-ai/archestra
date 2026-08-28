@@ -615,61 +615,64 @@ function ProjectCard({
       {...navigation.props}
       className={`rounded-lg border p-4 transition-colors ${navigation.className} ${selected ? "border-primary bg-primary/5" : ""}`}
     >
-      <div className="flex items-center justify-between gap-2">
-        <Link
-          href={`/projects/${project.id}`}
-          className="flex min-w-0 items-center gap-2"
-        >
-          <span className="shrink-0">
-            <AgentIcon icon={project.icon} fallbackType="project" size={18} />
-          </span>
-          <span className="min-w-0 truncate font-medium">{project.name}</span>
-        </Link>
-        <span className="flex shrink-0 items-center gap-1">
-          <Checkbox
-            checked={selected}
-            disabled={selectionDisabled}
-            onCheckedChange={(value) => onSelectedChange(!!value)}
-            onClick={onSelectionClick}
-            aria-label={`Select ${project.name}`}
-            aria-description={
-              selectionDisabled ? "You cannot modify this project" : undefined
-            }
-            title={
-              selectionDisabled ? "You cannot modify this project" : undefined
-            }
-          />
-          {/* Scope pill (personal/team/org) on every card. The owner label is
+      <div className="flex items-start gap-3">
+        <Checkbox
+          className="mt-1"
+          checked={selected}
+          disabled={selectionDisabled}
+          onCheckedChange={(value) => onSelectedChange(!!value)}
+          onClick={onSelectionClick}
+          aria-label={`Select ${project.name}`}
+          aria-description={
+            selectionDisabled ? "You cannot modify this project" : undefined
+          }
+          title={
+            selectionDisabled ? "You cannot modify this project" : undefined
+          }
+        />
+        <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
+          <Link
+            href={`/projects/${project.id}`}
+            className="flex min-w-0 items-center gap-2"
+          >
+            <span className="shrink-0">
+              <AgentIcon icon={project.icon} fallbackType="project" size={18} />
+            </span>
+            <span className="min-w-0 truncate font-medium">{project.name}</span>
+          </Link>
+          <span className="flex shrink-0 items-center gap-1">
+            {/* Scope pill (personal/team/org) on every card. The owner label is
               added only on another member's PERSONAL project (admin oversight),
               where the personal pill alone can't say whose it is — for team/org
               the scope pill already conveys the sharing. */}
-          <ScopeBadge
-            scope={projectVisibilityToScope(project.visibility)}
-            teamNames={project.shareTeamNames}
-            userNames={project.shareUserNames}
-          />
-          {project.viewerRole === "admin" && project.visibility === null && (
-            <Badge variant="secondary">
-              {project.ownerName
-                ? `Owned by ${project.ownerName}`
-                : "Other user"}
-            </Badge>
-          )}
-          <ProjectActionsMenu
-            pinned={!!project.pinnedAt}
-            canPin={project.viewerRole !== "admin"}
-            canManage={canManageProject(project.viewerRole, !!isProjectAdmin)}
-            canDelete={canDeleteProject({
-              viewerRole: project.viewerRole,
-              visibility: project.visibility,
-              isProjectAdmin: !!isProjectAdmin,
-              canShareOrg: !!canShareOrg,
-            })}
-            onTogglePin={() => onTogglePin(project)}
-            onEdit={() => onEdit(project)}
-            onDelete={() => onDelete(project)}
-          />
-        </span>
+            <ScopeBadge
+              scope={projectVisibilityToScope(project.visibility)}
+              teamNames={project.shareTeamNames}
+              userNames={project.shareUserNames}
+            />
+            {project.viewerRole === "admin" && project.visibility === null && (
+              <Badge variant="secondary">
+                {project.ownerName
+                  ? `Owned by ${project.ownerName}`
+                  : "Other user"}
+              </Badge>
+            )}
+            <ProjectActionsMenu
+              pinned={!!project.pinnedAt}
+              canPin={project.viewerRole !== "admin"}
+              canManage={canManageProject(project.viewerRole, !!isProjectAdmin)}
+              canDelete={canDeleteProject({
+                viewerRole: project.viewerRole,
+                visibility: project.visibility,
+                isProjectAdmin: !!isProjectAdmin,
+                canShareOrg: !!canShareOrg,
+              })}
+              onTogglePin={() => onTogglePin(project)}
+              onEdit={() => onEdit(project)}
+              onDelete={() => onDelete(project)}
+            />
+          </span>
+        </div>
       </div>
       {/* Always reserve two lines so cards keep a uniform height regardless of
           description length (or absence). */}

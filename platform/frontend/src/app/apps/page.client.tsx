@@ -222,7 +222,7 @@ export default function AppsPage() {
         </FilterBar>
 
         {parsedLabels && (
-          <div className="mb-6">
+          <div className="mb-3">
             <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />
           </div>
         )}

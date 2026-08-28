@@ -1,5 +1,6 @@
 import type { RowSelectionState } from "@tanstack/react-table";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FilterBar } from "@/components/filter-bar";
@@ -195,6 +196,32 @@ describe("TableCardView", () => {
     fireEvent.click(selectionControl);
 
     expect(onSelectedChange).toHaveBeenCalledWith(true);
+  });
+
+  it("explains why a card cannot be selected", async () => {
+    const user = userEvent.setup();
+    const onSelectedChange = vi.fn();
+
+    render(
+      <TableCard
+        title="Unavailable source"
+        selected={false}
+        selectionDisabled
+        selectionDisabledTooltip="Install this source before selecting it"
+        onSelectedChange={onSelectedChange}
+        selectionLabel="Select unavailable source"
+      />,
+    );
+
+    const selectionControl = screen.getByLabelText("Select unavailable source");
+    expect(selectionControl).toBeDisabled();
+    await user.hover(selectionControl.parentElement ?? selectionControl);
+
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Install this source before selecting it",
+    );
+    fireEvent.click(selectionControl);
+    expect(onSelectedChange).not.toHaveBeenCalled();
   });
 
   it("reports the rows visible in card mode", () => {

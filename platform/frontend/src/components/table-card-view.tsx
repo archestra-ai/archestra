@@ -289,6 +289,7 @@ export function TableCard({
   actions,
   selected,
   selectionDisabled,
+  selectionDisabledTooltip,
   onSelectedChange,
   onSelectionClick,
   selectionLabel,
@@ -296,6 +297,7 @@ export function TableCard({
   footer,
   className,
   onNavigate,
+  testId,
 }: {
   title: ReactNode;
   description?: ReactNode;
@@ -303,6 +305,7 @@ export function TableCard({
   actions?: ReactNode;
   selected?: boolean;
   selectionDisabled?: boolean;
+  selectionDisabledTooltip?: ReactNode;
   onSelectedChange?: (selected: boolean) => void;
   onSelectionClick?: MouseEventHandler<HTMLButtonElement>;
   selectionLabel?: string;
@@ -310,14 +313,44 @@ export function TableCard({
   footer?: ReactNode;
   className?: string;
   onNavigate?: () => void;
+  testId?: string;
 }) {
   const selectable =
     onSelectedChange !== undefined || onSelectionClick !== undefined;
   const navigation = useNavigableCard({ onNavigate, selected });
+  const selectionControl = selectable ? (
+    <Checkbox
+      className="mt-1"
+      checked={selected}
+      disabled={selectionDisabled}
+      onCheckedChange={
+        onSelectedChange ? (value) => onSelectedChange(!!value) : undefined
+      }
+      onClick={(event) => {
+        event.stopPropagation();
+        onSelectionClick?.(event);
+      }}
+      aria-label={selectionLabel}
+    />
+  ) : null;
+  const renderedSelectionControl =
+    selectionDisabled && selectionDisabledTooltip && selectionControl ? (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex cursor-not-allowed">
+            {selectionControl}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>{selectionDisabledTooltip}</TooltipContent>
+      </Tooltip>
+    ) : (
+      selectionControl
+    );
 
   return (
     <div
       {...navigation.props}
+      data-testid={testId}
       className={cn(
         "flex h-full flex-col gap-3 rounded-lg border p-4 transition-colors",
         selected
@@ -329,23 +362,7 @@ export function TableCard({
       )}
     >
       <div className="flex items-start gap-3">
-        {selectable ? (
-          <Checkbox
-            className="mt-1"
-            checked={selected}
-            disabled={selectionDisabled}
-            onCheckedChange={
-              onSelectedChange
-                ? (value) => onSelectedChange(!!value)
-                : undefined
-            }
-            onClick={(event) => {
-              event.stopPropagation();
-              onSelectionClick?.(event);
-            }}
-            aria-label={selectionLabel}
-          />
-        ) : null}
+        {renderedSelectionControl}
         {icon ? (
           <span className="mt-0.5 shrink-0 text-muted-foreground">{icon}</span>
         ) : null}

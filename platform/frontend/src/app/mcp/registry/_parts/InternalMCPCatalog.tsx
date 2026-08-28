@@ -1607,6 +1607,9 @@ function McpServerCatalogSection({
         selection={{
           ...cardSelection(item),
           disabled: !canSelect(item),
+          disabledTooltip: !serverInfo.installedServer
+            ? "Install this server before selecting it"
+            : "Wait for installation to finish",
         }}
       />
     );
@@ -1647,10 +1650,8 @@ function McpServerCatalogSection({
             rowIds={cardPageItems.filter(canSelect).map((item) => item.id)}
             onVisibleRowIdsChange={recordCardPageRowIds}
           >
-            <div className="space-y-6">
-              <TableCardGrid className={CARD_GRID_CLASS}>
-                {cardPageItems.map(renderCard)}
-              </TableCardGrid>
+            <div className="space-y-4">
+              <TableCardGrid>{cardPageItems.map(renderCard)}</TableCardGrid>
               {orderedCardItems.length > cardPagination.pageSize ? (
                 <TablePagination
                   pageIndex={cardPageIndex}
@@ -1790,21 +1791,6 @@ function McpCatalogLabelKeyRow({
     />
   );
 }
-
-/**
- * Columns are sized from what a card needs, not from viewport breakpoints. The
- * breakpoints measured the window rather than the space left after the nav, so
- * `lg:grid-cols-3` kept promising three columns while handing each card ~190px
- * — far less than its metadata row (scope badge, tool and agent counts,
- * deployment state, connection avatars) can lay out on one line. Sizing from
- * the content drops a column at those widths instead of squeezing.
- *
- * 19rem: measured against the widest real cards, every one of them fits by
- * 296px and the worst overflows by 1px at 288px, so this floor clears it with
- * a little room for the author name to occupy rather than truncate.
- */
-const CARD_GRID_CLASS =
-  "auto-rows-fr grid-cols-[repeat(auto-fill,minmax(19rem,1fr))] lg:grid-cols-[repeat(auto-fill,minmax(19rem,1fr))] 2xl:grid-cols-[repeat(auto-fill,minmax(19rem,1fr))]";
 
 function countSuffix(applicable: number, selected: number): string {
   return applicable > 0 && applicable < selected ? ` (${applicable})` : "";

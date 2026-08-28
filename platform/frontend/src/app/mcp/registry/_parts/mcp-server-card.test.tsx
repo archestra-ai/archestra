@@ -572,14 +572,30 @@ describe("McpServerCard uninstall permission", () => {
     const grid = screen.getByTestId("registry-card-grid");
     expect(
       within(grid)
-        .getAllByRole("link")
-        .filter((link) =>
+        .getAllByRole("heading", { level: 3 })
+        .filter((heading) =>
           [flagged.name, personal.name, alpha.name, zeta.name].includes(
-            link.textContent ?? "",
+            heading.textContent ?? "",
           ),
         )
-        .map((link) => link.textContent),
+        .map((heading) => heading.textContent),
     ).toEqual([alpha.name, flagged.name, personal.name, zeta.name]);
+  });
+
+  it("explains that an uninstalled card must be installed before selection", async () => {
+    const user = userEvent.setup();
+    useMcpServersMock.mockReturnValue({ data: [] });
+    renderCard(<InternalMCPCatalog initialData={[item]} />);
+
+    const checkbox = screen.getByRole("checkbox", {
+      name: "Select some-remote-server",
+    });
+    expect(checkbox).toBeDisabled();
+    await user.hover(checkbox.parentElement ?? checkbox);
+
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Install this server before selecting it",
+    );
   });
 
   it("selects a card range from the shared bulk-selection checkbox", async () => {
@@ -618,6 +634,7 @@ describe("McpServerCard uninstall permission", () => {
           onSelectedChange,
           onSelectionClick: vi.fn(),
           disabled: true,
+          disabledTooltip: "Wait for installation to finish",
         }}
       />,
     );
@@ -626,6 +643,10 @@ describe("McpServerCard uninstall permission", () => {
       name: "Select some-remote-server",
     });
     expect(checkbox).toBeDisabled();
+    await user.hover(checkbox.parentElement ?? checkbox);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Wait for installation to finish",
+    );
 
     await user.click(checkbox);
 

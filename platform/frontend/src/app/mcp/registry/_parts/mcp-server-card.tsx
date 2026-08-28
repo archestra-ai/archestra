@@ -27,7 +27,7 @@ import { type MouseEventHandler, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
-import { useNavigableCard } from "@/components/table-card-view";
+import { TableCard } from "@/components/table-card-view";
 import {
   Avatar,
   AvatarFallback,
@@ -36,8 +36,6 @@ import {
 } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -57,7 +55,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { copyToClipboard } from "@/lib/clipboard";
@@ -147,6 +144,7 @@ export type McpServerCardProps = {
     onSelectedChange: (selected: boolean) => void;
     onSelectionClick: MouseEventHandler<HTMLButtonElement>;
     disabled?: boolean;
+    disabledTooltip?: string;
   };
 };
 
@@ -261,11 +259,6 @@ export function McpServerCard({
     const qs = params.toString();
     router.push(`/mcp/registry/${item.id}${qs ? `?${qs}` : ""}`);
   };
-  const cardNavigation = useNavigableCard({
-    onNavigate: () => goToItemPage(),
-    selected: selection?.selected,
-  });
-
   // ── Shareable edit deep-link (`?edit=<catalogId>`) ──────────────────────
   // Legacy links: the editor now lives on the item detail page, so a shared
   // `?edit=<id>` link redirects there for users who can edit, and shows a
@@ -357,7 +350,7 @@ export function McpServerCard({
       permissions={{ mcpServerInstallation: ["delete"] }}
       variant="outline"
       size="sm"
-      className="flex-1"
+      className="flex-1 px-2.5"
       onClick={handleUninstallClick}
     >
       Uninstall
@@ -570,34 +563,6 @@ export function McpServerCard({
     >
       <Pencil className="h-4 w-4" />
     </Button>
-  );
-
-  const selectionCheckbox = selection ? (
-    <Checkbox
-      className="mt-1"
-      checked={selection.selected}
-      disabled={selection.disabled}
-      aria-label={`Select ${item.name}`}
-      onCheckedChange={(checked) =>
-        selection.onSelectedChange(checked === true)
-      }
-      onClick={(event) => selection.onSelectionClick(event)}
-    />
-  ) : null;
-  const selectionControl = selection?.disabled ? (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span
-          className="inline-flex cursor-not-allowed"
-          title="Wait for installation to finish"
-        >
-          {selectionCheckbox}
-        </span>
-      </TooltipTrigger>
-      <TooltipContent>Wait for installation to finish</TooltipContent>
-    </Tooltip>
-  ) : (
-    selectionCheckbox
   );
 
   // A 4th connection folds into the +N count rather than lengthening the
@@ -894,7 +859,7 @@ export function McpServerCard({
             disabled={showApprovalPanel}
             size="sm"
             variant="outline"
-            className="shrink-0 text-destructive border-destructive/30 hover:bg-destructive/10"
+            className="shrink-0 text-destructive border-destructive/30 hover:bg-destructive/10 sm:flex-1"
           >
             <RefreshCw className="h-4 w-4" />
             Reinstall
@@ -969,7 +934,7 @@ export function McpServerCard({
             disabled={reinstallCatalogMutation.isPending || showApprovalPanel}
             size="sm"
             variant="outline"
-            className="shrink-0 text-destructive border-destructive/30 hover:bg-destructive/10"
+            className="shrink-0 text-destructive border-destructive/30 hover:bg-destructive/10 sm:flex-1"
           >
             <RefreshCw className="h-4 w-4" />
             Reinstall
@@ -997,7 +962,7 @@ export function McpServerCard({
             disabled={showApprovalPanel}
             size="sm"
             variant="outline"
-            className="shrink-0 text-destructive border-destructive/30 hover:bg-destructive/10"
+            className="shrink-0 text-destructive border-destructive/30 hover:bg-destructive/10 sm:flex-1"
           >
             <RefreshCw className="h-4 w-4" />
             Reinstall
@@ -1052,153 +1017,140 @@ export function McpServerCard({
     </>
   );
 
+  const hasCardBody = Boolean(
+    environmentLabel ||
+      statusIssue ||
+      item.providesUi ||
+      item.providesSkills ||
+      showApprovalPanel ||
+      (variant === "local" && isInstalling),
+  );
+  const cardBody = hasCardBody ? (
+    <div className="space-y-3">
+      {(environmentLabel ||
+        statusIssue ||
+        item.providesUi ||
+        item.providesSkills) && (
+        <div className="flex flex-wrap items-center gap-1">
+          {environmentLabel && (
+            <Badge variant="outline" className="text-muted-foreground">
+              <span className="max-w-32 truncate">{environmentLabel}</span>
+            </Badge>
+          )}
+          {statusIssue && (
+            <span
+              data-testid={
+                statusIssue.kind === "failed-to-start"
+                  ? `${E2eTestId.McpServerError}-${item.name}-default`
+                  : undefined
+              }
+            >
+              <McpServerIssueBadge issue={statusIssue} />
+            </span>
+          )}
+          <McpCapabilityBadges
+            providesUi={item.providesUi}
+            providesSkills={item.providesSkills}
+            skillCount={item.skillCount}
+          />
+        </div>
+      )}
+      {showApprovalPanel && (
+        <div className="space-y-1 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2.5">
+          <div className="flex items-center gap-2 text-sm font-medium text-amber-800 dark:text-amber-500">
+            <span>
+              {isInstallAdmin
+                ? "Image needs approval"
+                : "Admin review required"}
+            </span>
+            {isInstallAdmin ? (
+              <button
+                type="button"
+                onClick={() => router.push(`/mcp/registry/${item.id}/edit`)}
+                title="Review config"
+                aria-label="Review config"
+                className="shrink-0 rounded p-0.5 hover:bg-amber-500/10"
+              >
+                <FileSearch className="h-4 w-4" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={copyApprovalLink}
+                title="Copy link"
+                aria-label="Copy link"
+                className="shrink-0 rounded p-0.5 hover:bg-amber-500/10"
+              >
+                <Copy className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {allServersForCatalog.length > 0
+              ? "The Docker image was changed to one that isn't from a trusted registry. Existing connections keep running the previous image until an admin approves."
+              : isInstallAdmin
+                ? "This MCP server Docker image isn't from a trusted image registry. Review and approve configuration to allow installs."
+                : "This MCP server Docker image isn't from a trusted image registry. An admin must approve it before it can be installed."}
+          </p>
+        </div>
+      )}
+      {variant === "local" && isInstalling && (
+        <div className="overflow-hidden rounded-md bg-muted/50">
+          <div className="px-3 py-2">
+            <InstallationProgress
+              status={
+                installationStatus === "error"
+                  ? null
+                  : (installationStatus ?? null)
+              }
+              serverId={installedServer?.id}
+              deploymentStatuses={deploymentStatuses}
+              onMoreDetails={() => goToItemPage("logs", installedServer?.id)}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  ) : undefined;
+  const cardFooter = (
+    <div className="space-y-3">
+      {compactInfoRow}
+      {isBuiltinVariant
+        ? builtinCardContent
+        : isPlaywrightVariant
+          ? playwrightCardContent
+          : isRemoteVariant
+            ? remoteCardContent
+            : localCardContent}
+    </div>
+  );
+
   return (
-    <Card
-      {...cardNavigation.props}
-      // `overflow-hidden` is a backstop, not the fix: the rows inside are laid
-      // out to fit. It means that if some future combination still doesn't,
-      // the card clips it instead of painting it over its neighbour.
-      className={`flex h-full flex-col gap-4 overflow-hidden pt-4 transition-colors ${cardNavigation.className} ${selection?.selected ? "border-primary bg-primary/5" : ""}`}
-      data-testid={`${E2eTestId.McpServerCard}-${item.name}`}
-    >
-      <CardHeader className="gap-0">
-        <div className="flex items-start gap-3 overflow-hidden">
-          {selectionControl}
-          <div className="flex min-w-0 flex-1 items-start justify-between gap-4 overflow-hidden">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 mb-1 overflow-hidden w-full">
-                <Link
-                  href={`/mcp/registry/${item.id}`}
-                  className="flex min-w-0 items-center gap-2 rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <span className="relative inline-flex shrink-0">
-                    <McpCatalogIcon
-                      icon={item.icon}
-                      catalogId={item.id}
-                      size={20}
-                    />
-                    {deploymentStatusIndicator}
-                  </span>
-                  <TruncatedTooltip content={item.name}>
-                    <span className="line-clamp-2 break-words text-lg font-semibold leading-5">
-                      {item.name}
-                    </span>
-                  </TruncatedTooltip>
-                </Link>
-                {environmentLabel && (
-                  <Badge
-                    variant="outline"
-                    className="shrink-0 text-muted-foreground"
-                  >
-                    <span className="max-w-32 truncate">
-                      {environmentLabel}
-                    </span>
-                  </Badge>
-                )}
-              </div>
-              {(statusIssue || item.description) && (
-                <div className="flex min-w-0 flex-col items-start gap-1">
-                  {statusIssue && (
-                    <span
-                      className="shrink-0"
-                      data-testid={
-                        statusIssue.kind === "failed-to-start"
-                          ? `${E2eTestId.McpServerError}-${item.name}-default`
-                          : undefined
-                      }
-                    >
-                      <McpServerIssueBadge issue={statusIssue} />
-                    </span>
-                  )}
-                  {item.description && (
-                    <p className="min-w-0 text-xs text-muted-foreground line-clamp-2">
-                      {item.description}
-                    </p>
-                  )}
-                </div>
-              )}
-              <McpCapabilityBadges
-                providesUi={item.providesUi}
-                providesSkills={item.providesSkills}
-                skillCount={item.skillCount}
-                className="mt-2"
-              />
-            </div>
-            <div className="flex shrink-0 items-center gap-1">
-              {canEditCatalog && settingsButton}
-            </div>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4 flex-grow">
-        {showApprovalPanel && (
-          <div className="space-y-1 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2.5">
-            <div className="flex items-center gap-2 text-sm font-medium text-amber-800 dark:text-amber-500">
-              <span>
-                {isInstallAdmin
-                  ? "Image needs approval"
-                  : "Admin review required"}
-              </span>
-              {isInstallAdmin ? (
-                <button
-                  type="button"
-                  onClick={() => router.push(`/mcp/registry/${item.id}/edit`)}
-                  title="Review config"
-                  aria-label="Review config"
-                  className="shrink-0 rounded p-0.5 hover:bg-amber-500/10"
-                >
-                  <FileSearch className="h-4 w-4" />
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={copyApprovalLink}
-                  title="Copy link"
-                  aria-label="Copy link"
-                  className="shrink-0 rounded p-0.5 hover:bg-amber-500/10"
-                >
-                  <Copy className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {allServersForCatalog.length > 0
-                ? "The Docker image was changed to one that isn't from a trusted registry. Existing connections keep running the previous image until an admin approves."
-                : isInstallAdmin
-                  ? "This MCP server Docker image isn't from a trusted image registry. Review and approve configuration to allow installs."
-                  : "This MCP server Docker image isn't from a trusted image registry. An admin must approve it before it can be installed."}
-            </p>
-          </div>
-        )}
-        {variant === "local" && isInstalling && (
-          <div className="bg-muted/50 rounded-md overflow-hidden">
-            <div className="px-3 py-2">
-              <InstallationProgress
-                status={
-                  installationStatus === "error"
-                    ? null
-                    : (installationStatus ?? null)
-                }
-                serverId={installedServer?.id}
-                deploymentStatuses={deploymentStatuses}
-                onMoreDetails={() => goToItemPage("logs", installedServer?.id)}
-              />
-            </div>
-          </div>
-        )}
-        <div className="mt-auto flex flex-col gap-4">
-          {compactInfoRow}
-          {isBuiltinVariant
-            ? builtinCardContent
-            : isPlaywrightVariant
-              ? playwrightCardContent
-              : isRemoteVariant
-                ? remoteCardContent
-                : localCardContent}
-        </div>
-      </CardContent>
+    <>
+      <TableCard
+        testId={`${E2eTestId.McpServerCard}-${item.name}`}
+        title={item.name}
+        description={item.description}
+        icon={
+          <span className="relative inline-flex">
+            <McpCatalogIcon icon={item.icon} catalogId={item.id} size={36} />
+            {deploymentStatusIndicator}
+          </span>
+        }
+        actions={canEditCatalog ? settingsButton : undefined}
+        selected={selection?.selected}
+        selectionDisabled={selection?.disabled}
+        selectionDisabledTooltip={selection?.disabledTooltip}
+        onSelectedChange={selection?.onSelectedChange}
+        onSelectionClick={selection?.onSelectionClick}
+        selectionLabel={selection ? `Select ${item.name}` : undefined}
+        onNavigate={() => goToItemPage()}
+        footer={cardFooter}
+      >
+        {cardBody}
+      </TableCard>
       {dialogs}
-    </Card>
+    </>
   );
 }
 

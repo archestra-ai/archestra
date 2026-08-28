@@ -496,7 +496,7 @@ export function McpServerIssueNotice({
         <Button
           variant={action.variant ?? "outline"}
           size="sm"
-          className="shrink-0 gap-1 px-2 text-xs"
+          className="shrink-0 gap-1 px-2 text-xs sm:flex-1"
           aria-label={action.label}
           data-testid={action.testId}
           onClick={action.onClick}
@@ -511,7 +511,7 @@ export function McpServerIssueNotice({
         <Button
           variant="outline"
           size="sm"
-          className="shrink-0 gap-1 px-2 text-xs"
+          className="shrink-0 gap-1 px-2 text-xs sm:flex-1"
           disabled={restoreMutation.isPending}
           onClick={() =>
             restoreMutation.mutate(
@@ -531,7 +531,7 @@ export function McpServerIssueNotice({
       <Button
         variant="outline"
         size="sm"
-        className="shrink-0 gap-1 px-2 text-xs"
+        className="shrink-0 gap-1 px-2 text-xs sm:flex-1"
         onClick={() => router.push(detailHref())}
       >
         Open

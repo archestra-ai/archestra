@@ -502,7 +502,7 @@ function McpToolCallsTable({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <FilterBar leading onClearFilters={hasFilters ? clearFilters : undefined}>
         {searchInputComponent}
         {/* Two people's personal gateways can both be called "My Gateway", so

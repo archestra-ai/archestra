@@ -49,6 +49,7 @@ import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
+import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -683,90 +684,92 @@ export default function ApiKeysPage() {
           </p>
         </div>
 
-        <FilterBar className="!mb-3">
-          <SearchInput
-            isLoading={isFetching}
-            objectNamePlural="credentials"
-            searchFields={["name"]}
-            paramName="search"
-            className={filterSearchClass}
-          />
-          <Select
-            value={providerFilter}
-            onValueChange={(value) =>
-              updateQueryParams({
-                provider: value === "all" ? null : value,
-              })
-            }
-          >
-            <SelectTrigger
-              size="sm"
-              aria-label="Filter by provider"
-              className={filterControlClass({
-                active: providerFilter !== "all",
-              })}
+        <BulkActionsScope className="space-y-3">
+          <FilterBar>
+            <SearchInput
+              isLoading={isFetching}
+              objectNamePlural="credentials"
+              searchFields={["name"]}
+              paramName="search"
+              className={filterSearchClass}
+            />
+            <Select
+              value={providerFilter}
+              onValueChange={(value) =>
+                updateQueryParams({
+                  provider: value === "all" ? null : value,
+                })
+              }
             >
-              <SelectValue placeholder="All providers" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All providers</SelectItem>
-              <LlmProviderSelectItems options={providerOptions} />
-            </SelectContent>
-          </Select>
-        </FilterBar>
+              <SelectTrigger
+                size="sm"
+                aria-label="Filter by provider"
+                className={filterControlClass({
+                  active: providerFilter !== "all",
+                })}
+              >
+                <SelectValue placeholder="All providers" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All providers</SelectItem>
+                <LlmProviderSelectItems options={providerOptions} />
+              </SelectContent>
+            </Select>
+          </FilterBar>
 
-        {byosEnabled &&
-          apiKeys.some((key) => key.secretStorageType === "database") && (
-            <Alert variant="destructive" className="!mb-3">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertTitle>Database-stored API keys detected</AlertTitle>
-              <AlertDescription>
-                External Vault storage is enabled, but some of your API keys are
-                still stored in the database. To migrate them to the vault,
-                delete them and create new ones with vault references.
-              </AlertDescription>
-            </Alert>
-          )}
+          {byosEnabled &&
+            apiKeys.some((key) => key.secretStorageType === "database") && (
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Database-stored API keys detected</AlertTitle>
+                <AlertDescription>
+                  External Vault storage is enabled, but some of your API keys
+                  are still stored in the database. To migrate them to the
+                  vault, delete them and create new ones with vault references.
+                </AlertDescription>
+              </Alert>
+            )}
 
-        <div data-testid={E2eTestId.ChatApiKeysTable}>
-          <BulkActions
-            count={selectedApiKeys.length}
-            noun="API key"
-            onClear={clearSelection}
-            busy={bulkDeleteMutation.isPending}
-            selectAllMatching={selectAllMatching}
-          >
-            <PermissionButton
-              permissions={{ llmProviderApiKey: ["delete"] }}
-              variant="destructive"
-              size="sm"
-              onClick={() => setIsBulkDeleteDialogOpen(true)}
+          <div data-testid={E2eTestId.ChatApiKeysTable}>
+            <BulkActions
+              count={selectedApiKeys.length}
+              noun="API key"
+              onClear={clearSelection}
+              busy={bulkDeleteMutation.isPending}
+              selectAllMatching={selectAllMatching}
             >
-              <Trash2 className="h-4 w-4" />
-              <span>Delete</span>
-            </PermissionButton>
-          </BulkActions>
-          <DataTable
-            columns={columns}
-            data={rows}
-            getRowId={(row) => row.id}
-            rowSelection={rowSelection}
-            onRowSelectionChange={setRowSelection}
-            onPageRowIdsChange={onPageRowIdsChange}
-            hideSelectedCount
-            isLoading={permissionsPending || isFetching}
-            emptyIcon={Boxes}
-            emptyMessage="No credentials configured"
-            hasActiveFilters={Boolean(search || providerFilter !== "all")}
-            filteredEmptyMessage="No LLM provider credentials match your filters"
-            onClearFilters={() =>
-              updateQueryParams({
-                search: null,
-                provider: null,
-              })
-            }
-          />
-        </div>
+              <PermissionButton
+                permissions={{ llmProviderApiKey: ["delete"] }}
+                variant="destructive"
+                size="sm"
+                onClick={() => setIsBulkDeleteDialogOpen(true)}
+              >
+                <Trash2 className="h-4 w-4" />
+                <span>Delete</span>
+              </PermissionButton>
+            </BulkActions>
+            <DataTable
+              columns={columns}
+              data={rows}
+              getRowId={(row) => row.id}
+              rowSelection={rowSelection}
+              onRowSelectionChange={setRowSelection}
+              onPageRowIdsChange={onPageRowIdsChange}
+              hideSelectedCount
+              isLoading={permissionsPending || isFetching}
+              emptyIcon={Boxes}
+              emptyMessage="No credentials configured"
+              hasActiveFilters={Boolean(search || providerFilter !== "all")}
+              filteredEmptyMessage="No LLM provider credentials match your filters"
+              onClearFilters={() =>
+                updateQueryParams({
+                  search: null,
+                  provider: null,
+                })
+              }
+            />
+          </div>
+        </BulkActionsScope>
 
         {/* Create Dialog */}
         <CreateLlmProviderApiKeyDialog

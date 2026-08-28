@@ -564,7 +564,7 @@ export function AuditLogTable() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <FilterBar
         leading
         onClearFilters={hasFilters ? clearFilters : undefined}

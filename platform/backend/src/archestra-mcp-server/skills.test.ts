@@ -203,7 +203,7 @@ describe("skill tool execution", () => {
       organizationId,
       serverType: "remote",
     });
-    const server = await makeMcpServer({
+    await makeMcpServer({
       catalogId: catalog.id,
       serverType: "remote",
       scope: "org",
@@ -229,9 +229,7 @@ describe("skill tool execution", () => {
         {},
         context,
       );
-      expect(textOf(result)).toContain(
-        `${server.name} [org:${server.id.slice(0, 8)}] / release`,
-      );
+      expect(textOf(result)).toContain('name="release"');
       expect(textOf(result)).toContain("Release safely.");
       expect(textOf(result)).toContain('trust="untrusted"');
     } finally {
@@ -245,6 +243,12 @@ describe("skill tool execution", () => {
   }) => {
     const originalEnabled = config.mcpGateway.skillsEnabled;
     config.mcpGateway.skillsEnabled = true;
+    await seedSkill({
+      skill: {
+        name: "release",
+        content: manifest("release", "Native release instructions."),
+      },
+    });
     const catalog = await makeInternalMcpCatalog({
       organizationId,
       serverType: "remote",
@@ -304,15 +308,24 @@ describe("skill tool execution", () => {
           },
         ),
     );
-    const qualifiedName = `${server.name} [org:${server.id.slice(0, 8)}] / release`;
+    const projectedName = "release-from-mcp";
 
     try {
+      const listed = await executeArchestraTool(
+        TOOL_LIST_SKILLS_FULL_NAME,
+        {},
+        context,
+      );
+      expect(textOf(listed)).toContain(`name="${projectedName}"`);
+
       const activation = await executeArchestraTool(
         TOOL_LOAD_SKILL_FULL_NAME,
-        { name: qualifiedName },
+        { name: projectedName },
         context,
       );
       expect(activation.isError).toBe(false);
+      expect(textOf(activation)).toContain(`name="${projectedName}"`);
+      expect(textOf(activation)).toContain("Release carefully.");
       await drainBackgroundWork();
       let usage = await ExternalMcpSkillUsageEventModel.getSummaries([
         { mcpServerId: server.id, uri },
@@ -321,10 +334,11 @@ describe("skill tool execution", () => {
 
       const fileRead = await executeArchestraTool(
         TOOL_LOAD_SKILL_FULL_NAME,
-        { name: qualifiedName, path: "guide.md" },
+        { name: projectedName, path: "guide.md" },
         context,
       );
       expect(fileRead.isError).toBe(false);
+      expect(textOf(fileRead)).toContain(`name="${projectedName}"`);
       await drainBackgroundWork();
       usage = await ExternalMcpSkillUsageEventModel.getSummaries([
         { mcpServerId: server.id, uri },
@@ -446,26 +460,20 @@ describe("skill tool execution", () => {
       input,
     });
     if (!plugin) throw new Error("plugin seed failed");
-    const loadName = formatPluginSkillName({
-      pluginId: plugin.id,
-      pluginName: plugin.displayName,
-      scope: plugin.scope,
-      skillPath: "skills/release",
-      name: "release-guide",
-    });
-
     const catalog = await executeArchestraTool(
       TOOL_LIST_SKILLS_FULL_NAME,
       {},
       context,
     );
-    expect(textOf(catalog)).toContain(loadName);
+    expect(textOf(catalog)).toContain('name="release-guide"');
 
     const activation = await executeArchestraTool(
       TOOL_LOAD_SKILL_FULL_NAME,
-      { name: loadName },
+      { name: "release-guide" },
       context,
     );
+    expect(activation.isError).toBe(false);
+    expect(textOf(activation)).toContain('name="release-guide"');
     expect(textOf(activation)).toContain("Ship carefully.");
     expect(textOf(activation)).toContain("references/checklist.md");
     expect(textOf(activation)).toContain(".mcp.json");
@@ -485,34 +493,34 @@ describe("skill tool execution", () => {
 
     const file = await executeArchestraTool(
       TOOL_LOAD_SKILL_FULL_NAME,
-      { name: loadName, path: "references/checklist.md" },
+      { name: "release-guide", path: "references/checklist.md" },
       context,
     );
     expect(textOf(file)).toContain("# Checklist");
     const mcpConfig = await executeArchestraTool(
       TOOL_LOAD_SKILL_FULL_NAME,
-      { name: loadName, path: ".mcp.json" },
+      { name: "release-guide", path: ".mcp.json" },
       context,
     );
     expect(mcpConfig.isError).toBe(false);
     expect(textOf(mcpConfig)).toContain("{}\n");
     const outputStyle = await executeArchestraTool(
       TOOL_LOAD_SKILL_FULL_NAME,
-      { name: loadName, path: "output-style.md" },
+      { name: "release-guide", path: "output-style.md" },
       context,
     );
     expect(outputStyle.isError).toBe(false);
     expect(textOf(outputStyle)).toContain("Prefer concise release notes.");
     const arbitraryContext = await executeArchestraTool(
       TOOL_LOAD_SKILL_FULL_NAME,
-      { name: loadName, path: "custom/context.dat" },
+      { name: "release-guide", path: "custom/context.dat" },
       context,
     );
     expect(arbitraryContext.isError).toBe(false);
     expect(textOf(arbitraryContext)).toContain("arbitrary adoptable context");
     const hookArtifact = await executeArchestraTool(
       TOOL_LOAD_SKILL_FULL_NAME,
-      { name: loadName, path: "hooks/hooks.json" },
+      { name: "release-guide", path: "hooks/hooks.json" },
       context,
     );
     expect(hookArtifact.isError).toBe(true);
@@ -522,6 +530,223 @@ describe("skill tool execution", () => {
       { pluginId: plugin.id, skillPath: "skills/release" },
     ]);
     expect(usage.get(plugin.id)?.get("skills/release")?.usageCount).toBe(1);
+  });
+
+  test("suffixes a plugin skill name when a native skill uses it", async () => {
+    config.plugins.enabled = true;
+    await seedSkill({
+      skill: {
+        name: "release-guide",
+        content: manifest("release-guide", "Native release instructions."),
+      },
+    });
+    const plugin = await PluginModel.create({
+      organizationId,
+      userId,
+      input: {
+        displayName: "Portable bundle",
+        description: "Portable skills",
+        clientType: "claude-code",
+        supportedPlatforms: ["posix"],
+        scope: "org",
+        files: [
+          {
+            path: "skills/release/SKILL.md",
+            content: manifest("release-guide", "Plugin release instructions."),
+            encoding: "utf8",
+            mode: "100644",
+          },
+        ],
+      },
+    });
+    if (!plugin) throw new Error("plugin seed failed");
+
+    const catalog = await executeArchestraTool(
+      TOOL_LIST_SKILLS_FULL_NAME,
+      {},
+      context,
+    );
+    expect(textOf(catalog)).toContain('name="release-guide"');
+    expect(textOf(catalog)).toContain('name="release-guide-from-plugin"');
+
+    const nativeActivation = await executeArchestraTool(
+      TOOL_LOAD_SKILL_FULL_NAME,
+      { name: "release-guide" },
+      context,
+    );
+    expect(textOf(nativeActivation)).toContain("Native release instructions.");
+
+    const pluginActivation = await executeArchestraTool(
+      TOOL_LOAD_SKILL_FULL_NAME,
+      { name: "release-guide-from-plugin" },
+      context,
+    );
+    expect(textOf(pluginActivation)).toContain("Plugin release instructions.");
+    expect(textOf(pluginActivation)).toContain(
+      'name="release-guide-from-plugin"',
+    );
+  });
+
+  test("uses the XML-safe listed name to load a projected skill", async () => {
+    config.plugins.enabled = true;
+    const plugin = await PluginModel.create({
+      organizationId,
+      userId,
+      input: {
+        displayName: "Portable bundle",
+        description: "Portable skills",
+        clientType: "claude-code",
+        supportedPlatforms: ["posix"],
+        scope: "org",
+        files: [
+          {
+            path: "skills/verify/SKILL.md",
+            content: [
+              "---",
+              'name: "release & verify"',
+              "description: A test skill.",
+              "---",
+              "",
+              "Verify the release.",
+            ].join("\n"),
+            encoding: "utf8",
+            mode: "100644",
+          },
+        ],
+      },
+    });
+    if (!plugin) throw new Error("plugin seed failed");
+
+    const catalog = await executeArchestraTool(
+      TOOL_LIST_SKILLS_FULL_NAME,
+      {},
+      context,
+    );
+    expect(textOf(catalog)).toContain('name="release &amp; verify"');
+
+    const activation = await executeArchestraTool(
+      TOOL_LOAD_SKILL_FULL_NAME,
+      { name: "release &amp; verify" },
+      context,
+    );
+    expect(activation.isError).toBe(false);
+    expect(textOf(activation)).toContain('name="release &amp; verify"');
+    expect(textOf(activation)).toContain("Verify the release.");
+  });
+
+  test("assigns duplicate projected names by stable source identity", async () => {
+    config.plugins.enabled = true;
+    const plugin = await PluginModel.create({
+      organizationId,
+      userId,
+      input: {
+        displayName: "Portable bundle",
+        description: "Portable skills",
+        clientType: "claude-code",
+        supportedPlatforms: ["posix"],
+        scope: "org",
+        files: [
+          {
+            path: "skills/b/SKILL.md",
+            content: manifest("release-guide", "Second release instructions."),
+            encoding: "utf8",
+            mode: "100644",
+          },
+          {
+            path: "skills/a/SKILL.md",
+            content: manifest("release-guide", "First release instructions."),
+            encoding: "utf8",
+            mode: "100644",
+          },
+        ],
+      },
+    });
+    if (!plugin) throw new Error("plugin seed failed");
+
+    const first = await executeArchestraTool(
+      TOOL_LOAD_SKILL_FULL_NAME,
+      { name: "release-guide-from-plugin" },
+      context,
+    );
+    const second = await executeArchestraTool(
+      TOOL_LOAD_SKILL_FULL_NAME,
+      { name: "release-guide-from-plugin-2" },
+      context,
+    );
+    expect(textOf(first)).toContain("First release instructions.");
+    expect(textOf(second)).toContain("Second release instructions.");
+  });
+
+  test("keeps legacy references ahead of colliding projected names", async () => {
+    config.plugins.enabled = true;
+    const original = await PluginModel.create({
+      organizationId,
+      userId,
+      input: {
+        displayName: "Original bundle",
+        description: "Original skills",
+        clientType: "claude-code",
+        supportedPlatforms: ["posix"],
+        scope: "org",
+        files: [
+          {
+            path: "skills/release/SKILL.md",
+            content: manifest("release-guide", "Original instructions."),
+            encoding: "utf8",
+            mode: "100644",
+          },
+        ],
+      },
+    });
+    if (!original) throw new Error("plugin seed failed");
+    const legacyName = formatPluginSkillName({
+      pluginId: original.id,
+      pluginName: original.displayName,
+      scope: original.scope,
+      skillPath: "skills/release",
+      name: "release-guide",
+    });
+    const colliding = await PluginModel.create({
+      organizationId,
+      userId,
+      input: {
+        displayName: "Colliding bundle",
+        description: "Colliding skills",
+        clientType: "claude-code",
+        supportedPlatforms: ["posix"],
+        scope: "org",
+        files: [
+          {
+            path: "skills/collision/SKILL.md",
+            content: manifest(legacyName, "Colliding instructions."),
+            encoding: "utf8",
+            mode: "100644",
+          },
+        ],
+      },
+    });
+    if (!colliding) throw new Error("plugin seed failed");
+
+    const legacyActivation = await executeArchestraTool(
+      TOOL_LOAD_SKILL_FULL_NAME,
+      { name: legacyName },
+      context,
+    );
+    expect(textOf(legacyActivation)).toContain("Original instructions.");
+
+    const catalog = await executeArchestraTool(
+      TOOL_LIST_SKILLS_FULL_NAME,
+      {},
+      context,
+    );
+    const collidingAlias = `${legacyName}-from-plugin`;
+    expect(textOf(catalog)).toContain(`name="${collidingAlias}"`);
+    const collidingActivation = await executeArchestraTool(
+      TOOL_LOAD_SKILL_FULL_NAME,
+      { name: collidingAlias },
+      context,
+    );
+    expect(textOf(collidingActivation)).toContain("Colliding instructions.");
   });
 
   test("load_skill with an empty-string path lists the skill, like omitting path", async () => {

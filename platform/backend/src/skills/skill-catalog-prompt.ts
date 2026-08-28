@@ -6,8 +6,15 @@ import {
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import { AgentModel, SkillModel, SkillTeamModel } from "@/models";
+import type { Skill } from "@/types";
 import { escapeXmlAttr, neutralizeFrameTags } from "./skill-activation";
 import { isSkillSandboxAvailableForAgent } from "./skill-sandbox-availability";
+
+interface SkillCatalogContext {
+  organizationId: string;
+  userId?: string;
+  agentId?: string;
+}
 
 /**
  * Build the `<available_skills>` catalog block — one line per accessible skill
@@ -18,38 +25,13 @@ import { isSkillSandboxAvailableForAgent } from "./skill-sandbox-availability";
  * handling to the caller (a tool message for `list_skills`, or omitting the
  * block from a system prompt).
  */
-export async function buildSkillCatalogPrompt(params: {
-  organizationId: string;
-  userId?: string;
-  agentId?: string;
-}): Promise<string | null> {
+export async function buildSkillCatalogPrompt(
+  params: SkillCatalogContext & { catalogSkills?: Skill[] },
+): Promise<string | null> {
   const { organizationId, userId, agentId } = params;
+  const skills =
+    params.catalogSkills ?? (await listAccessibleCatalogSkills(params));
 
-  const checker =
-    userId !== undefined
-      ? await getSkillPermissionChecker({ userId, organizationId })
-      : null;
-  const isSkillAdmin = checker?.isAdmin ?? false;
-  const accessibleSkillIds = isSkillAdmin
-    ? undefined
-    : await SkillTeamModel.getUserAccessibleSkillIds({
-        organizationId,
-        userId,
-      });
-
-  // Skills are environment-scoped like tools and connectors: the catalog only
-  // shows skills in the agent's environment (null = Default; built-ins exempt).
-  // Skill-admin visibility widens the scope filter, never the environment one.
-  const environmentId =
-    agentId !== undefined
-      ? await AgentModel.findEnvironmentId(agentId)
-      : undefined;
-
-  const skills = await SkillModel.findByOrganization({
-    organizationId,
-    accessibleSkillIds,
-    environmentId,
-  });
   if (skills.length === 0) {
     return null;
   }
@@ -104,6 +86,38 @@ export async function buildSkillCatalogPrompt(params: {
     : `Call ${loadSkill} with one of these names to load its instructions.`;
 
   return `<available_skills>\n${catalog}\n</available_skills>\n${SKILL_CATALOG_UNTRUSTED_NOTE}\n${instructions}${agentDesignatedNote}`;
+}
+
+export async function listAccessibleCatalogSkills(
+  params: SkillCatalogContext,
+): Promise<Skill[]> {
+  const { organizationId, userId, agentId } = params;
+
+  const checker =
+    userId !== undefined
+      ? await getSkillPermissionChecker({ userId, organizationId })
+      : null;
+  const isSkillAdmin = checker?.isAdmin ?? false;
+  const accessibleSkillIds = isSkillAdmin
+    ? undefined
+    : await SkillTeamModel.getUserAccessibleSkillIds({
+        organizationId,
+        userId,
+      });
+
+  // Skills are environment-scoped like tools and connectors: the catalog only
+  // shows skills in the agent's environment (null = Default; built-ins exempt).
+  // Skill-admin visibility widens the scope filter, never the environment one.
+  const environmentId =
+    agentId !== undefined
+      ? await AgentModel.findEnvironmentId(agentId)
+      : undefined;
+
+  return SkillModel.findByOrganization({
+    organizationId,
+    accessibleSkillIds,
+    environmentId,
+  });
 }
 
 /**

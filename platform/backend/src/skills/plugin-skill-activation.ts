@@ -12,8 +12,11 @@ export function formatPluginSkillName(
   );
 }
 
-export function formatPluginSkillActivation(skill: PluginSkillDetail): string {
-  const name = neutralizeFrameTags(formatPluginSkillName(skill));
+export function formatPluginSkillActivation(
+  skill: PluginSkillDetail,
+  activationName = formatPluginSkillName(skill),
+): string {
+  const name = neutralizeFrameTags(activationName);
   const files = skill.files.map((file) => file.path).sort();
   return [
     `<skill_content name="${escapeXmlAttr(name)}" source="plugin" live="true">`,

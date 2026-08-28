@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,8 +8,10 @@ vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/organization.query");
 
+const { routerPush } = vi.hoisted(() => ({ routerPush: vi.fn() }));
+
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useRouter: () => ({ push: routerPush, replace: vi.fn() }),
 }));
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
@@ -139,6 +141,7 @@ describe("McpServerTable uninstall permission", () => {
       data: undefined,
     } as unknown as ReturnType<typeof useAppearanceSettings>);
     useMcpServersMock.mockReturnValue({ data: [personalInstall] });
+    dismissMutateAsync.mockResolvedValue({ succeeded: [], failed: [] });
     grantAllExcept({});
   });
 
@@ -238,7 +241,7 @@ describe("McpServerTable uninstall permission", () => {
     ).not.toHaveLength(0);
   });
 
-  it("keeps queue actions inline and moves lower-priority actions into overflow", async () => {
+  it("keeps queue actions inline without triggering row navigation", async () => {
     const user = userEvent.setup();
     const issue = {
       kind: "needs-reauth",
@@ -279,7 +282,14 @@ describe("McpServerTable uninstall permission", () => {
     expect(
       screen.getByRole("heading", { name: "Dismiss alert" }),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(routerPush).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Dismiss" }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("heading", { name: "Dismiss alert" }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(routerPush).not.toHaveBeenCalled();
 
     expect(
       screen.getByRole("link", {

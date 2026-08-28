@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { memo, useState } from "react";
+import { RowClickShield } from "@/components/agent-pages/row-click-shield";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import {
@@ -258,15 +259,19 @@ export function McpServerTable({
         const item = row.original;
         const { installedServer, isInstallInProgress } = getServerInfo(item);
         return (
-          <McpServerRowActions
-            item={item}
-            installedServer={installedServer}
-            issues={issuesByCatalog.get(item.id) ?? []}
-            isInstalling={installingItemId === item.id || !!isInstallInProgress}
-            onInstall={onInstall}
-            onReinstall={onReinstall}
-            onCancelInstallation={onCancelInstallation}
-          />
+          <RowClickShield>
+            <McpServerRowActions
+              item={item}
+              installedServer={installedServer}
+              issues={issuesByCatalog.get(item.id) ?? []}
+              isInstalling={
+                installingItemId === item.id || !!isInstallInProgress
+              }
+              onInstall={onInstall}
+              onReinstall={onReinstall}
+              onCancelInstallation={onCancelInstallation}
+            />
+          </RowClickShield>
         );
       },
     },

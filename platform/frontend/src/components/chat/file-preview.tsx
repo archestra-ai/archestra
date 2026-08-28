@@ -25,8 +25,8 @@ export type PreviewableFile = {
 
 /**
  * Content-only preview for a file served from a byte endpoint: markdown
- * rendered, images inline, text/CSV as text/table, everything else a download
- * prompt. Extracted from the chat Files panel so the project pages preview
+ * rendered, images (SVG included) inline, text/CSV as text/table, everything
+ * else a download prompt. Extracted from the chat Files panel so the project pages preview
  * identically.
  *
  * Editing is controlled by the caller: when `editing` is true and a row-backed
@@ -117,6 +117,9 @@ export function FilePreview({
           />
         </div>
       )}
+      {kind === "svg" && (
+        <SvgPreview contentUrl={contentUrl} name={file.name} />
+      )}
       {kind === "html" && <HtmlPreview contentUrl={contentUrl} />}
       {kind === "pdf" && (
         <iframe
@@ -128,7 +131,9 @@ export function FilePreview({
       {(kind === "text" || kind === "csv") && (
         <FileTextPreview contentUrl={contentUrl} asTable={kind === "csv"} />
       )}
-      {kind === "unsupported" && <UnsupportedPreview file={file} />}
+      {kind === "unsupported" && (
+        <UnsupportedPreview name={file.name} contentUrl={contentUrl} />
+      )}
     </div>
   );
 }
@@ -298,6 +303,130 @@ function HtmlPreview({ contentUrl }: { contentUrl: string }) {
   );
 }
 
+/**
+ * Largest SVG the preview will turn into a data: URL. Bigger files fall back
+ * to download; the byte routes cap uploads at 25 MiB, so this bounds the
+ * base64 copy held in the DOM.
+ */
+const SVG_PREVIEW_MAX_BYTES = 10 * 1024 * 1024;
+
+type SvgPreviewSource =
+  | { status: "loading" }
+  | { status: "ready"; dataUrl: string }
+  | { status: "too-large" }
+  | { status: "failed" };
+
+/**
+ * SVG rendered through <img> from a client-built data: URL. The byte endpoint
+ * deliberately serves SVG download-only (it is a script carrier), so the bytes
+ * are fetched and re-typed here. <img> is the security control: browsers load
+ * SVG images with scripts, external references and interactivity disabled,
+ * while SMIL and CSS animations still play. A data: URL rather than a blob:
+ * one so "open image in new tab" lands in an opaque origin, never ours.
+ */
+function SvgPreview({
+  contentUrl,
+  name,
+}: {
+  contentUrl: string;
+  name: string;
+}) {
+  const source = useSvgDataUrl(contentUrl);
+  switch (source.status) {
+    case "loading":
+      return <p className="p-4 text-xs text-muted-foreground">Loading…</p>;
+    case "failed":
+      return (
+        <p className="p-4 text-xs text-muted-foreground">
+          Failed to load preview.
+        </p>
+      );
+    case "too-large":
+      return (
+        <UnsupportedPreview
+          name={name}
+          contentUrl={contentUrl}
+          reason={`This SVG is larger than ${SVG_PREVIEW_MAX_BYTES / (1024 * 1024)} MB, so it can't be previewed.`}
+        />
+      );
+    case "ready":
+      return (
+        <div className="flex h-full items-center justify-center p-4">
+          <img
+            src={source.dataUrl}
+            alt={name}
+            className="max-h-full max-w-full object-contain"
+          />
+        </div>
+      );
+  }
+}
+
+/** Fetch an SVG's bytes and encode them as an `image/svg+xml` data: URL. */
+function useSvgDataUrl(contentUrl: string): SvgPreviewSource {
+  const [source, setSource] = useState<SvgPreviewSource>({
+    status: "loading",
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    // Closing the preview mid-transfer must not leave a multi-MB body
+    // downloading, nor encode bytes nothing will render.
+    const abort = new AbortController();
+    setSource({ status: "loading" });
+    fetch(contentUrl, { signal: abort.signal })
+      .then(async (r): Promise<SvgPreviewSource> => {
+        if (!r.ok) throw new Error(`status ${r.status}`);
+        // The byte routes always send Content-Length, so an oversize file is
+        // refused before its body is transferred. byteLength below stays the
+        // authority for sources that report no length.
+        if (exceedsSvgCap(r.headers.get("Content-Length"))) {
+          return { status: "too-large" };
+        }
+        // Raw bytes, not text(): an SVG declaring a non-UTF-8 encoding must
+        // reach the image decoder untouched.
+        const bytes = await r.arrayBuffer();
+        if (bytes.byteLength > SVG_PREVIEW_MAX_BYTES) {
+          return { status: "too-large" };
+        }
+        if (cancelled) return { status: "loading" };
+        const blob = new Blob([bytes], { type: "image/svg+xml" });
+        return { status: "ready", dataUrl: await readAsDataUrl(blob) };
+      })
+      .then((next) => {
+        if (!cancelled) setSource(next);
+      })
+      .catch(() => {
+        if (!cancelled) setSource({ status: "failed" });
+      });
+    return () => {
+      cancelled = true;
+      abort.abort();
+    };
+  }, [contentUrl]);
+
+  return source;
+}
+
+/** True only for a well-formed length header that is over the cap. */
+function exceedsSvgCap(contentLength: string | null): boolean {
+  if (contentLength === null) return false;
+  const length = Number(contentLength);
+  return Number.isFinite(length) && length > SVG_PREVIEW_MAX_BYTES;
+}
+
+function readAsDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") resolve(reader.result);
+      else reject(new Error("FileReader produced no data URL"));
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
 function FileTextPreview({
   contentUrl,
   asTable,
@@ -352,18 +481,28 @@ function FileTextPreview({
   );
 }
 
-function UnsupportedPreview({ file }: { file: PreviewableFile }) {
+/**
+ * Download-only fallback. `contentUrl` is the resolved URL (a `blob:` in a
+ * locked chat), so the download link works wherever the preview would have.
+ */
+function UnsupportedPreview({
+  name,
+  contentUrl,
+  reason = "Preview isn't available for this file type.",
+}: {
+  name: string;
+  contentUrl: string;
+  reason?: string;
+}) {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-3 px-6 py-8 text-center">
       <span className="rounded-md border px-3 py-2 text-xs font-semibold uppercase text-muted-foreground">
-        {fileTag(file.name)}
+        {fileTag(name)}
       </span>
-      <p className="text-xs text-muted-foreground">
-        Preview isn't available for this file type.
-      </p>
-      {file.contentUrl && (
+      <p className="text-xs text-muted-foreground">{reason}</p>
+      {contentUrl && (
         <Button asChild variant="secondary" size="sm" className="gap-1">
-          <a href={file.contentUrl} download={file.name}>
+          <a href={contentUrl} download={name}>
             <Download className="h-4 w-4" />
             Download
           </a>

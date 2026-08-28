@@ -45,6 +45,7 @@ import {
 } from "../utils/mcp-image";
 import { unwrapToolContent } from "../utils/unwrap-tool-content";
 import { sanitizeGeminiToolSchema } from "./gemini-schema";
+import { GeminiToolNameCodec } from "./gemini-tool-names";
 
 // =============================================================================
 // TYPE ALIASES
@@ -647,6 +648,7 @@ class GeminiStreamAdapter
 {
   readonly provider = "gemini" as const;
   readonly state: StreamAccumulatorState;
+  private readonly toolNameCodec: GeminiToolNameCodec;
   private model: string = "";
   private inlineDataParts: Gemini.Types.MessagePart[] = [];
   // Set to the refusal text when the streamed response was replaced by a policy
@@ -662,7 +664,8 @@ class GeminiStreamAdapter
   private outputTextSignature: string | undefined;
   private toolCallSignatures: Map<number, string> = new Map();
 
-  constructor() {
+  constructor(request?: GeminiRequestWithModel) {
+    this.toolNameCodec = new GeminiToolNameCodec(request);
     this.state = {
       responseId: "",
       model: "",
@@ -679,6 +682,7 @@ class GeminiStreamAdapter
   }
 
   processChunk(chunk: GeminiStreamChunk): ChunkProcessingResult {
+    chunk = this.toolNameCodec.decodeResponse(chunk);
     if (this.state.timing.firstChunkTime === null) {
       this.state.timing.firstChunkTime = Date.now();
     }
@@ -1462,6 +1466,11 @@ export function restToSdkGenerateContentParams(
     params.config.tools = sdkTools;
   }
 
+  if (body.toolConfig) {
+    params.config.toolConfig =
+      body.toolConfig as GenerateContentConfig["toolConfig"];
+  }
+
   if (body.systemInstruction) {
     params.config.systemInstruction = { ...body.systemInstruction };
   }
@@ -1491,8 +1500,10 @@ export const geminiAdapterFactory: LLMProvider<
     return new GeminiResponseAdapter(response);
   },
 
-  createStreamAdapter(): LLMStreamAdapter<GeminiStreamChunk, GeminiResponse> {
-    return new GeminiStreamAdapter();
+  createStreamAdapter(
+    request?: GeminiRequestWithModel,
+  ): LLMStreamAdapter<GeminiStreamChunk, GeminiResponse> {
+    return new GeminiStreamAdapter(request);
   },
 
   extractApiKey(headers: GeminiHeaders): string | undefined {
@@ -1532,18 +1543,20 @@ export const geminiAdapterFactory: LLMProvider<
     request: GeminiRequestWithModel,
   ): Promise<GeminiResponse> {
     const genAI = client as GoogleGenAI;
-    const model = request._model ?? "gemini-2.5-pro";
+    const { providerRequest, toolNameCodec } =
+      prepareGeminiProviderRequest(request);
+    const model = providerRequest._model ?? "gemini-2.5-pro";
 
     // Normalize tools to array
-    const tools = request.tools
-      ? Array.isArray(request.tools)
-        ? request.tools
-        : [request.tools]
+    const tools = providerRequest.tools
+      ? Array.isArray(providerRequest.tools)
+        ? providerRequest.tools
+        : [providerRequest.tools]
       : undefined;
 
     // Convert REST body to SDK params
     const sdkParams = restToSdkGenerateContentParams(
-      { ...request, contents: request.contents || [] },
+      { ...providerRequest, contents: providerRequest.contents || [] },
       model,
       tools,
     );
@@ -1553,7 +1566,9 @@ export const geminiAdapterFactory: LLMProvider<
     );
 
     // Convert SDK response to REST format
-    return sdkResponseToRestResponse(response, model);
+    return toolNameCodec.decodeResponse(
+      sdkResponseToRestResponse(response, model),
+    );
   },
 
   async executeStream(
@@ -1561,18 +1576,19 @@ export const geminiAdapterFactory: LLMProvider<
     request: GeminiRequestWithModel,
   ): Promise<AsyncIterable<GeminiStreamChunk>> {
     const genAI = client as GoogleGenAI;
-    const model = request._model ?? "gemini-2.5-pro";
+    const { providerRequest } = prepareGeminiProviderRequest(request);
+    const model = providerRequest._model ?? "gemini-2.5-pro";
 
     // Normalize tools to array
-    const tools = request.tools
-      ? Array.isArray(request.tools)
-        ? request.tools
-        : [request.tools]
+    const tools = providerRequest.tools
+      ? Array.isArray(providerRequest.tools)
+        ? providerRequest.tools
+        : [providerRequest.tools]
       : undefined;
 
     // Convert REST body to SDK params
     const sdkParams = restToSdkGenerateContentParams(
-      { ...request, contents: request.contents || [] },
+      { ...providerRequest, contents: providerRequest.contents || [] },
       model,
       tools,
     );
@@ -1632,6 +1648,30 @@ export const geminiAdapterFactory: LLMProvider<
     return "Internal server error";
   },
 };
+
+type GeminiProviderRequestContext = {
+  providerRequest: GeminiRequestWithModel;
+  toolNameCodec: GeminiToolNameCodec;
+};
+
+const geminiProviderRequestContexts = new WeakMap<
+  GeminiRequestWithModel,
+  GeminiProviderRequestContext
+>();
+
+function prepareGeminiProviderRequest(
+  request: GeminiRequestWithModel,
+): GeminiProviderRequestContext {
+  const cached = geminiProviderRequestContexts.get(request);
+  if (cached) return cached;
+
+  const toolNameCodec = new GeminiToolNameCodec(request);
+  const providerRequest = toolNameCodec.encodeRequest(request);
+  const context = { providerRequest, toolNameCodec };
+  geminiProviderRequestContexts.set(request, context);
+  geminiProviderRequestContexts.set(providerRequest, context);
+  return context;
+}
 
 /** Rewritten arguments arrive as the JSON string the model emitted; this wire
  * shape carries them as an object. A repaired call always parses (the planner

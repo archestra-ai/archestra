@@ -640,7 +640,7 @@ export type GeminiGenerateContentRequestInput = {
     tools?: Array<{
         functionDeclarations?: Array<{
             /**
-             * The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
+             * The name of the function. Must start with a letter or underscore and contain only a-z, A-Z, 0-9, underscores, dots, colons, or dashes, with a maximum length of 128.
              */
             name: string;
             /**
@@ -686,7 +686,7 @@ export type GeminiGenerateContentRequestInput = {
     }> | {
         functionDeclarations?: Array<{
             /**
-             * The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
+             * The name of the function. Must start with a letter or underscore and contain only a-z, A-Z, 0-9, underscores, dots, colons, or dashes, with a maximum length of 128.
              */
             name: string;
             /**
@@ -805,7 +805,7 @@ export type GeminiGenerateContentRequestInput = {
         tools?: Array<{
             functionDeclarations?: Array<{
                 /**
-                 * The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
+                 * The name of the function. Must start with a letter or underscore and contain only a-z, A-Z, 0-9, underscores, dots, colons, or dashes, with a maximum length of 128.
                  */
                 name: string;
                 /**
@@ -851,7 +851,7 @@ export type GeminiGenerateContentRequestInput = {
         }> | {
             functionDeclarations?: Array<{
                 /**
-                 * The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
+                 * The name of the function. Must start with a letter or underscore and contain only a-z, A-Z, 0-9, underscores, dots, colons, or dashes, with a maximum length of 128.
                  */
                 name: string;
                 /**
@@ -6931,7 +6931,7 @@ export type GeminiGenerateContentRequest = {
     tools?: Array<{
         functionDeclarations?: Array<{
             /**
-             * The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
+             * The name of the function. Must start with a letter or underscore and contain only a-z, A-Z, 0-9, underscores, dots, colons, or dashes, with a maximum length of 128.
              */
             name: string;
             /**
@@ -6977,7 +6977,7 @@ export type GeminiGenerateContentRequest = {
     }> | {
         functionDeclarations?: Array<{
             /**
-             * The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
+             * The name of the function. Must start with a letter or underscore and contain only a-z, A-Z, 0-9, underscores, dots, colons, or dashes, with a maximum length of 128.
              */
             name: string;
             /**
@@ -7096,7 +7096,7 @@ export type GeminiGenerateContentRequest = {
         tools?: Array<{
             functionDeclarations?: Array<{
                 /**
-                 * The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
+                 * The name of the function. Must start with a letter or underscore and contain only a-z, A-Z, 0-9, underscores, dots, colons, or dashes, with a maximum length of 128.
                  */
                 name: string;
                 /**
@@ -7142,7 +7142,7 @@ export type GeminiGenerateContentRequest = {
         }> | {
             functionDeclarations?: Array<{
                 /**
-                 * The name of the function. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 63.
+                 * The name of the function. Must start with a letter or underscore and contain only a-z, A-Z, 0-9, underscores, dots, colons, or dashes, with a maximum length of 128.
                  */
                 name: string;
                 /**

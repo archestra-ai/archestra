@@ -3,7 +3,7 @@ title: Skills
 category: Agents
 order: 3
 description: Reusable SKILL.md instruction sets that agents load on demand
-lastUpdated: 2026-08-27
+lastUpdated: 2026-08-28
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -128,6 +128,8 @@ Plugins can contain one or more `SKILL.md` trees. Every valid Skill inside a plu
 The category does not filter by the plugin's client or operating system. Skill instructions are usually portable, so a Skill from a Claude Code plugin can still help in another client. The source client and platforms stay visible because bundled scripts and tool names may depend on them.
 
 Plugin Skills are read-only and remain managed by their source plugin. Archestra shares every file owned by the Skill tree except hooks, hook manifests, plugin or marketplace metadata, and installation files. Anyone with access can load the remaining files through the same `list_skills` and `load_skill` tools as other Skills. Activations contribute to the shared usage view. Archestra reads the source bytes directly instead of copying them into standalone Skills.
+
+`list_skills` keeps each source Skill's name when it is unique. Name collisions add `-from-mcp` or `-from-plugin`; pass the returned name to `load_skill`.
 
 ## Permissions and scope
 

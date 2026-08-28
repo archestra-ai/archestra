@@ -14,8 +14,9 @@ export function formatExternalSkillName(
 
 export function formatExternalSkillActivation(
   skill: ExternalMcpSkillDetail,
+  activationName = formatExternalSkillName(skill),
 ): string {
-  const name = neutralizeFrameTags(formatExternalSkillName(skill));
+  const name = neutralizeFrameTags(activationName);
   const files = skill.files.map((file) => file.path).sort();
   return [
     `<skill_content name="${escapeXmlAttr(name)}" source="mcp" live="true">`,

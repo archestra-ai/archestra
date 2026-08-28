@@ -1,6 +1,6 @@
 import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import {
@@ -91,7 +91,6 @@ function renderPage(query: string) {
 describe("VirtualKeysPage provider-key filter", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    window.localStorage.clear();
     vi.mocked(useRouter).mockReturnValue({
       push: vi.fn(),
     } as unknown as ReturnType<typeof useRouter>);
@@ -139,24 +138,5 @@ describe("VirtualKeysPage provider-key filter", () => {
     expect(
       await screen.findByRole("button", { name: "Filter by provider key" }),
     ).toHaveTextContent("All provider keys");
-  });
-
-  it("uses the virtual-key icon in both empty layouts", async () => {
-    const { container } = renderPage("");
-
-    await screen.findByText(
-      "No virtual keys yet. Create one and choose its provider key mappings.",
-    );
-    expect(container.querySelector(".lucide-key-round")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "View as table" }));
-
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "View as table" }),
-      ).toHaveAttribute("aria-pressed", "true"),
-    );
-    expect(container.querySelector(".lucide-key-round")).toBeInTheDocument();
-    expect(container.querySelector(".lucide-inbox")).not.toBeInTheDocument();
   });
 });

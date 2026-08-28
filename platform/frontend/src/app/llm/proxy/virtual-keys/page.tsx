@@ -197,14 +197,6 @@ function VirtualKeysTable() {
       page: "1",
     });
   }, [updateQueryParams]);
-  const emptyStateProps = {
-    emptyIcon: KeyRound,
-    emptyMessage:
-      "No virtual keys yet. Create one and choose its provider key mappings.",
-    hasActiveFilters,
-    filteredEmptyMessage: "No virtual keys match your filters",
-    onClearFilters: clearFilters,
-  };
 
   const columns: ColumnDef<VirtualKeyRow>[] = [
     createSelectColumn<VirtualKeyRow>({
@@ -410,7 +402,11 @@ function VirtualKeysTable() {
             <TableCardList
               itemCount={keys.length}
               isLoading={query.isFetching}
-              {...emptyStateProps}
+              hasActiveFilters={hasActiveFilters}
+              onClearFilters={clearFilters}
+              emptyIcon={KeyRound}
+              emptyMessage="No virtual keys yet. Create one and choose its provider key mappings."
+              filteredEmptyMessage="No virtual keys match your filters"
               pagination={{
                 pageIndex,
                 pageSize,
@@ -522,7 +518,10 @@ function VirtualKeysTable() {
               }}
               onPaginationChange={setPagination}
               isLoading={query.isFetching}
-              {...emptyStateProps}
+              hasActiveFilters={hasActiveFilters}
+              onClearFilters={clearFilters}
+              emptyMessage="No virtual keys yet. Create one and choose its provider key mappings."
+              filteredEmptyMessage="No virtual keys match your filters. Try adjusting your search."
             />
           }
         />

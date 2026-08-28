@@ -394,32 +394,6 @@ function McpGateways({
     : agents.filter((row) => effectiveRowSelection[row.id]);
   const selectedGateways =
     allMatchingSelected && allMatching ? allMatching : pageSelection;
-  const emptyStateProps = {
-    emptyIcon: Waypoints,
-    emptyMessage: isDeletedView
-      ? "No deleted MCP gateways found."
-      : "No MCP gateways found",
-    hasActiveFilters: Boolean(
-      nameFilter ||
-        scopeFilter.hasActiveScopeFilters ||
-        labelsFromUrl ||
-        isDeletedView,
-    ),
-    filteredEmptyMessage: isDeletedView
-      ? "No deleted MCP gateways found."
-      : "No MCP gateways match your filters",
-    onClearFilters: () =>
-      updateQueryParams({
-        name: null,
-        scope: null,
-        teamIds: null,
-        authorIds: null,
-        excludeAuthorIds: null,
-        labels: null,
-        status: null,
-        page: "1",
-      }),
-  };
 
   const renderGatewayActions = (agent: GatewayData) => {
     const isLegacy = agent.agentType === "profile";
@@ -784,7 +758,25 @@ function McpGateways({
                   <TableCardList
                     itemCount={agents.length}
                     isLoading={showLoading}
-                    {...emptyStateProps}
+                    hasActiveFilters={Boolean(
+                      nameFilter ||
+                        scopeFilter.hasActiveScopeFilters ||
+                        labelsFromUrl,
+                    )}
+                    emptyIcon={Waypoints}
+                    filteredEmptyMessage="No MCP gateways match your filters"
+                    onClearFilters={() =>
+                      updateQueryParams({
+                        name: null,
+                        scope: null,
+                        teamIds: null,
+                        authorIds: null,
+                        excludeAuthorIds: null,
+                        labels: null,
+                        status: null,
+                        page: "1",
+                      })
+                    }
                     pagination={{
                       pageIndex,
                       pageSize,
@@ -862,7 +854,35 @@ function McpGateways({
                               ),
                             )
                     }
-                    {...emptyStateProps}
+                    hasActiveFilters={Boolean(
+                      nameFilter ||
+                        scopeFilter.hasActiveScopeFilters ||
+                        labelsFromUrl ||
+                        isDeletedView,
+                    )}
+                    onClearFilters={() =>
+                      updateQueryParams({
+                        name: null,
+                        scope: null,
+                        teamIds: null,
+                        authorIds: null,
+                        excludeAuthorIds: null,
+                        labels: null,
+                        status: null,
+                        page: "1",
+                      })
+                    }
+                    emptyIcon={Waypoints}
+                    emptyMessage={
+                      isDeletedView
+                        ? "No deleted MCP gateways found."
+                        : "No MCP gateways found"
+                    }
+                    filteredEmptyMessage={
+                      isDeletedView
+                        ? "No deleted MCP gateways found."
+                        : "No MCP gateways match your filters"
+                    }
                   />
                 }
               />

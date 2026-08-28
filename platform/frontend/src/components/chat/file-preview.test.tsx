@@ -74,10 +74,19 @@ function decodeDataUrl(src: string): number[] {
 function stubLockedChatFetch(blobBytes: Uint8Array) {
   const fetchSpy = vi.fn(async (url: string, _init?: RequestInit) => {
     if (url === SEALED_URL) {
-      return { ok: true, blob: async () => new Blob([SVG_BYTES]) };
+      return {
+        ok: true,
+        headers: new Headers(),
+        blob: async () => new Blob([SVG_BYTES]),
+      };
     }
     if (url === "blob:sealed") {
-      return { ok: true, arrayBuffer: async () => blobBytes.buffer.slice(0) };
+      // A real blob: fetch reports its length; the cap is enforced from it.
+      return {
+        ok: true,
+        headers: new Headers({ "Content-Length": String(blobBytes.length) }),
+        arrayBuffer: async () => blobBytes.buffer.slice(0),
+      };
     }
     throw new Error(`unexpected fetch ${url}`);
   });
@@ -126,6 +135,35 @@ describe("FilePreview svg", () => {
     });
     expect(link.href).toBe(ARTIFACT_URL);
     expect(screen.queryByRole("img")).toBeNull();
+  });
+
+  it("refuses an oversize file on its length header, without reading the body", async () => {
+    const arrayBuffer = vi.fn(async () => {
+      throw new Error("body must not be read");
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        headers: new Headers({
+          "Content-Length": String(SVG_PREVIEW_MAX_BYTES + 1),
+        }),
+        arrayBuffer,
+      })),
+    );
+
+    render(
+      <FilePreview
+        file={{
+          name: "huge.svg",
+          mimeType: "image/svg+xml",
+          contentUrl: ARTIFACT_URL,
+        }}
+      />,
+    );
+
+    await screen.findByRole("link", { name: /download/i });
+    expect(arrayBuffer).not.toHaveBeenCalled();
   });
 
   it("in a locked chat, reads the sealed bytes once with the key and converts the blob", async () => {

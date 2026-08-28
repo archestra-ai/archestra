@@ -370,16 +370,26 @@ function useSvgDataUrl(contentUrl: string): SvgPreviewSource {
 
   useEffect(() => {
     let cancelled = false;
+    // Closing the preview mid-transfer must not leave a multi-MB body
+    // downloading, nor encode bytes nothing will render.
+    const abort = new AbortController();
     setSource({ status: "loading" });
-    fetch(contentUrl)
+    fetch(contentUrl, { signal: abort.signal })
       .then(async (r): Promise<SvgPreviewSource> => {
         if (!r.ok) throw new Error(`status ${r.status}`);
+        // The byte routes always send Content-Length, so an oversize file is
+        // refused before its body is transferred. byteLength below stays the
+        // authority for sources that report no length.
+        if (exceedsSvgCap(r.headers.get("Content-Length"))) {
+          return { status: "too-large" };
+        }
         // Raw bytes, not text(): an SVG declaring a non-UTF-8 encoding must
         // reach the image decoder untouched.
         const bytes = await r.arrayBuffer();
         if (bytes.byteLength > SVG_PREVIEW_MAX_BYTES) {
           return { status: "too-large" };
         }
+        if (cancelled) return { status: "loading" };
         const blob = new Blob([bytes], { type: "image/svg+xml" });
         return { status: "ready", dataUrl: await readAsDataUrl(blob) };
       })
@@ -391,10 +401,18 @@ function useSvgDataUrl(contentUrl: string): SvgPreviewSource {
       });
     return () => {
       cancelled = true;
+      abort.abort();
     };
   }, [contentUrl]);
 
   return source;
+}
+
+/** True only for a well-formed length header that is over the cap. */
+function exceedsSvgCap(contentLength: string | null): boolean {
+  if (contentLength === null) return false;
+  const length = Number(contentLength);
+  return Number.isFinite(length) && length > SVG_PREVIEW_MAX_BYTES;
 }
 
 function readAsDataUrl(blob: Blob): Promise<string> {

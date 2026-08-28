@@ -893,7 +893,7 @@ export function McpServerCard({
             disabled={showApprovalPanel}
             size="sm"
             variant="outline"
-            className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10"
+            className="shrink-0 text-destructive border-destructive/30 hover:bg-destructive/10"
           >
             <RefreshCw className="h-4 w-4" />
             Reinstall
@@ -968,7 +968,7 @@ export function McpServerCard({
             disabled={reinstallCatalogMutation.isPending || showApprovalPanel}
             size="sm"
             variant="outline"
-            className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10"
+            className="shrink-0 text-destructive border-destructive/30 hover:bg-destructive/10"
           >
             <RefreshCw className="h-4 w-4" />
             Reinstall
@@ -996,7 +996,7 @@ export function McpServerCard({
             disabled={showApprovalPanel}
             size="sm"
             variant="outline"
-            className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10"
+            className="shrink-0 text-destructive border-destructive/30 hover:bg-destructive/10"
           >
             <RefreshCw className="h-4 w-4" />
             Reinstall

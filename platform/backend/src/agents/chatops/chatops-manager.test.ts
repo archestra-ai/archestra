@@ -260,6 +260,7 @@ describe("ChatOpsManager security validation", () => {
       backgroundExecution: {
         image: "coding-worker:dev",
         command: null,
+        inferenceProtocol: "openai_responses",
         backend: "kubernetes",
         steerMode: "pipe",
         privileged: false,

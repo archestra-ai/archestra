@@ -13,7 +13,6 @@ import { A2AProtocolRole } from "@/agents/a2a/a2a-protocol";
 import { watchChatOpsTask } from "@/agents/chatops/chatops-task-watcher";
 import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
-import { runnerRuntimeManager } from "@/k8s/runner-runtime";
 import {
   A2AArtifactModel,
   A2ATaskModel,
@@ -21,6 +20,7 @@ import {
   AgentRunModel,
   AgentTeamModel,
 } from "@/models";
+import { resolveRunnerBackend } from "@/services/runners/backends";
 import { preflightAgentDeploymentCredentials } from "@/services/runners/credentials";
 import { resolveAgentDeployment } from "@/services/runners/pod-execution";
 import { AGENT_DEPLOYMENT_CREDENTIALS_REQUIRED_CODE } from "@/types";
@@ -135,11 +135,7 @@ const registry = defineArchestraTools([
         }
 
         const deployment = resolveAgentDeployment(agent);
-        if (deployment && !runnerRuntimeManager.isEnabled) {
-          return errorResult(
-            `Agent "${agent.name}" has Background execution configured, but deployments are not available on this installation.`,
-          );
-        }
+        if (deployment) resolveRunnerBackend(deployment.backend);
 
         // Preflight the caller's credentials BEFORE the task exists. The
         // lifecycle would refuse anyway — but asynchronously, after this tool
@@ -352,7 +348,7 @@ const registry = defineArchestraTools([
           );
         }
 
-        await runnerRuntimeManager.steer({
+        await resolveRunnerBackend(session.backend).steer({
           session,
           steerMode: deployment.steerMode,
           message: args.message,

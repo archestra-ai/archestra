@@ -37,7 +37,8 @@ export function makeConfig(
       sandbox: false,
       agentBackgroundExecution: false,
       agentBackgroundExecutionBaseImage:
-        "ghcr.io/archestra-ai/runner-agent-base:latest",
+        "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:latest",
+      agentBackgroundExecutionBackend: null,
       plugins: false,
       sandboxArtifactBytesLimit: DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
       chatAttachmentStorageBytesLimit: DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,

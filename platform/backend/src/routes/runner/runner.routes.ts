@@ -5,8 +5,11 @@ import {
   getAgentTypePermissionChecker,
   requireAgentModifyPermission,
 } from "@/auth";
-import { runnerRuntimeManager } from "@/k8s/runner-runtime";
 import { AgentModel, AgentRunModel, TeamModel } from "@/models";
+import {
+  isAnyRunnerBackendEnabled,
+  resolveRunnerBackend,
+} from "@/services/runners/backends";
 import {
   deleteAgentDeploymentCredential,
   preflightAgentDeploymentCredentials,
@@ -184,7 +187,7 @@ async function requireReadableDeployment(
 async function requireReadableDeploymentWithAgent(
   request: AgentRequest,
 ): Promise<{ agent: Agent; deployment: AgentDeployment }> {
-  if (!runnerRuntimeManager.isEnabled) {
+  if (!isAnyRunnerBackendEnabled()) {
     throw new ApiError(404, "Not found");
   }
   const agent = await requireReadableAgent(request);
@@ -192,6 +195,7 @@ async function requireReadableDeploymentWithAgent(
   if (!deployment) {
     throw new ApiError(404, "Background execution is not configured");
   }
+  resolveRunnerBackend(deployment.backend);
   return { agent, deployment };
 }
 

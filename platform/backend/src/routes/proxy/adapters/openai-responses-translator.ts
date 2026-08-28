@@ -151,8 +151,19 @@ function responseInputToChatMessages(
   input: LooseResponseItem[],
 ): OpenAiRequest["messages"] {
   return input.flatMap((item) => {
-    if (item.type === "message") {
-      const role = item.role === "assistant" ? "assistant" : "user";
+    if (
+      item.type === "message" ||
+      item.role === "user" ||
+      item.role === "assistant" ||
+      item.role === "system" ||
+      item.role === "developer"
+    ) {
+      const role =
+        item.role === "assistant"
+          ? "assistant"
+          : item.role === "system" || item.role === "developer"
+            ? "system"
+            : "user";
       return [
         {
           role,

@@ -1,0 +1,309 @@
+import type { SupportedProvider } from "@archestra/shared";
+import config from "@/config";
+import {
+  LlmProviderApiKeyModelLinkModel,
+  ModelModel,
+  UserCredentialModel,
+  VirtualApiKeyModel,
+} from "@/models";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import type { Agent, AgentDeployment, User } from "@/types";
+import { buildRunnerLaunchSpec } from "./launch-spec";
+
+describe("buildRunnerLaunchSpec", () => {
+  let previousPlatformBaseUrl: string;
+
+  beforeEach(() => {
+    previousPlatformBaseUrl = config.agentBackgroundExecution.platformBaseUrl;
+    config.agentBackgroundExecution.platformBaseUrl =
+      "https://platform.example.test";
+  });
+
+  afterEach(() => {
+    config.agentBackgroundExecution.platformBaseUrl = previousPlatformBaseUrl;
+  });
+
+  test("routes the Agent's selected model through its scoped model router", async ({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeAgent,
+  }) => {
+    const setup = await makeConfiguredAgent({
+      provider: "gemini",
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    });
+
+    const { spec, virtualApiKeyId } = await buildRunnerLaunchSpec({
+      deployment: deployment(setup.agent, "openai_responses"),
+      taskId: crypto.randomUUID(),
+      agentId: setup.agent.id,
+      actorUserId: setup.user.id,
+      organizationId: setup.agent.organizationId,
+      runtimeScope: "agent-tests",
+      effectiveNetworkPolicy: { source: "built_in", policy: null },
+      task: "Inspect the repository and report the result.",
+    });
+
+    expect(spec.env).toMatchObject({
+      ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL: "gemini:selected-model",
+      ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL: "selected-model",
+      ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL_PROVIDER: "gemini",
+      ARCHESTRA_LLM_PROXY_PROTOCOL: "openai_responses",
+      ARCHESTRA_LLM_PROXY_URL: `https://platform.example.test/v1/model-router/${setup.agent.id}`,
+      OPENAI_BASE_URL: `https://platform.example.test/v1/model-router/${setup.agent.id}`,
+      ARCHESTRA_MCP_GATEWAY_URL: `https://platform.example.test/v1/mcp/${setup.agent.id}`,
+    });
+    expect(spec.secretEnv.OPENAI_API_KEY).toMatch(/^arch_/);
+    expect(spec.secretEnv.OPENAI_API_KEY).not.toBe("upstream-secret");
+
+    const virtualKey = await VirtualApiKeyModel.findById(virtualApiKeyId);
+    expect(virtualKey?.scope).toBe("personal");
+    expect(virtualKey?.authorId).toBe(setup.user.id);
+  });
+
+  test("uses the Agent-scoped Anthropic endpoint for an Anthropic image", async ({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeAgent,
+  }) => {
+    const setup = await makeConfiguredAgent({
+      provider: "anthropic",
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    });
+
+    const { spec } = await buildRunnerLaunchSpec({
+      deployment: deployment(setup.agent, "anthropic"),
+      taskId: crypto.randomUUID(),
+      agentId: setup.agent.id,
+      actorUserId: setup.user.id,
+      organizationId: setup.agent.organizationId,
+      runtimeScope: "agent-tests",
+      effectiveNetworkPolicy: { source: "built_in", policy: null },
+    });
+
+    expect(spec.env.ARCHESTRA_LLM_PROXY_URL).toBe(
+      `https://platform.example.test/v1/anthropic/${setup.agent.id}`,
+    );
+    expect(spec.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL).toBe(
+      "selected-model",
+    );
+    expect(spec.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL).toBe(
+      "selected-model",
+    );
+    expect(spec.secretEnv.ANTHROPIC_API_KEY).toMatch(/^arch_/);
+  });
+
+  test("rejects an image protocol that cannot serve the selected provider", async ({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeAgent,
+  }) => {
+    const setup = await makeConfiguredAgent({
+      provider: "gemini",
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    });
+
+    await expect(
+      buildRunnerLaunchSpec({
+        deployment: deployment(setup.agent, "anthropic"),
+        taskId: crypto.randomUUID(),
+        agentId: setup.agent.id,
+        actorUserId: setup.user.id,
+        organizationId: setup.agent.organizationId,
+        runtimeScope: "agent-tests",
+        effectiveNetworkPolicy: { source: "built_in", policy: null },
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  test("rejects a Responses-only model for a Chat Completions image", async ({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeAgent,
+  }) => {
+    const setup = await makeConfiguredAgent({
+      provider: "openai",
+      modelId: "gpt-5.6-sol",
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    });
+
+    await expect(
+      buildRunnerLaunchSpec({
+        deployment: deployment(setup.agent, "openai_chat"),
+        taskId: crypto.randomUUID(),
+        agentId: setup.agent.id,
+        actorUserId: setup.user.id,
+        organizationId: setup.agent.organizationId,
+        runtimeScope: "agent-tests",
+        effectiveNetworkPolicy: { source: "built_in", policy: null },
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      message: expect.stringContaining("requires the Responses API"),
+    });
+  });
+
+  test("aliases a declared GitHub token for native gh clients", async ({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeAgent,
+  }) => {
+    const setup = await makeConfiguredAgent({
+      provider: "openai",
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    });
+    const configuredDeployment = deployment(setup.agent, "openai_responses");
+    configuredDeployment.credentials = [
+      {
+        key: "GITHUB_TOKEN",
+        scope: "per_user",
+        label: "GitHub token",
+        required: true,
+      },
+    ];
+    await UserCredentialModel.upsert({
+      organizationId: setup.agent.organizationId,
+      userId: setup.user.id,
+      agentId: setup.agent.id,
+      key: "GITHUB_TOKEN",
+      value: "github-token",
+    });
+
+    const { spec } = await buildRunnerLaunchSpec({
+      deployment: configuredDeployment,
+      taskId: crypto.randomUUID(),
+      agentId: setup.agent.id,
+      actorUserId: setup.user.id,
+      organizationId: setup.agent.organizationId,
+      runtimeScope: "agent-tests",
+      effectiveNetworkPolicy: { source: "built_in", policy: null },
+    });
+
+    expect(spec.secretEnv.GITHUB_TOKEN).toBe("github-token");
+    expect(spec.secretEnv.GH_TOKEN).toBe("github-token");
+  });
+});
+
+async function makeConfiguredAgent(params: {
+  provider: SupportedProvider;
+  modelId?: string;
+  makeOrganization: () => Promise<{ id: string }>;
+  makeAdmin: () => Promise<User>;
+  makeMember: (
+    userId: string,
+    organizationId: string,
+    overrides: { role: "admin" },
+  ) => Promise<unknown>;
+  makeSecret: (overrides: {
+    secret: Record<string, unknown>;
+  }) => Promise<{ id: string }>;
+  makeLlmProviderApiKey: (
+    organizationId: string,
+    secretId: string,
+    overrides: { provider: SupportedProvider },
+  ) => Promise<{ id: string }>;
+  makeAgent: (overrides: {
+    organizationId: string;
+    authorId: string;
+    agentType: "agent";
+    modelId: string;
+    llmApiKeyId: string;
+  }) => Promise<Agent>;
+}): Promise<{ agent: Agent; user: User }> {
+  const organization = await params.makeOrganization();
+  const user = await params.makeAdmin();
+  await params.makeMember(user.id, organization.id, { role: "admin" });
+  const secret = await params.makeSecret({
+    secret: { apiKey: "upstream-secret" },
+  });
+  const providerKey = await params.makeLlmProviderApiKey(
+    organization.id,
+    secret.id,
+    { provider: params.provider },
+  );
+  const modelId = params.modelId ?? "selected-model";
+  const model = await ModelModel.create({
+    externalId: `${params.provider}/${modelId}`,
+    provider: params.provider,
+    modelId,
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+    supportsToolCalling: true,
+    lastSyncedAt: new Date(),
+  });
+  await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(providerKey.id, [
+    model.id,
+  ]);
+  const agent = await params.makeAgent({
+    organizationId: organization.id,
+    authorId: user.id,
+    agentType: "agent",
+    modelId: model.id,
+    llmApiKeyId: providerKey.id,
+  });
+  return { agent, user };
+}
+
+function deployment(
+  agent: Agent,
+  inferenceProtocol: AgentDeployment["inferenceProtocol"],
+): AgentDeployment {
+  return {
+    agentId: agent.id,
+    organizationId: agent.organizationId,
+    environmentId: null,
+    secretId: null,
+    image: "agent-image:dev",
+    command: null,
+    inferenceProtocol,
+    backend: "kubernetes",
+    steerMode: "pipe",
+    privileged: false,
+    resources: null,
+    environment: null,
+    credentials: null,
+    ttlHours: null,
+    maxCostUsd: null,
+    idleTimeoutMinutes: null,
+  };
+}

@@ -41,6 +41,13 @@ function findPullRequestUrl(output: string): string | null {
 }
 
 function conciseOutput(output: string): string {
+  // Native catalog clients write their complete interactive transcript to the
+  // execution log. That belongs in the Executions console, not in a Slack
+  // completion reply. PR links are extracted above before this guard.
+  if (output.includes("[archestra] agent session exited")) {
+    return "";
+  }
+
   const cleaned = output
     .split("\n")
     .filter((line) => {

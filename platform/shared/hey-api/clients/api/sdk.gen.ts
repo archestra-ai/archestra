@@ -6303,7 +6303,7 @@ export const mistralChatCompletionsWithAgent = <ThrowOnError extends boolean = f
 export const modelRouterListModelsWithDefaultAgent = <ThrowOnError extends boolean = false>(options?: Options<ModelRouterListModelsWithDefaultAgentData, ThrowOnError>) => (options?.client ?? client).get<ModelRouterListModelsWithDefaultAgentResponses, ModelRouterListModelsWithDefaultAgentErrors, ThrowOnError>({ url: '/v1/model-router/models', ...options });
 
 /**
- * List OpenAI-compatible model ids available through the model router (specific LLM proxy)
+ * List OpenAI-compatible model ids available through the model router (specific attribution Agent)
  *
  * Authentication:
  *
@@ -6328,7 +6328,7 @@ export const modelRouterResponsesWithDefaultAgent = <ThrowOnError extends boolea
 });
 
 /**
- * Create a response through the OpenAI-compatible model router (specific LLM proxy)
+ * Create a response through the OpenAI-compatible model router (specific attribution Agent)
  *
  * Authentication:
  *
@@ -6360,7 +6360,7 @@ export const modelRouterEmbeddingsWithDefaultAgent = <ThrowOnError extends boole
 });
 
 /**
- * Create embeddings through the OpenAI-compatible model router (specific LLM proxy)
+ * Create embeddings through the OpenAI-compatible model router (specific attribution Agent)
  *
  * Authentication:
  *
@@ -6392,7 +6392,7 @@ export const modelRouterChatCompletionsWithDefaultAgent = <ThrowOnError extends 
 });
 
 /**
- * Create a chat completion through the OpenAI-compatible model router (specific LLM proxy)
+ * Create a chat completion through the OpenAI-compatible model router (specific attribution Agent)
  *
  * Authentication:
  *

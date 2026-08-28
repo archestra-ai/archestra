@@ -3,11 +3,15 @@
 The agent loop that runs inside an Archestra Agent's Background execution
 deployment, and the default image used when no custom command is configured.
 
-It is deliberately thin. The model, the tool set, the policies and the budget
-are all resolved by the platform behind the LLM proxy and MCP gateway this
-process talks to — the loop's job is to keep a conversation going, print it
-legibly for anyone attached to the tmux session, and take direction from a
-human without losing its place.
+It is deliberately thin. The model, remote tool set, policies and budget are
+all resolved by the platform behind the LLM proxy and MCP gateway this process
+talks to. The loop keeps a conversation going, exposes a command tool rooted in
+the isolated execution workspace, prints activity legibly for anyone attached
+to the tmux session, and takes direction from a human without losing its place.
+
+The local command tool lets the built-in catalog Agent clone repositories, edit
+files, and run verification inside its own pod. It does not bypass the gateway
+for remote tools or the LLM proxy for inference.
 
 ## How a session is steered
 
@@ -34,8 +38,13 @@ fails at startup rather than silently pointing the agent somewhere else.
 | Variable | Meaning |
 | --- | --- |
 | `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_AGENT_ID`, `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_AGENT_NAME` | Agent identity for this run |
-| `ARCHESTRA_LLM_PROXY_URL`, `ANTHROPIC_API_KEY` | The proxy and the session's personal virtual key |
+| `ARCHESTRA_LLM_PROXY_URL`, `ARCHESTRA_LLM_PROXY_PROTOCOL`, `ARCHESTRA_VIRTUAL_KEY` | The Agent-scoped proxy, its Responses, Chat Completions, or Anthropic Messages wire protocol, and the execution's short-lived personal virtual key |
 | `ARCHESTRA_MCP_GATEWAY_URL`, `ARCHESTRA_MCP_GATEWAY_TOKEN` | Tool access, as the invoking user |
 | `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK` | Initial instruction, when started with one |
 | `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_STEER_FIFO` | Where steer messages arrive |
-| `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL`, `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MAX_STEPS` | Model and step cap |
+| `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL`, `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL`, `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MAX_STEPS` | Provider-qualified model for the generic runner, native model slug for catalog CLIs, and step cap |
+
+The runtime also exposes the virtual key through the conventional
+`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `ANTHROPIC_AUTH_TOKEN` names for
+maintained third-party Agent images. Those aliases all point to Archestra,
+never to an upstream provider credential.

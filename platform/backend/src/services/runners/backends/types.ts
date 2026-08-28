@@ -1,6 +1,37 @@
-import type { Writable } from "node:stream";
-import type { RunnerLaunchSpec } from "@/k8s/runner-runtime/manifests";
-import type { AgentRun } from "@/types";
+import type { Readable, Writable } from "node:stream";
+import type WebSocket from "ws";
+import type {
+  AgentDeploymentBackend,
+  AgentDeploymentResources,
+  AgentDeploymentSteerMode,
+  AgentRun,
+  EffectiveNetworkPolicy,
+} from "@/types";
+
+/**
+ * Runtime-neutral description of one isolated Agent execution.
+ *
+ * The control plane resolves identity, credentials, inference, tools, limits,
+ * and network intent before crossing this boundary. A backend translates the
+ * result into its own vocabulary: a Kubernetes Job today, and potentially a
+ * VM or managed sandbox later.
+ */
+export type RunnerLaunchSpec = {
+  taskId: string;
+  runnerId: string;
+  frozenName: string;
+  /** Backend placement scope (a namespace, VM pool, region, or sandbox tier). */
+  runtimeScope: string;
+  image: string;
+  command: string[] | null;
+  privileged: boolean;
+  resources: AgentDeploymentResources | null;
+  env: Record<string, string>;
+  secretEnv: Record<string, string>;
+  activeDeadlineSeconds: number | null;
+  imagePullSecrets: string[];
+  effectiveNetworkPolicy: EffectiveNetworkPolicy;
+};
 
 /**
  * How a runner's work is actually executed.
@@ -22,6 +53,16 @@ export interface RunnerBackend {
   /** Whether this deployment can actually run work on this backend. */
   readonly isEnabled: boolean;
 
+  /**
+   * Select the backend-owned placement scope for a new execution.
+   * Existing Environment/organization scopes are hints; an adapter may map
+   * them to a namespace, VM pool, region, sandbox tier, or another target.
+   */
+  resolveRuntimeScope(params: {
+    environmentScope?: string | null;
+    organizationScope?: string | null;
+  }): string;
+
   /** Schedule the workload. Returns once accepted, not once running. */
   launch(spec: RunnerLaunchSpec): Promise<void>;
 
@@ -39,8 +80,25 @@ export interface RunnerBackend {
   streamOutput(params: {
     session: AgentRun;
     destination: Writable;
+    lines?: number;
     abortSignal?: AbortSignal;
   }): Promise<void>;
+
+  /** Interject into a live execution using the deployment's delivery mode. */
+  steer(params: {
+    session: AgentRun;
+    steerMode: AgentDeploymentSteerMode;
+    message: string;
+  }): Promise<void>;
+
+  /** Attach an interactive terminal to the execution. */
+  attach(params: {
+    session: AgentRun;
+    stdin: Readable;
+    stdout: Writable;
+    stderr: Writable;
+    onStatus?: (status: RunnerAttachStatus) => void;
+  }): Promise<RunnerAttachment>;
 
   /**
    * Wait for the session to reach an outcome.
@@ -55,12 +113,31 @@ export interface RunnerBackend {
 
   /** Release everything the session holds. Safe to call more than once. */
   teardown(session: AgentRun): Promise<void>;
+
+  /** Serialize adoption/teardown for one execution across control-plane replicas. */
+  withSessionLease(
+    session: AgentRun,
+    operation: () => Promise<void>,
+  ): Promise<boolean>;
 }
 
-/** Mirrors `RunnerBackendNameSchema`; the column stores exactly these. */
-export type RunnerBackendName = "kubernetes";
+/** Mirrors `AgentDeploymentBackendSchema`; durable runs store exactly these. */
+export type RunnerBackendName = AgentDeploymentBackend;
 
 export interface RunnerCompletion {
   outcome: "succeeded" | "failed" | "aborted";
   reason?: string;
+}
+
+export interface RunnerAttachStatus {
+  outcome: "success" | "failure";
+  message?: string;
+}
+
+export interface RunnerAttachment {
+  /** Operator-facing diagnostic command, never needed for transport. */
+  command: string;
+  /** Backend-native resource identifier, useful for diagnostics only. */
+  resourceName: string;
+  socket: WebSocket;
 }

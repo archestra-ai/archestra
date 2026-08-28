@@ -85,7 +85,25 @@ describe("model-router-resolver", () => {
       );
     });
 
-    test("returns 404 for unqualified, unknown, and non-text models", async () => {
+    test("resolves an unqualified model when the key maps one provider", async () => {
+      await createTextModel({
+        provider: "openai",
+        modelId: "known-resolver-test",
+      });
+
+      await expect(
+        resolveModelRoute({
+          requestedModel: "known-resolver-test",
+          allowedProviders: new Set(["openai"]),
+        }),
+      ).resolves.toMatchObject({
+        provider: "openai",
+        modelId: "known-resolver-test",
+        requestedModel: "known-resolver-test",
+      });
+    });
+
+    test("returns 404 for ambiguous unqualified, unknown, and non-text models", async () => {
       await createTextModel({
         provider: "openai",
         modelId: "known-resolver-test",
@@ -107,6 +125,29 @@ describe("model-router-resolver", () => {
           message: `Model "${requestedModel}" is not available. Use a provider-qualified model id such as "anthropic:claude-opus-4-6-20250918".`,
         });
       }
+    });
+
+    test("does not infer a provider when a key maps multiple providers", async () => {
+      await createTextModel({
+        provider: "openai",
+        modelId: "shared-resolver-test",
+      });
+      await createTextModel({
+        provider: "gemini",
+        modelId: "shared-resolver-test",
+      });
+
+      await expectApiError(
+        resolveModelRoute({
+          requestedModel: "shared-resolver-test",
+          allowedProviders: new Set(["openai", "gemini"]),
+        }),
+        {
+          statusCode: 404,
+          message:
+            'Model "shared-resolver-test" is not available. Use a provider-qualified model id such as "anthropic:claude-opus-4-6-20250918".',
+        },
+      );
     });
 
     test("resolves embedding models only when embedding capability is requested", async () => {

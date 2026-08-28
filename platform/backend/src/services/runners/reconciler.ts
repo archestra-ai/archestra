@@ -1,14 +1,14 @@
 import { A2AManager } from "@/agents/a2a/a2a-manager";
 import { watchChatOpsTask } from "@/agents/chatops/chatops-task-watcher";
 import config from "@/config";
-import { runnerRuntimeManager } from "@/k8s/runner-runtime";
 import logger from "@/logging";
 import { A2ATaskModel, AgentModel, AgentRunModel } from "@/models";
 import { isTerminalA2ATaskState } from "@/types/a2a-task";
-import { cleanupTaskPod } from "./pod-execution";
+import { isAnyRunnerBackendEnabled, resolveRunnerBackend } from "./backends";
+import { cleanupBackgroundTask } from "./pod-execution";
 
 /**
- * Re-adopts Kubernetes Jobs whose launching backend process disappeared.
+ * Re-adopts executions whose launching control-plane process disappeared.
  * Agent runs and A2A tasks are durable; this is the bridge that reconnects
  * them after a rolling deploy or local hot reload.
  */
@@ -18,7 +18,7 @@ class AgentExecutionReconciler {
   private timer: NodeJS.Timeout | null = null;
 
   start(): void {
-    if (this.timer || !runnerRuntimeManager.isEnabled) return;
+    if (this.timer || !isAnyRunnerBackendEnabled()) return;
     this.runReconcile();
     this.timer = setInterval(
       () => this.runReconcile(),
@@ -67,11 +67,12 @@ class AgentExecutionReconciler {
 
       // A healthy owner heartbeats every 30 seconds. Give it several missed
       // beats before adopting so a slow query or event-loop pause cannot make
-      // two processes stream the same Job concurrently.
+      // two processes stream the same execution concurrently.
       const heartbeatAt = task.lastHeartbeatAt?.getTime() ?? 0;
       if (Date.now() - heartbeatAt < ADOPTION_DELAY_MS) return;
 
-      await runnerRuntimeManager.withSessionLease(session, async () => {
+      const backend = resolveRunnerBackend(session.backend);
+      await backend.withSessionLease(session, async () => {
         const refreshed = await A2ATaskModel.findById(session.taskId);
         if (!refreshed || isTerminalA2ATaskState(refreshed.state)) {
           await this.finalizeTerminalSession(session);
@@ -112,8 +113,9 @@ class AgentExecutionReconciler {
   private async finalizeTerminalSession(
     session: Awaited<ReturnType<typeof AgentRunModel.listOpen>>[number],
   ): Promise<void> {
-    await runnerRuntimeManager.withSessionLease(session, async () => {
-      await cleanupTaskPod(session);
+    const backend = resolveRunnerBackend(session.backend);
+    await backend.withSessionLease(session, async () => {
+      await cleanupBackgroundTask(session);
       await this.notifyMessagingThread(session);
     });
   }

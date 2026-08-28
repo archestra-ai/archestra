@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { createAnthropic } from "@ai-sdk/anthropic";
+import { createOpenAI } from "@ai-sdk/openai";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { type ModelMessage, stepCountIs, streamText } from "ai";
@@ -9,6 +10,7 @@ import {
   readConfig,
 } from "./config.js";
 import { loadGatewayTools } from "./gateway-tools.js";
+import { loadLocalWorkspaceTools } from "./local-tools.js";
 import { SteerQueue } from "./steer-queue.js";
 
 /**
@@ -53,16 +55,13 @@ async function main(): Promise<number> {
   process.once("SIGTERM", stop);
   process.once("SIGINT", stop);
 
-  const anthropic = createAnthropic({
-    // The injected base is `/v1/anthropic/{agentId}` — the shape a BYO CLI
-    // expects in ANTHROPIC_BASE_URL, appending `/v1/messages` itself. The AI
-    // SDK appends only `/messages`, so the `/v1` segment is supplied here.
-    baseURL: `${config.proxyBaseUrl}/v1`,
-    apiKey: config.apiKey,
-  });
+  const model = createModel(config);
 
   const mcpClient = await connectGateway(config);
-  const tools = await loadGatewayTools(mcpClient);
+  const tools = {
+    ...loadLocalWorkspaceTools(),
+    ...(await loadGatewayTools(mcpClient)),
+  };
   write(`${Object.keys(tools).length} tools available.`);
   write("");
 
@@ -94,7 +93,7 @@ async function main(): Promise<number> {
       }
 
       const result = streamText({
-        model: anthropic(config.model),
+        model,
         system: config.systemPrompt ?? undefined,
         messages,
         tools,
@@ -102,6 +101,7 @@ async function main(): Promise<number> {
         abortSignal: shutdown.signal,
       });
 
+      let streamFailed = false;
       for await (const part of result.fullStream) {
         if (part.type === "text-delta") {
           process.stdout.write(part.text);
@@ -111,7 +111,11 @@ async function main(): Promise<number> {
           // Provider errors may include raw response data. The platform logs
           // carry the detail; terminal scrollback must never echo secrets.
           write("\n[error] The model request failed.");
+          streamFailed = true;
         }
+      }
+      if (streamFailed) {
+        throw new Error("Model stream failed");
       }
       write("");
       messages.push(...(await result.response).messages);
@@ -134,12 +138,33 @@ async function main(): Promise<number> {
     }
   } finally {
     steerQueue.stop();
-    await mcpClient.close().catch(() => undefined);
+    await Promise.race([
+      mcpClient.close().catch(() => undefined),
+      new Promise<void>((resolve) => setTimeout(resolve, 1_000)),
+    ]);
     process.off("SIGTERM", stop);
     process.off("SIGINT", stop);
   }
 
   return exitCode;
+}
+
+function createModel(config: BackgroundExecutionAgentConfig) {
+  if (config.proxyProtocol === "anthropic") {
+    return createAnthropic({
+      // Claude-compatible clients append `/v1/messages`; the AI SDK appends
+      // only `/messages`, so supply its `/v1` segment here.
+      baseURL: `${config.proxyBaseUrl}/v1`,
+      apiKey: config.apiKey,
+    })(config.model);
+  }
+  const openai = createOpenAI({
+    baseURL: config.proxyBaseUrl,
+    apiKey: config.apiKey,
+  });
+  return config.proxyProtocol === "openai_chat"
+    ? openai.chat(config.model)
+    : openai.responses(config.model);
 }
 
 /**
@@ -193,7 +218,7 @@ const MAX_HISTORY_MESSAGES = 200;
 
 main()
   .then((code) => {
-    process.exitCode = code;
+    process.exit(code);
   })
   .catch(() => {
     write("archestra: the session could not start.");

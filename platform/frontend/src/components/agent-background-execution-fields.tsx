@@ -19,6 +19,7 @@ import { useFeature } from "@/lib/config/config.query";
 export type BackgroundExecutionConfig = {
   image: string;
   command: string[] | null;
+  inferenceProtocol: "openai_responses" | "openai_chat" | "anthropic";
   backend: "kubernetes";
   steerMode: "pipe" | "tmux_keys";
   privileged: boolean;
@@ -47,6 +48,7 @@ export function defaultBackgroundExecution(
   return {
     image: defaultImage,
     command: null,
+    inferenceProtocol: "openai_responses",
     backend: "kubernetes",
     steerMode: "pipe",
     privileged: false,
@@ -169,6 +171,42 @@ export function AgentBackgroundExecutionFields({
               </p>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="background-execution-inference-protocol">
+                  Inference API
+                </Label>
+                <Select
+                  value={config.inferenceProtocol}
+                  onValueChange={(
+                    inferenceProtocol:
+                      | "openai_responses"
+                      | "openai_chat"
+                      | "anthropic",
+                  ) => update({ inferenceProtocol })}
+                >
+                  <SelectTrigger
+                    id="background-execution-inference-protocol"
+                    className="w-full"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="openai_responses">
+                      OpenAI Responses
+                    </SelectItem>
+                    <SelectItem value="openai_chat">
+                      OpenAI Chat Completions
+                    </SelectItem>
+                    <SelectItem value="anthropic">
+                      Anthropic Messages
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Choose the API protocol the container&apos;s Agent client
+                  expects. Every option stays behind the Archestra LLM proxy.
+                </p>
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="background-execution-steering">Steering</Label>
                 <Select

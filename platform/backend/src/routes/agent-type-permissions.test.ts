@@ -247,6 +247,7 @@ describe("agent type permission isolation (routes)", () => {
             backgroundExecution: {
               image: "example.com/coding-agent:latest",
               command: null,
+              inferenceProtocol: "openai_responses",
               backend: "kubernetes",
               steerMode: "pipe",
               privileged: false,
@@ -271,6 +272,7 @@ describe("agent type permission isolation (routes)", () => {
             backgroundExecution: {
               image: "example.com/coding-agent:latest",
               command: null,
+              inferenceProtocol: "openai_responses",
               backend: "kubernetes",
               steerMode: "pipe",
               privileged: true,

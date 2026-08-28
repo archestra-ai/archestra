@@ -4,16 +4,16 @@ import {
   buildRunnerJob,
   buildRunnerPlatformEgressPolicy,
   buildRunnerSecret,
-  type RunnerLaunchSpec,
+  type KubernetesRunnerLaunchSpec,
 } from "./manifests";
 import { RUNNER_TASK_LABEL } from "./naming";
 
-const SPEC: RunnerLaunchSpec = {
+const SPEC: KubernetesRunnerLaunchSpec = {
   taskId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
   runnerId: "11111111-2222-3333-4444-555555555555",
   frozenName: "runner-deploy-app-11111111",
   namespace: "archestra-dev",
-  image: "ghcr.io/archestra-ai/runner-agent-base:latest",
+  image: "registry.example.test/agent-archestra:latest",
   command: null,
   privileged: false,
   resources: { cpuRequest: "500m", memoryRequest: "1Gi", memoryLimit: "4Gi" },
@@ -94,7 +94,10 @@ describe("buildRunnerJob", () => {
     );
 
     expect(entrypoint?.value).toBe(
-      `'claude' '--task' 'it'\\''s a '\\''quoted'\\'' task; rm -rf /'`,
+      [
+        "if command -v archestra-agent-init >/dev/null 2>&1; then archestra-agent-init; fi",
+        `exec 'claude' '--task' 'it'\\''s a '\\''quoted'\\'' task; rm -rf /'`,
+      ].join("\n"),
     );
   });
 
@@ -105,7 +108,10 @@ describe("buildRunnerJob", () => {
       (entry) =>
         entry.name === "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ENTRYPOINT",
     );
-    expect(entrypoint?.value).toBe("archestra-runner-agent");
+    expect(entrypoint?.value).toBe(
+      "if command -v archestra-agent-init >/dev/null 2>&1; then archestra-agent-init; fi\n" +
+        "exec archestra-runner-agent",
+    );
   });
 
   it("applies resource requests and limits as configured", () => {
@@ -131,6 +137,11 @@ describe("the container bootstrap", () => {
   it("creates the steer FIFO and holds PID 1 for the session's lifetime", () => {
     expect(script()).toContain("mkfifo -m 600");
     expect(script()).toContain("tmux has-session -t agent");
+  });
+
+  it("propagates the Agent process exit code to the Job", () => {
+    expect(script()).toContain('status=$?; printf "%s\\n" "$status"');
+    expect(script()).toContain('exit "$(cat /var/run/archestra/exit-code)"');
   });
 });
 

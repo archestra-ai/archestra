@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Writable } from "node:stream";
 import type { A2AExecuteResult } from "@/agents/a2a-executor";
-import config from "@/config";
 import logger from "@/logging";
 import { AgentRunModel, EnvironmentModel, OrganizationModel } from "@/models";
 import {
@@ -16,18 +15,18 @@ import { type RunnerBackend, resolveRunnerBackend } from "./backends";
 import { buildRunnerLaunchSpec } from "./launch-spec";
 
 /**
- * Run one A2A task inside a pod.
+ * Start one delegated A2A task through its configured execution backend.
  *
  * This is the `executeRun` the A2A task lifecycle already injects, swapped for
- * a Kubernetes-backed one. Everything above it — the compare-and-set state
+ * an isolated execution-backed one. Everything above it — the compare-and-set state
  * machine, the response artifact, the durable event log, cancellation, push
  * notifications and SSE subscribers — is unchanged, because the lifecycle only
  * ever knew that contract.
  *
- * The pod is started and then followed: the session's stdout becomes the
- * task's streamed text, and abort tears the pod down.
+ * The session is started and then followed: its stdout becomes the task's
+ * streamed text, and abort tears the execution down.
  */
-async function startPodSession(params: {
+async function startBackgroundSession(params: {
   deployment: AgentDeployment;
   taskId: string;
   agentId: string;
@@ -46,9 +45,9 @@ async function startPodSession(params: {
       )
     : null;
   const organization = await OrganizationModel.getById(params.organizationId);
-  const namespace = resolveNamespace({
-    environmentNamespace: environment?.namespace,
-    organizationNamespace: organization?.defaultEnvironmentNamespace,
+  const runtimeScope = backend.resolveRuntimeScope({
+    environmentScope: environment?.namespace,
+    organizationScope: organization?.defaultEnvironmentNamespace,
   });
   const effectiveNetworkPolicy = await resolveEffectiveNetworkPolicy({
     organizationId: params.organizationId,
@@ -63,7 +62,7 @@ async function startPodSession(params: {
     agentId: params.agentId,
     actorUserId: params.actorUserId,
     organizationId: params.organizationId,
-    namespace,
+    runtimeScope,
     effectiveNetworkPolicy,
     task: params.task,
   });
@@ -76,8 +75,8 @@ async function startPodSession(params: {
     agentId: params.deployment.agentId,
     actorUserId: params.actorUserId,
     deploymentName: spec.frozenName,
-    namespace,
-    secretName: `${spec.frozenName}-env`,
+    backend: backend.name,
+    runtimeScope,
     virtualApiKeyId,
     chatOpsBindingId: params.chatOpsBindingId,
     chatOpsThreadId: params.chatOpsThreadId,
@@ -129,33 +128,16 @@ export function resolveAgentDeployment(
 }
 
 /**
- * Namespace a session's pod lands in: the runner's environment when it has
- * one, otherwise the organization's default. Never creates a namespace — an
- * unknown one is an operator's decision to make.
- */
-function resolveNamespace(params: {
-  environmentNamespace?: string | null;
-  organizationNamespace?: string | null;
-}): string {
-  return (
-    params.environmentNamespace ??
-    params.organizationNamespace ??
-    config.orchestrator.kubernetes.namespace
-  );
-}
-
-/**
- * Run one A2A task to completion inside a pod, shaped as the lifecycle's
+ * Run one delegated A2A task to completion, shaped as the lifecycle's
  * `executeRun`.
  *
- * Ordering matters here. The pod is started, then followed, then waited on —
- * and the wait is on the Job rather than the log stream, because logs ending
- * only means this pod stopped writing, which a Job that retries will do more
- * than once. Teardown runs in a finally so a crash, a cancel and a clean
- * finish all release the pod, the Secret holding the actor's credentials and
- * the minted virtual key.
+ * Ordering matters here. The execution is started, then followed, then waited
+ * on. A backend outcome rather than the log stream ends the task because an
+ * output connection can stop before the workload does. Teardown runs in a
+ * finally so a crash, cancellation and a clean finish all release the runtime,
+ * the actor's injected credentials, and the minted virtual key.
  */
-export async function runTaskInPod(params: {
+export async function runTaskInBackground(params: {
   deployment: AgentDeployment;
   taskId: string;
   agentId: string;
@@ -168,10 +150,9 @@ export async function runTaskInPod(params: {
   abortSignal?: AbortSignal;
 }): Promise<A2AExecuteResult> {
   const launchedAt = Date.now();
-  const session = await startPodSession(params);
-  return await followTaskInPod({
+  const session = await startBackgroundSession(params);
+  return await followBackgroundTask({
     session,
-    backendName: params.deployment.backend,
     launchedAt,
     onTextDelta: params.onTextDelta,
     abortSignal: params.abortSignal,
@@ -179,26 +160,25 @@ export async function runTaskInPod(params: {
 }
 
 /**
- * Re-attach the durable A2A lifecycle to a Job that survived a backend
- * restart. Kubernetes owns the work; this process resumes output capture,
+ * Re-attach the durable A2A lifecycle to an execution that survived a control
+ * plane restart. Its original backend owns the work; this process resumes output capture,
  * heartbeats and terminal settlement without launching a second workload.
  */
-export async function resumeTaskInPod(params: {
+export async function resumeBackgroundTask(params: {
   session: AgentRun;
   onTextDelta?: (delta: string) => void;
   abortSignal?: AbortSignal;
 }): Promise<A2AExecuteResult> {
-  return await followTaskInPod({
+  return await followBackgroundTask({
     session: params.session,
-    backendName: "kubernetes",
     onTextDelta: params.onTextDelta,
     abortSignal: params.abortSignal,
   });
 }
 
 /** Clean up a session whose task settled while no backend owned its run. */
-export async function cleanupTaskPod(session: AgentRun): Promise<void> {
-  const backend = resolveRunnerBackend("kubernetes");
+export async function cleanupBackgroundTask(session: AgentRun): Promise<void> {
+  const backend = resolveRunnerBackend(session.backend);
   let retainedLogs = "";
   const stopCapture = new AbortController();
   const capture = followOutput({
@@ -215,14 +195,13 @@ export async function cleanupTaskPod(session: AgentRun): Promise<void> {
   await AgentRunModel.close({ id: session.id, logs: retainedLogs });
 }
 
-async function followTaskInPod(params: {
+async function followBackgroundTask(params: {
   session: AgentRun;
-  backendName: AgentDeployment["backend"];
   launchedAt?: number;
   onTextDelta?: (delta: string) => void;
   abortSignal?: AbortSignal;
 }): Promise<A2AExecuteResult> {
-  const backend = resolveRunnerBackend(params.backendName);
+  const backend = resolveRunnerBackend(params.session.backend);
   const { session } = params;
   const transcript: string[] = [];
   let retainedLogs = "";
@@ -241,8 +220,8 @@ async function followTaskInPod(params: {
     }
     reportRunnerStarted();
 
-    // Logs are followed on their own promise: the Job outcome is what ends the
-    // run, and a stream that dies early (pod replaced, connection dropped)
+    // Logs are followed on their own promise: the backend outcome ends the
+    // run, and a stream that dies early (runtime replaced, connection dropped)
     // must not be mistaken for the task finishing.
     const streaming = followOutput({
       backend,
@@ -262,7 +241,7 @@ async function followTaskInPod(params: {
     outcome = completion.outcome;
 
     // Give the tail of the log a moment to arrive before settling: the last
-    // write and the Job's status flip race, and dropping it would truncate
+    // write and the backend's outcome race, and dropping it would truncate
     // the answer at exactly the point the reader cares about.
     await Promise.race([streaming, delayMs(LOG_DRAIN_GRACE_MS)]);
 

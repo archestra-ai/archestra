@@ -13,11 +13,12 @@ import {
   A2AProtocolTaskState,
 } from "./a2a-protocol";
 
-const { executeA2AMessage, resumeTaskInPod, runTaskInPod } = vi.hoisted(() => ({
-  executeA2AMessage: vi.fn(),
-  resumeTaskInPod: vi.fn(),
-  runTaskInPod: vi.fn(),
-}));
+const { executeA2AMessage, resumeBackgroundTask, runTaskInBackground } =
+  vi.hoisted(() => ({
+    executeA2AMessage: vi.fn(),
+    resumeBackgroundTask: vi.fn(),
+    runTaskInBackground: vi.fn(),
+  }));
 
 vi.mock("@/agents/a2a-executor.ts", () => ({
   executeA2AMessage,
@@ -36,8 +37,8 @@ vi.mock("@/services/runners/pod-execution", () => ({
           ...agent.backgroundExecution,
         }
       : null,
-  runTaskInPod,
-  resumeTaskInPod,
+  runTaskInBackground,
+  resumeBackgroundTask,
 }));
 
 const actor: A2AActor = {
@@ -178,8 +179,8 @@ describe("A2AManager full task mode", () => {
       agentId: agent.id,
       actorUserId: actor.id,
       deploymentName: "runner-background-agent-recovery",
-      namespace: "archestra-dev",
-      secretName: null,
+      backend: "kubernetes",
+      runtimeScope: "archestra-dev",
       virtualApiKeyId: null,
       chatOpsBindingId: null,
       chatOpsThreadId: null,
@@ -189,7 +190,7 @@ describe("A2AManager full task mode", () => {
       startedAt: new Date(),
       endedAt: null,
     };
-    resumeTaskInPod.mockImplementationOnce(
+    resumeBackgroundTask.mockImplementationOnce(
       async (params: { onTextDelta?: (delta: string) => void }) => {
         params.onTextDelta?.("recovered answer");
         const messageId = crypto.randomUUID();
@@ -208,7 +209,7 @@ describe("A2AManager full task mode", () => {
 
     await fullManager().adoptBackgroundTask({ taskId: task.id, session });
 
-    expect(resumeTaskInPod).toHaveBeenCalledWith(
+    expect(resumeBackgroundTask).toHaveBeenCalledWith(
       expect.objectContaining({ session }),
     );
     expect((await A2ATaskModel.findById(task.id))?.state).toBe(
@@ -231,6 +232,7 @@ describe("A2AManager full task mode", () => {
       backgroundExecution: {
         image: "example.invalid/background-agent:test",
         command: null,
+        inferenceProtocol: "openai_responses",
         backend: "kubernetes",
         steerMode: "pipe",
         privileged: false,
@@ -242,7 +244,7 @@ describe("A2AManager full task mode", () => {
       },
     });
     mockExecutorText("foreground answer");
-    runTaskInPod.mockResolvedValueOnce({
+    runTaskInBackground.mockResolvedValueOnce({
       messageId: crypto.randomUUID(),
       text: "background answer",
       finishReason: "stop",
@@ -258,7 +260,7 @@ describe("A2AManager full task mode", () => {
       agentId: agent.id,
     });
     expect(direct.message?.parts).toEqual([{ text: "foreground answer" }]);
-    expect(runTaskInPod).not.toHaveBeenCalled();
+    expect(runTaskInBackground).not.toHaveBeenCalled();
 
     const tasked = await sendMessage({
       manager: fullManager(),
@@ -266,7 +268,7 @@ describe("A2AManager full task mode", () => {
       taskRun: { createTask: true, detached: false },
     });
     expect(tasked.task?.status.state).toBe(A2AProtocolTaskState.Completed);
-    expect(runTaskInPod).toHaveBeenCalledWith(
+    expect(runTaskInBackground).toHaveBeenCalledWith(
       expect.objectContaining({
         agentId: agent.id,
         taskId: tasked.task?.id,

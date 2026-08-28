@@ -305,8 +305,8 @@ describe("websocket Agent run authorization and cleanup", () => {
       agentId: agent.id,
       actorUserId: owner.id,
       deploymentName: `agent-run-${task.id}`,
-      namespace: "archestra-dev",
-      secretName: null,
+      backend: "kubernetes",
+      runtimeScope: "archestra-dev",
       virtualApiKeyId: null,
     });
     const ws = {
@@ -370,8 +370,8 @@ describe("websocket Agent run authorization and cleanup", () => {
       agentId: agent.id,
       actorUserId: owner.id,
       deploymentName: `agent-run-${task.id}`,
-      namespace: "archestra-dev",
-      secretName: null,
+      backend: "kubernetes",
+      runtimeScope: "archestra-dev",
       virtualApiKeyId: null,
     });
     await AgentRunModel.close({
@@ -449,8 +449,8 @@ describe("websocket Agent run authorization and cleanup", () => {
       agentId: agent.id,
       actorUserId: owner.id,
       deploymentName: `agent-run-${task.id}`,
-      namespace: "archestra-dev",
-      secretName: null,
+      backend: "kubernetes",
+      runtimeScope: "archestra-dev",
       virtualApiKeyId: null,
     });
     const ws = {

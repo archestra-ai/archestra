@@ -408,7 +408,7 @@ export type McpDeploymentStatusEntry = {
 // Agent run attach + logs, server -> client
 export type AgentRunAttachStartedMessage = {
   type: "agent_run_attach_started";
-  payload: { runId: string; command: string; podName: string };
+  payload: { runId: string; command: string; resourceName: string };
 };
 
 export type AgentRunAttachOutputMessage = {

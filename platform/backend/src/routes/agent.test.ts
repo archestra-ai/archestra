@@ -175,6 +175,7 @@ describe("agent routes", () => {
       const backgroundExecution = {
         image: "example.com/coding-agent:latest",
         command: null,
+        inferenceProtocol: "openai_responses",
         backend: "kubernetes",
         steerMode: "pipe",
         privileged: false,
@@ -214,6 +215,7 @@ describe("agent routes", () => {
           backgroundExecution: {
             image: "example.com/coding-agent:latest",
             command: null,
+            inferenceProtocol: "openai_responses",
             backend: "kubernetes",
             steerMode: "pipe",
             privileged: false,
@@ -247,6 +249,7 @@ describe("agent routes", () => {
             backgroundExecution: {
               image: "example.com/coding-agent:1.0.0",
               command: null,
+              inferenceProtocol: "openai_responses",
               backend: "kubernetes",
               steerMode: "pipe",
               privileged: true,

@@ -1621,17 +1621,17 @@
           "primaryKey": false,
           "notNull": true
         },
-        "namespace": {
-          "name": "namespace",
+        "backend": {
+          "name": "backend",
           "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "secret_name": {
-          "name": "secret_name",
+        "runtime_scope": {
+          "name": "runtime_scope",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "virtual_api_key_id": {
           "name": "virtual_api_key_id",

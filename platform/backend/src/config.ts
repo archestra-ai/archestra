@@ -2247,7 +2247,7 @@ const config = {
     /** Built-in execution loop used when an Agent enables the capability. */
     defaultImage:
       process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_BASE_IMAGE?.trim() ||
-      "ghcr.io/archestra-ai/runner-agent-base:latest",
+      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:latest",
     /** Fallback lifetime cap for runners whose agent sets none. */
     defaultTtlHours: parsePositiveInt(
       process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_DEFAULT_TTL_HOURS,
@@ -2281,14 +2281,13 @@ const config = {
         "4Gi",
     },
     /**
-     * Base URL a runner pod uses to reach this deployment's LLM proxy and MCP
-     * gateway. Must be reachable from inside the cluster, so it defaults to
-     * the internal API URL rather than the browser-facing one.
+     * Base URL a background execution pod uses to reach this deployment's LLM
+     * proxy and MCP gateway. Must be reachable from inside the cluster, so it
+     * defaults to the internal API URL rather than the browser-facing one.
      *
-     * Empty means runners cannot start: crab-env's hard lesson is that a
-     * session which silently bypasses the proxy loses all observability, so a
-     * missing URL fails the spawn loudly instead of falling back to a direct
-     * provider call.
+     * Empty means background executions cannot start: a session which silently
+     * bypasses the proxy loses all observability, so a missing URL fails the
+     * spawn loudly instead of falling back to a direct provider call.
      */
     platformBaseUrl:
       process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_PLATFORM_BASE_URL?.trim() ||

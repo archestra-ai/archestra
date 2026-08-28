@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { CatalogSourceCard } from "@/components/catalog-source-card";
 import { FilterBar } from "@/components/filter-bar";
 import { LoadingState } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
@@ -179,13 +180,13 @@ function NewSkillWizard() {
               {effectiveStep === "source" && (
                 <div className="mx-auto max-w-3xl space-y-8">
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <ActionCard
+                    <CatalogSourceCard
                       icon={<Github className="size-5" />}
                       title="Custom GitHub URL"
                       description="Paste any repository with SKILL.md directories."
                       onClick={openImport}
                     />
-                    <ActionCard
+                    <CatalogSourceCard
                       icon={<FileText className="size-5" />}
                       title="Blank template"
                       description="Write a SKILL.md manifest from scratch."
@@ -454,34 +455,6 @@ function SkillIndexResult({
         </div>
       </div>
       <ArrowRight className="size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-    </button>
-  );
-}
-
-function ActionCard({
-  icon,
-  title,
-  description,
-  onClick,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="group flex flex-col gap-3 rounded-xl border bg-card p-5 text-left text-card-foreground shadow-sm transition-colors hover:border-primary/40 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-    >
-      <div className="flex size-10 items-center justify-center rounded-lg bg-muted text-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary">
-        {icon}
-      </div>
-      <div className="space-y-1">
-        <div className="font-medium leading-none">{title}</div>
-        <p className="text-sm text-muted-foreground">{description}</p>
-      </div>
     </button>
   );
 }

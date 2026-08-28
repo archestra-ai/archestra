@@ -30,7 +30,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { useOrgScopedAgents } from "@/lib/agent.query";
 import {
   APPS_HACKATHON_DATE_RANGE_LABEL,
@@ -38,6 +37,7 @@ import {
   APPS_HACKATHON_SETTING_ANCHOR,
   useAppsHackathonOffered,
 } from "@/lib/app-session-recording/apps-hackathon";
+import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import { useLlmModels } from "@/lib/llm-models.query";
@@ -90,6 +90,7 @@ export default function AgentSettingsPage() {
   // switch on. Past the closing date the whole section goes rather than
   // lingering as a switch that no longer changes anything.
   const hackathonOffered = useAppsHackathonOffered();
+  const executionBackend = useFeature("agentBackgroundExecutionBackend");
 
   const {
     data: allModels,
@@ -352,6 +353,74 @@ export default function AgentSettingsPage() {
           </WithPermissions>
         }
       />
+      {executionBackend && (
+        <SettingsBlock
+          title="Execution Backend"
+          description={
+            <>
+              Installation-wide defaults for delegated Background executions.
+              Configure per-Agent overrides from the Agent editor. Deployment
+              operators manage these values.{" "}
+              <ExternalDocsLink
+                href={getDocsUrl(DocsPage.PlatformAgentBackgroundExecution)}
+              >
+                Learn how Background execution works
+              </ExternalDocsLink>
+            </>
+          }
+          control={
+            <div className="w-full rounded-lg border bg-muted/20 p-4 sm:w-[28rem]">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <div className="font-medium">Kubernetes</div>
+                  <div className="text-xs text-muted-foreground">
+                    One isolated Job per delegated task
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <span
+                    className={`size-2 rounded-full ${
+                      executionBackend.available ? "bg-green-500" : "bg-red-500"
+                    }`}
+                  />
+                  {executionBackend.available ? "Available" : "Unavailable"}
+                </div>
+              </div>
+              <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
+                <dt className="text-muted-foreground">Default image</dt>
+                <dd
+                  className="truncate font-mono text-xs"
+                  title={executionBackend.defaultImage}
+                >
+                  {executionBackend.defaultImage}
+                </dd>
+                <dt className="text-muted-foreground">Maximum duration</dt>
+                <dd>{executionBackend.defaultTtlHours} hours</dd>
+                <dt className="text-muted-foreground">Idle timeout</dt>
+                <dd>{executionBackend.defaultIdleTimeoutMinutes} minutes</dd>
+                <dt className="text-muted-foreground">Resources</dt>
+                <dd>
+                  {executionBackend.resources.cpuRequest} CPU,{" "}
+                  {executionBackend.resources.memoryRequest} memory request,{" "}
+                  {executionBackend.resources.memoryLimit} memory limit
+                </dd>
+                <dt className="text-muted-foreground">Privileged containers</dt>
+                <dd>
+                  {executionBackend.allowPrivileged ? "Allowed" : "Disabled"}
+                </dd>
+              </dl>
+            </div>
+          }
+          notice={
+            !executionBackend.available ? (
+              <span className="text-red-600 dark:text-red-400">
+                The feature is enabled, but the Kubernetes execution backend is
+                not reachable. Check the orchestrator configuration.
+              </span>
+            ) : undefined
+          }
+        />
+      )}
       <SettingsBlock
         title="Chat File Uploads"
         description={`Allow users to upload files in the ${appName} chat UI.`}

@@ -19,7 +19,6 @@ import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 // biome-ignore lint/style/noRestrictedImports: runtime-gated EE model import
 import { isIdleHibernationOffered } from "@/k8s/mcp-server-runtime/hibernation.ee";
-import { runnerRuntimeManager } from "@/k8s/runner-runtime";
 // SPDX-SnippetEnd
 import {
   getGoogleDriveOAuthRedirectUri,
@@ -29,6 +28,7 @@ import logger from "@/logging";
 import { OrganizationModel } from "@/models";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { getByosVaultKvVersion, isByosEnabled } from "@/secrets-manager";
+import { isAnyRunnerBackendEnabled } from "@/services/runners/backends";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { EmailProviderTypeSchema } from "@/types";
 import { PUBLIC_CONFIG_PATH } from "./route-paths";
@@ -98,6 +98,22 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
                */
               agentBackgroundExecution: z.boolean(),
               agentBackgroundExecutionBaseImage: z.string(),
+              /** Operator-owned defaults and health for the execution backend. */
+              agentBackgroundExecutionBackend: z
+                .object({
+                  name: z.literal("kubernetes"),
+                  available: z.boolean(),
+                  defaultImage: z.string(),
+                  defaultTtlHours: z.number(),
+                  defaultIdleTimeoutMinutes: z.number(),
+                  allowPrivileged: z.boolean(),
+                  resources: z.object({
+                    cpuRequest: z.string(),
+                    memoryRequest: z.string(),
+                    memoryLimit: z.string(),
+                  }),
+                })
+                .nullable(),
               plugins: z.boolean(),
               // Max size of a file the sandbox can stage. The chat composer caps
               // sandbox-routed uploads at this instead of guessing.
@@ -230,9 +246,24 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           sandbox: skillSandboxRuntimeService.isEnabled,
           // The same predicate the routes gate on, so the UI can never offer
           // a feature whose endpoints answer 404.
-          agentBackgroundExecution: runnerRuntimeManager.isEnabled,
+          agentBackgroundExecution: isAnyRunnerBackendEnabled(),
           agentBackgroundExecutionBaseImage:
             config.agentBackgroundExecution.defaultImage,
+          agentBackgroundExecutionBackend: config.agentBackgroundExecution
+            .enabled
+            ? {
+                name: "kubernetes" as const,
+                available: isAnyRunnerBackendEnabled(),
+                defaultImage: config.agentBackgroundExecution.defaultImage,
+                defaultTtlHours:
+                  config.agentBackgroundExecution.defaultTtlHours,
+                defaultIdleTimeoutMinutes:
+                  config.agentBackgroundExecution.defaultIdleTimeoutMinutes,
+                allowPrivileged:
+                  config.agentBackgroundExecution.allowPrivileged,
+                resources: config.agentBackgroundExecution.resources,
+              }
+            : null,
           plugins: config.plugins.enabled,
           sandboxArtifactBytesLimit: config.skillsSandbox.artifactBytesLimit,
           chatAttachmentStorageBytesLimit:

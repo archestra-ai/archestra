@@ -18,6 +18,9 @@ import { A2ATaskStateSchema } from "./a2a-task";
  * anywhere above it.
  */
 export const AgentDeploymentBackendSchema = z.enum(["kubernetes"]);
+export type AgentDeploymentBackend = z.infer<
+  typeof AgentDeploymentBackendSchema
+>;
 
 export const AgentDeploymentSteerModeSchema = z.enum(["pipe", "tmux_keys"]);
 export type AgentDeploymentSteerMode = z.infer<
@@ -111,6 +114,8 @@ export type AgentDeploymentEnvironmentEntry = z.infer<
 export const AgentBackgroundExecutionSchema = z.object({
   image: z.string().trim().min(1).max(2_000),
   command: z.array(z.string()).nullable(),
+  /** Wire protocol the image uses to reach Archestra's model router. */
+  inferenceProtocol: z.enum(["openai_responses", "openai_chat", "anthropic"]),
   backend: AgentDeploymentBackendSchema,
   steerMode: AgentDeploymentSteerModeSchema,
   privileged: z.boolean(),
@@ -144,10 +149,12 @@ export type AgentDeployment = AgentBackgroundExecution & {
   secretId: string | null;
 };
 
-export const SelectAgentRunSchema = createSelectSchema(schema.agentRunsTable);
-export const InsertAgentRunSchema = createInsertSchema(
+export const SelectAgentRunSchema = createSelectSchema(
   schema.agentRunsTable,
-).omit({ id: true, startedAt: true, endedAt: true });
+).extend({ backend: AgentDeploymentBackendSchema });
+export const InsertAgentRunSchema = createInsertSchema(schema.agentRunsTable)
+  .extend({ backend: AgentDeploymentBackendSchema })
+  .omit({ id: true, startedAt: true, endedAt: true });
 
 export const SelectAgentExecutionSchema = SelectAgentRunSchema.omit({
   logs: true,

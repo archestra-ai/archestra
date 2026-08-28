@@ -17,15 +17,16 @@ import McpDeploymentLeaseModel, {
   ClusterLeaseHeldError,
 } from "@/models/mcp-deployment-lease";
 import { reportRunnerSteer } from "@/observability/metrics/runner";
+import type { RunnerLaunchSpec } from "@/services/runners/backends";
 import type { AgentDeploymentSteerMode, AgentRun } from "@/types";
 import {
   buildRunnerEnvironmentEgressPolicy,
   buildRunnerJob,
   buildRunnerPlatformEgressPolicy,
   buildRunnerSecret,
+  type KubernetesRunnerLaunchSpec,
   RUNNER_CONTAINER_NAME,
   RUNNER_TMUX_SESSION,
-  type RunnerLaunchSpec,
 } from "./manifests";
 import { RUNNER_LEASE_SCOPE, runnerNames, runnerPodSelector } from "./naming";
 
@@ -58,20 +59,20 @@ class RunnerRuntimeManager {
   async launch(spec: RunnerLaunchSpec): Promise<void> {
     const clients = this.requireClients();
     const names = runnerNames(spec.frozenName);
-    const withOwner: RunnerLaunchSpec = {
-      ...spec,
-      ownerReferences:
-        spec.ownerReferences ??
-        (await resolveRuntimeOwnerReferences(
-          clients.rbacApi,
-          spec.namespace,
-        ).catch((error) => {
-          logger.warn(
-            { error },
-            "Could not resolve runtime owner references for an Agent run",
-          );
-          return undefined;
-        })),
+    const { runtimeScope, ...runtimeSpec } = spec;
+    const withOwner: KubernetesRunnerLaunchSpec = {
+      ...runtimeSpec,
+      namespace: runtimeScope,
+      ownerReferences: await resolveRuntimeOwnerReferences(
+        clients.rbacApi,
+        runtimeScope,
+      ).catch((error) => {
+        logger.warn(
+          { error },
+          "Could not resolve runtime owner references for an Agent run",
+        );
+        return undefined;
+      }),
     };
 
     const existingJob = await clients.batchApi
@@ -191,7 +192,7 @@ class RunnerRuntimeManager {
     if (!podName) {
       throw new Error("This session has no running pod to attach to");
     }
-    const namespace = params.session.namespace;
+    const namespace = params.session.runtimeScope;
     const socket = await clients.exec.exec(
       namespace,
       podName,
@@ -223,7 +224,7 @@ class RunnerRuntimeManager {
       throw new Error("This session has no pod to read logs from");
     }
     const request = await clients.log.log(
-      params.session.namespace,
+      params.session.runtimeScope,
       pod.name,
       RUNNER_CONTAINER_NAME,
       params.destination,
@@ -247,7 +248,7 @@ class RunnerRuntimeManager {
   async findPodName(session: AgentRun): Promise<string | null> {
     const clients = this.requireClients();
     const pods = await clients.coreApi.listNamespacedPod({
-      namespace: session.namespace,
+      namespace: session.runtimeScope,
       labelSelector: runnerPodSelector(session.taskId),
     });
     const running = pods.items.find(
@@ -268,7 +269,7 @@ class RunnerRuntimeManager {
   ): Promise<{ name: string; phase: string } | null> {
     const clients = this.requireClients();
     const pods = await clients.coreApi.listNamespacedPod({
-      namespace: session.namespace,
+      namespace: session.runtimeScope,
       labelSelector: runnerPodSelector(session.taskId),
     });
     const pod = pods.items.find((candidate) => candidate.metadata?.name);
@@ -303,7 +304,7 @@ class RunnerRuntimeManager {
       const job = await clients.batchApi
         .readNamespacedJobStatus({
           name: jobName,
-          namespace: params.session.namespace,
+          namespace: params.session.runtimeScope,
         })
         .catch(() => null);
 
@@ -350,7 +351,7 @@ class RunnerRuntimeManager {
 
     const clients = this.requireClients();
     const names = runnerNames(session.deploymentName);
-    const namespace = session.namespace;
+    const namespace = session.runtimeScope;
 
     const deletions: Array<[string, () => Promise<unknown>]> = [
       [
@@ -478,7 +479,7 @@ class RunnerRuntimeManager {
     await new Promise<void>((resolve, reject) => {
       clients.exec
         .exec(
-          params.session.namespace,
+          params.session.runtimeScope,
           params.podName,
           RUNNER_CONTAINER_NAME,
           params.command,

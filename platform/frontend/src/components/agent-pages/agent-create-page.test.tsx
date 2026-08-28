@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentFormProps } from "@/components/agent-form";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
 import { AgentCreatePage } from "./agent-create-page";
 
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/config/config.query");
 
 // The form itself is covered by agent-form.test.tsx; here it is a stub whose
 // props are what the page is expected to hand it, plus a way to fire
@@ -58,10 +60,56 @@ describe("AgentCreatePage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockPermissions({ canRead: true });
+    vi.mocked(useFeature).mockReturnValue(false);
     vi.mocked(useRouter).mockReturnValue({
       push,
       replace: vi.fn(),
     } as unknown as ReturnType<typeof useRouter>);
+  });
+
+  it("offers maintained Agent templates and prefills the existing create wizard", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useFeature).mockImplementation((feature) =>
+      feature === "agentBackgroundExecution"
+        ? true
+        : feature === "agentBackgroundExecutionBaseImage"
+          ? "agent-archestra:dev"
+          : undefined,
+    );
+
+    render(<AgentCreatePage kind="agent" />);
+
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Popular agents" }),
+    ).toBeInTheDocument();
+    for (const name of [
+      "Archestra Agent",
+      "Claude Code",
+      "Codex",
+      "Hermes",
+      "OpenClaw",
+    ]) {
+      expect(
+        screen.getByRole("button", { name: new RegExp(name, "i") }),
+      ).toBeInTheDocument();
+    }
+    expect(formProps).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: /codex/i }));
+
+    expect(screen.getByText(/codex is prefilled below/i)).toBeInTheDocument();
+    expect(formProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        initialValues: expect.objectContaining({
+          name: "Codex",
+          backgroundExecution: expect.objectContaining({
+            command: ["archestra-codex"],
+            image: "agent-codex:dev",
+          }),
+        }),
+      }),
+    );
+    expect(screen.getByRole("button", { name: "Catalog" })).toBeInTheDocument();
   });
 
   it("mounts the whole form once, showing the first step, and only the last step may submit", async () => {

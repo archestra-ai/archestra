@@ -42930,6 +42930,14 @@
                                   "type": "string"
                                 }
                               },
+                              "inferenceProtocol": {
+                                "type": "string",
+                                "enum": [
+                                  "openai_responses",
+                                  "openai_chat",
+                                  "anthropic"
+                                ]
+                              },
                               "backend": {
                                 "type": "string",
                                 "enum": [
@@ -43049,6 +43057,7 @@
                             "required": [
                               "image",
                               "command",
+                              "inferenceProtocol",
                               "backend",
                               "steerMode",
                               "privileged",
@@ -43900,6 +43909,14 @@
                           "type": "string"
                         }
                       },
+                      "inferenceProtocol": {
+                        "type": "string",
+                        "enum": [
+                          "openai_responses",
+                          "openai_chat",
+                          "anthropic"
+                        ]
+                      },
                       "backend": {
                         "type": "string",
                         "enum": [
@@ -44016,6 +44033,7 @@
                     "required": [
                       "image",
                       "command",
+                      "inferenceProtocol",
                       "backend",
                       "steerMode",
                       "privileged",
@@ -44389,6 +44407,14 @@
                             "type": "string"
                           }
                         },
+                        "inferenceProtocol": {
+                          "type": "string",
+                          "enum": [
+                            "openai_responses",
+                            "openai_chat",
+                            "anthropic"
+                          ]
+                        },
                         "backend": {
                           "type": "string",
                           "enum": [
@@ -44508,6 +44534,7 @@
                       "required": [
                         "image",
                         "command",
+                        "inferenceProtocol",
                         "backend",
                         "steerMode",
                         "privileged",
@@ -45429,6 +45456,14 @@
                               "type": "string"
                             }
                           },
+                          "inferenceProtocol": {
+                            "type": "string",
+                            "enum": [
+                              "openai_responses",
+                              "openai_chat",
+                              "anthropic"
+                            ]
+                          },
                           "backend": {
                             "type": "string",
                             "enum": [
@@ -45548,6 +45583,7 @@
                         "required": [
                           "image",
                           "command",
+                          "inferenceProtocol",
                           "backend",
                           "steerMode",
                           "privileged",
@@ -46666,6 +46702,14 @@
                             "type": "string"
                           }
                         },
+                        "inferenceProtocol": {
+                          "type": "string",
+                          "enum": [
+                            "openai_responses",
+                            "openai_chat",
+                            "anthropic"
+                          ]
+                        },
                         "backend": {
                           "type": "string",
                           "enum": [
@@ -46785,6 +46829,7 @@
                       "required": [
                         "image",
                         "command",
+                        "inferenceProtocol",
                         "backend",
                         "steerMode",
                         "privileged",
@@ -47972,6 +48017,14 @@
                                 "type": "string"
                               }
                             },
+                            "inferenceProtocol": {
+                              "type": "string",
+                              "enum": [
+                                "openai_responses",
+                                "openai_chat",
+                                "anthropic"
+                              ]
+                            },
                             "backend": {
                               "type": "string",
                               "enum": [
@@ -48091,6 +48144,7 @@
                           "required": [
                             "image",
                             "command",
+                            "inferenceProtocol",
                             "backend",
                             "steerMode",
                             "privileged",
@@ -48961,6 +49015,14 @@
                             "type": "string"
                           }
                         },
+                        "inferenceProtocol": {
+                          "type": "string",
+                          "enum": [
+                            "openai_responses",
+                            "openai_chat",
+                            "anthropic"
+                          ]
+                        },
                         "backend": {
                           "type": "string",
                           "enum": [
@@ -49080,6 +49142,7 @@
                       "required": [
                         "image",
                         "command",
+                        "inferenceProtocol",
                         "backend",
                         "steerMode",
                         "privileged",
@@ -49883,6 +49946,14 @@
                           "type": "string"
                         }
                       },
+                      "inferenceProtocol": {
+                        "type": "string",
+                        "enum": [
+                          "openai_responses",
+                          "openai_chat",
+                          "anthropic"
+                        ]
+                      },
                       "backend": {
                         "type": "string",
                         "enum": [
@@ -49999,6 +50070,7 @@
                     "required": [
                       "image",
                       "command",
+                      "inferenceProtocol",
                       "backend",
                       "steerMode",
                       "privileged",
@@ -50376,6 +50448,14 @@
                             "type": "string"
                           }
                         },
+                        "inferenceProtocol": {
+                          "type": "string",
+                          "enum": [
+                            "openai_responses",
+                            "openai_chat",
+                            "anthropic"
+                          ]
+                        },
                         "backend": {
                           "type": "string",
                           "enum": [
@@ -50495,6 +50575,7 @@
                       "required": [
                         "image",
                         "command",
+                        "inferenceProtocol",
                         "backend",
                         "steerMode",
                         "privileged",
@@ -52621,6 +52702,14 @@
                             "type": "string"
                           }
                         },
+                        "inferenceProtocol": {
+                          "type": "string",
+                          "enum": [
+                            "openai_responses",
+                            "openai_chat",
+                            "anthropic"
+                          ]
+                        },
                         "backend": {
                           "type": "string",
                           "enum": [
@@ -52740,6 +52829,7 @@
                       "required": [
                         "image",
                         "command",
+                        "inferenceProtocol",
                         "backend",
                         "steerMode",
                         "privileged",
@@ -53603,6 +53693,14 @@
                             "type": "string"
                           }
                         },
+                        "inferenceProtocol": {
+                          "type": "string",
+                          "enum": [
+                            "openai_responses",
+                            "openai_chat",
+                            "anthropic"
+                          ]
+                        },
                         "backend": {
                           "type": "string",
                           "enum": [
@@ -53722,6 +53820,7 @@
                       "required": [
                         "image",
                         "command",
+                        "inferenceProtocol",
                         "backend",
                         "steerMode",
                         "privileged",
@@ -59010,6 +59109,14 @@
                             "type": "string"
                           }
                         },
+                        "inferenceProtocol": {
+                          "type": "string",
+                          "enum": [
+                            "openai_responses",
+                            "openai_chat",
+                            "anthropic"
+                          ]
+                        },
                         "backend": {
                           "type": "string",
                           "enum": [
@@ -59129,6 +59236,7 @@
                       "required": [
                         "image",
                         "command",
+                        "inferenceProtocol",
                         "backend",
                         "steerMode",
                         "privileged",
@@ -127159,6 +127267,63 @@
                         "agentBackgroundExecutionBaseImage": {
                           "type": "string"
                         },
+                        "agentBackgroundExecutionBackend": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "kubernetes"
+                              ]
+                            },
+                            "available": {
+                              "type": "boolean"
+                            },
+                            "defaultImage": {
+                              "type": "string"
+                            },
+                            "defaultTtlHours": {
+                              "type": "number"
+                            },
+                            "defaultIdleTimeoutMinutes": {
+                              "type": "number"
+                            },
+                            "allowPrivileged": {
+                              "type": "boolean"
+                            },
+                            "resources": {
+                              "type": "object",
+                              "properties": {
+                                "cpuRequest": {
+                                  "type": "string"
+                                },
+                                "memoryRequest": {
+                                  "type": "string"
+                                },
+                                "memoryLimit": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "cpuRequest",
+                                "memoryRequest",
+                                "memoryLimit"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "available",
+                            "defaultImage",
+                            "defaultTtlHours",
+                            "defaultIdleTimeoutMinutes",
+                            "allowPrivileged",
+                            "resources"
+                          ],
+                          "additionalProperties": false
+                        },
                         "plugins": {
                           "type": "boolean"
                         },
@@ -127333,6 +127498,7 @@
                         "sandbox",
                         "agentBackgroundExecution",
                         "agentBackgroundExecutionBaseImage",
+                        "agentBackgroundExecutionBackend",
                         "plugins",
                         "sandboxArtifactBytesLimit",
                         "chatAttachmentStorageBytesLimit",
@@ -284866,7 +285032,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "List OpenAI-compatible model ids available through the model router (specific LLM proxy)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "List OpenAI-compatible model ids available through the model router (specific attribution Agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
         "parameters": [
           {
             "schema": {
@@ -285752,7 +285918,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a response through the OpenAI-compatible model router (specific LLM proxy)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a response through the OpenAI-compatible model router (specific attribution Agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -286717,7 +286883,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create embeddings through the OpenAI-compatible model router (specific LLM proxy)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create embeddings through the OpenAI-compatible model router (specific attribution Agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -287379,7 +287545,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion through the OpenAI-compatible model router (specific LLM proxy)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion through the OpenAI-compatible model router (specific attribution Agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -331030,11 +331196,13 @@
                       "deploymentName": {
                         "type": "string"
                       },
-                      "namespace": {
-                        "type": "string"
+                      "backend": {
+                        "type": "string",
+                        "enum": [
+                          "kubernetes"
+                        ]
                       },
-                      "secretName": {
-                        "nullable": true,
+                      "runtimeScope": {
                         "type": "string"
                       },
                       "virtualApiKeyId": {
@@ -331083,8 +331251,8 @@
                       "agentId",
                       "actorUserId",
                       "deploymentName",
-                      "namespace",
-                      "secretName",
+                      "backend",
+                      "runtimeScope",
                       "virtualApiKeyId",
                       "startedAt",
                       "endedAt",

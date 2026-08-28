@@ -1,11 +1,16 @@
+import {
+  MODEL_ROUTER_SUPPORTED_PROVIDERS,
+  providerDisplayNames,
+  requiresOpenAiResponsesApi,
+  requiresResponsesApi,
+  type SupportedProvider,
+} from "@archestra/shared";
 import config from "@/config";
-import type { RunnerLaunchSpec } from "@/k8s/runner-runtime/manifests";
-import { RUNNER_STEER_FIFO } from "@/k8s/runner-runtime/manifests";
-import { constructFrozenRunnerName } from "@/k8s/runner-runtime/naming";
 import {
   AgentModel,
   LimitModel,
   LlmProviderApiKeyModel,
+  ModelModel,
   TeamModel,
   UserTokenModel,
   VirtualApiKeyModel,
@@ -16,7 +21,13 @@ import type {
   MissingAgentDeploymentCredential,
 } from "@/types";
 import { AGENT_DEPLOYMENT_CREDENTIALS_REQUIRED_CODE, ApiError } from "@/types";
+import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
+import type { RunnerLaunchSpec } from "./backends";
 import { resolveAgentDeploymentCredentials } from "./credentials";
+import {
+  constructStableExecutionName,
+  RUNNER_STEER_FIFO,
+} from "./runtime-contract";
 
 /**
  * Raised when a session cannot start only because the person it would act as
@@ -42,8 +53,8 @@ class AgentDeploymentCredentialsRequiredError extends ApiError {
 }
 
 /**
- * Everything a pod needs to carry one A2A task, resolved for the person the
- * session acts as.
+ * Everything an execution backend needs to carry one A2A task, resolved for
+ * the person the session acts as.
  *
  * A session needs no proxy or gateway configuration of its own: the LLM proxy
  * URL, a personal-scope virtual key (so spend attributes to the human rather
@@ -52,18 +63,17 @@ class AgentDeploymentCredentialsRequiredError extends ApiError {
  */
 export async function buildRunnerLaunchSpec(params: {
   deployment: AgentDeployment;
-  /** The A2A task this pod carries; its id names the workload. */
+  /** The A2A task this execution carries; its id names the workload. */
   taskId: string;
   /** Agent the task belongs to, for the proxy and gateway routes. */
   agentId: string;
   actorUserId: string;
   organizationId: string;
-  namespace: string;
+  runtimeScope: string;
   effectiveNetworkPolicy: EffectiveNetworkPolicy;
   /** The first instruction, when the task started with one. */
   task?: string | null;
   imagePullSecrets?: string[];
-  ownerReferences?: RunnerLaunchSpec["ownerReferences"];
 }): Promise<{ spec: RunnerLaunchSpec; virtualApiKeyId: string }> {
   const platformBaseUrl =
     config.agentBackgroundExecution.platformBaseUrl.replace(/\/+$/, "");
@@ -108,24 +118,44 @@ export async function buildRunnerLaunchSpec(params: {
     );
   }
 
-  // The virtual key must carry a provider mapping or the proxy refuses it:
-  // a virtual key is an indirection to a real provider credential, not a
-  // credential itself. Resolution honors the agent's configured key first,
-  // then the actor's personal -> team -> org precedence, exactly as chat does.
   const agent = await AgentModel.findById(params.agentId);
+  if (!agent) {
+    throw new ApiError(
+      404,
+      "The Agent for this background run no longer exists",
+    );
+  }
+  const llm = await resolveConversationLlmSelectionForAgent({
+    agent,
+    organizationId: params.organizationId,
+    userId: params.actorUserId,
+    includeMemberChatDefault: false,
+  });
+  assertInferenceProtocolSupported({
+    protocol: params.deployment.inferenceProtocol,
+    provider: llm.selectedProvider,
+    model: llm.selectedModel,
+    supportedEndpoints: llm.modelId
+      ? (await ModelModel.findById(llm.modelId))?.supportedEndpoints
+      : null,
+  });
+
+  // The virtual key must carry the provider selected for this Agent. It is an
+  // indirection to the actor's accessible provider credential, not a provider
+  // credential itself. The execution never receives the upstream secret.
   const userTeamIds = await TeamModel.getUserTeamIds(params.actorUserId);
   const providerApiKey = await LlmProviderApiKeyModel.getCurrentApiKey({
     organizationId: params.organizationId,
     userId: params.actorUserId,
     userTeamIds,
-    provider: "anthropic",
+    provider: llm.selectedProvider,
     conversationId: null,
-    agentLlmApiKeyId: agent?.llmApiKeyId ?? undefined,
+    agentLlmApiKeyId: agent.llmApiKeyId ?? undefined,
   });
   if (!providerApiKey) {
     throw new ApiError(
       409,
-      "No Anthropic API key is configured for your account, teams, or organization, so this background run has nothing to talk to the model with. Ask an admin to add one under LLM provider keys.",
+      `No ${providerDisplayNames[llm.selectedProvider]} credential is available for this Agent and user, so the background run cannot use its selected model.`,
     );
   }
 
@@ -137,7 +167,10 @@ export async function buildRunnerLaunchSpec(params: {
     scope: "personal",
     authorId: params.actorUserId,
     providerApiKeys: [
-      { provider: "anthropic", providerApiKeyId: providerApiKey.id },
+      {
+        provider: llm.selectedProvider,
+        providerApiKeyId: providerApiKey.id,
+      },
     ],
   });
   if (params.deployment.maxCostUsd) {
@@ -156,10 +189,16 @@ export async function buildRunnerLaunchSpec(params: {
     }
   }
 
-  // The singleton proxy endpoint, the same one every external client uses.
-  // Spend attribution rides the personal virtual key; an agent-scoped URL is
-  // not a thing the single-proxy design supports for chat agents.
-  const proxyUrl = `${platformBaseUrl}/v1/anthropic`;
+  const modelRouterUrl = `${platformBaseUrl}/v1/model-router/${params.agentId}`;
+  const anthropicUrl = `${platformBaseUrl}/v1/anthropic/${params.agentId}`;
+  const proxyUrl =
+    params.deployment.inferenceProtocol === "anthropic"
+      ? anthropicUrl
+      : modelRouterUrl;
+  const runtimeModel =
+    params.deployment.inferenceProtocol !== "anthropic"
+      ? `${llm.selectedProvider}:${llm.selectedModel}`
+      : llm.selectedModel;
   const nonSecretEnv: Record<string, string> = {
     // The runner's own environment goes first: the addresses below must win.
     // An entry overriding ANTHROPIC_BASE_URL would be exactly the bypass the
@@ -171,17 +210,26 @@ export async function buildRunnerLaunchSpec(params: {
       ]),
     ),
     ARCHESTRA_AGENT_BACKGROUND_EXECUTION_AGENT_ID: params.deployment.agentId,
-    ARCHESTRA_AGENT_BACKGROUND_EXECUTION_AGENT_NAME: agent?.name ?? "agent",
+    ARCHESTRA_AGENT_BACKGROUND_EXECUTION_AGENT_NAME: agent.name,
     ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID: params.taskId,
+    ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL: runtimeModel,
+    // Native CLIs use provider-published model slugs for local metadata and
+    // capability detection. Their single-provider virtual key keeps this
+    // unambiguous at the Model Router while the generic runner retains the
+    // qualified model id above.
+    ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL: llm.selectedModel,
+    ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL_PROVIDER: llm.selectedProvider,
     ARCHESTRA_AGENT_BACKGROUND_EXECUTION_STEER_FIFO: RUNNER_STEER_FIFO,
     // The finish contract: a session that has done its work parks this long
-    // for further direction, then exits so the Job — and the task — settle.
+    // for further direction, then exits so the execution and task settle.
     ARCHESTRA_AGENT_BACKGROUND_EXECUTION_IDLE_TIMEOUT_SECONDS: String(
       (params.deployment.idleTimeoutMinutes ??
         config.agentBackgroundExecution.defaultIdleTimeoutMinutes) * 60,
     ),
     ARCHESTRA_LLM_PROXY_URL: proxyUrl,
-    ANTHROPIC_BASE_URL: proxyUrl,
+    ARCHESTRA_LLM_PROXY_PROTOCOL: params.deployment.inferenceProtocol,
+    OPENAI_BASE_URL: modelRouterUrl,
+    ANTHROPIC_BASE_URL: anthropicUrl,
     ARCHESTRA_MCP_GATEWAY_URL: `${platformBaseUrl}/v1/mcp/${params.agentId}`,
   };
 
@@ -192,7 +240,8 @@ export async function buildRunnerLaunchSpec(params: {
     // variables, so the virtual key is presented that way too.
     ANTHROPIC_API_KEY: virtualKey.value,
     ANTHROPIC_AUTH_TOKEN: virtualKey.value,
-    ...(agent?.systemPrompt
+    OPENAI_API_KEY: virtualKey.value,
+    ...(agent.systemPrompt
       ? {
           ARCHESTRA_AGENT_BACKGROUND_EXECUTION_SYSTEM_PROMPT:
             agent.systemPrompt,
@@ -201,7 +250,7 @@ export async function buildRunnerLaunchSpec(params: {
     ...(params.task
       ? { ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK: params.task }
       : {}),
-    ...credentials.env,
+    ...withNativeClientCredentialAliases(credentials.env),
   };
 
   return {
@@ -209,11 +258,8 @@ export async function buildRunnerLaunchSpec(params: {
     spec: {
       taskId: params.taskId,
       runnerId: params.deployment.agentId,
-      frozenName: constructFrozenRunnerName(
-        agent?.name ?? "agent",
-        params.taskId,
-      ),
-      namespace: params.namespace,
+      frozenName: constructStableExecutionName(agent.name, params.taskId),
+      runtimeScope: params.runtimeScope,
       image: params.deployment.image,
       command: params.deployment.command ?? null,
       privileged: params.deployment.privileged,
@@ -230,8 +276,54 @@ export async function buildRunnerLaunchSpec(params: {
         60 *
         60,
       imagePullSecrets: params.imagePullSecrets ?? [],
-      ownerReferences: params.ownerReferences,
       effectiveNetworkPolicy: params.effectiveNetworkPolicy,
     },
   };
+}
+
+function withNativeClientCredentialAliases(
+  credentials: Record<string, string>,
+): Record<string, string> {
+  // GitHub accepts GITHUB_TOKEN across its APIs, while the gh CLI's canonical
+  // non-interactive variable is GH_TOKEN. Catalog users declare it once and
+  // git/gh-based clients receive the shape they expect.
+  return credentials.GITHUB_TOKEN && !credentials.GH_TOKEN
+    ? { ...credentials, GH_TOKEN: credentials.GITHUB_TOKEN }
+    : credentials;
+}
+
+function assertInferenceProtocolSupported(params: {
+  protocol: AgentDeployment["inferenceProtocol"];
+  provider: SupportedProvider;
+  model: string;
+  supportedEndpoints: string[] | null | undefined;
+}): void {
+  if (params.protocol === "anthropic" && params.provider !== "anthropic") {
+    throw new ApiError(
+      409,
+      `This background image expects the Anthropic API, but the Agent's selected model uses ${providerDisplayNames[params.provider]}. Choose an Anthropic model or use an OpenAI-compatible background image.`,
+    );
+  }
+  if (
+    params.protocol !== "anthropic" &&
+    !new Set<SupportedProvider>(MODEL_ROUTER_SUPPORTED_PROVIDERS).has(
+      params.provider,
+    )
+  ) {
+    throw new ApiError(
+      409,
+      `${providerDisplayNames[params.provider]} models are not available through the OpenAI-compatible model router used by this background image.`,
+    );
+  }
+  if (
+    params.protocol === "openai_chat" &&
+    (requiresResponsesApi(params.supportedEndpoints) ||
+      (params.provider === "openai" &&
+        requiresOpenAiResponsesApi(params.model)))
+  ) {
+    throw new ApiError(
+      409,
+      `This background image uses Chat Completions, but model "${params.model}" requires the Responses API. Choose a Chat Completions model or an image that uses OpenAI Responses.`,
+    );
+  }
 }

@@ -12973,6 +12973,7 @@ export type GetAgentsResponses = {
             backgroundExecution: {
                 image: string;
                 command: Array<string> | null;
+                inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
                 backend: 'kubernetes';
                 steerMode: 'pipe' | 'tmux_keys';
                 privileged: boolean;
@@ -13100,6 +13101,7 @@ export type CreateAgentData = {
         backgroundExecution?: {
             image: string;
             command: Array<string> | null;
+            inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
@@ -13262,6 +13264,7 @@ export type CreateAgentResponses = {
         backgroundExecution: {
             image: string;
             command: Array<string> | null;
+            inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
@@ -13492,6 +13495,7 @@ export type GetAllAgentsResponses = {
         backgroundExecution: {
             image: string;
             command: Array<string> | null;
+            inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
@@ -13777,6 +13781,7 @@ export type GetDefaultMcpGatewayResponses = {
         backgroundExecution: {
             image: string;
             command: Array<string> | null;
+            inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
@@ -14054,6 +14059,7 @@ export type ImportAgentResponses = {
             backgroundExecution: {
                 image: string;
                 command: Array<string> | null;
+                inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
                 backend: 'kubernetes';
                 steerMode: 'pipe' | 'tmux_keys';
                 privileged: boolean;
@@ -14344,6 +14350,7 @@ export type GetAgentResponses = {
         backgroundExecution: {
             image: string;
             command: Array<string> | null;
+            inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
@@ -14462,6 +14469,7 @@ export type UpdateAgentData = {
         backgroundExecution?: {
             image: string;
             command: Array<string> | null;
+            inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
@@ -14626,6 +14634,7 @@ export type UpdateAgentResponses = {
         backgroundExecution: {
             image: string;
             command: Array<string> | null;
+            inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
@@ -15085,6 +15094,7 @@ export type RestoreAgentVersionResponses = {
         backgroundExecution: {
             image: string;
             command: Array<string> | null;
+            inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
@@ -15293,6 +15303,7 @@ export type CloneAgentResponses = {
         backgroundExecution: {
             image: string;
             command: Array<string> | null;
+            inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
@@ -16828,6 +16839,7 @@ export type RestoreAgentResponses = {
         backgroundExecution: {
             image: string;
             command: Array<string> | null;
+            inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
             backend: 'kubernetes';
             steerMode: 'pipe' | 'tmux_keys';
             privileged: boolean;
@@ -34988,6 +35000,19 @@ export type GetConfigResponses = {
             sandbox: boolean;
             agentBackgroundExecution: boolean;
             agentBackgroundExecutionBaseImage: string;
+            agentBackgroundExecutionBackend: {
+                name: 'kubernetes';
+                available: boolean;
+                defaultImage: string;
+                defaultTtlHours: number;
+                defaultIdleTimeoutMinutes: number;
+                allowPrivileged: boolean;
+                resources: {
+                    cpuRequest: string;
+                    memoryRequest: string;
+                    memoryLimit: string;
+                };
+            } | null;
             plugins: boolean;
             sandboxArtifactBytesLimit: number;
             chatAttachmentStorageBytesLimit: number;
@@ -84887,8 +84912,8 @@ export type GetAgentExecutionsResponses = {
         agentId: string;
         actorUserId: string;
         deploymentName: string;
-        namespace: string;
-        secretName: string | null;
+        backend: 'kubernetes';
+        runtimeScope: string;
         virtualApiKeyId: string | null;
         startedAt: string;
         endedAt: string | null;

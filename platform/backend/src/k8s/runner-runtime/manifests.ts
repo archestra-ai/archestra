@@ -3,17 +3,19 @@ import {
   buildManagedNetworkPolicy,
   buildUnrestrictedFloorPolicy,
 } from "@/k8s/mcp-server-runtime/network-policy";
-import type { AgentDeploymentResources, EffectiveNetworkPolicy } from "@/types";
+import type { RunnerLaunchSpec } from "@/services/runners/backends";
+import {
+  RUNNER_RUNTIME_DIR,
+  RUNNER_STEER_FIFO,
+} from "@/services/runners/runtime-contract";
+import type { AgentDeploymentResources } from "@/types";
 import { RUNNER_TASK_LABEL, runnerLabels, runnerNames } from "./naming";
 
-/** Where the steer FIFO and the generated entrypoint live inside the pod. */
-const RUNNER_RUN_DIR = "/var/run/archestra";
 const DNS_PORTS = [
   { protocol: "UDP" as const, port: 53 },
   { protocol: "TCP" as const, port: 53 },
 ];
 
-export const RUNNER_STEER_FIFO = `${RUNNER_RUN_DIR}/steer`;
 /** Session `tmux attach` lands in — the pane the agent itself is using. */
 export const RUNNER_TMUX_SESSION = "agent";
 
@@ -33,28 +35,13 @@ const RUNNER_UNUSABLE_IMAGE_EXIT_CODE = 78;
  * boundary. That keeps manifest construction a pure function of its input and
  * testable without a cluster.
  */
-export type RunnerLaunchSpec = {
-  /** The A2A task this pod carries. */
-  taskId: string;
-  /** The runner definition it was launched from. */
-  runnerId: string;
-  frozenName: string;
+export type KubernetesRunnerLaunchSpec = Omit<
+  RunnerLaunchSpec,
+  "runtimeScope"
+> & {
   namespace: string;
-  image: string;
-  /** Shell command tmux runs; null uses the default runner-agent entrypoint. */
-  command: string[] | null;
-  privileged: boolean;
-  resources: AgentDeploymentResources | null;
-  /** Non-secret environment, inlined into the pod spec. */
-  env: Record<string, string>;
-  /** Secret environment, delivered through a Kubernetes Secret via envFrom. */
-  secretEnv: Record<string, string>;
-  /** Hard lifetime cap enforced by Kubernetes in addition to the reaper. */
-  activeDeadlineSeconds: number | null;
-  imagePullSecrets: string[];
+  /** Kubernetes garbage-collection owner, resolved inside this backend. */
   ownerReferences: k8s.V1OwnerReference[] | undefined;
-  /** The Agent Environment policy resolved when the task is launched. */
-  effectiveNetworkPolicy: EffectiveNetworkPolicy;
 };
 
 /**
@@ -73,16 +60,17 @@ export type RunnerLaunchSpec = {
  * already performed.
  */
 function buildRunnerBootstrapScript(): string {
+  const exitCodeFile = `${RUNNER_RUNTIME_DIR}/exit-code`;
   return [
     "set -eu",
-    `mkdir -p ${RUNNER_RUN_DIR}`,
+    `mkdir -p ${RUNNER_RUNTIME_DIR}`,
     `[ -p "${RUNNER_STEER_FIFO}" ] || mkfifo -m 600 "${RUNNER_STEER_FIFO}"`,
     "if ! command -v tmux >/dev/null 2>&1; then",
     '  echo "archestra: this image has no tmux, which runners require for attach and steering" >&2',
     `  exit ${RUNNER_UNUSABLE_IMAGE_EXIT_CODE}`,
     "fi",
-    `printf '%s\\n' "$ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ENTRYPOINT" > ${RUNNER_RUN_DIR}/entry.sh`,
-    `tmux new-session -d -s ${RUNNER_TMUX_SESSION} "/bin/sh ${RUNNER_RUN_DIR}/entry.sh; echo; echo '[archestra] agent session exited'; sleep 10"`,
+    `printf '%s\\n' "$ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ENTRYPOINT" > ${RUNNER_RUNTIME_DIR}/entry.sh`,
+    `tmux new-session -d -s ${RUNNER_TMUX_SESSION} '/bin/sh ${RUNNER_RUNTIME_DIR}/entry.sh; status=$?; printf "%s\\n" "$status" > ${exitCodeFile}; echo; echo "[archestra] agent session exited"; sleep 10; exit "$status"'`,
     // Mirror the pane to the container's stdout. tmux gives the agent a pty,
     // so without this its output exists only inside the pane: kubectl logs
     // shows nothing, and the platform's log-follower streams an empty task.
@@ -90,6 +78,11 @@ function buildRunnerBootstrapScript(): string {
     // Hold PID 1 for exactly as long as the session lives, so the Job
     // completes when the agent is done rather than when tmux forks away.
     `while tmux has-session -t ${RUNNER_TMUX_SESSION} 2>/dev/null; do sleep 5; done`,
+    `if [ ! -f ${exitCodeFile} ]; then`,
+    '  echo "archestra: agent session ended without an exit status" >&2',
+    "  exit 1",
+    "fi",
+    `exit "$(cat ${exitCodeFile})"`,
   ].join("\n");
 }
 
@@ -98,7 +91,7 @@ function buildRunnerBootstrapScript(): string {
  * restart a finished session forever, and restart a crashed one behind the
  * user's back — re-executing side effects the first attempt already had.
  */
-export function buildRunnerJob(spec: RunnerLaunchSpec): k8s.V1Job {
+export function buildRunnerJob(spec: KubernetesRunnerLaunchSpec): k8s.V1Job {
   const names = runnerNames(spec.frozenName);
   const labels = runnerLabels({ taskId: spec.taskId, runnerId: spec.runnerId });
 
@@ -156,7 +149,7 @@ export function buildRunnerJob(spec: RunnerLaunchSpec): k8s.V1Job {
                 : {}),
               resources: buildResourceRequirements(spec.resources),
               volumeMounts: [
-                { name: "archestra-run", mountPath: RUNNER_RUN_DIR },
+                { name: "archestra-run", mountPath: RUNNER_RUNTIME_DIR },
               ],
               ...(spec.privileged
                 ? { securityContext: { privileged: true } }
@@ -169,7 +162,9 @@ export function buildRunnerJob(spec: RunnerLaunchSpec): k8s.V1Job {
   };
 }
 
-export function buildRunnerSecret(spec: RunnerLaunchSpec): k8s.V1Secret {
+export function buildRunnerSecret(
+  spec: KubernetesRunnerLaunchSpec,
+): k8s.V1Secret {
   const names = runnerNames(spec.frozenName);
   return {
     apiVersion: "v1",
@@ -201,7 +196,7 @@ export function buildRunnerSecret(spec: RunnerLaunchSpec): k8s.V1Secret {
  * network is the environment's decision to make, not this policy's.
  */
 export function buildRunnerPlatformEgressPolicy(params: {
-  spec: RunnerLaunchSpec;
+  spec: KubernetesRunnerLaunchSpec;
   platformNamespace: string;
   platformPodLabels: Record<string, string>;
   platformPorts: number[];
@@ -277,7 +272,7 @@ export function buildRunnerPlatformEgressPolicy(params: {
  * can always reach Archestra without gaining arbitrary public access.
  */
 export function buildRunnerEnvironmentEgressPolicy(
-  spec: RunnerLaunchSpec,
+  spec: KubernetesRunnerLaunchSpec,
 ): k8s.V1NetworkPolicy {
   const names = runnerNames(spec.frozenName);
   const labels = runnerLabels({ taskId: spec.taskId, runnerId: spec.runnerId });
@@ -315,10 +310,14 @@ export function buildRunnerEnvironmentEgressPolicy(
  * bring-your-own-image either satisfies or overrides with its own command.
  */
 function resolveEntrypoint(command: string[] | null): string {
-  if (!command || command.length === 0) {
-    return "archestra-runner-agent";
-  }
-  return command.map(shellQuote).join(" ");
+  const resolved =
+    !command || command.length === 0
+      ? "archestra-runner-agent"
+      : command.map(shellQuote).join(" ");
+  return [
+    "if command -v archestra-agent-init >/dev/null 2>&1; then archestra-agent-init; fi",
+    `exec ${resolved}`,
+  ].join("\n");
 }
 
 function shellQuote(argument: string): string {

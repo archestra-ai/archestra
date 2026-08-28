@@ -20,6 +20,19 @@ let mockAgents: Array<{
   scope: "personal" | "team" | "org";
   authorEmail?: string | null;
 }> = [];
+let mockExecutionBackend: {
+  name: "kubernetes";
+  available: boolean;
+  defaultImage: string;
+  defaultTtlHours: number;
+  defaultIdleTimeoutMinutes: number;
+  allowPrivileged: boolean;
+  resources: {
+    cpuRequest: string;
+    memoryRequest: string;
+    memoryLimit: string;
+  };
+} | null = null;
 const mockAgentSelector = vi.fn(
   ({ value, placeholder }: { value: string; placeholder?: string }) => (
     <div>{value || placeholder}</div>
@@ -117,6 +130,13 @@ vi.mock("@/lib/agent.query", () => ({
   }),
 }));
 
+vi.mock("@/lib/config/config.query", () => ({
+  useFeature: (feature: string) =>
+    feature === "agentBackgroundExecutionBackend"
+      ? mockExecutionBackend
+      : undefined,
+}));
+
 vi.mock("@/lib/llm-models.query", () => ({
   useLlmModels: () => ({
     data: [
@@ -185,6 +205,7 @@ beforeEach(() => {
     },
   ];
   mockAgents = [];
+  mockExecutionBackend = null;
 
   vi.mocked(useOrganization).mockReturnValue({
     data: mockOrganization,
@@ -203,6 +224,38 @@ beforeEach(() => {
 });
 
 describe("AgentSettingsPage", () => {
+  it("shows execution backend health and operator defaults only when enabled", () => {
+    const { rerender } = renderPage();
+
+    expect(screen.queryByText("Execution Backend")).not.toBeInTheDocument();
+
+    mockExecutionBackend = {
+      name: "kubernetes",
+      available: true,
+      defaultImage: "registry.example.test/agent:latest",
+      defaultTtlHours: 72,
+      defaultIdleTimeoutMinutes: 180,
+      allowPrivileged: false,
+      resources: {
+        cpuRequest: "500m",
+        memoryRequest: "1Gi",
+        memoryLimit: "4Gi",
+      },
+    };
+    rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <AgentSettingsPage />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByText("Execution Backend")).toBeInTheDocument();
+    expect(screen.getByText("Available")).toBeInTheDocument();
+    expect(
+      screen.getByText("registry.example.test/agent:latest"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("72 hours")).toBeInTheDocument();
+  });
+
   it("lets users reset the org default model selection", async () => {
     const user = userEvent.setup();
 

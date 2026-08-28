@@ -11,6 +11,7 @@ export type BackgroundExecutionAgentConfig = {
   proxyBaseUrl: string;
   /** Virtual key authenticating this session to the proxy. */
   apiKey: string;
+  proxyProtocol: "openai_responses" | "openai_chat" | "anthropic";
   /** MCP gateway base, already scoped to the agent. */
   gatewayUrl: string;
   gatewayToken: string;
@@ -42,7 +43,8 @@ export function readConfig(
     proxyBaseUrl: stripTrailingSlash(
       requireValue(env, "ARCHESTRA_LLM_PROXY_URL"),
     ),
-    apiKey: requireValue(env, "ANTHROPIC_API_KEY"),
+    apiKey: requireValue(env, "ARCHESTRA_VIRTUAL_KEY"),
+    proxyProtocol: readProxyProtocol(env),
     gatewayUrl: stripTrailingSlash(
       requireValue(env, "ARCHESTRA_MCP_GATEWAY_URL"),
     ),
@@ -65,6 +67,22 @@ export function readConfig(
         0,
       ) * 1000 || null,
   };
+}
+
+function readProxyProtocol(
+  env: NodeJS.ProcessEnv,
+): BackgroundExecutionAgentConfig["proxyProtocol"] {
+  const value = requireValue(env, "ARCHESTRA_LLM_PROXY_PROTOCOL");
+  if (
+    value === "openai_responses" ||
+    value === "openai_chat" ||
+    value === "anthropic"
+  ) {
+    return value;
+  }
+  throw new BackgroundExecutionAgentConfigError(
+    "ARCHESTRA_LLM_PROXY_PROTOCOL must be openai_responses, openai_chat, or anthropic.",
+  );
 }
 
 function requireBackgroundExecutionValue(

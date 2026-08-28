@@ -78,4 +78,16 @@ describe("buildChatOpsTaskNotification", () => {
       }),
     ).toBe("🦀 Task `task-1` finished.\n\nFinished the requested work.");
   });
+
+  test("keeps native execution transcripts in the execution console", () => {
+    expect(
+      buildChatOpsTaskNotification({
+        taskId: "task-1",
+        state: "TASK_STATE_COMPLETED",
+        statusReason: null,
+        output:
+          "Initializing agent...\n[tool output spanning many lines]\n[archestra] agent session exited",
+      }),
+    ).toBe("🦀 Task `task-1` finished.");
+  });
 });

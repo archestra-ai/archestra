@@ -24,7 +24,8 @@ describe("AgentRunModel completion notifications", () => {
       agentId: agent.id,
       actorUserId: user.id,
       deploymentName: `runner-${task.id}`,
-      namespace: "archestra-dev",
+      backend: "kubernetes",
+      runtimeScope: "archestra-dev",
       chatOpsBindingId: crypto.randomUUID(),
       chatOpsThreadId: "thread-1",
     });

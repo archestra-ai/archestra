@@ -1,9 +1,16 @@
-import type { Writable } from "node:stream";
+import type { Readable, Writable } from "node:stream";
+import type WebSocket from "ws";
+import config from "@/config";
 import { runnerRuntimeManager } from "@/k8s/runner-runtime";
-import type { RunnerLaunchSpec } from "@/k8s/runner-runtime/manifests";
-import type { AgentRun } from "@/types";
+import type { AgentDeploymentSteerMode, AgentRun } from "@/types";
 import { ApiError } from "@/types";
-import type { RunnerBackend, RunnerCompletion } from "./types";
+import type {
+  RunnerAttachment,
+  RunnerAttachStatus,
+  RunnerBackend,
+  RunnerCompletion,
+  RunnerLaunchSpec,
+} from "./types";
 
 /**
  * Kubernetes backend: one Job per session.
@@ -17,6 +24,17 @@ class KubernetesRunnerBackend implements RunnerBackend {
 
   get isEnabled(): boolean {
     return runnerRuntimeManager.isEnabled;
+  }
+
+  resolveRuntimeScope(params: {
+    environmentScope?: string | null;
+    organizationScope?: string | null;
+  }): string {
+    return (
+      params.environmentScope ??
+      params.organizationScope ??
+      config.orchestrator.kubernetes.namespace
+    );
   }
 
   async launch(spec: RunnerLaunchSpec): Promise<void> {
@@ -47,14 +65,48 @@ class KubernetesRunnerBackend implements RunnerBackend {
   async streamOutput(params: {
     session: AgentRun;
     destination: Writable;
+    lines?: number;
     abortSignal?: AbortSignal;
   }): Promise<void> {
     await runnerRuntimeManager.streamLogs({
       session: params.session,
       destination: params.destination,
-      lines: RUNNER_LOG_TAIL_LINES,
+      lines: params.lines ?? RUNNER_LOG_TAIL_LINES,
       abortSignal: params.abortSignal,
     });
+  }
+
+  async steer(params: {
+    session: AgentRun;
+    steerMode: AgentDeploymentSteerMode;
+    message: string;
+  }): Promise<void> {
+    await runnerRuntimeManager.steer(params);
+  }
+
+  async attach(params: {
+    session: AgentRun;
+    stdin: Readable;
+    stdout: Writable;
+    stderr: Writable;
+    onStatus?: (status: RunnerAttachStatus) => void;
+  }): Promise<RunnerAttachment> {
+    const attachment = await runnerRuntimeManager.attach({
+      session: params.session,
+      stdin: params.stdin,
+      stdout: params.stdout,
+      stderr: params.stderr,
+      onStatus: (status) =>
+        params.onStatus?.({
+          outcome: status.status === "Failure" ? "failure" : "success",
+          message: status.message ?? undefined,
+        }),
+    });
+    return {
+      command: attachment.command,
+      resourceName: attachment.podName,
+      socket: attachment.socket as WebSocket,
+    };
   }
 
   async waitForCompletion(params: {
@@ -66,6 +118,13 @@ class KubernetesRunnerBackend implements RunnerBackend {
 
   async teardown(session: AgentRun): Promise<void> {
     await runnerRuntimeManager.teardown(session);
+  }
+
+  async withSessionLease(
+    session: AgentRun,
+    operation: () => Promise<void>,
+  ): Promise<boolean> {
+    return runnerRuntimeManager.withSessionLease(session, operation);
   }
 }
 

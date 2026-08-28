@@ -17,11 +17,11 @@ import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
 import { BrowserStreamSocketClientContext } from "@/features/browser-stream/websocket/browser-stream.websocket";
 import McpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
-import { runnerRuntimeManager } from "@/k8s/runner-runtime";
 import logger from "@/logging";
 import { AgentRunModel, McpServerModel, UserModel } from "@/models";
 import { reportMcpDeploymentStatuses } from "@/observability/metrics/mcp";
 import { isPredefinedAdmin } from "@/services/agent-tool-assignment";
+import { resolveRunnerBackend } from "@/services/runners/backends";
 
 interface McpLogsSubscription {
   serverId: string;
@@ -548,13 +548,15 @@ class WebSocketService {
     const stderr = new PassThrough();
 
     try {
-      const { podName, command, socket } = await runnerRuntimeManager.attach({
+      const { resourceName, command, socket } = await resolveRunnerBackend(
+        session.backend,
+      ).attach({
         session,
         stdin,
         stdout,
         stderr,
         onStatus: (status) => {
-          if (status.status === "Failure") {
+          if (status.outcome === "failure") {
             this.sendToClient(ws, {
               type: "agent_run_attach_closed",
               payload: { runId, reason: status.message ?? undefined },
@@ -590,7 +592,7 @@ class WebSocketService {
 
       this.sendToClient(ws, {
         type: "agent_run_attach_started",
-        payload: { runId, command, podName },
+        payload: { runId, command, resourceName },
       });
     } catch (error) {
       this.sendToClient(ws, {
@@ -678,7 +680,7 @@ class WebSocketService {
     });
 
     try {
-      await runnerRuntimeManager.streamLogs({
+      await resolveRunnerBackend(session.backend).streamOutput({
         session,
         destination: stream,
         lines,

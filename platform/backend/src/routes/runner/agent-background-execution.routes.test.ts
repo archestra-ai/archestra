@@ -31,6 +31,7 @@ describe("Agent Background execution routes", () => {
       backgroundExecution: {
         image: "example.com/coding-agent:latest",
         command: null,
+        inferenceProtocol: "openai_responses",
         backend: "kubernetes",
         steerMode: "pipe",
         privileged: false,
@@ -89,8 +90,8 @@ describe("Agent Background execution routes", () => {
       agentId: agent.id,
       actorUserId: user.id,
       deploymentName: `agent-run-${selectedTask.id}`,
-      namespace: "archestra-dev",
-      secretName: null,
+      backend: "kubernetes",
+      runtimeScope: "archestra-dev",
       virtualApiKeyId: null,
     });
     await A2ATaskModel.transitionStateWithEvent({
@@ -120,8 +121,8 @@ describe("Agent Background execution routes", () => {
       agentId: otherAgent.id,
       actorUserId: user.id,
       deploymentName: `agent-run-${otherTask.id}`,
-      namespace: "archestra-dev",
-      secretName: null,
+      backend: "kubernetes",
+      runtimeScope: "archestra-dev",
       virtualApiKeyId: null,
     });
 

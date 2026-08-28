@@ -24,8 +24,8 @@ import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
 import { validateMCPGatewayToken } from "@/routes/mcp-gateway/utils";
 import {
   resolveAgentDeployment,
-  resumeTaskInPod,
-  runTaskInPod,
+  resumeBackgroundTask,
+  runTaskInBackground,
 } from "@/services/runners/pod-execution";
 import type { A2AContext, A2AMessage, AgentRun } from "@/types";
 import { isTerminalA2ATaskState } from "@/types/a2a-task";
@@ -212,7 +212,7 @@ export class A2AManager {
       contextId: task.contextId,
       survivesRestart: true,
       executeRun: (runOpts) =>
-        resumeTaskInPod({
+        resumeBackgroundTask({
           session: params.session,
           onTextDelta: runOpts.onTextDelta,
           abortSignal: runOpts.abortSignal,
@@ -585,7 +585,7 @@ export class A2AManager {
             // long-running work, so an ordinary send still answers in process
             // and an Agent gaining Background execution does not change chat.
             if (deployment && runOpts.taskId) {
-              return runTaskInPod({
+              return runTaskInBackground({
                 deployment,
                 // The task is the pod's identity: one session per task, so a
                 // resumed task adopts its own pod rather than starting a second.

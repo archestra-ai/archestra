@@ -6,25 +6,27 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { AgentDeploymentBackend } from "@/types/runner";
 import a2aTasksTable from "./a2a-task";
 import agentsTable from "./agent";
 import usersTable from "./user";
 import virtualApiKeysTable from "./virtual-api-key";
 
 /**
- * The pod carrying one A2A task.
+ * The isolated runtime carrying one A2A task.
  *
  * Deliberately holds no state of its own: the task's own state machine is the
  * record of how the work is going, and a second one would only be a source of
- * disagreement. This row answers "which Kubernetes objects belong to this
- * task, and whose credentials are in them" — nothing else.
+ * disagreement. This row freezes which execution backend owns the task and
+ * whose credentials it uses, so reconciliation never depends on mutable Agent
+ * configuration.
  */
 const agentRunsTable = pgTable(
   "agent_runs",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     organizationId: text("organization_id").notNull(),
-    /** One pod per task. */
+    /** One isolated execution per task. */
     taskId: uuid("task_id")
       .notNull()
       .references(() => a2aTasksTable.id, { onDelete: "cascade" }),
@@ -37,9 +39,11 @@ const agentRunsTable = pgTable(
       .references(() => usersTable.id, { onDelete: "cascade" }),
     /** Frozen at creation so a rename can never orphan the workload. */
     deploymentName: text("deployment_name").notNull(),
-    namespace: text("namespace").notNull(),
-    secretName: text("secret_name"),
-    /** Revoked when the session ends; a live key outliving its pod keeps billing. */
+    /** Frozen because a restart must re-adopt through the original backend. */
+    backend: text("backend").$type<AgentDeploymentBackend>().notNull(),
+    /** Backend-owned placement scope, intentionally not Kubernetes-specific. */
+    runtimeScope: text("runtime_scope").notNull(),
+    /** Revoked when the session ends; a live key outliving its runtime keeps billing. */
     virtualApiKeyId: uuid("virtual_api_key_id").references(
       () => virtualApiKeysTable.id,
       { onDelete: "set null" },
@@ -54,7 +58,7 @@ const agentRunsTable = pgTable(
     ),
     /** Set after the provider accepts the terminal reply. */
     completionNotifiedAt: timestamp("completion_notified_at", { mode: "date" }),
-    /** Bounded tail of container output retained after the pod is removed. */
+    /** Bounded tail of runtime output retained after the execution is removed. */
     logs: text("logs"),
     startedAt: timestamp("started_at", { mode: "date" }).notNull().defaultNow(),
     endedAt: timestamp("ended_at", { mode: "date" }),

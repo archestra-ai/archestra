@@ -796,12 +796,24 @@ export interface AgentFormFooterState {
   canSubmit: boolean;
 }
 
+/** Editable values a create flow may seed from a catalog template. */
+export interface AgentFormInitialValues {
+  name?: string;
+  icon?: string | null;
+  description?: string;
+  systemPrompt?: string;
+  backgroundExecution?: BackgroundExecutionConfig | null;
+  accessAllTools?: boolean;
+}
+
 export interface AgentFormProps {
   /** Agent to edit. If null/undefined, creates a new agent */
   agent?: Agent | null;
   /** Agent type: 'agent' for internal agents with prompts, 'profile' for external profiles */
   agentType?: AgentType;
   defaultIconType?: AgentIconVariant;
+  /** Catalog/template defaults for a new Agent. Ignored in edit mode. */
+  initialValues?: AgentFormInitialValues;
   /** Callback when a new agent/profile is created (not called for updates) */
   onCreated?: (created: { id: string; name: string }) => void;
   /** Callback after an existing agent was saved (not called for creates). */
@@ -854,6 +866,7 @@ export function AgentForm({
   agent,
   agentType = "profile",
   defaultIconType = "agent",
+  initialValues,
   onCreated,
   onSaved,
   onDirtyChange,
@@ -1487,13 +1500,15 @@ export function AgentForm({
             accessAllSubagents: agentData.accessAllSubagents ?? false,
           }
         : {
-            name: "",
-            icon: null,
-            description: "",
+            name: initialValues?.name ?? "",
+            icon: initialValues?.icon ?? null,
+            description: initialValues?.description ?? "",
             // Prefill a starter persona for new agents so the default is
             // visible and editable in the UI; other agent types don't surface
             // the instruction.
-            systemPrompt: isInternalAgent ? DEFAULT_AGENT_SYSTEM_PROMPT : "",
+            systemPrompt:
+              initialValues?.systemPrompt ??
+              (isInternalAgent ? DEFAULT_AGENT_SYSTEM_PROMPT : ""),
             suggestedPrompts: [],
             assignedTeamIds: [],
             assignedUserIds: [],
@@ -1509,12 +1524,12 @@ export function AgentForm({
             autoConfigureOnToolDiscovery: false,
             dualLlmMaxRounds: String(DUAL_LLM_DEFAULT_MAX_ROUNDS),
             passthroughHeaders: [],
-            backgroundExecution: null,
+            backgroundExecution: initialValues?.backgroundExecution ?? null,
             // New agents default to "Auto" (implicit access to all tools);
             // admins can switch to "Custom" (explicitly assigned tools).
             toolExposureMode: "full",
             missingCredentialBehavior: "allow",
-            accessAllTools: true,
+            accessAllTools: initialValues?.accessAllTools ?? true,
             accessAllSubagents: true,
           };
 
@@ -1562,7 +1577,7 @@ export function AgentForm({
       setSelectedToolsCount(0);
       lastAutoSelectedProviderRef.current = null;
     }
-  }, [agent, freshAgent, refetchAgent, isInternalAgent]);
+  }, [agent, freshAgent, refetchAgent, isInternalAgent, initialValues]);
 
   // A brand-new agent starts in the org's configured landing environment for
   // its type. Kept out of the reset path above (same reasoning as the seeds

@@ -2,7 +2,7 @@ import { ApiError } from "@/types";
 import { kubernetesRunnerBackend } from "./kubernetes";
 import type { RunnerBackend, RunnerBackendName } from "./types";
 
-export type { RunnerBackend } from "./types";
+export type { RunnerBackend, RunnerLaunchSpec } from "./types";
 
 /**
  * Every execution backend this deployment knows how to drive.
@@ -33,4 +33,9 @@ export function resolveRunnerBackend(name: RunnerBackendName): RunnerBackend {
     );
   }
   return backend;
+}
+
+/** Whether this installation has at least one usable execution backend. */
+export function isAnyRunnerBackendEnabled(): boolean {
+  return Object.values(BACKENDS).some((backend) => backend.isEnabled);
 }

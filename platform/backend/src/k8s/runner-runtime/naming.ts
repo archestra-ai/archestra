@@ -1,7 +1,4 @@
-import {
-  ensureStringIsRfc1123Compliant,
-  sanitizeLabelValue,
-} from "@/k8s/shared";
+import { sanitizeLabelValue } from "@/k8s/shared";
 
 /** The A2A task this pod carries — the pod's stable selector identity. */
 export const RUNNER_TASK_LABEL = "archestra.io/runner-task-id";
@@ -14,22 +11,6 @@ const RUNNER_PURPOSE_LABEL = "archestra.io/purpose";
 const RUNNER_PURPOSE_VALUE = "runner";
 
 export const RUNNER_LEASE_SCOPE = "runner-transition";
-
-/**
- * Frozen Kubernetes names for one runner: `runner-<slug40>-<id8>`.
- *
- * Computed once at creation, stored on the row, and never recomputed —
- * workload identity must not follow the mutable display name, or a rename
- * orphans the running session. The 56-char cap leaves room for the derived
- * `-env` / `-np` suffixes inside the 63-char RFC 1123 label limit.
- */
-export function constructFrozenRunnerName(name: string, id: string): string {
-  const slug =
-    ensureStringIsRfc1123Compliant(name)
-      .slice(0, 40)
-      .replace(/[^a-z0-9]+$/, "") || "session";
-  return `runner-${slug}-${id.slice(0, 8)}`;
-}
 
 export function runnerNames(frozenName: string): {
   job: string;

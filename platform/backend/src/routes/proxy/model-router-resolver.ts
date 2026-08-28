@@ -43,33 +43,28 @@ export async function resolveModelRoute(params: {
       );
     }
 
-    const providerMatches =
-      params.capability === "embeddings"
-        ? await ModelModel.findEmbeddingModelsByModelId({
-            modelId: explicit.modelId,
-            provider: explicit.provider,
-          })
-        : await ModelModel.findTextChatModelsByModelId({
-            modelId: explicit.modelId,
-            provider: explicit.provider,
-          });
+    return resolveProviderModel({
+      provider: explicit.provider,
+      modelId: explicit.modelId,
+      requestedModel,
+      capability: params.capability,
+      allowedApiKeyIds: params.allowedApiKeyIds,
+    });
+  }
 
-    const accessibleMatches = params.allowedApiKeyIds
-      ? await filterModelsByLinkedApiKeys(
-          providerMatches,
-          params.allowedApiKeyIds,
-        )
-      : providerMatches;
-
-    if (accessibleMatches.length === 1) {
-      return toResolution(accessibleMatches[0], requestedModel);
-    }
-    if (accessibleMatches.length > 1) {
-      throw new ApiError(
-        500,
-        `Ambiguous model resolution: "${requestedModel}" matched ${accessibleMatches.length} models.`,
-      );
-    }
+  // Native clients such as Codex and Hermes expect the provider's own model
+  // slug. A virtual key mapped to exactly one provider makes that slug just as
+  // unambiguous as a qualified id while preserving strict routing for general
+  // multi-provider Model Router keys.
+  if (params.allowedProviders?.size === 1) {
+    const [provider] = params.allowedProviders;
+    return resolveProviderModel({
+      provider,
+      modelId: requestedModel,
+      requestedModel,
+      capability: params.capability,
+      allowedApiKeyIds: params.allowedApiKeyIds,
+    });
   }
 
   throw new ApiError(
@@ -101,6 +96,15 @@ export function buildRoutableModelId(model: Model): string {
   return `${model.provider}:${model.modelId}`;
 }
 
+export function sortRoutableModels(models: Model[]): Model[] {
+  return [...models].sort((a, b) => {
+    const providerCompare =
+      providerSortIndex(a.provider) - providerSortIndex(b.provider);
+    if (providerCompare !== 0) return providerCompare;
+    return a.modelId.localeCompare(b.modelId);
+  });
+}
+
 function toResolution(
   model: Model,
   requestedModel: string,
@@ -111,6 +115,51 @@ function toResolution(
     requestedModel,
     supportedEndpoints: model.supportedEndpoints ?? null,
   };
+}
+
+async function resolveProviderModel(params: {
+  provider: SupportedProvider;
+  modelId: string;
+  requestedModel: string;
+  capability?: "text-chat" | "embeddings";
+  allowedApiKeyIds?: string[];
+}): Promise<ModelRouterResolution> {
+  const providerMatches =
+    params.capability === "embeddings"
+      ? await ModelModel.findEmbeddingModelsByModelId({
+          modelId: params.modelId,
+          provider: params.provider,
+        })
+      : await ModelModel.findTextChatModelsByModelId({
+          modelId: params.modelId,
+          provider: params.provider,
+        });
+
+  const accessibleMatches = params.allowedApiKeyIds
+    ? await filterModelsByLinkedApiKeys(
+        providerMatches,
+        params.allowedApiKeyIds,
+      )
+    : providerMatches;
+
+  if (accessibleMatches.length === 1) {
+    return toResolution(accessibleMatches[0], params.requestedModel);
+  }
+  if (accessibleMatches.length > 1) {
+    throw new ApiError(
+      500,
+      `Ambiguous model resolution: "${params.requestedModel}" matched ${accessibleMatches.length} models.`,
+    );
+  }
+
+  throw modelNotAvailableError(params.requestedModel);
+}
+
+function modelNotAvailableError(requestedModel: string): ApiError {
+  return new ApiError(
+    404,
+    `Model "${requestedModel}" is not available. Use a provider-qualified model id such as "anthropic:claude-opus-4-6-20250918".`,
+  );
 }
 
 function providerSortIndex(provider: SupportedProvider): number {
@@ -129,13 +178,4 @@ async function filterModelsByLinkedApiKeys(
     await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds(apiKeyIds);
   const linkedIds = new Set(linked.map(({ model }) => model.id));
   return models.filter((model) => linkedIds.has(model.id));
-}
-
-export function sortRoutableModels(models: Model[]): Model[] {
-  return [...models].sort((a, b) => {
-    const providerCompare =
-      providerSortIndex(a.provider) - providerSortIndex(b.provider);
-    if (providerCompare !== 0) return providerCompare;
-    return a.modelId.localeCompare(b.modelId);
-  });
 }

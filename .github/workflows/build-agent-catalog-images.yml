@@ -41,8 +41,8 @@ jobs:
           - agent-hermes
           - agent-openclaw
     permissions:
-      contents: read
-      id-token: write
+      contents: read # Required to invoke the reusable image build workflow.
+      id-token: write # Required for Workload Identity Federation.
     uses: ./.github/workflows/build-native-multi-arch-image.yml
     with:
       image_directory: ./platform

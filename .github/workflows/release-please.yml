@@ -221,8 +221,8 @@ jobs:
     needs:
       - release-please
     permissions:
-      contents: read
-      id-token: write
+      contents: read # Required to invoke the reusable Agent image workflow.
+      id-token: write # Required for Workload Identity Federation.
     with:
       push_to_gcr: true
       version: ${{ needs.release-please.outputs.platform_version }}

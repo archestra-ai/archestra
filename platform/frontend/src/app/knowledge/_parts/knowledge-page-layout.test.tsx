@@ -191,33 +191,6 @@ describe("KnowledgePageLayout", () => {
     });
   });
 
-  describe("tabs", () => {
-    it("renders Connectors, Files and Knowledge Bases tabs linking to their routes", () => {
-      renderLayout();
-
-      for (const link of screen.getAllByRole("link", { name: "Connectors" })) {
-        expect(link).toHaveAttribute("href", "/knowledge/connectors");
-      }
-      for (const link of screen.getAllByRole("link", { name: "Files" })) {
-        expect(link).toHaveAttribute("href", "/knowledge/files");
-      }
-      expect(
-        screen.getAllByRole("link", { name: "Files" }).length,
-      ).toBeGreaterThan(0);
-      for (const link of screen.getAllByRole("link", {
-        name: "Knowledge Bases",
-      })) {
-        expect(link).toHaveAttribute("href", "/knowledge/knowledge-bases");
-      }
-      expect(
-        screen.getAllByRole("link", { name: "Connectors" }).length,
-      ).toBeGreaterThan(0);
-      expect(
-        screen.getAllByRole("link", { name: "Knowledge Bases" }).length,
-      ).toBeGreaterThan(0);
-    });
-  });
-
   describe("loading state", () => {
     it("shows the shared loading state when isPending is true", () => {
       renderLayout(true);

@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { McpServerIssue } from "@/lib/mcp/mcp-server-issues";
+import { McpServerIssueBadge } from "./mcp-server-issue-badge";
 import { McpServerIssueNotice } from "./mcp-server-issue-notice";
 
 const { routerPush } = vi.hoisted(() => ({ routerPush: vi.fn() }));
@@ -380,6 +381,25 @@ describe("McpServerIssueNotice", () => {
         ],
       },
       expect.objectContaining({ onSuccess: expect.any(Function) }),
+    );
+  });
+
+  it("distinguishes a dismissed alert from an active warning", () => {
+    render(
+      <>
+        <McpServerIssueBadge issue={needsReauth()} />
+        <McpServerIssueBadge issue={needsReauth({ muted: true })} />
+      </>,
+    );
+
+    const [activeBadge, dismissedBadge] = screen
+      .getAllByText("Needs re-authentication")
+      .map((label) => label.closest('[data-slot="badge"]'));
+    expect(activeBadge).toHaveClass("bg-orange-500/5", "text-orange-900/80");
+    expect(dismissedBadge).toHaveAttribute("data-variant", "secondary");
+    expect(dismissedBadge).not.toHaveClass(
+      "bg-orange-500/5",
+      "text-orange-900/80",
     );
   });
 

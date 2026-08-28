@@ -55,7 +55,11 @@ export function McpServerIssueBadge({
   const badge = (
     <Badge
       variant="secondary"
-      className={cn("max-w-full", ISSUE_TONE[issue.kind], className)}
+      className={cn(
+        "max-w-full",
+        !issue.muted && ISSUE_TONE[issue.kind],
+        className,
+      )}
       data-testid={`mcp-server-issue-${issue.kind}`}
     >
       {issue.muted && <BellOff aria-hidden className="size-3" />}

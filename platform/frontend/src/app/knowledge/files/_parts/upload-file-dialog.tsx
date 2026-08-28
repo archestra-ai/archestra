@@ -1,7 +1,8 @@
 "use client";
 
-import { Upload } from "lucide-react";
-import { useCallback, useState } from "react";
+import { FolderPlus, Upload } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { DirectoryDialog } from "@/app/knowledge/files/_parts/directory-dialog";
 import {
   FileVisibilitySelector,
   type KnowledgeFileVisibility,
@@ -19,6 +20,7 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -32,6 +34,7 @@ import {
 } from "@/lib/knowledge/knowledge-file-accept";
 
 const ROOT_VALUE = "__root__";
+const CREATE_DIRECTORY_VALUE = "__create_directory__";
 
 export function UploadFileDialog({
   open,
@@ -53,8 +56,25 @@ export function UploadFileDialog({
   const [teamIds, setTeamIds] = useState<string[]>([]);
   const [failures, setFailures] = useState<string[]>([]);
   const [progress, setProgress] = useState<{ done: number; total: number }>();
+  const [createDirectoryOpen, setCreateDirectoryOpen] = useState(false);
+  const [createdDirectory, setCreatedDirectory] =
+    useState<KnowledgeDirectory>();
 
   const upload = useUploadKnowledgeFile();
+  const availableDirectories =
+    createdDirectory &&
+    !directories.some((directory) => directory.id === createdDirectory.id)
+      ? [...directories, createdDirectory]
+      : directories;
+
+  useEffect(() => {
+    if (
+      createdDirectory &&
+      directories.some((directory) => directory.id === createdDirectory.id)
+    ) {
+      setCreatedDirectory(undefined);
+    }
+  }, [createdDirectory, directories]);
 
   const reset = () => {
     setFiles([]);
@@ -79,6 +99,14 @@ export function UploadFileDialog({
     files.length > 0 &&
     (visibility !== "team-scoped" || teamIds.length > 0) &&
     !upload.isPending;
+
+  const handleDirectoryChange = (value: string) => {
+    if (value === CREATE_DIRECTORY_VALUE) {
+      setCreateDirectoryOpen(true);
+      return;
+    }
+    setDirectoryId(value);
+  };
 
   const handleUpload = async () => {
     const rejected: string[] = [];
@@ -115,80 +143,97 @@ export function UploadFileDialog({
   };
 
   return (
-    <FormDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title="Upload documents"
-      description="PDF, Word, Markdown, CSV, JSON or plain text. Documents become searchable once you add them to a knowledge base."
-      size="medium"
-    >
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
-        <FileDropInput
-          accept={KNOWLEDGE_FILE_ACCEPT}
-          typesLabel={KNOWLEDGE_FILE_TYPES_LABEL}
-          onFiles={addFiles}
-        />
+    <>
+      <FormDialog
+        open={open}
+        onOpenChange={onOpenChange}
+        title="Upload documents"
+        description="PDF, Word, Markdown, CSV, JSON or plain text. Documents become searchable once you add them to a knowledge base."
+        size="medium"
+      >
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
+          <FileDropInput
+            accept={KNOWLEDGE_FILE_ACCEPT}
+            typesLabel={KNOWLEDGE_FILE_TYPES_LABEL}
+            onFiles={addFiles}
+          />
 
-        <StagedFileList
-          files={files}
-          onRemove={(file) =>
-            setFiles((previous) => previous.filter((f) => f !== file))
-          }
-        />
+          <StagedFileList
+            files={files}
+            onRemove={(file) =>
+              setFiles((previous) => previous.filter((f) => f !== file))
+            }
+          />
 
-        <div className="space-y-1.5">
-          <Label htmlFor="upload-directory">Directory</Label>
-          <Select value={directoryId} onValueChange={setDirectoryId}>
-            <SelectTrigger id="upload-directory" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ROOT_VALUE}>No directory</SelectItem>
-              {directories.map((directory) => (
-                <SelectItem key={directory.id} value={directory.id}>
-                  {directory.name}
+          <div className="space-y-1.5">
+            <Label htmlFor="upload-directory">Directory</Label>
+            <Select value={directoryId} onValueChange={handleDirectoryChange}>
+              <SelectTrigger id="upload-directory" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ROOT_VALUE}>No directory</SelectItem>
+                {availableDirectories.map((directory) => (
+                  <SelectItem key={directory.id} value={directory.id}>
+                    {directory.name}
+                  </SelectItem>
+                ))}
+                <SelectSeparator />
+                <SelectItem
+                  value={CREATE_DIRECTORY_VALUE}
+                  icon={<FolderPlus className="h-4 w-4" />}
+                >
+                  Create directory…
                 </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <FileVisibilitySelector
+            visibility={visibility}
+            onVisibilityChange={setVisibility}
+            teamIds={teamIds}
+            onTeamIdsChange={setTeamIds}
+          />
+
+          {failures.length > 0 && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3">
+              <p className="font-medium text-destructive text-sm">
+                Could not read {failures.length}{" "}
+                {failures.length === 1 ? "document" : "documents"}
+              </p>
+              <p className="mt-1 text-muted-foreground text-xs">
+                {failures.join(", ")}. A scanned PDF with no text layer has
+                nothing to index — run OCR over it first.
+              </p>
+            </div>
+          )}
         </div>
 
-        <FileVisibilitySelector
-          visibility={visibility}
-          onVisibilityChange={setVisibility}
-          teamIds={teamIds}
-          onTeamIdsChange={setTeamIds}
-        />
-
-        {failures.length > 0 && (
-          <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3">
-            <p className="font-medium text-destructive text-sm">
-              Could not read {failures.length}{" "}
-              {failures.length === 1 ? "document" : "documents"}
-            </p>
-            <p className="mt-1 text-muted-foreground text-xs">
-              {failures.join(", ")}. A scanned PDF with no text layer has
-              nothing to index — run OCR over it first.
-            </p>
-          </div>
-        )}
-      </div>
-
-      <DialogStickyFooter>
-        <Button variant="outline" onClick={() => onOpenChange(false)}>
-          <span>Cancel</span>
-        </Button>
-        <Button disabled={!canSubmit} onClick={() => void handleUpload()}>
-          <Upload className="mr-1 h-4 w-4" />
-          <span>
-            {progress
-              ? `Uploading ${progress.done}/${progress.total}…`
-              : files.length > 1
-                ? `Upload ${files.length} documents`
-                : "Upload"}
-          </span>
-        </Button>
-      </DialogStickyFooter>
-    </FormDialog>
+        <DialogStickyFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            <span>Cancel</span>
+          </Button>
+          <Button disabled={!canSubmit} onClick={() => void handleUpload()}>
+            <Upload className="mr-1 h-4 w-4" />
+            <span>
+              {progress
+                ? `Uploading ${progress.done}/${progress.total}…`
+                : files.length > 1
+                  ? `Upload ${files.length} documents`
+                  : "Upload"}
+            </span>
+          </Button>
+        </DialogStickyFooter>
+      </FormDialog>
+      <DirectoryDialog
+        open={createDirectoryOpen}
+        onOpenChange={setCreateDirectoryOpen}
+        onCreated={(directory) => {
+          setCreatedDirectory(directory);
+          setDirectoryId(directory.id);
+        }}
+      />
+    </>
   );
 }

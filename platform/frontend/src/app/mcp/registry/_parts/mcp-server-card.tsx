@@ -1100,8 +1100,8 @@ export function McpServerCard({
         title={item.name}
         description={item.description}
         icon={
-          <span className="relative inline-flex">
-            <McpCatalogIcon icon={item.icon} catalogId={item.id} size={36} />
+          <span className="relative flex size-9 items-center justify-center overflow-hidden rounded-lg border bg-muted/30">
+            <McpCatalogIcon icon={item.icon} catalogId={item.id} size={20} />
             {deploymentStatusIndicator}
           </span>
         }

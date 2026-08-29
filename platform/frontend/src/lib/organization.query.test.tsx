@@ -1,3 +1,4 @@
+import { archestraApiSdk } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
@@ -8,7 +9,9 @@ import {
   organizationKeys,
   useActiveMemberRole,
   useIsGlobalAdmin,
+  useUpdateKnowledgeSettings,
 } from "@/lib/organization.query";
+import { retrievalEvaluationKeys } from "@/lib/retrieval-evaluation.query";
 
 vi.mock("@/lib/clients/auth/auth-client");
 
@@ -196,5 +199,30 @@ describe("useIsGlobalAdmin", () => {
       expect(result.current.isLoading).toBe(false);
     });
     expect(result.current.isGlobalAdmin).toBe(false);
+  });
+});
+
+describe("useUpdateKnowledgeSettings", () => {
+  it("invalidates evaluator fingerprints after BM25 settings are saved", async () => {
+    vi.spyOn(archestraApiSdk, "updateKnowledgeSettings").mockResolvedValue({
+      data: { id: "org-1" },
+      error: undefined,
+    } as never);
+    const { result, queryClient } = renderWithClient(() =>
+      useUpdateKnowledgeSettings("Saved", "Failed"),
+    );
+    const capabilitiesKey = retrievalEvaluationKeys.capabilities();
+    queryClient.setQueryData(capabilitiesKey, { components: [] });
+    expect(queryClient.getQueryState(capabilitiesKey)?.isInvalidated).toBe(
+      false,
+    );
+
+    await act(async () => {
+      await result.current.mutateAsync({ kbBm25K1: 0.6, kbBm25B: 0.37 });
+    });
+
+    expect(queryClient.getQueryState(capabilitiesKey)?.isInvalidated).toBe(
+      true,
+    );
   });
 });

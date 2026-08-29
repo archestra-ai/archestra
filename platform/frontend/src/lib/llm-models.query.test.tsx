@@ -27,6 +27,29 @@ describe("useLlmModels", () => {
     vi.useFakeTimers();
   });
 
+  it("scopes Knowledge reranker discovery to the selected API key", async () => {
+    vi.mocked(archestraApiSdk.getLlmModels).mockResolvedValue(
+      makeGetLlmModelsResult([makeModel()]),
+    );
+
+    renderHook(
+      () =>
+        useLlmModels({
+          apiKeyId: "00000000-0000-4000-8000-000000000001",
+          purpose: "knowledge-reranker",
+        }),
+      { wrapper: createWrapper() },
+    );
+    await flushQuery();
+
+    expect(archestraApiSdk.getLlmModels).toHaveBeenCalledWith({
+      query: {
+        apiKeyId: "00000000-0000-4000-8000-000000000001",
+        purpose: "knowledge-reranker",
+      },
+    });
+  });
+
   afterEach(() => {
     vi.useRealTimers();
   });

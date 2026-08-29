@@ -14,6 +14,7 @@ import { useSession } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
 import { environmentKeys } from "./environment.query";
+import { retrievalEvaluationKeys } from "./retrieval-evaluation.query";
 import {
   getApiErrorInternalCode,
   handleApiError,
@@ -745,6 +746,9 @@ export function useUpdateKnowledgeSettings(
     onSuccess: (updatedOrganization) => {
       if (!updatedOrganization) return;
       queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
+      queryClient.invalidateQueries({
+        queryKey: retrievalEvaluationKeys.capabilities(),
+      });
       toast.success(onSuccessMessage);
     },
   });
@@ -770,6 +774,9 @@ export function useDropEmbeddingConfig() {
     onSuccess: (updatedOrganization) => {
       if (!updatedOrganization) return;
       queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
+      queryClient.invalidateQueries({
+        queryKey: retrievalEvaluationKeys.capabilities(),
+      });
       toast.success("Embedding configuration dropped");
     },
   });

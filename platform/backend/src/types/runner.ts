@@ -22,6 +22,14 @@ export type AgentDeploymentBackend = z.infer<
   typeof AgentDeploymentBackendSchema
 >;
 
+export const AgentRunActorKindSchema = z.enum([
+  "user",
+  "team",
+  "organization",
+  "system",
+]);
+export type AgentRunActorKind = z.infer<typeof AgentRunActorKindSchema>;
+
 export const AgentDeploymentSteerModeSchema = z.enum(["pipe", "tmux_keys"]);
 export type AgentDeploymentSteerMode = z.infer<
   typeof AgentDeploymentSteerModeSchema
@@ -39,6 +47,26 @@ export const AgentDeploymentResourcesSchema = z.object({
 });
 export type AgentDeploymentResources = z.infer<
   typeof AgentDeploymentResourcesSchema
+>;
+
+/** Where a detached execution delivers its terminal result. */
+export const AgentRunCompletionTargetSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("chatops"),
+    bindingId: z.string().uuid(),
+    threadId: z.string().min(1),
+  }),
+  z.object({
+    type: z.literal("email"),
+    providerId: z.string().min(1),
+    originalMessageId: z.string().min(1),
+    fromAddress: z.string().email(),
+    toAddress: z.string().email(),
+    subject: z.string().nullable(),
+  }),
+]);
+export type AgentRunCompletionTarget = z.infer<
+  typeof AgentRunCompletionTargetSchema
 >;
 
 // ===================== Credential declarations =====================
@@ -151,15 +179,22 @@ export type AgentDeployment = AgentBackgroundExecution & {
 
 export const SelectAgentRunSchema = createSelectSchema(
   schema.agentRunsTable,
-).extend({ backend: AgentDeploymentBackendSchema });
+).extend({
+  backend: AgentDeploymentBackendSchema,
+  actorKind: AgentRunActorKindSchema,
+  completionTarget: AgentRunCompletionTargetSchema.nullable(),
+});
 export const InsertAgentRunSchema = createInsertSchema(schema.agentRunsTable)
-  .extend({ backend: AgentDeploymentBackendSchema })
+  .extend({
+    backend: AgentDeploymentBackendSchema,
+    actorKind: AgentRunActorKindSchema,
+    completionTarget: AgentRunCompletionTargetSchema.nullable().optional(),
+  })
   .omit({ id: true, startedAt: true, endedAt: true });
 
 export const SelectAgentExecutionSchema = SelectAgentRunSchema.omit({
   logs: true,
-  chatOpsBindingId: true,
-  chatOpsThreadId: true,
+  completionTarget: true,
   completionNotificationClaimedAt: true,
   completionNotifiedAt: true,
 }).extend({

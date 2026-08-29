@@ -5,8 +5,7 @@ const TERMINAL_TASK_STATES = new Set([
   "TASK_STATE_REJECTED",
 ]);
 
-export function buildChatOpsTaskNotification(params: {
-  taskId: string;
+export function buildTaskCompletionNotification(params: {
   state: string;
   statusReason: string | null;
   output: string;
@@ -18,20 +17,20 @@ export function buildChatOpsTaskNotification(params: {
   if (params.state === "TASK_STATE_COMPLETED") {
     const pullRequestUrl = findPullRequestUrl(params.output);
     if (pullRequestUrl) {
-      return `🦀 PR ready: ${pullRequestUrl}`;
+      return `PR ready: ${pullRequestUrl}`;
     }
 
     const output = conciseOutput(params.output);
-    return `🦀 Task \`${params.taskId}\` finished.${output ? `\n\n${output}` : ""}`;
+    return output || "Task finished.";
   }
 
   const outcome =
     params.state === "TASK_STATE_CANCELED" ? "was canceled" : "failed";
   const reason = params.statusReason?.trim();
-  return `🦀 Task \`${params.taskId}\` ${outcome}.${reason ? ` ${reason}` : ""}`;
+  return `Task ${outcome}.${reason ? ` ${reason}` : ""}`;
 }
 
-// === internals ===
+// === Internal helpers ===
 
 function findPullRequestUrl(output: string): string | null {
   const matches = output.match(
@@ -42,8 +41,8 @@ function findPullRequestUrl(output: string): string | null {
 
 function conciseOutput(output: string): string {
   // Native catalog clients write their complete interactive transcript to the
-  // execution log. That belongs in the Executions console, not in a Slack
-  // completion reply. PR links are extracted above before this guard.
+  // execution log. That belongs in the execution console, not in a completion
+  // message. PR links are extracted above before this guard.
   if (output.includes("[archestra] agent session exited")) {
     return "";
   }

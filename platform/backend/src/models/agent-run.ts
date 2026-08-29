@@ -49,8 +49,8 @@ class AgentRunModel {
       .where(isNull(schema.agentRunsTable.endedAt));
   }
 
-  /** Terminal messaging executions whose completion reply is still pending. */
-  static async listPendingChatOpsNotifications(): Promise<AgentRun[]> {
+  /** Terminal executions whose channel completion reply is still pending. */
+  static async listPendingCompletionNotifications(): Promise<AgentRun[]> {
     return db
       .select(getTableColumns(schema.agentRunsTable))
       .from(schema.agentRunsTable)
@@ -60,8 +60,7 @@ class AgentRunModel {
       )
       .where(
         and(
-          isNotNull(schema.agentRunsTable.chatOpsBindingId),
-          isNotNull(schema.agentRunsTable.chatOpsThreadId),
+          isNotNull(schema.agentRunsTable.completionTarget),
           isNull(schema.agentRunsTable.completionNotifiedAt),
           inArray(schema.a2aTasksTable.state, A2A_TERMINAL_TASK_STATES),
         ),
@@ -74,8 +73,7 @@ class AgentRunModel {
   }): Promise<AgentExecution[]> {
     const {
       logs: _logs,
-      chatOpsBindingId: _chatOpsBindingId,
-      chatOpsThreadId: _chatOpsThreadId,
+      completionTarget: _completionTarget,
       completionNotificationClaimedAt: _completionNotificationClaimedAt,
       completionNotifiedAt: _completionNotifiedAt,
       ...runColumns
@@ -248,8 +246,7 @@ class AgentRunModel {
   }) {
     const {
       logs: _logs,
-      chatOpsBindingId: _chatOpsBindingId,
-      chatOpsThreadId: _chatOpsThreadId,
+      completionTarget: _completionTarget,
       completionNotificationClaimedAt: _completionNotificationClaimedAt,
       completionNotifiedAt: _completionNotifiedAt,
       ...runColumns
@@ -277,7 +274,8 @@ class AgentRunModel {
       )
       .where(
         and(
-          eq(schema.agentRunsTable.actorUserId, params.actorUserId),
+          eq(schema.agentRunsTable.actorKind, "user"),
+          eq(schema.agentRunsTable.actorId, params.actorUserId),
           eq(schema.agentRunsTable.organizationId, params.organizationId),
           ...(params.taskId
             ? [eq(schema.agentRunsTable.taskId, params.taskId)]

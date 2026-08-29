@@ -3,6 +3,7 @@ import config from "@/config";
 import {
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
+  TeamTokenModel,
   UserCredentialModel,
   VirtualApiKeyModel,
 } from "@/models";
@@ -52,7 +53,11 @@ describe("buildRunnerLaunchSpec", () => {
       },
       taskId: crypto.randomUUID(),
       agentId: setup.agent.id,
-      actorUserId: setup.user.id,
+      actor: {
+        id: setup.user.id,
+        kind: "user",
+        organizationId: setup.agent.organizationId,
+      },
       organizationId: setup.agent.organizationId,
       runtimeScope: "agent-tests",
       effectiveNetworkPolicy: { source: "built_in", policy: null },
@@ -81,6 +86,53 @@ describe("buildRunnerLaunchSpec", () => {
     expect(virtualKey?.authorId).toBe(setup.user.id);
   });
 
+  test("uses organization-scoped access for a system execution actor", async ({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeAgent,
+  }) => {
+    const setup = await makeConfiguredAgent({
+      provider: "gemini",
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    });
+    await TeamTokenModel.create({
+      organizationId: setup.agent.organizationId,
+      isOrganizationToken: true,
+      name: "Automation token",
+    });
+
+    const { spec, virtualApiKeyId } = await buildRunnerLaunchSpec({
+      deployment: deployment(setup.agent, "openai_responses"),
+      taskId: crypto.randomUUID(),
+      agentId: setup.agent.id,
+      actor: {
+        id: "system",
+        kind: "system",
+        organizationId: setup.agent.organizationId,
+      },
+      organizationId: setup.agent.organizationId,
+      runtimeScope: "agent-tests",
+      effectiveNetworkPolicy: { source: "built_in", policy: null },
+      appName: "Archestra",
+      executionMode: "one_shot",
+      task: "Process an incoming message.",
+    });
+
+    expect(spec.secretEnv.ARCHESTRA_MCP_GATEWAY_TOKEN).toEqual(
+      expect.any(String),
+    );
+    const virtualKey = await VirtualApiKeyModel.findById(virtualApiKeyId);
+    expect(virtualKey).toMatchObject({ scope: "org", authorId: null });
+  });
+
   test("uses the Agent-scoped Anthropic endpoint for an Anthropic image", async ({
     makeOrganization,
     makeAdmin,
@@ -103,7 +155,11 @@ describe("buildRunnerLaunchSpec", () => {
       deployment: deployment(setup.agent, "anthropic"),
       taskId: crypto.randomUUID(),
       agentId: setup.agent.id,
-      actorUserId: setup.user.id,
+      actor: {
+        id: setup.user.id,
+        kind: "user",
+        organizationId: setup.agent.organizationId,
+      },
       organizationId: setup.agent.organizationId,
       runtimeScope: "agent-tests",
       effectiveNetworkPolicy: { source: "built_in", policy: null },
@@ -146,7 +202,11 @@ describe("buildRunnerLaunchSpec", () => {
         deployment: deployment(setup.agent, "anthropic"),
         taskId: crypto.randomUUID(),
         agentId: setup.agent.id,
-        actorUserId: setup.user.id,
+        actor: {
+          id: setup.user.id,
+          kind: "user",
+          organizationId: setup.agent.organizationId,
+        },
         organizationId: setup.agent.organizationId,
         runtimeScope: "agent-tests",
         effectiveNetworkPolicy: { source: "built_in", policy: null },
@@ -180,7 +240,11 @@ describe("buildRunnerLaunchSpec", () => {
         deployment: deployment(setup.agent, "openai_chat"),
         taskId: crypto.randomUUID(),
         agentId: setup.agent.id,
-        actorUserId: setup.user.id,
+        actor: {
+          id: setup.user.id,
+          kind: "user",
+          organizationId: setup.agent.organizationId,
+        },
         organizationId: setup.agent.organizationId,
         runtimeScope: "agent-tests",
         effectiveNetworkPolicy: { source: "built_in", policy: null },
@@ -231,7 +295,11 @@ describe("buildRunnerLaunchSpec", () => {
       deployment: configuredDeployment,
       taskId: crypto.randomUUID(),
       agentId: setup.agent.id,
-      actorUserId: setup.user.id,
+      actor: {
+        id: setup.user.id,
+        kind: "user",
+        organizationId: setup.agent.organizationId,
+      },
       organizationId: setup.agent.organizationId,
       runtimeScope: "agent-tests",
       effectiveNetworkPolicy: { source: "built_in", policy: null },
@@ -283,7 +351,11 @@ describe("buildRunnerLaunchSpec", () => {
       deployment: configuredDeployment,
       taskId,
       agentId: setup.agent.id,
-      actorUserId: setup.user.id,
+      actor: {
+        id: setup.user.id,
+        kind: "user",
+        organizationId: setup.agent.organizationId,
+      },
       organizationId: setup.agent.organizationId,
       runtimeScope: "agent-tests",
       effectiveNetworkPolicy: { source: "built_in", policy: null },
@@ -338,7 +410,11 @@ describe("buildRunnerLaunchSpec", () => {
         deployment: configuredDeployment,
         taskId: crypto.randomUUID(),
         agentId: setup.agent.id,
-        actorUserId: setup.user.id,
+        actor: {
+          id: setup.user.id,
+          kind: "user",
+          organizationId: setup.agent.organizationId,
+        },
         organizationId: setup.agent.organizationId,
         runtimeScope: "agent-tests",
         effectiveNetworkPolicy: { source: "built_in", policy: null },
@@ -387,7 +463,11 @@ describe("buildRunnerLaunchSpec", () => {
       deployment: configuredDeployment,
       taskId: crypto.randomUUID(),
       agentId: setup.agent.id,
-      actorUserId: setup.user.id,
+      actor: {
+        id: setup.user.id,
+        kind: "user",
+        organizationId: setup.agent.organizationId,
+      },
       organizationId: setup.agent.organizationId,
       runtimeScope: "agent-tests",
       effectiveNetworkPolicy: { source: "built_in", policy: null },
@@ -427,7 +507,11 @@ describe("buildRunnerLaunchSpec", () => {
         deployment: configuredDeployment,
         taskId: crypto.randomUUID(),
         agentId: setup.agent.id,
-        actorUserId: setup.user.id,
+        actor: {
+          id: setup.user.id,
+          kind: "user",
+          organizationId: setup.agent.organizationId,
+        },
         organizationId: setup.agent.organizationId,
         runtimeScope: "agent-tests",
         effectiveNetworkPolicy: { source: "built_in", policy: null },
@@ -480,7 +564,11 @@ describe("buildRunnerLaunchSpec", () => {
         deployment: configuredDeployment,
         taskId: crypto.randomUUID(),
         agentId: setup.agent.id,
-        actorUserId: setup.user.id,
+        actor: {
+          id: setup.user.id,
+          kind: "user",
+          organizationId: setup.agent.organizationId,
+        },
         organizationId: setup.agent.organizationId,
         runtimeScope: "agent-tests",
         effectiveNetworkPolicy: { source: "built_in", policy: null },

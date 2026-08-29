@@ -330,6 +330,13 @@ This same unified tracing applies to all agent invocation paths:
 
 The `archestra.trigger.source` span attribute lets you filter traces by invocation channel (e.g., find all agent executions triggered from MS Teams).
 
+Background execution model and MCP calls retain the same Agent, user, route,
+and execution correlation attributes. Terminal replies sent back to ChatOps or
+email produce `send_completion` messaging spans. The
+`runner_completion_deliveries_total` metric counts successful and failed
+deliveries by the closed `interface` label (`chatops` or `email`). Task IDs are
+kept out of Prometheus labels.
+
 External LLM proxy calls produce independent root traces.
 
 ### Custom Agent Labels

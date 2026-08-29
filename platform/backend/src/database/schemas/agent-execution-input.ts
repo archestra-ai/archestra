@@ -26,9 +26,10 @@ const agentExecutionInputsTable = pgTable(
     taskId: uuid("task_id")
       .notNull()
       .references(() => a2aTasksTable.id, { onDelete: "cascade" }),
-    uploadedByUserId: text("uploaded_by_user_id")
-      .notNull()
-      .references(() => usersTable.id, { onDelete: "cascade" }),
+    uploadedByUserId: text("uploaded_by_user_id").references(
+      () => usersTable.id,
+      { onDelete: "cascade" },
+    ),
     originalName: text("original_name").notNull(),
     runtimePath: text("runtime_path").notNull(),
     mimeType: text("mime_type").notNull(),

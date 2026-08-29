@@ -3102,6 +3102,13 @@
       "when": 1787870934724,
       "tag": "0442_fresh_killer_shrike",
       "breakpoints": true
+    },
+    {
+      "idx": 443,
+      "version": "7",
+      "when": 1788001896559,
+      "tag": "0443_stormy_namorita",
+      "breakpoints": true
     }
   ]
 }

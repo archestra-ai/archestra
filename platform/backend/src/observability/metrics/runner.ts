@@ -23,11 +23,14 @@ type RunnerTerminationOutcome =
   | "stopped_by_user"
   | "expired_ttl"
   | "expired_idle";
+type RunnerCompletionInterface = "chatops" | "email";
+type RunnerCompletionDeliveryOutcome = "success" | "failed";
 
 let runnerStartsTotal: client.Counter<string>;
 let runnerTerminationsTotal: client.Counter<string>;
 let runnerProvisionDurationSeconds: client.Histogram<string>;
 let runnerSteersTotal: client.Counter<string>;
+let runnerCompletionDeliveriesTotal: client.Counter<string>;
 
 let initialized = false;
 
@@ -60,6 +63,12 @@ export function initializeRunnerMetrics(): void {
     labelNames: ["steer_mode"],
   });
 
+  runnerCompletionDeliveriesTotal = new client.Counter({
+    name: "runner_completion_deliveries_total",
+    help: "Total terminal Agent execution results delivered to an external interface",
+    labelNames: ["interface", "outcome"],
+  });
+
   logger.info("Runner metrics initialized");
 }
 
@@ -80,4 +89,14 @@ export function reportRunnerProvisioned(seconds: number): void {
 
 export function reportRunnerSteer(steerMode: string): void {
   runnerSteersTotal?.inc({ steer_mode: steerMode });
+}
+
+export function reportRunnerCompletionDelivery(
+  completionInterface: RunnerCompletionInterface,
+  outcome: RunnerCompletionDeliveryOutcome,
+): void {
+  runnerCompletionDeliveriesTotal?.inc({
+    interface: completionInterface,
+    outcome,
+  });
 }

@@ -3,7 +3,7 @@ title: Webhook (A2A)
 category: Agents
 order: 10
 description: Invoke agents over HTTP using the A2A protocol
-lastUpdated: 2026-08-22
+lastUpdated: 2026-08-29
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -126,7 +126,7 @@ The response is one of two shapes inside `result`:
 }
 ```
 
-A plain blocking send answers with a `message`. The response is a `task` instead when the run needs approval, when you request background execution, or when you stream — see [Tasks](#tasks).
+A plain blocking send answers with a `message` when the Agent uses the foreground loop. For an Agent with [Background execution](/docs/platform-agent-background-execution) configured, `SendMessage` runs in that deployment and returns a completed `task`. The response is also a task when the run needs approval, when you set `returnImmediately`, or when you stream — see [Tasks](#tasks).
 
 ## Tasks
 
@@ -134,6 +134,7 @@ A task is a durable unit of work with an id, a state, a message history, and [ar
 
 - `SendStreamingMessage` — every streamed run is a task.
 - `returnImmediately` — background execution (below).
+- Background-enabled Agent — `SendMessage` uses the Agent's configured execution backend.
 - Tool approval — the run pauses for a human decision.
 
 A task moves through the A2A 1.0 states:
@@ -151,7 +152,7 @@ A task moves through the A2A 1.0 states:
 
 ## Background Execution
 
-Set `configuration.returnImmediately: true` to get the task handle back at once. The run continues on the server; you poll `GetTask` or open `SubscribeToTask` for the result.
+Set `configuration.returnImmediately: true` to get the task handle back at once. The run continues on the server; you poll `GetTask` or open `SubscribeToTask` for the result. A blocking `SendMessage` to a Background-enabled Agent still uses its execution backend, but waits for the task to settle before returning it.
 
 ```json
 {

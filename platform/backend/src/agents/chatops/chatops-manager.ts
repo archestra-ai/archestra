@@ -2368,8 +2368,11 @@ export class ChatOpsManager {
       sessionId,
       source,
       routeCategory: RouteCategory.CHATOPS,
-      chatOpsBindingId: binding.id,
-      chatOpsThreadId: effectiveThreadId,
+      completionTarget: {
+        type: "chatops",
+        bindingId: binding.id,
+        threadId: effectiveThreadId,
+      },
       ephemeralExecutionPrefix,
     };
 

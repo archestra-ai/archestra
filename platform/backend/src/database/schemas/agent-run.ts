@@ -1,12 +1,17 @@
 import {
   index,
+  jsonb,
   pgTable,
   text,
   timestamp,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { AgentDeploymentBackend } from "@/types/runner";
+import type {
+  AgentDeploymentBackend,
+  AgentRunActorKind,
+  AgentRunCompletionTarget,
+} from "@/types/runner";
 import a2aTasksTable from "./a2a-task";
 import agentsTable from "./agent";
 import usersTable from "./user";
@@ -33,10 +38,13 @@ const agentRunsTable = pgTable(
     agentId: uuid("agent_id")
       .notNull()
       .references(() => agentsTable.id, { onDelete: "cascade" }),
-    /** The person the session acts as; its credentials are the ones injected. */
-    actorUserId: text("actor_user_id")
-      .notNull()
-      .references(() => usersTable.id, { onDelete: "cascade" }),
+    /** Actor whose access and credentials the session uses. */
+    actorKind: text("actor_kind").$type<AgentRunActorKind>().notNull(),
+    actorId: text("actor_id").notNull(),
+    /** User FK for personal sessions; null for team/org/system automation. */
+    actorUserId: text("actor_user_id").references(() => usersTable.id, {
+      onDelete: "cascade",
+    }),
     /** Concise, user-editable label shown beside foreground conversations. */
     title: text("title").notNull().default("Execution"),
     /** Frozen at creation so a rename can never orphan the workload. */
@@ -50,9 +58,9 @@ const agentRunsTable = pgTable(
       () => virtualApiKeysTable.id,
       { onDelete: "set null" },
     ),
-    /** Messaging thread to notify after a detached execution settles. */
-    chatOpsBindingId: uuid("chatops_binding_id"),
-    chatOpsThreadId: text("chatops_thread_id"),
+    /** Optional channel callback for a detached execution's terminal result. */
+    completionTarget:
+      jsonb("completion_target").$type<AgentRunCompletionTarget>(),
     /** Reclaimable delivery lease; a crashed sender cannot strand the reply. */
     completionNotificationClaimedAt: timestamp(
       "completion_notification_claimed_at",
@@ -71,6 +79,7 @@ const agentRunsTable = pgTable(
     index("agent_runs_agent_id_idx").on(table.agentId),
     index("agent_runs_organization_id_idx").on(table.organizationId),
     index("agent_runs_actor_user_id_idx").on(table.actorUserId),
+    index("agent_runs_actor_idx").on(table.actorKind, table.actorId),
   ],
 );
 

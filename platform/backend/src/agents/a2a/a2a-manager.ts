@@ -27,7 +27,12 @@ import {
   resumeBackgroundTask,
   runTaskInBackground,
 } from "@/services/runners/pod-execution";
-import type { A2AContext, A2AMessage, AgentRun } from "@/types";
+import type {
+  A2AContext,
+  A2AMessage,
+  AgentRun,
+  AgentRunCompletionTarget,
+} from "@/types";
 import { isTerminalA2ATaskState } from "@/types/a2a-task";
 import {
   type OutboundUrlRejection,
@@ -155,8 +160,7 @@ export interface A2ASystemParams {
   sessionId?: string;
   source?: InteractionSource;
   routeCategory?: RouteCategory;
-  chatOpsBindingId?: string;
-  chatOpsThreadId?: string;
+  completionTarget?: AgentRunCompletionTarget;
   /**
    * Interactive is reserved for a person opening the execution terminal in
    * Chat. Every other durable task is one-shot so delegation surfaces can
@@ -564,9 +568,9 @@ export class A2AManager {
             })
           : [],
       ]);
-      // Background execution belongs to the Agent itself. It is considered
-      // only by the durable task path below; a synchronous A2A message stays
-      // in the foreground platform loop.
+      // Background execution belongs to the Agent itself and is selected only
+      // for a durable task. Invocation surfaces decide whether a plain send
+      // should remain a Message or be promoted to that task lifecycle.
       const deployment = resolveAgentDeployment(agent);
 
       const executeRun = (runOpts: {
@@ -587,9 +591,9 @@ export class A2AManager {
             ? { id: a2aUser.id, email: a2aUser.email, name: a2aUser.name }
             : null,
           callback: async () => {
-            // Only a task run goes to the container. The association is for
-            // long-running work, so an ordinary send still answers in process
-            // and an Agent gaining Background execution does not change chat.
+            // Only a task run goes to the container. This keeps the runtime
+            // decision independent from the protocol surface: A2A can promote
+            // a direct send, while foreground Chat can remain message-based.
             if (deployment && runOpts.taskId) {
               return runTaskInBackground({
                 deployment,
@@ -597,10 +601,9 @@ export class A2AManager {
                 // resumed task adopts its own pod rather than starting a second.
                 taskId: runOpts.taskId,
                 agentId,
-                actorUserId: actor.kind === "user" ? actor.id : "system",
+                actor,
                 organizationId: actor.organizationId,
-                chatOpsBindingId: systemParams?.chatOpsBindingId,
-                chatOpsThreadId: systemParams?.chatOpsThreadId,
+                completionTarget: systemParams?.completionTarget,
                 task: executedTurnText,
                 modelId: agent.modelId,
                 llmApiKeyId: agent.llmApiKeyId,
@@ -626,8 +629,14 @@ export class A2AManager {
               parentDelegationChain: undefined, // This is the root call, chain starts with agentId
               blockOnApprovalRequired: false, // No need to block. We check approval flow availability below
               originalUiMessages: contextUiMessages,
-              chatOpsBindingId: systemParams?.chatOpsBindingId,
-              chatOpsThreadId: systemParams?.chatOpsThreadId,
+              chatOpsBindingId:
+                systemParams?.completionTarget?.type === "chatops"
+                  ? systemParams.completionTarget.bindingId
+                  : undefined,
+              chatOpsThreadId:
+                systemParams?.completionTarget?.type === "chatops"
+                  ? systemParams.completionTarget.threadId
+                  : undefined,
               onTextDelta: runOpts.onTextDelta,
               abortSignal: runOpts.abortSignal,
             });

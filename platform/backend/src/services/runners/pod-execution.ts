@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Writable } from "node:stream";
 import { DEFAULT_APP_NAME, toPlaceholderTitle } from "@archestra/shared";
+import type { A2AActor } from "@/agents/a2a/a2a-base";
 import type { A2AExecuteResult } from "@/agents/a2a-executor";
 import config from "@/config";
 import logger from "@/logging";
@@ -16,7 +17,12 @@ import {
   reportRunnerTerminated,
 } from "@/observability/metrics/runner";
 import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-policy";
-import type { Agent, AgentDeployment, AgentRun } from "@/types";
+import type {
+  Agent,
+  AgentDeployment,
+  AgentRun,
+  AgentRunCompletionTarget,
+} from "@/types";
 import { ApiError } from "@/types";
 import { type RunnerBackend, resolveRunnerBackend } from "./backends";
 import { buildRunnerLaunchSpec } from "./launch-spec";
@@ -38,10 +44,9 @@ async function startBackgroundSession(params: {
   deployment: AgentDeployment;
   taskId: string;
   agentId: string;
-  actorUserId: string;
+  actor: A2AActor;
   organizationId: string;
-  chatOpsBindingId?: string;
-  chatOpsThreadId?: string;
+  completionTarget?: AgentRunCompletionTarget;
   task?: string | null;
   executionMode: "interactive" | "one_shot";
   modelId: string | null;
@@ -73,7 +78,7 @@ async function startBackgroundSession(params: {
     deployment: params.deployment,
     taskId: params.taskId,
     agentId: params.agentId,
-    actorUserId: params.actorUserId,
+    actor: params.actor,
     organizationId: params.organizationId,
     runtimeScope,
     effectiveNetworkPolicy,
@@ -90,14 +95,15 @@ async function startBackgroundSession(params: {
     organizationId: params.organizationId,
     taskId: params.taskId,
     agentId: params.deployment.agentId,
-    actorUserId: params.actorUserId,
+    actorKind: params.actor.kind,
+    actorId: params.actor.id,
+    actorUserId: params.actor.kind === "user" ? params.actor.id : null,
     title: placeholderTitle,
     deploymentName: spec.frozenName,
     backend: backend.name,
     runtimeScope,
     virtualApiKeyId,
-    chatOpsBindingId: params.chatOpsBindingId,
-    chatOpsThreadId: params.chatOpsThreadId,
+    completionTarget: params.completionTarget,
   });
 
   void generateAgentExecutionTitle({
@@ -184,10 +190,9 @@ export async function runTaskInBackground(params: {
   deployment: AgentDeployment;
   taskId: string;
   agentId: string;
-  actorUserId: string;
+  actor: A2AActor;
   organizationId: string;
-  chatOpsBindingId?: string;
-  chatOpsThreadId?: string;
+  completionTarget?: AgentRunCompletionTarget;
   task?: string | null;
   executionMode: "interactive" | "one_shot";
   modelId: string | null;

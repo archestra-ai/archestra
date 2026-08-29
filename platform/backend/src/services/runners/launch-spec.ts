@@ -12,13 +12,15 @@ import {
   type SupportedProvider,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
+import type { A2AActor } from "@/agents/a2a/a2a-base";
+import { selectMCPGatewayToken } from "@/clients/chat-mcp-client";
 import config from "@/config";
 import {
   AgentModel,
   LimitModel,
   LlmProviderApiKeyModel,
   ModelModel,
-  UserTokenModel,
+  TeamTokenModel,
   VirtualApiKeyModel,
 } from "@/models";
 import { archestraMarkWithText } from "@/services/archestra-mark";
@@ -77,7 +79,7 @@ export async function buildRunnerLaunchSpec(params: {
   taskId: string;
   /** Agent the task belongs to, for the proxy and gateway routes. */
   agentId: string;
-  actorUserId: string;
+  actor: A2AActor;
   organizationId: string;
   runtimeScope: string;
   effectiveNetworkPolicy: EffectiveNetworkPolicy;
@@ -101,10 +103,11 @@ export async function buildRunnerLaunchSpec(params: {
     );
   }
 
+  const actorUserId = params.actor.kind === "user" ? params.actor.id : null;
   const credentials = await resolveAgentDeploymentCredentials({
     deployment: params.deployment,
     organizationId: params.organizationId,
-    userId: params.actorUserId,
+    userId: actorUserId,
   });
   if (credentials.misconfigured.length > 0) {
     throw new ApiError(
@@ -121,17 +124,11 @@ export async function buildRunnerLaunchSpec(params: {
     );
   }
 
-  const userToken = await UserTokenModel.ensureUserToken(
-    params.actorUserId,
-    params.organizationId,
-  );
-  const gatewayToken = await UserTokenModel.getTokenValue(userToken.id);
-  if (!gatewayToken) {
-    throw new ApiError(
-      500,
-      "Could not resolve the MCP gateway token for this user",
-    );
-  }
+  const gatewayToken = await resolveGatewayToken({
+    actor: params.actor,
+    agentId: params.agentId,
+    organizationId: params.organizationId,
+  });
 
   const agent = await AgentModel.findById(params.agentId);
   if (!agent) {
@@ -143,7 +140,7 @@ export async function buildRunnerLaunchSpec(params: {
   const llm = await resolveConversationLlmSelectionForAgent({
     agent,
     organizationId: params.organizationId,
-    userId: params.actorUserId,
+    userId: actorUserId ?? "system",
     includeMemberChatDefault: false,
   });
   assertInferenceProtocolSupported({
@@ -194,12 +191,11 @@ export async function buildRunnerLaunchSpec(params: {
         organizationId: params.organizationId,
         name: `background-task-${params.taskId.slice(0, 8)}`,
         keyType: "passthrough",
-        scope: "personal",
-        authorId: params.actorUserId,
+        ...virtualKeyVisibility(params.actor),
       })
     : await createProviderBackedVirtualKey({
         organizationId: params.organizationId,
-        actorUserId: params.actorUserId,
+        actor: params.actor,
         taskId: params.taskId,
         provider: llm.selectedProvider,
         model: llm.selectedModel,
@@ -384,20 +380,22 @@ function claudeCodeCustomHeaders(params: {
 
 async function createProviderBackedVirtualKey(params: {
   organizationId: string;
-  actorUserId: string;
+  actor: A2AActor;
   taskId: string;
   provider: SupportedProvider;
   model: string;
   agentLlmApiKeyId: string | null;
   requiredSubscriptionKind: SubscriptionCredentialKind | null;
 }): Promise<Awaited<ReturnType<typeof VirtualApiKeyModel.create>>> {
-  const requiredSubscription = params.requiredSubscriptionKind
-    ? await LlmProviderApiKeyModel.findPersonalSubscriptionKey({
-        organizationId: params.organizationId,
-        userId: params.actorUserId,
-        kind: params.requiredSubscriptionKind,
-      })
-    : null;
+  const actorUserId = params.actor.kind === "user" ? params.actor.id : null;
+  const requiredSubscription =
+    params.requiredSubscriptionKind && actorUserId
+      ? await LlmProviderApiKeyModel.findPersonalSubscriptionKey({
+          organizationId: params.organizationId,
+          userId: actorUserId,
+          kind: params.requiredSubscriptionKind,
+        })
+      : null;
   if (params.requiredSubscriptionKind && !requiredSubscription) {
     throw new ApiError(
       409,
@@ -411,7 +409,7 @@ async function createProviderBackedVirtualKey(params: {
       }
     : await resolveProviderApiKey({
         organizationId: params.organizationId,
-        userId: params.actorUserId,
+        userId: actorUserId ?? undefined,
         provider: params.provider,
         agentLlmApiKeyId: params.agentLlmApiKeyId ?? undefined,
         modelName: params.model,
@@ -439,8 +437,7 @@ async function createProviderBackedVirtualKey(params: {
     name: `background-task-${params.taskId.slice(0, 8)}`,
     // Personal scope is what attributes the session's LLM spend to the human
     // it acts as rather than to the organization at large.
-    scope: "personal",
-    authorId: params.actorUserId,
+    ...virtualKeyVisibility(params.actor),
     providerApiKeys: [
       {
         provider: params.provider,
@@ -448,6 +445,43 @@ async function createProviderBackedVirtualKey(params: {
       },
     ],
   });
+}
+
+async function resolveGatewayToken(params: {
+  actor: A2AActor;
+  agentId: string;
+  organizationId: string;
+}): Promise<string> {
+  if (params.actor.kind === "team") {
+    const token = await TeamTokenModel.findTeamToken(params.actor.id);
+    const value = token ? await TeamTokenModel.getTokenValue(token.id) : null;
+    if (value) return value;
+  } else {
+    const selected = await selectMCPGatewayToken(
+      params.agentId,
+      params.actor.kind === "user" ? params.actor.id : "system",
+      params.organizationId,
+    );
+    if (selected?.tokenValue) return selected.tokenValue;
+  }
+  throw new ApiError(
+    500,
+    "Could not resolve an MCP gateway token for this execution actor",
+  );
+}
+
+function virtualKeyVisibility(actor: A2AActor): {
+  scope: "personal" | "team" | "org";
+  authorId: string | null;
+  teamIds?: string[];
+} {
+  if (actor.kind === "user") {
+    return { scope: "personal", authorId: actor.id };
+  }
+  if (actor.kind === "team") {
+    return { scope: "team", authorId: null, teamIds: [actor.id] };
+  }
+  return { scope: "org", authorId: null };
 }
 
 function withNativeClientCredentialAliases(

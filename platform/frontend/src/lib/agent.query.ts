@@ -336,7 +336,7 @@ export function useCreateProfile() {
   });
 }
 
-export function useUpdateProfile() {
+export function useUpdateProfile(options?: { successMessage?: string }) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({
@@ -361,6 +361,9 @@ export function useUpdateProfile() {
       // chat (or any other page using useProfile) shows fresh data
       queryClient.setQueryData(["agents", variables.id], data);
       queryClient.invalidateQueries({ queryKey: ["agents"] });
+      if (options?.successMessage) {
+        toast.success(options.successMessage);
+      }
       // Invalidate profile tokens when teams change (tokens are auto-created/deleted)
       queryClient.invalidateQueries({
         queryKey: ["profileTokens", variables.id],

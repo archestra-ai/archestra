@@ -1,5 +1,6 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAgentEmailAddress } from "@/lib/chatops/incoming-email.query";
@@ -98,6 +99,24 @@ beforeEach(() => {
 });
 
 describe("A2AConnectionInstructions — Other ways to reach this agent", () => {
+  it("puts raw API examples after user-facing channels and keeps them collapsed", async () => {
+    const user = userEvent.setup();
+    renderChannels();
+
+    const channelsHeading = screen.getByRole("heading", {
+      name: "Other ways to reach this agent",
+    });
+    const apiTrigger = screen.getByRole("button", { name: /Call via API/ });
+    expect(
+      channelsHeading.compareDocumentPosition(apiTrigger) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.queryByText("Continue the conversation")).toBeNull();
+
+    await user.click(apiTrigger);
+    expect(screen.getByText("Continue the conversation")).toBeVisible();
+  });
+
   // Email invocation used to render its guidance inside a bg-muted/50 panel at
   // text-sm, so the channel that most often has nothing to copy shouted over
   // the two above it. Every channel now gets the same one line of prose.

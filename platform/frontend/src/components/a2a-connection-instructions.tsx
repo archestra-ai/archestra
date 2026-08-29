@@ -531,7 +531,7 @@ curl -X POST "${a2aEndpoint}" \\
           className="space-y-4 rounded-lg border bg-card p-4"
         >
           <h3 id={endpointHeadingId} className="text-sm font-semibold">
-            Endpoint
+            Agent Endpoint
           </h3>
           <ConnectionUrlStep
             bare
@@ -573,8 +573,9 @@ curl -X POST "${a2aEndpoint}" \\
               Authentication
             </h3>
             <p className="text-sm text-muted-foreground">
-              Use a platform token for A2A. OAuth access tokens and configured
-              identity-provider JWTs also work; LLM API keys do not.
+              Use a platform token for A2A calls. OAuth access tokens and
+              configured identity-provider JWTs also work. LLM API keys do not
+              work.
             </p>
           </div>
           <div className="space-y-3">
@@ -661,109 +662,6 @@ curl -X POST "${a2aEndpoint}" \\
           </div>
         </section>
 
-        <section
-          aria-labelledby={examplesHeadingId}
-          className="space-y-4 rounded-lg border bg-card p-4"
-        >
-          <h3 id={examplesHeadingId} className="text-sm font-semibold">
-            Call the agent
-          </h3>
-          <div className="space-y-3">
-            <CurlExampleSection
-              key={`card-${effectiveTokenId}`}
-              code={agentCardCurlCode}
-              {...curlExampleProps}
-            />
-            <CurlExampleSection
-              key={`send-${effectiveTokenId}`}
-              code={curlCode}
-              {...curlExampleProps}
-            />
-            <CurlExampleSection
-              key={`stream-${effectiveTokenId}`}
-              code={streamingCurlCode}
-              {...curlExampleProps}
-            />
-            <Collapsible className="rounded-lg border">
-              <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium">
-                Continue the conversation
-                <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
-              </CollapsibleTrigger>
-              <CollapsibleContent className="px-4 pb-4">
-                <CurlExampleSection
-                  key={`reply-${effectiveTokenId}`}
-                  code={replyCurlCode}
-                  {...curlExampleProps}
-                />
-              </CollapsibleContent>
-            </Collapsible>
-            <Collapsible className="rounded-lg border">
-              <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium">
-                Approve or deny tool calls
-                <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
-              </CollapsibleTrigger>
-              <CollapsibleContent className="px-4 pb-4">
-                <CurlExampleSection
-                  key={`approval-${effectiveTokenId}`}
-                  code={approvalCurlCode}
-                  {...curlExampleProps}
-                />
-              </CollapsibleContent>
-            </Collapsible>
-            <Collapsible className="rounded-lg border">
-              <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium">
-                Run in the background
-                <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
-              </CollapsibleTrigger>
-              <CollapsibleContent className="px-4 pb-4">
-                <CurlExampleSection
-                  key={`background-${effectiveTokenId}`}
-                  code={backgroundTaskCurlCode}
-                  {...curlExampleProps}
-                />
-              </CollapsibleContent>
-            </Collapsible>
-            <Collapsible className="rounded-lg border">
-              <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium">
-                Reconnect to a running task
-                <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
-              </CollapsibleTrigger>
-              <CollapsibleContent className="px-4 pb-4">
-                <CurlExampleSection
-                  key={`subscribe-${effectiveTokenId}`}
-                  code={subscribeCurlCode}
-                  {...curlExampleProps}
-                />
-              </CollapsibleContent>
-            </Collapsible>
-            <Collapsible className="rounded-lg border">
-              <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium">
-                List and cancel tasks
-                <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
-              </CollapsibleTrigger>
-              <CollapsibleContent className="px-4 pb-4">
-                <CurlExampleSection
-                  key={`manage-${effectiveTokenId}`}
-                  code={manageTasksCurlCode}
-                  {...curlExampleProps}
-                />
-              </CollapsibleContent>
-            </Collapsible>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Every method is covered in the{" "}
-            <a
-              href={getDocsUrl(DocsPage.PlatformAgentTriggersWebhookA2a)}
-              target="_blank"
-              rel="noreferrer"
-              className="underline hover:text-foreground"
-            >
-              A2A docs
-            </a>
-            .
-          </p>
-        </section>
-
         <section className="space-y-4 rounded-lg border bg-card p-4">
           <h3 className="text-sm font-semibold">
             Other ways to reach this agent
@@ -782,13 +680,130 @@ curl -X POST "${a2aEndpoint}" \\
             />
           </div>
         </section>
+
+        <Collapsible className="rounded-lg border bg-card">
+          <CollapsibleTrigger className="group flex w-full items-center justify-between gap-4 rounded-lg p-4 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+            <span className="space-y-1">
+              <span
+                id={examplesHeadingId}
+                className="block text-sm font-semibold"
+              >
+                Call via API
+              </span>
+              <span className="block text-xs font-normal text-muted-foreground">
+                View A2A request examples for a custom integration.
+              </span>
+            </span>
+            <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+          </CollapsibleTrigger>
+          <CollapsibleContent
+            aria-labelledby={examplesHeadingId}
+            role="region"
+            className="space-y-4 border-t px-4 pb-4 pt-4"
+          >
+            <div className="space-y-3">
+              <CurlExampleSection
+                key={`card-${effectiveTokenId}`}
+                code={agentCardCurlCode}
+                {...curlExampleProps}
+              />
+              <CurlExampleSection
+                key={`send-${effectiveTokenId}`}
+                code={curlCode}
+                {...curlExampleProps}
+              />
+              <CurlExampleSection
+                key={`stream-${effectiveTokenId}`}
+                code={streamingCurlCode}
+                {...curlExampleProps}
+              />
+              <Collapsible className="rounded-lg border">
+                <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium">
+                  Continue the conversation
+                  <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="px-4 pb-4">
+                  <CurlExampleSection
+                    key={`reply-${effectiveTokenId}`}
+                    code={replyCurlCode}
+                    {...curlExampleProps}
+                  />
+                </CollapsibleContent>
+              </Collapsible>
+              <Collapsible className="rounded-lg border">
+                <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium">
+                  Approve or deny tool calls
+                  <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="px-4 pb-4">
+                  <CurlExampleSection
+                    key={`approval-${effectiveTokenId}`}
+                    code={approvalCurlCode}
+                    {...curlExampleProps}
+                  />
+                </CollapsibleContent>
+              </Collapsible>
+              <Collapsible className="rounded-lg border">
+                <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium">
+                  Run in the background
+                  <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="px-4 pb-4">
+                  <CurlExampleSection
+                    key={`background-${effectiveTokenId}`}
+                    code={backgroundTaskCurlCode}
+                    {...curlExampleProps}
+                  />
+                </CollapsibleContent>
+              </Collapsible>
+              <Collapsible className="rounded-lg border">
+                <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium">
+                  Reconnect to a running task
+                  <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="px-4 pb-4">
+                  <CurlExampleSection
+                    key={`subscribe-${effectiveTokenId}`}
+                    code={subscribeCurlCode}
+                    {...curlExampleProps}
+                  />
+                </CollapsibleContent>
+              </Collapsible>
+              <Collapsible className="rounded-lg border">
+                <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium">
+                  List and cancel tasks
+                  <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="px-4 pb-4">
+                  <CurlExampleSection
+                    key={`manage-${effectiveTokenId}`}
+                    code={manageTasksCurlCode}
+                    {...curlExampleProps}
+                  />
+                </CollapsibleContent>
+              </Collapsible>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              The{" "}
+              <a
+                href={getDocsUrl(DocsPage.PlatformAgentTriggersWebhookA2a)}
+                target="_blank"
+                rel="noreferrer"
+                className="underline hover:text-foreground"
+              >
+                A2A docs
+              </a>
+              <span> cover every method.</span>
+            </p>
+          </CollapsibleContent>
+        </Collapsible>
       </div>
     );
   }
 
   return (
     <div>
-      <WizardStep n={1} title="Endpoint">
+      <WizardStep n={1} title="Agent Endpoint">
         <div className="space-y-3">
           <ConnectionUrlStep
             bare

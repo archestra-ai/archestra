@@ -38,6 +38,9 @@ vi.mock("./agent-connect-content", () => ({
 vi.mock("./agent-background-execution-card", () => ({
   AgentBackgroundExecutionCard: () => <div>background execution</div>,
 }));
+vi.mock("./agent-system-prompt-card", () => ({
+  AgentSystemPromptCard: () => <div>system prompt editor</div>,
+}));
 vi.mock("./agent-executions", () => ({
   AgentExecutions: () => <div>execution history</div>,
 }));
@@ -174,22 +177,24 @@ describe("AgentDetailPage", () => {
     expect(screen.queryByRole("link", { name: "Connect" })).toBeNull();
   });
 
-  it("shows the overview without a click, above the connection instructions, and links to the full configuration", () => {
+  it("shows overview and system prompt editing before connection instructions", () => {
     render(<AgentDetailPage kind="agent" id="a1" />);
 
     expect(screen.getByRole("heading", { name: "Overview" })).toBeVisible();
     const overview = screen.getByText("overview");
+    const systemPrompt = screen.getByText("system prompt editor");
     const connect = screen.getByText("connect content");
     expect(
-      overview.compareDocumentPosition(connect) &
+      overview.compareDocumentPosition(systemPrompt) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    // Same destination as the header's Edit, so Overview is a way in rather
-    // than a second, shorter copy of the form.
-    expect(screen.getByRole("link", { name: /Configuration/ })).toHaveAttribute(
-      "href",
-      "/agents/a1/edit",
-    );
+    expect(
+      systemPrompt.compareDocumentPosition(connect) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: /Full configuration/i }),
+    ).toHaveAttribute("href", "/agents/a1/edit");
   });
 
   it("keeps the MCP Gateway Overview but moves its environment into the header", () => {

@@ -359,6 +359,12 @@ An Agent with Background execution configured has an **Executions** tab. Use it 
 - read live or retained container logs
 - attach to the live shell for troubleshooting or interactive work
 
+Runner Jobs provide `/var/run/archestra/attach` for direct Kubernetes access.
+Interactive `bash` and `sh` sessions opened through `kubectl exec` or k9s join
+the Agent session automatically. Press `Ctrl-b`, then `d`, to detach without
+stopping the execution. For a raw diagnostic shell, set
+`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_AUTO_ATTACH=0` on the exec command.
+
 Archestra retains up to 1 MB of container output after the pod is removed. Only the user whose credentials started an execution can attach to its live shell. Agent administrators cannot enter another user's shell. There is no separate Background execution permission or sidebar resource.
 
 ## Example Architecture

@@ -1,10 +1,12 @@
 import type * as k8s from "@kubernetes/client-node";
 import type { RunnerLaunchSpec } from "@/services/runners/backends";
 import {
+  RUNNER_ATTACH_SCRIPT,
   RUNNER_ATTACHMENTS_DIR,
   RUNNER_ATTACHMENTS_MANIFEST,
   RUNNER_INPUTS_READY_FILE,
   RUNNER_RUNTIME_DIR,
+  RUNNER_SHELL_INIT_SCRIPT,
   RUNNER_STEER_FIFO,
 } from "@/services/runners/runtime-contract";
 import type { AgentDeploymentResources } from "@/types";
@@ -20,6 +22,20 @@ export const RUNNER_TMUX_SESSION = "agent";
 
 /** Container name in the Job spec; exec and log reads both address it. */
 export const RUNNER_CONTAINER_NAME = "runner";
+
+/**
+ * Install the stable attach command and the hook used by kubectl/k9s shells.
+ * Kept as a script so the manager can repair live pods created before an
+ * upgrade without relying on anything beyond the image's required /bin/sh.
+ */
+export function buildRunnerTerminalIntegrationScript(): string {
+  return [
+    `printf '%s\\n' '#!/bin/sh' 'tmux set-option -t ${RUNNER_TMUX_SESSION} mouse on' 'exec tmux attach -t ${RUNNER_TMUX_SESSION}' > ${RUNNER_ATTACH_SCRIPT}`,
+    `chmod 755 ${RUNNER_ATTACH_SCRIPT}`,
+    `printf '%s\\n' 'if [ "\${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_AUTO_ATTACH:-1}" = "1" ] && [ -t 0 ] && [ -t 1 ] && [ -z "\${TMUX:-}" ] && tmux has-session -t ${RUNNER_TMUX_SESSION} 2>/dev/null; then exec ${RUNNER_ATTACH_SCRIPT}; fi' > ${RUNNER_SHELL_INIT_SCRIPT}`,
+    `chmod 644 ${RUNNER_SHELL_INIT_SCRIPT}`,
+  ].join("\n");
+}
 
 /**
  * Exit code the bootstrap uses when the image cannot host a runner. Distinct
@@ -63,6 +79,7 @@ function buildRunnerBootstrapScript(): string {
   return [
     "set -eu",
     `mkdir -p ${RUNNER_RUNTIME_DIR}`,
+    buildRunnerTerminalIntegrationScript(),
     `mkdir -p ${RUNNER_ATTACHMENTS_DIR}`,
     'if [ "$ARCHESTRA_AGENT_BACKGROUND_EXECUTION_INPUT_FILE_COUNT" -gt 0 ]; then',
     `  echo "[runner] staging $ARCHESTRA_AGENT_BACKGROUND_EXECUTION_INPUT_FILE_COUNT input file(s)"`,
@@ -163,6 +180,11 @@ export function buildRunnerJob(spec: KubernetesRunnerLaunchSpec): k8s.V1Job {
                   LANG: "C.UTF-8",
                   LC_ALL: "C.UTF-8",
                   TERM: "xterm-256color",
+                  // k9s opens `bash` or `sh` directly. These standard shell
+                  // hooks join the already-running tmux pane on first prompt.
+                  ENV: RUNNER_SHELL_INIT_SCRIPT,
+                  PROMPT_COMMAND: `. ${RUNNER_SHELL_INIT_SCRIPT}`,
+                  ARCHESTRA_AGENT_BACKGROUND_EXECUTION_AUTO_ATTACH: "1",
                   ...spec.env,
                 }).map(([name, value]) => ({ name, value })),
                 {

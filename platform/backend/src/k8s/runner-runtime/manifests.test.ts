@@ -93,6 +93,22 @@ describe("buildRunnerJob", () => {
         },
       ]),
     );
+    expect(
+      buildRunnerJob({
+        ...SPEC,
+        env: {
+          ...SPEC.env,
+          ARCHESTRA_AGENT_BACKGROUND_EXECUTION_AUTO_ATTACH: "0",
+        },
+      }).spec?.template.spec?.containers[0]?.env,
+    ).toEqual(
+      expect.arrayContaining([
+        {
+          name: "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_AUTO_ATTACH",
+          value: "0",
+        },
+      ]),
+    );
   });
 
   it("holds the entrypoint until declared input files are staged", () => {

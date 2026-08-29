@@ -57,15 +57,19 @@ RUN pnpm add --global @openai/codex@0.149.1 \
  && chown -R 1000:1000 /home/node
 USER 1000:1000
 
+FROM rust:1.89.0-bookworm AS lobster-rust-toolchain
+
 # Staging's Archestra-native task environment. It deliberately builds on the
 # maintained Codex runtime, then adds only the repository toolchain and a
 # workflow wrapper; provider and MCP credentials still arrive at launch time.
 FROM agent-codex AS agent-lobster-env
 USER root
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-      | sh -s -- -y --profile minimal --default-toolchain stable \
- && /home/node/.cargo/bin/cargo --version \
- && chown -R 1000:1000 /home/node
+COPY --from=lobster-rust-toolchain /usr/local/cargo /usr/local/cargo
+COPY --from=lobster-rust-toolchain /usr/local/rustup /usr/local/rustup
+ENV RUSTUP_HOME=/usr/local/rustup
+ENV CARGO_HOME=/usr/local/cargo
+ENV PATH=/usr/local/cargo/bin:$PATH
+RUN cargo --version && rustc --version
 COPY agent_images/lobster-env /opt/archestra/lobster-env
 RUN chmod 0444 /opt/archestra/lobster-env/system-prompt.md
 USER 1000:1000

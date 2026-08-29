@@ -880,6 +880,11 @@ Background execution runs delegated Agent tasks in dedicated Kubernetes pods. Yo
   - Values: `true`, `false`
   - An explicit `false` keeps the feature off even when `ARCHESTRA_BETA=true`.
 
+- **`ARCHESTRA_BUNDLES_ENABLED`** - Enables Bundles and their connection setup delivery.
+  - Default: `false`
+  - Values: `true`, `false`
+  - Only the exact value `true` enables this beta feature. `ARCHESTRA_BETA` does not enable it.
+
 - **`ARCHESTRA_GIT_BINARY_PATH`** - Path to the `git` binary. The public marketplace endpoint shells out to `git http-backend` (CGI) for clone/pull traffic — make sure the binary is present in the backend container image.
   - Default: `git`
 

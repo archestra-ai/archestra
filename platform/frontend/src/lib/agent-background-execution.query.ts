@@ -75,7 +75,10 @@ export function useMyAgentExecution(taskId: string, enabled = true) {
       return data;
     },
     enabled: enabled && !!taskId,
-    refetchInterval: (query) => (query.state.data?.endedAt ? false : 2_000),
+    refetchInterval: (query) =>
+      query.state.status === "error" || query.state.data?.endedAt
+        ? false
+        : 2_000,
     retry: (failureCount) => failureCount < 8,
     retryDelay: 500,
   });

@@ -6,6 +6,7 @@ const queryState = vi.hoisted(() => ({
     data: undefined as Record<string, unknown> | undefined,
     isPending: false,
     isError: false,
+    error: undefined as Error | undefined,
     refetch: vi.fn(),
   },
 }));
@@ -40,6 +41,7 @@ describe("BackgroundExecutionChatSession", () => {
       data: undefined,
       isPending: false,
       isError: false,
+      error: undefined,
       refetch: vi.fn(),
     };
   });
@@ -53,6 +55,37 @@ describe("BackgroundExecutionChatSession", () => {
     expect(
       screen.getByText(
         "Scheduling the workload and preparing its terminal. You can leave this page and come back.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the last execution visible when a background refresh fails", () => {
+    queryState.value.data = execution({
+      state: "TASK_STATE_SUBMITTED",
+      endedAt: null,
+    });
+    queryState.value.isError = true;
+
+    render(<BackgroundExecutionChatSession taskId="task-1" />);
+
+    expect(screen.getByText("Starting Codex…")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Couldn't load this execution"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("explains when the requested execution cannot be found", () => {
+    queryState.value.isError = true;
+    queryState.value.error = new Error("Execution not found");
+
+    render(<BackgroundExecutionChatSession taskId="task-1" />);
+
+    expect(
+      screen.getByText("Couldn't load this execution"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "This execution no longer exists, or you no longer have access to it.",
       ),
     ).toBeInTheDocument();
   });

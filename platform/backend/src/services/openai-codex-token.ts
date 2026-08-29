@@ -640,8 +640,8 @@ async function redeemWithOpenAi(refreshToken: string): Promise<{
 
   const response = await fetch(`${issuer}/oauth/token`, {
     method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
       grant_type: "refresh_token",
       refresh_token: refreshToken,
       client_id: clientId,

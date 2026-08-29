@@ -36,6 +36,17 @@ describe("openAiCodexTokenManager.getAccessToken (uncached, no key id)", () => {
       refreshToken: CREDENTIAL.refreshToken,
     });
     expect(token).toBe("at_1");
+
+    const fetchMock = vi.mocked(fetch);
+    const init = fetchMock.mock.calls[0]?.[1];
+    expect(new Headers(init?.headers).get("content-type")).toBe(
+      "application/json",
+    );
+    expect(JSON.parse(String(init?.body))).toEqual({
+      grant_type: "refresh_token",
+      refresh_token: CREDENTIAL.refreshToken,
+      client_id: expect.any(String),
+    });
   });
 
   it("surfaces a 401 when OpenAI rejects the refresh token", async () => {
@@ -136,8 +147,10 @@ function stubTokenEndpoint(
   rotations: Record<string, { accessToken: string; rotatedTo?: string }>,
 ) {
   const fetchMock = vi.fn(async (_input: unknown, init?: RequestInit) => {
-    const params = new URLSearchParams(String(init?.body));
-    const presented = params.get("refresh_token") ?? "";
+    const payload = JSON.parse(String(init?.body)) as {
+      refresh_token?: string;
+    };
+    const presented = payload.refresh_token ?? "";
     const entry = rotations[presented];
     if (!entry) {
       return tokenResponse({ error: "invalid_grant" }, 400);
@@ -200,7 +213,8 @@ describe("in-flight redemption lineage isolation", () => {
       (_input: unknown, init?: RequestInit) =>
         new Promise<Response>((resolve) => {
           presentedTokens.push(
-            new URLSearchParams(String(init?.body)).get("refresh_token"),
+            (JSON.parse(String(init?.body)) as { refresh_token?: string })
+              .refresh_token ?? null,
           );
           resolvers.push(resolve);
         }),

@@ -426,7 +426,7 @@ describe("renderStartupGuardScript", () => {
     // after claude exits
     expect(script).toContain("\\033[?1049h");
     expect(script).toContain(
-      `trap 'stty echo </dev/tty 2>/dev/null; printf "\\033[?1049l"' EXIT`,
+      `trap 'stop_frame_key_reader; stty echo </dev/tty 2>/dev/null; printf "\\033[?1049l"' EXIT`,
     );
     // echo off for the whole interactive run so keys buffered during the
     // probe animation leave no smudge
@@ -764,6 +764,26 @@ describe("renderStartupGuardScript", () => {
     // nothing is disconnected, nothing remembered, the guard stays installed
     expect(await readClaudeLog(guardHome)).toBe("");
     expect(output).not.toContain("Disconnected");
+    expect(existsSync(guardHome.skipFile)).toBe(false);
+    expect(existsSync(guardHome.guardFile)).toBe(true);
+  });
+
+  test("interactive, Bash 3.2 fallback hears Space between animation frames", async () => {
+    const script = renderStartupGuardScript(
+      CTX,
+      CLAUDE_CODE_GUARD_CLIENT,
+    ).replace(
+      'if [ "${BASH_VERSINFO[0]:-3}" -ge 4 ]; then FRAME_KEYS=1; fi',
+      ":",
+    );
+    const { output, guardHome } = await runGuardInteractive({
+      script,
+      curlExitCode: 0,
+      curlBody: '{"mcp":"ok","llm":"ok"}',
+      keys: " ",
+    });
+    expect(output).not.toContain("✓");
+    expect(await readClaudeLog(guardHome)).toBe("");
     expect(existsSync(guardHome.skipFile)).toBe(false);
     expect(existsSync(guardHome.guardFile)).toBe(true);
   });

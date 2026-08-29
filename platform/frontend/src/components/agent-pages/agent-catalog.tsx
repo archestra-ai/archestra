@@ -5,14 +5,19 @@ import type { AgentFormInitialValues } from "@/components/agent-form";
 import { CatalogSourceCard } from "@/components/catalog-source-card";
 import { ProviderIcon } from "@/components/provider-icon";
 import { Badge } from "@/components/ui/badge";
+import appConfig from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
-import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
+import {
+  DEFAULT_APP_LOGO,
+  useAppIconLogo,
+  useAppName,
+} from "@/lib/hooks/use-app-name";
 
 export interface AgentCatalogTemplate {
   id: "archestra" | "claude-code" | "codex" | "hermes" | "openclaw";
   name: string;
   description: string;
-  icon: string;
+  icon: string | null;
   initialValues: AgentFormInitialValues;
 }
 
@@ -20,7 +25,7 @@ export function getAgentCatalogTemplates(
   archestraImage: string,
   // white-label-ok: test/helper fallback only; shipped UI always passes useAppName().
   appName = "Archestra",
-  appIconLogo = "/logo-icon.svg",
+  appIconLogo: string | null = "/logo-icon.svg",
 ): readonly AgentCatalogTemplate[] {
   return [
     template({
@@ -101,7 +106,16 @@ export function AgentCatalog({
 }) {
   const configuredImage = useFeature("agentBackgroundExecutionBaseImage");
   const appName = useAppName();
-  const appIconLogo = useAppIconLogo();
+  const resolvedAppIconLogo = useAppIconLogo();
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  const appIconLogo =
+    appConfig.enterpriseFeatures.fullWhiteLabeling &&
+    resolvedAppIconLogo === DEFAULT_APP_LOGO
+      ? null
+      : resolvedAppIconLogo;
+  // SPDX-SnippetEnd
   const templates = getAgentCatalogTemplates(
     typeof configuredImage === "string"
       ? configuredImage
@@ -151,11 +165,11 @@ function CatalogAgentIcon({
   appIconLogo,
 }: {
   id: AgentCatalogTemplate["id"];
-  appIconLogo: string;
+  appIconLogo: string | null;
 }) {
   switch (id) {
     case "archestra":
-      return (
+      return appIconLogo ? (
         <Image
           src={appIconLogo}
           alt=""
@@ -163,6 +177,8 @@ function CatalogAgentIcon({
           height={22}
           className="size-[22px] rounded-sm object-contain"
         />
+      ) : (
+        <Bot className="size-5" />
       );
     case "claude-code":
       return <ProviderIcon provider="anthropic" size={22} />;
@@ -197,7 +213,7 @@ function template(params: {
   id: AgentCatalogTemplate["id"];
   name: string;
   description: string;
-  icon: string;
+  icon: string | null;
   platformName: string;
   image: string;
   command: string[] | null;

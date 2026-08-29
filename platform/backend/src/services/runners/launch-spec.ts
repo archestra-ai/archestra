@@ -339,6 +339,14 @@ export async function buildRunnerLaunchSpec(params: {
 }
 
 function executionBanner(appName: string): string {
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  if (config.enterpriseFeatures.fullWhiteLabeling) {
+    return `${appName}\nSecure access to your AI tools`;
+  }
+  // SPDX-SnippetEnd
+
   return isDefaultBrandedAppName(appName)
     ? archestraMarkWithText({ appName }).join("\n")
     : `${appName}\nSecure access to your AI tools`;

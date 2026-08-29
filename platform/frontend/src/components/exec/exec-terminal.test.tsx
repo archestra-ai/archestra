@@ -6,8 +6,12 @@ const terminalHarness = vi.hoisted(() => {
     resizeHandler: null as
       | ((dimensions: { cols: number; rows: number }) => void)
       | null,
+    wheelHandler: null as (() => boolean) | null,
     emitResize(cols: number, rows: number) {
       this.resizeHandler?.({ cols, rows });
+    },
+    processWheel() {
+      return this.wheelHandler?.();
     },
   };
 });
@@ -15,11 +19,15 @@ const terminalHarness = vi.hoisted(() => {
 vi.mock("@xterm/xterm", () => ({
   Terminal: class Terminal {
     rows = 24;
+    buffer = { active: { type: "alternate" } };
     loadAddon() {}
     open() {}
     dispose() {}
     write() {}
     onData() {}
+    attachCustomWheelEventHandler(handler: () => boolean) {
+      terminalHarness.wheelHandler = handler;
+    }
     onResize(handler: (dimensions: { cols: number; rows: number }) => void) {
       terminalHarness.resizeHandler = handler;
     }
@@ -47,6 +55,7 @@ describe("ExecTerminal", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     terminalHarness.resizeHandler = null;
+    terminalHarness.wheelHandler = null;
   });
 
   it("keeps the remote PTY synchronized with xterm dimension changes", async () => {
@@ -69,5 +78,21 @@ describe("ExecTerminal", () => {
     await waitFor(() => {
       expect(transport.sendResize).toHaveBeenCalledWith(164, 52);
     });
+  });
+
+  it("does not turn wheel motion over tmux into remote terminal input", async () => {
+    const transport: ExecSessionTransport = {
+      open: (handlers) => {
+        handlers.onStarted(null);
+        return vi.fn();
+      },
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+    };
+
+    render(<ExecTerminal sessionKey="task-1" transport={transport} isActive />);
+
+    await screen.findByText("Connected");
+    expect(terminalHarness.processWheel()).toBe(false);
   });
 });

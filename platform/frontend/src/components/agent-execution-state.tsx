@@ -1,15 +1,25 @@
+"use client";
+
+import { ChevronRight } from "lucide-react";
+import { useState } from "react";
+import { LogConsole } from "@/components/log-console";
+import { StandardDialog } from "@/components/standard-dialog";
+import { Button } from "@/components/ui/button";
 import type { AgentExecution } from "@/lib/agent-background-execution.query";
 import { cn } from "@/lib/utils";
 
 export function AgentExecutionState({
   state,
   compact = false,
+  statusReason,
 }: {
   state: AgentExecution["state"];
   compact?: boolean;
+  statusReason?: string | null;
 }) {
   const presentation = executionStatePresentation(state);
-  return (
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const status = (
     <span
       className={cn(
         "inline-flex shrink-0 items-center gap-1.5 font-medium text-muted-foreground",
@@ -23,8 +33,40 @@ export function AgentExecutionState({
           presentation.dotClassName,
         )}
       />
-      {presentation.label}
+      <span>{presentation.label}</span>
     </span>
+  );
+
+  if (!statusReason) return status;
+
+  return (
+    <>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="-mx-1.5 h-6 gap-0.5 rounded-md px-1.5 hover:bg-muted"
+        aria-label={`View ${presentation.label.toLowerCase()} details`}
+        onClick={() => setDetailsOpen(true)}
+      >
+        {status}
+        <ChevronRight className="size-3 text-muted-foreground/70" />
+      </Button>
+      <StandardDialog
+        open={detailsOpen}
+        onOpenChange={setDetailsOpen}
+        title={`Execution ${presentation.label.toLowerCase()}`}
+        description="The execution reported this reason when it stopped."
+        size="medium"
+      >
+        <LogConsole
+          content={formatExecutionStatusReason(statusReason)}
+          contentTone="error"
+          copySuccessMessage="Execution details copied to clipboard"
+          className="h-64"
+        />
+      </StandardDialog>
+    </>
   );
 }
 
@@ -52,5 +94,28 @@ function executionStatePresentation(state: AgentExecution["state"]): {
       return { label: "Starting", dotClassName: "bg-sky-500", pulse: true };
     default:
       return { label: "Pending", dotClassName: "bg-sky-500", pulse: true };
+  }
+}
+
+function formatExecutionStatusReason(reason: string): string {
+  const bodyMarker = "Body: ";
+  const bodyStart = reason.indexOf(bodyMarker);
+  if (bodyStart === -1) return reason;
+
+  const parsedBody = parseEmbeddedJson(
+    reason.slice(bodyStart + bodyMarker.length),
+  );
+  if (parsedBody === null) return reason;
+
+  const summary = reason.slice(0, bodyStart).trimEnd();
+  return `${summary}\n\nBody:\n${JSON.stringify(parsedBody, null, 2)}`;
+}
+
+function parseEmbeddedJson(value: string): unknown | null {
+  try {
+    const parsed: unknown = JSON.parse(value.trim());
+    return typeof parsed === "string" ? JSON.parse(parsed) : parsed;
+  } catch {
+    return null;
   }
 }

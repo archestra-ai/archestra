@@ -65,20 +65,20 @@ function buildRunnerBootstrapScript(): string {
     `mkdir -p ${RUNNER_RUNTIME_DIR}`,
     `mkdir -p ${RUNNER_ATTACHMENTS_DIR}`,
     'if [ "$ARCHESTRA_AGENT_BACKGROUND_EXECUTION_INPUT_FILE_COUNT" -gt 0 ]; then',
-    `  echo "[archestra] staging $ARCHESTRA_AGENT_BACKGROUND_EXECUTION_INPUT_FILE_COUNT input file(s)"`,
+    `  echo "[runner] staging $ARCHESTRA_AGENT_BACKGROUND_EXECUTION_INPUT_FILE_COUNT input file(s)"`,
     `  attempts=0; while [ ! -f ${RUNNER_INPUTS_READY_FILE} ]; do`,
     "    attempts=$((attempts + 1))",
-    '    if [ "$attempts" -gt 300 ]; then echo "archestra: timed out while staging execution inputs" >&2; exit 74; fi',
+    '    if [ "$attempts" -gt 300 ]; then echo "runner: timed out while staging execution inputs" >&2; exit 74; fi',
     "    sleep 1",
     "  done",
     "fi",
     `[ -p "${RUNNER_STEER_FIFO}" ] || mkfifo -m 600 "${RUNNER_STEER_FIFO}"`,
     "if ! command -v tmux >/dev/null 2>&1; then",
-    '  echo "archestra: this image has no tmux, which runners require for attach and steering" >&2',
+    '  echo "runner: this image has no tmux, which runners require for attach and steering" >&2',
     `  exit ${RUNNER_UNUSABLE_IMAGE_EXIT_CODE}`,
     "fi",
     `printf '%s\\n' "$ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ENTRYPOINT" > ${RUNNER_RUNTIME_DIR}/entry.sh`,
-    `printf '%s\n' '/bin/sh ${RUNNER_RUNTIME_DIR}/entry.sh; status=$?; printf "%s\\n" "$status" > ${exitCodeFile}; echo; echo "[archestra] agent session exited"; exit "$status"' > ${RUNNER_RUNTIME_DIR}/session.sh`,
+    `printf '%s\n' '/bin/sh ${RUNNER_RUNTIME_DIR}/entry.sh; status=$?; printf "%s\\n" "$status" > ${exitCodeFile}; echo; echo "[runner] agent session exited"; exit "$status"' > ${RUNNER_RUNTIME_DIR}/session.sh`,
     // Create the pane before starting the Agent so its output cannot race the
     // pipe setup. A fast one-shot client used to finish before pipe-pane was
     // attached, leaving its durable transcript empty.
@@ -92,7 +92,7 @@ function buildRunnerBootstrapScript(): string {
     // completes when the agent is done rather than when tmux forks away.
     `while tmux has-session -t ${RUNNER_TMUX_SESSION} 2>/dev/null; do sleep 5; done`,
     `if [ ! -f ${exitCodeFile} ]; then`,
-    '  echo "archestra: agent session ended without an exit status" >&2',
+    '  echo "runner: agent session ended without an exit status" >&2',
     "  exit 1",
     "fi",
     `exit "$(cat ${exitCodeFile})"`,

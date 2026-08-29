@@ -54,7 +54,11 @@ export function BackgroundExecutionChatSession({ taskId }: { taskId: string }) {
               <h1 className="truncate text-sm font-medium">
                 {execution.title}
               </h1>
-              <AgentExecutionState state={execution.state} compact />
+              <AgentExecutionState
+                state={execution.state}
+                statusReason={execution.statusReason}
+                compact
+              />
             </div>
             <p className="truncate text-xs text-muted-foreground">
               {execution.agent.name}

@@ -142,6 +142,13 @@ export function ExecTerminal({
 
       terminal.loadAddon(fitAddon);
       terminal.open(terminalRef.current);
+      terminal.attachCustomWheelEventHandler(
+        // xterm turns wheel motion into Up/Down input when an alternate-screen
+        // app such as tmux has no browser scrollback. That types escape
+        // sequences into the remote TUI. Leave normal-buffer scrollback to
+        // xterm, but let the surrounding page consume alternate-screen wheels.
+        () => terminal.buffer.active.type === "normal",
+      );
 
       // FitAddon can resize xterm for reasons other than an element resize
       // (font metrics settling is the common one). Drive the remote PTY from

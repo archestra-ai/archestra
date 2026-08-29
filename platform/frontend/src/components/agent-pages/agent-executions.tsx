@@ -152,18 +152,17 @@ function ExecutionDetails({
               <h2 className="truncate text-sm font-medium">
                 {execution.title}
               </h2>
-              <AgentExecutionState state={execution.state} compact />
+              <AgentExecutionState
+                state={execution.state}
+                statusReason={execution.statusReason}
+                compact
+              />
             </div>
             <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[11px] text-muted-foreground">
               <span className="font-mono">{shortTaskId(execution.taskId)}</span>
               <span aria-hidden>·</span>
               <span>{new Date(execution.startedAt).toLocaleString()}</span>
             </p>
-            {execution.statusReason && (
-              <p className="mt-2 text-xs text-destructive">
-                {execution.statusReason}
-              </p>
-            )}
           </div>
           <DeploymentConsoleTabList
             variant="compact"

@@ -9,10 +9,21 @@ import { useFeature } from "@/lib/config/config.query";
 import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
 import { AgentCreatePage } from "./agent-create-page";
 
+const { mockConfig } = vi.hoisted(() => ({
+  mockConfig: {
+    enterpriseFeatures: {
+      fullWhiteLabeling: false,
+    },
+  },
+}));
+
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/hooks/use-app-name");
+vi.mock("@/lib/config/config", () => ({
+  default: mockConfig,
+}));
 
 // The form itself is covered by agent-form.test.tsx; here it is a stub whose
 // props are what the page is expected to hand it, plus a way to fire
@@ -61,6 +72,7 @@ function mockPermissions({
 describe("AgentCreatePage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockConfig.enterpriseFeatures.fullWhiteLabeling = false;
     mockPermissions({ canRead: true });
     vi.mocked(useFeature).mockReturnValue(false);
     vi.mocked(useAppName).mockReturnValue("Archestra");
@@ -152,6 +164,37 @@ describe("AgentCreatePage", () => {
       }),
     );
   });
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  it("uses a neutral built-in Agent icon when full white-labeling has no custom icon", async () => {
+    const user = userEvent.setup();
+    mockConfig.enterpriseFeatures.fullWhiteLabeling = true;
+    vi.mocked(useFeature).mockImplementation((feature) =>
+      feature === "agentBackgroundExecution" ? true : undefined,
+    );
+    vi.mocked(useAppName).mockReturnValue("Example AI");
+    vi.mocked(useAppIconLogo).mockReturnValue("/logo-icon.svg");
+
+    render(<AgentCreatePage kind="agent" />);
+
+    const template = screen.getByRole("button", {
+      name: /example ai agent/i,
+    });
+    expect(template.querySelector("img")).toBeNull();
+
+    await user.click(template);
+    expect(formProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        initialValues: expect.objectContaining({
+          name: "Example AI Agent",
+          icon: null,
+        }),
+      }),
+    );
+  });
+  // SPDX-SnippetEnd
 
   it("prefills Claude Code with its runtime-scoped personal subscription token", async () => {
     const user = userEvent.setup();

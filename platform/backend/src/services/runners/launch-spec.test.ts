@@ -61,7 +61,7 @@ describe("buildRunnerLaunchSpec", () => {
       organizationId: setup.agent.organizationId,
       runtimeScope: "agent-tests",
       effectiveNetworkPolicy: { source: "built_in", policy: null },
-      appName: "Archestra",
+      appName: "Example AI",
       executionMode: "one_shot",
       task: "Inspect the repository and report the result.",
     });
@@ -75,7 +75,12 @@ describe("buildRunnerLaunchSpec", () => {
       ARCHESTRA_LLM_PROXY_URL: `https://platform.example.test/v1/model-router/${setup.agent.id}`,
       OPENAI_BASE_URL: `https://platform.example.test/v1/model-router/${setup.agent.id}`,
       ARCHESTRA_MCP_GATEWAY_URL: `https://platform.example.test/v1/mcp/${setup.agent.id}`,
+      ARCHESTRA_AGENT_BACKGROUND_EXECUTION_BANNER:
+        "Example AI\nSecure access to your AI tools",
     });
+    expect(spec.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_BANNER).not.toContain(
+      "⣾⣿",
+    );
     expect(spec.secretEnv.OPENAI_API_KEY).toMatch(/^arch_/);
     expect(spec.secretEnv.OPENAI_API_KEY).not.toBe("upstream-secret");
     expect(spec.env.OPENAI_BASE_URL).not.toBe("https://bypass.invalid");
@@ -129,6 +134,14 @@ describe("buildRunnerLaunchSpec", () => {
     expect(spec.secretEnv.ARCHESTRA_MCP_GATEWAY_TOKEN).toEqual(
       expect.any(String),
     );
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    expect(config.enterpriseFeatures.fullWhiteLabeling).toBe(true);
+    expect(spec.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_BANNER).toBe(
+      "Archestra\nSecure access to your AI tools",
+    );
+    // SPDX-SnippetEnd
     const virtualKey = await VirtualApiKeyModel.findById(virtualApiKeyId);
     expect(virtualKey).toMatchObject({ scope: "org", authorId: null });
   });

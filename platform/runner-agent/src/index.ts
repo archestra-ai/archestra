@@ -29,7 +29,7 @@ async function main(): Promise<number> {
     config = readConfig(process.env);
   } catch (error: unknown) {
     if (error instanceof BackgroundExecutionAgentConfigError) {
-      write(`archestra: ${error.message}`);
+      write(`runner: ${error.message}`);
       return 78;
     }
     throw error;
@@ -38,7 +38,7 @@ async function main(): Promise<number> {
   renderHeader(config);
 
   const steerQueue = new SteerQueue(config.steerFifo, (error: unknown) => {
-    write(`archestra: could not read the steer channel: ${describe(error)}`);
+    write(`runner: could not read the steer channel: ${describe(error)}`);
   });
   steerQueue.start();
   const terminalInput =
@@ -92,9 +92,7 @@ async function main(): Promise<number> {
         const incoming = await steerQueue.waitForMessage(config.idleTimeoutMs);
         if (incoming.length === 0) {
           if (config.idleTimeoutMs !== null) {
-            write(
-              "[archestra] no further direction — session complete, exiting",
-            );
+            write("[runner] no further direction — session complete, exiting");
           }
           break;
         }
@@ -148,7 +146,7 @@ async function main(): Promise<number> {
       // SDK/provider exceptions can carry raw HTTP response bodies. Keep the
       // user-visible terminal generic rather than persisting those details in
       // the run's scrollback and logs.
-      write("\narchestra: the session failed.");
+      write("\nrunner: the session failed.");
       exitCode = 1;
     }
   } finally {
@@ -285,7 +283,7 @@ main()
     process.exit(code);
   })
   .catch(() => {
-    write("archestra: the session could not start.");
+    write("runner: the session could not start.");
     // An MCP transport may retain internal fetch handles after a failed
     // handshake. This is a task process, so a startup failure is terminal: do
     // not leave the execution pod looking alive after surfacing the error.

@@ -779,14 +779,14 @@ const RUNNER_ATTACH_TIMEOUT_MS = 60_000;
 
 function runnerTerminalAttachCommand(): string[] {
   return [
-    "env",
-    "LANG=C.UTF-8",
-    "LC_ALL=C.UTF-8",
-    "TERM=xterm-256color",
-    "tmux",
-    "attach",
-    "-t",
-    RUNNER_TMUX_SESSION,
+    "/bin/sh",
+    "-c",
+    [
+      // Apply this at attach time as well as bootstrap time so sessions that
+      // predate an upgrade immediately gain working browser scrollback.
+      `tmux set-option -t ${RUNNER_TMUX_SESSION} mouse on`,
+      `exec env LANG=C.UTF-8 LC_ALL=C.UTF-8 TERM=xterm-256color tmux attach -t ${RUNNER_TMUX_SESSION}`,
+    ].join(" && "),
   ];
 }
 

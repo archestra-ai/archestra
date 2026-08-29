@@ -198,6 +198,13 @@ describe("the container bootstrap", () => {
     );
     expect(script()).not.toContain("sleep 10");
   });
+
+  it("lets terminal wheel events scroll tmux history", () => {
+    expect(script()).toContain("tmux set-option -t agent mouse on");
+    expect(script().indexOf("mouse on")).toBeLessThan(
+      script().indexOf("tmux respawn-pane"),
+    );
+  });
 });
 
 describe("buildRunnerSecret", () => {

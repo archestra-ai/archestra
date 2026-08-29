@@ -83,6 +83,10 @@ function buildRunnerBootstrapScript(): string {
     // pipe setup. A fast one-shot client used to finish before pipe-pane was
     // attached, leaving its durable transcript empty.
     `tmux new-session -d -s ${RUNNER_TMUX_SESSION} 'while :; do sleep 1; done'`,
+    // Let browser terminals send wheel events to tmux. Its WheelUpPane binding
+    // enters copy mode and scrolls tmux's own history; without mouse mode,
+    // xterm falls back to cursor-key sequences that get typed into the pane.
+    `tmux set-option -t ${RUNNER_TMUX_SESSION} mouse on`,
     // Mirror the pane to the container's stdout. tmux gives the agent a pty,
     // so without this its output exists only inside the pane: kubectl logs
     // shows nothing, and the platform's log-follower streams an empty task.

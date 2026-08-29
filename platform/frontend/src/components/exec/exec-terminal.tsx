@@ -142,32 +142,6 @@ export function ExecTerminal({
 
       terminal.loadAddon(fitAddon);
       terminal.open(terminalRef.current);
-      terminal.attachCustomWheelEventHandler(
-        // xterm can forward a wheel as mouse input or synthesize Up/Down input
-        // when it thinks an application such as tmux should own scrolling.
-        // Browser wheel motion must never become remote terminal input.
-        () => false,
-      );
-      const wheelContainer = terminalRef.current;
-      const handleWheel = (event: WheelEvent) => {
-        const buffer = terminal.buffer.active;
-        const atLocalBoundary =
-          event.deltaY < 0
-            ? buffer.viewportY <= 0
-            : buffer.viewportY >= buffer.baseY;
-
-        // Keep xterm from seeing the event in both cases. At a local scrollback
-        // boundary, leaving the default action intact lets the page scroll.
-        event.stopPropagation();
-        if (event.deltaY === 0 || atLocalBoundary) return;
-
-        event.preventDefault();
-        terminal.scrollLines(wheelDeltaInLines(event, terminal.rows));
-      };
-      wheelContainer.addEventListener("wheel", handleWheel, {
-        capture: true,
-        passive: false,
-      });
 
       // FitAddon can resize xterm for reasons other than an element resize
       // (font metrics settling is the common one). Drive the remote PTY from
@@ -243,7 +217,6 @@ export function ExecTerminal({
       }
 
       return () => {
-        wheelContainer.removeEventListener("wheel", handleWheel, true);
         resizeObserver.disconnect();
         closeSession();
       };
@@ -346,14 +319,4 @@ export function ExecTerminal({
       )}
     </div>
   );
-}
-
-function wheelDeltaInLines(event: WheelEvent, pageSize: number): number {
-  const lines =
-    event.deltaMode === WheelEvent.DOM_DELTA_LINE
-      ? event.deltaY
-      : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
-        ? event.deltaY * pageSize
-        : event.deltaY / 16;
-  return Math.sign(lines) * Math.max(1, Math.round(Math.abs(lines)));
 }

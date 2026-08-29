@@ -2947,13 +2947,13 @@ describe("InteractionModel", () => {
   });
 
   describe("getUniqueUserIds", () => {
-    test("returns unique user IDs with names", async ({
+    test("returns unique users ordered by activity", async ({
       makeAdmin,
       makeUser,
     }) => {
       const admin = await makeAdmin();
-      const user1 = await makeUser({ name: "User One" });
-      const user2 = await makeUser({ name: "User Two" });
+      const user1 = await makeUser({ name: "Zulu Most Active" });
+      const user2 = await makeUser({ name: "Alpha Less Active" });
 
       const agent = await AgentModel.create({
         name: "Agent",
@@ -3008,9 +3008,10 @@ describe("InteractionModel", () => {
       const userIds = await InteractionModel.getUniqueUserIds(admin.id, true);
 
       expect(userIds).toHaveLength(2);
-      // Results should be sorted by name
-      expect(userIds.map((u) => u.name)).toContain("User One");
-      expect(userIds.map((u) => u.name)).toContain("User Two");
+      expect(userIds.map((u) => u.name)).toEqual([
+        "Zulu Most Active",
+        "Alpha Less Active",
+      ]);
       expect(userIds.every((u) => u.id && u.name)).toBe(true);
     });
 

@@ -18,6 +18,7 @@ describe("AgentExecutionState", () => {
       />,
     );
 
+    expect(screen.getByText("View details")).toBeVisible();
     await user.click(
       screen.getByRole("button", { name: "View failed details" }),
     );
@@ -38,5 +39,18 @@ describe("AgentExecutionState", () => {
     expect(
       screen.queryByRole("button", { name: /view failed details/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it("keeps an icon-only history status accessible", () => {
+    render(
+      <AgentExecutionState
+        state="TASK_STATE_INPUT_REQUIRED"
+        compact
+        iconOnly
+      />,
+    );
+
+    expect(screen.getByRole("img", { name: "Needs input" })).toBeVisible();
+    expect(screen.queryByText("Needs input")).not.toBeInTheDocument();
   });
 });

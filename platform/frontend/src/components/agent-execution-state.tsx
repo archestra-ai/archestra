@@ -5,37 +5,65 @@ import { useState } from "react";
 import { LogConsole } from "@/components/log-console";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { AgentExecution } from "@/lib/agent-background-execution.query";
 import { cn } from "@/lib/utils";
 
 export function AgentExecutionState({
   state,
   compact = false,
+  iconOnly = false,
   statusReason,
 }: {
   state: AgentExecution["state"];
   compact?: boolean;
+  iconOnly?: boolean;
   statusReason?: string | null;
 }) {
   const presentation = executionStatePresentation(state);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const dot = (
+    <span
+      className={cn(
+        "size-1.5 rounded-full",
+        presentation.pulse && "animate-pulse",
+        presentation.dotClassName,
+      )}
+    />
+  );
   const status = (
     <span
       className={cn(
         "inline-flex shrink-0 items-center gap-1.5 font-medium text-muted-foreground",
         compact ? "text-[11px]" : "text-xs",
+        statusReason && "text-foreground",
       )}
     >
-      <span
-        className={cn(
-          "size-1.5 rounded-full",
-          presentation.pulse && "animate-pulse",
-          presentation.dotClassName,
-        )}
-      />
+      {dot}
       <span>{presentation.label}</span>
     </span>
   );
+
+  if (iconOnly) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span
+            role="img"
+            aria-label={presentation.label}
+            className="inline-flex size-5 shrink-0 items-center justify-center"
+          >
+            {dot}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="right">{presentation.label}</TooltipContent>
+      </Tooltip>
+    );
+  }
 
   if (!statusReason) return status;
 
@@ -43,13 +71,17 @@ export function AgentExecutionState({
     <>
       <Button
         type="button"
-        variant="ghost"
+        variant="outline"
         size="sm"
-        className="-mx-1.5 h-6 gap-0.5 rounded-md px-1.5 hover:bg-muted"
+        className="-mx-1 h-7 gap-1.5 rounded-full border-destructive/20 bg-destructive/5 px-2 hover:border-destructive/30 hover:bg-destructive/10"
         aria-label={`View ${presentation.label.toLowerCase()} details`}
         onClick={() => setDetailsOpen(true)}
       >
         {status}
+        <span aria-hidden className="h-3 w-px bg-border" />
+        <span className="text-[10px] font-normal text-muted-foreground">
+          View details
+        </span>
         <ChevronRight className="size-3 text-muted-foreground/70" />
       </Button>
       <StandardDialog

@@ -98,16 +98,22 @@ export function AgentExecutions({ agentId }: { agentId: string }) {
                       <span className="min-w-0 flex-1 truncate text-sm font-medium">
                         {execution.title}
                       </span>
-                      <AgentExecutionState state={execution.state} compact />
+                      <AgentExecutionState
+                        state={execution.state}
+                        compact
+                        iconOnly
+                      />
                     </span>
                     <span className="flex items-center gap-1.5 text-[11px] font-normal text-muted-foreground">
                       <span className="font-mono">
                         {shortTaskId(execution.taskId)}
                       </span>
                       <span aria-hidden>·</span>
-                      {formatDistanceToNow(new Date(execution.startedAt), {
-                        addSuffix: true,
-                      })}
+                      <span className="min-w-0 truncate">
+                        {formatDistanceToNow(new Date(execution.startedAt), {
+                          addSuffix: true,
+                        })}
+                      </span>
                     </span>
                   </span>
                 </Button>

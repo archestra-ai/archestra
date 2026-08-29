@@ -2,6 +2,7 @@ import { archestraApiSdk } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
+import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useCreateProfile, useUpdateProfile } from "@/lib/agent.query";
 import { isReportedApiError } from "@/lib/utils";
@@ -100,5 +101,23 @@ describe("agent write mutations", () => {
     await expect(
       result.current.mutateAsync({ name: "New", agentType: "agent" } as never),
     ).resolves.toMatchObject({ id: "agent-1" });
+  });
+
+  it("shows a caller-specific message after an update succeeds", async () => {
+    sdk.updateAgent.mockResolvedValue({
+      data: { id: "agent-1", systemPrompt: "New prompt" },
+      error: undefined,
+    } as never);
+
+    const { result } = setup(() =>
+      useUpdateProfile({ successMessage: "System prompt saved" }),
+    );
+
+    await result.current.mutateAsync({
+      id: "agent-1",
+      data: { systemPrompt: "New prompt" },
+    });
+
+    expect(toast.success).toHaveBeenCalledWith("System prompt saved");
   });
 });

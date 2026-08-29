@@ -76,6 +76,7 @@ import {
   isAgentTypeAllowedOnPage,
 } from "./agent-page-config";
 import { BackLink } from "./agent-page-shell";
+import { AgentSystemPromptCard } from "./agent-system-prompt-card";
 import { useAgentAccess } from "./use-agent-access";
 
 /**
@@ -477,7 +478,17 @@ function AgentDetails({
             headingId="agent-overview-heading"
             facts={overviewFacts}
             configHref={canEdit ? agentActionHref(editAction) : undefined}
+            configLabel="Full configuration"
           />
+
+          {kind === "agent" && (
+            <AgentSystemPromptCard
+              key={agent.id}
+              agent={agent}
+              readOnly={!canEdit}
+              builtInAgentName={agent.builtInAgentConfig?.name}
+            />
+          )}
 
           {hasBackgroundExecution && (
             <AgentBackgroundExecutionCard

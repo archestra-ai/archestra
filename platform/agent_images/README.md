@@ -12,6 +12,7 @@ invoking user's Agent-scoped MCP gateway endpoint.
 | `agent-codex` | `archestra-codex` | OpenAI Responses |
 | `agent-hermes` | `archestra-hermes` | OpenAI Chat Completions |
 | `agent-openclaw` | `archestra-openclaw` | OpenAI Responses |
+| `agent-lobster-env` | `archestra-lobster-env` | OpenAI Responses |
 
 Build a target from `platform/`:
 
@@ -55,6 +56,7 @@ a per-user Background execution secret. GitHub SSH clone URLs are normalized
 to that authenticated HTTPS transport, so a catalog Agent does not also need a
 separate SSH key.
 
-All five targets are built by `build-agent-catalog-images.yml` for development
-deployments and releases. Keep native CLI versions exact and review their
-published package scripts before updating them.
+The five public catalog targets are built for development deployments and
+releases. The `agent-lobster-env` target is included only in development image
+publishing for the staging evaluation. Keep native CLI versions exact and
+review their published package scripts before updating them.

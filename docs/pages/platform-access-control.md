@@ -47,6 +47,7 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | Agents | `read`, `create`, `update`, `delete`, `team-admin`, `deploy-to-restricted` |
 | Skills | `read`, `create`, `update`, `delete`, `team-admin`, `deploy-to-restricted` |
 | Plugins | `read`, `create`, `update`, `delete` |
+| Bundles | `read`, `create`, `update`, `delete` |
 | Apps | `read`, `create`, `update`, `delete`, `team-admin`, `deploy-to-restricted` |
 | Code Sandbox | `execute` |
 | Agent Triggers | `read`, `create`, `update`, `delete` |
@@ -95,6 +96,7 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 |----------|--------|
 | Agents | `read`, `create`, `update`, `delete` |
 | Skills | `read`, `create`, `update`, `delete` |
+| Bundles | `read` |
 | Apps | `read`, `create`, `update`, `delete` |
 | Code Sandbox | `execute` |
 | Scheduled Tasks | `read`, `create`, `update`, `delete` |
@@ -173,6 +175,10 @@ The following table lists all available permissions that can be assigned to cust
 | `app:deploy-to-restricted` | Assign MCP Apps to restricted deployment environments |
 | `auditLog:read` | View audit log records of your own administrative actions |
 | `auditLog:admin` | View the organization-wide audit log of every member's administrative actions |
+| `bundle:read` | View and apply bundles |
+| `bundle:create` | Create bundles |
+| `bundle:update` | Modify bundle membership |
+| `bundle:delete` | Delete bundles |
 | `chat:read` | View and access chat conversations |
 | `chat:create` | Start new chat conversations |
 | `chat:update` | Edit chat messages and conversation settings |

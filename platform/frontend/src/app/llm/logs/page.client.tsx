@@ -16,6 +16,7 @@ import { AgentSelector } from "@/components/agent-selector";
 import { BilledCost } from "@/components/billed-cost";
 import { ClientSourceBadge } from "@/components/client-source-badge";
 import {
+  CollectionFilters,
   FilterBar,
   FilterSelect,
   filterControlClass,
@@ -491,101 +492,106 @@ function SessionsTable() {
   }
 
   return (
-    <div className="space-y-3">
-      <FilterBar leading onClearFilters={hasFilters ? clearFilters : undefined}>
-        {/* Anchor the "not a session ID" hint as a floating overlay under the
+    <div>
+      <CollectionFilters>
+        <FilterBar
+          leading
+          onClearFilters={hasFilters ? clearFilters : undefined}
+        >
+          {/* Anchor the "not a session ID" hint as a floating overlay under the
             input so toggling it never reflows the filter bar or the table. */}
-        <div className={filterSearchClass}>
-          <SearchInput
-            isLoading={isFetching}
-            objectNamePlural="logs"
-            searchFields={["session ID"]}
-            paramName="search"
-            className="relative w-full"
-          />
-          {searchIsNotSessionId && (
-            <output className="absolute left-0 top-full z-20 mt-1 w-full rounded-md border bg-popover px-2 py-1 text-xs text-muted-foreground shadow-md">
-              Enter a valid session UUID
-            </output>
-          )}
-        </div>
+          <div className={filterSearchClass}>
+            <SearchInput
+              isLoading={isFetching}
+              objectNamePlural="logs"
+              searchFields={["session ID"]}
+              paramName="search"
+              className="relative w-full"
+            />
+            {searchIsNotSessionId && (
+              <output className="absolute left-0 top-full z-20 mt-1 w-full rounded-md border bg-popover px-2 py-1 text-xs text-muted-foreground shadow-md">
+                Enter a valid session UUID
+              </output>
+            )}
+          </div>
 
-        {/* Two people's personal agents can both be called "My Agent", so the
+          {/* Two people's personal agents can both be called "My Agent", so the
             picker carries each one's scope and owner email rather than a bare
             name. */}
-        <AgentSelector
-          mode="single"
-          flat
-          compactTrigger
-          agents={agents ?? []}
-          value={profileFilter}
-          onValueChange={handleProfileFilterChange}
-          sentinelOption={{
-            value: "all",
-            label: "All Agents",
-          }}
-          // Only reached when the URL pins an id that no longer resolves to an
-          // agent (e.g. a bookmarked filter whose target was deleted); the
-          // sentinel label covers the ordinary unfiltered state.
-          placeholder="Filter by Agent"
-          searchPlaceholder="Search agents…"
-          emptyMessage="No agents found."
-          className={filterControlClass({ active: profileFilter !== "all" })}
-        />
-
-        {canSeeAllLogs ? (
-          // Without log:admin the server scopes every listing to the caller's
-          // own rows, so a user filter would be a one-entry dropdown.
-          <UserFilterSelect
-            value={userFilter}
-            onValueChange={handleUserFilterChange}
-            users={uniqueUsers}
+          <AgentSelector
+            mode="single"
+            flat
+            compactTrigger
+            agents={agents ?? []}
+            value={profileFilter}
+            onValueChange={handleProfileFilterChange}
+            sentinelOption={{
+              value: "all",
+              label: "All Agents",
+            }}
+            // Only reached when the URL pins an id that no longer resolves to an
+            // agent (e.g. a bookmarked filter whose target was deleted); the
+            // sentinel label covers the ordinary unfiltered state.
+            placeholder="Filter by Agent"
+            searchPlaceholder="Search agents…"
+            emptyMessage="No agents found."
+            className={filterControlClass({ active: profileFilter !== "all" })}
           />
-        ) : null}
 
-        <FilterSelect
-          value={sourceFilter}
-          onValueChange={handleSourceFilterChange}
-          placeholder="Filter by Source"
-          items={[
-            { value: "all", label: "All Sources" },
-            ...Object.entries(INTERACTION_SOURCE_DISPLAY).map(
-              ([value, { label }]) => ({
-                value,
-                label,
-                content: (
-                  <SourceFilterOption source={value as InteractionSource} />
-                ),
-                selectedContent: (
-                  <SourceFilterOption source={value as InteractionSource} />
-                ),
-              }),
-            ),
-          ]}
-        />
+          {canSeeAllLogs ? (
+            // Without log:admin the server scopes every listing to the caller's
+            // own rows, so a user filter would be a one-entry dropdown.
+            <UserFilterSelect
+              value={userFilter}
+              onValueChange={handleUserFilterChange}
+              users={uniqueUsers}
+            />
+          ) : null}
 
-        <ClientFilterSelect
-          value={clientFilter}
-          onValueChange={handleClientFilterChange}
-        />
+          <FilterSelect
+            value={sourceFilter}
+            onValueChange={handleSourceFilterChange}
+            placeholder="Filter by Source"
+            items={[
+              { value: "all", label: "All Sources" },
+              ...Object.entries(INTERACTION_SOURCE_DISPLAY).map(
+                ([value, { label }]) => ({
+                  value,
+                  label,
+                  content: (
+                    <SourceFilterOption source={value as InteractionSource} />
+                  ),
+                  selectedContent: (
+                    <SourceFilterOption source={value as InteractionSource} />
+                  ),
+                }),
+              ),
+            ]}
+          />
 
-        <DateTimeRangePicker
-          startDate={dateTimePicker.startDate}
-          endDate={dateTimePicker.endDate}
-          isDialogOpen={dateTimePicker.isDateDialogOpen}
-          tempStartDate={dateTimePicker.tempStartDate}
-          tempEndDate={dateTimePicker.tempEndDate}
-          displayText={dateTimePicker.getDateRangeDisplay()}
-          onDialogOpenChange={dateTimePicker.setIsDateDialogOpen}
-          onTempStartDateChange={dateTimePicker.setTempStartDate}
-          onTempEndDateChange={dateTimePicker.setTempEndDate}
-          onOpenDialog={dateTimePicker.openDateDialog}
-          onApply={dateTimePicker.handleApplyDateRange}
-          className={filterControlClass({
-            active: dateTimePicker.startDate !== undefined,
-          })}
-        />
-      </FilterBar>
+          <ClientFilterSelect
+            value={clientFilter}
+            onValueChange={handleClientFilterChange}
+          />
+
+          <DateTimeRangePicker
+            startDate={dateTimePicker.startDate}
+            endDate={dateTimePicker.endDate}
+            isDialogOpen={dateTimePicker.isDateDialogOpen}
+            tempStartDate={dateTimePicker.tempStartDate}
+            tempEndDate={dateTimePicker.tempEndDate}
+            displayText={dateTimePicker.getDateRangeDisplay()}
+            onDialogOpenChange={dateTimePicker.setIsDateDialogOpen}
+            onTempStartDateChange={dateTimePicker.setTempStartDate}
+            onTempEndDateChange={dateTimePicker.setTempEndDate}
+            onOpenDialog={dateTimePicker.openDateDialog}
+            onApply={dateTimePicker.handleApplyDateRange}
+            className={filterControlClass({
+              active: dateTimePicker.startDate !== undefined,
+            })}
+          />
+        </FilterBar>
+      </CollectionFilters>
 
       <DataTable
         columns={columns}

@@ -37,6 +37,32 @@ export type OverflowFilter = {
 };
 
 /**
+ * Owns the 12px gap between a collection's filters and the table or cards
+ * below. Agents and Skills are the reference: wrap the {@link FilterBar} plus
+ * any badges, chips, or hints, then render the collection as the next sibling.
+ *
+ * `[&+*]:!mt-0` cancels a parent `space-y-*` margin on the collection so the
+ * gap stays 12px even when the page still uses a vertical stack. Bordered
+ * tables read as 13px because of the table's top border.
+ */
+export function CollectionFilters({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      data-slot="collection-filters"
+      className={cn("mb-3 flex flex-col gap-2 [&+*]:!mt-0", className)}
+    >
+      {children}
+    </div>
+  );
+}
+
+/**
  * One compact row of table filters: search, then the filter controls, then any
  * trailing view/sort actions. Every filtered list page uses this so the bars
  * read the same everywhere.
@@ -65,13 +91,11 @@ export type OverflowFilter = {
  * @param leading - Pulls the first control strip below a page header into the
  * surrounding vertical rhythm. Nested bars leave this disabled.
  *
- * The bar carries no outer margin: the surrounding stack owns the gap between
- * it and the table. It used to default to `mb-4`, which made "let my parent
- * space this" and "have no spacing at all" the same string — callers wrote
- * `className="mb-0"` meaning the former and silently got the latter, because
- * tailwind's `space-y-*` spaces a stack via margin-bottom on every child but
- * the last, which `mb-0` then cancelled. Six pages had a collapsed gap this
- * way. Pass an explicit margin here only when there is no stack to own it.
+ * The bar carries no outer margin. Wrap it — and any badges or chips that
+ * belong with the filters — in {@link CollectionFilters}, which owns the 12px
+ * gap to the table or cards. Putting `mb-*` on the bar itself fights parent
+ * `space-y-*` stacks (those space via margin-top on the next sibling) and is
+ * how collection pages ended up with collapsed or doubled gaps.
  */
 export function FilterBar({
   children,
@@ -84,7 +108,7 @@ export function FilterBar({
   actions,
   leading = false,
 }: {
-  children: ReactNode;
+  children?: ReactNode;
   className?: string;
   contextualActions?: ReactNode;
   contextualActionsClassName?: string;

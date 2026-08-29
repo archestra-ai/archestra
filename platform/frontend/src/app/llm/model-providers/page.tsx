@@ -26,6 +26,7 @@ import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
+  CollectionFilters,
   FilterBar,
   filterControlClass,
   filterSearchClass,
@@ -714,38 +715,40 @@ export default function ApiKeysPage() {
           </p>
         </div>
 
-        <BulkActionsScope className="space-y-3">
-          <FilterBar>
-            <SearchInput
-              isLoading={isFetching}
-              objectNamePlural="credentials"
-              searchFields={["name"]}
-              paramName="search"
-              className={filterSearchClass}
-            />
-            <Select
-              value={providerFilter}
-              onValueChange={(value) =>
-                updateQueryParams({
-                  provider: value === "all" ? null : value,
-                })
-              }
-            >
-              <SelectTrigger
-                size="sm"
-                aria-label="Filter by provider"
-                className={filterControlClass({
-                  active: providerFilter !== "all",
-                })}
+        <BulkActionsScope>
+          <CollectionFilters>
+            <FilterBar>
+              <SearchInput
+                isLoading={isFetching}
+                objectNamePlural="credentials"
+                searchFields={["name"]}
+                paramName="search"
+                className={filterSearchClass}
+              />
+              <Select
+                value={providerFilter}
+                onValueChange={(value) =>
+                  updateQueryParams({
+                    provider: value === "all" ? null : value,
+                  })
+                }
               >
-                <SelectValue placeholder="All providers" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All providers</SelectItem>
-                <LlmProviderSelectItems options={providerOptions} />
-              </SelectContent>
-            </Select>
-          </FilterBar>
+                <SelectTrigger
+                  size="sm"
+                  aria-label="Filter by provider"
+                  className={filterControlClass({
+                    active: providerFilter !== "all",
+                  })}
+                >
+                  <SelectValue placeholder="All providers" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All providers</SelectItem>
+                  <LlmProviderSelectItems options={providerOptions} />
+                </SelectContent>
+              </Select>
+            </FilterBar>
+          </CollectionFilters>
 
           {byosEnabled &&
             apiKeys.some((key) => key.secretStorageType === "database") && (

@@ -23,6 +23,7 @@ import {
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EditVirtualKeyDialog } from "@/components/edit-virtual-key-dialog";
 import {
+  CollectionFilters,
   FilterBar,
   FilterSelect,
   filterSearchClass,
@@ -341,7 +342,7 @@ function VirtualKeysTable() {
   return (
     <TableCardView storageKey="archestra-llm-virtual-keys-view">
       <div>
-        <div className="mb-3">
+        <CollectionFilters>
           <FilterBar leading actions={<TableCardViewToggle />}>
             <SearchInput
               isLoading={query.isFetching}
@@ -388,7 +389,7 @@ function VirtualKeysTable() {
               }
             />
           </FilterBar>
-        </div>
+        </CollectionFilters>
 
         <BulkActions
           count={selectedKeys.length}

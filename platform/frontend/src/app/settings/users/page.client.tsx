@@ -20,6 +20,7 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AuthProviderIcon } from "@/components/auth-provider-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
+  CollectionFilters,
   FilterBar,
   filterControlClass,
   filterSearchClass,
@@ -607,19 +608,23 @@ function MembersTab({
   ];
 
   return (
-    <BulkActionsScope className="space-y-3">
-      <FilterBar
-        actions={<TabButtons activeTab={activeTab} onTabChange={onTabChange} />}
-      >
-        <SearchInput
-          isLoading={isFetching}
-          objectNamePlural="users"
-          searchFields={["name", "email"]}
-          paramName="name"
-          className={filterSearchClass}
-        />
-        <RoleFilterDropdown />
-      </FilterBar>
+    <BulkActionsScope>
+      <CollectionFilters>
+        <FilterBar
+          actions={
+            <TabButtons activeTab={activeTab} onTabChange={onTabChange} />
+          }
+        >
+          <SearchInput
+            isLoading={isFetching}
+            objectNamePlural="users"
+            searchFields={["name", "email"]}
+            paramName="name"
+            className={filterSearchClass}
+          />
+          <RoleFilterDropdown />
+        </FilterBar>
+      </CollectionFilters>
 
       <LoadingWrapper isPending={isPending} loadingFallback={<LoadingState />}>
         <BulkActions
@@ -999,12 +1004,14 @@ function InvitationsTab({
   ];
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-4">
-        <div className="ml-auto">
-          <TabButtons activeTab={activeTab} onTabChange={onTabChange} />
-        </div>
-      </div>
+    <div>
+      <CollectionFilters>
+        <FilterBar
+          actions={
+            <TabButtons activeTab={activeTab} onTabChange={onTabChange} />
+          }
+        />
+      </CollectionFilters>
 
       <LoadingWrapper isPending={isPending} loadingFallback={<LoadingState />}>
         <DataTable

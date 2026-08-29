@@ -42,7 +42,11 @@ import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
-import { FilterBar, filterSearchClass } from "@/components/filter-bar";
+import {
+  CollectionFilters,
+  FilterBar,
+  filterSearchClass,
+} from "@/components/filter-bar";
 import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
@@ -686,7 +690,7 @@ function McpGateways({
       <TableCardView storageKey="archestra-mcp-gateways-view">
         <div>
           <div>
-            <div className="mb-3 flex flex-col gap-2">
+            <CollectionFilters>
               <FilterBar
                 leading
                 actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
@@ -714,7 +718,7 @@ function McpGateways({
                 />
               )}
               <ActiveFilterBadges adminPermission={{ mcpGateway: ["admin"] }} />
-            </div>
+            </CollectionFilters>
 
             <div data-testid={E2eTestId.AgentsTable}>
               <BulkActions

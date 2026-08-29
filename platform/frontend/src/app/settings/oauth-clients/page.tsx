@@ -14,6 +14,7 @@ import { useSetSettingsAction } from "@/app/settings/layout";
 import { CreateOAuthClientDialog } from "@/components/create-oauth-client-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
+  CollectionFilters,
   FilterBar,
   FilterSelect,
   filterSearchClass,
@@ -349,7 +350,7 @@ function OauthClientsTable() {
 
   return (
     <div>
-      <div className="mb-3">
+      <CollectionFilters>
         <FilterBar>
           <SearchInput
             isLoading={llmQuery.isFetching || mcpQuery.isFetching}
@@ -391,7 +392,7 @@ function OauthClientsTable() {
             ]}
           />
         </FilterBar>
-      </div>
+      </CollectionFilters>
 
       <DataTable
         columns={columns}

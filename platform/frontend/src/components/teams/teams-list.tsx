@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { useSetSettingsAction } from "@/app/settings/layout";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
+  CollectionFilters,
   FilterBar,
   filterControlClass,
   filterSearchClass,
@@ -296,24 +297,26 @@ export function TeamsList() {
 
   return (
     <>
-      <BulkActionsScope className="space-y-3">
-        <FilterBar>
-          <SearchInput
-            isLoading={isLoading}
-            objectNamePlural="teams"
-            searchFields={["name"]}
-            className={filterSearchClass}
-          />
-          <LabelSelect
-            labelKeys={labelKeys}
-            LabelKeyRowComponent={TeamLabelKeyRow}
-            className={filterControlClass({ active: hasLabelFilters })}
-          />
-        </FilterBar>
+      <BulkActionsScope>
+        <CollectionFilters>
+          <FilterBar>
+            <SearchInput
+              isLoading={isLoading}
+              objectNamePlural="teams"
+              searchFields={["name"]}
+              className={filterSearchClass}
+            />
+            <LabelSelect
+              labelKeys={labelKeys}
+              LabelKeyRowComponent={TeamLabelKeyRow}
+              className={filterControlClass({ active: hasLabelFilters })}
+            />
+          </FilterBar>
 
-        {hasLabelFilters && (
-          <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />
-        )}
+          {hasLabelFilters && (
+            <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />
+          )}
+        </CollectionFilters>
 
         <BulkActions
           count={selectedTeams.length}

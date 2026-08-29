@@ -45,7 +45,11 @@ import { EditConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/edit
 import { BackLink } from "@/components/agent-pages/agent-page-shell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { type DetailFact, DetailFacts } from "@/components/detail-facts";
-import { FilterBar, filterControlClass } from "@/components/filter-bar";
+import {
+  CollectionFilters,
+  FilterBar,
+  filterControlClass,
+} from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
 import { LoadingState, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
@@ -740,84 +744,86 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
           />
         ) : (
           <div>
-            <FilterBar className="mb-3">
-              {isAutoSync && (
+            <CollectionFilters>
+              <FilterBar>
+                {isAutoSync && (
+                  <Select
+                    value={runTypeFilter}
+                    onValueChange={(value) => {
+                      setRunTypeFilter(value as typeof runTypeFilter);
+                      setPageIndex(0);
+                    }}
+                  >
+                    <SelectTrigger
+                      size="sm"
+                      className={filterControlClass({
+                        active: runTypeFilter !== "all",
+                      })}
+                      aria-label="Filter runs"
+                    >
+                      <SelectValue placeholder="All runs" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All runs</SelectItem>
+                      <SelectItem value="content">Documents</SelectItem>
+                      <SelectItem value="permission">Permissions</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
                 <Select
-                  value={runTypeFilter}
+                  value={runStatusFilter}
                   onValueChange={(value) => {
-                    setRunTypeFilter(value as typeof runTypeFilter);
+                    setRunStatusFilter(value as typeof runStatusFilter);
                     setPageIndex(0);
                   }}
                 >
                   <SelectTrigger
                     size="sm"
                     className={filterControlClass({
-                      active: runTypeFilter !== "all",
+                      active: runStatusFilter !== "all",
                     })}
-                    aria-label="Filter runs"
+                    aria-label="Filter by status"
                   >
-                    <SelectValue placeholder="All runs" />
+                    <SelectValue placeholder="All statuses" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All runs</SelectItem>
-                    <SelectItem value="content">Documents</SelectItem>
-                    <SelectItem value="permission">Permissions</SelectItem>
+                    <SelectItem value="all">All statuses</SelectItem>
+                    <SelectItem value="running">Running</SelectItem>
+                    <SelectItem value="success">Success</SelectItem>
+                    <SelectItem value="completed_with_errors">
+                      Completed with errors
+                    </SelectItem>
+                    <SelectItem value="no_documents">No documents</SelectItem>
+                    <SelectItem value="failed">Failed</SelectItem>
+                    <SelectItem value="partial">Partial</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                    <SelectItem value="superseded">Superseded</SelectItem>
                   </SelectContent>
                 </Select>
-              )}
-              <Select
-                value={runStatusFilter}
-                onValueChange={(value) => {
-                  setRunStatusFilter(value as typeof runStatusFilter);
-                  setPageIndex(0);
-                }}
-              >
-                <SelectTrigger
-                  size="sm"
-                  className={filterControlClass({
-                    active: runStatusFilter !== "all",
-                  })}
-                  aria-label="Filter by status"
+                <Select
+                  value={runResultFilter}
+                  onValueChange={(value) => {
+                    setRunResultFilter(value as typeof runResultFilter);
+                    setPageIndex(0);
+                  }}
                 >
-                  <SelectValue placeholder="All statuses" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All statuses</SelectItem>
-                  <SelectItem value="running">Running</SelectItem>
-                  <SelectItem value="success">Success</SelectItem>
-                  <SelectItem value="completed_with_errors">
-                    Completed with errors
-                  </SelectItem>
-                  <SelectItem value="no_documents">No documents</SelectItem>
-                  <SelectItem value="failed">Failed</SelectItem>
-                  <SelectItem value="partial">Partial</SelectItem>
-                  <SelectItem value="cancelled">Cancelled</SelectItem>
-                  <SelectItem value="superseded">Superseded</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select
-                value={runResultFilter}
-                onValueChange={(value) => {
-                  setRunResultFilter(value as typeof runResultFilter);
-                  setPageIndex(0);
-                }}
-              >
-                <SelectTrigger
-                  size="sm"
-                  className={filterControlClass({
-                    active: runResultFilter !== "all",
-                  })}
-                  aria-label="Filter by result"
-                >
-                  <SelectValue placeholder="All results" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All results</SelectItem>
-                  <SelectItem value="changes">With changes</SelectItem>
-                  <SelectItem value="no-changes">No changes</SelectItem>
-                </SelectContent>
-              </Select>
-            </FilterBar>
+                  <SelectTrigger
+                    size="sm"
+                    className={filterControlClass({
+                      active: runResultFilter !== "all",
+                    })}
+                    aria-label="Filter by result"
+                  >
+                    <SelectValue placeholder="All results" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All results</SelectItem>
+                    <SelectItem value="changes">With changes</SelectItem>
+                    <SelectItem value="no-changes">No changes</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FilterBar>
+            </CollectionFilters>
             <LoadingWrapper
               isPending={
                 (isRunsPending || isRunsFetching) && runRows.length === 0

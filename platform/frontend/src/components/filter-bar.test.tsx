@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import {
+  CollectionFilters,
   FilterBar,
   FilterBarContextualActions,
   FilterSelect,
@@ -11,6 +12,21 @@ const ITEMS = [
   { value: "all", label: "All actions" },
   { value: "create", label: "Create" },
 ];
+
+describe("CollectionFilters", () => {
+  it("owns the 12px gap to the next sibling even inside a space-y stack", () => {
+    const { container } = render(
+      <div className="space-y-6">
+        <CollectionFilters>filters</CollectionFilters>
+        <div>table</div>
+      </div>,
+    );
+
+    const slot = container.querySelector('[data-slot="collection-filters"]');
+    expect(slot?.className).toContain("mb-3");
+    expect(slot?.className).toContain("[&+*]:!mt-0");
+  });
+});
 
 describe("FilterBar", () => {
   it("renders a Clear control only while filters are applied", async () => {

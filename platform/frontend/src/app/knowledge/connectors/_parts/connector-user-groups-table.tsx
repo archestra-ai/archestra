@@ -7,6 +7,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
+  CollectionFilters,
   FilterBar,
   filterControlClass,
   filterSearchClass,
@@ -211,51 +212,55 @@ export function ConnectorUserGroupsTable({
   return (
     <div>
       {groups.length > 0 && (
-        <FilterBar className="mb-3">
-          <SearchInput
-            value={search}
-            syncQueryParams={false}
-            placeholder={`Search by ${noun.singular} or member name`}
-            className={filterSearchClass}
-            onSearchChange={setSearch}
-          />
-          <Select
-            value={filter}
-            onValueChange={(value) => setFilter(value as GroupFilter)}
-          >
-            <SelectTrigger
-              size="sm"
-              className={filterControlClass({ active: filter !== "all" })}
-              aria-label={`Filter ${noun.plural}`}
+        <CollectionFilters>
+          <FilterBar>
+            <SearchInput
+              value={search}
+              syncQueryParams={false}
+              placeholder={`Search by ${noun.singular} or member name`}
+              className={filterSearchClass}
+              onSearchChange={setSearch}
+            />
+            <Select
+              value={filter}
+              onValueChange={(value) => setFilter(value as GroupFilter)}
             >
-              <SelectValue placeholder={`All ${noun.plural}`} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{`All ${noun.plural}`}</SelectItem>
-              <SelectItem value="fully-assigned">Fully assigned</SelectItem>
-              <SelectItem value="not-fully-assigned">
-                Not fully assigned
-              </SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={memberFilter} onValueChange={setMemberFilter}>
-            <SelectTrigger
-              size="sm"
-              className={filterControlClass({ active: memberFilter !== "all" })}
-              aria-label="Filter by member"
-            >
-              <SelectValue placeholder="All members" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All members</SelectItem>
-              {memberOptions.map((member) => (
-                <SelectItem key={member.value} value={member.value}>
-                  {member.label}
+              <SelectTrigger
+                size="sm"
+                className={filterControlClass({ active: filter !== "all" })}
+                aria-label={`Filter ${noun.plural}`}
+              >
+                <SelectValue placeholder={`All ${noun.plural}`} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{`All ${noun.plural}`}</SelectItem>
+                <SelectItem value="fully-assigned">Fully assigned</SelectItem>
+                <SelectItem value="not-fully-assigned">
+                  Not fully assigned
                 </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </FilterBar>
+              </SelectContent>
+            </Select>
+            <Select value={memberFilter} onValueChange={setMemberFilter}>
+              <SelectTrigger
+                size="sm"
+                className={filterControlClass({
+                  active: memberFilter !== "all",
+                })}
+                aria-label="Filter by member"
+              >
+                <SelectValue placeholder="All members" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All members</SelectItem>
+                {memberOptions.map((member) => (
+                  <SelectItem key={member.value} value={member.value}>
+                    {member.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FilterBar>
+        </CollectionFilters>
       )}
 
       {userGroups?.truncated && (

@@ -82,6 +82,7 @@ describe("AuthPageWithInvitationCheck", () => {
       attemptCount: 0,
       estimatedTotalAttempts: 7,
       elapsedMs: 0,
+      nextRetryInMs: null,
       retry: mockRetry,
     });
   });
@@ -352,7 +353,7 @@ describe("AuthPageWithInvitationCheck", () => {
   });
 
   describe("backend connectivity", () => {
-    it("should show connecting message instead of login form when backend is connecting", () => {
+    it("should show when the next automatic retry will run", () => {
       vi.mocked(useSearchParams).mockReturnValue({
         get: vi.fn().mockReturnValue(null),
       } as unknown as ReturnType<typeof useSearchParams>);
@@ -365,16 +366,20 @@ describe("AuthPageWithInvitationCheck", () => {
         attemptCount: 0,
         estimatedTotalAttempts: 7,
         elapsedMs: 0,
+        nextRetryInMs: 8000,
         retry: mockRetry,
       });
 
       render(<AuthPageWithInvitationCheck path="sign-in" />);
 
-      expect(screen.getByText("Connecting...")).toBeInTheDocument();
+      expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
+      expect(screen.getByText("Connecting to Sparky")).toBeInTheDocument();
+      expect(screen.getByText("Retrying automatically")).toBeInTheDocument();
+      expect(screen.getByText("Next retry in 8s")).toBeInTheDocument();
       expect(screen.queryByTestId("auth-view")).not.toBeInTheDocument();
     });
 
-    it("should show retry information when connection attempts have failed", () => {
+    it("should keep retry counters out of the connecting interface", () => {
       vi.mocked(useSearchParams).mockReturnValue({
         get: vi.fn().mockReturnValue(null),
       } as unknown as ReturnType<typeof useSearchParams>);
@@ -387,14 +392,14 @@ describe("AuthPageWithInvitationCheck", () => {
         attemptCount: 3,
         estimatedTotalAttempts: 7,
         elapsedMs: 5000,
+        nextRetryInMs: 8000,
         retry: mockRetry,
       });
 
       render(<AuthPageWithInvitationCheck path="sign-in" />);
 
-      expect(
-        screen.getByText(/Still trying to connect, attempt 3 \/ 7/),
-      ).toBeInTheDocument();
+      expect(screen.getByText("Retrying automatically")).toBeInTheDocument();
+      expect(screen.queryByText(/Attempt \d/)).not.toBeInTheDocument();
       expect(screen.queryByTestId("auth-view")).not.toBeInTheDocument();
     });
 
@@ -411,13 +416,14 @@ describe("AuthPageWithInvitationCheck", () => {
         attemptCount: 5,
         estimatedTotalAttempts: 7,
         elapsedMs: 60000,
+        nextRetryInMs: null,
         retry: mockRetry,
       });
 
       render(<AuthPageWithInvitationCheck path="sign-in" />);
 
-      expect(screen.getByText("Unable to Connect")).toBeInTheDocument();
-      expect(screen.getByText("Server Unreachable")).toBeInTheDocument();
+      expect(screen.getByRole("alert")).toBeInTheDocument();
+      expect(screen.getByText("Backend unavailable")).toBeInTheDocument();
       expect(screen.queryByTestId("auth-view")).not.toBeInTheDocument();
     });
 
@@ -434,6 +440,7 @@ describe("AuthPageWithInvitationCheck", () => {
         attemptCount: 5,
         estimatedTotalAttempts: 7,
         elapsedMs: 60000,
+        nextRetryInMs: null,
         retry: mockRetry,
       });
 
@@ -458,6 +465,7 @@ describe("AuthPageWithInvitationCheck", () => {
         attemptCount: 0,
         estimatedTotalAttempts: 7,
         elapsedMs: 0,
+        nextRetryInMs: null,
         retry: mockRetry,
       });
 

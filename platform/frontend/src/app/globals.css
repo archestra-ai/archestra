@@ -120,6 +120,7 @@
      Set on both html and body — iOS Safari only honors it reliably when the
      root carries it too. */
   html {
+    @apply bg-background;
     overscroll-behavior-y: none;
   }
   body {

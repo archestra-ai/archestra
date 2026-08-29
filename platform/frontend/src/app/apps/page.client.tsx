@@ -182,7 +182,7 @@ export default function AppsPage() {
       }
     >
       <TableCardView storageKey="archestra-apps-view">
-        <FilterBar className="mb-3" actions={<TableCardViewToggle />}>
+        <FilterBar leading className="mb-3" actions={<TableCardViewToggle />}>
           <SearchInput
             isLoading={isFetching}
             paramName="search"

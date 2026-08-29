@@ -56,6 +56,10 @@ export interface UseBackendConnectivityResult {
    */
   elapsedMs: number;
   /**
+   * Time until the next automatic retry, or null while a check is in progress
+   */
+  nextRetryInMs: number | null;
+  /**
    * Manually retry the connection
    */
   retry: () => void;
@@ -111,6 +115,7 @@ export function useBackendConnectivity(
   const [status, setStatus] = useState<BackendConnectionStatus>("initializing");
   const [attemptCount, setAttemptCount] = useState(0);
   const [elapsedMs, setElapsedMs] = useState(0);
+  const [nextRetryAtMs, setNextRetryAtMs] = useState<number | null>(null);
 
   const estimatedTotalAttempts = calculateEstimatedTotalAttempts(
     timeoutMs,
@@ -157,6 +162,7 @@ export function useBackendConnectivity(
 
       if (isHealthy) {
         clearTimers();
+        setNextRetryAtMs(null);
         setStatus("connected");
         return;
       }
@@ -173,6 +179,7 @@ export function useBackendConnectivity(
 
       if (elapsed >= timeoutMs) {
         clearTimers();
+        setNextRetryAtMs(null);
         setStatus("unreachable");
         return;
       }
@@ -184,9 +191,11 @@ export function useBackendConnectivity(
       );
 
       setAttemptCount(currentAttempt + 1);
+      setNextRetryAtMs(now + nextDelay);
 
       // Schedule next attempt
       timeoutRef.current = setTimeout(() => {
+        setNextRetryAtMs(null);
         attemptConnection(currentAttempt + 1);
       }, nextDelay);
     },
@@ -198,6 +207,7 @@ export function useBackendConnectivity(
     setStatus("checking");
     setAttemptCount(0);
     setElapsedMs(0);
+    setNextRetryAtMs(null);
     clearTimers();
 
     // Record start time
@@ -237,6 +247,8 @@ export function useBackendConnectivity(
     attemptCount,
     estimatedTotalAttempts,
     elapsedMs,
+    nextRetryInMs:
+      nextRetryAtMs === null ? null : Math.max(0, nextRetryAtMs - Date.now()),
     retry,
   };
 }

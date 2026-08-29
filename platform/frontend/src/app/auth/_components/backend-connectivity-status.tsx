@@ -1,22 +1,16 @@
 "use client";
 
 import { GITHUB_REPO_URL } from "@archestra/shared";
-import {
-  AlertCircle,
-  CheckCircle2,
-  ExternalLink,
-  RefreshCcw,
-  ServerOff,
-} from "lucide-react";
+import { ExternalLink, LoaderCircle, RefreshCcw } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { LoadingState } from "@/components/loading";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AppLogo } from "@/components/app-logo";
 import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -24,24 +18,13 @@ import { useBackendConnectivity } from "@/lib/config/backend-connectivity";
 import { useAppName } from "@/lib/hooks/use-app-name";
 
 interface BackendConnectivityStatusProps {
-  /**
-   * Children to render when the backend is connected
-   */
   children: React.ReactNode;
 }
 
-/**
- * Wrapper component that shows connection status while trying to reach the backend.
- * - Shows a "Connecting..." message while attempting to connect
- * - Shows children only when connected
- * - Shows an error message after 1 minute of failed attempts
- * - Shows "Connected" message briefly after recovering from connection issues
- * - Redirects authenticated users to their intended destination
- */
 export function BackendConnectivityStatus({
   children,
 }: BackendConnectivityStatusProps) {
-  const { status, attemptCount, estimatedTotalAttempts, retry } =
+  const { status, attemptCount, nextRetryInMs, retry } =
     useBackendConnectivity();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirectTo");
@@ -49,190 +32,182 @@ export function BackendConnectivityStatus({
   const hadConnectionIssuesRef = useRef(false);
   const hasInitiatedRefreshRef = useRef(false);
 
-  // Track if we had connection issues (were in "connecting" state with attempts)
   useEffect(() => {
     if (status === "connecting" && attemptCount > 0) {
       hadConnectionIssuesRef.current = true;
     }
   }, [status, attemptCount]);
 
-  // When connected after having connection issues, show the connected message
-  // and refresh the page if there's a redirectTo param
   useEffect(() => {
-    if (status === "connected" && hadConnectionIssuesRef.current) {
-      setShowConnectedMessage(true);
-
-      // If there's a redirectTo param, refresh the page after showing the message
-      // The normal auth flow will handle the redirect
-      if (redirectTo && !hasInitiatedRefreshRef.current) {
-        hasInitiatedRefreshRef.current = true;
-        setTimeout(() => {
-          window.location.reload();
-        }, 1000);
-      } else if (!redirectTo) {
-        // No redirectTo, just show connected message briefly then show children
-        const timer = setTimeout(() => {
-          setShowConnectedMessage(false);
-          hadConnectionIssuesRef.current = false;
-        }, 1500);
-        return () => clearTimeout(timer);
-      }
+    if (status !== "connected" || !hadConnectionIssuesRef.current) {
+      return;
     }
+
+    setShowConnectedMessage(true);
+
+    if (redirectTo && !hasInitiatedRefreshRef.current) {
+      hasInitiatedRefreshRef.current = true;
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setShowConnectedMessage(false);
+      hadConnectionIssuesRef.current = false;
+    }, 1500);
+
+    return () => clearTimeout(timer);
   }, [status, redirectTo]);
 
-  // During "initializing" or "checking" (first health check in progress),
-  // don't show any UI to avoid flashing the connecting dialog when backend is up
   if (status === "initializing" || status === "checking") {
     return null;
   }
 
-  // Show "Connected" message briefly after recovering from connection issues
   if (status === "connected" && showConnectedMessage) {
-    return <ConnectedSuccessView hasRedirectTo={!!redirectTo} />;
+    return (
+      <ConnectivityView
+        title="Ready"
+        description={
+          redirectTo ? "Reloading the page." : "Continuing to sign in."
+        }
+      />
+    );
   }
 
-  // When connected, render children (the login form)
   if (status === "connected") {
     return <>{children}</>;
   }
 
-  // Show unified connection status view
   return (
     <ConnectionStatusView
       status={status}
-      attemptCount={attemptCount}
-      estimatedTotalAttempts={estimatedTotalAttempts}
-      retry={retry}
+      nextRetryInMs={nextRetryInMs}
+      onRetry={retry}
     />
-  );
-}
-
-function ConnectedSuccessView({ hasRedirectTo }: { hasRedirectTo: boolean }) {
-  return (
-    <main className="h-full flex items-center justify-center p-4">
-      <Card className="max-w-md w-full">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30">
-            <CheckCircle2 className="h-6 w-6 text-green-600 dark:text-green-400" />
-          </div>
-          <CardTitle className="text-green-600 dark:text-green-400">
-            Connected
-          </CardTitle>
-          <CardDescription>
-            {hasRedirectTo
-              ? "Refreshing..."
-              : "Successfully connected to the backend server."}
-          </CardDescription>
-        </CardHeader>
-      </Card>
-    </main>
   );
 }
 
 function ConnectionStatusView({
   status,
-  attemptCount,
-  estimatedTotalAttempts,
-  retry,
+  nextRetryInMs,
+  onRetry,
 }: {
   status: "connecting" | "unreachable";
-  attemptCount: number;
-  estimatedTotalAttempts: number;
-  retry: () => void;
+  nextRetryInMs: number | null;
+  onRetry: () => void;
 }) {
   const appName = useAppName();
   const isUnreachable = status === "unreachable";
 
+  if (!isUnreachable) {
+    return (
+      <ConnectivityView
+        title={`Connecting to ${appName}`}
+        description="The backend is not responding yet. Sign-in will appear when it is ready."
+        busy
+      >
+        <ConnectionActivity nextRetryInMs={nextRetryInMs} />
+      </ConnectivityView>
+    );
+  }
+
+  return (
+    <ConnectivityView
+      title="Backend unavailable"
+      description={`The ${appName} backend did not respond. Check that it is running, then try again.`}
+      urgent
+      actions={
+        <>
+          <Button type="button" onClick={onRetry}>
+            <RefreshCcw className="size-4" />
+            <span>Try again</span>
+          </Button>
+          <Button variant="ghost" asChild>
+            <a
+              href={`${GITHUB_REPO_URL}/issues`}
+              target="_blank"
+              rel="noreferrer noopener"
+            >
+              <span>Report issue</span>
+              <ExternalLink className="size-3.5" />
+            </a>
+          </Button>
+        </>
+      }
+    />
+  );
+}
+
+function ConnectivityView({
+  title,
+  description,
+  actions,
+  children,
+  busy = false,
+  urgent = false,
+}: {
+  title: string;
+  description: string;
+  actions?: React.ReactNode;
+  children?: React.ReactNode;
+  busy?: boolean;
+  urgent?: boolean;
+}) {
   return (
     <main className="h-full flex items-center justify-center p-4">
-      <Card className="max-w-md w-full">
-        <CardHeader className="text-center">
-          <div
-            className={`mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full ${
-              isUnreachable ? "bg-destructive/10" : "bg-muted"
-            }`}
-          >
-            {isUnreachable ? (
-              <ServerOff className="h-6 w-6 text-destructive" />
-            ) : (
-              <LoadingState
-                className="min-h-0 p-0"
-                label="Connecting…"
-                showLabel={false}
-                variant="compact"
-              />
-            )}
-          </div>
-          <CardTitle>
-            {isUnreachable ? "Unable to Connect" : "Connecting..."}
-          </CardTitle>
-          <CardDescription>
-            {isUnreachable
-              ? "Unable to establish a connection to the backend server after multiple attempts."
-              : `Establishing connection to the ${appName} backend server.`}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {isUnreachable ? (
-            <Alert className="border-destructive/50 bg-destructive/10">
-              <AlertCircle className="h-4 w-4 text-destructive" />
-              <AlertTitle className="text-destructive">
-                Server Unreachable
-              </AlertTitle>
-              <AlertDescription className="text-destructive/90">
-                <p className="text-sm mb-3">
-                  The backend server is not responding. Possible causes:
-                </p>
-                <ul className="list-disc list-inside space-y-1 text-sm">
-                  <li>Server is still starting up</li>
-                  <li>Network connectivity issue</li>
-                  <li>Server configuration problem</li>
-                </ul>
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <>
-              {attemptCount === 0 && (
-                <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                  <span>Attempting to connect...</span>
-                </div>
-              )}
-              {attemptCount > 0 && (
-                <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                  Still trying to connect, attempt {attemptCount} /{" "}
-                  {estimatedTotalAttempts}...
-                </div>
-              )}
-            </>
-          )}
+      <div className="space-y-4 w-full max-w-md">
+        <AppLogo />
 
-          <div className="flex justify-center gap-2">
-            {isUnreachable && (
-              <Button
-                onClick={retry}
-                variant="outline"
-                size="sm"
-                className="gap-2"
-              >
-                <RefreshCcw className="h-4 w-4" />
-                Try Again
-              </Button>
-            )}
-            {(attemptCount > 0 || isUnreachable) && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  window.open(`${GITHUB_REPO_URL}/issues`, "_blank")
-                }
-              >
-                Report issue on GitHub
-                <ExternalLink className="ml-1 h-3 w-3" />
-              </Button>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+        <Card
+          className={urgent ? "border-destructive/40" : undefined}
+          role={urgent ? "alert" : "status"}
+          aria-busy={busy || undefined}
+        >
+          <CardHeader>
+            <CardTitle className="text-xl">
+              <h1>{title}</h1>
+            </CardTitle>
+            <CardDescription>{description}</CardDescription>
+          </CardHeader>
+
+          {children}
+
+          {actions && <CardFooter className="gap-2">{actions}</CardFooter>}
+        </Card>
+      </div>
     </main>
+  );
+}
+
+function ConnectionActivity({
+  nextRetryInMs,
+}: {
+  nextRetryInMs: number | null;
+}) {
+  const retryStatus =
+    nextRetryInMs === null
+      ? "Checking now"
+      : `Next retry in ${Math.max(1, Math.ceil(nextRetryInMs / 1000))}s`;
+
+  return (
+    <CardContent>
+      <div className="flex items-center gap-3 rounded-md border bg-muted/30 p-3">
+        <LoaderCircle
+          className="size-4 shrink-0 animate-spin text-primary motion-reduce:animate-none"
+          aria-hidden="true"
+        />
+        <p className="min-w-0 flex-1 text-sm font-medium">
+          Retrying automatically
+        </p>
+        <p
+          className="shrink-0 text-xs tabular-nums text-muted-foreground"
+          aria-live="polite"
+        >
+          <span>{retryStatus}</span>
+        </p>
+      </div>
+    </CardContent>
   );
 }

@@ -9,6 +9,9 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/components/filter-bar", () => ({
+  CollectionFilters: ({ children }: { children: ReactNode }) => (
+    <div>{children}</div>
+  ),
   FilterBar: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   FilterSelect: () => <button type="button">All Sources</button>,
   filterSearchClass: "",

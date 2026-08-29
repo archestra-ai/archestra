@@ -359,6 +359,58 @@ jobs:
           retention-days: 1
           compression-level: 0 # Already gzipped
 
+  # Scan the exact images exercised by E2E instead of rebuilding the same
+  # Docker contexts on slower standard runners. The required check names stay
+  # unchanged, while the scans leave the queue critical path: they begin once
+  # the images are pushed and run alongside the E2E environments.
+  merge-queue-image-scanning:
+    name: Docker Image Scanning (${{ matrix.name }})
+    needs: [platform-e2e-build]
+    if: ${{ github.event_name == 'merge_group' && needs.platform-e2e-build.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read # Required for the local auth and scan actions.
+      id-token: write # Required for Workload Identity Federation when pulling images.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Platform
+            image-repository: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform
+            tag-suffix: -e2e
+          - name: MCP Server Base
+            image-repository: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base
+            tag-suffix: ""
+    steps:
+      - name: Reclaim disk space (background)
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Authenticate to Google Artifact Registry
+        uses: ./.github/actions/auth-to-gar
+        with:
+          service_account: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
+      - name: Pull E2E image
+        env:
+          SCAN_IMAGE: ${{ format('{0}:{1}{2}', matrix.image-repository, github.sha, matrix.tag-suffix) }}
+        run: docker pull "${SCAN_IMAGE}"
+
+      - name: Scan image for CVEs
+        uses: ./.github/actions/scan-docker-image
+        with:
+          image: ${{ format('{0}:{1}{2}', matrix.image-repository, github.sha, matrix.tag-suffix) }}
+          dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
+          dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
+          exit-code: "true"
+
   # Fast-cancel the run when an image build fails. The K8s job deliberately has
   # no `needs: [platform-e2e-build]` so it can set up in parallel with the
   # build, and then polls the registry for the pushed image up to

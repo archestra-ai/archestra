@@ -11,6 +11,8 @@ const IS_CI = !!process.env.CI;
 // isn't already exported into the Playwright process.
 const INT_TESTS_PORT = readIntTestsPort() ?? "3010";
 const INT_TESTS_URL = `http://127.0.0.1:${INT_TESTS_PORT}`;
+const CI_SHARD = process.env.ARCHESTRA_FRONTEND_INT_TESTS_SHARD;
+const CI_SHARD_SUFFIX = CI_SHARD ? `-shard-${CI_SHARD}` : "";
 
 function readIntTestsPort(): string | undefined {
   if (process.env.ARCHESTRA_FRONTEND_INT_TESTS_PORT) {
@@ -33,10 +35,10 @@ export default defineConfig({
   // onto the workspace's shared sources directly, so specs can import shared
   // subpaths without going through the package's published exports map).
   tsconfig: "./tests-integration/tsconfig.json",
-  // Tests share a single Next.js dev server with a process-global MSW handler
-  // list. Running them in parallel would let one test's `mswControl.use(...)`
-  // override leak into another test's request. Serialize until the suite is
-  // sharded across multiple dev-server workers.
+  // Tests within one shard share a Next.js server with a process-global MSW
+  // handler list and must remain serial. CI runs two Playwright processes,
+  // each with its own port, Next dist directory, and output directory, so the
+  // shards can overlap without leaking handler overrides across servers.
   fullyParallel: false,
   workers: 1,
   forbidOnly: IS_CI,
@@ -47,8 +49,18 @@ export default defineConfig({
   // near-instant locally), so the first test to touch a route would flake.
   timeout: 90_000,
   reporter: IS_CI
-    ? [["github"], ["html", { open: "never" }]]
+    ? [
+        ["github"],
+        [
+          "html",
+          {
+            open: "never",
+            outputFolder: `playwright-report${CI_SHARD_SUFFIX}`,
+          },
+        ],
+      ]
     : [["list"], ["html", { open: "never" }]],
+  outputDir: `test-results${CI_SHARD_SUFFIX}`,
   use: {
     baseURL: INT_TESTS_URL,
     trace: "on-first-retry",
@@ -69,7 +81,7 @@ export default defineConfig({
       // (dev/Tiltfile.dev). Without it, a self-started server would share
       // `.next` with the main `pnpm dev` server — since Next 16.3 that fails
       // outright on the `.next/dev/lock` single-instance guard.
-      NEXT_DIST_DIR: ".next-pw",
+      NEXT_DIST_DIR: `.next-pw${CI_SHARD_SUFFIX}`,
       NEXT_PUBLIC_API_MOCKING: "enabled",
       // Server components resolve their SDK base URL from this variable, so
       // pointing it at the mock backend route turns every SSR call into an

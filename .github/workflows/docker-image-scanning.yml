@@ -1,7 +1,8 @@
 name: Docker Image Scanning
 
-# Runs automatically in merge queue and on demand when the "run-docker-scan"
-# label is added to a PR.
+# Platform and MCP scans run here on demand when the "run-docker-scan" label
+# is added to a PR. Merge-queue scans reuse the images built by
+# platform-e2e-tests.yml; the p4 scan remains here because E2E does not build it.
 # Remove and re-add the label to re-trigger after new commits.
 on:
   pull_request:
@@ -19,10 +20,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Required-check placeholders for ordinary PR updates. The real scans remain
-  # merge-queue-only unless a trusted PR is explicitly labeled. Fork PRs always
-  # get the placeholder — the real scan needs trusted context, and without this
-  # a labeled fork PR would run neither job, leaving the required check pending.
+  # Required-check placeholders for ordinary PR updates. Trusted PRs can run
+  # the real scans explicitly. Fork PRs always get the placeholder — the real
+  # scan needs trusted context, and without this a labeled fork PR would run
+  # neither job, leaving the required check pending.
   docker-image-scanning-placeholder:
     name: Docker Image Scanning (${{ matrix.name }})
     if: ${{ github.event_name == 'pull_request' && (github.event.action != 'labeled' || github.event.label.name != 'run-docker-scan' || github.event.pull_request.head.repo.fork == true) }}
@@ -37,7 +38,10 @@ jobs:
 
   docker-image-scanning:
     name: Docker Image Scanning (${{ matrix.name }})
-    if: ${{ github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.label.name == 'run-docker-scan' && github.event.pull_request.head.repo.fork != true) }}
+    # Platform and MCP merge-queue scans run after their E2E image builds in
+    # platform-e2e-tests.yml. Keeping this matrix PR-only avoids duplicate
+    # same-named checks that could mask a failed required scan.
+    if: ${{ github.event_name == 'pull_request' && github.event.label.name == 'run-docker-scan' && github.event.pull_request.head.repo.fork != true }}
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read # Required to checkout the repository and read Docker build inputs.
@@ -80,12 +84,6 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
-      - name: Setup environment
-        if: ${{ matrix.use-build-action }}
-        uses: ./.github/actions/setup-env
-        with:
-          working-directory: ./platform
-
       - name: Build Platform image
         if: ${{ matrix.use-build-action }}
         uses: ./.github/actions/build-docker-image
@@ -118,3 +116,43 @@ jobs:
           dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
           dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
           exit-code: ${{ matrix.scan-exit-code }}
+
+  # E2E has no p4 image to reuse, so this small scan still builds locally on
+  # merge_group. Platform and MCP are deliberately absent from this job: their
+  # required checks are emitted by platform-e2e-tests.yml after the exact
+  # tested images are available.
+  merge-queue-p4-image-scanning:
+    name: Docker Image Scanning (p4 Shim)
+    if: ${{ github.event_name == 'merge_group' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Reclaim disk space (background)
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Build p4 Shim image
+        uses: ./.github/actions/build-docker-image
+        with:
+          context: ./platform/p4_shim_docker_image
+          dockerfile: ./platform/p4_shim_docker_image/Dockerfile
+          platforms: linux/amd64
+          push: "false"
+          load: "true"
+          tags: p4-shim:${{ github.sha }}
+          cache-from: type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/p4-shim:buildcache-amd64
+
+      - name: Scan image for CVEs
+        uses: ./.github/actions/scan-docker-image
+        with:
+          image: p4-shim:${{ github.sha }}
+          dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
+          dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
+          exit-code: "true"

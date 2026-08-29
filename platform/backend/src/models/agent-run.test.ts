@@ -22,12 +22,17 @@ describe("AgentRunModel completion notifications", () => {
       organizationId: organization.id,
       taskId: task.id,
       agentId: agent.id,
+      actorKind: "user",
+      actorId: user.id,
       actorUserId: user.id,
       deploymentName: `runner-${task.id}`,
       backend: "kubernetes",
       runtimeScope: "archestra-dev",
-      chatOpsBindingId: crypto.randomUUID(),
-      chatOpsThreadId: "thread-1",
+      completionTarget: {
+        type: "chatops",
+        bindingId: crypto.randomUUID(),
+        threadId: "thread-1",
+      },
     });
     await A2ATaskModel.transitionStateWithEvent({
       id: task.id,
@@ -44,7 +49,7 @@ describe("AgentRunModel completion notifications", () => {
     });
     await AgentRunModel.close({ id: run.id });
 
-    expect(await AgentRunModel.listPendingChatOpsNotifications()).toEqual([
+    expect(await AgentRunModel.listPendingCompletionNotifications()).toEqual([
       expect.objectContaining({ id: run.id }),
     ]);
 
@@ -67,6 +72,8 @@ describe("AgentRunModel completion notifications", () => {
     await AgentRunModel.markCompletionNotified(run.id);
     await AgentRunModel.releaseCompletionNotification(run.id);
     expect(await AgentRunModel.claimCompletionNotification(task.id)).toBeNull();
-    expect(await AgentRunModel.listPendingChatOpsNotifications()).toEqual([]);
+    expect(await AgentRunModel.listPendingCompletionNotifications()).toEqual(
+      [],
+    );
   });
 });

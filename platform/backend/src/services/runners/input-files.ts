@@ -11,7 +11,7 @@ import { RUNNER_ATTACHMENTS_DIR } from "./runtime-contract";
 export async function persistAgentExecutionInputs(params: {
   taskId: string;
   organizationId: string;
-  uploadedByUserId: string;
+  uploadedByUserId: string | null;
   attachments: A2AAttachment[];
 }): Promise<AgentExecutionInput[]> {
   const usedNames = new Set<string>();

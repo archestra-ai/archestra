@@ -1,20 +1,35 @@
 import type { AddressInfo } from "node:net";
 import { vi } from "vitest";
 import type { A2AExecuteParams } from "@/agents/a2a-executor";
+import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 
-const { mockExecuteA2AMessage, mockValidateMCPGatewayToken } = vi.hoisted(
-  () => ({
-    mockExecuteA2AMessage: vi.fn(),
-    mockValidateMCPGatewayToken: vi.fn(),
-  }),
-);
+const {
+  mockExecuteA2AMessage,
+  mockRunTaskInBackground,
+  mockValidateMCPGatewayToken,
+} = vi.hoisted(() => ({
+  mockExecuteA2AMessage: vi.fn(),
+  mockRunTaskInBackground: vi.fn(),
+  mockValidateMCPGatewayToken: vi.fn(),
+}));
 
 vi.mock("@/agents/a2a-executor", () => ({
   executeA2AMessage: (...args: unknown[]) => mockExecuteA2AMessage(...args),
 }));
+
+vi.mock("@/services/runners/pod-execution", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/services/runners/pod-execution")
+  >("@/services/runners/pod-execution");
+  return {
+    ...actual,
+    runTaskInBackground: (...args: unknown[]) =>
+      mockRunTaskInBackground(...args),
+  };
+});
 
 vi.mock("@/routes/mcp-gateway/utils", async () => {
   const actual = await vi.importActual<
@@ -154,12 +169,18 @@ function mockExecutorGated() {
 describe("a2a v2 task methods", () => {
   let app: FastifyInstanceWithZod;
   let agentId: string;
+  let organizationId: string;
+  let userId: string;
+  const previousBackgroundExecutionEnabled =
+    config.agentBackgroundExecution.enabled;
 
   beforeEach(async ({ makeInternalAgent, makeUser, makeMember }) => {
     const agent = await makeInternalAgent();
     const user = await makeUser();
     await makeMember(user.id, agent.organizationId);
     agentId = agent.id;
+    organizationId = agent.organizationId;
+    userId = user.id;
 
     mockValidateMCPGatewayToken.mockResolvedValue({
       organizationId: agent.organizationId,
@@ -174,7 +195,10 @@ describe("a2a v2 task methods", () => {
   afterEach(async () => {
     vi.restoreAllMocks();
     mockExecuteA2AMessage.mockReset();
+    mockRunTaskInBackground.mockReset();
     mockValidateMCPGatewayToken.mockReset();
+    config.agentBackgroundExecution.enabled =
+      previousBackgroundExecutionEnabled;
     await app.close();
   });
 
@@ -228,6 +252,77 @@ describe("a2a v2 task methods", () => {
       },
     ]);
     expect(settled.status.timestamp).toEqual(expect.any(String));
+  });
+
+  test("SendMessage returns a durable Task when the Agent uses background execution", async ({
+    makeInternalAgent,
+  }) => {
+    config.agentBackgroundExecution.enabled = true;
+    const backgroundAgent = await makeInternalAgent({
+      organizationId,
+      backgroundExecution: {
+        image: "example.invalid/background-agent:test",
+        command: null,
+        inferenceProtocol: "openai_responses",
+        backend: "kubernetes",
+        steerMode: "pipe",
+        privileged: false,
+        resources: null,
+        environment: null,
+        credentials: null,
+        ttlHours: null,
+        idleTimeoutMinutes: null,
+      },
+    });
+    agentId = backgroundAgent.id;
+    mockRunTaskInBackground.mockImplementationOnce(
+      async (params: { onTextDelta?: (delta: string) => void }) => {
+        params.onTextDelta?.("background answer");
+        const messageId = crypto.randomUUID();
+        return {
+          messageId,
+          text: "background answer",
+          finishReason: "stop",
+          responseUiMessage: {
+            id: messageId,
+            role: "assistant",
+            parts: [{ type: "text", text: "background answer" }],
+          },
+        };
+      },
+    );
+
+    const body = await rpc(2, "SendMessage", {
+      message: userMessage("run this in the execution backend"),
+    });
+
+    expect(body.result.message).toBeUndefined();
+    expect(body.result.task).toMatchObject({
+      id: expect.any(String),
+      status: { state: "TASK_STATE_COMPLETED" },
+      artifacts: [
+        {
+          name: "agent-response",
+          parts: [{ text: "background answer" }],
+        },
+      ],
+    });
+    expect(mockRunTaskInBackground).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: backgroundAgent.id,
+        taskId: body.result.task.id,
+        actor: {
+          id: userId,
+          kind: "user",
+          organizationId,
+        },
+        deployment: expect.objectContaining({
+          agentId: backgroundAgent.id,
+        }),
+        executionMode: "one_shot",
+      }),
+    );
+    expect(mockExecuteA2AMessage).not.toHaveBeenCalled();
   });
 
   test("CancelTask: unknown id is -32001, active task cancels to a returned Task, terminal is -32002", async () => {

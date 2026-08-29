@@ -6,6 +6,7 @@ import { vi } from "vitest";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
 import * as a2aExecutor from "@/agents/a2a-executor";
 import { AgentTeamModel } from "@/models";
+import { RouteCategory } from "@/observability/tracing";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
@@ -140,8 +141,12 @@ describe("task tools", () => {
         agentId: target.id,
         systemParams: {
           sessionId: chatContext.sessionId,
-          chatOpsBindingId: chatContext.chatOpsBindingId,
-          chatOpsThreadId: chatContext.chatOpsThreadId,
+          routeCategory: RouteCategory.CHATOPS,
+          completionTarget: {
+            type: "chatops",
+            bindingId: chatContext.chatOpsBindingId,
+            threadId: chatContext.chatOpsThreadId,
+          },
         },
         taskRun: { createTask: true, detached: true },
       }),

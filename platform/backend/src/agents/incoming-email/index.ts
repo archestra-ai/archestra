@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { type A2AAttachment, executeA2AMessage } from "@/agents/a2a-executor";
+import { watchTaskCompletion } from "@/agents/task-completion-watcher";
 import { userHasPermission } from "@/auth";
 import config from "@/config";
 import logger from "@/logging";
@@ -11,6 +12,8 @@ import ProcessedEmailModel from "@/models/processed-email";
 import TeamModel from "@/models/team";
 import UserModel from "@/models/user";
 import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
+import { resolveAgentDeployment } from "@/services/runners/pod-execution";
+import { startDetachedAgentTask } from "@/services/runners/start-task";
 import type {
   AgentIncomingEmailProvider,
   EmailProviderConfig,
@@ -523,6 +526,7 @@ export async function processIncomingEmail(
   // Apply security mode validation
   const securityMode = agent.incomingEmailSecurityMode;
   const senderEmail = email.fromAddress.toLowerCase();
+  const senderUser = await UserModel.findByEmail(senderEmail);
 
   logger.debug(
     {
@@ -540,7 +544,7 @@ export async function processIncomingEmail(
   switch (securityMode) {
     case "private": {
       // Private mode: Sender must be an Archestra user with access to the agent
-      const user = await UserModel.findByEmail(senderEmail);
+      const user = senderUser;
       if (!user) {
         logger.warn(
           {
@@ -788,9 +792,69 @@ ${formattedHistory}
     "[IncomingEmail] Invoking agent with email content",
   );
 
-  // Resolve user for span attributes (skip when userId is "system")
-  const emailUser =
-    userId !== "system" ? await UserModel.getById(userId) : null;
+  // Only private mode authenticates the sender as a platform user. Internal
+  // and public messages run as the system actor even when the address happens
+  // to match a user, so they cannot consume that user's personal credentials.
+  const emailUser = userId === "system" ? null : senderUser;
+
+  const deployment = resolveAgentDeployment(agent);
+  if (deployment) {
+    try {
+      const task = await startDetachedAgentTask({
+        actor: emailUser
+          ? {
+              id: emailUser.id,
+              kind: "user",
+              organizationId: organization,
+            }
+          : {
+              id: "system",
+              kind: "system",
+              organizationId: organization,
+            },
+        agentId,
+        message,
+        attachments: a2aAttachments.length > 0 ? a2aAttachments : undefined,
+        systemParams: {
+          sessionId: buildEmailSessionId(email.conversationId),
+          source: "email",
+          routeCategory: RouteCategory.EMAIL,
+          completionTarget: shouldSendReply
+            ? {
+                type: "email",
+                providerId: provider.providerId,
+                originalMessageId: email.messageId,
+                fromAddress: email.fromAddress,
+                toAddress: email.toAddress,
+                subject: email.subject ?? null,
+              }
+            : undefined,
+        },
+      });
+      if (shouldSendReply) {
+        void watchTaskCompletion({
+          taskId: task.id,
+          target: {
+            type: "email",
+            providerId: provider.providerId,
+            originalMessageId: email.messageId,
+            fromAddress: email.fromAddress,
+            toAddress: email.toAddress,
+            subject: email.subject ?? null,
+          },
+          agentName: agent.name || getDefaultAgentEmailName(),
+        });
+      }
+      logger.info(
+        { agentId, taskId: task.id, originalMessageId: email.messageId },
+        "[IncomingEmail] Started background execution for email",
+      );
+      return undefined;
+    } catch (error) {
+      await ProcessedEmailModel.deleteByMessageId(email.messageId);
+      throw error;
+    }
+  }
 
   // Execute using the shared A2A service, wrapped in a parent span so all
   // LLM and MCP tool calls appear as children of a single unified trace.

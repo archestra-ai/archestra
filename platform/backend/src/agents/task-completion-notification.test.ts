@@ -1,11 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { buildChatOpsTaskNotification } from "./chatops-task-notification";
+import { buildTaskCompletionNotification } from "./task-completion-notification";
 
-describe("buildChatOpsTaskNotification", () => {
+describe("buildTaskCompletionNotification", () => {
   test("does not announce a PR URL before the background run is terminal", () => {
     expect(
-      buildChatOpsTaskNotification({
-        taskId: "task-1",
+      buildTaskCompletionNotification({
         state: "TASK_STATE_WORKING",
         statusReason: null,
         output:
@@ -16,20 +15,18 @@ describe("buildChatOpsTaskNotification", () => {
 
   test("posts a concise PR update after the background run completes", () => {
     expect(
-      buildChatOpsTaskNotification({
-        taskId: "task-1",
+      buildTaskCompletionNotification({
         state: "TASK_STATE_COMPLETED",
         statusReason: null,
         output:
           "[tool] archestra__run_tool\nDone: https://github.com/example/project/pull/42\n[waiting for direction]",
       }),
-    ).toBe("🦀 PR ready: https://github.com/example/project/pull/42");
+    ).toBe("PR ready: https://github.com/example/project/pull/42");
   });
 
   test("does not narrate a working task before it has a useful result", () => {
     expect(
-      buildChatOpsTaskNotification({
-        taskId: "task-1",
+      buildTaskCompletionNotification({
         state: "TASK_STATE_WORKING",
         statusReason: null,
         output: "[tool] archestra__search_tools",
@@ -39,33 +36,28 @@ describe("buildChatOpsTaskNotification", () => {
 
   test("keeps terminal failures brief", () => {
     expect(
-      buildChatOpsTaskNotification({
-        taskId: "task-1",
+      buildTaskCompletionNotification({
         state: "TASK_STATE_FAILED",
         statusReason: "The deployment could not start.",
         output: "",
       }),
-    ).toBe("🦀 Task `task-1` failed. The deployment could not start.");
+    ).toBe("Task failed. The deployment could not start.");
   });
 
   test("does not mistake a PR URL in failed-task output for success", () => {
     expect(
-      buildChatOpsTaskNotification({
-        taskId: "task-1",
+      buildTaskCompletionNotification({
         state: "TASK_STATE_FAILED",
         statusReason: "The coding agent exited before finishing.",
         output:
           "Review https://github.com/example/project/pull/42 and fix any issues.",
       }),
-    ).toBe(
-      "🦀 Task `task-1` failed. The coding agent exited before finishing.",
-    );
+    ).toBe("Task failed. The coding agent exited before finishing.");
   });
 
   test("removes runtime boilerplate from a completed task", () => {
     expect(
-      buildChatOpsTaskNotification({
-        taskId: "task-1",
+      buildTaskCompletionNotification({
         state: "TASK_STATE_COMPLETED",
         statusReason: null,
         output: [
@@ -76,18 +68,17 @@ describe("buildChatOpsTaskNotification", () => {
           "[waiting for direction]",
         ].join("\n"),
       }),
-    ).toBe("🦀 Task `task-1` finished.\n\nFinished the requested work.");
+    ).toBe("Finished the requested work.");
   });
 
   test("keeps native execution transcripts in the execution console", () => {
     expect(
-      buildChatOpsTaskNotification({
-        taskId: "task-1",
+      buildTaskCompletionNotification({
         state: "TASK_STATE_COMPLETED",
         statusReason: null,
         output:
           "Initializing agent...\n[tool output spanning many lines]\n[archestra] agent session exited",
       }),
-    ).toBe("🦀 Task `task-1` finished.");
+    ).toBe("Task finished.");
   });
 });

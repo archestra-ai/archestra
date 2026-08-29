@@ -31,13 +31,14 @@ the future without changing Agents, delegation, or the Executions UI.
 Invocation is explicit and surface-specific:
 
 - **Archestra Chat uses execution mode for a Background-enabled Agent.** Selecting that Agent from the composer or choosing **Chat** on its detail page changes the composer into an execution launcher. The first message starts the isolated deployment and opens its live terminal.
-- **Ordinary messaging-channel and A2A messages stay in the foreground.** They use the normal Archestra Agent loop unless the caller explicitly starts or delegates a durable task.
+- **Ordinary messaging-channel messages stay in the foreground.** A channel Agent uses the normal Archestra Agent loop unless it delegates a durable task to a Background-enabled Agent.
+- **A2A and email select the configured runtime.** An A2A `SendMessage` or incoming email addressed directly to a Background-enabled Agent creates a durable task in its deployment. The same calls use the foreground loop when the Agent has no Background execution configuration.
 - **Delegation selects the configured runtime.** When another Agent delegates to this Agent, Archestra starts a durable task in the Agent's deployment if Background execution is configured. Without it, the delegation uses the foreground Agent loop.
 
 Background executions have two launch modes. Chat starts the image in
 **interactive** mode and exposes its live terminal; maintained Claude Code and
 Codex images run their native TUIs. Delegation from another Agent, A2A,
-messaging channels, schedules, and task tools uses **one-shot** mode. The same
+incoming email, schedules, and task tools uses **one-shot** mode. The same
 image receives the task, exits when it is finished, and lets Archestra settle
 the durable task and deliver its result. This is selected by the invocation
 surface, not by a user-facing Agent setting.
@@ -296,7 +297,7 @@ An Agent running on a developer machine or another system uses the same task int
 3. `get_task` or `list_tasks` to read status and results.
 4. `steer_task` or `cancel_task` when the task needs intervention.
 
-These tools use Archestra's A2A task state machine underneath. A client that supports A2A can drive the same lifecycle directly. The client never needs a Claude-to-Claude, Codex-to-Codex, or other runtime-specific integration: it asks Archestra to run an Agent, and Archestra selects that Agent's configured runtime. A direct synchronous A2A message still uses the foreground Agent loop; a durable task uses Background execution when configured.
+These tools use Archestra's A2A task state machine underneath. A client that supports A2A can drive the same lifecycle directly. The client never needs a Claude-to-Claude, Codex-to-Codex, or other runtime-specific integration: it asks Archestra to run an Agent, and Archestra selects that Agent's configured runtime. `SendMessage` to a Background-enabled Agent returns a durable A2A Task; the same method returns a Message for an Agent without Background execution unless the caller explicitly requests a task.
 
 ### Messaging channels
 
@@ -319,6 +320,18 @@ re-adopts the job and retries the pending thread notification.
 Users can name a specialist when they want a specific one, but they do not need
 to know Agent IDs or task-tool syntax. If the coordinator does not delegate,
 the message remains an ordinary foreground conversation.
+
+### Email
+
+Incoming email addressed to a Background-enabled Agent starts a durable task
+in that Agent's deployment. Webhook processing returns without waiting for the
+task. When replies are enabled, Archestra sends the terminal result in the
+original email thread. The pending reply is stored with the execution and is
+retried after a control-plane restart.
+
+In **Private** mode, a sender whose Agent access is verified runs as that user
+and can use their per-user credentials. **Internal** and **Public** mail runs as
+the system actor and can use shared credentials only. See [Incoming Email](/docs/platform-agent-triggers-email) for access modes and provider setup.
 
 ## Work with Executions in Chat
 

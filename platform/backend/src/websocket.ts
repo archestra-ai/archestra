@@ -728,7 +728,7 @@ class WebSocketService {
 
   /** The person a session acts as, or an Agent administrator. */
   private async mayControlSession(
-    session: { actorUserId: string },
+    session: { actorUserId: string | null },
     clientContext: WebSocketClientContext,
   ): Promise<boolean> {
     if (session.actorUserId === clientContext.userId) return true;

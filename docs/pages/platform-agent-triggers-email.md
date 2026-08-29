@@ -3,7 +3,7 @@ title: Incoming Email
 category: Agents
 order: 9
 description: Invoke agents by sending emails to auto-generated addresses
-lastUpdated: 2026-08-28
+lastUpdated: 2026-08-29
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -24,6 +24,10 @@ When an email arrives:
 3. The email body becomes the agent's input message
 4. The agent executes and generates a response
 5. Optionally, the agent's response is sent back as an email reply
+
+If the Agent has [Background execution](/docs/platform-agent-background-execution) configured, step 4 starts a durable task in its execution backend. The webhook does not wait for that task. When replies are enabled, Archestra sends the terminal result in the original thread after the task finishes. Pending replies survive control-plane restarts and are retried until delivery is recorded.
+
+In **Private** mode, a sender whose Agent access is verified uses their own identity and per-user credentials. **Internal** and **Public** mail runs as the system actor and can use shared credentials only.
 
 ## Conversation History
 

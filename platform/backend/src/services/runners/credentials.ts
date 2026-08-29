@@ -32,7 +32,7 @@ type AgentDeploymentCredentialResolution = {
 export async function resolveAgentDeploymentCredentials(params: {
   deployment: Pick<AgentDeployment, "agentId" | "credentials" | "secretId">;
   organizationId: string;
-  userId: string;
+  userId: string | null;
 }): Promise<AgentDeploymentCredentialResolution> {
   const { shared, perUser } = splitDeclarations(params.deployment.credentials);
   const env: Record<string, string> = {};
@@ -52,6 +52,13 @@ export async function resolveAgentDeploymentCredentials(params: {
   }
 
   if (perUser.length > 0) {
+    if (!params.userId) {
+      return {
+        env,
+        missing: perUser.filter((entry) => entry.required).map(toMissing),
+        misconfigured,
+      };
+    }
     const resolved = await UserCredentialModel.resolveValues({
       organizationId: params.organizationId,
       userId: params.userId,
@@ -77,7 +84,7 @@ export async function resolveAgentDeploymentCredentials(params: {
 export async function preflightAgentDeploymentCredentials(params: {
   deployment: Pick<AgentDeployment, "agentId" | "credentials" | "secretId">;
   organizationId: string;
-  userId: string;
+  userId: string | null;
 }): Promise<{
   configured: string[];
   missing: MissingAgentDeploymentCredential[];
@@ -101,6 +108,10 @@ export async function preflightAgentDeploymentCredentials(params: {
   }
 
   if (perUser.length > 0) {
+    if (!params.userId) {
+      missing.push(...perUser.filter((entry) => entry.required).map(toMissing));
+      return { configured, missing, misconfigured };
+    }
     const present = await UserCredentialModel.listPresentKeys({
       organizationId: params.organizationId,
       userId: params.userId,

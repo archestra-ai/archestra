@@ -47,7 +47,8 @@ export async function startDetachedAgentTask(params: {
             await persistAgentExecutionInputs({
               taskId,
               organizationId: params.actor.organizationId,
-              uploadedByUserId: params.actor.id,
+              uploadedByUserId:
+                params.actor.kind === "user" ? params.actor.id : null,
               attachments: params.attachments ?? [],
             });
           }

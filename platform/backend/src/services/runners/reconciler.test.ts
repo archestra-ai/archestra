@@ -15,7 +15,7 @@ describe("AgentExecutionReconciler", () => {
       .spyOn(AgentRunModel, "listOpen")
       .mockReturnValue(listOpen);
     const pendingSpy = vi
-      .spyOn(AgentRunModel, "listPendingChatOpsNotifications")
+      .spyOn(AgentRunModel, "listPendingCompletionNotifications")
       .mockResolvedValue([]);
 
     const first = agentExecutionReconciler.reconcile();

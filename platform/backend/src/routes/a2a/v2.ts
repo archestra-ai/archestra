@@ -40,6 +40,7 @@ import {
   resolveTokenOrganizationId,
   validateMCPGatewayToken,
 } from "@/routes/mcp-gateway/utils";
+import { resolveAgentDeployment } from "@/services/runners/pod-execution";
 import { type Agent, ApiError, UuidIdSchema } from "@/types";
 import { isTerminalA2ATaskState } from "@/types/a2a-task";
 
@@ -981,7 +982,10 @@ class A2AV2Router {
     const { method, params } = A2AJsonRpcRequestSchema.parse(request);
     const agent = await this.getAgentById(agentId);
     const actor = await this.resolveActor(agentId, token);
-    const { func, schema } = this.getRouteForMethod(method);
+    const { func, schema } = this.getRouteForMethod(
+      method,
+      Boolean(resolveAgentDeployment(agent)),
+    );
 
     // Throws ZodError if request schema is invalid
     schema.parse(params);
@@ -1060,7 +1064,7 @@ class A2AV2Router {
     });
   }
 
-  private getRouteForMethod(method: string) {
+  private getRouteForMethod(method: string, usesBackgroundExecution = false) {
     const mapper: Record<string, { func: A2ARouteFunc; schema: z.ZodSchema }> =
       {
         SendMessage: {
@@ -1072,8 +1076,16 @@ class A2AV2Router {
               // `return_immediately` (A2A v1.0): hand back the task the
               // moment it exists and run detached; the default (blocking)
               // keeps the pre-existing await-the-answer behavior.
-              ...(request.configuration?.returnImmediately
-                ? { taskRun: { createTask: true, detached: true } }
+              ...(usesBackgroundExecution ||
+              request.configuration?.returnImmediately
+                ? {
+                    taskRun: {
+                      createTask: true,
+                      detached: Boolean(
+                        request.configuration?.returnImmediately,
+                      ),
+                    },
+                  }
                 : {}),
             });
           },

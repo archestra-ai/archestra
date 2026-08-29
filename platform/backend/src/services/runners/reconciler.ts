@@ -1,5 +1,5 @@
 import { A2AManager } from "@/agents/a2a/a2a-manager";
-import { watchChatOpsTask } from "@/agents/chatops/chatops-task-watcher";
+import { watchTaskCompletion } from "@/agents/task-completion-watcher";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -49,7 +49,7 @@ class AgentExecutionReconciler {
         void this.reconcileSession(session);
       }
       const pendingNotifications =
-        await AgentRunModel.listPendingChatOpsNotifications();
+        await AgentRunModel.listPendingCompletionNotifications();
       for (const session of pendingNotifications) {
         if (this.inFlight.has(session.id)) continue;
         void this.notifySettledSession(session);
@@ -120,7 +120,7 @@ class AgentExecutionReconciler {
             "Re-adopted Agent background execution ended with an error",
           );
         }
-        await this.notifyMessagingThread(session);
+        await this.notifyCompletionTarget(session);
       });
     } catch (error) {
       logger.warn(
@@ -138,19 +138,18 @@ class AgentExecutionReconciler {
     const backend = resolveRunnerBackend(session.backend);
     await backend.withSessionLease(session, async () => {
       await cleanupBackgroundTask(session);
-      await this.notifyMessagingThread(session);
+      await this.notifyCompletionTarget(session);
     });
   }
 
-  private async notifyMessagingThread(
+  private async notifyCompletionTarget(
     session: Awaited<ReturnType<typeof AgentRunModel.listOpen>>[number],
   ): Promise<void> {
-    if (!session.chatOpsBindingId || !session.chatOpsThreadId) return;
+    if (!session.completionTarget) return;
     const agent = await AgentModel.findById(session.agentId);
-    await watchChatOpsTask({
+    await watchTaskCompletion({
       taskId: session.taskId,
-      bindingId: session.chatOpsBindingId,
-      threadId: session.chatOpsThreadId,
+      target: session.completionTarget,
       agentName: agent?.name ?? "Agent",
     });
   }
@@ -160,7 +159,7 @@ class AgentExecutionReconciler {
   ): Promise<void> {
     this.inFlight.add(session.id);
     try {
-      await this.notifyMessagingThread(session);
+      await this.notifyCompletionTarget(session);
     } catch (error) {
       logger.warn(
         { error, sessionId: session.id, taskId: session.taskId },

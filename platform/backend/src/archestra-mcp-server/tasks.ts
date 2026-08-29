@@ -18,6 +18,7 @@ import {
   AgentRunModel,
   AgentTeamModel,
 } from "@/models";
+import { RouteCategory } from "@/observability/tracing";
 import { resolveRunnerBackend } from "@/services/runners/backends";
 import { preflightAgentDeploymentCredentials } from "@/services/runners/credentials";
 import { resolveAgentDeployment } from "@/services/runners/pod-execution";
@@ -93,6 +94,14 @@ export async function startDelegatedTask(params: {
       }
     }
 
+    const completionTarget =
+      context.chatOpsBindingId && context.chatOpsThreadId
+        ? {
+            type: "chatops" as const,
+            bindingId: context.chatOpsBindingId,
+            threadId: context.chatOpsThreadId,
+          }
+        : undefined;
     const taskRow = await startDetachedAgentTask({
       actor,
       agentId: agent.id,
@@ -100,8 +109,10 @@ export async function startDelegatedTask(params: {
       systemParams: {
         sessionId:
           context.sessionId || context.conversationId || context.isolationKey,
-        chatOpsBindingId: context.chatOpsBindingId,
-        chatOpsThreadId: context.chatOpsThreadId,
+        routeCategory: completionTarget
+          ? RouteCategory.CHATOPS
+          : RouteCategory.A2A,
+        completionTarget,
       },
     });
 

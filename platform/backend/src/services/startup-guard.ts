@@ -47,13 +47,12 @@ import { describeMarketplaceContents } from "./marketplace-copy";
  *   every down remote. Everything draws on the alternate screen, so the
  *   terminal is clean again after claude exits;
  * - keeps a skip entry live the whole run: Space — polled between animation
- *   frames (bash ≥ 4) and during the retry wait — ends the pre-loader
+ *   frames and during the retry wait — ends the pre-loader
  *   immediately and lets the client start, disconnecting and remembering
  *   nothing. Reads that must hear it carry an IFS= prefix (default IFS
  *   strips a read space into '', colliding with Enter — and Enter at the
- *   down prompt means disconnect). Bash 3.2 cannot poll between frames (no
- *   fractional read -t); there the pressed key stays buffered and lands at
- *   the closing beat;
+ *   down prompt means disconnect). Bash 3.2 rejects fractional read timeouts,
+ *   so a background blocking read captures its frame-level keys instead;
  * - disconnecting runs the exact reverse of the connect steps and records the
  *   remote in a skip file so later launches don't re-check it. Once nothing
  *   connected is left to check, the guard uninstalls itself entirely (script,
@@ -456,8 +455,9 @@ fi
 # macOS system bash 3.2 falls back to 1s ticks.
 TICK=1
 if [ "\${BASH_VERSINFO[0]:-3}" -ge 4 ]; then TICK=0.25; fi
-# Animation frames double as key polls (for Space/[C]) only with that same
-# fractional read -t; 3.2 keeps plain sleep frames (see frame_tick).
+# Animation frames double as key polls (for Space/[C]). Bash 4+ reads with a
+# fractional timeout; 3.2 uses one background blocking read that frame_tick
+# polls without slowing the animation (see start_frame_key_reader).
 FRAME_KEYS=0
 if [ "\${BASH_VERSINFO[0]:-3}" -ge 4 ]; then FRAME_KEYS=1; fi
 # The [C] window on the all-healthy pass. Fractional read -t needs bash 4;
@@ -495,11 +495,10 @@ spin_tick() {
 }
 
 # Frame pacing that can hear the skip key: on bash ≥ 4 each animation frame
-# is a fractional read on the tty, so Space (and [C]) land the moment they
-# are pressed. The IFS= prefix is load-bearing: default IFS strips a read
-# space into '', indistinguishable from Enter. System bash 3.2 has no
-# sub-second read -t and keeps plain sleep — there a pressed key stays
-# buffered (echo is off) and is honored at the closing beat instead.
+# is a fractional read on the tty. System bash 3.2 rejects fractional read
+# timeouts, so one background blocking read captures the next key while the
+# animation keeps its normal sleep cadence. The IFS= prefix is load-bearing:
+# default IFS strips a read space into '', indistinguishable from Enter.
 #
 # Any OTHER key pressed mid-probe belongs to a prompt that has not appeared
 # yet (a typed-ahead y for the down prompt, the 1 after a [C]); consuming it
@@ -509,17 +508,53 @@ spin_tick() {
 SKIP_NOW=0
 PENDING_KEY=''
 PENDING_KEY_SET=0
+FRAME_KEY_PID=''
+FRAME_KEY_FILE=''
+handle_frame_key() {
+  case "$key" in
+    ' ') SKIP_NOW=1 ;;
+    c|C) OPEN_MENU=1; FRAME_KEYS=0 ;;
+    *) PENDING_KEY="$key"; PENDING_KEY_SET=1; FRAME_KEYS=0 ;;
+  esac
+}
+start_frame_key_reader() {
+  [ "$FRAME_KEYS" = "0" ] || return 0
+  FRAME_KEY_FILE=$(mktemp "\${TMPDIR:-/tmp}/archestra-guard-key.XXXXXX") || return 0
+  (
+    frame_key=''
+    IFS= read -rs -n 1 frame_key </dev/tty 2>/dev/null || exit 0
+    printf '%s' "$frame_key" >"$FRAME_KEY_FILE"
+  ) &
+  FRAME_KEY_PID=$!
+}
+poll_frame_key_reader() {
+  [ -n "$FRAME_KEY_PID" ] || return 1
+  kill -0 "$FRAME_KEY_PID" 2>/dev/null && return 1
+  wait "$FRAME_KEY_PID" 2>/dev/null || true
+  key=$(cat "$FRAME_KEY_FILE" 2>/dev/null || true)
+  rm -f "$FRAME_KEY_FILE"
+  FRAME_KEY_PID=''; FRAME_KEY_FILE=''
+  handle_frame_key
+  return 0
+}
+stop_frame_key_reader() {
+  [ -n "$FRAME_KEY_PID" ] || return 0
+  poll_frame_key_reader && return 0
+  kill "$FRAME_KEY_PID" 2>/dev/null || true
+  wait "$FRAME_KEY_PID" 2>/dev/null || true
+  rm -f "$FRAME_KEY_FILE"
+  FRAME_KEY_PID=''; FRAME_KEY_FILE=''
+}
 frame_tick() { # one animation frame; harvests Space/[C] pressed mid-probe
   if [ "$FRAME_KEYS" = "1" ]; then
     key=''
     IFS= read -rs -n 1 -t "$FRAME_SLEEP" key </dev/tty 2>/dev/null || return 0
-    case "$key" in
-      ' ') SKIP_NOW=1 ;;
-      c|C) OPEN_MENU=1; FRAME_KEYS=0 ;;
-      *) PENDING_KEY="$key"; PENDING_KEY_SET=1; FRAME_KEYS=0 ;;
-    esac
+    handle_frame_key
   else
-    sleep "$FRAME_SLEEP"
+    if ! poll_frame_key_reader; then
+      sleep "$FRAME_SLEEP"
+      poll_frame_key_reader || true
+    fi
   fi
   return 0
 }
@@ -924,7 +959,7 @@ printf '\\033[?1049h\\033[H\\033[2J'
 # Echo off for the whole interactive run: keys pressed while the probes animate
 # (before any read) would otherwise smudge the screen. Restored on exit.
 stty -echo </dev/tty 2>/dev/null || true
-trap 'stty echo </dev/tty 2>/dev/null; printf "\\033[?1049l"' EXIT
+trap 'stop_frame_key_reader; stty echo </dev/tty 2>/dev/null; printf "\\033[?1049l"' EXIT
 GUARD_DWELL=0
 OPEN_MENU=0
 finish_guard() {
@@ -969,6 +1004,7 @@ if [ "$SKIP_ALL" = "1" ]; then
   printf '\\033[J'
   finish_guard
 fi
+start_frame_key_reader
 DOWN_IDXS=''
 DOWN_COUNT=0
 i=0
@@ -994,6 +1030,7 @@ while [ "$i" -lt "\${#GUARD_URLS[@]}" ]; do
   fi
   i=$((i+1))
 done
+stop_frame_key_reader
 if [ "$SKIP_NOW" = "1" ]; then
   finish_guard
 fi

@@ -232,7 +232,7 @@ export default function ServiceAccountsSettingsPage() {
   // `DataTable` sets the table's `minWidth` to the sum of these sizes, so the
   // sum has to fit the settings shell's content column (~718px at 1200px wide)
   // or trailing columns disappear behind a horizontal scroll. These add up to
-  // 698 including the 56px select column, and each is wide enough for its own
+  // 710 including the 56px select column, and each is wide enough for its own
   // header to sit on one line.
   const columns: ColumnDef<ServiceAccount>[] = useMemo(() => {
     const baseColumns: ColumnDef<ServiceAccount>[] = [
@@ -298,7 +298,9 @@ export default function ServiceAccountsSettingsPage() {
       {
         id: "actions",
         header: "Actions",
-        size: 84,
+        // Two icon-sm buttons with the table's px-4 inset on both sides, so
+        // the last icon sits 16px from the frame like every other cell edge.
+        size: 96,
         cell: ({ row }) => renderRowActions(row.original),
       },
     ];

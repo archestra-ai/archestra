@@ -303,7 +303,7 @@ export default function ServiceAccountDetailPage({
             {
               id: "actions",
               header: "Actions",
-              size: 84,
+              size: 96,
               cell: ({ row }) => (
                 <TableRowActions
                   itemName={row.original.name}

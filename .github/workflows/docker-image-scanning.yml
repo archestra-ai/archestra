@@ -45,6 +45,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read # Required to checkout the repository and read Docker build inputs.
+      id-token: write # Required to pull exact-SHA images previously built by E2E.
     strategy:
       fail-fast: false
       matrix:
@@ -56,6 +57,8 @@ jobs:
             local-tag-prefix: archestra-platform
             use-build-action: true
             scan-exit-code: "true"
+            e2e-image: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform
+            e2e-tag-suffix: -e2e
           - name: MCP Server Base
             runner: ubuntu-latest
             context: ./platform/mcp_server_docker_image
@@ -64,6 +67,8 @@ jobs:
             use-build-action: false
             scan-exit-code: "true"
             cache-from: type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:buildcache
+            e2e-image: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base
+            e2e-tag-suffix: ""
           - name: p4 Shim
             runner: ubuntu-latest
             context: ./platform/p4_shim_docker_image
@@ -72,6 +77,8 @@ jobs:
             use-build-action: false
             scan-exit-code: "true"
             cache-from: type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/p4-shim:buildcache-amd64
+            e2e-image: ""
+            e2e-tag-suffix: ""
     steps:
       # Standard runners ship ~14 GB free; drop the unused preinstalled
       # toolchains so the image build + scan never run out of disk.
@@ -84,8 +91,30 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
-      - name: Build Platform image
-        if: ${{ matrix.use-build-action }}
+      - name: Authenticate to Google Artifact Registry
+        if: ${{ matrix.e2e-image != '' }}
+        uses: ./.github/actions/auth-to-gar
+        with:
+          service_account: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
+      - name: Reuse exact E2E image when available
+        id: e2e-image
+        if: ${{ matrix.e2e-image != '' }}
+        env:
+          E2E_IMAGE: ${{ format('{0}:{1}{2}', matrix.e2e-image, github.sha, matrix.e2e-tag-suffix) }}
+          LOCAL_IMAGE: ${{ format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
+        run: |
+          if docker manifest inspect "$E2E_IMAGE" >/dev/null 2>&1; then
+            docker pull "$E2E_IMAGE"
+            docker tag "$E2E_IMAGE" "$LOCAL_IMAGE"
+            echo "reused=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "reused=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build image with workspace cache
+        if: ${{ matrix.use-build-action && steps.e2e-image.outputs.reused != 'true' }}
         uses: ./.github/actions/build-docker-image
         with:
           context: ${{ matrix.context }}
@@ -97,8 +126,8 @@ jobs:
           # Read-only: the e2e build job owns cache export for this image.
           cache-from: type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:buildcache
 
-      - name: Build ${{ matrix.name }} image
-        if: ${{ !matrix.use-build-action }}
+      - name: Build image with registry cache
+        if: ${{ !matrix.use-build-action && steps.e2e-image.outputs.reused != 'true' }}
         uses: ./.github/actions/build-docker-image
         with:
           context: ${{ matrix.context }}

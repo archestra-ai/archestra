@@ -925,9 +925,12 @@ class InteractionModel {
       );
     }
 
-    // Get distinct user IDs from interactions and join with users table to get names
+    // Put the most active users first so a large organization's filter surfaces
+    // likely choices before its alphabetical tail. Names and ids close ties to
+    // keep the order stable between requests.
+    const activityCount = count();
     const result = await db
-      .selectDistinct({
+      .select({
         userId: schema.interactionsTable.userId,
         userName: schema.usersTable.name,
       })
@@ -937,7 +940,12 @@ class InteractionModel {
         eq(schema.interactionsTable.userId, schema.usersTable.id),
       )
       .where(and(...conditions))
-      .orderBy(asc(schema.usersTable.name));
+      .groupBy(schema.interactionsTable.userId, schema.usersTable.name)
+      .orderBy(
+        desc(activityCount),
+        asc(schema.usersTable.name),
+        asc(schema.interactionsTable.userId),
+      );
 
     return result
       .filter(

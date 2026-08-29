@@ -1,42 +1,11 @@
-import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { defineConfig } from "vitest/config";
-import { BaseSequencer, type TestSpecification } from "vitest/node";
 import { vitestLogPolicy } from "../vitest.shared";
 
 const isCI = process.env.CI === "true";
-
-// Vitest's default shard hash produced a persistent 15% spread in cumulative
-// file time across the four CI shards. This salt was selected against a recent
-// 1,062-file run; it keeps equal file counts while reducing that sampled spread
-// below 1%. New files still distribute deterministically with no manifest to
-// maintain, and every file remains assigned to exactly one shard.
-const CI_SHARD_HASH_SALT = "ci-balance-6237:";
-
-class BalancedShardSequencer extends BaseSequencer {
-  override async shard(
-    files: TestSpecification[],
-  ): Promise<TestSpecification[]> {
-    const shard = this.ctx.config.shard;
-    if (!shard) return files;
-
-    const root = path.resolve(this.ctx.config.root);
-    const sorted = [...files].sort((a, b) => {
-      const hashA = hashSpec(root, a);
-      const hashB = hashSpec(root, b);
-      return hashA.localeCompare(hashB);
-    });
-    const [start, end] = calculateShardRange(
-      sorted.length,
-      shard.index,
-      shard.count,
-    );
-    return sorted.slice(start, end);
-  }
-}
 
 /**
  * Bound the fork count by BOTH cores and memory. CPU half: 50% of cores
@@ -201,7 +170,6 @@ export default defineConfig({
     sequence: {
       // Shuffle test files to balance load across workers
       shuffle: true,
-      sequencer: BalancedShardSequencer,
     },
 
     // Increase test timeout for database operations
@@ -239,26 +207,6 @@ export default defineConfig({
     ],
   },
 });
-
-function hashSpec(root: string, spec: TestSpecification): string {
-  const fullPath = path.resolve(root, spec.moduleId);
-  const relativePath = fullPath.slice(root.length).split(path.sep).join("/");
-  return createHash("sha1")
-    .update(`${CI_SHARD_HASH_SALT}${relativePath}`)
-    .digest("hex");
-}
-
-function calculateShardRange(
-  fileCount: number,
-  index: number,
-  count: number,
-): [number, number] {
-  const baseSize = Math.floor(fileCount / count);
-  const largerShardCount = fileCount % count;
-  const size = baseSize + (index <= largerShardCount ? 1 : 0);
-  const start = (index - 1) * baseSize + Math.min(index - 1, largerShardCount);
-  return [start, start + size];
-}
 
 function rawPythonPlugin() {
   return {

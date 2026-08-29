@@ -421,14 +421,19 @@ describe("OrganizationCostsPage", () => {
 
     // `table-fixed` splits width equally without explicit widths, which left
     // the Models and Cost columns narrower than their badges — the badges then
-    // overflowed onto the neighbouring column.
-    const peopleTable = container.querySelector("table.min-w-\\[900px\\]");
-    expect(peopleTable).not.toBeNull();
+    // overflowed onto the neighbouring column. The same floor is on every
+    // statistics table so phone viewports scroll instead of wrapping cells.
+    const peopleTable = Array.from(
+      container.querySelectorAll("table.min-w-\\[70rem\\]"),
+    ).find((table) => table.textContent?.includes("Example User C"));
+    expect(peopleTable).toBeDefined();
 
     const headers = Array.from(peopleTable?.querySelectorAll("thead th") ?? []);
     expect(headers).toHaveLength(7);
     for (const header of headers) {
       expect(header.className).toMatch(/w-\[\d+%\]/);
+      expect(header.className).toMatch(/min-w-\[/);
+      expect(header.className).toMatch(/max-w-\[/);
     }
   });
 
@@ -559,6 +564,9 @@ describe("OrganizationCostsPage", () => {
     for (const tablePanel of tablePanels) {
       expect(tablePanel.className).toContain("max-h-[280px]");
       expect(tablePanel.className).toContain("overflow-auto");
+      const table = tablePanel.querySelector("table.min-w-\\[70rem\\]");
+      expect(table).not.toBeNull();
+      expect(table?.className).toContain("table-auto");
     }
   });
   it("reports LLM Proxy usage as one total rather than a table of proxies", () => {

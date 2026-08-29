@@ -203,6 +203,22 @@ function StatisticsSkeletonRows({
 const TIMEFRAME_STORAGE_KEY = "cost-statistics-timeframe";
 const STATISTICS_TABLE_MAX_HEIGHT_CLASS = "max-h-[280px]";
 /**
+ * `table-fixed` plus `wrap-break-word` (the shared Table) shrinks every
+ * column to the panel width, so on a phone headers and figures wrap into
+ * neighbouring cells. The floor is the sum of the column mins so the panel
+ * scrolls instead of crushing nowrap headers into the next cell.
+ */
+const STATISTICS_TABLE_MIN_WIDTH_CLASS = "min-w-[70rem] table-auto";
+const HEAD_STICKY = "bg-card sticky top-0 z-10 whitespace-nowrap";
+const COL_NAME = "min-w-[12rem] max-w-[20rem]";
+const COL_TEAM = "min-w-[8rem] max-w-[14rem]";
+const COL_MODEL = "min-w-[14rem] max-w-[24rem]";
+const COL_METRIC = "min-w-[7rem] max-w-[10rem]";
+const COL_TOKENS = "min-w-[8rem] max-w-[12rem]";
+const COL_COST = "min-w-[8rem] max-w-[12rem]";
+const COL_COST_BADGE = "min-w-[10rem] max-w-[16rem]";
+const COL_LONG = "min-w-[11rem] max-w-[16rem]";
+/**
  * The per-user endpoint is paginated because user cardinality is unbounded;
  * this page renders a leaderboard rather than the full roster.
  */
@@ -695,7 +711,7 @@ export default function StatisticsPage() {
   }, [getTimeframeDisplay, handleTimeframeChange, setActionButton, timeframe]);
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6 [&_[data-slot=card]]:min-w-0 [&_[data-slot=card-content]]:min-w-0">
       <CustomDateTimeRangeDialog
         open={isCustomDialogOpen}
         onOpenChange={setIsCustomDialogOpen}
@@ -717,7 +733,7 @@ export default function StatisticsPage() {
         isUsagePending={isModelStatisticsPending}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Costs</CardTitle>
@@ -910,25 +926,27 @@ export default function StatisticsPage() {
             </div>
 
             <StatisticsTablePanel>
-              <Table>
+              <Table className={STATISTICS_TABLE_MIN_WIDTH_CLASS}>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="bg-card sticky top-0 z-10">
+                    <TableHead className={`${HEAD_STICKY} ${COL_NAME}`}>
                       Team Name
                     </TableHead>
-                    <TableHead className="bg-card sticky top-0 z-10">
+                    <TableHead className={`${HEAD_STICKY} ${COL_METRIC}`}>
                       Members
                     </TableHead>
-                    <TableHead className="bg-card sticky top-0 z-10">
+                    <TableHead className={`${HEAD_STICKY} ${COL_METRIC}`}>
                       Profiles
                     </TableHead>
-                    <TableHead className="bg-card sticky top-0 z-10">
+                    <TableHead className={`${HEAD_STICKY} ${COL_METRIC}`}>
                       Requests
                     </TableHead>
-                    <TableHead className="bg-card sticky top-0 z-10">
+                    <TableHead className={`${HEAD_STICKY} ${COL_TOKENS}`}>
                       Tokens
                     </TableHead>
-                    <TableHead className="bg-card sticky top-0 z-10 text-right">
+                    <TableHead
+                      className={`${HEAD_STICKY} ${COL_COST} text-right`}
+                    >
                       Cost
                     </TableHead>
                   </TableRow>
@@ -948,18 +966,29 @@ export default function StatisticsPage() {
                   ) : (
                     sortedTeamStatistics.map((team) => (
                       <TableRow key={team.teamId}>
-                        <TableCell className="font-medium">
-                          {team.teamName}
+                        <TableCell className={`font-medium ${COL_NAME}`}>
+                          <span
+                            className="block truncate"
+                            title={team.teamName}
+                          >
+                            {team.teamName}
+                          </span>
                         </TableCell>
-                        <TableCell>{team.members}</TableCell>
-                        <TableCell>{team.agents}</TableCell>
-                        <TableCell>{team.requests.toLocaleString()}</TableCell>
-                        <TableCell>
+                        <TableCell className="whitespace-nowrap tabular-nums">
+                          {team.members}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap tabular-nums">
+                          {team.agents}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap tabular-nums">
+                          {team.requests.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap tabular-nums">
                           {(
                             team.inputTokens + team.outputTokens
                           ).toLocaleString()}
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="whitespace-nowrap text-right tabular-nums">
                           ${team.cost.toFixed(2)}
                         </TableCell>
                       </TableRow>
@@ -1030,25 +1059,27 @@ export default function StatisticsPage() {
             </div>
 
             <StatisticsTablePanel>
-              <Table>
+              <Table className={STATISTICS_TABLE_MIN_WIDTH_CLASS}>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="bg-card sticky top-0 z-10">
+                    <TableHead className={`${HEAD_STICKY} ${COL_NAME}`}>
                       Name
                     </TableHead>
-                    <TableHead className="bg-card sticky top-0 z-10">
+                    <TableHead className={`${HEAD_STICKY} ${COL_TEAM}`}>
                       Team
                     </TableHead>
-                    <TableHead className="bg-card sticky top-0 z-10">
+                    <TableHead className={`${HEAD_STICKY} ${COL_METRIC}`}>
                       Requests
                     </TableHead>
-                    <TableHead className="bg-card sticky top-0 z-10">
+                    <TableHead className={`${HEAD_STICKY} ${COL_TOKENS}`}>
                       Tokens
                     </TableHead>
-                    <TableHead className="bg-card sticky top-0 z-10">
+                    <TableHead className={`${HEAD_STICKY} ${COL_TOKENS}`}>
                       Cache read
                     </TableHead>
-                    <TableHead className="bg-card sticky top-0 z-10 text-right">
+                    <TableHead
+                      className={`${HEAD_STICKY} ${COL_COST} text-right`}
+                    >
                       Cost
                     </TableHead>
                   </TableRow>
@@ -1068,20 +1099,34 @@ export default function StatisticsPage() {
                   ) : (
                     sortedChatAgentStatistics.map((agent) => (
                       <TableRow key={agent.agentId}>
-                        <TableCell className="font-medium">
-                          {agent.agentName}
+                        <TableCell className={`font-medium ${COL_NAME}`}>
+                          <span
+                            className="block truncate"
+                            title={agent.agentName}
+                          >
+                            {agent.agentName}
+                          </span>
                         </TableCell>
-                        <TableCell>{agent.teamName}</TableCell>
-                        <TableCell>{agent.requests.toLocaleString()}</TableCell>
-                        <TableCell>
+                        <TableCell className={COL_TEAM}>
+                          <span
+                            className="block truncate"
+                            title={agent.teamName}
+                          >
+                            {agent.teamName}
+                          </span>
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap tabular-nums">
+                          {agent.requests.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap tabular-nums">
                           {(
                             agent.inputTokens + agent.outputTokens
                           ).toLocaleString()}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="whitespace-nowrap tabular-nums">
                           {(agent.cacheReadTokens ?? 0).toLocaleString()}
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="whitespace-nowrap text-right tabular-nums">
                           ${agent.cost.toFixed(2)}
                         </TableCell>
                       </TableRow>
@@ -1136,7 +1181,7 @@ export default function StatisticsPage() {
               </LineChart>
             </ChartContainerWrapper>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-3">
               <StatisticsFigure
                 label="Requests"
                 value={llmProxyTotals.requests.toLocaleString()}
@@ -1215,25 +1260,27 @@ export default function StatisticsPage() {
             </div>
 
             <StatisticsTablePanel>
-              <Table>
+              <Table className={STATISTICS_TABLE_MIN_WIDTH_CLASS}>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="bg-card sticky top-0 z-10">
+                    <TableHead className={`${HEAD_STICKY} ${COL_MODEL}`}>
                       Model
                     </TableHead>
-                    <TableHead className="bg-card sticky top-0 z-10">
+                    <TableHead className={`${HEAD_STICKY} ${COL_METRIC}`}>
                       Requests
                     </TableHead>
-                    <TableHead className="bg-card sticky top-0 z-10">
+                    <TableHead className={`${HEAD_STICKY} ${COL_TOKENS}`}>
                       Tokens Used
                     </TableHead>
-                    <TableHead className="bg-card sticky top-0 z-10">
+                    <TableHead className={`${HEAD_STICKY} ${COL_TOKENS}`}>
                       Cache read
                     </TableHead>
-                    <TableHead className="bg-card sticky top-0 z-10">
+                    <TableHead className={`${HEAD_STICKY} ${COL_COST}`}>
                       Cost
                     </TableHead>
-                    <TableHead className="bg-card sticky top-0 z-10 text-right">
+                    <TableHead
+                      className={`${HEAD_STICKY} ${COL_METRIC} text-right`}
+                    >
                       % of Total
                     </TableHead>
                   </TableRow>
@@ -1253,20 +1300,26 @@ export default function StatisticsPage() {
                   ) : (
                     sortedModelStatistics.map((model) => (
                       <TableRow key={model.model}>
-                        <TableCell className="font-medium">
-                          {model.model}
+                        <TableCell className={`font-medium ${COL_MODEL}`}>
+                          <span className="block truncate" title={model.model}>
+                            {model.model}
+                          </span>
                         </TableCell>
-                        <TableCell>{model.requests.toLocaleString()}</TableCell>
-                        <TableCell>
+                        <TableCell className="whitespace-nowrap tabular-nums">
+                          {model.requests.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap tabular-nums">
                           {(
                             model.inputTokens + model.outputTokens
                           ).toLocaleString()}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="whitespace-nowrap tabular-nums">
                           {(model.cacheReadTokens ?? 0).toLocaleString()}
                         </TableCell>
-                        <TableCell>${model.cost.toFixed(2)}</TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="whitespace-nowrap tabular-nums">
+                          ${model.cost.toFixed(2)}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap text-right tabular-nums">
                           {model.percentage.toFixed(1)}%
                         </TableCell>
                       </TableRow>
@@ -1296,28 +1349,32 @@ export default function StatisticsPage() {
                 overflow their cell onto the next column. The floor width makes
                 the panel scroll rather than crush the columns.
               */}
-            <Table className="min-w-[900px]">
+            <Table className={STATISTICS_TABLE_MIN_WIDTH_CLASS}>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="bg-card sticky top-0 z-10 w-[18%]">
+                  <TableHead className={`${HEAD_STICKY} ${COL_NAME} w-[18%]`}>
                     User
                   </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10 w-[10%]">
+                  <TableHead className={`${HEAD_STICKY} ${COL_METRIC} w-[10%]`}>
                     Requests
                   </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10 w-[13%]">
+                  <TableHead className={`${HEAD_STICKY} ${COL_TOKENS} w-[13%]`}>
                     Tokens Used
                   </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10 w-[21%]">
+                  <TableHead className={`${HEAD_STICKY} ${COL_MODEL} w-[21%]`}>
                     Models
                   </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10 w-[11%]">
+                  <TableHead className={`${HEAD_STICKY} ${COL_METRIC} w-[11%]`}>
                     Active Days
                   </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10 w-[16%]">
+                  <TableHead
+                    className={`${HEAD_STICKY} ${COL_COST_BADGE} w-[16%]`}
+                  >
                     Cost
                   </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10 w-[11%] text-right">
+                  <TableHead
+                    className={`${HEAD_STICKY} ${COL_LONG} w-[11%] text-right`}
+                  >
                     Last Active
                   </TableHead>
                 </TableRow>
@@ -1337,7 +1394,7 @@ export default function StatisticsPage() {
                 ) : (
                   userStatistics.map((user) => (
                     <TableRow key={user.userId}>
-                      <TableCell>
+                      <TableCell className={COL_NAME}>
                         <div
                           className="font-medium truncate"
                           title={user.userName}
@@ -1351,12 +1408,18 @@ export default function StatisticsPage() {
                           {user.userEmail}
                         </div>
                       </TableCell>
-                      <TableCell>{user.requests.toLocaleString()}</TableCell>
-                      <TableCell>{user.totalTokens.toLocaleString()}</TableCell>
+                      <TableCell className="whitespace-nowrap tabular-nums">
+                        {user.requests.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap tabular-nums">
+                        {user.totalTokens.toLocaleString()}
+                      </TableCell>
                       <TableCell>
                         <UserModelBadges models={user.models} />
                       </TableCell>
-                      <TableCell>{user.activeDays}</TableCell>
+                      <TableCell className="whitespace-nowrap tabular-nums">
+                        {user.activeDays}
+                      </TableCell>
                       <TableCell>
                         <BilledCost
                           cost={String(user.billedCost + user.subscriptionCost)}
@@ -1367,7 +1430,7 @@ export default function StatisticsPage() {
                           className="flex-wrap"
                         />
                       </TableCell>
-                      <TableCell className="text-right text-muted-foreground">
+                      <TableCell className="whitespace-nowrap text-right text-muted-foreground tabular-nums">
                         {user.lastActiveAt
                           ? format(new Date(user.lastActiveAt), "MMM d, HH:mm")
                           : "—"}
@@ -1414,28 +1477,36 @@ export default function StatisticsPage() {
         </CardHeader>
         <CardContent>
           <StatisticsTablePanel>
-            <Table>
+            <Table className={STATISTICS_TABLE_MIN_WIDTH_CLASS}>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="bg-card sticky top-0 z-10">
+                  <TableHead className={`${HEAD_STICKY} ${COL_NAME}`}>
                     App
                   </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10">
+                  <TableHead className={`${HEAD_STICKY} ${COL_METRIC}`}>
                     Runs
                   </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10">
+                  <TableHead className={`${HEAD_STICKY} ${COL_METRIC}`}>
                     Tool calls
                   </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10 text-right">
+                  <TableHead
+                    className={`${HEAD_STICKY} ${COL_COST} text-right`}
+                  >
                     Build cost
                   </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10 text-right">
+                  <TableHead
+                    className={`${HEAD_STICKY} ${COL_COST} text-right`}
+                  >
                     Runtime cost
                   </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10 text-right">
+                  <TableHead
+                    className={`${HEAD_STICKY} ${COL_LONG} text-right`}
+                  >
                     As chat (est.)
                   </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10 text-right">
+                  <TableHead
+                    className={`${HEAD_STICKY} ${COL_LONG} text-right`}
+                  >
                     Net saving (est.)
                   </TableHead>
                 </TableRow>
@@ -1458,25 +1529,37 @@ export default function StatisticsPage() {
                 ) : (
                   appStatistics.map((app) => (
                     <TableRow key={app.appId}>
-                      <TableCell>
-                        <div className="font-medium">{app.appName}</div>
-                        <div className="text-xs text-muted-foreground">
+                      <TableCell className={COL_NAME}>
+                        <div
+                          className="truncate font-medium"
+                          title={app.appName}
+                        >
+                          {app.appName}
+                        </div>
+                        <div
+                          className="truncate text-xs text-muted-foreground"
+                          title={app.authorName ?? "Unknown author"}
+                        >
                           {app.authorName ?? "Unknown author"}
                         </div>
                       </TableCell>
-                      <TableCell>{app.runs.toLocaleString()}</TableCell>
-                      <TableCell>{app.toolCalls.toLocaleString()}</TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="whitespace-nowrap tabular-nums">
+                        {app.runs.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap tabular-nums">
+                        {app.toolCalls.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-right">
                         <AppBuildCostCell app={app} />
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="whitespace-nowrap text-right tabular-nums">
                         ${app.runtimeCost.toFixed(2)}
                       </TableCell>
-                      <TableCell className="text-right text-muted-foreground">
+                      <TableCell className="whitespace-nowrap text-right text-muted-foreground tabular-nums">
                         ${app.estimatedChatEquivalentCost.toFixed(2)}
                       </TableCell>
                       <TableCell
-                        className={`text-right ${
+                        className={`whitespace-nowrap text-right tabular-nums ${
                           app.estimatedNetSavings < 0 ? "text-destructive" : ""
                         }`}
                       >
@@ -1511,28 +1594,36 @@ export default function StatisticsPage() {
         </CardHeader>
         <CardContent>
           <StatisticsTablePanel>
-            <Table>
+            <Table className={STATISTICS_TABLE_MIN_WIDTH_CLASS}>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="bg-card sticky top-0 z-10">
+                  <TableHead className={`${HEAD_STICKY} ${COL_NAME}`}>
                     Skill
                   </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10">
+                  <TableHead className={`${HEAD_STICKY} ${COL_METRIC}`}>
                     Activations
                   </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10">
+                  <TableHead className={`${HEAD_STICKY} ${COL_METRIC}`}>
                     People
                   </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10 text-right">
+                  <TableHead
+                    className={`${HEAD_STICKY} ${COL_TOKENS} text-right`}
+                  >
                     Context tokens
                   </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10 text-right">
+                  <TableHead
+                    className={`${HEAD_STICKY} ${COL_LONG} text-right`}
+                  >
                     Turns that used it
                   </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10 text-right">
+                  <TableHead
+                    className={`${HEAD_STICKY} ${COL_LONG} text-right`}
+                  >
                     Cost on those turns
                   </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10 text-right">
+                  <TableHead
+                    className={`${HEAD_STICKY} ${COL_LONG} text-right`}
+                  >
                     Last used
                   </TableHead>
                 </TableRow>
@@ -1552,25 +1643,30 @@ export default function StatisticsPage() {
                 ) : (
                   skillStatistics.map((skill) => (
                     <TableRow key={skill.skillId}>
-                      <TableCell className="font-medium">
-                        {skill.skillName}
+                      <TableCell className={`font-medium ${COL_NAME}`}>
+                        <span
+                          className="block truncate"
+                          title={skill.skillName}
+                        >
+                          {skill.skillName}
+                        </span>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-nowrap tabular-nums">
                         {skill.activations.toLocaleString()}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-nowrap tabular-nums">
                         {skill.distinctUsers.toLocaleString()}
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="whitespace-nowrap text-right">
                         <SkillContextTokensCell skill={skill} />
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="whitespace-nowrap text-right tabular-nums">
                         {skill.attributedRequests.toLocaleString()}
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="whitespace-nowrap text-right tabular-nums">
                         ${skill.attributedCost.toFixed(2)}
                       </TableCell>
-                      <TableCell className="text-right text-muted-foreground">
+                      <TableCell className="whitespace-nowrap text-right text-muted-foreground tabular-nums">
                         {skill.lastActivatedAt
                           ? format(
                               new Date(skill.lastActivatedAt),
@@ -1798,7 +1894,7 @@ function UserModelBadges({
 function StatisticsTablePanel({ children }: { children: React.ReactNode }) {
   return (
     <div
-      className={`${STATISTICS_TABLE_MAX_HEIGHT_CLASS} overflow-auto rounded-md border`}
+      className={`${STATISTICS_TABLE_MAX_HEIGHT_CLASS} min-w-0 overflow-auto rounded-md border`}
     >
       {children}
     </div>

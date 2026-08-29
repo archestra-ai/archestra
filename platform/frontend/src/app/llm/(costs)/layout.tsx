@@ -81,6 +81,7 @@ export default function CostsLayout({
   return (
     <CostsLayoutContext.Provider value={contextValue}>
       <PageLayout
+        minWidth="phone"
         title={config.title}
         description={
           pathname === "/llm/costs" && prometheusDocsUrl ? (

@@ -1,10 +1,12 @@
 import type * as k8s from "@kubernetes/client-node";
 import type { RunnerLaunchSpec } from "@/services/runners/backends";
 import {
+  RUNNER_ATTACH_SCRIPT,
   RUNNER_ATTACHMENTS_DIR,
   RUNNER_ATTACHMENTS_MANIFEST,
   RUNNER_INPUTS_READY_FILE,
   RUNNER_RUNTIME_DIR,
+  RUNNER_SHELL_INIT_SCRIPT,
   RUNNER_STEER_FIFO,
 } from "@/services/runners/runtime-contract";
 import type { AgentDeploymentResources } from "@/types";
@@ -20,6 +22,20 @@ export const RUNNER_TMUX_SESSION = "agent";
 
 /** Container name in the Job spec; exec and log reads both address it. */
 export const RUNNER_CONTAINER_NAME = "runner";
+
+/**
+ * Install the stable attach command and the hook used by kubectl/k9s shells.
+ * Kept as a script so the manager can repair live pods created before an
+ * upgrade without relying on anything beyond the image's required /bin/sh.
+ */
+export function buildRunnerTerminalIntegrationScript(): string {
+  return [
+    `printf '%s\\n' '#!/bin/sh' 'tmux set-option -t ${RUNNER_TMUX_SESSION} mouse on' 'exec tmux attach -t ${RUNNER_TMUX_SESSION}' > ${RUNNER_ATTACH_SCRIPT}`,
+    `chmod 755 ${RUNNER_ATTACH_SCRIPT}`,
+    `printf '%s\\n' 'if [ "\${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_AUTO_ATTACH:-1}" = "1" ] && [ -t 0 ] && [ -t 1 ] && [ -z "\${TMUX:-}" ] && tmux has-session -t ${RUNNER_TMUX_SESSION} 2>/dev/null; then exec ${RUNNER_ATTACH_SCRIPT}; fi' > ${RUNNER_SHELL_INIT_SCRIPT}`,
+    `chmod 644 ${RUNNER_SHELL_INIT_SCRIPT}`,
+  ].join("\n");
+}
 
 /**
  * Exit code the bootstrap uses when the image cannot host a runner. Distinct
@@ -63,26 +79,31 @@ function buildRunnerBootstrapScript(): string {
   return [
     "set -eu",
     `mkdir -p ${RUNNER_RUNTIME_DIR}`,
+    buildRunnerTerminalIntegrationScript(),
     `mkdir -p ${RUNNER_ATTACHMENTS_DIR}`,
     'if [ "$ARCHESTRA_AGENT_BACKGROUND_EXECUTION_INPUT_FILE_COUNT" -gt 0 ]; then',
-    `  echo "[archestra] staging $ARCHESTRA_AGENT_BACKGROUND_EXECUTION_INPUT_FILE_COUNT input file(s)"`,
+    `  echo "[runner] staging $ARCHESTRA_AGENT_BACKGROUND_EXECUTION_INPUT_FILE_COUNT input file(s)"`,
     `  attempts=0; while [ ! -f ${RUNNER_INPUTS_READY_FILE} ]; do`,
     "    attempts=$((attempts + 1))",
-    '    if [ "$attempts" -gt 300 ]; then echo "archestra: timed out while staging execution inputs" >&2; exit 74; fi',
+    '    if [ "$attempts" -gt 300 ]; then echo "runner: timed out while staging execution inputs" >&2; exit 74; fi',
     "    sleep 1",
     "  done",
     "fi",
     `[ -p "${RUNNER_STEER_FIFO}" ] || mkfifo -m 600 "${RUNNER_STEER_FIFO}"`,
     "if ! command -v tmux >/dev/null 2>&1; then",
-    '  echo "archestra: this image has no tmux, which runners require for attach and steering" >&2',
+    '  echo "runner: this image has no tmux, which runners require for attach and steering" >&2',
     `  exit ${RUNNER_UNUSABLE_IMAGE_EXIT_CODE}`,
     "fi",
     `printf '%s\\n' "$ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ENTRYPOINT" > ${RUNNER_RUNTIME_DIR}/entry.sh`,
-    `printf '%s\n' '/bin/sh ${RUNNER_RUNTIME_DIR}/entry.sh; status=$?; printf "%s\\n" "$status" > ${exitCodeFile}; echo; echo "[archestra] agent session exited"; exit "$status"' > ${RUNNER_RUNTIME_DIR}/session.sh`,
+    `printf '%s\n' '/bin/sh ${RUNNER_RUNTIME_DIR}/entry.sh; status=$?; printf "%s\\n" "$status" > ${exitCodeFile}; echo; echo "[runner] agent session exited"; exit "$status"' > ${RUNNER_RUNTIME_DIR}/session.sh`,
     // Create the pane before starting the Agent so its output cannot race the
     // pipe setup. A fast one-shot client used to finish before pipe-pane was
     // attached, leaving its durable transcript empty.
     `tmux new-session -d -s ${RUNNER_TMUX_SESSION} 'while :; do sleep 1; done'`,
+    // Let browser terminals send wheel events to tmux. Its WheelUpPane binding
+    // enters copy mode and scrolls tmux's own history; without mouse mode,
+    // xterm falls back to cursor-key sequences that get typed into the pane.
+    `tmux set-option -t ${RUNNER_TMUX_SESSION} mouse on`,
     // Mirror the pane to the container's stdout. tmux gives the agent a pty,
     // so without this its output exists only inside the pane: kubectl logs
     // shows nothing, and the platform's log-follower streams an empty task.
@@ -92,7 +113,7 @@ function buildRunnerBootstrapScript(): string {
     // completes when the agent is done rather than when tmux forks away.
     `while tmux has-session -t ${RUNNER_TMUX_SESSION} 2>/dev/null; do sleep 5; done`,
     `if [ ! -f ${exitCodeFile} ]; then`,
-    '  echo "archestra: agent session ended without an exit status" >&2',
+    '  echo "runner: agent session ended without an exit status" >&2',
     "  exit 1",
     "fi",
     `exit "$(cat ${exitCodeFile})"`,
@@ -159,6 +180,11 @@ export function buildRunnerJob(spec: KubernetesRunnerLaunchSpec): k8s.V1Job {
                   LANG: "C.UTF-8",
                   LC_ALL: "C.UTF-8",
                   TERM: "xterm-256color",
+                  // k9s opens `bash` or `sh` directly. These standard shell
+                  // hooks join the already-running tmux pane on first prompt.
+                  ENV: RUNNER_SHELL_INIT_SCRIPT,
+                  PROMPT_COMMAND: `. ${RUNNER_SHELL_INIT_SCRIPT}`,
+                  ARCHESTRA_AGENT_BACKGROUND_EXECUTION_AUTO_ATTACH: "1",
                   ...spec.env,
                 }).map(([name, value]) => ({ name, value })),
                 {

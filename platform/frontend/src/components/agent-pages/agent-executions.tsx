@@ -87,27 +87,36 @@ export function AgentExecutions({ agentId }: { agentId: string }) {
                   type="button"
                   variant="ghost"
                   className={cn(
-                    "h-auto w-full justify-start rounded-lg px-3 py-2.5 text-left hover:bg-muted/70",
+                    "h-auto w-full min-w-0 justify-start overflow-hidden rounded-lg px-3 py-2.5 text-left hover:bg-muted/70",
                     isSelected &&
                       "bg-muted text-foreground ring-1 ring-inset ring-border hover:bg-muted",
                   )}
                   onClick={() => setSelectedTaskId(execution.taskId)}
                 >
-                  <span className="min-w-0 flex-1 space-y-1">
-                    <span className="flex min-w-0 items-center gap-2">
-                      <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                  <span className="flex min-w-0 flex-1 flex-col gap-1 overflow-hidden">
+                    <span className="grid min-w-0 grid-cols-[minmax(0,1fr)_1.25rem] items-center gap-1.5">
+                      <span
+                        className="truncate text-sm font-medium"
+                        title={execution.title}
+                      >
                         {execution.title}
                       </span>
-                      <AgentExecutionState state={execution.state} compact />
+                      <AgentExecutionState
+                        state={execution.state}
+                        compact
+                        iconOnly
+                      />
                     </span>
                     <span className="flex items-center gap-1.5 text-[11px] font-normal text-muted-foreground">
                       <span className="font-mono">
                         {shortTaskId(execution.taskId)}
                       </span>
                       <span aria-hidden>·</span>
-                      {formatDistanceToNow(new Date(execution.startedAt), {
-                        addSuffix: true,
-                      })}
+                      <span className="min-w-0 truncate">
+                        {formatDistanceToNow(new Date(execution.startedAt), {
+                          addSuffix: true,
+                        })}
+                      </span>
                     </span>
                   </span>
                 </Button>
@@ -152,18 +161,17 @@ function ExecutionDetails({
               <h2 className="truncate text-sm font-medium">
                 {execution.title}
               </h2>
-              <AgentExecutionState state={execution.state} compact />
+              <AgentExecutionState
+                state={execution.state}
+                statusReason={execution.statusReason}
+                compact
+              />
             </div>
             <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[11px] text-muted-foreground">
               <span className="font-mono">{shortTaskId(execution.taskId)}</span>
               <span aria-hidden>·</span>
               <span>{new Date(execution.startedAt).toLocaleString()}</span>
             </p>
-            {execution.statusReason && (
-              <p className="mt-2 text-xs text-destructive">
-                {execution.statusReason}
-              </p>
-            )}
           </div>
           <DeploymentConsoleTabList
             variant="compact"

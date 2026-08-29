@@ -21,15 +21,16 @@ export function BackgroundExecutionChatSession({ taskId }: { taskId: string }) {
   const [stopDialogOpen, setStopDialogOpen] = useState(false);
   const execution = query.data;
 
-  if (query.isPending) {
+  if (query.isPending && !execution) {
     return <ExecutionBooting />;
   }
-  if (query.isError || !execution) {
+  if (!execution) {
     return (
       <div className="flex h-full items-center justify-center p-6">
         <QueryLoadError
           className="max-w-lg border"
           title="Couldn't load this execution"
+          description={executionLoadErrorDescription(query.error)}
           onRetry={() => query.refetch()}
         />
       </div>
@@ -54,7 +55,11 @@ export function BackgroundExecutionChatSession({ taskId }: { taskId: string }) {
               <h1 className="truncate text-sm font-medium">
                 {execution.title}
               </h1>
-              <AgentExecutionState state={execution.state} compact />
+              <AgentExecutionState
+                state={execution.state}
+                statusReason={execution.statusReason}
+                compact
+              />
             </div>
             <p className="truncate text-xs text-muted-foreground">
               {execution.agent.name}
@@ -110,6 +115,13 @@ export function BackgroundExecutionChatSession({ taskId }: { taskId: string }) {
       />
     </main>
   );
+}
+
+function executionLoadErrorDescription(error: unknown): string | undefined {
+  if (error instanceof Error && error.message === "Execution not found") {
+    return "This execution no longer exists, or you no longer have access to it.";
+  }
+  return undefined;
 }
 
 function ExecutionBooting({

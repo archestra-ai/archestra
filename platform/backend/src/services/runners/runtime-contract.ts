@@ -1,6 +1,10 @@
 /** Filesystem contract shared by maintained execution images and backends. */
 export const RUNNER_RUNTIME_DIR = "/var/run/archestra";
 export const RUNNER_STEER_FIFO = `${RUNNER_RUNTIME_DIR}/steer`;
+/** Stable command that joins the interactive session from any exec client. */
+export const RUNNER_ATTACH_SCRIPT = `${RUNNER_RUNTIME_DIR}/attach`;
+/** Startup hook used by interactive shells opened directly in a runner pod. */
+export const RUNNER_SHELL_INIT_SCRIPT = `${RUNNER_RUNTIME_DIR}/shell-init`;
 /** Stable input location shared by every execution backend and Agent image. */
 export const RUNNER_ATTACHMENTS_DIR = `${RUNNER_RUNTIME_DIR}/attachments`;
 export const RUNNER_ATTACHMENTS_MANIFEST = `${RUNNER_RUNTIME_DIR}/attachments.json`;

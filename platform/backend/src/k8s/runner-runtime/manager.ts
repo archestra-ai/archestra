@@ -23,6 +23,7 @@ import McpDeploymentLeaseModel, {
 import { reportRunnerSteer } from "@/observability/metrics/runner";
 import type { RunnerLaunchSpec } from "@/services/runners/backends";
 import {
+  RUNNER_ATTACH_SCRIPT,
   RUNNER_ATTACHMENTS_DIR,
   RUNNER_ATTACHMENTS_MANIFEST,
   RUNNER_INPUTS_READY_FILE,
@@ -36,6 +37,7 @@ import {
   buildRunnerJob,
   buildRunnerPlatformEgressPolicy,
   buildRunnerSecret,
+  buildRunnerTerminalIntegrationScript,
   type KubernetesRunnerLaunchSpec,
   RUNNER_CONTAINER_NAME,
   RUNNER_TMUX_SESSION,
@@ -296,6 +298,13 @@ class RunnerRuntimeManager {
       throw new Error("This session has no running pod to attach to");
     }
     await this.waitForTmuxSession({ session: params.session, podName });
+    // Live pods created before an upgrade do not have the stable helper yet.
+    // Installing it here keeps the displayed command truthful for them too.
+    await this.execInPod({
+      session: params.session,
+      podName,
+      command: ["/bin/sh", "-c", buildRunnerTerminalIntegrationScript()],
+    });
     const namespace = params.session.runtimeScope;
     const socket = await clients.exec.exec(
       namespace,
@@ -778,16 +787,7 @@ const RUNNER_INPUT_STAGING_TIMEOUT_MS = 5 * 60_000;
 const RUNNER_ATTACH_TIMEOUT_MS = 60_000;
 
 function runnerTerminalAttachCommand(): string[] {
-  return [
-    "env",
-    "LANG=C.UTF-8",
-    "LC_ALL=C.UTF-8",
-    "TERM=xterm-256color",
-    "tmux",
-    "attach",
-    "-t",
-    RUNNER_TMUX_SESSION,
-  ];
+  return [RUNNER_ATTACH_SCRIPT];
 }
 
 /** Sleep that wakes early on abort, so cancellation is not delayed a full poll. */

@@ -77,6 +77,40 @@ describe("buildRunnerJob", () => {
     );
   });
 
+  it("makes direct interactive shells join the agent session", () => {
+    const env = buildRunnerJob(SPEC).spec?.template.spec?.containers[0]?.env;
+
+    expect(env).toEqual(
+      expect.arrayContaining([
+        { name: "ENV", value: "/var/run/archestra/shell-init" },
+        {
+          name: "PROMPT_COMMAND",
+          value: ". /var/run/archestra/shell-init",
+        },
+        {
+          name: "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_AUTO_ATTACH",
+          value: "1",
+        },
+      ]),
+    );
+    expect(
+      buildRunnerJob({
+        ...SPEC,
+        env: {
+          ...SPEC.env,
+          ARCHESTRA_AGENT_BACKGROUND_EXECUTION_AUTO_ATTACH: "0",
+        },
+      }).spec?.template.spec?.containers[0]?.env,
+    ).toEqual(
+      expect.arrayContaining([
+        {
+          name: "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_AUTO_ATTACH",
+          value: "0",
+        },
+      ]),
+    );
+  });
+
   it("holds the entrypoint until declared input files are staged", () => {
     const container = buildRunnerJob({ ...SPEC, inputFileCount: 2 }).spec
       ?.template.spec?.containers[0];
@@ -197,6 +231,22 @@ describe("the container bootstrap", () => {
       script().indexOf("tmux respawn-pane"),
     );
     expect(script()).not.toContain("sleep 10");
+  });
+
+  it("lets terminal wheel events scroll tmux history", () => {
+    expect(script()).toContain("tmux set-option -t agent mouse on");
+    expect(script().indexOf("mouse on")).toBeLessThan(
+      script().indexOf("tmux respawn-pane"),
+    );
+  });
+
+  it("installs a portable attach command for exec clients", () => {
+    expect(script()).toContain("> /var/run/archestra/attach");
+    expect(script()).toContain("chmod 755 /var/run/archestra/attach");
+    expect(script()).toContain("exec /var/run/archestra/attach");
+    expect(script().indexOf("/var/run/archestra/attach")).toBeLessThan(
+      script().indexOf("tmux new-session"),
+    );
   });
 });
 

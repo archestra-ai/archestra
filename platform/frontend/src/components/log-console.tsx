@@ -23,6 +23,8 @@ export function LogConsole({
   emptyMessage = "No logs available",
   placeholder,
   error,
+  contentTone = "logs",
+  copySuccessMessage = "Logs copied to clipboard",
   status,
   scrollAreaRef,
   onScroll,
@@ -41,6 +43,9 @@ export function LogConsole({
   placeholder?: React.ReactNode;
   /** Shown instead of the content — the logs could not be loaded at all. */
   error?: string | null;
+  /** Visual tone for copyable content. Transport errors use the `error` prop. */
+  contentTone?: "logs" | "error";
+  copySuccessMessage?: string;
   /** Footer content on the left of the copy button (streaming indicator, …). */
   status?: React.ReactNode;
   scrollAreaRef?: React.Ref<HTMLDivElement>;
@@ -57,12 +62,12 @@ export function LogConsole({
     try {
       await copyToClipboard(content);
       setCopied(true);
-      toast.success("Logs copied to clipboard");
+      toast.success(copySuccessMessage);
       setTimeout(() => setCopied(false), 2000);
     } catch (_error) {
       toast.error("Failed to copy logs");
     }
-  }, [content]);
+  }, [content, copySuccessMessage]);
 
   return (
     <div
@@ -89,7 +94,10 @@ export function LogConsole({
             </div>
           ) : content ? (
             <pre
-              className="font-mono text-xs whitespace-pre-wrap break-words text-emerald-400"
+              className={cn(
+                "font-mono text-xs whitespace-pre-wrap break-words",
+                contentTone === "error" ? "text-red-400" : "text-emerald-400",
+              )}
               data-testid={contentTestId}
             >
               {content}

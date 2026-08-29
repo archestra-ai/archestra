@@ -56,7 +56,7 @@ describe("withLatestRotatedRefreshToken", () => {
     });
   });
 
-  it("re-encodes an X Premium credential the same way, preserving identity fields", async () => {
+  it("re-encodes a SuperGrok credential the same way, preserving identity fields", async () => {
     const rtOriginal = `rt-orig-${crypto.randomUUID()}`;
     const value = encodeXaiSubscriptionCredential({
       refreshToken: rtOriginal,

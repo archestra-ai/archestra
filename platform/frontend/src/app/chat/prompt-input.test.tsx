@@ -328,6 +328,10 @@ vi.mock("@/lib/auth/auth.query");
 
 vi.mock("@/lib/config/config.query");
 
+vi.mock("@/lib/llm-provider-api-keys.query", () => ({
+  useAvailableLlmProviderApiKeys: () => ({ data: [] }),
+}));
+
 // Import the component after mocks are set up
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
@@ -458,7 +462,7 @@ describe("ArchestraPromptInput", () => {
     expect(mockTextInputClear).not.toHaveBeenCalled();
   });
 
-  it("uses the subscription registry's X sign-in label", () => {
+  it("uses the subscription registry's SuperGrok sign-in label", () => {
     render(
       <ArchestraPromptInput
         {...defaultProps}
@@ -469,7 +473,7 @@ describe("ArchestraPromptInput", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: "Sign in with X" }),
+      screen.getByRole("button", { name: "Sign in with Grok" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Sign in with xAI" }),

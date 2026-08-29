@@ -1,7 +1,11 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { providerLogoUrl, providerToLogoProvider } from "./provider-logos";
+import {
+  logoNameForProvider,
+  providerLogoUrl,
+  providerToLogoProvider,
+} from "./provider-logos";
 
 describe("provider logos", () => {
   // Logos are bundled (not fetched from models.dev) so they render when
@@ -21,5 +25,15 @@ describe("provider logos", () => {
   it("builds a same-origin URL", () => {
     expect(providerLogoUrl("anthropic")).toBe("/model-logos/anthropic.svg");
     expect(providerLogoUrl("ollama")).toBe("/model-logos/ollama-cloud.svg");
+  });
+
+  it("uses the Grok mark for a SuperGrok subscription on xAI", () => {
+    expect(logoNameForProvider("xai")).toBe("xai");
+    expect(logoNameForProvider("xai", null)).toBe("xai");
+    expect(logoNameForProvider("xai", "x-premium")).toBe("grok");
+    expect(logoNameForProvider("openai", "chatgpt")).toBe("openai");
+    expect(
+      existsSync(join(__dirname, "../../public/model-logos", "grok.svg")),
+    ).toBe(true);
   });
 });

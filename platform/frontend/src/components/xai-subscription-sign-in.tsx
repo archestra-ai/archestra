@@ -12,7 +12,7 @@ import {
 
 interface XaiSubscriptionSignInProps {
   /**
-   * Receives the encoded X Premium credential once the device flow completes;
+   * Receives the encoded SuperGrok credential once the device flow completes;
    * the form stores it as the xAI provider key.
    */
   onCredential: (credential: string) => void | Promise<void>;
@@ -20,9 +20,9 @@ interface XaiSubscriptionSignInProps {
 }
 
 /**
- * "Sign in with X" device flow: shows a one-time code the user enters at
+ * "Sign in with Grok" device flow: shows a one-time code the user enters at
  * accounts.x.ai, then polls until xAI hands back the OAuth credential that
- * becomes the xAI (X Premium subscription) provider key. Works on hosted
+ * becomes the SuperGrok provider key. Works on hosted
  * deployments and custom domains — no localhost loopback required.
  *
  * Unlike the ChatGPT/Codex flow there is no account setting to turn on first,
@@ -141,8 +141,8 @@ export function XaiSubscriptionSignIn({
   if (completed) {
     return (
       <p className="flex items-center gap-2 text-xs text-muted-foreground">
-        <Check className="h-4 w-4 text-green-500" />X account linked — you can
-        save the key now.
+        <Check className="h-4 w-4 text-green-500" />
+        <span>Grok account linked — you can save the key now.</span>
       </p>
     );
   }
@@ -152,10 +152,10 @@ export function XaiSubscriptionSignIn({
       <ol className="list-none space-y-3 rounded-md border p-3 text-xs text-muted-foreground">
         <li>
           <span className="font-medium text-foreground">
-            1. Copy this code and open X's device sign-in.
+            1. Copy this code and open Grok's device sign-in.
           </span>{" "}
-          Paste it, then approve with the account that has your X Premium
-          (SuperGrok) subscription.
+          Paste it, then approve with the account that has your SuperGrok
+          subscription.
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <Button
               type="button"
@@ -163,8 +163,8 @@ export function XaiSubscriptionSignIn({
               size="sm"
               onClick={() => copyCodeAndOpen(flow)}
             >
-              <XLogo className="mr-2 h-4 w-4" />
-              Copy code &amp; open X
+              <GrokLogo className="mr-2 h-4 w-4" />
+              Copy code &amp; open Grok
             </Button>
             <button
               type="button"
@@ -208,9 +208,9 @@ export function XaiSubscriptionSignIn({
         {start.isPending ? (
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
         ) : (
-          <XLogo className="mr-2 h-4 w-4" />
+          <GrokLogo className="mr-2 h-4 w-4" />
         )}
-        <span>Sign in with X</span>
+        <span>Sign in with Grok</span>
       </Button>
       {expired && (
         <p className="text-xs text-destructive">
@@ -221,8 +221,8 @@ export function XaiSubscriptionSignIn({
   );
 }
 
-/** X's wordmark glyph (lucide has no brand icon for it). */
-function XLogo({ className }: { className?: string }) {
+/** Grok's black-hole G monogram (lucide has no brand icon for it). */
+function GrokLogo({ className }: { className?: string }) {
   return (
     <svg
       className={className}
@@ -231,7 +231,10 @@ function XLogo({ className }: { className?: string }) {
       aria-hidden="true"
       focusable="false"
     >
-      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+      <path
+        fillRule="evenodd"
+        d="M9.27 15.29l7.978-5.897c.391-.29.95-.177 1.137.272.98 2.369.542 5.215-1.41 7.169-1.951 1.954-4.667 2.382-7.149 1.406l-2.711 1.257c3.889 2.661 8.611 2.003 11.562-.953 2.341-2.344 3.066-5.539 2.388-8.42l.006.007c-.983-4.232.242-5.924 2.75-9.383.06-.082.12-.164.179-.248l-3.301 3.305v-.01L9.267 15.292M7.623 16.723c-2.792-2.67-2.31-6.801.071-9.184 1.761-1.763 4.647-2.483 7.166-1.425l2.705-1.25a7.808 7.808 0 00-1.829-1A8.975 8.975 0 005.984 5.83c-2.533 2.536-3.33 6.436-1.962 9.764 1.022 2.487-.653 4.246-2.34 6.022-.599.63-1.199 1.259-1.682 1.925l7.62-6.815"
+      />
     </svg>
   );
 }

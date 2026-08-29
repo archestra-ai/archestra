@@ -221,7 +221,7 @@ describe("GET /api/llm-provider-api-keys/available", () => {
     expect(getBestModelSpy).not.toHaveBeenCalled();
   });
 
-  test("includeKeyId carries subscription metadata for another user's X Premium key", async ({
+  test("includeKeyId carries subscription metadata for another user's SuperGrok key", async ({
     makeSecret,
     makeUser,
     makeLlmProviderApiKey,
@@ -239,7 +239,7 @@ describe("GET /api/llm-provider-api-keys/available", () => {
       provider: "xai",
       scope: "personal",
       userId: owner.id,
-      name: "X Premium (SuperGrok)",
+      name: "SuperGrok",
     });
 
     const response = await app.inject({
@@ -252,7 +252,7 @@ describe("GET /api/llm-provider-api-keys/available", () => {
       .json()
       .find((key: { id: string }) => key.id === ownerKey.id);
     // The viewer can't list the owner's personal key, but the included agent
-    // key must say it is an X Premium credential so the chat/agent preflight
+    // key must say it is a SuperGrok credential so the chat/agent preflight
     // gates sending behind "connect your own account".
     expect(includedKey).toMatchObject({
       isAgentKey: true,
@@ -438,7 +438,7 @@ describe("LLM Provider API Keys CRUD", () => {
   }) => {
     // The edit dialog's URL-param path (?edit=<id>) resolves through this
     // route; without the derived kind an F5 mid-edit would reopen an
-    // X Premium key on the API-key tab with no connected card.
+    // SuperGrok key on the API-key tab with no connected card.
     const secret = await makeSecret({
       secret: {
         apiKey: encodeXaiSubscriptionCredential({
@@ -451,7 +451,7 @@ describe("LLM Provider API Keys CRUD", () => {
       provider: "xai",
       scope: "personal",
       userId: user.id,
-      name: "X Premium (SuperGrok)",
+      name: "SuperGrok",
     });
 
     const response = await app.inject({

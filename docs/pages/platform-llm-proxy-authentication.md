@@ -3,7 +3,7 @@ title: Authentication
 category: LLM Proxy
 order: 3
 description: Authentication methods for the LLM Proxy
-lastUpdated: 2026-08-27
+lastUpdated: 2026-08-29
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -263,6 +263,6 @@ Use cases:
 - OpenAI-compatible proxies
 - Regional endpoints
 
-Keys connected through a subscription sign-in do not support a base URL override. An X Premium (SuperGrok) key, for example, only talks to the configured xAI endpoint — a key that carries an override is rejected.
+Keys connected through a subscription sign-in do not support a base URL override. A SuperGrok key, for example, only talks to the configured xAI endpoint — a key that carries an override is rejected.
 
 When a virtual key or OAuth client access token is resolved, the mapped provider key's base URL is used automatically.

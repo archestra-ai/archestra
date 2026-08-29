@@ -405,7 +405,7 @@ describe("ApiKeysPage", () => {
     expect(cards).toHaveTextContent("ChatGPT");
     expect(cards).toHaveTextContent("GitHub Copilot");
     expect(cards).toHaveTextContent("Microsoft 365 Copilot");
-    expect(cards).toHaveTextContent("X Premium (SuperGrok)");
+    expect(cards).toHaveTextContent("SuperGrok");
     expect(screen.getAllByText("Connect")).toHaveLength(4);
     expect(screen.getAllByText("Not connected")).toHaveLength(4);
   });
@@ -423,7 +423,7 @@ describe("ApiKeysPage", () => {
 
     expect(
       screen.getByTestId("subscription-provider-cards"),
-    ).not.toHaveTextContent("X Premium (SuperGrok)");
+    ).not.toHaveTextContent("SuperGrok");
     expect(screen.getAllByText("Connect")).toHaveLength(3);
   });
 
@@ -553,7 +553,7 @@ describe("ApiKeysPage", () => {
       data: [
         {
           id: "x-premium-key",
-          name: "X Premium (SuperGrok)",
+          name: "SuperGrok",
           provider: "xai",
           scope: "personal",
         },
@@ -565,11 +565,11 @@ describe("ApiKeysPage", () => {
 
     // The subscription card remains unconnected and the same-named ordinary key
     // remains its own credential row.
-    expect(screen.getAllByText("X Premium (SuperGrok)")).toHaveLength(2);
+    expect(screen.getAllByText("SuperGrok")).toHaveLength(2);
     expect(screen.getAllByText("Connect")).toHaveLength(4);
   });
 
-  it("reopens an X Premium key from the edit URL param in subscription mode", async () => {
+  it("reopens a SuperGrok key from the edit URL param in subscription mode", async () => {
     // The reviewer-reported F5 case: ?edit=<id> resolves the key through the
     // single-key endpoint, which must carry subscriptionKind so the dialog
     // reopens on the subscription auth mode, not the API-key tab.
@@ -585,7 +585,7 @@ describe("ApiKeysPage", () => {
     mockUseLlmProviderApiKey.mockReturnValue({
       data: {
         id: "x-premium-key",
-        name: "X Premium (SuperGrok)",
+        name: "SuperGrok",
         provider: "xai",
         scope: "personal",
         secretId: "secret-1",
@@ -729,7 +729,7 @@ describe("ApiKeysPage", () => {
     expect(screen.getByTestId("create-dialog")).toHaveTextContent('["openai"]');
   });
 
-  it("uses the registry's X-specific connect copy", () => {
+  it("uses the registry's Grok-specific connect copy", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
       isPending: false,
@@ -739,10 +739,10 @@ describe("ApiKeysPage", () => {
     fireEvent.click(screen.getAllByText("Connect")[3]);
 
     expect(screen.getByTestId("create-dialog")).toHaveTextContent(
-      "Sign in with X",
+      "Sign in with Grok",
     );
     expect(screen.getByTestId("create-dialog")).toHaveTextContent(
-      "Connect the X account that holds your X Premium (SuperGrok) subscription",
+      "Connect your SuperGrok subscription",
     );
   });
 });

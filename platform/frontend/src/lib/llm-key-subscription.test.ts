@@ -25,7 +25,7 @@ describe("isPersonalSubscription", () => {
     expect(
       isPersonalSubscription({
         provider: "xai",
-        name: "X Premium (SuperGrok)",
+        name: "SuperGrok",
       }),
     ).toBe(false);
     expect(
@@ -63,7 +63,7 @@ describe("isPersonalSubscription", () => {
     expect(
       isPersonalSubscription({
         provider: "openai",
-        name: "X Premium (SuperGrok)",
+        name: "SuperGrok",
       }),
     ).toBe(false);
   });

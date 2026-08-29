@@ -2060,7 +2060,7 @@ export function mapProviderError(
     // On credential-level subscription providers (openai, xai) this code is
     // only ever emitted for the subscription credential mode — a plain API key
     // never needs a per-user link — so the label must name the subscription
-    // ("ChatGPT Subscription", "X Premium (SuperGrok)"), not the provider.
+    // ("ChatGPT Subscription", "SuperGrok"), not the provider.
     if (errorMessage) {
       response.message = errorMessage;
     }

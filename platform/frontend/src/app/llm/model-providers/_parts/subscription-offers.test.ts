@@ -39,7 +39,7 @@ describe("subscriptionKindOfCredential", () => {
     // An ordinary xAI key is allowed to be named after the subscription.
     expect(
       subscriptionKindOfCredential(
-        credential({ provider: "xai", name: "X Premium (SuperGrok)" }),
+        credential({ provider: "xai", name: "SuperGrok" }),
       ),
     ).toBeNull();
   });

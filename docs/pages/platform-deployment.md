@@ -2,7 +2,7 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-08-27
+lastUpdated: 2026-08-29
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -1128,16 +1128,16 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Default: `https://api.x.ai/v1`
   - Use this to point to your own proxy or other custom endpoints
 
-- **`ARCHESTRA_XAI_SUBSCRIPTION_ISSUER`** - OAuth issuer for the X Premium (SuperGrok) sign-in. Its OIDC discovery document supplies the device and token endpoints.
+- **`ARCHESTRA_XAI_SUBSCRIPTION_ISSUER`** - OAuth issuer for the SuperSuperGrok sign-in. Its OIDC discovery document supplies the device and token endpoints.
   - Default: `https://auth.x.ai`
 - **`ARCHESTRA_XAI_SUBSCRIPTION_VERIFICATION_ORIGIN`** - Allowed browser origin for the device-flow verification page. Responses pointing elsewhere are rejected.
   - Default: `https://accounts.x.ai`
 - **`ARCHESTRA_XAI_SUBSCRIPTION_CLIENT_VERSION`** - Tested xAI session-protocol version reported to the proxy. Update this deliberately when adopting a newer proxy contract.
   - Default: `1.0.0`
-- **`ARCHESTRA_XAI_SUBSCRIPTION_BASE_URL`** - OpenAI-compatible inference and model endpoint for X Premium OAuth sessions.
+- **`ARCHESTRA_XAI_SUBSCRIPTION_BASE_URL`** - OpenAI-compatible inference and model endpoint for SuperGrok OAuth sessions.
   - Default: `https://cli-chat-proxy.grok.com/v1`
   - This is separate from the metered `ARCHESTRA_XAI_BASE_URL` API-key endpoint
-- **`ARCHESTRA_XAI_SUBSCRIPTION_CLIENT_ID`** - Public OAuth client id for the X Premium device-code login.
+- **`ARCHESTRA_XAI_SUBSCRIPTION_CLIENT_ID`** - Public OAuth client id for the SuperGrok device-code login.
   - Default: the public Grok CLI client id
 - **`ARCHESTRA_XAI_SUBSCRIPTION_SCOPES`** - Space-separated scopes requested at device-authorization time. Drop `grok-cli:access` if xAI refuses it for your accounts; `offline_access` is required, since it is what yields the refresh token the key stores.
   - Default: `openid profile email offline_access api:access grok-cli:access`

@@ -115,7 +115,7 @@ describe("subscriptionKindFromKeyMetadata", () => {
     expect(
       subscriptionKindFromKeyMetadata({
         provider: "xai",
-        name: "X Premium (SuperGrok)",
+        name: "SuperGrok",
       }),
     ).toBeNull();
     expect(

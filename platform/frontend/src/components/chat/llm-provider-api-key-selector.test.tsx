@@ -112,7 +112,7 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
       screen.getByRole("button", { name: "Microsoft 365 Copilot Connect" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "X Premium (SuperGrok) Connect" }),
+      screen.getByRole("button", { name: "SuperGrok Connect" }),
     ).toBeInTheDocument();
   });
 
@@ -436,12 +436,12 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
     );
   });
 
-  it("recognizes an X Premium key as connected without absorbing plain xAI API keys", () => {
+  it("recognizes a SuperGrok key as connected without absorbing plain xAI API keys", () => {
     // Both keys live on the `xai` provider; only the subscriptionKind the
     // backend read off the stored secret distinguishes the subscription.
     const xPremiumKey = {
       id: "x-premium-key",
-      name: "X Premium (SuperGrok)",
+      name: "SuperGrok",
       provider: "xai",
       scope: "personal",
       userId: "current-user",
@@ -462,10 +462,10 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
     renderSelector();
 
     expect(
-      screen.getByRole("button", { name: "X Premium (SuperGrok) Connected" }),
+      screen.getByRole("button", { name: "SuperGrok Connected" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "X Premium (SuperGrok) Connect" }),
+      screen.queryByRole("button", { name: "SuperGrok Connect" }),
     ).not.toBeInTheDocument();
     // The plain key stays an ordinary credential row, untouched by the
     // subscription matching.
@@ -477,7 +477,7 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
   it("does not let a mutable name turn an ordinary xAI key into a subscription", () => {
     const nameOnlyXPremiumKey = {
       id: "x-premium-name-only",
-      name: "X Premium (SuperGrok)",
+      name: "SuperGrok",
       provider: "xai",
       scope: "personal",
       userId: "current-user",
@@ -497,21 +497,21 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
     renderSelector();
 
     expect(
-      screen.getByRole("button", { name: "X Premium (SuperGrok) Connected" }),
+      screen.getByRole("button", { name: "SuperGrok Connected" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "X Premium (SuperGrok) Connect" }),
+      screen.getByRole("button", { name: "SuperGrok Connect" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Plain xAI key Connected" }),
     ).toBeInTheDocument();
   });
 
-  it("re-opens the X sign-in flow to reconnect a selected X Premium key", async () => {
+  it("re-opens the SuperGrok sign-in flow to reconnect a selected SuperGrok key", async () => {
     const user = userEvent.setup();
     const xPremiumKey = {
       id: "x-premium-key",
-      name: "X Premium (SuperGrok)",
+      name: "SuperGrok",
       provider: "xai",
       scope: "personal",
       userId: "current-user",
@@ -533,13 +533,11 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
 
     await user.click(
       screen.getByRole("button", {
-        name: /^X Premium \(SuperGrok\) Connected\s*Selected$/,
+        name: /^SuperGrok Connected\s*Selected$/,
       }),
     );
 
-    expect(
-      screen.getByText("Reconnect X Premium (SuperGrok)"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Reconnect SuperGrok")).toBeInTheDocument();
     expect(screen.getByText("reconnect:x-premium-key")).toBeInTheDocument();
   });
 });

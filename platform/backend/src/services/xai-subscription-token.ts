@@ -1,5 +1,5 @@
 /**
- * xAI OAuth token redemption for the "X Premium (SuperGrok)" subscription auth
+ * xAI OAuth token redemption for the "SuperGrok" subscription auth
  * mode.
  *
  * Each user holds a long-lived xAI `refresh_token` (obtained via the device flow
@@ -311,7 +311,7 @@ class XaiSubscriptionTokenManager {
     }
     const storedCredential = decodeXaiSubscriptionCredential(storedValue);
     if (!storedCredential) {
-      // The stored secret is no longer an X Premium credential (e.g.
+      // The stored secret is no longer a SuperGrok credential (e.g.
       // reconnected as a plain API key). Don't overwrite it.
       return;
     }
@@ -377,7 +377,7 @@ export function createXaiSubscriptionFetch(params: {
       return redemptionErrorResponse(
         new ApiError(
           400,
-          "X Premium (SuperGrok) credentials can only be used against the configured xAI subscription endpoint — remove the per-key base URL override or use an API key instead.",
+          "SuperGrok credentials can only be used against the configured xAI subscription endpoint — remove the per-key base URL override or use an API key instead.",
         ),
       );
     }
@@ -503,7 +503,7 @@ export function xaiOauthErrorLogFields(body: string): {
 
 /**
  * True when a URL is on the configured xAI session-proxy origin — the only origin an
- * X Premium subscription bearer may be sent to. Shared by the proxy fetch
+ * SuperGrok subscription bearer may be sent to. Shared by the proxy fetch
  * wrapper and the xai model fetcher so the fail-closed rule cannot drift
  * between the two.
  */
@@ -833,7 +833,7 @@ async function redeemWithXai(refreshToken: string): Promise<{
     if (response.status === 400 || response.status === 401) {
       throw new ApiError(
         401,
-        "X sign-in has expired or been revoked. Reconnect your X account to keep using your X Premium (SuperGrok) subscription.",
+        "SuperGrok sign-in has expired or been revoked. Reconnect your Grok account to keep using your SuperGrok subscription.",
         ArchestraInternalErrorCode.ProviderAuthRequired,
       );
     }

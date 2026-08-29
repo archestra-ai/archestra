@@ -128,21 +128,20 @@ export const SUBSCRIPTION_CREDENTIALS = {
   },
   "x-premium": {
     provider: "xai",
-    label: "X Premium (SuperGrok)",
-    displayName: "X Premium (SuperGrok)",
+    label: "SuperGrok",
+    displayName: "SuperGrok",
     marker: "xai-subscription:",
     connect: {
-      signInTitle: "Sign in with X",
-      signInDescription:
-        "Connect the X account that holds your X Premium (SuperGrok) subscription",
-      accountLabel: "X Premium (SuperGrok) Subscription",
+      signInTitle: "Sign in with Grok",
+      signInDescription: "Connect your SuperGrok subscription",
+      accountLabel: "SuperGrok account",
       signInHint:
-        "No API key needed — just Sign in with the X account that carries your X Premium (SuperGrok) subscription. Keys are per-user: everyone using a Grok model signs in with their own account.",
-      connectedTitle: "X account connected",
+        "No API key needed — just Sign in with the Grok account that carries your SuperGrok subscription. Keys are per-user: everyone using a Grok model signs in with their own account.",
+      connectedTitle: "Grok account connected",
       connectedDescription:
-        "Your X Premium (SuperGrok) subscription is linked through your X account.",
+        "Your SuperGrok subscription is linked through your Grok account.",
       perUserScopeReason:
-        "X Premium (SuperGrok) subscription keys are per-user — each person connects their own X account, so they can only be personal.",
+        "SuperGrok keys are per-user — each person connects their own Grok account, so they can only be personal.",
     },
   },
 } as const satisfies Record<string, SubscriptionCredentialDefinition>;

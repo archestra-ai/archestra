@@ -174,7 +174,7 @@ describe("LlmProviderApiKeyForm", () => {
       "Store a provider API key in Vault instead",
     );
     expect(
-      screen.queryByRole("button", { name: /Sign in with X/i }),
+      screen.queryByRole("button", { name: /Sign in with Grok/i }),
     ).not.toBeInTheDocument();
   });
 

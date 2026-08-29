@@ -3,7 +3,7 @@
 import { E2eTestId, SUBSCRIPTION_CREDENTIALS } from "@archestra/shared";
 import { CheckCircle2, Unplug } from "lucide-react";
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
-import { ProviderIcon } from "@/components/provider-icon";
+import { SubscriptionBrandIcon } from "@/components/subscription-brand-icon";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -99,7 +99,11 @@ function SubscriptionProviderCard({
       data-testid={`${E2eTestId.SubscriptionProviderCard}-${offer.kind}`}
     >
       <div className="flex min-w-0 items-center gap-2">
-        <ProviderIcon provider={offer.provider} size={20} />
+        <SubscriptionBrandIcon
+          kind={offer.kind}
+          provider={offer.provider}
+          size={20}
+        />
         <span className="min-w-0 truncate font-medium" title={offer.name}>
           {offer.name}
         </span>

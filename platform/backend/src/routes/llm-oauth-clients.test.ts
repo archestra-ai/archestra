@@ -242,9 +242,7 @@ describe("llmOauthClientsRoutes", () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.message).toContain(
-      "X Premium (SuperGrok) is per-user",
-    );
+    expect(response.json().error.message).toContain("SuperGrok is per-user");
   });
 
   test("creates an authorization_code client registered as a confidential, PKCE client", async () => {

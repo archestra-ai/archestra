@@ -1076,7 +1076,7 @@ describe("KnowledgeSettingsPage", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("does not offer an X Premium (SuperGrok) credential while still offering a plain xAI key", async () => {
+    it("does not offer a SuperGrok credential while still offering a plain xAI key", async () => {
       const user = userEvent.setup();
       mockOrganization = {
         embeddingChatApiKeyId: null,
@@ -1093,7 +1093,7 @@ describe("KnowledgeSettingsPage", () => {
         },
         {
           id: "x-premium-key",
-          name: "X Premium (SuperGrok)",
+          name: "SuperGrok",
           provider: "xai",
           scope: "personal",
           subscriptionKind: "x-premium",
@@ -1115,7 +1115,7 @@ describe("KnowledgeSettingsPage", () => {
         screen.getByRole("option", { name: /xAI Console Key/i }),
       ).toBeInTheDocument();
       expect(
-        screen.queryByRole("option", { name: /X Premium/i }),
+        screen.queryByRole("option", { name: /SuperGrok/i }),
       ).not.toBeInTheDocument();
     });
   });

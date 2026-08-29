@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-08-27
+lastUpdated: 2026-08-29
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -549,7 +549,7 @@ The marker is advice, not a quality verdict. Models are treated as suitable unle
 
 ## xAI (Grok)
 
-[xAI](https://x.ai/) is Elon Musk's AI company offering the Grok series of large language models with real-time information access.
+[xAI](https://x.ai/) is the company behind the Grok models.
 
 ### Supported xAI APIs
 
@@ -565,16 +565,16 @@ The marker is advice, not a quality verdict. Models are treated as suitable unle
 | Variable                     | Required | Description                                                                    |
 | ---------------------------- | -------- | ------------------------------------------------------------------------------ |
 | `ARCHESTRA_XAI_BASE_URL`     | No       | xAI API base URL (default: `https://api.x.ai/v1`)                             |
-| `ARCHESTRA_XAI_SUBSCRIPTION_BASE_URL` | No | X Premium session proxy (default: `https://cli-chat-proxy.grok.com/v1`) |
+| `ARCHESTRA_XAI_SUBSCRIPTION_BASE_URL` | No | SuperGrok session proxy (default: `https://cli-chat-proxy.grok.com/v1`) |
 | `ARCHESTRA_CHAT_XAI_API_KEY` | No       | Default API key for xAI (can be overridden per conversation/team/org)       |
 
 ### Getting an API Key
 
 You can generate an API key from the [xAI Console](https://console.x.ai/).
 
-### X Premium (SuperGrok) Subscription
+### SuperGrok Subscription
 
-Reuse an X Premium (SuperGrok) subscription for chat instead of a metered API key. Click **Connect** on the **X Premium (SuperGrok)** card on **Model Providers**, then sign in with the X account that holds your subscription.
+Reuse a SuperGrok subscription for chat instead of a metered API key. Click **Connect** on the **SuperGrok** card on **Model Providers**, then sign in with the Grok account that holds your subscription.
 
 See [Personal Subscriptions](#personal-subscriptions) for how these credentials are scoped.
 
@@ -586,14 +586,14 @@ Subscription sign-in is unavailable when Bring Your Own Secrets uses a read-only
 
 ### Popular Models
 
-- `grok-2-latest` - Latest Grok model with enhanced capabilities
-- `grok-2-mini` - Lightweight variant optimized for speed
-- `grok-beta` - Beta version with experimental features
+- `grok-4.6` - Flagship text and code model
+- `grok-4.5` - Previous flagship
+- `grok-4.3` - Long-context model (1M tokens)
 
 ### Important Notes
 
 - **OpenAI-compatible API**: xAI's API follows the OpenAI Chat Completions format, making it easy to switch between providers
-- **Real-time information**: Grok models have access to real-time information from X (Twitter) for up-to-date responses
+- **Realtime data**: Grok has no knowledge of current events unless you enable web search or X search tools
 - **API Key format**: Obtain your API key from the [xAI Console](https://console.x.ai/)
 - **Rate limits**: Be mindful of xAI's rate limits when implementing high-volume applications
 

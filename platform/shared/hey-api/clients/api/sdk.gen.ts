@@ -9805,7 +9805,7 @@ export const xaiChatCompletionsWithAgent = <ThrowOnError extends boolean = false
 });
 
 /**
- * Start the xAI OAuth device flow used to connect an X Premium (SuperGrok) subscription as an xAI provider credential
+ * Start the xAI OAuth device flow used to connect a SuperGrok subscription as a provider credential
  *
  * Authentication:
  *

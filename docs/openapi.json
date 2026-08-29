@@ -374838,7 +374838,7 @@
         "tags": [
           "xAI Subscription Auth"
         ],
-        "description": "Start the xAI OAuth device flow used to connect an X Premium (SuperGrok) subscription as an xAI provider credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Start the xAI OAuth device flow used to connect a SuperGrok subscription as a provider credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "responses": {
           "200": {
             "description": "Default Response",

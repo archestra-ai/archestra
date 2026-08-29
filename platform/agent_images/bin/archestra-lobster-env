@@ -3,7 +3,8 @@ set -euo pipefail
 
 repo_dir="${ARCHESTRA_LOBSTER_ENV_REPOSITORY_DIR:-/home/node/workspace/archestra}"
 public_repo="${ARCHESTRA_LOBSTER_ENV_PUBLIC_REPOSITORY:-https://github.com/archestra-ai/archestra.git}"
-private_repo="${ARCHESTRA_LOBSTER_ENV_PRIVATE_REPOSITORY:-https://github.com/archestra-ai/archestra-private.git}"
+private_repo_slug="${ARCHESTRA_LOBSTER_ENV_PRIVATE_REPOSITORY_SLUG:-archestra-ai/archestra-private}"
+private_repo="${ARCHESTRA_LOBSTER_ENV_PRIVATE_REPOSITORY:-https://github.com/${private_repo_slug}.git}"
 task_id="${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID:?}"
 branch="agent/lobster-${task_id%%-*}"
 
@@ -28,6 +29,7 @@ git -C "${repo_dir}" config push.default current
 git -C "${repo_dir}" config user.name "Archestra Agent"
 git -C "${repo_dir}" config user.email \
   "archestra-agent[bot]@users.noreply.github.com"
+(cd "${repo_dir}" && gh repo set-default "${private_repo_slug}")
 
 # Keep the private mirror's main at least as fresh as the public base. A racing
 # task may have already advanced it, so a non-fast-forward sync is harmless;

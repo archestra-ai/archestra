@@ -352,7 +352,7 @@ describe("AuthPageWithInvitationCheck", () => {
   });
 
   describe("backend connectivity", () => {
-    it("should preview the sign-in surface while the backend connects", () => {
+    it("should explain the automatic retry behavior while connecting", () => {
       vi.mocked(useSearchParams).mockReturnValue({
         get: vi.fn().mockReturnValue(null),
       } as unknown as ReturnType<typeof useSearchParams>);
@@ -371,11 +371,12 @@ describe("AuthPageWithInvitationCheck", () => {
       render(<AuthPageWithInvitationCheck path="sign-in" />);
 
       expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
-      expect(screen.getByText("Starting Sparky")).toBeInTheDocument();
+      expect(screen.getByText("Connecting to Sparky")).toBeInTheDocument();
+      expect(screen.getByText("Retrying automatically")).toBeInTheDocument();
       expect(screen.queryByTestId("auth-view")).not.toBeInTheDocument();
     });
 
-    it("should keep retry scheduling out of the connecting interface", () => {
+    it("should keep retry counters out of the connecting interface", () => {
       vi.mocked(useSearchParams).mockReturnValue({
         get: vi.fn().mockReturnValue(null),
       } as unknown as ReturnType<typeof useSearchParams>);
@@ -393,7 +394,7 @@ describe("AuthPageWithInvitationCheck", () => {
 
       render(<AuthPageWithInvitationCheck path="sign-in" />);
 
-      expect(screen.getByText("Starting Sparky")).toBeInTheDocument();
+      expect(screen.getByText("Retrying automatically")).toBeInTheDocument();
       expect(screen.queryByText(/Attempt \d/)).not.toBeInTheDocument();
       expect(screen.queryByTestId("auth-view")).not.toBeInTheDocument();
     });

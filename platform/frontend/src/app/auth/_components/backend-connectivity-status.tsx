@@ -1,7 +1,7 @@
 "use client";
 
 import { GITHUB_REPO_URL } from "@archestra/shared";
-import { ExternalLink, RefreshCcw } from "lucide-react";
+import { ExternalLink, LoaderCircle, RefreshCcw } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { AppLogo } from "@/components/app-logo";
@@ -14,7 +14,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useBackendConnectivity } from "@/lib/config/backend-connectivity";
 import { useAppName } from "@/lib/hooks/use-app-name";
 
@@ -96,11 +95,11 @@ function ConnectionStatusView({
   if (!isUnreachable) {
     return (
       <ConnectivityView
-        title={`Starting ${appName}`}
-        description="Finishing startup. Sign-in will appear automatically."
+        title={`Connecting to ${appName}`}
+        description="The backend is not responding yet. Sign-in will appear when it is ready."
         busy
       >
-        <SignInSkeleton />
+        <ConnectionActivity />
       </ConnectivityView>
     );
   }
@@ -173,18 +172,21 @@ function ConnectivityView({
   );
 }
 
-function SignInSkeleton() {
+function ConnectionActivity() {
   return (
-    <CardContent className="space-y-5" aria-hidden="true">
-      <div className="space-y-2">
-        <Skeleton className="h-3 w-12 bg-muted-foreground/15 motion-reduce:animate-none" />
-        <Skeleton className="h-9 w-full bg-muted-foreground/15 motion-reduce:animate-none" />
+    <CardContent>
+      <div className="flex items-start gap-3 rounded-md border bg-muted/30 p-3">
+        <LoaderCircle
+          className="mt-0.5 size-4 shrink-0 animate-spin text-primary motion-reduce:animate-none"
+          aria-hidden="true"
+        />
+        <div className="space-y-0.5">
+          <p className="text-sm font-medium">Retrying automatically</p>
+          <p className="text-xs leading-5 text-muted-foreground">
+            Checks pause longer after each unsuccessful attempt.
+          </p>
+        </div>
       </div>
-      <div className="space-y-2">
-        <Skeleton className="h-3 w-16 bg-muted-foreground/15 motion-reduce:animate-none" />
-        <Skeleton className="h-9 w-full bg-muted-foreground/15 motion-reduce:animate-none" />
-      </div>
-      <Skeleton className="h-9 w-full bg-muted-foreground/15 motion-reduce:animate-none" />
     </CardContent>
   );
 }

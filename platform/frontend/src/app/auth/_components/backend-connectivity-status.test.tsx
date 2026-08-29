@@ -69,7 +69,7 @@ describe("BackendConnectivityStatus", () => {
     expect(screen.queryByText("Ready")).not.toBeInTheDocument();
   });
 
-  it("previews the sign-in surface while the backend starts", () => {
+  it("explains the automatic retry behavior while connecting", () => {
     vi.mocked(useBackendConnectivity).mockReturnValue({
       status: "connecting",
       attemptCount: 0,
@@ -85,15 +85,21 @@ describe("BackendConnectivityStatus", () => {
     );
 
     expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
-    expect(screen.getByText("Starting Sparky")).toBeInTheDocument();
+    expect(screen.getByText("Connecting to Sparky")).toBeInTheDocument();
     expect(
-      screen.getByText("Finishing startup. Sign-in will appear automatically."),
+      screen.getByText(
+        "The backend is not responding yet. Sign-in will appear when it is ready.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Retrying automatically")).toBeInTheDocument();
+    expect(
+      screen.getByText("Checks pause longer after each unsuccessful attempt."),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Attempt \d/)).not.toBeInTheDocument();
     expect(screen.queryByTestId("child-content")).not.toBeInTheDocument();
   });
 
-  it("keeps retry scheduling out of the interface", () => {
+  it("keeps retry counters out of the interface", () => {
     vi.mocked(useBackendConnectivity).mockReturnValue({
       status: "connecting",
       attemptCount: 3,
@@ -108,7 +114,7 @@ describe("BackendConnectivityStatus", () => {
       </BackendConnectivityStatus>,
     );
 
-    expect(screen.getByText("Starting Sparky")).toBeInTheDocument();
+    expect(screen.getByText("Retrying automatically")).toBeInTheDocument();
     expect(screen.queryByText(/Attempt \d/)).not.toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: /Report issue/i }),

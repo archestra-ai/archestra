@@ -340,6 +340,18 @@ describe("PageLayout header", () => {
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveClass("min-w-0");
   });
+
+  it("floors table pages at phone width so copy does not collapse to a sliver", () => {
+    const { container } = render(
+      <PageLayout minWidth="phone" title="Costs">
+        <div>tables</div>
+      </PageLayout>,
+    );
+
+    expect(
+      container.querySelectorAll(".min-w-\\[20rem\\]").length,
+    ).toBeGreaterThan(0);
+  });
 });
 
 const FIVE_TABS = [

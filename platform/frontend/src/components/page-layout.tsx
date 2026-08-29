@@ -51,6 +51,7 @@ export function PageLayout({
   actionButton,
   mobileVisibleCount = 3,
   maxWidth: maxWidthKey = "wide",
+  minWidth: minWidthKey = "none",
 }: {
   children: React.ReactNode;
   /**
@@ -111,6 +112,12 @@ export function PageLayout({
    * opens into one — the column then stays put between reading and editing.
    */
   maxWidth?: keyof typeof MAX_WIDTH_CLASSES;
+  /**
+   * Floor for the shared header/content column. `phone` is 20rem — wide
+   * enough to read body copy, narrow enough that a phone does not
+   * horizontally scroll the whole page. Tables inside still scroll.
+   */
+  minWidth?: keyof typeof MIN_WIDTH_CLASSES;
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -128,6 +135,7 @@ export function PageLayout({
     ? `${pathname}?${searchParams.toString()}`
     : pathname;
   const maxWidth = MAX_WIDTH_CLASSES[maxWidthKey];
+  const minWidth = MIN_WIDTH_CLASSES[minWidthKey];
   const [overflowOpen, setOverflowOpen] = useState(false);
 
   // Split tabs for mobile: visible vs overflow
@@ -147,9 +155,14 @@ export function PageLayout({
       : undefined;
 
   return (
-    <div className="flex h-full w-full flex-col">
+    <div
+      className={cn(
+        "flex h-full w-full flex-col",
+        minWidth && "min-w-0 overflow-x-auto",
+      )}
+    >
       <div className="border-b border-border bg-card/30">
-        <div className={cn("mx-auto", maxWidth, "px-6 pt-6 md:px-6")}>
+        <div className={cn("mx-auto", minWidth, maxWidth, "px-6 pt-6 md:px-6")}>
           {backLink && <div className="mb-2">{backLink}</div>}
           {/* Below sm the action buttons drop under the title/description
               instead of squeezing them into a sliver beside the buttons. */}
@@ -303,13 +316,25 @@ export function PageLayout({
         </div>
       </div>
       <div className="w-full h-full">
-        <div className={cn("mx-auto w-full", maxWidth, "px-6 py-6 md:px-6")}>
+        <div
+          className={cn(
+            "mx-auto w-full",
+            minWidth || "min-w-0",
+            maxWidth,
+            "px-6 py-6 md:px-6",
+          )}
+        >
           {children}
         </div>
       </div>
     </div>
   );
 }
+
+const MIN_WIDTH_CLASSES = {
+  none: "",
+  phone: "min-w-[20rem]",
+} as const;
 
 const MAX_WIDTH_CLASSES = {
   wide: "max-w-[1680px]",

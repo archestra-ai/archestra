@@ -30,6 +30,10 @@ describe("usage dimension cards", () => {
     expect(
       screen.getByRole("img", { name: /62\.5% of tokens/i }),
     ).toBeInTheDocument();
+    // Phone viewports must scroll the table rather than wrap figures into
+    // neighbouring columns (`table-fixed` + wrap-break-word otherwise crush it).
+    expect(screen.getByRole("table").className).toContain("min-w-[70rem]");
+    expect(screen.getByRole("table").className).toContain("table-auto");
   });
 
   it("groups client usage and keeps subscription-covered value out of spend", () => {

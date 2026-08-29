@@ -76,16 +76,30 @@ export function TopSessionsCard({
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <Table>
+            <Table className="min-w-[70rem] table-auto">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Started</TableHead>
-                  <TableHead>Client</TableHead>
-                  <TableHead>Model</TableHead>
-                  <TableHead className="text-right">Requests</TableHead>
-                  <TableHead className="text-right">Duration</TableHead>
-                  <TableHead className="text-right">Tokens</TableHead>
-                  <TableHead className="text-right">Spend</TableHead>
+                  <TableHead className="min-w-[9rem] max-w-[12rem] whitespace-nowrap">
+                    Started
+                  </TableHead>
+                  <TableHead className="min-w-[8rem] max-w-[14rem] whitespace-nowrap">
+                    Client
+                  </TableHead>
+                  <TableHead className="min-w-[14rem] max-w-[24rem] whitespace-nowrap">
+                    Model
+                  </TableHead>
+                  <TableHead className="min-w-[7rem] max-w-[10rem] whitespace-nowrap text-right">
+                    Requests
+                  </TableHead>
+                  <TableHead className="min-w-[7rem] max-w-[10rem] whitespace-nowrap text-right">
+                    Duration
+                  </TableHead>
+                  <TableHead className="min-w-[8rem] max-w-[12rem] whitespace-nowrap text-right">
+                    Tokens
+                  </TableHead>
+                  <TableHead className="min-w-[10rem] max-w-[16rem] whitespace-nowrap text-right">
+                    Spend
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -102,26 +116,26 @@ export function TopSessionsCard({
                         {session.sessionId}
                       </span>
                     </TableCell>
-                    <TableCell className="max-w-[14ch] truncate">
+                    <TableCell className="max-w-[14rem] truncate">
                       <span title={session.client ?? undefined}>
                         {session.client ?? "Not reported"}
                       </span>
                     </TableCell>
-                    <TableCell className="max-w-[18ch] truncate">
+                    <TableCell className="max-w-[24rem] truncate">
                       <span title={session.model ?? undefined}>
                         {session.model ?? "Not reported"}
                       </span>
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell className="whitespace-nowrap text-right tabular-nums">
                       {session.requests.toLocaleString()}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell className="whitespace-nowrap text-right tabular-nums">
                       {formatDuration(session.durationMinutes)}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell className="whitespace-nowrap text-right tabular-nums">
                       {formatTokens(session.tokens)}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell className="whitespace-nowrap text-right tabular-nums">
                       <BilledCost
                         cost={String(session.cost)}
                         billedCost={String(session.billedCost)}

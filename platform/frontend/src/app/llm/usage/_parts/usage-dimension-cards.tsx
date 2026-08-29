@@ -95,23 +95,28 @@ function UsageDimensionCard({
             {emptyMessage}
           </p>
         ) : (
-          <div className="max-h-[360px] overflow-auto rounded-md border">
-            <Table>
+          <div className="max-h-[360px] min-w-0 overflow-auto rounded-md border">
+            {/*
+              Shared Table is `table-fixed` + wrap-break-word; without a floor
+              width, phone viewports crush headers and figures into neighbouring
+              columns. Scroll horizontally instead.
+            */}
+            <Table className="min-w-[70rem] table-auto">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="bg-card sticky top-0 z-10">
+                  <TableHead className="bg-card sticky top-0 z-10 min-w-[12rem] max-w-[20rem] whitespace-nowrap">
                     {dimensionLabel}
                   </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10">
+                  <TableHead className="bg-card sticky top-0 z-10 min-w-28 max-w-[12rem] whitespace-nowrap">
                     Share
                   </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10 text-right">
+                  <TableHead className="bg-card sticky top-0 z-10 min-w-[7rem] max-w-[10rem] whitespace-nowrap text-right">
                     Requests
                   </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10 text-right">
+                  <TableHead className="bg-card sticky top-0 z-10 min-w-[8rem] max-w-[12rem] whitespace-nowrap text-right">
                     Tokens
                   </TableHead>
-                  <TableHead className="bg-card sticky top-0 z-10 text-right">
+                  <TableHead className="bg-card sticky top-0 z-10 min-w-[10rem] max-w-[16rem] whitespace-nowrap text-right">
                     Spend
                   </TableHead>
                 </TableRow>
@@ -119,7 +124,7 @@ function UsageDimensionCard({
               <TableBody>
                 {rows.map((row) => (
                   <TableRow key={row.label}>
-                    <TableCell className="max-w-[20ch] font-medium">
+                    <TableCell className="max-w-[20rem] font-medium">
                       <span className="block truncate" title={row.label}>
                         {row.label}
                       </span>
@@ -143,10 +148,10 @@ function UsageDimensionCard({
                         </span>
                       </div>
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell className="whitespace-nowrap text-right tabular-nums">
                       {row.requests.toLocaleString()}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell className="whitespace-nowrap text-right tabular-nums">
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <span className="cursor-default underline decoration-dotted underline-offset-4">
@@ -167,7 +172,7 @@ function UsageDimensionCard({
                         </TooltipContent>
                       </Tooltip>
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="whitespace-nowrap text-right">
                       <BilledCost
                         cost={String(row.billedCost + row.subscriptionCost)}
                         billedCost={String(row.billedCost)}

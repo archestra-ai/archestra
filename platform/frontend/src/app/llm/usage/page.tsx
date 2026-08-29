@@ -77,6 +77,7 @@ export default function MyUsagePage() {
 
   return (
     <PageLayout
+      minWidth="phone"
       title="My Usage"
       description="Review your own LLM activity, token mix, clients, models, sessions, and billed spend."
       actionButton={
@@ -94,11 +95,11 @@ export default function MyUsagePage() {
         </Select>
       }
     >
-      <div className="space-y-6">
+      <div className="min-w-0 space-y-6">
         <MyUsageSummary timeframe={timeframe} enabled={isTimeframeResolved} />
 
         {statisticsQuery.isPending || breakdownQuery.isPending ? (
-          <div className="grid gap-6 xl:grid-cols-2">
+          <div className="grid min-w-0 gap-6 xl:grid-cols-2">
             <Skeleton className="h-72 w-full" />
             <Skeleton className="h-72 w-full" />
             <Skeleton className="h-72 w-full" />
@@ -114,12 +115,12 @@ export default function MyUsagePage() {
           </p>
         ) : (
           <>
-            <div className="grid gap-6 xl:grid-cols-2">
+            <div className="grid min-w-0 gap-6 xl:grid-cols-2">
               <ModelUsageCard models={statisticsQuery.data.models} />
               <ClientUsageCard clients={breakdownQuery.data.clients} />
             </div>
 
-            <div className="grid gap-6 xl:grid-cols-2">
+            <div className="grid min-w-0 gap-6 xl:grid-cols-2">
               <TokenMixCard mix={breakdownQuery.data.tokenMix} />
               <ContextSizeCard buckets={breakdownQuery.data.contextBuckets} />
             </div>

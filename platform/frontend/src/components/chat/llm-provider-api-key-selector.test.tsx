@@ -537,9 +537,7 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
       }),
     );
 
-    expect(
-      screen.getByText("Reconnect SuperGrok"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Reconnect SuperGrok")).toBeInTheDocument();
     expect(screen.getByText("reconnect:x-premium-key")).toBeInTheDocument();
   });
 });

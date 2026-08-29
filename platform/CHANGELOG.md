@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.46](https://github.com/archestra-ai/archestra/compare/platform-v1.3.45...platform-v1.3.46) (2026-08-29)
+
+
+### Bug Fixes
+
+* **frontend:** contain responsive registry content ([#7536](https://github.com/archestra-ai/archestra/issues/7536)) ([3ca774e](https://github.com/archestra-ai/archestra/commit/3ca774ef89524215d274a05da02f7c1a24ec12a6))
+* **gemini:** preserve signatures through tool rewrites ([#7538](https://github.com/archestra-ai/archestra/issues/7538)) ([3f466c6](https://github.com/archestra-ai/archestra/commit/3f466c66012d8dcb306b54ffbf59d3e3cd3b0e39))
+
 ## [1.3.45](https://github.com/archestra-ai/archestra/compare/platform-v1.3.44...platform-v1.3.45) (2026-08-28)
 
 

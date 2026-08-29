@@ -180,6 +180,14 @@ export const TOOL_PERMISSIONS: Record<
   run_command: { resource: "sandbox", action: "execute" },
   download_file: { resource: "sandbox", action: "execute" },
   upload_file: { resource: "sandbox", action: "execute" },
+
+  // Tasks are an Agent capability, including when an Agent opts into
+  // Background execution. Per-task ownership stays in the handlers.
+  start_task: { resource: "agent", action: "read" },
+  get_task: { resource: "agent", action: "read" },
+  list_tasks: { resource: "agent", action: "read" },
+  steer_task: { resource: "agent", action: "read" },
+  cancel_task: { resource: "agent", action: "read" },
   // Persistent file store — these operate on `skill_sandbox_files`, not the
   // sandbox itself, so they gate on `file:manage`. Per-file authorization
   // (authorship, project membership) stays in the handlers.

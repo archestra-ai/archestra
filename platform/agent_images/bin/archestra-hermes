@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${ARCHESTRA_LLM_PROXY_PROTOCOL:-}" != "openai_chat" ]]; then
+  echo "archestra: Hermes requires an Agent configured for OpenAI Chat Completions" >&2
+  exit 78
+fi
+
+runtime_dir="${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_RUNTIME_DIR:-/var/run/archestra}"
+export HERMES_HOME="${runtime_dir}/hermes"
+mkdir -p "${HERMES_HOME}"
+jq -n \
+  --arg base_url "${OPENAI_BASE_URL:?}" \
+  --arg model "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL:?}" \
+  --arg task_id "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID:?}" \
+  --arg mcp_url "${ARCHESTRA_MCP_GATEWAY_URL:?}" \
+  --arg gateway_token "${ARCHESTRA_MCP_GATEWAY_TOKEN:?}" \
+  --arg system_prompt "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_SYSTEM_PROMPT:-}" \
+  '{
+    providers:{archestra:{
+      name:"Archestra",
+      base_url:$base_url,
+      key_env:"OPENAI_API_KEY",
+      default_model:$model,
+      transport:"openai_chat"
+    }},
+    agent:{system_prompt:$system_prompt},
+    model:{
+      max_tokens:16384,
+      context_length:1047576,
+      default_headers:{
+        "X-Archestra-Execution-Id":$task_id,
+        "X-Archestra-Session-Id":$task_id
+      }
+    },
+    mcp_servers:{archestra:{
+      url:$mcp_url,
+      headers:{
+        Authorization:("Bearer " + $gateway_token),
+        "X-Archestra-Execution-Id":$task_id,
+        "X-Archestra-Session-Id":$task_id
+      }
+    }}
+  }' > "${HERMES_HOME}/config.yaml"
+chmod 0600 "${HERMES_HOME}/config.yaml"
+
+# Hermes reads its ordinary config from ~/.hermes.
+mkdir -p "${HOME}/.hermes"
+ln -sf "${HERMES_HOME}/config.yaml" "${HOME}/.hermes/config.yaml"
+task_file="${runtime_dir}/task.md"
+printf '%s\n' "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK:?}" > "${task_file}"
+
+common_args=(
+  --provider archestra
+  --model "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL:?}"
+  --yolo
+  --accept-hooks
+)
+
+case "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODE:-one_shot}" in
+  interactive)
+    exec hermes chat \
+      "${common_args[@]}" \
+      --tui \
+      --query "$(cat "${task_file}")"
+    ;;
+  one_shot)
+    set +e
+    hermes chat \
+      "${common_args[@]}" \
+      --query "$(cat "${task_file}")" \
+      2>&1 | tee "${runtime_dir}/hermes-output.log"
+    status=${PIPESTATUS[0]}
+    set -e
+    if [[ ${status} -ne 0 ]] || grep -Eq 'HTTP [45][0-9]{2}:|Traceback \(most recent call last\)|LLM request failed|api_validation_error|Context length exceeded|\[exit [1-9][0-9]*\]|Failed to ' "${runtime_dir}/hermes-output.log"; then
+      exit 1
+    fi
+    ;;
+  *)
+    echo "archestra: unknown Background execution mode" >&2
+    exit 78
+    ;;
+esac

@@ -33,6 +33,7 @@ import {
   ProfileLabels,
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
+import { ContainerDeploymentFields } from "@/components/container-deployment-fields";
 import {
   type EnterpriseManagedConfigInput,
   EnterpriseManagedCredentialFields,
@@ -1385,52 +1386,66 @@ export function McpCatalogForm({
 
               {currentServerType === "local" && (
                 <>
-                  <FormField
-                    control={form.control}
-                    name="localConfig.command"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>
-                          Command
-                          <ReinstallHint show={isCommandDirty} />
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="node"
-                            className="font-mono"
-                            autoComplete={MCP_CONFIG_AUTOCOMPLETE}
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          The executable command to run. Optional if Docker
-                          Image is set (will use image's default{" "}
-                          <code>CMD</code>).
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="localConfig.arguments"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>
-                          Arguments (one per line)
-                          <ReinstallHint show={isArgumentsDirty} />
-                        </FormLabel>
-                        <FormControl>
-                          <Textarea
-                            placeholder={`/path/to/server.js\n--verbose`}
-                            className="font-mono min-h-20"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
+                  <ContainerDeploymentFields
+                    ids={{
+                      image: "mcp-deployment-image",
+                      command: "mcp-deployment-command",
+                      arguments: "mcp-deployment-arguments",
+                    }}
+                    value={{
+                      image: form.watch("localConfig.dockerImage") ?? "",
+                      command: form.watch("localConfig.command") ?? "",
+                      arguments: form.watch("localConfig.arguments") ?? "",
+                    }}
+                    onChange={(next) => {
+                      const current = form.getValues("localConfig");
+                      if (next.image !== current?.dockerImage) {
+                        form.setValue("localConfig.dockerImage", next.image, {
+                          shouldDirty: true,
+                          shouldValidate: true,
+                        });
+                      }
+                      if (next.command !== current?.command) {
+                        form.setValue("localConfig.command", next.command, {
+                          shouldDirty: true,
+                          shouldValidate: true,
+                        });
+                      }
+                      if (next.arguments !== current?.arguments) {
+                        form.setValue("localConfig.arguments", next.arguments, {
+                          shouldDirty: true,
+                          shouldValidate: true,
+                        });
+                      }
+                    }}
+                    image={{
+                      placeholder: mcpServerBaseImage,
+                      optional: true,
+                      labelAddon: <ReinstallHint show={isDockerImageDirty} />,
+                    }}
+                    command={{
+                      placeholder: "node",
+                      labelAddon: <ReinstallHint show={isCommandDirty} />,
+                      description: (
+                        <>
+                          The executable to run. Optional when a container image
+                          is set; its default <code>CMD</code> is used.
+                        </>
+                      ),
+                    }}
+                    arguments={{
+                      placeholder: "/path/to/server.js\n--verbose",
+                      labelAddon: <ReinstallHint show={isArgumentsDirty} />,
+                    }}
+                    errors={{
+                      image:
+                        form.formState.errors.localConfig?.dockerImage?.message,
+                      command:
+                        form.formState.errors.localConfig?.command?.message,
+                      arguments:
+                        form.formState.errors.localConfig?.arguments?.message,
+                    }}
+                    autoComplete={MCP_CONFIG_AUTOCOMPLETE}
                   />
 
                   <FormField
@@ -1558,29 +1573,6 @@ export function McpCatalogForm({
 
             {currentServerType === "local" && (
               <div className="space-y-4">
-                <h3 className="font-semibold text-base">Docker</h3>
-
-                <FormField
-                  control={form.control}
-                  name="localConfig.dockerImage"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>
-                        Image (optional)
-                        <ReinstallHint show={isDockerImageDirty} />
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder={mcpServerBaseImage}
-                          className="font-mono"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <h3 className="font-semibold text-base">

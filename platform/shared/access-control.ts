@@ -674,6 +674,20 @@ export const requiredEndpointPermissionsMap: Partial<
    * authenticated but no specific permission.
    */
   [RouteId.GetOrganization]: {},
+
+  // Background execution belongs to Agents. Read access is enough to view
+  // runs and manage one's own declared credentials; shared credential writes
+  // additionally enforce Agent update + scope ownership inside the route.
+  [RouteId.GetAgentBackgroundExecutionPreflight]: { agent: ["read"] },
+  [RouteId.SetAgentBackgroundExecutionCredential]: { agent: ["read"] },
+  [RouteId.DeleteAgentBackgroundExecutionCredential]: { agent: ["read"] },
+  [RouteId.GetAgentExecutions]: { agent: ["read"] },
+  [RouteId.StartAgentExecution]: { agent: ["read"] },
+  [RouteId.GetMyAgentExecutions]: { agent: ["read"] },
+  [RouteId.GetMyAgentExecution]: { agent: ["read"] },
+  [RouteId.UpdateAgentExecution]: { agent: ["read"] },
+  [RouteId.CancelAgentExecution]: { agent: ["read"] },
+  [RouteId.DeleteAgentExecution]: { agent: ["read"] },
   // Completing onboarding flips an org-wide flag, so gate it on admin-level
   // organization-settings update, like the other org-settings routes.
   [RouteId.CompleteOnboarding]: { organizationSettings: ["update"] },
@@ -2077,6 +2091,10 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // Agents
   "/agents": { agent: ["read"] },
   "/agents/new": { agent: ["create"] },
+  "/messaging-channels": { agentTrigger: ["read"] },
+  "/messaging-channels/slack": { agentTrigger: ["read"] },
+  "/messaging-channels/ms-teams": { agentTrigger: ["read"] },
+  "/messaging-channels/email": { agentTrigger: ["read"] },
   "/skills": { skill: ["read"] },
   "/skills/new": { skill: ["create"] },
   "/plugins": { plugin: ["read"] },

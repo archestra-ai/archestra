@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${ARCHESTRA_LLM_PROXY_PROTOCOL:-}" != "anthropic" ]]; then
+  echo "archestra: Claude Code requires an Agent configured with an Anthropic model" >&2
+  exit 78
+fi
+
+# Claude Code treats ANTHROPIC_API_KEY as a user-supplied custom key and asks
+# for first-run confirmation. The same short-lived platform credential is also
+# provided in ANTHROPIC_AUTH_TOKEN, which is its non-interactive gateway path.
+# Prefer that alias so a fresh pod opens directly into the native TUI.
+unset ANTHROPIC_API_KEY
+
+runtime_dir="${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_RUNTIME_DIR:-/var/run/archestra}"
+mcp_config="${runtime_dir}/claude-mcp.json"
+jq -n \
+  --arg url "${ARCHESTRA_MCP_GATEWAY_URL:?}" \
+  --arg token "${ARCHESTRA_MCP_GATEWAY_TOKEN:?}" \
+  --arg task_id "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID:?}" \
+  '{mcpServers:{archestra:{
+    type:"http",
+    url:$url,
+    headers:{
+      Authorization:("Bearer " + $token),
+      "X-Archestra-Execution-Id":$task_id,
+      "X-Archestra-Session-Id":$task_id
+    }
+  }}}' \
+  > "${mcp_config}"
+chmod 0600 "${mcp_config}"
+
+args=(
+  --model "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL:?}"
+  --permission-mode bypassPermissions
+  --mcp-config "${mcp_config}"
+  --strict-mcp-config
+)
+if [[ -n "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_SYSTEM_PROMPT:-}" ]]; then
+  args+=(--append-system-prompt "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_SYSTEM_PROMPT}")
+fi
+
+case "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODE:-one_shot}" in
+  interactive)
+    # A Chat execution owns a real pty. Start Claude Code's native TUI with the
+    # first prompt already submitted, then leave the process alive for the
+    # person's follow-up turns.
+    exec claude "${args[@]}" "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK:?}"
+    ;;
+  one_shot)
+    # Delegation surfaces have nobody attached to exit the TUI. Print mode
+    # produces one terminal result and exits so the task can settle and report
+    # back to Slack, MCP, schedules, or an A2A caller.
+    exec claude --print "${args[@]}" "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK:?}"
+    ;;
+  *)
+    echo "archestra: unknown Background execution mode" >&2
+    exit 78
+    ;;
+esac

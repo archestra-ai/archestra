@@ -1837,6 +1837,36 @@ export const parseSandboxMemoryMaxBytes = (
   return bytes;
 };
 
+/**
+ * Parse a `key=value,key2=value2` label selector into matchLabels. A malformed
+ * entry falls back to the default rather than silently producing a selector
+ * that matches nothing — an egress policy selecting no destination would leave
+ * every runner unable to reach the platform.
+ *
+ * @public — exported for testability
+ */
+export function parseLabelSelector(
+  value: string | undefined,
+  defaultValue: Record<string, string>,
+): Record<string, string> {
+  const raw = value?.trim();
+  if (!raw) return defaultValue;
+  const parsed: Record<string, string> = {};
+  for (const pair of raw.split(",")) {
+    const [key, ...rest] = pair.split("=");
+    const label = key?.trim();
+    const labelValue = rest.join("=").trim();
+    if (!label || !labelValue) {
+      logger.error(
+        `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_PLATFORM_POD_SELECTOR is not a key=value list (${raw}); using the default`,
+      );
+      return defaultValue;
+    }
+    parsed[label] = labelValue;
+  }
+  return parsed;
+}
+
 const IPV4_CIDR =
   /^((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\/(3[0-2]|[12]?\d)$/;
 
@@ -2192,6 +2222,102 @@ const config = {
     cacheDir:
       process.env.ARCHESTRA_SKILL_MARKETPLACE_CACHE_DIR?.trim() ||
       path.join(homedir(), ".archestra", "skill-marketplace-cache"),
+  },
+  agentBackgroundExecution: {
+    /**
+     * Background execution: delegated Agent tasks run in one Kubernetes pod
+     * each and remain attachable and steerable while they run.
+     *
+     * Deliberately an independent switch rather than `betaFeatureEnabled`:
+     * the feature spawns compute holding a user's personal credentials, so
+     * flipping the ARCHESTRA_BETA master switch must never turn it on by
+     * implication. It also needs the Kubernetes runtime configured — without
+     * that, `orchestratorK8sRuntime` is false and background runs stay unavailable
+     * regardless of this value.
+     */
+    enabled:
+      process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ENABLED === "true",
+    /**
+     * Privileged pods have node-level impact. Agent administrators cannot
+     * enable them unless the deployment operator explicitly opts in too.
+     */
+    allowPrivileged:
+      process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ALLOW_PRIVILEGED ===
+      "true",
+    /** Built-in execution loop used when an Agent enables the capability. */
+    defaultImage:
+      process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_BASE_IMAGE?.trim() ||
+      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:latest",
+    /** Fallback lifetime cap for runners whose agent sets none. */
+    defaultTtlHours: parsePositiveInt(
+      process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_DEFAULT_TTL_HOURS,
+      72,
+    ),
+    /**
+     * Fallback idle stop for runners whose agent sets none. An idle runner is
+     * stopped rather than scaled to zero: its in-memory session state cannot
+     * survive the pod, so the loss is made explicit instead of silent.
+     */
+    defaultIdleTimeoutMinutes: parsePositiveInt(
+      process.env
+        .ARCHESTRA_AGENT_BACKGROUND_EXECUTION_DEFAULT_IDLE_TIMEOUT_MINUTES,
+      180,
+    ),
+    resources: {
+      cpuRequest:
+        process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_CPU_REQUEST?.trim() ||
+        "500m",
+      memoryRequest:
+        process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MEMORY_REQUEST?.trim() ||
+        "1Gi",
+      /**
+       * No CPU limit by default, matching the MCP server runtime: throttling
+       * an agent mid-turn surfaces as confusing timeouts rather than
+       * back-pressure. Memory is limited because a runaway agent process
+       * should die rather than take the node with it.
+       */
+      memoryLimit:
+        process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MEMORY_LIMIT?.trim() ||
+        "4Gi",
+    },
+    ephemeralStorageLimit: parseK8sResourceQuantity({
+      envName: "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_EPHEMERAL_STORAGE_LIMIT",
+      value:
+        process.env
+          .ARCHESTRA_AGENT_BACKGROUND_EXECUTION_EPHEMERAL_STORAGE_LIMIT,
+      validator: isValidK8sMemoryQuantity,
+      defaultValue: "10Gi",
+    }),
+    /**
+     * Base URL a background execution pod uses to reach this deployment's LLM
+     * proxy and MCP gateway. Must be reachable from inside the cluster, so it
+     * defaults to the internal API URL rather than the browser-facing one.
+     *
+     * Empty means background executions cannot start: a session which silently
+     * bypasses the proxy loses all observability, so a missing URL fails the
+     * spawn loudly instead of falling back to a direct provider call.
+     */
+    platformBaseUrl:
+      process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_PLATFORM_BASE_URL?.trim() ||
+      process.env.ARCHESTRA_INTERNAL_API_BASE_URL?.trim() ||
+      "",
+    /**
+     * Selects the platform's own API-serving pods, so a runner's egress policy
+     * can allow exactly that destination and nothing else. The default is the
+     * label the Helm chart already stamps on both the platform and worker
+     * deployments; override it if your deployment labels them differently, or
+     * when the platform runs outside the cluster.
+     */
+    platformPodSelector: parseLabelSelector(
+      process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_PLATFORM_POD_SELECTOR,
+      { "archestra.io/p4-shim-client": "true" },
+    ),
+    /** How often the reconciler syncs runner state and applies TTL/idle stops. */
+    reconcileIntervalSeconds: parsePositiveInt(
+      process.env
+        .ARCHESTRA_AGENT_BACKGROUND_EXECUTION_RECONCILE_INTERVAL_SECONDS,
+      30,
+    ),
   },
   plugins: {
     /**

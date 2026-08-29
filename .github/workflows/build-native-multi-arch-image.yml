@@ -32,6 +32,11 @@ on:
         required: false
         type: string
         default: ""
+      target:
+        description: "Optional Dockerfile target stage"
+        required: false
+        type: string
+        default: ""
       previous_image:
         description: "Optional previous image to extract static assets from"
         required: false
@@ -137,6 +142,7 @@ jobs:
         with:
           context: ${{ inputs.image_directory }}
           dockerfile: ${{ inputs.dockerfile }}
+          target: ${{ inputs.target }}
           push: ${{ inputs.push_image }}
           platforms: ${{ matrix.os_and_arch }}
           outputs: ${{ inputs.push_image && format('type=image,name={0}/{1},push-by-digest=true,name-canonical=true,push=true', inputs.image_registry, inputs.image_name) || '' }}

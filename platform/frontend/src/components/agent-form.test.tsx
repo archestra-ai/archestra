@@ -79,6 +79,7 @@ const {
         provider: string;
         scope: string;
         bestModelId: string;
+        subscriptionKind?: string | null;
       }>;
     } => ({ data: [] }),
   ),
@@ -643,6 +644,8 @@ const AgentForm = (props: Omit<AgentFormProps, "footer">) => (
 );
 
 const baseAgent = {
+  backgroundExecution: null,
+  backgroundExecutionSecretId: null,
   id: "00000000-0000-4000-8000-000000000001",
   organizationId: "00000000-0000-4000-8000-000000000010",
   name: "Existing Agent",
@@ -2187,6 +2190,79 @@ describe("AgentForm save payload and failure handling", () => {
     await waitFor(() => expect(updateAgent).toHaveBeenCalled());
     expect(savedBody().llmApiKeyId).toBe("key-1");
     expect(savedBody().modelId).toBe("model-1");
+  });
+
+  it("automatically uses an existing ChatGPT subscription for the Codex catalog runtime", async () => {
+    const user = userEvent.setup();
+    useAvailableLlmProviderApiKeysMock.mockReturnValue({
+      data: [
+        {
+          id: "chatgpt-subscription",
+          name: "ChatGPT Subscription",
+          provider: "openai",
+          scope: "personal",
+          bestModelId: "codex-model",
+          subscriptionKind: "chatgpt",
+        },
+      ],
+    });
+
+    render(
+      <AgentForm
+        agentType="agent"
+        sections={["configuration"]}
+        initialValues={{
+          name: "Codex",
+          requiredSubscriptionKind: "chatgpt",
+        }}
+      />,
+    );
+
+    const createButton = await screen.findByRole("button", {
+      name: /create/i,
+    });
+    await waitFor(() => expect(createButton).not.toBeDisabled());
+    await user.click(createButton);
+
+    await waitFor(() => expect(createAgent).toHaveBeenCalled());
+    expect(createAgent.mock.calls[0][0]).toMatchObject({
+      llmApiKeyId: "chatgpt-subscription",
+      modelId: "codex-model",
+    });
+  });
+
+  it("does not let a Codex catalog runtime fall back to an API key", async () => {
+    useAvailableLlmProviderApiKeysMock.mockReturnValue({
+      data: [
+        {
+          id: "usage-key",
+          name: "OpenAI API key",
+          provider: "openai",
+          scope: "org",
+          bestModelId: "usage-model",
+          subscriptionKind: null,
+        },
+      ],
+    });
+
+    render(
+      <AgentForm
+        agentType="agent"
+        sections={["configuration"]}
+        initialValues={{
+          name: "Codex",
+          requiredSubscriptionKind: "chatgpt",
+        }}
+      />,
+    );
+
+    expect(
+      await screen.findByText("ChatGPT Subscription required"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Sign in with ChatGPT" }),
+    ).toHaveAttribute("href", "/llm/model-providers?connect=chatgpt");
+    expect(screen.getByRole("button", { name: /create/i })).toBeDisabled();
   });
 
   it("leaves a refused update to the toast the query layer already showed", async () => {

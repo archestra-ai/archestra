@@ -905,11 +905,15 @@ export function stripClaudeContextVariantSuffix(modelId: string): string {
  *   'none'"). Disabling reasoning would degrade the model, so route the whole
  *   family to Responses. "gpt-5.6" is matched up to a `-`/`.`/end boundary so
  *   tiers and dated snapshots are covered without matching e.g. `gpt-5.61`.
+ * - Codex models: OpenAI serves the coding-specialized `gpt-*-codex` family
+ *   through Responses rather than Chat Completions. The suffix boundary also
+ *   covers variants such as `-mini`, `-max`, and dated snapshots.
  */
 export function requiresOpenAiResponsesApi(modelId: string): boolean {
   return (
     /(?:^|[-/])pro(?:[-/]|$)/i.test(modelId) ||
-    /(?:^|\/)gpt-5\.6(?:$|[-.])/i.test(modelId)
+    /(?:^|\/)gpt-5\.6(?:$|[-.])/i.test(modelId) ||
+    /(?:^|\/)gpt-[^/]+-codex(?:$|[-.])/i.test(modelId)
   );
 }
 

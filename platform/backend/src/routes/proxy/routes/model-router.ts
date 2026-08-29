@@ -6,6 +6,7 @@ import {
   perUserCredentialLabel,
   type ResourceVisibilityScope,
   RouteId,
+  requiresOpenAiResponsesApi,
   requiresResponsesApi,
   type SupportedProvider,
 } from "@archestra/shared";
@@ -49,6 +50,7 @@ import {
   mistralAdapterFactory,
   ollamaAdapterFactory,
   openAiEmbeddingsAdapterFactory,
+  openAiResponsesAdapterFactory,
   openaiAdapterFactory,
   openrouterAdapterFactory,
   perplexityAdapterFactory,
@@ -303,7 +305,7 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.ModelRouterListModelsWithAgent,
         description:
-          "List OpenAI-compatible model ids available through the model router (specific LLM proxy)",
+          "List OpenAI-compatible model ids available through the model router (specific attribution Agent)",
         tags: ["LLM Proxy"],
         params: z.object({
           agentId: UuidIdSchema,
@@ -345,7 +347,7 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.ModelRouterResponsesWithAgent,
         description:
-          "Create a response through the OpenAI-compatible model router (specific LLM proxy)",
+          "Create a response through the OpenAI-compatible model router (specific attribution Agent)",
         tags: ["LLM Proxy"],
         params: z.object({
           agentId: UuidIdSchema,
@@ -386,7 +388,7 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.ModelRouterEmbeddingsWithAgent,
         description:
-          "Create embeddings through the OpenAI-compatible model router (specific LLM proxy)",
+          "Create embeddings through the OpenAI-compatible model router (specific attribution Agent)",
         tags: ["LLM Proxy"],
         params: z.object({
           agentId: UuidIdSchema,
@@ -429,7 +431,7 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.ModelRouterChatCompletionsWithAgent,
         description:
-          "Create a chat completion through the OpenAI-compatible model router (specific LLM proxy)",
+          "Create a chat completion through the OpenAI-compatible model router (specific attribution Agent)",
         tags: ["LLM Proxy"],
         params: z.object({
           agentId: UuidIdSchema,
@@ -626,17 +628,19 @@ function getModelRouterEmbeddingsProvider(
  * The provider's native Responses adapter when the resolved model is served
  * only over Responses, otherwise null.
  *
- * Keyed off the model's own published surfaces rather than the provider, so a
- * provider that serves both wires keeps the uniform chat path for every model
- * that accepts chat completions, and only its Responses-only models (Copilot's
- * Codex and GPT-5.x) take the native route.
+ * Keyed off the model's published surfaces where available. OpenAI does not
+ * publish those surfaces, so its known Responses-only model families use the
+ * same model-id discriminator as foreground Agent chat.
  */
 function getNativeResponsesAdapter(resolution: ModelRouterResolution) {
-  if (!requiresResponsesApi(resolution.supportedEndpoints)) {
+  if (!modelRequiresResponses(resolution)) {
     return null;
   }
   if (resolution.provider === "github-copilot") {
     return githubCopilotResponsesAdapterFactory;
+  }
+  if (resolution.provider === "openai") {
+    return openAiResponsesAdapterFactory;
   }
   return null;
 }
@@ -650,13 +654,21 @@ function getNativeResponsesAdapter(resolution: ModelRouterResolution) {
 function assertModelServesChatCompletions(
   resolution: ModelRouterResolution,
 ): void {
-  if (!requiresResponsesApi(resolution.supportedEndpoints)) {
+  if (!modelRequiresResponses(resolution)) {
     return;
   }
   throw new ApiError(
     400,
     `Model "${resolution.requestedModel}" is only served over the Responses API. ` +
       `Send this request to the model router's ${RESPONSES_SUFFIX} endpoint instead of ${CHAT_COMPLETIONS_SUFFIX}.`,
+  );
+}
+
+function modelRequiresResponses(resolution: ModelRouterResolution): boolean {
+  return (
+    requiresResponsesApi(resolution.supportedEndpoints) ||
+    (resolution.provider === "openai" &&
+      requiresOpenAiResponsesApi(resolution.modelId))
   );
 }
 
@@ -835,8 +847,8 @@ async function listModels(params: { auth: ModelRouterAuth }) {
 
 async function getModelRouterAgent(agentId: string | undefined) {
   const agent = await resolveAgent(agentId);
-  if (agent.agentType !== "llm_proxy") {
-    throw new ApiError(400, "Model router requires an LLM Proxy ID.");
+  if (agent.agentType !== "llm_proxy" && agent.agentType !== "agent") {
+    throw new ApiError(400, "Model router requires an Agent or LLM Proxy ID.");
   }
   return agent;
 }
@@ -852,7 +864,7 @@ async function ensureModelRouterAgentAccess(params: {
   if (params.agent.organizationId !== params.auth.organizationId) {
     throw new ApiError(
       403,
-      "Model Router virtual key cannot access this LLM Proxy.",
+      "Model Router virtual key cannot access this Agent.",
     );
   }
   if (params.auth.authMethod === "oauth_user") {
@@ -861,7 +873,7 @@ async function ensureModelRouterAgentAccess(params: {
       params.agent.organizationId,
     );
     if (!member) {
-      throw new ApiError(403, "OAuth user cannot access this LLM Proxy.");
+      throw new ApiError(403, "OAuth user cannot access this Agent.");
     }
   }
 }

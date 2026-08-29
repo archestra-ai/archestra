@@ -13,11 +13,16 @@ import {
   OAUTH_TOKEN_ID_PREFIX,
   parseFullToolName,
   platformExecutedAs,
+  TOOL_CANCEL_TASK_SHORT_NAME,
   TOOL_COPY_FILE_SHORT_NAME,
+  TOOL_GET_TASK_SHORT_NAME,
+  TOOL_LIST_TASKS_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
+  TOOL_START_TASK_SHORT_NAME,
+  TOOL_STEER_TASK_SHORT_NAME,
 } from "@archestra/shared";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -261,6 +266,7 @@ const rawArchestraTokenCache =
 export async function createAgentServer(params: {
   agentId: string;
   tokenAuth?: TokenAuthContext;
+  executionId?: string;
   /**
    * Answers the client supplied on an MRTR retry, keyed as they were issued.
    * Absent on a first attempt, which is what makes the gateway elicit.
@@ -273,7 +279,7 @@ export async function createAgentServer(params: {
     round?: number;
   };
 }): Promise<{ server: McpServer; agent: AgentInfo }> {
-  const { agentId, tokenAuth, mrtr } = params;
+  const { agentId, tokenAuth, executionId, mrtr } = params;
   const mrtrEnabled = mrtr?.enabled === true;
 
   /**
@@ -398,10 +404,26 @@ export async function createAgentServer(params: {
         userId: tokenAuth?.userId,
       }),
     ]);
+    const hasTaskStarter =
+      delegationTools.length > 0 ||
+      mcpTools.some(
+        (tool) =>
+          archestraMcpBranding.getToolShortName(tool.name) ===
+          TOOL_START_TASK_SHORT_NAME,
+      );
+    // A task handle is not useful without its lifecycle controls. Dynamic
+    // per-Agent delegation tools do not have assignment rows, so expose the
+    // controls as protocol support whenever this gateway can start a task.
+    // The handlers still scope every task to the authenticated actor and the
+    // call path keeps its normal RBAC check.
+    const implicitTaskControlTools = hasTaskStarter
+      ? getImplicitTaskControlTools()
+      : [];
     const candidateTools = dedupeToolsByName(
       [
         ...mcpTools.filter((tool) => !tool.delegateToAgentId),
         ...implicitMetaTools,
+        ...implicitTaskControlTools,
         ...[...delegationTools, ...skillDelegationTools].map((tool) => ({
           name: tool.name,
           description: tool.description,
@@ -547,6 +569,7 @@ export async function createAgentServer(params: {
         // biome-ignore lint/suspicious/noExplicitAny: toolResult structure varies by method type
         toolResult: { tools: toolsList } as any,
         userId: tokenAuth?.userId ?? null,
+        executionId: executionId ?? null,
         authMethod: deriveAuthMethod(tokenAuth) ?? null,
       });
       logger.info(
@@ -835,6 +858,7 @@ export async function createAgentServer(params: {
               },
               toolResult: blockedResult,
               userId: tokenAuth?.userId ?? null,
+              executionId: executionId ?? null,
               authMethod: deriveAuthMethod(tokenAuth) ?? null,
             });
           } catch (dbError) {
@@ -944,6 +968,7 @@ export async function createAgentServer(params: {
               },
               toolResult: archestraResult,
               userId: tokenAuth?.userId ?? null,
+              executionId: executionId ?? null,
               authMethod: deriveAuthMethod(tokenAuth) ?? null,
             });
           } catch (dbError) {
@@ -2311,6 +2336,7 @@ function filterExposedTools(params: {
     // operator chose. `full` mode hides only the meta tools.
     return toolExposureMode === "search_and_run_only"
       ? isArchestraMetaTool(tool.name) ||
+          isTaskControlTool(tool.name) ||
           isAlwaysExposedTool(tool.name) ||
           (advertiseUiResourceTools &&
             !autoToolMode &&
@@ -2361,6 +2387,10 @@ function getImplicitArchestraMetaTools() {
   return getArchestraMcpTools().filter((tool) =>
     isArchestraMetaTool(tool.name),
   );
+}
+
+function getImplicitTaskControlTools() {
+  return getArchestraMcpTools().filter((tool) => isTaskControlTool(tool.name));
 }
 
 // First occurrence wins: callers (getMcpToolsByAgent) order candidates with
@@ -2495,6 +2525,16 @@ function isArchestraMetaTool(toolName: string) {
   return (
     shortName === TOOL_SEARCH_TOOLS_SHORT_NAME ||
     shortName === TOOL_RUN_TOOL_SHORT_NAME
+  );
+}
+
+function isTaskControlTool(toolName: string) {
+  const shortName = archestraMcpBranding.getToolShortName(toolName);
+  return (
+    shortName === TOOL_GET_TASK_SHORT_NAME ||
+    shortName === TOOL_LIST_TASKS_SHORT_NAME ||
+    shortName === TOOL_STEER_TASK_SHORT_NAME ||
+    shortName === TOOL_CANCEL_TASK_SHORT_NAME
   );
 }
 

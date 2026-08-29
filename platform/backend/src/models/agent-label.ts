@@ -130,7 +130,9 @@ class AgentLabelModel {
     deletedValues: number;
   }> {
     return await withDbTransaction(async (tx) => {
-      // Find orphaned keys (not referenced in any label junction table)
+      // Find orphaned keys (not referenced in any label junction table).
+      // EVERY junction must be joined here: a key this query cannot see looks
+      // orphaned, and deleting it cascades away the labels that were using it.
       const orphanedKeys = await tx
         .select({ id: schema.labelKeysTable.id })
         .from(schema.labelKeysTable)

@@ -737,6 +737,25 @@ class A2ATaskModel {
     return task ?? null;
   }
 
+  /** The context actor a task belongs to, for caller-scoped access checks. */
+  static async findActorForTask(
+    taskId: string,
+  ): Promise<{ actorKind: string; actorId: string } | null> {
+    const [row] = await db
+      .select({
+        actorKind: schema.a2aContextsTable.actorKind,
+        actorId: schema.a2aContextsTable.actorId,
+      })
+      .from(schema.a2aTasksTable)
+      .innerJoin(
+        schema.a2aContextsTable,
+        eq(schema.a2aTasksTable.contextId, schema.a2aContextsTable.id),
+      )
+      .where(eq(schema.a2aTasksTable.id, taskId))
+      .limit(1);
+    return row ?? null;
+  }
+
   static async findById(id: string): Promise<A2ATask | null> {
     const [task] = await db
       .select()

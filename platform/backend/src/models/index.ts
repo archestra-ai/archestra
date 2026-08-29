@@ -12,8 +12,10 @@ export { default as AgentExcludedConnectorModel } from "./agent-excluded-connect
 export { default as AgentExcludedSkillModel } from "./agent-excluded-skill";
 export { default as AgentExcludedSubagentModel } from "./agent-excluded-subagent";
 export { default as AgentExcludedToolModel } from "./agent-excluded-tool";
+export { default as AgentExecutionInputModel } from "./agent-execution-input";
 export { default as AgentKnowledgeBaseModel } from "./agent-knowledge-base";
 export { default as AgentLabelModel } from "./agent-label";
+export { default as AgentRunModel } from "./agent-run";
 export { default as AgentSkillModel } from "./agent-skill";
 export { default as AgentTeamModel } from "./agent-team";
 export { default as AgentToolModel } from "./agent-tool";
@@ -141,6 +143,7 @@ export { default as ToolInvocationPolicyModel } from "./tool-invocation-policy";
 export { default as ToolObservationModel } from "./tool-observation";
 export { default as TrustedDataPolicyModel } from "./trusted-data-policy";
 export { default as UserModel } from "./user";
+export { default as UserCredentialModel } from "./user-credential";
 export { default as UserOnboardingSeenItemModel } from "./user-onboarding-seen-item";
 export { default as UserTokenModel } from "./user-token";
 export { default as VerificationModel } from "./verification";

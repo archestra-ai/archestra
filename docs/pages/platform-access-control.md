@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-08-24
+lastUpdated: 2026-08-27
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.

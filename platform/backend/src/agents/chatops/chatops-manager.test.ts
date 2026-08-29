@@ -204,6 +204,35 @@ describe("ChatOpsManager security validation", () => {
     });
   }
 
+  test("posts background task completion into the bound thread", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const binding = await unboundChannelBinding(organization.id);
+    const sendReply = vi.fn().mockResolvedValue("reply-id");
+    const manager = makeManagerWith(createMockProvider({ sendReply }));
+
+    await manager.notifyBindingThread({
+      bindingId: binding.id,
+      threadId: "task-thread",
+      text: "Task finished.",
+      agentName: "Research agent",
+    });
+
+    expect(sendReply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: "Task finished.",
+        replyInThread: true,
+        footer: "🤖 Research agent",
+        originalMessage: expect.objectContaining({
+          channelId: "test-channel-id",
+          threadId: "task-thread",
+          isThreadReply: true,
+        }),
+      }),
+    );
+  });
+
   test("auto-assigns the sole agent when a channel has no agent yet", async ({
     makeOrganization,
     makeInternalAgent,

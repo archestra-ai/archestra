@@ -8,6 +8,7 @@ import {
 } from "@archestra/shared";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { siKubernetes } from "simple-icons";
 import { AgentSelector } from "@/components/agent-selector";
 import { ChannelIcon } from "@/components/channel-icon";
 import { ExternalDocsLink } from "@/components/external-docs-link";
@@ -30,7 +31,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { useOrgScopedAgents } from "@/lib/agent.query";
 import {
   APPS_HACKATHON_DATE_RANGE_LABEL,
@@ -38,6 +38,7 @@ import {
   APPS_HACKATHON_SETTING_ANCHOR,
   useAppsHackathonOffered,
 } from "@/lib/app-session-recording/apps-hackathon";
+import { type FeaturesResponse, useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import { useLlmModels } from "@/lib/llm-models.query";
@@ -90,6 +91,7 @@ export default function AgentSettingsPage() {
   // switch on. Past the closing date the whole section goes rather than
   // lingering as a switch that no longer changes anything.
   const hackathonOffered = useAppsHackathonOffered();
+  const executionBackend = useFeature("agentBackgroundExecutionBackend");
 
   const {
     data: allModels,
@@ -455,6 +457,126 @@ export default function AgentSettingsPage() {
         emptyMessage="No channels found."
         savedMessage="Available messaging channels updated"
       />
+      {executionBackend && (
+        <ExecutionBackendSection executionBackend={executionBackend} />
+      )}
     </SettingsSectionStack>
+  );
+}
+
+type ExecutionBackend = NonNullable<
+  FeaturesResponse["agentBackgroundExecutionBackend"]
+>;
+
+function ExecutionBackendSection({
+  executionBackend,
+}: {
+  executionBackend: ExecutionBackend;
+}) {
+  return (
+    <section className="scroll-mt-24 border-t pt-8">
+      <div className="space-y-1">
+        <h2 className="text-base font-semibold leading-6">Execution Backend</h2>
+        <p className="max-w-3xl text-sm leading-5 text-muted-foreground">
+          Installation-wide defaults for delegated Background executions.
+          Configure per-Agent overrides from the Agent editor. Deployment
+          operators manage these values.{" "}
+          <ExternalDocsLink
+            href={getDocsUrl(DocsPage.PlatformAgentBackgroundExecution)}
+          >
+            Learn how Background execution works
+          </ExternalDocsLink>
+        </p>
+      </div>
+
+      <div className="mt-4 overflow-hidden rounded-xl border bg-card">
+        <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[#326CE5]/10">
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                className="size-6"
+                fill={`#${siKubernetes.hex}`}
+              >
+                <path d={siKubernetes.path} />
+              </svg>
+            </div>
+            <div className="min-w-0">
+              <h3 className="font-medium">Kubernetes</h3>
+              <p className="text-sm text-muted-foreground">
+                One isolated Job per delegated task
+              </p>
+            </div>
+          </div>
+          <div className="flex w-fit items-center gap-2 rounded-full border bg-background px-3 py-1.5 text-sm font-medium">
+            <span
+              className={`size-2 rounded-full ${
+                executionBackend.available ? "bg-green-500" : "bg-red-500"
+              }`}
+            />
+            <span>
+              {executionBackend.available ? "Available" : "Unavailable"}
+            </span>
+          </div>
+        </div>
+
+        <dl className="grid gap-x-8 gap-y-5 border-t p-5 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="min-w-0 sm:col-span-2">
+            <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Default image
+            </dt>
+            <dd
+              className="mt-1 break-all font-mono text-sm"
+              title={executionBackend.defaultImage}
+            >
+              {executionBackend.defaultImage}
+            </dd>
+          </div>
+          <ExecutionBackendDetail label="Maximum duration">
+            {executionBackend.defaultTtlHours} hours
+          </ExecutionBackendDetail>
+          <ExecutionBackendDetail label="Idle timeout">
+            {executionBackend.defaultIdleTimeoutMinutes} minutes
+          </ExecutionBackendDetail>
+          <ExecutionBackendDetail label="CPU request">
+            {executionBackend.resources.cpuRequest}
+          </ExecutionBackendDetail>
+          <ExecutionBackendDetail label="Memory request">
+            {executionBackend.resources.memoryRequest}
+          </ExecutionBackendDetail>
+          <ExecutionBackendDetail label="Memory limit">
+            {executionBackend.resources.memoryLimit}
+          </ExecutionBackendDetail>
+          <ExecutionBackendDetail label="Privileged containers">
+            {executionBackend.allowPrivileged ? "Allowed" : "Disabled"}
+          </ExecutionBackendDetail>
+        </dl>
+
+        {!executionBackend.available && (
+          <div className="border-t bg-red-500/5 px-5 py-3 text-sm text-red-600 dark:text-red-400">
+            The feature is enabled, but the Kubernetes execution backend is not
+            reachable. Check the orchestrator configuration.
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function ExecutionBackendDetail({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </dt>
+      <dd className="mt-1 text-sm">{children}</dd>
+    </div>
   );
 }

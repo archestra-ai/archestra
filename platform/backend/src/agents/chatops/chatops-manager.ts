@@ -60,6 +60,7 @@ import {
   resolveSignupWelcomeMode,
 } from "./auto-provision";
 import { claimThreadMuteHint, getThreadMuteMarker } from "./channel-activation";
+import { compactChatOpsResponse } from "./chatops-response";
 import { chatOpsRunRegistry } from "./chatops-run-registry";
 import {
   CHATOPS_ATTACHMENT_LIMITS,
@@ -200,6 +201,64 @@ export class ChatOpsManager {
    * Uses a distributed TTL cache to avoid rediscovering too frequently.
    * Providers implement channel listing; this method handles caching, upsert, and stale cleanup.
    */
+  /**
+   * Post one message into a bound channel's thread, outside any incoming
+   * message flow. This is how background work started FROM a chatops
+   * conversation (a runner task) reports back when it finishes — the promise
+   * "I'll follow up once it completes" only means something if something can
+   * actually follow up.
+   */
+  async notifyBindingThread(params: {
+    bindingId: string;
+    threadId: string;
+    text: string;
+    agentName?: string;
+  }): Promise<void> {
+    const binding = await ChatOpsChannelBindingModel.findById(params.bindingId);
+    if (!binding) {
+      logger.warn(
+        { bindingId: params.bindingId },
+        "[ChatOps] notifyBindingThread: binding no longer exists",
+      );
+      return;
+    }
+    const provider =
+      binding.provider === "slack"
+        ? this.slackProvider
+        : binding.provider === "ms-teams"
+          ? this.msTeamsProvider
+          : binding.provider === "telegram"
+            ? this.telegramProvider
+            : null;
+    if (!provider?.isConfigured()) {
+      logger.warn(
+        { bindingId: params.bindingId, provider: binding.provider },
+        "[ChatOps] notifyBindingThread: provider not configured",
+      );
+      return;
+    }
+    await provider.sendReply({
+      // A synthesized reference, not a real incoming message: sendReply only
+      // routes on channelId/threadId, and this reply answers a thread rather
+      // than a specific message.
+      originalMessage: {
+        messageId: `notify-${params.bindingId}-${Date.now()}`,
+        channelId: binding.channelId,
+        workspaceId: null,
+        threadId: params.threadId,
+        senderId: "system",
+        senderName: "system",
+        text: "",
+        rawText: "",
+        timestamp: new Date(),
+        isThreadReply: true,
+      },
+      text: params.text,
+      replyInThread: true,
+      footer: params.agentName ? `🤖 ${params.agentName}` : undefined,
+    });
+  }
+
   async discoverChannels(params: {
     provider: ChatOpsProvider;
     context: unknown;
@@ -2062,7 +2121,7 @@ export class ChatOpsManager {
     const text = (resultMessage.parts || [])
       .map((part) => part.text)
       .join("\n");
-    let agentResponse = stripThinkingBlocks(text);
+    let agentResponse = compactChatOpsResponse(stripThinkingBlocks(text));
 
     // The agent's way to stay silent in group conversations — post nothing.
     // The sentinel ANYWHERE in the response means silence: models often

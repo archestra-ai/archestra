@@ -1,4 +1,4 @@
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 
 import config from "@/config";
 
@@ -380,7 +380,9 @@ function sign(encoded: string): string {
       "Cannot sign MRTR request state: no auth secret is configured",
     );
   }
-  return createHmac("sha256", key).update(encoded).digest("base64url");
+  const hmac = createHmac("sha256", key);
+  // codeql[js/insufficient-password-hash] This HMAC authenticates opaque request state; it does not store or verify passwords.
+  return hmac.update(encoded).digest("base64url");
 }
 
 function verifySignature(encoded: string, signature: string): boolean {
@@ -410,7 +412,16 @@ function verifySignature(encoded: string, signature: string): boolean {
  * both sides agree.
  */
 function digestRequestParams(method: string, requestParams: unknown): string {
-  return createHash("sha256")
+  const key = hmacKey();
+  if (!key) {
+    throw new Error(
+      "Cannot digest MRTR request parameters: no auth secret is configured",
+    );
+  }
+
+  // Key the digest because request parameters may contain credentials. A
+  // plain hash inside the client-visible state would permit offline guessing.
+  return createHmac("sha256", key)
     .update(stableStringify(canonicalRequestParams(method, requestParams)))
     .digest("base64url");
 }

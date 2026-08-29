@@ -1,6 +1,7 @@
 import { vi } from "vitest";
 import { A2AArtifactModel, A2AMessageModel, A2ATaskModel } from "@/models";
 import { describe, expect, test } from "@/test";
+import type { AgentRun } from "@/types";
 import { type A2AActor, A2AError, A2AErrorKind } from "./a2a-base";
 import { buildApprovalDecisionSendMessageRequest } from "./a2a-helper";
 import { A2AManager } from "./a2a-manager";
@@ -12,12 +13,32 @@ import {
   A2AProtocolTaskState,
 } from "./a2a-protocol";
 
-const { executeA2AMessage } = vi.hoisted(() => ({
-  executeA2AMessage: vi.fn(),
-}));
+const { executeA2AMessage, resumeBackgroundTask, runTaskInBackground } =
+  vi.hoisted(() => ({
+    executeA2AMessage: vi.fn(),
+    resumeBackgroundTask: vi.fn(),
+    runTaskInBackground: vi.fn(),
+  }));
 
 vi.mock("@/agents/a2a-executor.ts", () => ({
   executeA2AMessage,
+}));
+
+vi.mock("@/services/runners/pod-execution", () => ({
+  resolveAgentDeployment: (agent: {
+    id: string;
+    name: string;
+    backgroundExecution?: object | null;
+  }) =>
+    agent.backgroundExecution
+      ? {
+          agentId: agent.id,
+          name: agent.name,
+          ...agent.backgroundExecution,
+        }
+      : null,
+  runTaskInBackground,
+  resumeBackgroundTask,
 }));
 
 const actor: A2AActor = {
@@ -140,6 +161,125 @@ async function waitForState(
 }
 
 describe("A2AManager full task mode", () => {
+  test("re-adopts a surviving background Job and settles its existing task", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "background-agent", teams: [] });
+    const context = await A2AContextManager.createContext(actor);
+    const task = await A2ATaskModel.create({
+      contextId: context.id,
+      agentId: agent.id,
+      state: A2AProtocolTaskState.Working,
+      lastHeartbeatAt: new Date(0),
+    });
+    const session: AgentRun = {
+      id: crypto.randomUUID(),
+      organizationId: agent.organizationId,
+      taskId: task.id,
+      agentId: agent.id,
+      actorUserId: actor.id,
+      title: "Recovered task",
+      deploymentName: "runner-background-agent-recovery",
+      backend: "kubernetes",
+      runtimeScope: "archestra-dev",
+      virtualApiKeyId: null,
+      chatOpsBindingId: null,
+      chatOpsThreadId: null,
+      completionNotificationClaimedAt: null,
+      completionNotifiedAt: null,
+      logs: null,
+      startedAt: new Date(),
+      endedAt: null,
+    };
+    resumeBackgroundTask.mockImplementationOnce(
+      async (params: { onTextDelta?: (delta: string) => void }) => {
+        params.onTextDelta?.("recovered answer");
+        const messageId = crypto.randomUUID();
+        return {
+          messageId,
+          text: "recovered answer",
+          finishReason: "stop",
+          responseUiMessage: {
+            id: messageId,
+            role: "assistant",
+            parts: [{ type: "text", text: "recovered answer" }],
+          },
+        };
+      },
+    );
+
+    await fullManager().adoptBackgroundTask({ taskId: task.id, session });
+
+    expect(resumeBackgroundTask).toHaveBeenCalledWith(
+      expect.objectContaining({ session }),
+    );
+    expect((await A2ATaskModel.findById(task.id))?.state).toBe(
+      A2AProtocolTaskState.Completed,
+    );
+    expect(await A2AArtifactModel.findByTaskId(task.id)).toEqual([
+      expect.objectContaining({
+        name: "agent-response",
+        parts: [{ text: "recovered answer" }],
+      }),
+    ]);
+  });
+
+  test("an Agent deployment is used for a task, while a synchronous A2A message stays foreground", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      name: "background-agent",
+      teams: [],
+      backgroundExecution: {
+        image: "example.invalid/background-agent:test",
+        command: null,
+        inferenceProtocol: "openai_responses",
+        backend: "kubernetes",
+        steerMode: "pipe",
+        privileged: false,
+        resources: null,
+        environment: null,
+        credentials: null,
+        ttlHours: null,
+        idleTimeoutMinutes: null,
+      },
+    });
+    mockExecutorText("foreground answer");
+    runTaskInBackground.mockResolvedValueOnce({
+      messageId: crypto.randomUUID(),
+      text: "background answer",
+      finishReason: "stop",
+      responseUiMessage: {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        parts: [{ type: "text", text: "background answer" }],
+      },
+    });
+
+    const direct = await sendMessage({
+      manager: fullManager(),
+      agentId: agent.id,
+    });
+    expect(direct.message?.parts).toEqual([{ text: "foreground answer" }]);
+    expect(runTaskInBackground).not.toHaveBeenCalled();
+
+    const tasked = await sendMessage({
+      manager: fullManager(),
+      agentId: agent.id,
+      taskRun: { createTask: true, detached: false },
+    });
+    expect(tasked.task?.status.state).toBe(A2AProtocolTaskState.Completed);
+    expect(runTaskInBackground).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: agent.id,
+        taskId: tasked.task?.id,
+        deployment: expect.objectContaining({ agentId: agent.id }),
+        executionMode: "one_shot",
+      }),
+    );
+    expect(executeA2AMessage).toHaveBeenCalledTimes(1);
+  });
+
   test("blocking tasked run walks SUBMITTED -> WORKING -> COMPLETED with artifact, events, and timestamps", async ({
     makeAgent,
   }) => {

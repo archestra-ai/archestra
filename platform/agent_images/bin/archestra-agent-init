@@ -1,0 +1,49 @@
+#!/bin/sh
+set -eu
+
+# A pod can become runnable a moment before the platform endpoint is reachable
+# (notably while a local Tilt backend restarts). Native clients retry transport
+# errors inconsistently, so establish the shared runtime contract once here.
+if [ -n "${OPENAI_BASE_URL:-}" ] && [ -n "${OPENAI_API_KEY:-}" ]; then
+  platform_ready=false
+  attempt=1
+  while [ "${attempt}" -le 30 ]; do
+    if curl --fail --silent --show-error --output /dev/null \
+      --header "Authorization: Bearer ${OPENAI_API_KEY}" \
+      "${OPENAI_BASE_URL%/}/models"; then
+      platform_ready=true
+      break
+    fi
+    attempt=$((attempt + 1))
+    sleep 1
+  done
+  if [ "${platform_ready}" != true ]; then
+    echo "archestra: the Agent runtime could not reach the platform proxy" >&2
+    exit 69
+  fi
+fi
+
+# Catalog images use a declared per-user token. Configure git's credential
+# helper before any Agent command starts so ordinary `git clone` and `git push`
+# work without an interactive username/password prompt. Keep command output
+# suppressed: authentication errors should surface on the actual git command,
+# never by printing credential state during startup.
+if [ -n "${GH_TOKEN:-${GITHUB_TOKEN:-}}" ] && command -v gh >/dev/null 2>&1; then
+  github_token="${GH_TOKEN:-${GITHUB_TOKEN}}"
+  # Persist the credential inside this ephemeral pod before the native Agent
+  # starts. Some clients deliberately scrub token-shaped environment variables
+  # from their shell tools; Git and gh can still use the user-supplied token
+  # through their normal 0600 auth store without putting it in the workspace.
+  printf '%s\n' "${github_token}" |
+    env -u GH_TOKEN -u GITHUB_TOKEN gh auth login \
+      --hostname github.com \
+      --with-token >/dev/null 2>&1
+  gh auth setup-git >/dev/null 2>&1
+  # Coding agents commonly prefer the SSH clone URL shown by GitHub. The
+  # catalog credential is an HTTPS token, so normalize either SSH spelling to
+  # the authenticated HTTPS transport instead of requiring a second SSH key.
+  git config --global url."https://github.com/".insteadOf "git@github.com:"
+  git config --global --add url."https://github.com/".insteadOf \
+    "ssh://git@github.com/"
+  unset github_token
+fi

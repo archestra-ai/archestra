@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${ARCHESTRA_LLM_PROXY_PROTOCOL:-}" != "openai_responses" ]]; then
+  echo "archestra: Codex requires an Agent configured for OpenAI Responses" >&2
+  exit 78
+fi
+
+runtime_dir="${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_RUNTIME_DIR:-/var/run/archestra}"
+export CODEX_HOME="${runtime_dir}/codex"
+mkdir -p "${CODEX_HOME}"
+developer_instructions="$({
+  printf '%s\n\n' "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_SYSTEM_PROMPT:-}"
+  printf '%s' "Complete the delegated task fully in this isolated runner. Use the local shell and file tools directly. Do not stop after announcing a plan. Verify the work and report the concrete result."
+} | jq -Rs .)"
+cat > "${CODEX_HOME}/config.toml" <<EOF
+model = "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL:?}"
+model_provider = "archestra"
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+developer_instructions = ${developer_instructions}
+
+[model_providers.archestra]
+name = "Archestra"
+base_url = "${OPENAI_BASE_URL:?}"
+env_key = "OPENAI_API_KEY"
+wire_api = "responses"
+
+[model_providers.archestra.http_headers]
+"X-Archestra-Execution-Id" = "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID:?}"
+"X-Archestra-Session-Id" = "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID:?}"
+
+[mcp_servers.archestra]
+url = "${ARCHESTRA_MCP_GATEWAY_URL:?}"
+bearer_token_env_var = "ARCHESTRA_MCP_GATEWAY_TOKEN"
+
+[mcp_servers.archestra.http_headers]
+"X-Archestra-Execution-Id" = "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID:?}"
+"X-Archestra-Session-Id" = "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID:?}"
+
+[projects."${PWD}"]
+trust_level = "trusted"
+EOF
+chmod 0600 "${CODEX_HOME}/config.toml"
+
+task_file="${runtime_dir}/task.md"
+printf '%s\n' "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK:?}" > "${task_file}"
+
+common_args=(
+  --dangerously-bypass-approvals-and-sandbox
+  --model "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL}"
+  --config model_provider='"archestra"'
+)
+
+case "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODE:-one_shot}" in
+  interactive)
+    # No subcommand means Codex's native full-screen TUI. The positional prompt
+    # starts the first turn; subsequent terminal input stays in the same Codex
+    # conversation until the person exits or stops the execution.
+    exec codex "${common_args[@]}" -- "$(cat "${task_file}")"
+    ;;
+  one_shot)
+    exec codex exec \
+      "${common_args[@]}" \
+      --skip-git-repo-check \
+      --color always \
+      -- "$(cat "${task_file}")"
+    ;;
+  *)
+    echo "archestra: unknown Background execution mode" >&2
+    exit 78
+    ;;
+esac

@@ -515,6 +515,20 @@ class OpenAiResponsesStreamAdapter
       this.state.stopReason =
         this.state.toolCalls.length > 0 ? "tool_calls" : "stop";
 
+      // A Responses client treats this envelope as the end of the turn. When
+      // tool-call fragments are being held for policy evaluation, forwarding
+      // `response.completed` now makes the client exit before the approved
+      // calls are released. Buffer the terminal envelope with those fragments
+      // so the client observes function calls first and completion last.
+      if (this.state.toolCalls.length > 0) {
+        this.state.rawToolCallEvents.push(chunk);
+        return {
+          sseData: null,
+          isToolCallChunk: true,
+          isFinal: true,
+        };
+      }
+
       return {
         sseData: toSse(chunk),
         isToolCallChunk: false,

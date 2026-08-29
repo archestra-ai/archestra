@@ -403,6 +403,35 @@ describe("ArchestraPromptInput", () => {
     localStorage.clear();
   });
 
+  it("turns the composer into a focused execution launcher", () => {
+    render(
+      <ArchestraPromptInput
+        {...defaultProps}
+        executionMode
+        executionAgentName="Codex"
+        allowFileUploads
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "Starts Codex in an isolated execution. This becomes its live terminal when ready.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId(E2eTestId.ChatPromptTextarea)).toHaveAttribute(
+      "placeholder",
+      "Describe the task to run...",
+    );
+    expect(
+      screen.getByTestId(E2eTestId.ChatFileUploadButton),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId(E2eTestId.ChatDisabledFileUploadButton),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("model-selector")).not.toBeInTheDocument();
+    expect(screen.queryByText("Speech")).not.toBeInTheDocument();
+  });
+
   it("shows subscription sign-in without provider settings permission", () => {
     const onSubmit = vi.fn();
     mockControllerState.value = "keep this draft";

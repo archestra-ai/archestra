@@ -4,7 +4,14 @@ type InternalAgent = archestraApiTypes.GetAllAgentsResponses["200"][number];
 
 type InitialAgentListItem = Pick<
   InternalAgent,
-  "id" | "name" | "scope" | "authorId" | "description" | "icon" | "systemPrompt"
+  | "id"
+  | "name"
+  | "scope"
+  | "authorId"
+  | "description"
+  | "icon"
+  | "systemPrompt"
+  | "backgroundExecution"
 >;
 
 export function filterAndSortInitialAgents(params: {

@@ -14,7 +14,7 @@ import {
   parseSandboxCommand,
 } from "@archestra/shared";
 import type { ChatStatus } from "ai";
-import { XIcon } from "lucide-react";
+import { TerminalSquare, XIcon } from "lucide-react";
 import type { FormEvent, KeyboardEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -221,6 +221,9 @@ export interface ArchestraPromptInputProps
   onRestoreExternalMcpSkillAttachment?: (
     skill: ChatExternalMcpSkillMetadata,
   ) => void;
+  /** Render the new-chat composer as an isolated execution launcher. */
+  executionMode?: boolean;
+  executionAgentName?: string;
 }
 
 type SlashCommand = {
@@ -285,6 +288,8 @@ const PromptInputContent = ({
   externalMcpSkillAttachment,
   onRemoveExternalMcpSkillAttachment,
   onRestoreExternalMcpSkillAttachment,
+  executionMode = false,
+  executionAgentName,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
   sandboxAvailable: boolean;
@@ -993,7 +998,16 @@ const PromptInputContent = ({
           edge, carrying the explanation that used to live in the toggle's
           tooltip. Paired with the dashed composer border below so an
           locked chat is unmistakable while composing. */}
-      {lockedChatActive && (
+      {executionMode && (
+        <div className="mx-3 -mb-px flex items-center gap-2 rounded-t-lg border border-b-0 border-primary/50 bg-primary/5 px-3 py-1.5 text-xs text-muted-foreground animate-in fade-in slide-in-from-bottom-2">
+          <TerminalSquare className="size-3.5 text-primary" />
+          <span>
+            Starts {executionAgentName ?? "this Agent"} in an isolated
+            execution. This becomes its live terminal when ready.
+          </span>
+        </div>
+      )}
+      {lockedChatActive && !executionMode && (
         <div
           data-testid={E2eTestId.LockedChatNotice}
           className="mx-3 -mb-px flex items-center gap-2 rounded-t-lg border border-b-0 border-dashed border-muted-foreground/60 bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground animate-in fade-in slide-in-from-bottom-2"
@@ -1013,6 +1027,8 @@ const PromptInputContent = ({
         maxFileSize={storageByteLimit}
         onError={handleFileError}
         className={cn(
+          executionMode &&
+            "[&_[data-slot=input-group]]:border-primary/50 [&_[data-slot=input-group]]:bg-primary/[0.025] [&_[data-slot=input-group]]:!ring-0 [&:has([data-slot=input-group-control]:focus-visible)_[data-slot=input-group]]:!border-primary",
           lockedChatActive &&
             // The dashed border replaces the composer's ring outright (both
             // at once read as two competing outlines). !important because the
@@ -1035,9 +1051,11 @@ const PromptInputContent = ({
           ) : (
             <PromptInputTextarea
               placeholder={
-                conversationId
-                  ? "Ask a follow-up..."
-                  : (chatPlaceholder ?? "What would you like to get done?")
+                executionMode
+                  ? "Describe the task to run..."
+                  : conversationId
+                    ? "Ask a follow-up..."
+                    : (chatPlaceholder ?? "What would you like to get done?")
               }
               ref={textareaRef}
               className="px-4"
@@ -1079,6 +1097,7 @@ const PromptInputContent = ({
             modelSource={modelSource}
             toolsUnavailable={toolsUnavailable}
             notRecommendedForAgents={notRecommendedForAgents}
+            executionMode={executionMode}
             onResetModelOverride={onResetModelOverride}
             thinkingEffort={thinkingEffort}
             onThinkingEffortChange={onThinkingEffortChange}
@@ -1099,10 +1118,12 @@ const PromptInputContent = ({
               folds the inline tools into a menu (freeing space for the pinned
               recorder pill) rather than squeezing the send button. */}
           <div ref={trailingRef} className="flex shrink-0 items-center gap-2">
-            <PromptInputSpeechButton
-              textareaRef={textareaRef}
-              onTranscriptionChange={handleTranscriptionChange}
-            />
+            {!executionMode && (
+              <PromptInputSpeechButton
+                textareaRef={textareaRef}
+                onTranscriptionChange={handleTranscriptionChange}
+              />
+            )}
             <Tooltip>
               <TooltipTrigger asChild>
                 <PromptInputSubmit
@@ -1201,6 +1222,8 @@ const ArchestraPromptInput = ({
   externalMcpSkillAttachment,
   onRemoveExternalMcpSkillAttachment,
   onRestoreExternalMcpSkillAttachment,
+  executionMode,
+  executionAgentName,
 }: ArchestraPromptInputProps) => {
   const { data: activeAgent } = useProfile(agentId ?? undefined);
   const sandboxAvailable = activeAgent?.sandboxAvailable ?? false;
@@ -1311,6 +1334,8 @@ const ArchestraPromptInput = ({
           sandboxAvailable={sandboxAvailable}
           lockedChat={lockedChat}
           onLockedChatChange={onLockedChatChange}
+          executionMode={executionMode}
+          executionAgentName={executionAgentName}
           prefillText={prefillText}
           onPrefillApplied={onPrefillApplied}
           externalMcpSkillAttachment={externalMcpSkillAttachment}

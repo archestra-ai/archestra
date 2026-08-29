@@ -7,6 +7,7 @@ import {
   slugify,
 } from "@archestra/shared";
 import { vi } from "vitest";
+import config from "@/config";
 import db, { schema } from "@/database";
 import {
   AgentExcludedSubagentModel,
@@ -20,10 +21,19 @@ import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool, getAgentTools } from ".";
 
 const mockExecuteA2AMessage = vi.fn();
+const mockStartDelegatedTask = vi.fn();
 
 vi.mock("@/agents/a2a-executor", () => ({
   executeA2AMessage: (...args: unknown[]) => mockExecuteA2AMessage(...args),
 }));
+vi.mock("@/archestra-mcp-server/tasks", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/archestra-mcp-server/tasks")>();
+  return {
+    ...actual,
+    startDelegatedTask: (...args: unknown[]) => mockStartDelegatedTask(...args),
+  };
+});
 
 describe("delegation tool execution", () => {
   let testAgent: Agent;
@@ -93,6 +103,63 @@ describe("delegation tool execution", () => {
     expect(text).toContain("No delegation is configured");
     expect(text).toContain(`${AGENT_TOOL_PREFIX}*`);
     expect(text).toContain("Do not guess delegation names");
+  });
+
+  test("runs an ordinary delegation as a durable task when the target has Background execution", async ({
+    makeAgent,
+    makeAgentTool,
+  }) => {
+    const previous = config.agentBackgroundExecution.enabled;
+    config.agentBackgroundExecution.enabled = true;
+    const targetAgent = await makeAgent({
+      name: "Background Worker",
+      backgroundExecution: {
+        image: "example.invalid/background-worker:test",
+        command: null,
+        inferenceProtocol: "openai_responses",
+        backend: "kubernetes",
+        steerMode: "pipe",
+        privileged: false,
+        resources: null,
+        environment: null,
+        credentials: null,
+        ttlHours: null,
+        idleTimeoutMinutes: null,
+      },
+    });
+    const delegationTool = await ToolModel.findOrCreateDelegationTool(
+      targetAgent.id,
+    );
+    await makeAgentTool(testAgent.id, delegationTool.id);
+    mockStartDelegatedTask.mockResolvedValue({
+      content: [{ type: "text", text: "Task task-1 started" }],
+      isError: false,
+    });
+    const context = {
+      ...mockContext,
+      userId: "user-1",
+      sessionId: "chatops:slack:thread-1",
+      chatOpsBindingId: "binding-1",
+      chatOpsThreadId: "thread-1",
+    };
+
+    try {
+      const result = await executeArchestraTool(
+        `${AGENT_TOOL_PREFIX}${slugify(targetAgent.name)}`,
+        { message: "Implement the change." },
+        context,
+      );
+
+      expect(result.isError).toBe(false);
+      expect(mockStartDelegatedTask).toHaveBeenCalledWith({
+        agentId: targetAgent.id,
+        message: "Implement the change.",
+        context,
+      });
+      expect(mockExecuteA2AMessage).not.toHaveBeenCalled();
+    } finally {
+      config.agentBackgroundExecution.enabled = previous;
+    }
   });
 
   test("propagates the current trust state to delegated subagents", async ({

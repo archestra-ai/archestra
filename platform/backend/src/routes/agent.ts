@@ -26,6 +26,7 @@ import {
   assertAgentTeams,
 } from "@/auth/agent-type-permissions";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
+import config from "@/config";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import {
   AgentLabelModel,
@@ -55,6 +56,7 @@ import {
 } from "@/services/environments/environment";
 import {
   type Agent,
+  type AgentBackgroundExecution,
   AgentCredentialReadinessSchema,
   AgentExportPayloadSchema,
   AgentKnowledgeSourceExclusionsSchema,
@@ -501,6 +503,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
       checker.require(agentType, "create");
+      requireBackgroundExecutionPermission({
+        agentType,
+        backgroundExecution: body.backgroundExecution,
+        isAdmin: checker.isAdmin(agentType),
+      });
 
       // Validate scope-based permissions for agent creation
       if (!checker.isAdmin(agentType)) {
@@ -776,7 +783,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       } catch {
         throw new ApiError(404, "Agent not found");
       }
-
       // Enforce scope-based modify permissions like UpdateAgent does
       const userTeamIds = !checker.isAdmin(existingAgent.agentType)
         ? await TeamModel.getUserTeamIds(user.id)
@@ -1460,6 +1466,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       } catch {
         throw new ApiError(404, "Agent not found");
       }
+      requireBackgroundExecutionPermission({
+        agentType: existingAgent.agentType,
+        backgroundExecution: body.backgroundExecution,
+        isAdmin: checker.isAdmin(existingAgent.agentType),
+      });
 
       // Fetch user's team IDs once for scope-based checks and team assignment validation
       const userTeamIds = !checker.isAdmin(existingAgent.agentType)
@@ -2682,6 +2693,38 @@ const AGENT_READ_FORBIDDEN_MESSAGE =
  */
 const LLM_PROXY_MANAGED_MESSAGE =
   "The LLM Proxy is managed on the LLM Proxy page.";
+
+function requireBackgroundExecutionPermission(params: {
+  agentType: AgentType;
+  backgroundExecution?: AgentBackgroundExecution | null;
+  isAdmin: boolean;
+}): void {
+  if (params.backgroundExecution == null) return;
+  if (!config.agentBackgroundExecution.enabled) {
+    throw new ApiError(400, "Background execution is not enabled");
+  }
+  if (params.agentType !== "agent") {
+    throw new ApiError(
+      400,
+      "Background execution can only be configured for Agents",
+    );
+  }
+  if (params.backgroundExecution.privileged && !params.isAdmin) {
+    throw new ApiError(
+      403,
+      "Only Agent administrators can enable a privileged background deployment",
+    );
+  }
+  if (
+    params.backgroundExecution.privileged &&
+    !config.agentBackgroundExecution.allowPrivileged
+  ) {
+    throw new ApiError(
+      403,
+      "Privileged background deployments are disabled by the deployment operator",
+    );
+  }
+}
 
 /** Whether two id lists hold the same set of ids, order aside. */
 function sameIdSet(a: string[], b: string[]): boolean {

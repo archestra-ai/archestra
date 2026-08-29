@@ -2208,6 +2208,114 @@ Required RBAC permission: `plugin:admin`
 | `id` | `string` | Yes | The plugin id, as listed by list_plugins. |
 
 
+### Tasks
+
+| Tool | Description | Required RBAC Permission |
+|------|-------------|--------------------------|
+| `start_task` | Start long-running work on an agent as a durable task and return immediately with its id. | `agent:read` |
+| `get_task` | Read a task's state and the output it has produced so far. | `agent:read` |
+| `list_tasks` | List your tasks on one agent, newest activity first. | `agent:read` |
+| `steer_task` | Interject one message into a running task's container session — a course correction without stopping the work. | `agent:read` |
+| `cancel_task` | Durably cancel a task. | `agent:read` |
+
+#### start_task
+
+Required RBAC permission: `agent:read`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `agent_id` | `string` | Yes | The agent to do the work. |
+| `message` | `string` | Yes | What the agent should do. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `task` | `object` | Yes |  |
+| `task.task_id` | `string` | Yes | Pass to get_task / steer_task / cancel_task. |
+| `task.state` | `string` | Yes | submitted \| working \| input-required \| completed \| canceled \| failed |
+| `task.agent_id` | `string \| null` | Yes | The agent doing the work. |
+| `task.status_reason` | `string \| null` | Yes | Why the task is in its state, when there is something to say. |
+| `task.created_at` | `string` | Yes | ISO 8601. |
+| `task.state_changed_at` | `string` | Yes | ISO 8601 of the last transition. |
+| `execution` | `"background" \| "foreground"` | Yes | Where the delegated task executes. |
+
+#### get_task
+
+Required RBAC permission: `agent:read`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `task_id` | `string` | Yes | From start_task or list_tasks. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `task` | `object` | Yes |  |
+| `task.task_id` | `string` | Yes | Pass to get_task / steer_task / cancel_task. |
+| `task.state` | `string` | Yes | submitted \| working \| input-required \| completed \| canceled \| failed |
+| `task.agent_id` | `string \| null` | Yes | The agent doing the work. |
+| `task.status_reason` | `string \| null` | Yes | Why the task is in its state, when there is something to say. |
+| `task.created_at` | `string` | Yes | ISO 8601. |
+| `task.state_changed_at` | `string` | Yes | ISO 8601 of the last transition. |
+| `output` | `string` | Yes | The task's response artifact so far (tail, capped). |
+| `output_truncated` | `boolean` | Yes |  |
+| `session` | `object \| null` | Yes | The Agent run, when the task uses Background execution. |
+| `session.attachable` | `boolean` | Yes | Whether a live container is carrying the task right now. |
+| `session.started_at` | `string \| null` | Yes |  |
+
+#### list_tasks
+
+Required RBAC permission: `agent:read`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `agent_id` | `string` | Yes | The agent whose tasks to list. |
+| `state` | `"submitted" \| "working" \| "input-required" \| "completed" \| "canceled" \| "failed"` | No | Only tasks in this state. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `tasks` | `object[]` | Yes |  |
+| `tasks[].task_id` | `string` | Yes | Pass to get_task / steer_task / cancel_task. |
+| `tasks[].state` | `string` | Yes | submitted \| working \| input-required \| completed \| canceled \| failed |
+| `tasks[].agent_id` | `string \| null` | Yes | The agent doing the work. |
+| `tasks[].status_reason` | `string \| null` | Yes | Why the task is in its state, when there is something to say. |
+| `tasks[].created_at` | `string` | Yes | ISO 8601. |
+| `tasks[].state_changed_at` | `string` | Yes | ISO 8601 of the last transition. |
+| `total` | `integer` | Yes |  |
+
+#### steer_task
+
+Required RBAC permission: `agent:read`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `task_id` | `string` | Yes |  |
+| `message` | `string` | Yes |  |
+
+
+#### cancel_task
+
+Required RBAC permission: `agent:read`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `task_id` | `string` | Yes |  |
+
+
 ### Code Sandbox
 
 These tools are served only when the code runtime is enabled — set `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`, or `ARCHESTRA_CODE_RUNTIME_ENABLED=true` together with an orchestrator kubeconfig. Without it they do not appear in `tools/list`. The [Code Sandbox](/docs/platform-code-sandbox) page covers what the runtime is and how an agent uses it.

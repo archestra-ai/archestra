@@ -51,6 +51,7 @@ import {
   minimaxAdapterFactory,
   mistralAdapterFactory,
   ollamaAdapterFactory,
+  openAiResponsesAdapterFactory,
   openaiAdapterFactory,
   openrouterAdapterFactory,
   perplexityAdapterFactory,
@@ -491,6 +492,9 @@ describe("model router proxy routes", () => {
       githubCopilotResponsesAdapterFactory,
       "createClient",
     ).mockImplementation(() => createResponsesTestClient() as never);
+    vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockImplementation(
+      () => createResponsesTestClient() as never,
+    );
     vi.spyOn(azureAdapterFactory, "createClient").mockImplementation(
       () => createAzureTestClient() as never,
     );
@@ -678,6 +682,51 @@ describe("model router proxy routes", () => {
     });
   }
 
+  test("routes an internal Agent through the model router for background execution attribution", async ({
+    makeAgent,
+    makeOrganization,
+    makeUser,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    await upsertModel({ provider: "openai", modelId: "gpt-5.4" });
+    const organization = await makeOrganization();
+    const { value } = await createModelRouterVirtualKey({
+      organizationId: organization.id,
+      provider: "openai",
+      makeUser,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Background execution Agent",
+      agentType: "agent",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/model-router/${agent.id}/responses`,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${value}`,
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "openai:gpt-5.4",
+        input: "Hello",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      object: "response",
+      model: "openai:gpt-5.4",
+    });
+  });
+
   test("routes a Responses-only model natively through the provider's Responses surface", async ({
     makeAgent,
     makeOrganization,
@@ -730,6 +779,53 @@ describe("model router proxy routes", () => {
       githubCopilotResponsesAdapterFactory.createClient,
     ).toHaveBeenCalledOnce();
     expect(githubCopilotAdapterFactory.createClient).not.toHaveBeenCalled();
+  });
+
+  test("routes a native Codex model slug through OpenAI's Responses surface", async ({
+    makeAgent,
+    makeOrganization,
+    makeUser,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    const provider = "openai";
+    const modelId = "gpt-5.3-codex";
+    await upsertModel({ provider, modelId });
+    const organization = await makeOrganization();
+    const { value } = await createModelRouterVirtualKey({
+      organizationId: organization.id,
+      provider,
+      makeUser,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "OpenAI Responses Background Agent",
+      agentType: "agent",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/model-router/${agent.id}/responses`,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${value}`,
+        "user-agent": "test-client",
+      },
+      payload: {
+        // Native coding clients use OpenAI's slug. This is unambiguous because
+        // the task's virtual key maps exactly one provider.
+        model: modelId,
+        input: [{ role: "user", content: "Hello" }],
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(openAiResponsesAdapterFactory.createClient).toHaveBeenCalledOnce();
+    expect(openaiAdapterFactory.createClient).not.toHaveBeenCalled();
   });
 
   test("streams a Responses-only model through the provider's Responses surface", async ({
@@ -1865,7 +1961,7 @@ describe("model router proxy routes", () => {
 
       expect(response.statusCode).toBe(403);
       expect(response.json().error.message).toBe(
-        "Model Router virtual key cannot access this LLM Proxy.",
+        "Model Router virtual key cannot access this Agent.",
       );
     }
   });
@@ -2154,7 +2250,7 @@ describe("model router proxy routes", () => {
     expect(groqAdapterFactory.createClient).toHaveBeenCalledOnce();
   });
 
-  test("rejects unqualified model ids", async ({
+  test("routes an unqualified model id when the key maps one provider", async ({
     makeAgent,
     makeOrganization,
     makeSecret,
@@ -2191,8 +2287,9 @@ describe("model router proxy routes", () => {
       },
     });
 
-    expect(response.statusCode).toBe(404);
-    expect(response.json().error.message).toContain("provider-qualified");
+    expect(response.statusCode).toBe(200);
+    expect(openaiAdapterFactory.createClient).toHaveBeenCalledOnce();
+    expect(groqAdapterFactory.createClient).not.toHaveBeenCalled();
   });
 
   test("translates Anthropic models to and from OpenAI chat completions", async ({

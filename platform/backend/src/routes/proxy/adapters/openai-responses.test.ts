@@ -1,6 +1,27 @@
 import { describe, expect, test } from "vitest";
 import type { OpenAi } from "@/types";
 import { openAiResponsesAdapterFactory } from "./openai-responses";
+import { responsesToOpenaiChat } from "./openai-responses-translator";
+
+describe("responsesToOpenaiChat", () => {
+  test("translates AI SDK easy-input messages for the model router", () => {
+    const request = {
+      model: "openai:gpt-5.6-sol",
+      input: [
+        { role: "developer", content: "Follow repository instructions." },
+        {
+          role: "user",
+          content: [{ type: "input_text", text: "Open the pull request." }],
+        },
+      ],
+    } as unknown as OpenAi.Types.ResponsesRequest;
+
+    expect(responsesToOpenaiChat(request).chatBody.messages).toEqual([
+      { role: "system", content: "Follow repository instructions." },
+      { role: "user", content: "Open the pull request." },
+    ]);
+  });
+});
 
 describe("OpenAiResponsesRequestAdapter.getMessages", () => {
   // The AI SDK emits Responses "easy input" messages: role/content with no
@@ -268,5 +289,53 @@ describe("OpenAiResponsesStreamAdapter.toProviderResponse", () => {
     } as unknown as Parameters<typeof adapter.processChunk>[0]);
 
     expect(adapter.toProviderResponse().output).toEqual(upstreamOutput);
+  });
+
+  test("buffers completion behind tool calls until policy evaluation finishes", () => {
+    const adapter = openAiResponsesAdapterFactory.createStreamAdapter();
+
+    adapter.processChunk({
+      type: "response.output_item.added",
+      output_index: 0,
+      sequence_number: 1,
+      item: {
+        id: "item_1",
+        call_id: "call_1",
+        type: "function_call",
+        name: "update_plan",
+        arguments: "{}",
+        status: "in_progress",
+      },
+    } as unknown as Parameters<typeof adapter.processChunk>[0]);
+    const completed = adapter.processChunk({
+      type: "response.completed",
+      sequence_number: 2,
+      response: {
+        id: "resp_tools",
+        object: "response",
+        status: "completed",
+        model: "gpt-5.3-codex",
+        output: [
+          {
+            id: "item_1",
+            call_id: "call_1",
+            type: "function_call",
+            name: "update_plan",
+            arguments: "{}",
+            status: "completed",
+          },
+        ],
+      },
+    } as unknown as Parameters<typeof adapter.processChunk>[0]);
+
+    expect(completed).toMatchObject({
+      sseData: null,
+      isToolCallChunk: true,
+      isFinal: true,
+    });
+    const released = adapter.getRawToolCallEvents().join("");
+    expect(released.indexOf("response.output_item.added")).toBeLessThan(
+      released.indexOf("response.completed"),
+    );
   });
 });

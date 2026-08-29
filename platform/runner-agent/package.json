@@ -1,0 +1,34 @@
+{
+  "name": "@archestra/runner-agent",
+  "version": "0.1.0",
+  "description": "The agent loop that runs inside an Archestra Runner",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "archestra-runner-agent": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc6",
+    "dev": "tsx src/index.ts",
+    "lint": "biome check",
+    "lint:fix": "biome check --write",
+    "type-check": "tsc6 --noEmit",
+    "test": "vitest run",
+    "check:commit": "concurrently --kill-others-on-fail --group --names type-check,biome 'pnpm type-check' 'biome ci'",
+    "check:ci": "concurrently --kill-others-on-fail --group --names type-check,test,biome 'pnpm type-check' 'pnpm test' 'biome ci'"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.58",
+    "@ai-sdk/openai": "^3.0.41",
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "ai": "catalog:",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "concurrently": "^9.2.1",
+    "tsx": "^4.21.0",
+    "typescript": "catalog:",
+    "vitest": "^4.1.0"
+  }
+}

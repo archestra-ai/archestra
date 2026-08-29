@@ -1,5 +1,5 @@
 import type { IncomingMessage } from "node:http";
-import type { PassThrough } from "node:stream";
+import { PassThrough } from "node:stream";
 import type {
   ClientWebSocketMessage,
   McpDeploymentStatusEntry,
@@ -16,6 +16,7 @@ import { betterAuth } from "@/auth";
 import db, { schema } from "@/database";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
 import McpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
+import { A2AContextModel, A2ATaskModel, AgentRunModel } from "@/models";
 import AgentModel from "@/models/agent";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import websocketService from "@/websocket";
@@ -45,6 +46,25 @@ interface McpExecSubscription {
   };
 }
 
+interface AgentRunAttachSubscription {
+  runId: string;
+  stdin: PassThrough;
+  stdout: PassThrough;
+  stderr: PassThrough;
+  inputPaused: boolean;
+  socket: {
+    readyState: number;
+    close: () => void;
+    send: (data: Buffer) => void;
+  };
+}
+
+interface AgentRunLogsSubscription {
+  runId: string;
+  stream: PassThrough;
+  abortController: AbortController;
+}
+
 interface McpDeploymentStatusSubscription {
   buildStatuses: (
     summary: typeof McpServerRuntimeManager.statusSummary,
@@ -65,6 +85,9 @@ const service = websocketService as unknown as {
   };
   mcpLogsSubscriptions: Map<WS, McpLogsSubscription>;
   mcpExecSubscriptions: Map<WS, McpExecSubscription>;
+  agentRunAttachSubscriptions: Map<WS, AgentRunAttachSubscription>;
+  agentRunLogsSubscriptions: Map<WS, AgentRunLogsSubscription>;
+  cleanupAgentRunSubscriptions: (ws: WS) => void;
   mcpDeploymentStatusSubscriptions: Map<WS, McpDeploymentStatusSubscription>;
   mcpDeploymentStatusPollInterval: NodeJS.Timeout | null;
   lastMcpDeploymentRefreshAt: number;
@@ -244,6 +267,299 @@ describe("websocket browser-stream authorization", () => {
     expect(service.browserSubscriptions.has(ws)).toBe(false);
     expect(selectSpy).not.toHaveBeenCalled();
     expect(screenshotSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("websocket Agent run authorization and cleanup", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    service.clientContexts.clear();
+    service.agentRunAttachSubscriptions.clear();
+    service.agentRunLogsSubscriptions.clear();
+  });
+
+  test("rejects a log subscription from a user who does not control the run", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const owner = await makeUser();
+    const viewer = await makeUser();
+    await makeMember(owner.id, organization.id, { role: "member" });
+    await makeMember(viewer.id, organization.id, { role: "member" });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      authorId: owner.id,
+      agentType: "agent",
+      scope: "org",
+    });
+    const context = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: owner.id,
+    });
+    const task = await A2ATaskModel.create({
+      contextId: context.id,
+      agentId: agent.id,
+      state: "TASK_STATE_SUBMITTED",
+    });
+    await AgentRunModel.create({
+      organizationId: organization.id,
+      taskId: task.id,
+      agentId: agent.id,
+      actorUserId: owner.id,
+      deploymentName: `agent-run-${task.id}`,
+      backend: "kubernetes",
+      runtimeScope: "archestra-dev",
+      virtualApiKeyId: null,
+    });
+    const ws = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+    } as unknown as WS;
+    service.clientContexts.set(ws, {
+      userId: viewer.id,
+      organizationId: organization.id,
+      userIsMcpServerAdmin: false,
+    });
+
+    await service.handleMessage(
+      {
+        type: "subscribe_agent_run_logs",
+        payload: { runId: task.id, lines: 100 },
+      },
+      ws,
+    );
+
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        type: "agent_run_logs_error",
+        payload: {
+          runId: task.id,
+          error: "Only the person who started this run can view its logs",
+        },
+      }),
+    );
+    expect(service.agentRunLogsSubscriptions.has(ws)).toBe(false);
+  });
+
+  test("returns retained logs after an Agent execution pod is removed", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const owner = await makeUser();
+    await makeMember(owner.id, organization.id, { role: "member" });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      authorId: owner.id,
+      agentType: "agent",
+      scope: "org",
+    });
+    const context = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: owner.id,
+    });
+    const task = await A2ATaskModel.create({
+      contextId: context.id,
+      agentId: agent.id,
+      state: "TASK_STATE_COMPLETED",
+    });
+    const run = await AgentRunModel.create({
+      organizationId: organization.id,
+      taskId: task.id,
+      agentId: agent.id,
+      actorUserId: owner.id,
+      deploymentName: `agent-run-${task.id}`,
+      backend: "kubernetes",
+      runtimeScope: "archestra-dev",
+      virtualApiKeyId: null,
+    });
+    await AgentRunModel.close({
+      id: run.id,
+      logs: "checked repository\nopened pull request\n",
+    });
+    const ws = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+    } as unknown as WS;
+    service.clientContexts.set(ws, {
+      userId: owner.id,
+      organizationId: organization.id,
+      userIsMcpServerAdmin: false,
+    });
+
+    await service.handleMessage(
+      {
+        type: "subscribe_agent_run_logs",
+        payload: { runId: task.id, lines: 100 },
+      },
+      ws,
+    );
+
+    expect(ws.send).toHaveBeenNthCalledWith(
+      1,
+      JSON.stringify({
+        type: "agent_run_logs",
+        payload: {
+          runId: task.id,
+          logs: "checked repository\nopened pull request\n",
+        },
+      }),
+    );
+    expect(ws.send).toHaveBeenNthCalledWith(
+      2,
+      JSON.stringify({
+        type: "agent_run_logs_ended",
+        payload: { runId: task.id },
+      }),
+    );
+    expect(service.agentRunLogsSubscriptions.has(ws)).toBe(false);
+  });
+
+  test("does not let an Agent administrator attach to another user's run", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const owner = await makeUser();
+    const administrator = await makeUser();
+    await makeMember(owner.id, organization.id, { role: "member" });
+    await makeMember(administrator.id, organization.id, { role: "admin" });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      authorId: owner.id,
+      agentType: "agent",
+      scope: "org",
+    });
+    const context = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: owner.id,
+    });
+    const task = await A2ATaskModel.create({
+      contextId: context.id,
+      agentId: agent.id,
+      state: "TASK_STATE_SUBMITTED",
+    });
+    await AgentRunModel.create({
+      organizationId: organization.id,
+      taskId: task.id,
+      agentId: agent.id,
+      actorUserId: owner.id,
+      deploymentName: `agent-run-${task.id}`,
+      backend: "kubernetes",
+      runtimeScope: "archestra-dev",
+      virtualApiKeyId: null,
+    });
+    const ws = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+    } as unknown as WS;
+    service.clientContexts.set(ws, {
+      userId: administrator.id,
+      organizationId: organization.id,
+      userIsMcpServerAdmin: false,
+    });
+
+    await service.handleMessage(
+      {
+        type: "subscribe_agent_run_attach",
+        payload: { runId: task.id },
+      },
+      ws,
+    );
+
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        type: "agent_run_attach_error",
+        payload: {
+          runId: task.id,
+          error: "Only the person who started this run can attach to it",
+        },
+      }),
+    );
+    expect(service.agentRunAttachSubscriptions.has(ws)).toBe(false);
+  });
+
+  test("destroys Agent run streams and detaches the exec socket on disconnect", () => {
+    const ws = {} as WS;
+    const attach = {
+      runId: crypto.randomUUID(),
+      stdin: new PassThrough(),
+      stdout: new PassThrough(),
+      stderr: new PassThrough(),
+      inputPaused: false,
+      socket: { readyState: WS.OPEN, close: vi.fn(), send: vi.fn() },
+    };
+    const logs = {
+      runId: attach.runId,
+      stream: new PassThrough(),
+      abortController: new AbortController(),
+    };
+    service.agentRunAttachSubscriptions.set(ws, attach);
+    service.agentRunLogsSubscriptions.set(ws, logs);
+
+    service.cleanupAgentRunSubscriptions(ws);
+
+    expect(attach.stdin.destroyed).toBe(true);
+    expect(attach.stdout.destroyed).toBe(true);
+    expect(attach.stderr.destroyed).toBe(true);
+    expect(attach.socket.close).toHaveBeenCalledOnce();
+    expect(logs.abortController.signal.aborted).toBe(true);
+    expect(logs.stream.destroyed).toBe(true);
+    expect(service.agentRunAttachSubscriptions.has(ws)).toBe(false);
+    expect(service.agentRunLogsSubscriptions.has(ws)).toBe(false);
+  });
+
+  test("pauses Agent terminal input when stdin applies backpressure", async () => {
+    const stdin = new PassThrough();
+    vi.spyOn(stdin, "write").mockReturnValue(false);
+    const pause = vi.fn();
+    const resume = vi.fn();
+    const runId = crypto.randomUUID();
+    const ws = {
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+      _socket: { pause, resume },
+    } as unknown as WS;
+    service.clientContexts.set(ws, {
+      userId: "user-1",
+      organizationId: "org-1",
+      userIsMcpServerAdmin: false,
+    });
+    const subscription: AgentRunAttachSubscription = {
+      runId,
+      stdin,
+      stdout: new PassThrough(),
+      stderr: new PassThrough(),
+      inputPaused: false,
+      socket: { readyState: WS.OPEN, close: vi.fn(), send: vi.fn() },
+    };
+    service.agentRunAttachSubscriptions.set(ws, subscription);
+
+    await service.handleMessage(
+      {
+        type: "agent_run_attach_input",
+        payload: { runId, data: "large terminal input" },
+      },
+      ws,
+    );
+
+    expect(pause).toHaveBeenCalledOnce();
+    expect(subscription.inputPaused).toBe(true);
+
+    stdin.emit("drain");
+    expect(resume).toHaveBeenCalledOnce();
+    expect(subscription.inputPaused).toBe(false);
   });
 });
 

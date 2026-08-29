@@ -103,6 +103,10 @@ import {
 } from "@/components/ui/empty";
 import { Version } from "@/components/version";
 import { useDefaultAgentId, useInternalAgents } from "@/lib/agent.query";
+import {
+  useAgentBackgroundExecutionPreflight,
+  useStartAgentExecution,
+} from "@/lib/agent-background-execution.query";
 import { trackEvent } from "@/lib/analytics";
 import { useApp } from "@/lib/app.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
@@ -186,7 +190,7 @@ import {
   getAgentSubscriptionConnection,
 } from "@/lib/chat/use-chat-preferences";
 import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state.hook";
-import { useConfig } from "@/lib/config/config.query";
+import { useConfig, useFeature } from "@/lib/config/config.query";
 import {
   type ConnectivityState,
   useConnectivity,
@@ -434,6 +438,9 @@ export function ChatPageContent({
   const { data: internalAgents = [], isPending: isLoadingAgents } =
     useInternalAgents({ enabled: hasChatAccess });
   const { data: defaultAgentId } = useDefaultAgentId();
+  const backgroundExecutionEnabled =
+    useFeature("agentBackgroundExecution") === true;
+  const startAgentExecutionMutation = useStartAgentExecution();
 
   // Fetch profiles and models for initial chat (no conversation)
   const { modelsByProvider, isPending: isModelsLoading } =
@@ -488,6 +495,17 @@ export function ChatPageContent({
     isProjectLoading: !!newChatProjectId && isNewChatProjectPending,
     routeConversationId,
   });
+  const initialExecutionAgent = backgroundExecutionEnabled
+    ? internalAgents.find(
+        (agent) =>
+          agent.id === initialAgentId && agent.backgroundExecution !== null,
+      )
+    : undefined;
+  const isInitialExecutionMode = !!initialExecutionAgent;
+  const executionPreflight = useAgentBackgroundExecutionPreflight(
+    initialAgentId ?? "",
+    isInitialExecutionMode,
+  );
 
   // Whether the NEXT chat created from the new-chat composer is a locked chat.
   // Only meaningful pre-conversation; reset after a successful create so a
@@ -2828,7 +2846,7 @@ export function ChatPageContent({
   // Form submit handler wraps submitInitialMessage with event.preventDefault
   const handleInitialSubmit: ArchestraPromptInputProps["onSubmit"] =
     useCallback(
-      (message, e, options) => {
+      async (message, e, options) => {
         e.preventDefault();
         const { kind: connectivityKind } = connectivity.state;
         if (connectivityKind !== "online") {
@@ -2836,9 +2854,34 @@ export function ChatPageContent({
           // Throw to keep the textarea and draft intact (onSubmit contract).
           throw new Error("offline-not-submit");
         }
+        if (isInitialExecutionMode && initialAgentId) {
+          const text = message.text?.trim() ?? "";
+          if (!text) return;
+          if (options) {
+            toast.error(
+              "Chat commands aren't available in an execution launcher.",
+            );
+            throw new Error("execution-input-not-supported");
+          }
+          const started = await startAgentExecutionMutation.mutateAsync({
+            agentId: initialAgentId,
+            message: text,
+            files: message.files,
+          });
+          if (!started) throw new Error("execution-not-started");
+          router.push(`/chat/executions/${started.taskId}`);
+          return;
+        }
         submitInitialMessage(message, options);
       },
-      [submitInitialMessage, connectivity.state],
+      [
+        submitInitialMessage,
+        connectivity.state,
+        initialAgentId,
+        isInitialExecutionMode,
+        router,
+        startAgentExecutionMutation,
+      ],
     );
 
   // A chat started from a project page keeps the Files panel open when the
@@ -3094,7 +3137,7 @@ export function ChatPageContent({
   // A review chat is exempt: the read-only replay plays without a key, so we
   // render the full layout (docked replay) and prompt for a key inline in the
   // composer slot instead of short-circuiting the whole page.
-  if (!hasAnyApiKey && !hasReviewContext) {
+  if (!hasAnyApiKey && !hasReviewContext && !isInitialExecutionMode) {
     return <NoApiKeySetup onKeyAdded={handleFirstKeyAdded} />;
   }
 
@@ -3467,7 +3510,8 @@ export function ChatPageContent({
                       </div>
                     </div>
                   ) : isAppOversight ||
-                    isResolvingOversightApp ? null : !hasAnyApiKey ? (
+                    isResolvingOversightApp ? null : !hasAnyApiKey &&
+                    !isInitialExecutionMode ? (
                     /* Review chat with no LLM key: the replay plays in the panel
                        without a key, but chatting needs one — prompt for it here
                        instead of the composer (which assumes a selected model). */
@@ -3658,6 +3702,7 @@ export function ChatPageContent({
                         <AppLogo />
                       </div>
                       {(() => {
+                        if (isInitialExecutionMode) return null;
                         const currentAgent = internalAgents.find(
                           (a) => a.id === initialAgentId,
                         );
@@ -3698,7 +3743,7 @@ export function ChatPageContent({
                           default="none"
                         >
                           <div className="w-full">
-                            {!hasAnyApiKey ? (
+                            {!hasAnyApiKey && !isInitialExecutionMode ? (
                               /* Review deep link reached the splash without a key
                                    (only review chats get here — non-review no-key
                                    chats short-circuit above). Prompt for a key
@@ -3708,7 +3753,7 @@ export function ChatPageContent({
                               />
                             ) : (
                               <>
-                                {newChatAgentId && (
+                                {newChatAgentId && !isInitialExecutionMode && (
                                   <div className="mb-3">
                                     <AgentConnectionNotice
                                       agentId={newChatAgentId}
@@ -3722,7 +3767,8 @@ export function ChatPageContent({
                                     initialNotRecommended
                                   }
                                   status={
-                                    createConversationMutation.isPending
+                                    createConversationMutation.isPending ||
+                                    startAgentExecutionMutation.isPending
                                       ? "submitted"
                                       : "ready"
                                   }
@@ -3767,7 +3813,12 @@ export function ChatPageContent({
                                   sendDisabled={
                                     !initialAgentId ||
                                     isPlaywrightSetupVisible ||
-                                    isAgentSubscriptionMetadataPending
+                                    (!isInitialExecutionMode &&
+                                      isAgentSubscriptionMetadataPending) ||
+                                    (isInitialExecutionMode &&
+                                      (executionPreflight.isPending ||
+                                        executionPreflight.data?.ready !==
+                                          true))
                                   }
                                   subscriptionConnectRequired={
                                     initialPerUserConnect.needsConnect
@@ -3780,8 +3831,16 @@ export function ChatPageContent({
                                   }
                                   selectorAgentId={initialAgentId}
                                   onAgentChange={handleInitialAgentChange}
-                                  lockedChat={isLockedChatDraft}
-                                  onLockedChatChange={setIsLockedChatDraft}
+                                  lockedChat={
+                                    isInitialExecutionMode
+                                      ? false
+                                      : isLockedChatDraft
+                                  }
+                                  onLockedChatChange={
+                                    isInitialExecutionMode
+                                      ? undefined
+                                      : setIsLockedChatDraft
+                                  }
                                   modelSource={initialModelSource}
                                   onResetModelOverride={
                                     handleResetModelOverride
@@ -3813,7 +3872,28 @@ export function ChatPageContent({
                                   onRestoreExternalMcpSkillAttachment={
                                     setExternalMcpSkillAttachment
                                   }
+                                  executionMode={isInitialExecutionMode}
+                                  executionAgentName={
+                                    initialExecutionAgent?.name
+                                  }
                                 />
+                                {isInitialExecutionMode &&
+                                  executionPreflight.data?.ready === false && (
+                                    <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
+                                      This execution needs credentials before it
+                                      can start.{" "}
+                                      <Link
+                                        className="font-medium text-foreground underline underline-offset-4"
+                                        href={
+                                          "/agents/" +
+                                          initialAgentId +
+                                          "?tab=overview#background-execution-credentials"
+                                        }
+                                      >
+                                        Configure credentials
+                                      </Link>
+                                    </div>
+                                  )}
                               </>
                             )}
                           </div>

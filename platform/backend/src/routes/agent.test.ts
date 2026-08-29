@@ -7,6 +7,7 @@ import {
 } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
+import config from "@/config";
 import db, { schema } from "@/database";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import {
@@ -168,6 +169,162 @@ describe("agent routes", () => {
       expect(agent.suggestedPrompts).toHaveLength(1);
       expect(agent.suggestedPrompts[0].summaryTitle).toBe("Quick start");
       expect(agent.suggestedPrompts[0].prompt).toBe("Get me started");
+    });
+
+    test("persists Background execution on an Agent", async () => {
+      const previous = config.agentBackgroundExecution.enabled;
+      config.agentBackgroundExecution.enabled = true;
+      const backgroundExecution = {
+        image: "example.com/coding-agent:latest",
+        command: null,
+        inferenceProtocol: "openai_responses",
+        backend: "kubernetes",
+        steerMode: "pipe",
+        privileged: false,
+        resources: null,
+        environment: [{ key: "WORK_MODE", value: "background" }],
+        credentials: null,
+        ttlHours: 24,
+        maxCostUsd: 25,
+        idleTimeoutMinutes: 30,
+      };
+
+      try {
+        const response = await app.inject({
+          method: "POST",
+          url: "/api/agents",
+          payload: {
+            name: `Background Agent ${crypto.randomUUID().slice(0, 8)}`,
+            agentType: "agent",
+            scope: "personal",
+            teams: [],
+            backgroundExecution,
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.json().backgroundExecution).toEqual(
+          backgroundExecution,
+        );
+      } finally {
+        config.agentBackgroundExecution.enabled = previous;
+      }
+    });
+
+    test("rejects Background execution configuration while the feature flag is disabled", async () => {
+      const previous = config.agentBackgroundExecution.enabled;
+      config.agentBackgroundExecution.enabled = false;
+      try {
+        const response = await app.inject({
+          method: "POST",
+          url: "/api/agents",
+          payload: {
+            name: `Disabled Background Agent ${crypto.randomUUID().slice(0, 8)}`,
+            agentType: "agent",
+            scope: "personal",
+            teams: [],
+            backgroundExecution: {
+              image: "example.com/coding-agent:latest",
+              command: null,
+              inferenceProtocol: "openai_responses",
+              backend: "kubernetes",
+              steerMode: "pipe",
+              privileged: false,
+              resources: null,
+              environment: null,
+              credentials: null,
+              ttlHours: null,
+              idleTimeoutMinutes: null,
+            },
+          },
+        });
+
+        expect(response.statusCode).toBe(400);
+        expect(response.json().error.message).toBe(
+          "Background execution is not enabled",
+        );
+      } finally {
+        config.agentBackgroundExecution.enabled = previous;
+      }
+    });
+
+    test("rejects Background execution on an MCP Gateway", async () => {
+      const previous = config.agentBackgroundExecution.enabled;
+      config.agentBackgroundExecution.enabled = true;
+      try {
+        const response = await app.inject({
+          method: "POST",
+          url: "/api/agents",
+          payload: {
+            name: `Gateway ${crypto.randomUUID().slice(0, 8)}`,
+            agentType: "mcp_gateway",
+            scope: "personal",
+            teams: [],
+            backgroundExecution: {
+              image: "example.com/coding-agent:latest",
+              command: null,
+              inferenceProtocol: "openai_responses",
+              backend: "kubernetes",
+              steerMode: "pipe",
+              privileged: false,
+              resources: null,
+              environment: null,
+              credentials: null,
+              ttlHours: null,
+              idleTimeoutMinutes: null,
+            },
+          },
+        });
+
+        expect(response.statusCode).toBe(400);
+        expect(response.json().error.message).toContain(
+          "can only be configured for Agents",
+        );
+      } finally {
+        config.agentBackgroundExecution.enabled = previous;
+      }
+    });
+
+    test("requires deployment-operator approval for privileged Background execution", async () => {
+      const previousEnabled = config.agentBackgroundExecution.enabled;
+      const previousAllowPrivileged =
+        config.agentBackgroundExecution.allowPrivileged;
+      config.agentBackgroundExecution.enabled = true;
+      config.agentBackgroundExecution.allowPrivileged = false;
+      try {
+        const response = await app.inject({
+          method: "POST",
+          url: "/api/agents",
+          payload: {
+            name: `Privileged Background Agent ${crypto.randomUUID().slice(0, 8)}`,
+            agentType: "agent",
+            scope: "personal",
+            teams: [],
+            backgroundExecution: {
+              image: "example.com/coding-agent:1.0.0",
+              command: null,
+              inferenceProtocol: "openai_responses",
+              backend: "kubernetes",
+              steerMode: "pipe",
+              privileged: true,
+              resources: null,
+              environment: null,
+              credentials: null,
+              ttlHours: null,
+              idleTimeoutMinutes: null,
+            },
+          },
+        });
+
+        expect(response.statusCode).toBe(403);
+        expect(response.json().error.message).toContain(
+          "disabled by the deployment operator",
+        );
+      } finally {
+        config.agentBackgroundExecution.enabled = previousEnabled;
+        config.agentBackgroundExecution.allowPrivileged =
+          previousAllowPrivileged;
+      }
     });
 
     test("rejects an agent with a model but no API key", async () => {

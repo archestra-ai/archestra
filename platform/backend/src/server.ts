@@ -118,6 +118,7 @@ import { mcpActiveUseTracker } from "@/services/mcp-active-use.ee";
 // SPDX-SnippetEnd
 import { mcpGatewayTaskReaper } from "@/services/mcp-gateway-task-reaper";
 import { mcpToolsRefreshManager } from "@/services/mcp-tools-refresh";
+import { agentExecutionReconciler } from "@/services/runners/reconciler";
 import { systemKeyManager } from "@/services/system-key-manager";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { taskQueueService } from "@/task-queue";
@@ -1553,6 +1554,7 @@ const startWebServer = async () => {
     // (it also prunes terminal event logs), started here unconditionally so
     // orphaned tasks get settled even on pods that never start a run.
     a2aTaskRunService.startMaintenance();
+    agentExecutionReconciler.start();
 
     /**
      * Here we don't expose the metrics endpoint on the main API port, but we do collect metrics
@@ -1712,6 +1714,7 @@ function registerWebServerShutdown(
     // Stop accepting new runs before snapshotting, so nothing created after this
     // point escapes the cleanup below.
     activeChatRunService.beginShutdown();
+    agentExecutionReconciler.stop();
 
     // Fail this pod's in-flight chat runs first: a long SSE stream keeps Fastify
     // connections open, so waiting for fastify.close() risks SIGKILL before the

@@ -86,6 +86,16 @@ describe("resolveAuditableRouteConfig", () => {
     expect(resolved?.cfg.resourceType).toBe("agent");
   });
 
+  test("shared Agent credential mutations are explicit Agent updates", () => {
+    const resolved = resolveAuditableRouteConfig(
+      "/api/agents/:id/background-execution/credentials/:key",
+    );
+    expect(resolved?.viaWalkUp).toBe(false);
+    expect(resolved?.cfg.resourceType).toBe("agent");
+    expect(resolved?.cfg.action).toBe("agent.updated");
+    expect(resolved?.cfg.onlyWhenChanged).toBe(true);
+  });
+
   test("walk-up match returns viaWalkUp=true with the parent config", () => {
     // /api/mcp_server/:id/some-subroute is not registered; walks up to /api/mcp_server/:id
     const resolved = resolveAuditableRouteConfig(

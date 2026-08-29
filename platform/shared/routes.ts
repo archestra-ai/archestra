@@ -453,6 +453,20 @@ export const RouteId = {
   UpdateServiceAccountToken: "updateServiceAccountToken",
   DeleteServiceAccountToken: "deleteServiceAccountToken",
 
+  // Agent Background execution
+  GetAgentBackgroundExecutionPreflight: "getAgentBackgroundExecutionPreflight",
+  SetAgentBackgroundExecutionCredential:
+    "setAgentBackgroundExecutionCredential",
+  DeleteAgentBackgroundExecutionCredential:
+    "deleteAgentBackgroundExecutionCredential",
+  GetAgentExecutions: "getAgentExecutions",
+  StartAgentExecution: "startAgentExecution",
+  GetMyAgentExecutions: "getMyAgentExecutions",
+  GetMyAgentExecution: "getMyAgentExecution",
+  UpdateAgentExecution: "updateAgentExecution",
+  CancelAgentExecution: "cancelAgentExecution",
+  DeleteAgentExecution: "deleteAgentExecution",
+
   // Virtual API Key Routes
   GetAllVirtualApiKeys: "getAllVirtualApiKeys",
   GetVirtualApiKey: "getVirtualApiKey",

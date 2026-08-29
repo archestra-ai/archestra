@@ -23,6 +23,8 @@ interface FieldScopeSelectProps {
   disableInstallation?: boolean;
   /** Tooltip copy shown when the disabled "Installation" option is hovered. */
   disabledReason?: string;
+  installationLabel?: string;
+  staticLabel?: string;
 }
 
 export function FieldScopeSelect({
@@ -30,6 +32,8 @@ export function FieldScopeSelect({
   onChange,
   disableInstallation = false,
   disabledReason,
+  installationLabel = "Installation",
+  staticLabel = "Static",
 }: FieldScopeSelectProps) {
   const installationItem = (
     <SelectItem
@@ -39,7 +43,7 @@ export function FieldScopeSelect({
         disableInstallation ? "data-[disabled]:pointer-events-auto" : undefined
       }
     >
-      Installation
+      {installationLabel}
     </SelectItem>
   );
   return (
@@ -64,7 +68,7 @@ export function FieldScopeSelect({
         ) : (
           installationItem
         )}
-        <SelectItem value="static">Static</SelectItem>
+        <SelectItem value="static">{staticLabel}</SelectItem>
       </SelectContent>
     </Select>
   );

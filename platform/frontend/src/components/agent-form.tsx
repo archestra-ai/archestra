@@ -19,6 +19,8 @@ import {
   MAX_SUGGESTED_PROMPT_TEXT_LENGTH,
   MAX_SUGGESTED_PROMPT_TITLE_LENGTH,
   MAX_SUGGESTED_PROMPTS,
+  SUBSCRIPTION_CREDENTIALS,
+  type SubscriptionCredentialKind,
   type SupportedProvider,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
@@ -49,6 +51,10 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
+import {
+  AgentBackgroundExecutionFields,
+  type BackgroundExecutionConfig,
+} from "@/components/agent-background-execution-fields";
 import {
   AgentHooksEditor,
   type AgentHooksEditorRef,
@@ -792,12 +798,26 @@ export interface AgentFormFooterState {
   canSubmit: boolean;
 }
 
+/** Editable values a create flow may seed from a catalog template. */
+export interface AgentFormInitialValues {
+  name?: string;
+  icon?: string | null;
+  description?: string;
+  systemPrompt?: string;
+  backgroundExecution?: BackgroundExecutionConfig | null;
+  accessAllTools?: boolean;
+  /** Catalog runtimes that must bill an acting user's own subscription. */
+  requiredSubscriptionKind?: SubscriptionCredentialKind;
+}
+
 export interface AgentFormProps {
   /** Agent to edit. If null/undefined, creates a new agent */
   agent?: Agent | null;
   /** Agent type: 'agent' for internal agents with prompts, 'profile' for external profiles */
   agentType?: AgentType;
   defaultIconType?: AgentIconVariant;
+  /** Catalog/template defaults for a new Agent. Ignored in edit mode. */
+  initialValues?: AgentFormInitialValues;
   /** Callback when a new agent/profile is created (not called for updates) */
   onCreated?: (created: { id: string; name: string }) => void;
   /** Callback after an existing agent was saved (not called for creates). */
@@ -850,6 +870,7 @@ export function AgentForm({
   agent,
   agentType = "profile",
   defaultIconType = "agent",
+  initialValues,
   onCreated,
   onSaved,
   onDirtyChange,
@@ -873,7 +894,6 @@ export function AgentForm({
   const shouldLoadKnowledgeSources = true;
   const shouldLoadLlmConfiguration = agentType === "agent";
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
-
   const { data: allInternalAgents = [] } = useDelegationTargetAgents({
     enabled: supportsSubagents && !!canReadAgents,
   });
@@ -1132,6 +1152,8 @@ export function AgentForm({
     String(DUAL_LLM_DEFAULT_MAX_ROUNDS),
   );
   const [passthroughHeaders, setPassthroughHeaders] = useState<string[]>([]);
+  const [backgroundExecution, setBackgroundExecution] =
+    useState<BackgroundExecutionConfig | null>(null);
   const [toolExposureMode, setToolExposureMode] =
     useState<ToolExposureMode>("full");
   const [missingCredentialBehavior, setMissingCredentialBehavior] =
@@ -1246,6 +1268,8 @@ export function AgentForm({
       : "The environment for this agent's code sandbox (runtime and network egress) and the tools and knowledge sources it can use.";
   const isBuiltIn = !!agent?.builtIn;
   const agentHooksEnabled = useFeature("agentHooksEnabled");
+  const agentBackgroundExecutionEnabled =
+    useFeature("agentBackgroundExecution") === true;
   // "Auto" (implicit access to all tools) is the default for new agents; admins
   // can switch an agent to "Custom" (explicitly assigned tools). Implicit access
   // is scoped to tools/knowledge visible to the user AND in the agent's
@@ -1472,6 +1496,9 @@ export function AgentForm({
                 ? String(agentData.builtInAgentConfig.maxRounds)
                 : String(DUAL_LLM_DEFAULT_MAX_ROUNDS),
             passthroughHeaders: agentData.passthroughHeaders ?? [],
+            backgroundExecution:
+              (agentData.backgroundExecution as BackgroundExecutionConfig | null) ??
+              null,
             toolExposureMode: agentData.toolExposureMode ?? "full",
             missingCredentialBehavior:
               agentData.missingCredentialBehavior ?? "allow",
@@ -1479,13 +1506,15 @@ export function AgentForm({
             accessAllSubagents: agentData.accessAllSubagents ?? false,
           }
         : {
-            name: "",
-            icon: null,
-            description: "",
+            name: initialValues?.name ?? "",
+            icon: initialValues?.icon ?? null,
+            description: initialValues?.description ?? "",
             // Prefill a starter persona for new agents so the default is
             // visible and editable in the UI; other agent types don't surface
             // the instruction.
-            systemPrompt: isInternalAgent ? DEFAULT_AGENT_SYSTEM_PROMPT : "",
+            systemPrompt:
+              initialValues?.systemPrompt ??
+              (isInternalAgent ? DEFAULT_AGENT_SYSTEM_PROMPT : ""),
             suggestedPrompts: [],
             assignedTeamIds: [],
             assignedUserIds: [],
@@ -1501,11 +1530,12 @@ export function AgentForm({
             autoConfigureOnToolDiscovery: false,
             dualLlmMaxRounds: String(DUAL_LLM_DEFAULT_MAX_ROUNDS),
             passthroughHeaders: [],
+            backgroundExecution: initialValues?.backgroundExecution ?? null,
             // New agents default to "Auto" (implicit access to all tools);
             // admins can switch to "Custom" (explicitly assigned tools).
             toolExposureMode: "full",
             missingCredentialBehavior: "allow",
-            accessAllTools: true,
+            accessAllTools: initialValues?.accessAllTools ?? true,
             accessAllSubagents: true,
           };
 
@@ -1528,6 +1558,7 @@ export function AgentForm({
       setScope(nextValues.scope);
       setPersonalDefaultOverride(null);
       setPassthroughHeaders(nextValues.passthroughHeaders);
+      setBackgroundExecution(nextValues.backgroundExecution);
       setToolExposureMode(nextValues.toolExposureMode);
       setMissingCredentialBehavior(nextValues.missingCredentialBehavior);
       setAccessAllTools(nextValues.accessAllTools);
@@ -1552,7 +1583,7 @@ export function AgentForm({
       setSelectedToolsCount(0);
       lastAutoSelectedProviderRef.current = null;
     }
-  }, [agent, freshAgent, refetchAgent, isInternalAgent]);
+  }, [agent, freshAgent, refetchAgent, isInternalAgent, initialValues]);
 
   // A brand-new agent starts in the org's configured landing environment for
   // its type. Kept out of the reset path above (same reasoning as the seeds
@@ -1727,6 +1758,18 @@ export function AgentForm({
     () => availableApiKeys.find((k) => k.id === llmApiKeyId),
     [availableApiKeys, llmApiKeyId],
   );
+  const requiredSubscriptionKind = initialValues?.requiredSubscriptionKind;
+  const requiredSubscription = requiredSubscriptionKind
+    ? SUBSCRIPTION_CREDENTIALS[requiredSubscriptionKind]
+    : null;
+  const requiredSubscriptionKey = requiredSubscriptionKind
+    ? availableApiKeys.find(
+        (key) => key.subscriptionKind === requiredSubscriptionKind,
+      )
+    : undefined;
+  const requiredSubscriptionSatisfied =
+    !requiredSubscriptionKind ||
+    selectedApiKey?.subscriptionKind === requiredSubscriptionKind;
   const selectedApiKeyIsSubscription =
     selectedApiKey !== undefined && isPersonalSubscription(selectedApiKey);
 
@@ -1820,6 +1863,23 @@ export function AgentForm({
     },
     [availableApiKeys, currentLlmProvider, modelsByProvider],
   );
+
+  // A maintained catalog runtime can require the vendor's own subscription
+  // rather than merely prefer the most highly ranked key. Apply the connected
+  // personal subscription once its async key list arrives, including its best
+  // compatible model, but never keep overriding later user edits.
+  const catalogSubscriptionAppliedRef = useRef(false);
+  useEffect(() => {
+    if (
+      agent ||
+      catalogSubscriptionAppliedRef.current ||
+      !requiredSubscriptionKey
+    ) {
+      return;
+    }
+    catalogSubscriptionAppliedRef.current = true;
+    handleLlmApiKeyChange(requiredSubscriptionKey.id);
+  }, [agent, handleLlmApiKeyChange, requiredSubscriptionKey]);
 
   // A team-scoped agent must have at least one team, otherwise it is
   // inaccessible to everyone (issue #6624). Applies to admins too.
@@ -2007,6 +2067,9 @@ export function AgentForm({
                 passthroughHeaders:
                   passthroughHeaders.length > 0 ? passthroughHeaders : null,
               }),
+              ...(agentBackgroundExecutionEnabled && {
+                backgroundExecution,
+              }),
             }),
             // The tools group: what the agent may reach, and how.
             ...(showToolsSections && {
@@ -2066,6 +2129,9 @@ export function AgentForm({
           ...(agentType === "mcp_gateway" && {
             passthroughHeaders:
               passthroughHeaders.length > 0 ? passthroughHeaders : null,
+          }),
+          ...(agentBackgroundExecutionEnabled && {
+            backgroundExecution,
           }),
         });
         if (!created) return false;
@@ -2307,6 +2373,8 @@ export function AgentForm({
     accessAllSubagents,
     supportsEnvironment,
     supportsSubagents,
+    agentBackgroundExecutionEnabled,
+    backgroundExecution,
   ]);
 
   const handleSave = useCallback(async () => {
@@ -2368,6 +2436,7 @@ export function AgentForm({
     missingCredentialBehavior,
     accessAllTools,
     accessAllSubagents,
+    backgroundExecution,
   });
   const isDirty =
     !readOnly &&
@@ -2426,6 +2495,7 @@ export function AgentForm({
     !createAgent.isPending &&
     !updateAgent.isPending &&
     !requiresTeamSelection &&
+    requiredSubscriptionSatisfied &&
     mcpEnvConflicts.length === 0 &&
     !environmentConflicts.blocksSave &&
     !(scope === "team" && hasNoAvailableTeams);
@@ -2485,6 +2555,7 @@ export function AgentForm({
                       icon={icon}
                       onIconChange={setIcon}
                       fallbackType={defaultIconType}
+                      showLogos={agentType === "agent"}
                     >
                       <div className="space-y-2">
                         <Label htmlFor="agentName">Name *</Label>
@@ -2855,6 +2926,37 @@ export function AgentForm({
                     </Alert>
                   ) : (
                     <>
+                      {requiredSubscription &&
+                        !requiredSubscriptionSatisfied && (
+                          <Alert>
+                            <InfoIcon className="h-4 w-4" />
+                            <AlertTitle>
+                              {requiredSubscription.label} required
+                            </AlertTitle>
+                            <AlertDescription className="space-y-2">
+                              <p>
+                                This maintained runtime uses your existing
+                                subscription and does not fall back to
+                                usage-based API billing.
+                              </p>
+                              {!requiredSubscriptionKey && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  asChild
+                                >
+                                  <Link
+                                    href={`/llm/model-providers?connect=${requiredSubscriptionKind}`}
+                                    target="_blank"
+                                  >
+                                    {requiredSubscription.connect.signInTitle}
+                                  </Link>
+                                </Button>
+                              )}
+                            </AlertDescription>
+                          </Alert>
+                        )}
                       {selectedApiKeyIsSubscription ? (
                         <Alert>
                           <InfoIcon className="h-4 w-4" />
@@ -3599,6 +3701,13 @@ export function AgentForm({
                   />
                 </div>
 
+                {agentType === "agent" && agentBackgroundExecutionEnabled && (
+                  <AgentBackgroundExecutionFields
+                    value={backgroundExecution}
+                    onChange={setBackgroundExecution}
+                  />
+                )}
+
                 {/* Security (LLM Proxy and Agent only) */}
                 {showSecurity && (
                   <div className="space-y-2">
@@ -3854,6 +3963,7 @@ type AgentFormFields = {
   autoConfigureOnToolDiscovery: boolean;
   dualLlmMaxRounds: string;
   passthroughHeaders: string[];
+  backgroundExecution: BackgroundExecutionConfig | null;
   toolExposureMode: ToolExposureMode;
   missingCredentialBehavior: MissingCredentialBehavior;
   accessAllTools: boolean;

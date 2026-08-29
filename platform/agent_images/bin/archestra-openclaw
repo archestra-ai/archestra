@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${ARCHESTRA_LLM_PROXY_PROTOCOL:-}" != "openai_responses" ]]; then
+  echo "archestra: OpenClaw requires an Agent configured for OpenAI Responses" >&2
+  exit 78
+fi
+
+resolve_docker_desktop_url() {
+  local url="$1"
+  local ipv6
+
+  if [[ "${url}" != http://host.internal:* ]]; then
+    printf '%s\n' "${url}"
+    return
+  fi
+
+  ipv6="$(getent ahostsv6 host.internal 2>/dev/null | awk 'NR == 1 { print $1 }')"
+  if [[ -z "${ipv6}" ]]; then
+    printf '%s\n' "${url}"
+    return
+  fi
+
+  printf '%s\n' "${url/\/\/host.internal/\/\/\[${ipv6}\]}"
+}
+
+runtime_dir="${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_RUNTIME_DIR:-/var/run/archestra}"
+config_file="${runtime_dir}/openclaw.json"
+task_file="${runtime_dir}/task.md"
+model="${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL:?}"
+export OPENCLAW_STATE_DIR="${runtime_dir}/openclaw-state"
+export OPENCLAW_CONFIG_PATH="${config_file}"
+mkdir -p "${OPENCLAW_STATE_DIR}"
+
+# Docker Desktop publishes host.internal with a working IPv6 address and a
+# synthetic IPv4 address that cannot accept connections from Kubernetes pods.
+# OpenClaw's DNS-pinned HTTP transport intentionally prefers IPv4, so use the
+# reachable address directly for this local-only hostname. Production service
+# DNS names and ordinary platform URLs are left unchanged.
+openclaw_base_url="$(resolve_docker_desktop_url "${OPENAI_BASE_URL:?}")"
+openclaw_mcp_url="$(resolve_docker_desktop_url "${ARCHESTRA_MCP_GATEWAY_URL:?}")"
+: "${OPENAI_API_KEY:?}"
+
+jq -n \
+  --arg base_url "${openclaw_base_url}" \
+  --arg model "${model}" \
+  --arg task_id "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID:?}" \
+  --arg mcp_url "${openclaw_mcp_url}" \
+  --arg workspace "${PWD}" \
+  '{
+    models:{
+      mode:"replace",
+      providers:{
+        archestra:{
+          baseUrl:$base_url,
+          apiKey:env.OPENAI_API_KEY,
+          api:"openai-responses",
+          headers:{
+            "X-Archestra-Execution-Id":$task_id,
+            "X-Archestra-Session-Id":$task_id
+          },
+          models:[{id:$model,name:$model}]
+        }
+      }
+    },
+    agents:{defaults:{
+      workspace:$workspace,
+      model:{primary:("archestra/" + $model)}
+    }},
+    mcp:{
+      servers:{
+        archestra:{
+          url:$mcp_url,
+          transport:"streamable-http",
+          headers:{
+            Authorization:"Bearer ${ARCHESTRA_MCP_GATEWAY_TOKEN}",
+            "X-Archestra-Execution-Id":$task_id,
+            "X-Archestra-Session-Id":$task_id
+          }
+        }
+      }
+    }
+  }' > "${config_file}"
+chmod 0600 "${config_file}"
+printf '%s\n' "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK:?}" > "${task_file}"
+
+session_key="agent:main:${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID:?}"
+
+case "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODE:-one_shot}" in
+  interactive)
+    exec openclaw tui \
+      --local \
+      --session "${session_key}" \
+      --message "$(cat "${task_file}")"
+    ;;
+  one_shot)
+    set +e
+    openclaw agent \
+      --local \
+      --session-key "${session_key}" \
+      --model "archestra/${model}" \
+      --message-file "${task_file}" 2>&1 | tee "${runtime_dir}/openclaw-output.log"
+    status=${PIPESTATUS[0]}
+    set -e
+    if [[ ${status} -ne 0 ]] || grep -Eq 'FailoverError:|LLM request failed|network connection error' "${runtime_dir}/openclaw-output.log"; then
+      exit 1
+    fi
+    ;;
+  *)
+    echo "archestra: unknown Background execution mode" >&2
+    exit 78
+    ;;
+esac

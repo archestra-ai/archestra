@@ -1,5 +1,6 @@
 import { ADMIN_ROLE_NAME, BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import { vi } from "vitest";
+import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -215,6 +216,8 @@ describe("agent type permission isolation (routes)", () => {
       });
       await makeMember(memberUser.id, organizationId, { role: "agent_only" });
       const memberApp = await createAppForUser(memberUser);
+      const previousEnabled = config.agentBackgroundExecution.enabled;
+      config.agentBackgroundExecution.enabled = true;
 
       try {
         const agentRes = await memberApp.inject({
@@ -235,7 +238,58 @@ describe("agent type permission isolation (routes)", () => {
           url: "/api/agents?agentType=llm_proxy",
         });
         expect(proxyRes.statusCode).toBe(400);
+
+        const backgroundAgent = await memberApp.inject({
+          method: "POST",
+          url: "/api/agents",
+          payload: {
+            name: "background-agent",
+            agentType: "agent",
+            scope: "personal",
+            teams: [],
+            backgroundExecution: {
+              image: "example.com/coding-agent:latest",
+              command: null,
+              inferenceProtocol: "openai_responses",
+              backend: "kubernetes",
+              steerMode: "pipe",
+              privileged: false,
+              resources: null,
+              environment: null,
+              credentials: null,
+              ttlHours: null,
+              idleTimeoutMinutes: null,
+            },
+          },
+        });
+        expect(backgroundAgent.statusCode).toBe(200);
+
+        const privilegedAgent = await memberApp.inject({
+          method: "POST",
+          url: "/api/agents",
+          payload: {
+            name: "privileged-background-agent",
+            agentType: "agent",
+            scope: "personal",
+            teams: [],
+            backgroundExecution: {
+              image: "example.com/coding-agent:latest",
+              command: null,
+              inferenceProtocol: "openai_responses",
+              backend: "kubernetes",
+              steerMode: "pipe",
+              privileged: true,
+              resources: null,
+              environment: null,
+              credentials: null,
+              ttlHours: null,
+              idleTimeoutMinutes: null,
+            },
+          },
+        });
+        expect(privilegedAgent.statusCode).toBe(403);
       } finally {
+        config.agentBackgroundExecution.enabled = previousEnabled;
         await memberApp.close();
       }
     });

@@ -89,6 +89,24 @@ const McpExecResizePayloadSchema = z.object({
   rows: z.number().int().min(1),
 });
 
+// Agent run attach: the same shape as the MCP exec conversation, keyed by run.
+const AgentRunIdPayloadSchema = z.object({
+  runId: z.string().uuid(),
+});
+const AgentRunAttachInputPayloadSchema = z.object({
+  runId: z.string().uuid(),
+  data: z.string(),
+});
+const AgentRunAttachResizePayloadSchema = z.object({
+  runId: z.string().uuid(),
+  cols: z.number().int().min(1),
+  rows: z.number().int().min(1),
+});
+const SubscribeAgentRunLogsPayloadSchema = z.object({
+  runId: z.string().uuid(),
+  lines: z.number().int().min(1).max(10_000).optional(),
+});
+
 // MCP Deployment Status payloads
 const SubscribeMcpDeploymentStatusesPayloadSchema = z.object({});
 const UnsubscribeMcpDeploymentStatusesPayloadSchema = z.object({});
@@ -156,6 +174,30 @@ export const ClientWebSocketMessageSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("mcp_exec_resize"),
     payload: McpExecResizePayloadSchema,
+  }),
+  z.object({
+    type: z.literal("subscribe_agent_run_attach"),
+    payload: AgentRunIdPayloadSchema,
+  }),
+  z.object({
+    type: z.literal("unsubscribe_agent_run_attach"),
+    payload: AgentRunIdPayloadSchema,
+  }),
+  z.object({
+    type: z.literal("agent_run_attach_input"),
+    payload: AgentRunAttachInputPayloadSchema,
+  }),
+  z.object({
+    type: z.literal("agent_run_attach_resize"),
+    payload: AgentRunAttachResizePayloadSchema,
+  }),
+  z.object({
+    type: z.literal("subscribe_agent_run_logs"),
+    payload: SubscribeAgentRunLogsPayloadSchema,
+  }),
+  z.object({
+    type: z.literal("unsubscribe_agent_run_logs"),
+    payload: AgentRunIdPayloadSchema,
   }),
   z.object({
     type: z.literal("subscribe_mcp_deployment_statuses"),
@@ -363,6 +405,46 @@ export type McpDeploymentStatusEntry = {
   deploymentName?: string;
 };
 
+// Agent run attach + logs, server -> client
+export type AgentRunAttachStartedMessage = {
+  type: "agent_run_attach_started";
+  payload: { runId: string; command: string; resourceName: string };
+};
+
+export type AgentRunAttachOutputMessage = {
+  type: "agent_run_attach_output";
+  payload: { runId: string; data: string };
+};
+
+export type AgentRunAttachErrorMessage = {
+  type: "agent_run_attach_error";
+  payload: { runId: string; error: string };
+};
+
+export type AgentRunAttachClosedMessage = {
+  type: "agent_run_attach_closed";
+  payload: {
+    runId: string;
+    /** Why the session ended, when the exec reported a failure status. */
+    reason?: string;
+  };
+};
+
+export type AgentRunLogsMessage = {
+  type: "agent_run_logs";
+  payload: { runId: string; logs: string };
+};
+
+export type AgentRunLogsErrorMessage = {
+  type: "agent_run_logs_error";
+  payload: { runId: string; error: string };
+};
+
+export type AgentRunLogsEndedMessage = {
+  type: "agent_run_logs_ended";
+  payload: { runId: string };
+};
+
 export type McpDeploymentStatusesMessage = {
   type: "mcp_deployment_statuses";
   payload: {
@@ -447,6 +529,13 @@ export type ServerWebSocketMessage =
   | McpExecOutputMessage
   | McpExecErrorMessage
   | McpExecClosedMessage
+  | AgentRunAttachStartedMessage
+  | AgentRunAttachOutputMessage
+  | AgentRunAttachErrorMessage
+  | AgentRunAttachClosedMessage
+  | AgentRunLogsMessage
+  | AgentRunLogsErrorMessage
+  | AgentRunLogsEndedMessage
   | McpDeploymentStatusesMessage
   | McpInstallationStatusMessage
   | McpServersChangedMessage

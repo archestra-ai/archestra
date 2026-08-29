@@ -18,6 +18,7 @@ import Image from "next/image";
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { AgentIconVariant } from "@/components/agent-icon";
+import { isAgentImageIcon } from "@/components/agent-icon.utils";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -56,7 +57,7 @@ export function AgentIconPicker({
   const [open, setOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const isImage = value?.startsWith("data:");
+  const isImage = isAgentImageIcon(value);
 
   const handleEmojiSelect = useCallback(
     (emoji: string) => {

@@ -9,6 +9,7 @@ import {
   useProfile,
 } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
 import { useEnvironments } from "@/lib/environment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDefaultEnvironment } from "@/lib/organization.query";
@@ -16,6 +17,7 @@ import { AgentDetailPage } from "./agent-detail-page";
 
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/hooks/use-app-name");
 vi.mock("@/lib/environment.query");
 vi.mock("@/lib/organization.query");
@@ -32,6 +34,12 @@ vi.mock("./agent-overview", () => ({
 }));
 vi.mock("./agent-connect-content", () => ({
   AgentConnectContent: () => <div>connect content</div>,
+}));
+vi.mock("./agent-background-execution-card", () => ({
+  AgentBackgroundExecutionCard: () => <div>background execution</div>,
+}));
+vi.mock("./agent-executions", () => ({
+  AgentExecutions: () => <div>execution history</div>,
 }));
 vi.mock("@/components/clone-agent-dialog", () => ({
   CloneAgentDialog: () => null,
@@ -92,6 +100,7 @@ describe("AgentDetailPage", () => {
       data: true,
       isPending: false,
     } as unknown as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useFeature).mockReturnValue(false);
     vi.mocked(useRouter).mockReturnValue({
       push: vi.fn(),
       replace: vi.fn(),
@@ -203,5 +212,28 @@ describe("AgentDetailPage", () => {
 
     expect(screen.queryByText("connect content")).toBeNull();
     expect(screen.getByRole("heading", { name: "Overview" })).toBeVisible();
+  });
+
+  it("names delegated task history Executions and opens it from the page header", () => {
+    vi.mocked(useFeature).mockReturnValue(true);
+    mockAgent({ ...baseAgent, backgroundExecution: {} });
+    render(<AgentDetailPage kind="agent" id="a1" />);
+
+    expect(
+      screen
+        .getAllByRole("link", { name: "Executions" })
+        .every(
+          (link) => link.getAttribute("href") === "/agents/a1?tab=executions",
+        ),
+    ).toBe(true);
+    expect(screen.queryByRole("link", { name: "Runs" })).toBeNull();
+  });
+
+  it("keeps execution UI invisible when its feature flag is disabled", () => {
+    mockAgent({ ...baseAgent, backgroundExecution: {} });
+    render(<AgentDetailPage kind="agent" id="a1" />);
+
+    expect(screen.queryByRole("link", { name: "Executions" })).toBeNull();
+    expect(screen.queryByText("background execution")).toBeNull();
   });
 });

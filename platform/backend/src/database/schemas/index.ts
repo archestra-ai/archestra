@@ -54,8 +54,10 @@ export { default as agentExcludedConnectorsTable } from "./agent-excluded-connec
 export { default as agentExcludedSkillsTable } from "./agent-excluded-skill";
 export { default as agentExcludedSubagentsTable } from "./agent-excluded-subagent";
 export { default as agentExcludedToolsTable } from "./agent-excluded-tool";
+export { default as agentExecutionInputsTable } from "./agent-execution-input";
 export { default as agentKnowledgeBasesTable } from "./agent-knowledge-base";
 export { default as agentLabelsTable } from "./agent-label";
+export { default as agentRunsTable } from "./agent-run";
 export { default as agentSkillsTable } from "./agent-skill";
 export { default as agentSuggestedPromptsTable } from "./agent-suggested-prompt";
 export { default as agentTeamsTable } from "./agent-team";
@@ -218,6 +220,7 @@ export { default as toolObservationsTable } from "./tool-observation";
 export { default as trustedDataPoliciesTable } from "./trusted-data-policy";
 export { default as twoFactorsTable } from "./two-factor";
 export { default as usersTable } from "./user";
+export { default as userCredentialsTable } from "./user-credential";
 export { default as userOnboardingSeenItemsTable } from "./user-onboarding-seen-item";
 export { default as userTokensTable } from "./user-token";
 export { default as verificationsTable } from "./verification";

@@ -8,6 +8,12 @@ const mockUseLlmProviderApiKey = vi.fn();
 const mockLlmProviderApiKeyForm = vi.fn();
 const mockUseAllVirtualApiKeys = vi.fn();
 const mockUseLlmOauthClients = vi.fn();
+const { useDataTableQueryParamsMock, updateQueryParamsMock } = vi.hoisted(
+  () => ({
+    useDataTableQueryParamsMock: vi.fn(),
+    updateQueryParamsMock: vi.fn(),
+  }),
+);
 
 vi.mock("next/image", () => ({
   default: ({
@@ -74,10 +80,7 @@ vi.mock("@/lib/docs/docs", () => ({
 }));
 
 vi.mock("@/lib/hooks/use-data-table-query-params", () => ({
-  useDataTableQueryParams: () => ({
-    searchParams: new URLSearchParams(),
-    updateQueryParams: vi.fn(),
-  }),
+  useDataTableQueryParams: () => useDataTableQueryParamsMock(),
 }));
 
 vi.mock("@/components/create-llm-provider-api-key-dialog", () => ({
@@ -272,6 +275,10 @@ import ApiKeysPage from "./page";
 describe("ApiKeysPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useDataTableQueryParamsMock.mockReturnValue({
+      searchParams: new URLSearchParams(),
+      updateQueryParams: updateQueryParamsMock,
+    });
     vi.mocked(usePathname).mockReturnValue("/llm/model-providers");
     vi.mocked(useRouter).mockReturnValue({
       replace: vi.fn(),
@@ -300,6 +307,26 @@ describe("ApiKeysPage", () => {
       data: { data: [], pagination: { total: 0 } },
       isPending: false,
     });
+  });
+
+  it("opens a subscription sign-in linked from an Agent catalog flow", async () => {
+    useDataTableQueryParamsMock.mockReturnValue({
+      searchParams: new URLSearchParams("connect=chatgpt"),
+      updateQueryParams: updateQueryParamsMock,
+    });
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+
+    render(<ApiKeysPage />);
+
+    await waitFor(() =>
+      expect(updateQueryParamsMock).toHaveBeenCalledWith({ connect: null }),
+    );
+    expect(await screen.findByTestId("create-dialog")).toHaveTextContent(
+      "Sign in with ChatGPT",
+    );
   });
 
   it("does not query API keys while read permission is still loading", () => {

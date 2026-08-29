@@ -9,7 +9,11 @@ import {
   SupportedProviders,
 } from "@archestra/shared";
 import { useEffect, useRef, useState } from "react";
-import { FilterBar, filterSearchClass } from "@/components/filter-bar";
+import {
+  CollectionFilters,
+  FilterBar,
+  filterSearchClass,
+} from "@/components/filter-bar";
 import { ProviderIcon } from "@/components/provider-icon";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { SearchInput } from "@/components/search-input";
@@ -111,18 +115,20 @@ export function ModelProvidersSection() {
           {({ hasPermission }) => {
             const locked = updateMutation.isPending || !hasPermission;
             return (
-              <div className="flex flex-col gap-3">
-                <FilterBar
-                  onClearFilters={search ? () => setSearch("") : undefined}
-                >
-                  <SearchInput
-                    value={search}
-                    onSearchChange={setSearch}
-                    syncQueryParams={false}
-                    placeholder="Search providers…"
-                    className={filterSearchClass}
-                  />
-                </FilterBar>
+              <div>
+                <CollectionFilters>
+                  <FilterBar
+                    onClearFilters={search ? () => setSearch("") : undefined}
+                  >
+                    <SearchInput
+                      value={search}
+                      onSearchChange={setSearch}
+                      syncQueryParams={false}
+                      placeholder="Search providers…"
+                      className={filterSearchClass}
+                    />
+                  </FilterBar>
+                </CollectionFilters>
 
                 {visible.length === 0 ? (
                   <p className="py-6 text-center text-sm text-muted-foreground">

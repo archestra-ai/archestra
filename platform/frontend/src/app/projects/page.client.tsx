@@ -17,7 +17,11 @@ import { ApiKeyLoadError } from "@/components/api-key-load-error";
 import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
-import { FilterBar, filterSearchClass } from "@/components/filter-bar";
+import {
+  CollectionFilters,
+  FilterBar,
+  filterSearchClass,
+} from "@/components/filter-bar";
 import { IdentityFields } from "@/components/identity-fields";
 import { LoadingState } from "@/components/loading";
 import { NoApiKeySetup } from "@/components/no-api-key-setup";
@@ -251,35 +255,36 @@ function ProjectsList() {
             confirmLabel={PERMANENT_DELETE_LABEL}
           />
         )}
-        <div className="space-y-6">
-          <FilterBar
-            leading
-            className={projects.length > 0 ? "!mb-3" : undefined}
-            actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
-          >
-            {/* Hidden in the trash: the backend serves that slice whole, ignoring
+        <div>
+          <CollectionFilters>
+            <FilterBar
+              leading
+              actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
+            >
+              {/* Hidden in the trash: the backend serves that slice whole, ignoring
               search and scope, so live controls would read as broken filters. */}
-            {!isDeletedView && (
-              <>
-                <SearchInput
-                  isLoading={isFetching}
-                  placeholder="Search projects"
-                  paramName="search"
-                  className={filterSearchClass}
-                />
-                <ResourceScopeFilter
-                  ownerLabelPlural="projects"
-                  allLabel="All projects"
-                  adminPermission={{ project: ["admin"] }}
-                />
-              </>
-            )}
-            {/* Gated on `project:admin`, matching the slice the backend serves:
+              {!isDeletedView && (
+                <>
+                  <SearchInput
+                    isLoading={isFetching}
+                    placeholder="Search projects"
+                    paramName="search"
+                    className={filterSearchClass}
+                  />
+                  <ResourceScopeFilter
+                    ownerLabelPlural="projects"
+                    allLabel="All projects"
+                    adminPermission={{ project: ["admin"] }}
+                  />
+                </>
+              )}
+              {/* Gated on `project:admin`, matching the slice the backend serves:
               anyone else switching to Deleted would get an empty table. */}
-            <ResourceDeletedStatusFilter
-              deletePermission={{ project: ["admin"] }}
-            />
-          </FilterBar>
+              <ResourceDeletedStatusFilter
+                deletePermission={{ project: ["admin"] }}
+              />
+            </FilterBar>
+          </CollectionFilters>
           {(isPending || isFetching) && projects.length === 0 ? (
             <LoadingState label="Loading projects…" variant="page" />
           ) : isDeletedView ? (

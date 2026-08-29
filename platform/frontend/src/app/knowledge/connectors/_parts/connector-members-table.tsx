@@ -8,6 +8,7 @@ import { UserCog } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import {
+  CollectionFilters,
   FilterBar,
   filterControlClass,
   filterSearchClass,
@@ -300,50 +301,56 @@ export function ConnectorMembersTable({
   return (
     <div>
       {members.length > 0 && (
-        <FilterBar className="mb-3">
-          <SearchInput
-            value={search}
-            syncQueryParams={false}
-            placeholder={`Search by ID, email, name, or ${noun.singular}`}
-            className={filterSearchClass}
-            onSearchChange={setSearch}
-          />
-          <Select
-            value={filter}
-            onValueChange={(value) => setFilter(value as MemberFilter)}
-          >
-            <SelectTrigger
-              size="sm"
-              className={filterControlClass({ active: filter !== "all" })}
-              aria-label="Filter users"
+        <CollectionFilters>
+          <FilterBar>
+            <SearchInput
+              value={search}
+              syncQueryParams={false}
+              placeholder={`Search by ID, email, name, or ${noun.singular}`}
+              className={filterSearchClass}
+              onSearchChange={setSearch}
+            />
+            <Select
+              value={filter}
+              onValueChange={(value) => setFilter(value as MemberFilter)}
             >
-              <SelectValue placeholder="All users" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All users</SelectItem>
-              <SelectItem value="automatic">Automatically assigned</SelectItem>
-              <SelectItem value="manual">Manually assigned</SelectItem>
-              <SelectItem value="unassigned">Unassigned</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={groupFilter} onValueChange={setGroupFilter}>
-            <SelectTrigger
-              size="sm"
-              className={filterControlClass({ active: groupFilter !== "all" })}
-              aria-label={`Filter by ${noun.singular}`}
-            >
-              <SelectValue placeholder={`All ${noun.plural}`} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{`All ${noun.plural}`}</SelectItem>
-              {groupIds.map((groupId) => (
-                <SelectItem key={groupId} value={groupId}>
-                  {groupLabel(groupId)}
+              <SelectTrigger
+                size="sm"
+                className={filterControlClass({ active: filter !== "all" })}
+                aria-label="Filter users"
+              >
+                <SelectValue placeholder="All users" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All users</SelectItem>
+                <SelectItem value="automatic">
+                  Automatically assigned
                 </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </FilterBar>
+                <SelectItem value="manual">Manually assigned</SelectItem>
+                <SelectItem value="unassigned">Unassigned</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={groupFilter} onValueChange={setGroupFilter}>
+              <SelectTrigger
+                size="sm"
+                className={filterControlClass({
+                  active: groupFilter !== "all",
+                })}
+                aria-label={`Filter by ${noun.singular}`}
+              >
+                <SelectValue placeholder={`All ${noun.plural}`} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{`All ${noun.plural}`}</SelectItem>
+                {groupIds.map((groupId) => (
+                  <SelectItem key={groupId} value={groupId}>
+                    {groupLabel(groupId)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FilterBar>
+        </CollectionFilters>
       )}
 
       {userGroups?.truncated && (

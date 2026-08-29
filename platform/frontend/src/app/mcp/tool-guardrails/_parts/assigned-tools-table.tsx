@@ -24,6 +24,7 @@ import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { RowClickShield } from "@/components/agent-pages/row-click-shield";
 import { CallPolicyToggle } from "@/components/call-policy-toggle";
 import {
+  CollectionFilters,
   FilterBar,
   FilterSelect,
   filterSearchClass,
@@ -632,127 +633,134 @@ export function AssignedToolsTable({
   );
 
   return (
-    <BulkActionsScope className="space-y-3">
-      <FilterBar leading>
-        <SearchInput
-          isLoading={isLoading}
-          objectNamePlural="tools"
-          searchFields={["name"]}
-          paramName="search"
-          onSearchChange={handleSearchChange}
-          className={filterSearchClass}
-        />
+    <BulkActionsScope>
+      <CollectionFilters>
+        <FilterBar leading>
+          <SearchInput
+            isLoading={isLoading}
+            objectNamePlural="tools"
+            searchFields={["name"]}
+            paramName="search"
+            onSearchChange={handleSearchChange}
+            className={filterSearchClass}
+          />
 
-        <FilterSelect
-          value={originFilter}
-          onValueChange={handleOriginFilterChange}
-          placeholder="Filter by Source"
-          items={[
-            { value: "all", label: "All Sources" },
-            {
-              value: "agent",
-              label: "Agent",
-              content: (
-                <div className="flex items-center gap-2 min-w-0">
-                  <Bot className="h-4 w-4 shrink-0" />
-                  <span className="truncate">Agent</span>
-                </div>
-              ),
-              selectedContent: (
-                <div className="flex items-center gap-2 min-w-0">
-                  <Bot className="h-4 w-4 shrink-0" />
-                  <span className="truncate">Agent</span>
-                </div>
-              ),
-            },
-            ...(hasAppSources
-              ? [
-                  {
-                    value: APP_ORIGIN_FILTER_VALUE,
-                    label: APP_TOOL_SOURCE_LABEL,
-                    content: (
-                      <div className="flex items-center gap-2 min-w-0">
-                        <AppWindow className="h-4 w-4 shrink-0" />
-                        <span className="truncate">
-                          {APP_TOOL_SOURCE_LABEL}
-                        </span>
-                      </div>
-                    ),
-                    selectedContent: (
-                      <div className="flex items-center gap-2 min-w-0">
-                        <AppWindow className="h-4 w-4 shrink-0" />
-                        <span className="truncate">
-                          {APP_TOOL_SOURCE_LABEL}
-                        </span>
-                      </div>
-                    ),
-                  },
-                ]
-              : []),
-            {
-              value: "llm-proxy",
-              label: OBSERVED_TOOL_SOURCE_LABEL,
-              content: (
-                <div className="flex items-center gap-2 min-w-0">
-                  <Network className="h-4 w-4 shrink-0" />
-                  <span className="truncate">{OBSERVED_TOOL_SOURCE_LABEL}</span>
-                </div>
-              ),
-              selectedContent: (
-                <div className="flex items-center gap-2 min-w-0">
-                  <Network className="h-4 w-4 shrink-0" />
-                  <span className="truncate">{OBSERVED_TOOL_SOURCE_LABEL}</span>
-                </div>
-              ),
-            },
-            ...visibleCatalogSources.map((source) => ({
-              value: source.id,
-              label: source.name,
-              content: (
-                <div className="flex items-center gap-2 min-w-0">
-                  <McpCatalogIcon
-                    icon={source.icon}
-                    catalogId={source.id}
-                    size={16}
-                  />
-                  <span className="truncate">{source.name}</span>
-                </div>
-              ),
-              selectedContent: (
-                <div className="flex items-center gap-2 min-w-0">
-                  <McpCatalogIcon
-                    icon={source.icon}
-                    catalogId={source.id}
-                    size={16}
-                  />
-                  <span className="truncate">{source.name}</span>
-                </div>
-              ),
-            })),
-          ]}
-        />
+          <FilterSelect
+            value={originFilter}
+            onValueChange={handleOriginFilterChange}
+            placeholder="Filter by Source"
+            items={[
+              { value: "all", label: "All Sources" },
+              {
+                value: "agent",
+                label: "Agent",
+                content: (
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Bot className="h-4 w-4 shrink-0" />
+                    <span className="truncate">Agent</span>
+                  </div>
+                ),
+                selectedContent: (
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Bot className="h-4 w-4 shrink-0" />
+                    <span className="truncate">Agent</span>
+                  </div>
+                ),
+              },
+              ...(hasAppSources
+                ? [
+                    {
+                      value: APP_ORIGIN_FILTER_VALUE,
+                      label: APP_TOOL_SOURCE_LABEL,
+                      content: (
+                        <div className="flex items-center gap-2 min-w-0">
+                          <AppWindow className="h-4 w-4 shrink-0" />
+                          <span className="truncate">
+                            {APP_TOOL_SOURCE_LABEL}
+                          </span>
+                        </div>
+                      ),
+                      selectedContent: (
+                        <div className="flex items-center gap-2 min-w-0">
+                          <AppWindow className="h-4 w-4 shrink-0" />
+                          <span className="truncate">
+                            {APP_TOOL_SOURCE_LABEL}
+                          </span>
+                        </div>
+                      ),
+                    },
+                  ]
+                : []),
+              {
+                value: "llm-proxy",
+                label: OBSERVED_TOOL_SOURCE_LABEL,
+                content: (
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Network className="h-4 w-4 shrink-0" />
+                    <span className="truncate">
+                      {OBSERVED_TOOL_SOURCE_LABEL}
+                    </span>
+                  </div>
+                ),
+                selectedContent: (
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Network className="h-4 w-4 shrink-0" />
+                    <span className="truncate">
+                      {OBSERVED_TOOL_SOURCE_LABEL}
+                    </span>
+                  </div>
+                ),
+              },
+              ...visibleCatalogSources.map((source) => ({
+                value: source.id,
+                label: source.name,
+                content: (
+                  <div className="flex items-center gap-2 min-w-0">
+                    <McpCatalogIcon
+                      icon={source.icon}
+                      catalogId={source.id}
+                      size={16}
+                    />
+                    <span className="truncate">{source.name}</span>
+                  </div>
+                ),
+                selectedContent: (
+                  <div className="flex items-center gap-2 min-w-0">
+                    <McpCatalogIcon
+                      icon={source.icon}
+                      catalogId={source.id}
+                      size={16}
+                    />
+                    <span className="truncate">{source.name}</span>
+                  </div>
+                ),
+              })),
+            ]}
+          />
 
-        {/* Observed-tool attribution filters: narrow the list to tools seen in
+          {/* Observed-tool attribution filters: narrow the list to tools seen in
             one user's LLM proxy traffic, from one client app family. Only
             shown while the source filter is "Observed tools" — MCP-sourced
             tools carry no observations — and once someone has observed tools. */}
-        {observationFiltersActive && (toolObservers?.users.length ?? 0) > 0 && (
-          <UserFilterSelect
-            value={observedByFilter}
-            onValueChange={handleObservedByFilterChange}
-            users={toolObservers?.users}
-          />
-        )}
+          {observationFiltersActive &&
+            (toolObservers?.users.length ?? 0) > 0 && (
+              <UserFilterSelect
+                value={observedByFilter}
+                onValueChange={handleObservedByFilterChange}
+                users={toolObservers?.users}
+              />
+            )}
 
-        {observationFiltersActive &&
-          (toolObservers?.clients.length ?? 0) > 0 && (
-            <ClientFilterSelect
-              value={clientFilter}
-              onValueChange={handleClientFilterChange}
-              clients={toolObservers?.clients}
-            />
-          )}
-      </FilterBar>
+          {observationFiltersActive &&
+            (toolObservers?.clients.length ?? 0) > 0 && (
+              <ClientFilterSelect
+                value={clientFilter}
+                onValueChange={handleClientFilterChange}
+                clients={toolObservers?.clients}
+              />
+            )}
+        </FilterBar>
+      </CollectionFilters>
 
       <ToolPolicyBulkActionsBar
         selectedToolIds={bulkTools.map((tool) => tool.id)}

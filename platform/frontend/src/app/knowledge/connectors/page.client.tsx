@@ -21,6 +21,7 @@ import { CreateConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/cr
 import { EditConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/edit-connector-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
+  CollectionFilters,
   FilterBar,
   filterControlClass,
   filterSearchClass,
@@ -427,7 +428,7 @@ function ConnectorsList() {
     >
       <TableCardView storageKey="archestra-connectors-view">
         <div>
-          <div className="mb-3 flex flex-col gap-2">
+          <CollectionFilters>
             <FilterBar
               leading
               actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
@@ -466,7 +467,7 @@ function ConnectorsList() {
                 deletePermission={{ knowledgeSource: ["delete"] }}
               />
             </FilterBar>
-          </div>
+          </CollectionFilters>
 
           {isConnectorsLoadError ? (
             <QueryLoadError

@@ -47,7 +47,11 @@ import {
   resolveDefaultAgentBadge,
 } from "@/components/default-agent-tag";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { FilterBar, filterSearchClass } from "@/components/filter-bar";
+import {
+  CollectionFilters,
+  FilterBar,
+  filterSearchClass,
+} from "@/components/filter-bar";
 import { ImportAgentDialog } from "@/components/import-agent-dialog";
 import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
@@ -617,7 +621,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       <TableCardView storageKey="archestra-agents-view">
         <div>
           <div>
-            <div className="mb-3 flex flex-col gap-2">
+            <CollectionFilters>
               <FilterBar
                 leading
                 actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
@@ -646,7 +650,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                 />
               )}
               <ActiveFilterBadges adminPermission={{ agent: ["admin"] }} />
-            </div>
+            </CollectionFilters>
 
             <BulkActions
               count={selectedAgents.length}

@@ -5,6 +5,7 @@ import { ChevronDown, ChevronUp, User } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import {
+  CollectionFilters,
   FilterBar,
   FilterSelect,
   filterControlClass,
@@ -564,119 +565,123 @@ export function AuditLogTable() {
   }
 
   return (
-    <div className="space-y-3">
-      <FilterBar
-        leading
-        onClearFilters={hasFilters ? clearFilters : undefined}
-        // Action, outcome and the date range are what people reach for on this
-        // trail day to day; the four identity/resource pickers only matter once
-        // you are chasing a specific thing, so they start tucked away.
-        moreFilters={[
-          {
-            key: "actorType",
-            label: "Actor type",
-            active: !!actorType,
-            control: (
-              <FilterSelect
-                value={actorType ?? ALL_VALUE}
-                onValueChange={handleActorTypeChange}
-                placeholder="Filter by actor type"
-                items={actorTypeOptions}
-                inactiveValue={ALL_VALUE}
-              />
-            ),
-          },
-          {
-            key: "resourceType",
-            label: "Resource type",
-            active: !!resourceType,
-            control: (
-              <FilterSelect
-                value={resourceType ?? ALL_VALUE}
-                onValueChange={handleResourceChange}
-                placeholder="Filter by resource type"
-                items={resourceOptions}
-                inactiveValue={ALL_VALUE}
-              />
-            ),
-          },
-          {
-            key: "resourceId",
-            label: "Resource",
-            active: !!resourceId,
-            control: (
-              <FilterSelect
-                value={resourceId ?? ALL_VALUE}
-                onValueChange={handleEntityChange}
-                placeholder="Filter by resource"
-                items={entityOptions}
-                inactiveValue={ALL_VALUE}
-              />
-            ),
-          },
-          // Without auditLog:admin the server scopes the trail to the caller's
-          // own actions, so an actor filter would be pointless.
-          ...(canSeeAllAuditLogs
-            ? [
-                {
-                  key: "actorId",
-                  label: "Actor",
-                  active: !!actorId,
-                  control: (
-                    <FilterSelect
-                      value={actorId ?? ALL_VALUE}
-                      onValueChange={handleActorChange}
-                      placeholder="Filter by actor"
-                      items={memberOptions}
-                      pinnedItems={[{ value: ALL_VALUE, label: "All actors" }]}
-                      onSearchQueryChange={onActorSearchChange}
-                      emptyMessage={actorEmptyMessage}
-                      inactiveValue={ALL_VALUE}
-                    />
-                  ),
-                },
-              ]
-            : []),
-        ]}
-      >
-        <SearchInput
-          isLoading={isFetching}
-          objectNamePlural="audit events"
-          searchFields={["actor", "path", "resource"]}
-          paramName="search"
-          className={filterSearchClass}
-        />
-        <FilterSelect
-          value={action ?? ALL_VALUE}
-          onValueChange={handleActionChange}
-          placeholder="Filter by action"
-          items={actionOptions}
-          inactiveValue={ALL_VALUE}
-        />
-        <FilterSelect
-          value={outcome ?? ALL_VALUE}
-          onValueChange={handleOutcomeChange}
-          placeholder="Filter by outcome"
-          items={outcomeOptions}
-          inactiveValue={ALL_VALUE}
-        />
-        <DateTimeRangePicker
-          startDate={dateTimePicker.startDate}
-          endDate={dateTimePicker.endDate}
-          isDialogOpen={dateTimePicker.isDateDialogOpen}
-          tempStartDate={dateTimePicker.tempStartDate}
-          tempEndDate={dateTimePicker.tempEndDate}
-          displayText={dateTimePicker.getDateRangeDisplay()}
-          onDialogOpenChange={dateTimePicker.setIsDateDialogOpen}
-          onTempStartDateChange={dateTimePicker.setTempStartDate}
-          onTempEndDateChange={dateTimePicker.setTempEndDate}
-          onOpenDialog={dateTimePicker.openDateDialog}
-          onApply={dateTimePicker.handleApplyDateRange}
-          className={filterControlClass({
-            active: dateTimePicker.startDate !== undefined,
-          })}
-        />
-      </FilterBar>
+    <div>
+      <CollectionFilters>
+        <FilterBar
+          leading
+          onClearFilters={hasFilters ? clearFilters : undefined}
+          // Action, outcome and the date range are what people reach for on this
+          // trail day to day; the four identity/resource pickers only matter once
+          // you are chasing a specific thing, so they start tucked away.
+          moreFilters={[
+            {
+              key: "actorType",
+              label: "Actor type",
+              active: !!actorType,
+              control: (
+                <FilterSelect
+                  value={actorType ?? ALL_VALUE}
+                  onValueChange={handleActorTypeChange}
+                  placeholder="Filter by actor type"
+                  items={actorTypeOptions}
+                  inactiveValue={ALL_VALUE}
+                />
+              ),
+            },
+            {
+              key: "resourceType",
+              label: "Resource type",
+              active: !!resourceType,
+              control: (
+                <FilterSelect
+                  value={resourceType ?? ALL_VALUE}
+                  onValueChange={handleResourceChange}
+                  placeholder="Filter by resource type"
+                  items={resourceOptions}
+                  inactiveValue={ALL_VALUE}
+                />
+              ),
+            },
+            {
+              key: "resourceId",
+              label: "Resource",
+              active: !!resourceId,
+              control: (
+                <FilterSelect
+                  value={resourceId ?? ALL_VALUE}
+                  onValueChange={handleEntityChange}
+                  placeholder="Filter by resource"
+                  items={entityOptions}
+                  inactiveValue={ALL_VALUE}
+                />
+              ),
+            },
+            // Without auditLog:admin the server scopes the trail to the caller's
+            // own actions, so an actor filter would be pointless.
+            ...(canSeeAllAuditLogs
+              ? [
+                  {
+                    key: "actorId",
+                    label: "Actor",
+                    active: !!actorId,
+                    control: (
+                      <FilterSelect
+                        value={actorId ?? ALL_VALUE}
+                        onValueChange={handleActorChange}
+                        placeholder="Filter by actor"
+                        items={memberOptions}
+                        pinnedItems={[
+                          { value: ALL_VALUE, label: "All actors" },
+                        ]}
+                        onSearchQueryChange={onActorSearchChange}
+                        emptyMessage={actorEmptyMessage}
+                        inactiveValue={ALL_VALUE}
+                      />
+                    ),
+                  },
+                ]
+              : []),
+          ]}
+        >
+          <SearchInput
+            isLoading={isFetching}
+            objectNamePlural="audit events"
+            searchFields={["actor", "path", "resource"]}
+            paramName="search"
+            className={filterSearchClass}
+          />
+          <FilterSelect
+            value={action ?? ALL_VALUE}
+            onValueChange={handleActionChange}
+            placeholder="Filter by action"
+            items={actionOptions}
+            inactiveValue={ALL_VALUE}
+          />
+          <FilterSelect
+            value={outcome ?? ALL_VALUE}
+            onValueChange={handleOutcomeChange}
+            placeholder="Filter by outcome"
+            items={outcomeOptions}
+            inactiveValue={ALL_VALUE}
+          />
+          <DateTimeRangePicker
+            startDate={dateTimePicker.startDate}
+            endDate={dateTimePicker.endDate}
+            isDialogOpen={dateTimePicker.isDateDialogOpen}
+            tempStartDate={dateTimePicker.tempStartDate}
+            tempEndDate={dateTimePicker.tempEndDate}
+            displayText={dateTimePicker.getDateRangeDisplay()}
+            onDialogOpenChange={dateTimePicker.setIsDateDialogOpen}
+            onTempStartDateChange={dateTimePicker.setTempStartDate}
+            onTempEndDateChange={dateTimePicker.setTempEndDate}
+            onOpenDialog={dateTimePicker.openDateDialog}
+            onApply={dateTimePicker.handleApplyDateRange}
+            className={filterControlClass({
+              active: dateTimePicker.startDate !== undefined,
+            })}
+          />
+        </FilterBar>
+      </CollectionFilters>
 
       <DataTable<AuditLogRow, unknown>
         columns={columns}

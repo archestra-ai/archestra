@@ -24,6 +24,7 @@ import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import {
+  CollectionFilters,
   FilterBar,
   FilterSelect,
   filterControlClass,
@@ -521,111 +522,113 @@ export default function ModelsPage() {
       description='Models available from your configured providers. Use "Refresh Models" to re-fetch models and capabilities from providers.'
       actionButton={refreshModelsButton}
     >
-      <BulkActionsScope className="space-y-3">
+      <BulkActionsScope>
         {models.length > 0 && (
-          <FilterBar leading>
-            <SearchInput
-              objectNamePlural="models"
-              searchFields={["model ID"]}
-              value={search}
-              onSearchChange={setSearch}
-              syncQueryParams={false}
-              className={filterSearchClass}
-            />
-            <LlmProviderApiKeyDropdown
-              availableKeys={apiKeys}
-              selectedApiKeyId={apiKeyFilter === "all" ? null : apiKeyFilter}
-              open={apiKeyFilterOpen}
-              onOpenChange={setApiKeyFilterOpen}
-              onSelectKey={(value) => {
-                setApiKeyFilter(value);
-                setApiKeyFilterOpen(false);
-              }}
-              triggerVariant="select"
-              triggerClassName={filterControlClass({
-                active: apiKeyFilter !== "all",
-              })}
-              popoverClassName="w-[min(20rem,calc(100vw-2rem))]"
-              allOptionLabel="All provider API keys"
-              allOptionSelected={apiKeyFilter === "all"}
-              onSelectAllOption={() => {
-                setApiKeyFilter("all");
-                setApiKeyFilterOpen(false);
-              }}
-            />
-            <FilterSelect
-              value={modelTypeFilter}
-              onValueChange={(v) =>
-                setModelTypeFilter(v as "all" | "chat" | "embedding")
-              }
-              placeholder="Model type"
-              items={[
-                {
-                  value: "all",
-                  label: "All models",
-                  content: (
-                    <span className="flex items-center gap-2">
-                      <Boxes className="h-4 w-4 text-muted-foreground" />
-                      <span>All models</span>
-                    </span>
-                  ),
-                  selectedContent: (
-                    <span className="flex items-center gap-2">
-                      <Boxes className="h-4 w-4 text-muted-foreground" />
-                      <span>All models</span>
-                    </span>
-                  ),
-                },
-                {
-                  value: "chat",
-                  label: "Chat / generation",
-                  content: (
-                    <span className="flex items-center gap-2">
-                      <Brain className="h-4 w-4 text-muted-foreground" />
-                      <span>Chat / generation</span>
-                    </span>
-                  ),
-                  selectedContent: (
-                    <span className="flex items-center gap-2">
-                      <Brain className="h-4 w-4 text-muted-foreground" />
-                      <span>Chat / generation</span>
-                    </span>
-                  ),
-                },
-                {
-                  value: "embedding",
-                  label: "Embedding",
-                  content: (
-                    <span className="flex items-center gap-2">
-                      <Fingerprint className="h-4 w-4 text-muted-foreground" />
-                      <span>Embedding</span>
-                    </span>
-                  ),
-                  selectedContent: (
-                    <span className="flex items-center gap-2">
-                      <Fingerprint className="h-4 w-4 text-muted-foreground" />
-                      <span>Embedding</span>
-                    </span>
-                  ),
-                },
-              ]}
-            />
-            {canFilterFreeModels && (
-              <div className="flex items-center gap-2">
-                <Switch
-                  id="models-free-only"
-                  checked={freeOnly}
-                  onCheckedChange={setFreeOnly}
-                />
-                <Label
-                  htmlFor="models-free-only"
-                  className="text-sm text-muted-foreground"
-                >
-                  Free only
-                </Label>
-              </div>
-            )}
-          </FilterBar>
+          <CollectionFilters>
+            <FilterBar leading>
+              <SearchInput
+                objectNamePlural="models"
+                searchFields={["model ID"]}
+                value={search}
+                onSearchChange={setSearch}
+                syncQueryParams={false}
+                className={filterSearchClass}
+              />
+              <LlmProviderApiKeyDropdown
+                availableKeys={apiKeys}
+                selectedApiKeyId={apiKeyFilter === "all" ? null : apiKeyFilter}
+                open={apiKeyFilterOpen}
+                onOpenChange={setApiKeyFilterOpen}
+                onSelectKey={(value) => {
+                  setApiKeyFilter(value);
+                  setApiKeyFilterOpen(false);
+                }}
+                triggerVariant="select"
+                triggerClassName={filterControlClass({
+                  active: apiKeyFilter !== "all",
+                })}
+                popoverClassName="w-[min(20rem,calc(100vw-2rem))]"
+                allOptionLabel="All provider API keys"
+                allOptionSelected={apiKeyFilter === "all"}
+                onSelectAllOption={() => {
+                  setApiKeyFilter("all");
+                  setApiKeyFilterOpen(false);
+                }}
+              />
+              <FilterSelect
+                value={modelTypeFilter}
+                onValueChange={(v) =>
+                  setModelTypeFilter(v as "all" | "chat" | "embedding")
+                }
+                placeholder="Model type"
+                items={[
+                  {
+                    value: "all",
+                    label: "All models",
+                    content: (
+                      <span className="flex items-center gap-2">
+                        <Boxes className="h-4 w-4 text-muted-foreground" />
+                        <span>All models</span>
+                      </span>
+                    ),
+                    selectedContent: (
+                      <span className="flex items-center gap-2">
+                        <Boxes className="h-4 w-4 text-muted-foreground" />
+                        <span>All models</span>
+                      </span>
+                    ),
+                  },
+                  {
+                    value: "chat",
+                    label: "Chat / generation",
+                    content: (
+                      <span className="flex items-center gap-2">
+                        <Brain className="h-4 w-4 text-muted-foreground" />
+                        <span>Chat / generation</span>
+                      </span>
+                    ),
+                    selectedContent: (
+                      <span className="flex items-center gap-2">
+                        <Brain className="h-4 w-4 text-muted-foreground" />
+                        <span>Chat / generation</span>
+                      </span>
+                    ),
+                  },
+                  {
+                    value: "embedding",
+                    label: "Embedding",
+                    content: (
+                      <span className="flex items-center gap-2">
+                        <Fingerprint className="h-4 w-4 text-muted-foreground" />
+                        <span>Embedding</span>
+                      </span>
+                    ),
+                    selectedContent: (
+                      <span className="flex items-center gap-2">
+                        <Fingerprint className="h-4 w-4 text-muted-foreground" />
+                        <span>Embedding</span>
+                      </span>
+                    ),
+                  },
+                ]}
+              />
+              {canFilterFreeModels && (
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="models-free-only"
+                    checked={freeOnly}
+                    onCheckedChange={setFreeOnly}
+                  />
+                  <Label
+                    htmlFor="models-free-only"
+                    className="text-sm text-muted-foreground"
+                  >
+                    Free only
+                  </Label>
+                </div>
+              )}
+            </FilterBar>
+          </CollectionFilters>
         )}
         <BulkActions
           count={selectedModels.length}

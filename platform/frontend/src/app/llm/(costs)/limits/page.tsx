@@ -22,6 +22,12 @@ import { AgentIcon } from "@/components/agent-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EnvironmentScopeSelect } from "@/components/environment-scope-select";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import {
+  CollectionFilters,
+  FilterBar,
+  FilterSelect,
+  filterControlClass,
+} from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
 import {
   CLEANUP_INTERVAL_LABELS,
@@ -38,6 +44,7 @@ import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
+import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -51,13 +58,6 @@ import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Progress } from "@/components/ui/progress";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Tooltip,
   TooltipContent,
@@ -614,7 +614,7 @@ export default function LimitsPage() {
         cell: ({ row }) => {
           const usage = getUsageStatus(row.original);
           return (
-            <div className="w-[180px]">
+            <div className="min-w-0 w-full overflow-hidden">
               <Progress
                 value={Math.min(usage.percentage, 100)}
                 className={
@@ -625,7 +625,7 @@ export default function LimitsPage() {
                       : undefined
                 }
               />
-              <p className="mt-1 text-left text-xs text-muted-foreground">
+              <p className="mt-1 truncate text-left text-xs text-muted-foreground">
                 {`${formatCurrencyWhole(usage.actualUsage)} / ${formatCurrencyWhole(usage.actualLimit)} (${usage.percentage.toFixed(1)}%)`}
               </p>
             </div>
@@ -741,12 +741,12 @@ export default function LimitsPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div>
       <WithPermissions
         permissions={{ llmLimit: ["read"] }}
         noPermissionHandle="hide"
       >
-        <Alert variant="info">
+        <Alert variant="info" className="mb-4">
           <AlertDescription className="block">
             {defaultUserLimits.length > 0
               ? "A default user limit applies to every user. Custom per-user limits override it. Configure it in "
@@ -762,99 +762,108 @@ export default function LimitsPage() {
         </Alert>
       </WithPermissions>
 
-      <div
-        className={`flex flex-wrap gap-3 ${(isPending || isFetching) && limits.length === 0 ? "" : "!mb-3"}`}
-      >
-        <Select
-          value={statusFilter}
-          onValueChange={(value) =>
-            updateQueryParams({ status: value === "all" ? null : value })
-          }
-        >
-          <SelectTrigger className="w-full sm:w-[220px]">
-            <SelectValue placeholder="All statuses" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
-            <SelectItem value="safe">Safe</SelectItem>
-            <SelectItem value="warning">Near limit</SelectItem>
-            <SelectItem value="danger">Exceeded</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <Select
-          value={appliedToFilter}
-          onValueChange={(value) =>
-            updateQueryParams({ appliedTo: value === "all" ? null : value })
-          }
-        >
-          <SelectTrigger className="w-full sm:w-[220px]">
-            <SelectValue placeholder="All scopes" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All applied to</SelectItem>
-            <SelectItem value="organization">Organization</SelectItem>
-            <SelectItem value="team">Team</SelectItem>
-            <SelectItem value="agent">Agent</SelectItem>
-            <SelectItem value="llm_proxy">LLM Proxy</SelectItem>
-            <SelectItem value="user">User</SelectItem>
-            <SelectItem value="virtual_key">Virtual Key</SelectItem>
-            <SelectItem value="environment">Environment</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <LlmModelSearchableSelect
-          value={modelFilter}
-          onValueChange={(value) =>
-            updateQueryParams({ model: value === "all" ? null : value })
-          }
-          options={modelOptions}
-          placeholder="All models"
-          className="sm:max-w-[320px]"
-          showPricing={false}
-          includeAllOption
-          allLabel="All models"
-        />
-      </div>
-
-      <LoadingWrapper
-        isPending={(isPending || isFetching) && limits.length === 0}
-        loadingFallback={<LoadingState variant="page" />}
-      >
-        <BulkActions
-          count={selectedLimits.length}
-          noun="limit"
-          onClear={clearSelection}
-          busy={bulkDeleteLimits.isPending}
-          selectAllMatching={selectAllMatching}
-        >
-          <PermissionButton
-            permissions={{ llmLimit: ["delete"] }}
-            variant="destructive"
-            size="sm"
-            onClick={() => setIsBulkDeleteDialogOpen(true)}
+      <BulkActionsScope>
+        <CollectionFilters>
+          <FilterBar
+            onClearFilters={
+              hasActiveFilters
+                ? () =>
+                    updateQueryParams({
+                      status: null,
+                      appliedTo: null,
+                      model: null,
+                    })
+                : undefined
+            }
           >
-            <Trash2 className="h-4 w-4" />
-            <span>Delete</span>
-          </PermissionButton>
-        </BulkActions>
-        <DataTable
-          columns={columns}
-          data={filteredLimits}
-          getRowId={(limit) => limit.id}
-          rowSelection={rowSelection}
-          onRowSelectionChange={setRowSelection}
-          onPageRowIdsChange={onPageRowIdsChange}
-          hideSelectedCount
-          emptyIcon={CircleDollarSign}
-          emptyMessage="No limits configured"
-          hasActiveFilters={hasActiveFilters}
-          filteredEmptyMessage="No limits match your filters"
-          onClearFilters={() => {
-            updateQueryParams({ status: null, appliedTo: null, model: null });
-          }}
-        />
-      </LoadingWrapper>
+            <FilterSelect
+              value={statusFilter}
+              onValueChange={(value) =>
+                updateQueryParams({ status: value === "all" ? null : value })
+              }
+              placeholder="All statuses"
+              showSearch={false}
+              items={[
+                { value: "all", label: "All statuses" },
+                { value: "safe", label: "Safe" },
+                { value: "warning", label: "Near limit" },
+                { value: "danger", label: "Exceeded" },
+              ]}
+            />
+            <FilterSelect
+              value={appliedToFilter}
+              onValueChange={(value) =>
+                updateQueryParams({ appliedTo: value === "all" ? null : value })
+              }
+              placeholder="All applied to"
+              showSearch={false}
+              items={[
+                { value: "all", label: "All applied to" },
+                { value: "organization", label: "Organization" },
+                { value: "team", label: "Team" },
+                { value: "agent", label: "Agent" },
+                { value: "llm_proxy", label: "LLM Proxy" },
+                { value: "user", label: "User" },
+                { value: "virtual_key", label: "Virtual Key" },
+                { value: "environment", label: "Environment" },
+              ]}
+            />
+            <LlmModelSearchableSelect
+              value={modelFilter}
+              onValueChange={(value) =>
+                updateQueryParams({ model: value === "all" ? null : value })
+              }
+              options={modelOptions}
+              placeholder="All models"
+              className={filterControlClass({
+                active: modelFilter !== "all",
+              })}
+              showPricing={false}
+              includeAllOption
+              allLabel="All models"
+            />
+          </FilterBar>
+        </CollectionFilters>
+
+        <LoadingWrapper
+          isPending={(isPending || isFetching) && limits.length === 0}
+          loadingFallback={<LoadingState variant="page" />}
+        >
+          <BulkActions
+            count={selectedLimits.length}
+            noun="limit"
+            onClear={clearSelection}
+            busy={bulkDeleteLimits.isPending}
+            selectAllMatching={selectAllMatching}
+          >
+            <PermissionButton
+              permissions={{ llmLimit: ["delete"] }}
+              variant="destructive"
+              size="sm"
+              onClick={() => setIsBulkDeleteDialogOpen(true)}
+            >
+              <Trash2 className="h-4 w-4" />
+              <span>Delete</span>
+            </PermissionButton>
+          </BulkActions>
+          <DataTable
+            columns={columns}
+            data={filteredLimits}
+            getRowId={(limit) => limit.id}
+            rowSelection={rowSelection}
+            onRowSelectionChange={setRowSelection}
+            onPageRowIdsChange={onPageRowIdsChange}
+            hideSelectedCount
+            emptyIcon={CircleDollarSign}
+            emptyMessage="No limits configured"
+            hasActiveFilters={hasActiveFilters}
+            filteredEmptyMessage="No limits match your filters"
+            onClearFilters={() => {
+              updateQueryParams({ status: null, appliedTo: null, model: null });
+            }}
+          />
+        </LoadingWrapper>
+      </BulkActionsScope>
 
       <FormDialog
         open={isCreateDialogOpen || !!editingLimit}

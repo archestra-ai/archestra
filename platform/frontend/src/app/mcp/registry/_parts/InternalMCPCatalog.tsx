@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import {
+  CollectionFilters,
   FilterBar,
   filterControlClass,
   filterSearchClass,
@@ -1126,12 +1127,6 @@ export function InternalMCPCatalog({
     filters.author.size > 0 ||
     filters.status.has(INSTALLED_STATUS_VALUE) ||
     filters.status.has(NOT_INSTALLED_STATUS_VALUE);
-  const hasFilterChips =
-    filters.issue.size > 0 ||
-    filters.environment.size > 0 ||
-    filters.author.size > 0 ||
-    filters.status.has(INSTALLED_STATUS_VALUE) ||
-    filters.status.has(NOT_INSTALLED_STATUS_VALUE);
   const handleClearAllFilters = useCallback(() => {
     const params = new URLSearchParams(searchParams.toString());
     params.delete("search");
@@ -1165,14 +1160,8 @@ export function InternalMCPCatalog({
 
   return (
     <TableCardView storageKey="archestra-mcp-registry-view" defaultMode="table">
-      <div className="space-y-4">
-        <div
-          className={
-            !hasLabelFilters && !hasFilterChips
-              ? "space-y-3 !mb-3"
-              : "space-y-3"
-          }
-        >
+      <div>
+        <CollectionFilters>
           <FilterBar
             leading
             onClearFilters={
@@ -1257,18 +1246,15 @@ export function InternalMCPCatalog({
               />
             )}
           </FilterBar>
-        </div>
-        {hasLabelFilters && (
-          <div className={!hasFilterChips ? "!mb-3" : undefined}>
+          {hasLabelFilters && (
             <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />
-          </div>
-        )}
-        <RegistryFilterChips
-          className="!mb-3"
-          selected={filters}
-          onRemove={removeFilter}
-          onClearAll={clearAdvancedFilters}
-        />
+          )}
+          <RegistryFilterChips
+            selected={filters}
+            onRemove={removeFilter}
+            onClearAll={clearAdvancedFilters}
+          />
+        </CollectionFilters>
         {selectedFacet ? (
           allFilteredItems.length === 0 ? (
             // A clean fleet is only claimable when the facet itself is empty.

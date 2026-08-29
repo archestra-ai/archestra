@@ -7,6 +7,7 @@ import { useCallback, useMemo, useState } from "react";
 import { AclBadges } from "@/app/knowledge/connectors/_parts/acl-badges";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
+  CollectionFilters,
   FilterBar,
   filterControlClass,
   filterSearchClass,
@@ -281,49 +282,51 @@ export function ConnectorDocumentsTable({
   );
 
   return (
-    <BulkActionsScope className="space-y-3">
-      <FilterBar>
-        <SearchInput
-          isLoading={isFetching}
-          value={search}
-          syncQueryParams={false}
-          placeholder="Search documents by title"
-          className={filterSearchClass}
-          onSearchChange={(nextValue) =>
-            updateQueryParams({
-              search: nextValue || null,
-              page: "1",
-            })
-          }
-        />
-        {showGroupFilter && (
-          <Select
-            value={group || "all"}
-            onValueChange={(value) =>
+    <BulkActionsScope>
+      <CollectionFilters>
+        <FilterBar>
+          <SearchInput
+            isLoading={isFetching}
+            value={search}
+            syncQueryParams={false}
+            placeholder="Search documents by title"
+            className={filterSearchClass}
+            onSearchChange={(nextValue) =>
               updateQueryParams({
-                group: value === "all" ? null : value,
+                search: nextValue || null,
                 page: "1",
               })
             }
-          >
-            <SelectTrigger
-              size="sm"
-              className={filterControlClass({ active: Boolean(group) })}
-              aria-label={`Filter by ${noun.singular}`}
+          />
+          {showGroupFilter && (
+            <Select
+              value={group || "all"}
+              onValueChange={(value) =>
+                updateQueryParams({
+                  group: value === "all" ? null : value,
+                  page: "1",
+                })
+              }
             >
-              <SelectValue placeholder={`All ${noun.plural}`} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{`All ${noun.plural}`}</SelectItem>
-              {groupOptions.map(({ groupId, label }) => (
-                <SelectItem key={groupId} value={groupId}>
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-      </FilterBar>
+              <SelectTrigger
+                size="sm"
+                className={filterControlClass({ active: Boolean(group) })}
+                aria-label={`Filter by ${noun.singular}`}
+              >
+                <SelectValue placeholder={`All ${noun.plural}`} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{`All ${noun.plural}`}</SelectItem>
+                {groupOptions.map(({ groupId, label }) => (
+                  <SelectItem key={groupId} value={groupId}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </FilterBar>
+      </CollectionFilters>
 
       <BulkActions
         count={selectedCount}

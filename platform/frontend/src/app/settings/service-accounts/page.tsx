@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
+  CollectionFilters,
   FilterBar,
   FilterSelect,
   filterSearchClass,
@@ -360,44 +361,45 @@ export default function ServiceAccountsSettingsPage() {
         >
           <TableCardView storageKey="archestra-service-accounts-view">
             <div>
-              <FilterBar
-                className="mb-3"
-                actions={<TableCardViewToggle />}
-                onClearFilters={hasActiveFilters ? clearFilters : undefined}
-              >
-                <SearchInput
-                  objectNamePlural="service accounts"
-                  searchFields={["name"]}
-                  className={filterSearchClass}
-                />
-                <RoleFilterSelect
-                  value={roleFilter}
-                  onValueChange={(value) =>
-                    updateQueryParams({
-                      role: value === ALL ? null : value,
-                      page: "1",
-                    })
-                  }
-                  allOptionValue={ALL}
-                />
-                <FilterSelect
-                  value={statusFilter}
-                  onValueChange={(value) =>
-                    updateQueryParams({
-                      status: value === ALL ? null : value,
-                      page: "1",
-                    })
-                  }
-                  placeholder="Filter by status"
-                  items={[
-                    { value: ALL, label: "All statuses" },
-                    ...STATUS_FILTERS.map((health) => ({
-                      value: health,
-                      label: ACCOUNT_HEALTH_LABELS[health],
-                    })),
-                  ]}
-                />
-              </FilterBar>
+              <CollectionFilters>
+                <FilterBar
+                  actions={<TableCardViewToggle />}
+                  onClearFilters={hasActiveFilters ? clearFilters : undefined}
+                >
+                  <SearchInput
+                    objectNamePlural="service accounts"
+                    searchFields={["name"]}
+                    className={filterSearchClass}
+                  />
+                  <RoleFilterSelect
+                    value={roleFilter}
+                    onValueChange={(value) =>
+                      updateQueryParams({
+                        role: value === ALL ? null : value,
+                        page: "1",
+                      })
+                    }
+                    allOptionValue={ALL}
+                  />
+                  <FilterSelect
+                    value={statusFilter}
+                    onValueChange={(value) =>
+                      updateQueryParams({
+                        status: value === ALL ? null : value,
+                        page: "1",
+                      })
+                    }
+                    placeholder="Filter by status"
+                    items={[
+                      { value: ALL, label: "All statuses" },
+                      ...STATUS_FILTERS.map((health) => ({
+                        value: health,
+                        label: ACCOUNT_HEALTH_LABELS[health],
+                      })),
+                    ]}
+                  />
+                </FilterBar>
+              </CollectionFilters>
               {isServiceAccountsLoadError ? (
                 <QueryLoadError
                   title="Couldn't load your service accounts"

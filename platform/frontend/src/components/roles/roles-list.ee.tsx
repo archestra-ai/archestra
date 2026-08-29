@@ -14,7 +14,11 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useSetSettingsAction } from "@/app/settings/layout";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { FilterBar, filterSearchClass } from "@/components/filter-bar";
+import {
+  CollectionFilters,
+  FilterBar,
+  filterSearchClass,
+} from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RoleTypeIcon } from "@/components/role-type-icon";
@@ -420,23 +424,25 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
 
   return (
     <>
-      <BulkActionsScope className="space-y-3">
-        <FilterBar
-          onClearFilters={
-            nameFilter
-              ? () => updateQueryParams({ name: null, page: "1" })
-              : undefined
-          }
-          actions={headerAction}
-        >
-          <SearchInput
-            isLoading={isLoading}
-            objectNamePlural="roles"
-            searchFields={["name"]}
-            paramName="name"
-            className={filterSearchClass}
-          />
-        </FilterBar>
+      <BulkActionsScope>
+        <CollectionFilters>
+          <FilterBar
+            onClearFilters={
+              nameFilter
+                ? () => updateQueryParams({ name: null, page: "1" })
+                : undefined
+            }
+            actions={headerAction}
+          >
+            <SearchInput
+              isLoading={isLoading}
+              objectNamePlural="roles"
+              searchFields={["name"]}
+              paramName="name"
+              className={filterSearchClass}
+            />
+          </FilterBar>
+        </CollectionFilters>
 
         {isLoadingError ? (
           <QueryLoadError

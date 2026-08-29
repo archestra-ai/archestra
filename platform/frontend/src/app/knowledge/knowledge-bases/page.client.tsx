@@ -20,7 +20,11 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
-import { FilterBar, filterSearchClass } from "@/components/filter-bar";
+import {
+  CollectionFilters,
+  FilterBar,
+  filterSearchClass,
+} from "@/components/filter-bar";
 import { LoadingState } from "@/components/loading";
 import {
   PERMANENT_DELETE_LABEL,
@@ -450,7 +454,7 @@ function KnowledgeBasesList() {
     >
       <TableCardView storageKey="knowledge-bases-view">
         <div>
-          <div className="mb-3 flex flex-col gap-2">
+          <CollectionFilters>
             <FilterBar
               leading
               actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
@@ -464,7 +468,7 @@ function KnowledgeBasesList() {
                 deletePermission={{ knowledgeSource: ["delete"] }}
               />
             </FilterBar>
-          </div>
+          </CollectionFilters>
 
           {!isDeletedView && (
             <BulkActions

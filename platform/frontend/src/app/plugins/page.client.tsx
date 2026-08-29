@@ -20,6 +20,7 @@ import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import {
+  CollectionFilters,
   FilterBar,
   filterControlClass,
   filterSearchClass,
@@ -616,7 +617,7 @@ function PluginsList() {
             <PluginsEmptyState />
           ) : (
             <>
-              <div className="mb-3 flex flex-col gap-2">
+              <CollectionFilters>
                 <FilterBar
                   leading
                   onClearFilters={hasActiveFilters ? clearFilters : undefined}
@@ -748,7 +749,7 @@ function PluginsList() {
                   />
                 </FilterBar>
                 <ActiveFilterBadges adminPermission={{ plugin: ["admin"] }} />
-              </div>
+              </CollectionFilters>
 
               <BulkActions
                 count={bulkSelection.selected.length}

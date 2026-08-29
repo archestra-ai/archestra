@@ -25,6 +25,7 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import {
+  CollectionFilters,
   FilterBar,
   filterControlClass,
   filterSearchClass,
@@ -792,7 +793,7 @@ function SkillsList() {
             <SkillsEmptyState />
           ) : (
             <>
-              <div className="mb-3 flex flex-col gap-2">
+              <CollectionFilters>
                 <FilterBar
                   leading
                   onClearFilters={hasActiveFilters ? clearFilters : undefined}
@@ -895,7 +896,7 @@ function SkillsList() {
                   )}
                 </FilterBar>
                 <ActiveFilterBadges adminPermission={{ skill: ["admin"] }} />
-              </div>
+              </CollectionFilters>
 
               <section className="space-y-3" aria-label="Skills">
                 <BulkActions

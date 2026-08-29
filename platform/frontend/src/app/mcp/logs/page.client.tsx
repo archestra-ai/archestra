@@ -19,6 +19,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AgentSelector } from "@/components/agent-selector";
 import { ExecutedAsBadge } from "@/components/executed-as-badge";
 import {
+  CollectionFilters,
   FilterBar,
   filterControlClass,
   filterSearchClass,
@@ -502,33 +503,38 @@ function McpToolCallsTable({
   }
 
   return (
-    <div className="space-y-3">
-      <FilterBar leading onClearFilters={hasFilters ? clearFilters : undefined}>
-        {searchInputComponent}
-        {/* Two people's personal gateways can both be called "My Gateway", so
+    <div>
+      <CollectionFilters>
+        <FilterBar
+          leading
+          onClearFilters={hasFilters ? clearFilters : undefined}
+        >
+          {searchInputComponent}
+          {/* Two people's personal gateways can both be called "My Gateway", so
             the picker carries each one's scope and owner email rather than a
             bare name. */}
-        <AgentSelector
-          mode="single"
-          flat
-          compactTrigger
-          agents={agents ?? []}
-          value={profileFilter}
-          onValueChange={handleProfileFilterChange}
-          sentinelOption={{
-            value: "all",
-            label: "All Agents & MCP Gateways",
-          }}
-          // Only reached when the URL pins an id that no longer resolves to an
-          // agent (e.g. a bookmarked filter whose target was deleted); the
-          // sentinel label covers the ordinary unfiltered state.
-          placeholder="Filter by Agent"
-          searchPlaceholder="Search agents and MCP gateways…"
-          emptyMessage="No agents or MCP gateways found."
-          className={filterControlClass({ active: profileFilter !== "all" })}
-        />
-        {datePickerComponent}
-      </FilterBar>
+          <AgentSelector
+            mode="single"
+            flat
+            compactTrigger
+            agents={agents ?? []}
+            value={profileFilter}
+            onValueChange={handleProfileFilterChange}
+            sentinelOption={{
+              value: "all",
+              label: "All Agents & MCP Gateways",
+            }}
+            // Only reached when the URL pins an id that no longer resolves to an
+            // agent (e.g. a bookmarked filter whose target was deleted); the
+            // sentinel label covers the ordinary unfiltered state.
+            placeholder="Filter by Agent"
+            searchPlaceholder="Search agents and MCP gateways…"
+            emptyMessage="No agents or MCP gateways found."
+            className={filterControlClass({ active: profileFilter !== "all" })}
+          />
+          {datePickerComponent}
+        </FilterBar>
+      </CollectionFilters>
 
       <DataTable
         columns={columns}

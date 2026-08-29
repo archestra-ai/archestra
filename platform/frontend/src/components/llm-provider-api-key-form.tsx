@@ -271,6 +271,14 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://openrouter.ai/keys",
     consoleName: "OpenRouter",
   },
+  orcarouter: {
+    name: "OrcaRouter",
+    icon: "/icons/orcarouter.png",
+    placeholder: "sk-orca-...",
+    enabled: true,
+    consoleUrl: "https://www.orcarouter.ai/console/keys",
+    consoleName: "OrcaRouter",
+  },
   vllm: {
     // This entry is the generic OpenAI-compatible path, not the vLLM project's
     // own integration: the adapter only speaks `/v1/chat/completions`, so every

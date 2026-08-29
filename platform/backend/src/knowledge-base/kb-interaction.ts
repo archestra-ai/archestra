@@ -270,6 +270,7 @@ const PROVIDER_CHAT_INTERACTION_TYPE: Record<
   groq: "groq:chatCompletions",
   xai: "xai:chatCompletions",
   openrouter: "openrouter:chatCompletions",
+  orcarouter: "orcarouter:chatCompletions",
   vllm: "vllm:chatCompletions",
   ollama: "ollama:chatCompletions",
   "ollama-native": "ollama-native:chat",

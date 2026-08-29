@@ -348,6 +348,38 @@ Dynamic-pricing routers (`openrouter/auto`) report no fixed per-token price, so 
 
 Models that generate audio or images also report a zero per-token price, because they bill per second or per image instead. Archestra doesn't mark those free — the "Free models only" filter leaves them out.
 
+## OrcaRouter
+
+[OrcaRouter](https://www.orcarouter.ai) is an OpenAI-compatible AI gateway built for both models and agents. Like OpenRouter, it exposes a provider/model namespace across many models — but it also combines adaptive routing, automatic failover, zero-markup inference, observability, guardrails, and agent-tool governance behind the same endpoint. It also runs gateway-level, zero-trust security for AI agents on the same endpoint — screening every prompt/response and governing every tool call on a default-deny basis, with no application code changes.
+
+### Supported OrcaRouter APIs
+
+- **Chat Completions API** (`/chat/completions`) - OpenAI-compatible
+- **Embeddings API** (`/embeddings`) for Knowledge Base embeddings
+
+### OrcaRouter Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/orcarouter`
+- **Authentication**: Pass your OrcaRouter API key in the `Authorization` header as `Bearer <your-api-key>`
+
+### Environment Variables
+
+| Variable                            | Required | Description                                                                    |
+| ----------------------------------- | -------- | ------------------------------------------------------------------------------ |
+| `ARCHESTRA_ORCAROUTER_BASE_URL`     | No       | OrcaRouter API base URL (default: `https://api.orcarouter.ai/v1`)             |
+| `ARCHESTRA_CHAT_ORCAROUTER_API_KEY` | No       | Default API key for OrcaRouter (can be overridden per conversation/team/org)   |
+
+### Getting an API Key
+
+You can generate an API key from the [OrcaRouter console](https://www.orcarouter.ai/console/keys).
+
+### Popular Models
+
+- `orcarouter/auto` - OrcaRouter's Auto Router; picks the best model per request, billed at that model's rate.
+- `orcarouter/free` - OrcaRouter's Free Models Router; picks a free model per request, filtering for the features the request needs.
+
+When an OrcaRouter key is added to an organization that has no default model configured, Archestra sets the Free Models Router as the organization default, giving a zero-cost starting point. An explicitly chosen default is never overridden.
+
 ## Mistral AI
 
 [Mistral AI](https://mistral.ai/) provides open and commercial AI models through an OpenAI-compatible API.

@@ -477,6 +477,8 @@ export class ModelsDevClient {
       gemini: ["google/"], // Prefer google over google-vertex
       openai: ["openai/"], // Prefer direct providers over aggregators
       openrouter: ["openrouter/"],
+      // Not synced via models.dev; the /models endpoint is the catalog.
+      orcarouter: [],
       anthropic: ["anthropic/"],
       cohere: ["cohere/"],
       cerebras: ["cerebras/"],

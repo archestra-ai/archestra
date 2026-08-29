@@ -269,6 +269,11 @@ export const RouteId = {
     "openrouterChatCompletionsWithDefaultAgent",
   OpenrouterChatCompletionsWithAgent: "openrouterChatCompletionsWithAgent",
 
+  // Proxy Routes - OrcaRouter
+  OrcaRouterChatCompletionsWithDefaultAgent:
+    "orcarouterChatCompletionsWithDefaultAgent",
+  OrcaRouterChatCompletionsWithAgent: "orcarouterChatCompletionsWithAgent",
+
   // Proxy Routes - vLLM
   VllmChatCompletionsWithDefaultAgent: "vllmChatCompletionsWithDefaultAgent",
   VllmChatCompletionsWithAgent: "vllmChatCompletionsWithAgent",

@@ -4,6 +4,7 @@ import {
   MODELS_DEV_ENRICHMENT_PROVIDER_MAP,
   MODELS_DEV_PROVIDER_MAP,
   OPENROUTER_FREE_MODEL_ID,
+  ORCAROUTER_FREE_MODEL_ID,
   requiresPerplexityAgentApi,
   SUPPORTED_EMBEDDING_DIMENSIONS,
   type SupportedEmbeddingDimension,
@@ -249,7 +250,9 @@ class ModelSyncService {
     provider: SupportedProvider;
   }): Promise<void> {
     const { organizationId, apiKeyId, provider } = params;
-    if (provider !== "openrouter") {
+    // Both aggregators ship a free-models router that doubles as a zero-cost
+    // starting point for fresh organizations.
+    if (provider !== "openrouter" && provider !== "orcarouter") {
       return;
     }
 
@@ -259,8 +262,10 @@ class ModelSyncService {
     }
 
     const routerModel = await ModelModel.findByProviderAndModelId(
-      "openrouter",
-      OPENROUTER_FREE_MODEL_ID,
+      provider,
+      provider === "openrouter"
+        ? OPENROUTER_FREE_MODEL_ID
+        : ORCAROUTER_FREE_MODEL_ID,
     );
     if (!routerModel) {
       return;
@@ -685,7 +690,7 @@ function inferEmbeddingDimensions(
     return 1536;
   }
   if (
-    provider === "openrouter" &&
+    (provider === "openrouter" || provider === "orcarouter") &&
     (id === "openai/text-embedding-3-small" ||
       id === "openai/text-embedding-3-large")
   ) {

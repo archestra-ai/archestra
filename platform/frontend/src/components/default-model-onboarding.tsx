@@ -125,7 +125,9 @@ function SetDefaultModelDialog({
     () => availableKeys.find((key) => key.id === selectedApiKeyId) ?? null,
     [availableKeys, selectedApiKeyId],
   );
-  const canFilterFreeModels = selectedApiKey?.provider === "openrouter";
+  const canFilterFreeModels =
+    selectedApiKey?.provider === "openrouter" ||
+    selectedApiKey?.provider === "orcarouter";
 
   const updateMutation = useUpdateAgentSettings(
     "Default model set",

@@ -1456,6 +1456,7 @@ const providerErrorHandlers: Record<SupportedProvider, ProviderErrorHandler> = {
   groq: openAiCompatibleErrorHandler,
   xai: openAiCompatibleErrorHandler,
   openrouter: openAiCompatibleErrorHandler,
+  orcarouter: openAiCompatibleErrorHandler,
   vllm: providerErrorHandler(parseOpenAIError, mapVllmErrorToCode),
   ollama: providerErrorHandler(parseOpenAIError, mapOllamaErrorToCode),
   "ollama-native": providerErrorHandler(parseOpenAIError, mapOllamaErrorToCode),

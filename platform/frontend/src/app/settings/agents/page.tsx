@@ -209,7 +209,9 @@ export default function AgentSettingsPage() {
   );
   const selectedApiKeyIsSubscription =
     selectedApiKey !== null && isPersonalSubscription(selectedApiKey);
-  const canFilterFreeModels = selectedApiKey?.provider === "openrouter";
+  const canFilterFreeModels =
+    selectedApiKey?.provider === "openrouter" ||
+    selectedApiKey?.provider === "orcarouter";
 
   const handleAgentChange = useCallback((value: string) => {
     setDefaultAgentId(value === "__personal__" ? "" : value);

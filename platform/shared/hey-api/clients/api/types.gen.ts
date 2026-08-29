@@ -13059,7 +13059,7 @@ export type GetAgentsResponses = {
                 summaryTitle: string;
                 prompt: string;
             }>;
-            resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+            resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             resolvedLlmModelName?: string | null;
             llmProviderRequiresPerUserCredential?: boolean;
             sandboxAvailable?: boolean;
@@ -13350,7 +13350,7 @@ export type CreateAgentResponses = {
             summaryTitle: string;
             prompt: string;
         }>;
-        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
@@ -13581,7 +13581,7 @@ export type GetAllAgentsResponses = {
             summaryTitle: string;
             prompt: string;
         }>;
-        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
@@ -13867,7 +13867,7 @@ export type GetDefaultMcpGatewayResponses = {
             summaryTitle: string;
             prompt: string;
         }>;
-        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
@@ -14145,7 +14145,7 @@ export type ImportAgentResponses = {
                 summaryTitle: string;
                 prompt: string;
             }>;
-            resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+            resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             resolvedLlmModelName?: string | null;
             llmProviderRequiresPerUserCredential?: boolean;
             sandboxAvailable?: boolean;
@@ -14436,7 +14436,7 @@ export type GetAgentResponses = {
             summaryTitle: string;
             prompt: string;
         }>;
-        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
@@ -14720,7 +14720,7 @@ export type UpdateAgentResponses = {
             summaryTitle: string;
             prompt: string;
         }>;
-        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
@@ -15180,7 +15180,7 @@ export type RestoreAgentVersionResponses = {
             summaryTitle: string;
             prompt: string;
         }>;
-        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
@@ -15389,7 +15389,7 @@ export type CloneAgentResponses = {
             summaryTitle: string;
             prompt: string;
         }>;
-        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
@@ -16925,7 +16925,7 @@ export type RestoreAgentResponses = {
             summaryTitle: string;
             prompt: string;
         }>;
-        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
@@ -29937,7 +29937,7 @@ export type GetChatConversationsResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         modelId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
@@ -29985,11 +29985,11 @@ export type GetChatConversationsResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -30107,7 +30107,7 @@ export type CreateChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         modelId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
@@ -30155,11 +30155,11 @@ export type CreateChatConversationResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -30269,7 +30269,7 @@ export type GetDeletedChatConversationsResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         modelId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
@@ -30317,11 +30317,11 @@ export type GetDeletedChatConversationsResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -30518,7 +30518,7 @@ export type GetChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         modelId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
@@ -30566,11 +30566,11 @@ export type GetChatConversationResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -30691,7 +30691,7 @@ export type UpdateChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         modelId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
@@ -30739,11 +30739,11 @@ export type UpdateChatConversationResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -31295,7 +31295,7 @@ export type ForkChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         modelId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
@@ -31343,11 +31343,11 @@ export type ForkChatConversationResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -31548,7 +31548,7 @@ export type RestoreChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         modelId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
@@ -31596,11 +31596,11 @@ export type RestoreChatConversationResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -31812,7 +31812,7 @@ export type CompactChatConversationResponses = {
             chatApiKeyId: string | null;
             title: string | null;
             selectedModel: string;
-            selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+            selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             modelId: string | null;
             thinkingEffort: 'low' | 'medium' | 'high';
             hasCustomToolSelection: boolean;
@@ -31860,11 +31860,11 @@ export type CompactChatConversationResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -32250,7 +32250,7 @@ export type GetSharedConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         modelId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
@@ -32298,11 +32298,11 @@ export type GetSharedConversationResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -32417,7 +32417,7 @@ export type ForkSharedConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         modelId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
@@ -32465,11 +32465,11 @@ export type ForkSharedConversationResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -32586,7 +32586,7 @@ export type GenerateChatConversationTitleResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         modelId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
@@ -32634,11 +32634,11 @@ export type GenerateChatConversationTitleResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -32755,7 +32755,7 @@ export type UpdateChatMessageResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         modelId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
@@ -32803,11 +32803,11 @@ export type UpdateChatMessageResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -35162,7 +35162,7 @@ export type CreateConnectionSetupData = {
         baseUrl: string;
         mcpGatewayId?: string;
         llmProxyId?: string;
-        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         proxyAuth?: 'provider-key' | 'virtual-key';
         attributePassthrough?: boolean;
         model?: string;
@@ -35268,7 +35268,7 @@ export type CreateConnectionSetupResponse = CreateConnectionSetupResponses[keyof
 
 export type CreateConnectionVirtualKeyData = {
     body: {
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
     };
     path?: never;
     query?: never;
@@ -41296,11 +41296,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -41504,11 +41504,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -41628,11 +41628,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -41750,11 +41750,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -41872,11 +41872,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -41994,11 +41994,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -42093,11 +42093,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -42194,11 +42194,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -42736,11 +42736,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -43311,11 +43311,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -43412,11 +43412,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -43513,11 +43513,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -43614,11 +43614,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -43715,11 +43715,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -43816,11 +43816,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -43917,11 +43917,826 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        status?: number;
+                        message?: string;
+                        type?: string;
+                        raw?: unknown;
+                    };
+                };
+                createdAt: string;
+            }>;
+            connectorName?: string | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
+            requestType?: 'main' | 'subagent';
+            externalAgentIdLabel?: string | null;
+        } | {
+            id: string;
+            profileId: string | null;
+            externalAgentId: string | null;
+            executionId: string | null;
+            userId: string | null;
+            virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
+            environmentId: string | null;
+            connectorId: string | null;
+            appId: string | null;
+            sessionId: string | null;
+            sessionSource: string | null;
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+            billingMode: 'metered' | 'subscription';
+            authenticatedAppId: string | null;
+            authenticatedAppName: string | null;
+            request: {
+                model: string;
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
+                 */
+                messages: Array<{
+                    content: string | Array<{
+                        type: 'text';
+                        text: string;
+                    }>;
+                    role: 'developer';
+                    name?: string;
+                } | {
+                    content: string | Array<{
+                        type: 'text';
+                        text: string;
+                    }>;
+                    role: 'system';
+                    name?: string;
+                } | {
+                    content: string | Array<{
+                        type: 'text';
+                        text: string;
+                    } | {
+                        type: 'image_url';
+                        /**
+                         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+                         */
+                        image_url: {
+                            url: string;
+                            detail?: 'auto' | 'low' | 'high';
+                        };
+                    } | {
+                        type: 'input_audio';
+                        /**
+                         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
+                         */
+                        input_audio: {
+                            data: string;
+                            format: 'wav' | 'mp3';
+                        };
+                    } | {
+                        type: 'file';
+                        /**
+                         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
+                         */
+                        file: {
+                            file_data?: string;
+                            file_id?: string;
+                            filename?: string;
+                        };
+                    }>;
+                    role: 'user';
+                    name?: string;
+                } | {
+                    role: 'assistant';
+                    audio?: {
+                        id: string;
+                    } | null;
+                    content?: string | Array<{
+                        type: 'text';
+                        text: string;
+                    }> | Array<{
+                        type: 'refusal';
+                        refusal: string;
+                    }> | null;
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+                     */
+                    function_call?: {
+                        arguments: string;
+                        name: string;
+                    } | null;
+                    name?: string;
+                    reasoning_content?: string | null;
+                    refusal?: string | null;
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
+                     */
+                    tool_calls?: Array<{
+                        id: string;
+                        type: 'function';
+                        /**
+                         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+                         */
+                        function: {
+                            arguments: string;
+                            name: string;
+                        };
+                    } | {
+                        id: string;
+                        type: 'custom';
+                        /**
+                         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+                         */
+                        custom: {
+                            input: string;
+                            name: string;
+                        };
+                    }>;
+                } | {
+                    role: 'tool';
+                    content: string | Array<{
+                        type: 'text';
+                        text: string;
+                    } | {
+                        type: 'image_url';
+                        /**
+                         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+                         */
+                        image_url: {
+                            url: string;
+                            detail?: 'auto' | 'low' | 'high';
+                        };
+                    }>;
+                    tool_call_id: string;
+                } | {
+                    role: 'function';
+                    content: string | null;
+                    name: string;
+                }>;
+                /**
+                 *
+                 * A function tool that can be used to generate a response.
+                 *
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1392
+                 *
+                 */
+                tools?: Array<{
+                    type: 'function';
+                    /**
+                     * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+                     */
+                    function: {
+                        name: string;
+                        description?: string;
+                        /**
+                         *
+                         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                         *
+                         * The parameters the functions accepts, described as a JSON Schema object. See the
+                         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                         * documentation about the format.
+                         *
+                         * Omitting parameters defines a function with an empty parameter list.
+                         *
+                         */
+                        parameters?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
+                    };
+                } | {
+                    type: 'custom';
+                    custom: {
+                        /**
+                         * The name of the custom tool, used to identify it in tool calls
+                         */
+                        name: string;
+                        /**
+                         * Optional description of the custom tool, used to provide more context
+                         */
+                        description?: string;
+                        /**
+                         * The input format for the custom tool. Default is unconstrained text.
+                         */
+                        format?: {
+                            /**
+                             * Unconstrained text format. Always `text`
+                             */
+                            type: 'text';
+                        } | {
+                            type: 'grammar';
+                            /**
+                             * Your chosen grammar
+                             */
+                            grammar: {
+                                /**
+                                 * The grammar definition
+                                 */
+                                definition: string;
+                                /**
+                                 * The syntax of the grammar definition
+                                 */
+                                syntax: 'lark' | 'regex';
+                            };
+                        };
+                    };
+                } | {
+                    type: 'custom';
+                    /**
+                     * The name of the custom tool, used to identify it in tool calls
+                     */
+                    name: string;
+                    /**
+                     * Optional description of the custom tool, used to provide more context
+                     */
+                    description?: string;
+                    /**
+                     * The input format for the custom tool. Default is unconstrained text.
+                     */
+                    format?: {
+                        /**
+                         * Unconstrained text format. Always `text`
+                         */
+                        type: 'text';
+                    } | {
+                        type: 'grammar';
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar definition
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
+                }>;
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
+                 */
+                tool_choice?: 'none' | 'auto' | 'required' | {
+                    type: 'allowed_tools';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1455
+                     */
+                    allowed_tools: {
+                        /**
+                         *
+                         * Constrains the tools available to the model to a pre-defined set.
+                         *
+                         * auto allows the model to pick from among the allowed tools and generate a
+                         * message.
+                         *
+                         * required requires the model to call one or more of the allowed tools.
+                         *
+                         */
+                        mode: 'auto' | 'required';
+                        /**
+                         * A list of tool definitions that the model should be allowed to call
+                         */
+                        tools: Array<{
+                            [key: string]: {
+                                type: 'function';
+                                /**
+                                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+                                 */
+                                function: {
+                                    name: string;
+                                    description?: string;
+                                    /**
+                                     *
+                                     * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                                     *
+                                     * The parameters the functions accepts, described as a JSON Schema object. See the
+                                     * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                                     * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                                     * documentation about the format.
+                                     *
+                                     * Omitting parameters defines a function with an empty parameter list.
+                                     *
+                                     */
+                                    parameters?: {
+                                        [key: string]: unknown;
+                                    };
+                                    strict?: boolean | null;
+                                };
+                            };
+                        }>;
+                    };
+                } | {
+                    type: 'function';
+                    function: {
+                        name: string;
+                    };
+                } | {
+                    type: 'custom';
+                    custom: {
+                        /**
+                         * The name of the custom tool, used to identify it in tool calls
+                         */
+                        name: string;
+                        /**
+                         * Optional description of the custom tool, used to provide more context
+                         */
+                        description?: string;
+                        /**
+                         * The input format for the custom tool. Default is unconstrained text.
+                         */
+                        format?: {
+                            /**
+                             * Unconstrained text format. Always `text`
+                             */
+                            type: 'text';
+                        } | {
+                            type: 'grammar';
+                            /**
+                             * Your chosen grammar
+                             */
+                            grammar: {
+                                /**
+                                 * The grammar definition
+                                 */
+                                definition: string;
+                                /**
+                                 * The syntax of the grammar definition
+                                 */
+                                syntax: 'lark' | 'regex';
+                            };
+                        };
+                    };
+                };
+                temperature?: number | null;
+                max_tokens?: number | null;
+                max_completion_tokens?: number | null;
+                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+                stream?: boolean | null;
+                stream_options?: {
+                    include_usage?: boolean;
+                } | null;
+                user?: string;
+                [key: string]: unknown;
+            } | {
+                [key: string]: unknown;
+            };
+            processedRequest?: {
+                model: string;
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
+                 */
+                messages: Array<{
+                    content: string | Array<{
+                        type: 'text';
+                        text: string;
+                    }>;
+                    role: 'developer';
+                    name?: string;
+                } | {
+                    content: string | Array<{
+                        type: 'text';
+                        text: string;
+                    }>;
+                    role: 'system';
+                    name?: string;
+                } | {
+                    content: string | Array<{
+                        type: 'text';
+                        text: string;
+                    } | {
+                        type: 'image_url';
+                        /**
+                         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+                         */
+                        image_url: {
+                            url: string;
+                            detail?: 'auto' | 'low' | 'high';
+                        };
+                    } | {
+                        type: 'input_audio';
+                        /**
+                         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
+                         */
+                        input_audio: {
+                            data: string;
+                            format: 'wav' | 'mp3';
+                        };
+                    } | {
+                        type: 'file';
+                        /**
+                         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
+                         */
+                        file: {
+                            file_data?: string;
+                            file_id?: string;
+                            filename?: string;
+                        };
+                    }>;
+                    role: 'user';
+                    name?: string;
+                } | {
+                    role: 'assistant';
+                    audio?: {
+                        id: string;
+                    } | null;
+                    content?: string | Array<{
+                        type: 'text';
+                        text: string;
+                    }> | Array<{
+                        type: 'refusal';
+                        refusal: string;
+                    }> | null;
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+                     */
+                    function_call?: {
+                        arguments: string;
+                        name: string;
+                    } | null;
+                    name?: string;
+                    reasoning_content?: string | null;
+                    refusal?: string | null;
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
+                     */
+                    tool_calls?: Array<{
+                        id: string;
+                        type: 'function';
+                        /**
+                         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+                         */
+                        function: {
+                            arguments: string;
+                            name: string;
+                        };
+                    } | {
+                        id: string;
+                        type: 'custom';
+                        /**
+                         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+                         */
+                        custom: {
+                            input: string;
+                            name: string;
+                        };
+                    }>;
+                } | {
+                    role: 'tool';
+                    content: string | Array<{
+                        type: 'text';
+                        text: string;
+                    } | {
+                        type: 'image_url';
+                        /**
+                         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+                         */
+                        image_url: {
+                            url: string;
+                            detail?: 'auto' | 'low' | 'high';
+                        };
+                    }>;
+                    tool_call_id: string;
+                } | {
+                    role: 'function';
+                    content: string | null;
+                    name: string;
+                }>;
+                /**
+                 *
+                 * A function tool that can be used to generate a response.
+                 *
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1392
+                 *
+                 */
+                tools?: Array<{
+                    type: 'function';
+                    /**
+                     * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+                     */
+                    function: {
+                        name: string;
+                        description?: string;
+                        /**
+                         *
+                         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                         *
+                         * The parameters the functions accepts, described as a JSON Schema object. See the
+                         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                         * documentation about the format.
+                         *
+                         * Omitting parameters defines a function with an empty parameter list.
+                         *
+                         */
+                        parameters?: {
+                            [key: string]: unknown;
+                        };
+                        strict?: boolean | null;
+                    };
+                } | {
+                    type: 'custom';
+                    custom: {
+                        /**
+                         * The name of the custom tool, used to identify it in tool calls
+                         */
+                        name: string;
+                        /**
+                         * Optional description of the custom tool, used to provide more context
+                         */
+                        description?: string;
+                        /**
+                         * The input format for the custom tool. Default is unconstrained text.
+                         */
+                        format?: {
+                            /**
+                             * Unconstrained text format. Always `text`
+                             */
+                            type: 'text';
+                        } | {
+                            type: 'grammar';
+                            /**
+                             * Your chosen grammar
+                             */
+                            grammar: {
+                                /**
+                                 * The grammar definition
+                                 */
+                                definition: string;
+                                /**
+                                 * The syntax of the grammar definition
+                                 */
+                                syntax: 'lark' | 'regex';
+                            };
+                        };
+                    };
+                } | {
+                    type: 'custom';
+                    /**
+                     * The name of the custom tool, used to identify it in tool calls
+                     */
+                    name: string;
+                    /**
+                     * Optional description of the custom tool, used to provide more context
+                     */
+                    description?: string;
+                    /**
+                     * The input format for the custom tool. Default is unconstrained text.
+                     */
+                    format?: {
+                        /**
+                         * Unconstrained text format. Always `text`
+                         */
+                        type: 'text';
+                    } | {
+                        type: 'grammar';
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar definition
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
+                }>;
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
+                 */
+                tool_choice?: 'none' | 'auto' | 'required' | {
+                    type: 'allowed_tools';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1455
+                     */
+                    allowed_tools: {
+                        /**
+                         *
+                         * Constrains the tools available to the model to a pre-defined set.
+                         *
+                         * auto allows the model to pick from among the allowed tools and generate a
+                         * message.
+                         *
+                         * required requires the model to call one or more of the allowed tools.
+                         *
+                         */
+                        mode: 'auto' | 'required';
+                        /**
+                         * A list of tool definitions that the model should be allowed to call
+                         */
+                        tools: Array<{
+                            [key: string]: {
+                                type: 'function';
+                                /**
+                                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+                                 */
+                                function: {
+                                    name: string;
+                                    description?: string;
+                                    /**
+                                     *
+                                     * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                                     *
+                                     * The parameters the functions accepts, described as a JSON Schema object. See the
+                                     * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                                     * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                                     * documentation about the format.
+                                     *
+                                     * Omitting parameters defines a function with an empty parameter list.
+                                     *
+                                     */
+                                    parameters?: {
+                                        [key: string]: unknown;
+                                    };
+                                    strict?: boolean | null;
+                                };
+                            };
+                        }>;
+                    };
+                } | {
+                    type: 'function';
+                    function: {
+                        name: string;
+                    };
+                } | {
+                    type: 'custom';
+                    custom: {
+                        /**
+                         * The name of the custom tool, used to identify it in tool calls
+                         */
+                        name: string;
+                        /**
+                         * Optional description of the custom tool, used to provide more context
+                         */
+                        description?: string;
+                        /**
+                         * The input format for the custom tool. Default is unconstrained text.
+                         */
+                        format?: {
+                            /**
+                             * Unconstrained text format. Always `text`
+                             */
+                            type: 'text';
+                        } | {
+                            type: 'grammar';
+                            /**
+                             * Your chosen grammar
+                             */
+                            grammar: {
+                                /**
+                                 * The grammar definition
+                                 */
+                                definition: string;
+                                /**
+                                 * The syntax of the grammar definition
+                                 */
+                                syntax: 'lark' | 'regex';
+                            };
+                        };
+                    };
+                };
+                temperature?: number | null;
+                max_tokens?: number | null;
+                max_completion_tokens?: number | null;
+                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+                stream?: boolean | null;
+                stream_options?: {
+                    include_usage?: boolean;
+                } | null;
+                user?: string;
+                [key: string]: unknown;
+            } | {
+                [key: string]: unknown;
+            } | null;
+            response: {
+                id: string;
+                choices: Array<{
+                    finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
+                    index?: number;
+                    logprobs: unknown;
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
+                     */
+                    message: {
+                        content?: string | null;
+                        refusal?: string | null;
+                        role: 'assistant';
+                        annotations?: Array<unknown> | null;
+                        audio?: unknown;
+                        /**
+                         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+                         */
+                        function_call?: {
+                            arguments: string;
+                            name: string;
+                        } | null;
+                        reasoning_content?: string | null;
+                        tool_calls?: Array<{
+                            id: string;
+                            type: 'function';
+                            /**
+                             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+                             */
+                            function: {
+                                arguments: string;
+                                name: string;
+                            };
+                        } | {
+                            id: string;
+                            type: 'custom';
+                            /**
+                             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+                             */
+                            custom: {
+                                input: string;
+                                name: string;
+                            };
+                        }> | null;
+                    };
+                }>;
+                created: number;
+                model: string;
+                object: 'chat.completion';
+                server_tier?: string;
+                system_fingerprint?: string | null;
+                /**
+                 * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113
+                 */
+                usage?: {
+                    completion_tokens: number;
+                    prompt_tokens: number;
+                    total_tokens: number;
+                    /**
+                     * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
+                     */
+                    completion_tokens_details?: unknown;
+                    /**
+                     * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
+                     */
+                    prompt_tokens_details?: unknown;
+                };
+                [key: string]: unknown;
+            } | {
+                error: string;
+            } | {
+                __lockedChatSealed: string;
+            } | {
+                __redacted: 'locked_chat' | 'incognito';
+            };
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
+            type: 'orcarouter:chatCompletions';
+            model: string | null;
+            baselineModel: string | null;
+            inputTokens: number | null;
+            inputTokensEstimated: boolean;
+            outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
+            cacheWrite1hTokens: number | null;
+            baselineCost: string | null;
+            cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
+            toonTokensBefore: number | null;
+            toonTokensAfter: number | null;
+            toonCostSavings: string | null;
+            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            createdAt: string;
+            chatErrors?: Array<{
+                id: string;
+                conversationId: string;
+                error: {
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
+                    message: string;
+                    isRetryable: boolean;
+                    sessionId?: string;
+                    traceId?: string;
+                    spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
+                    authAction?: {
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        providerLabel: string;
+                    };
+                    originalError?: {
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -44018,11 +44833,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -44117,11 +44932,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -44216,11 +45031,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -44315,11 +45130,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -44416,11 +45231,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -44517,11 +45332,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -45332,11 +46147,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -46147,11 +46962,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -46962,11 +47777,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -47063,11 +47878,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -47232,11 +48047,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -47440,11 +48255,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -47648,11 +48463,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -47856,11 +48671,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -48382,11 +49197,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -48590,11 +49405,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -48714,11 +49529,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -48836,11 +49651,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -48958,11 +49773,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -49080,11 +49895,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -49179,11 +49994,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -49280,11 +50095,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -49822,11 +50637,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -50397,11 +51212,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -50498,11 +51313,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -50599,11 +51414,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -50700,11 +51515,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -50801,11 +51616,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -50902,11 +51717,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -51003,11 +51818,826 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    status?: number;
+                    message?: string;
+                    type?: string;
+                    raw?: unknown;
+                };
+            };
+            createdAt: string;
+        }>;
+        connectorName?: string | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
+        requestType?: 'main' | 'subagent';
+        externalAgentIdLabel?: string | null;
+    } | {
+        id: string;
+        profileId: string | null;
+        externalAgentId: string | null;
+        executionId: string | null;
+        userId: string | null;
+        virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
+        environmentId: string | null;
+        connectorId: string | null;
+        appId: string | null;
+        sessionId: string | null;
+        sessionSource: string | null;
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+        billingMode: 'metered' | 'subscription';
+        authenticatedAppId: string | null;
+        authenticatedAppName: string | null;
+        request: {
+            model: string;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
+             */
+            messages: Array<{
+                content: string | Array<{
+                    type: 'text';
+                    text: string;
+                }>;
+                role: 'developer';
+                name?: string;
+            } | {
+                content: string | Array<{
+                    type: 'text';
+                    text: string;
+                }>;
+                role: 'system';
+                name?: string;
+            } | {
+                content: string | Array<{
+                    type: 'text';
+                    text: string;
+                } | {
+                    type: 'image_url';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+                     */
+                    image_url: {
+                        url: string;
+                        detail?: 'auto' | 'low' | 'high';
+                    };
+                } | {
+                    type: 'input_audio';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
+                     */
+                    input_audio: {
+                        data: string;
+                        format: 'wav' | 'mp3';
+                    };
+                } | {
+                    type: 'file';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
+                     */
+                    file: {
+                        file_data?: string;
+                        file_id?: string;
+                        filename?: string;
+                    };
+                }>;
+                role: 'user';
+                name?: string;
+            } | {
+                role: 'assistant';
+                audio?: {
+                    id: string;
+                } | null;
+                content?: string | Array<{
+                    type: 'text';
+                    text: string;
+                }> | Array<{
+                    type: 'refusal';
+                    refusal: string;
+                }> | null;
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+                 */
+                function_call?: {
+                    arguments: string;
+                    name: string;
+                } | null;
+                name?: string;
+                reasoning_content?: string | null;
+                refusal?: string | null;
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
+                 */
+                tool_calls?: Array<{
+                    id: string;
+                    type: 'function';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+                     */
+                    function: {
+                        arguments: string;
+                        name: string;
+                    };
+                } | {
+                    id: string;
+                    type: 'custom';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+                     */
+                    custom: {
+                        input: string;
+                        name: string;
+                    };
+                }>;
+            } | {
+                role: 'tool';
+                content: string | Array<{
+                    type: 'text';
+                    text: string;
+                } | {
+                    type: 'image_url';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+                     */
+                    image_url: {
+                        url: string;
+                        detail?: 'auto' | 'low' | 'high';
+                    };
+                }>;
+                tool_call_id: string;
+            } | {
+                role: 'function';
+                content: string | null;
+                name: string;
+            }>;
+            /**
+             *
+             * A function tool that can be used to generate a response.
+             *
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1392
+             *
+             */
+            tools?: Array<{
+                type: 'function';
+                /**
+                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+                 */
+                function: {
+                    name: string;
+                    description?: string;
+                    /**
+                     *
+                     * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                     *
+                     * The parameters the functions accepts, described as a JSON Schema object. See the
+                     * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                     * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                     * documentation about the format.
+                     *
+                     * Omitting parameters defines a function with an empty parameter list.
+                     *
+                     */
+                    parameters?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
+                };
+            } | {
+                type: 'custom';
+                custom: {
+                    /**
+                     * The name of the custom tool, used to identify it in tool calls
+                     */
+                    name: string;
+                    /**
+                     * Optional description of the custom tool, used to provide more context
+                     */
+                    description?: string;
+                    /**
+                     * The input format for the custom tool. Default is unconstrained text.
+                     */
+                    format?: {
+                        /**
+                         * Unconstrained text format. Always `text`
+                         */
+                        type: 'text';
+                    } | {
+                        type: 'grammar';
+                        /**
+                         * Your chosen grammar
+                         */
+                        grammar: {
+                            /**
+                             * The grammar definition
+                             */
+                            definition: string;
+                            /**
+                             * The syntax of the grammar definition
+                             */
+                            syntax: 'lark' | 'regex';
+                        };
+                    };
+                };
+            } | {
+                type: 'custom';
+                /**
+                 * The name of the custom tool, used to identify it in tool calls
+                 */
+                name: string;
+                /**
+                 * Optional description of the custom tool, used to provide more context
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool. Default is unconstrained text.
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format. Always `text`
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    /**
+                     * The grammar definition
+                     */
+                    definition: string;
+                    /**
+                     * The syntax of the grammar definition
+                     */
+                    syntax: 'lark' | 'regex';
+                };
+            }>;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
+             */
+            tool_choice?: 'none' | 'auto' | 'required' | {
+                type: 'allowed_tools';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1455
+                 */
+                allowed_tools: {
+                    /**
+                     *
+                     * Constrains the tools available to the model to a pre-defined set.
+                     *
+                     * auto allows the model to pick from among the allowed tools and generate a
+                     * message.
+                     *
+                     * required requires the model to call one or more of the allowed tools.
+                     *
+                     */
+                    mode: 'auto' | 'required';
+                    /**
+                     * A list of tool definitions that the model should be allowed to call
+                     */
+                    tools: Array<{
+                        [key: string]: {
+                            type: 'function';
+                            /**
+                             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+                             */
+                            function: {
+                                name: string;
+                                description?: string;
+                                /**
+                                 *
+                                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                                 *
+                                 * The parameters the functions accepts, described as a JSON Schema object. See the
+                                 * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                                 * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                                 * documentation about the format.
+                                 *
+                                 * Omitting parameters defines a function with an empty parameter list.
+                                 *
+                                 */
+                                parameters?: {
+                                    [key: string]: unknown;
+                                };
+                                strict?: boolean | null;
+                            };
+                        };
+                    }>;
+                };
+            } | {
+                type: 'function';
+                function: {
+                    name: string;
+                };
+            } | {
+                type: 'custom';
+                custom: {
+                    /**
+                     * The name of the custom tool, used to identify it in tool calls
+                     */
+                    name: string;
+                    /**
+                     * Optional description of the custom tool, used to provide more context
+                     */
+                    description?: string;
+                    /**
+                     * The input format for the custom tool. Default is unconstrained text.
+                     */
+                    format?: {
+                        /**
+                         * Unconstrained text format. Always `text`
+                         */
+                        type: 'text';
+                    } | {
+                        type: 'grammar';
+                        /**
+                         * Your chosen grammar
+                         */
+                        grammar: {
+                            /**
+                             * The grammar definition
+                             */
+                            definition: string;
+                            /**
+                             * The syntax of the grammar definition
+                             */
+                            syntax: 'lark' | 'regex';
+                        };
+                    };
+                };
+            };
+            temperature?: number | null;
+            max_tokens?: number | null;
+            max_completion_tokens?: number | null;
+            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+            stream?: boolean | null;
+            stream_options?: {
+                include_usage?: boolean;
+            } | null;
+            user?: string;
+            [key: string]: unknown;
+        } | {
+            [key: string]: unknown;
+        };
+        processedRequest?: {
+            model: string;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
+             */
+            messages: Array<{
+                content: string | Array<{
+                    type: 'text';
+                    text: string;
+                }>;
+                role: 'developer';
+                name?: string;
+            } | {
+                content: string | Array<{
+                    type: 'text';
+                    text: string;
+                }>;
+                role: 'system';
+                name?: string;
+            } | {
+                content: string | Array<{
+                    type: 'text';
+                    text: string;
+                } | {
+                    type: 'image_url';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+                     */
+                    image_url: {
+                        url: string;
+                        detail?: 'auto' | 'low' | 'high';
+                    };
+                } | {
+                    type: 'input_audio';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
+                     */
+                    input_audio: {
+                        data: string;
+                        format: 'wav' | 'mp3';
+                    };
+                } | {
+                    type: 'file';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
+                     */
+                    file: {
+                        file_data?: string;
+                        file_id?: string;
+                        filename?: string;
+                    };
+                }>;
+                role: 'user';
+                name?: string;
+            } | {
+                role: 'assistant';
+                audio?: {
+                    id: string;
+                } | null;
+                content?: string | Array<{
+                    type: 'text';
+                    text: string;
+                }> | Array<{
+                    type: 'refusal';
+                    refusal: string;
+                }> | null;
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+                 */
+                function_call?: {
+                    arguments: string;
+                    name: string;
+                } | null;
+                name?: string;
+                reasoning_content?: string | null;
+                refusal?: string | null;
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
+                 */
+                tool_calls?: Array<{
+                    id: string;
+                    type: 'function';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+                     */
+                    function: {
+                        arguments: string;
+                        name: string;
+                    };
+                } | {
+                    id: string;
+                    type: 'custom';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+                     */
+                    custom: {
+                        input: string;
+                        name: string;
+                    };
+                }>;
+            } | {
+                role: 'tool';
+                content: string | Array<{
+                    type: 'text';
+                    text: string;
+                } | {
+                    type: 'image_url';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+                     */
+                    image_url: {
+                        url: string;
+                        detail?: 'auto' | 'low' | 'high';
+                    };
+                }>;
+                tool_call_id: string;
+            } | {
+                role: 'function';
+                content: string | null;
+                name: string;
+            }>;
+            /**
+             *
+             * A function tool that can be used to generate a response.
+             *
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1392
+             *
+             */
+            tools?: Array<{
+                type: 'function';
+                /**
+                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+                 */
+                function: {
+                    name: string;
+                    description?: string;
+                    /**
+                     *
+                     * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                     *
+                     * The parameters the functions accepts, described as a JSON Schema object. See the
+                     * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                     * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                     * documentation about the format.
+                     *
+                     * Omitting parameters defines a function with an empty parameter list.
+                     *
+                     */
+                    parameters?: {
+                        [key: string]: unknown;
+                    };
+                    strict?: boolean | null;
+                };
+            } | {
+                type: 'custom';
+                custom: {
+                    /**
+                     * The name of the custom tool, used to identify it in tool calls
+                     */
+                    name: string;
+                    /**
+                     * Optional description of the custom tool, used to provide more context
+                     */
+                    description?: string;
+                    /**
+                     * The input format for the custom tool. Default is unconstrained text.
+                     */
+                    format?: {
+                        /**
+                         * Unconstrained text format. Always `text`
+                         */
+                        type: 'text';
+                    } | {
+                        type: 'grammar';
+                        /**
+                         * Your chosen grammar
+                         */
+                        grammar: {
+                            /**
+                             * The grammar definition
+                             */
+                            definition: string;
+                            /**
+                             * The syntax of the grammar definition
+                             */
+                            syntax: 'lark' | 'regex';
+                        };
+                    };
+                };
+            } | {
+                type: 'custom';
+                /**
+                 * The name of the custom tool, used to identify it in tool calls
+                 */
+                name: string;
+                /**
+                 * Optional description of the custom tool, used to provide more context
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool. Default is unconstrained text.
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format. Always `text`
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    /**
+                     * The grammar definition
+                     */
+                    definition: string;
+                    /**
+                     * The syntax of the grammar definition
+                     */
+                    syntax: 'lark' | 'regex';
+                };
+            }>;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
+             */
+            tool_choice?: 'none' | 'auto' | 'required' | {
+                type: 'allowed_tools';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1455
+                 */
+                allowed_tools: {
+                    /**
+                     *
+                     * Constrains the tools available to the model to a pre-defined set.
+                     *
+                     * auto allows the model to pick from among the allowed tools and generate a
+                     * message.
+                     *
+                     * required requires the model to call one or more of the allowed tools.
+                     *
+                     */
+                    mode: 'auto' | 'required';
+                    /**
+                     * A list of tool definitions that the model should be allowed to call
+                     */
+                    tools: Array<{
+                        [key: string]: {
+                            type: 'function';
+                            /**
+                             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+                             */
+                            function: {
+                                name: string;
+                                description?: string;
+                                /**
+                                 *
+                                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                                 *
+                                 * The parameters the functions accepts, described as a JSON Schema object. See the
+                                 * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                                 * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                                 * documentation about the format.
+                                 *
+                                 * Omitting parameters defines a function with an empty parameter list.
+                                 *
+                                 */
+                                parameters?: {
+                                    [key: string]: unknown;
+                                };
+                                strict?: boolean | null;
+                            };
+                        };
+                    }>;
+                };
+            } | {
+                type: 'function';
+                function: {
+                    name: string;
+                };
+            } | {
+                type: 'custom';
+                custom: {
+                    /**
+                     * The name of the custom tool, used to identify it in tool calls
+                     */
+                    name: string;
+                    /**
+                     * Optional description of the custom tool, used to provide more context
+                     */
+                    description?: string;
+                    /**
+                     * The input format for the custom tool. Default is unconstrained text.
+                     */
+                    format?: {
+                        /**
+                         * Unconstrained text format. Always `text`
+                         */
+                        type: 'text';
+                    } | {
+                        type: 'grammar';
+                        /**
+                         * Your chosen grammar
+                         */
+                        grammar: {
+                            /**
+                             * The grammar definition
+                             */
+                            definition: string;
+                            /**
+                             * The syntax of the grammar definition
+                             */
+                            syntax: 'lark' | 'regex';
+                        };
+                    };
+                };
+            };
+            temperature?: number | null;
+            max_tokens?: number | null;
+            max_completion_tokens?: number | null;
+            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+            stream?: boolean | null;
+            stream_options?: {
+                include_usage?: boolean;
+            } | null;
+            user?: string;
+            [key: string]: unknown;
+        } | {
+            [key: string]: unknown;
+        } | null;
+        response: {
+            id: string;
+            choices: Array<{
+                finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
+                index?: number;
+                logprobs: unknown;
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
+                 */
+                message: {
+                    content?: string | null;
+                    refusal?: string | null;
+                    role: 'assistant';
+                    annotations?: Array<unknown> | null;
+                    audio?: unknown;
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+                     */
+                    function_call?: {
+                        arguments: string;
+                        name: string;
+                    } | null;
+                    reasoning_content?: string | null;
+                    tool_calls?: Array<{
+                        id: string;
+                        type: 'function';
+                        /**
+                         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+                         */
+                        function: {
+                            arguments: string;
+                            name: string;
+                        };
+                    } | {
+                        id: string;
+                        type: 'custom';
+                        /**
+                         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+                         */
+                        custom: {
+                            input: string;
+                            name: string;
+                        };
+                    }> | null;
+                };
+            }>;
+            created: number;
+            model: string;
+            object: 'chat.completion';
+            server_tier?: string;
+            system_fingerprint?: string | null;
+            /**
+             * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113
+             */
+            usage?: {
+                completion_tokens: number;
+                prompt_tokens: number;
+                total_tokens: number;
+                /**
+                 * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
+                 */
+                completion_tokens_details?: unknown;
+                /**
+                 * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
+                 */
+                prompt_tokens_details?: unknown;
+            };
+            [key: string]: unknown;
+        } | {
+            error: string;
+        } | {
+            __lockedChatSealed: string;
+        } | {
+            __redacted: 'locked_chat' | 'incognito';
+        };
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
+        type: 'orcarouter:chatCompletions';
+        model: string | null;
+        baselineModel: string | null;
+        inputTokens: number | null;
+        inputTokensEstimated: boolean;
+        outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
+        cacheWrite1hTokens: number | null;
+        baselineCost: string | null;
+        cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
+        toonTokensBefore: number | null;
+        toonTokensAfter: number | null;
+        toonCostSavings: string | null;
+        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+        createdAt: string;
+        chatErrors?: Array<{
+            id: string;
+            conversationId: string;
+            error: {
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
+                message: string;
+                isRetryable: boolean;
+                sessionId?: string;
+                traceId?: string;
+                spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
+                authAction?: {
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    providerLabel: string;
+                };
+                originalError?: {
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -51104,11 +52734,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -51203,11 +52833,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -51302,11 +52932,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -51401,11 +53031,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -51502,11 +53132,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -51603,11 +53233,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -52418,11 +54048,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -53233,11 +54863,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -54048,11 +55678,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -54149,11 +55779,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -54318,11 +55948,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -54526,11 +56156,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -54734,11 +56364,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -54942,11 +56572,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -65605,7 +67235,7 @@ export type GetLlmModelsData = {
     body?: never;
     path?: never;
     query?: {
-        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         apiKeyId?: string;
         isEmbedding?: string;
     };
@@ -65685,7 +67315,7 @@ export type GetLlmModelsResponses = {
         id: string;
         dbId: string;
         displayName: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         createdAt?: string;
         capabilities?: {
             contextLength: number | null;
@@ -65874,7 +67504,7 @@ export type GetModelsWithApiKeysResponses = {
     200: Array<{
         id: string;
         externalId: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         modelId: string;
         description: string | null;
         contextLength: number | null;
@@ -66154,7 +67784,7 @@ export type UpdateModelResponses = {
     200: {
         id: string;
         externalId: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         modelId: string;
         description: string | null;
         contextLength: number | null;
@@ -66291,7 +67921,7 @@ export type GetLlmOauthClientsResponses = {
             organizationId: string;
             grantType: 'client_credentials' | 'authorization_code';
             providerApiKeys: Array<{
-                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                 providerApiKeyId: string;
                 providerApiKeyName: string;
             }>;
@@ -66325,7 +67955,7 @@ export type CreateLlmOauthClientData = {
         name: string;
         grantType?: 'client_credentials' | 'authorization_code';
         providerApiKeys?: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             providerApiKeyId: string;
         }>;
         redirectUris?: Array<string>;
@@ -66413,7 +68043,7 @@ export type CreateLlmOauthClientResponses = {
         organizationId: string;
         grantType: 'client_credentials' | 'authorization_code';
         providerApiKeys: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             providerApiKeyId: string;
             providerApiKeyName: string;
         }>;
@@ -66524,7 +68154,7 @@ export type UpdateLlmOauthClientData = {
         name: string;
         grantType?: 'client_credentials' | 'authorization_code';
         providerApiKeys?: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             providerApiKeyId: string;
         }>;
         redirectUris?: Array<string>;
@@ -66614,7 +68244,7 @@ export type UpdateLlmOauthClientResponses = {
         organizationId: string;
         grantType: 'client_credentials' | 'authorization_code';
         providerApiKeys: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             providerApiKeyId: string;
             providerApiKeyName: string;
         }>;
@@ -66719,7 +68349,7 @@ export type RotateLlmOauthClientSecretResponses = {
         organizationId: string;
         grantType: 'client_credentials' | 'authorization_code';
         providerApiKeys: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             providerApiKeyId: string;
             providerApiKeyName: string;
         }>;
@@ -66842,7 +68472,7 @@ export type GetLlmProviderApiKeysData = {
     path?: never;
     query?: {
         search?: string;
-        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
     };
     url: '/api/llm-provider-api-keys';
 };
@@ -66920,7 +68550,7 @@ export type GetLlmProviderApiKeysResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org';
         userId: string | null;
@@ -66950,7 +68580,7 @@ export type GetLlmProviderApiKeysResponse = GetLlmProviderApiKeysResponses[keyof
 export type CreateLlmProviderApiKeyData = {
     body: {
         name: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         apiKey?: string;
         baseUrl?: string | null;
         inferenceBaseUrl?: string | null;
@@ -67044,7 +68674,7 @@ export type CreateLlmProviderApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org';
         userId: string | null;
@@ -67067,7 +68697,7 @@ export type GetAvailableLlmProviderApiKeysData = {
     body?: never;
     path?: never;
     query?: {
-        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         includeKeyId?: string;
     };
     url: '/api/llm-provider-api-keys/available';
@@ -67146,7 +68776,7 @@ export type GetAvailableLlmProviderApiKeysResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org';
         userId: string | null;
@@ -67340,7 +68970,7 @@ export type GetLlmProviderApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org';
         userId: string | null;
@@ -67465,7 +69095,7 @@ export type UpdateLlmProviderApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org';
         userId: string | null;
@@ -67568,7 +69198,7 @@ export type ReconnectLlmProviderApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org';
         userId: string | null;
@@ -76181,6 +77811,972 @@ export type OpenrouterChatCompletionsWithAgentResponses = {
 
 export type OpenrouterChatCompletionsWithAgentResponse = OpenrouterChatCompletionsWithAgentResponses[keyof OpenrouterChatCompletionsWithAgentResponses];
 
+export type OrcarouterChatCompletionsWithDefaultAgentData = {
+    body: {
+        model: string;
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
+         */
+        messages: Array<{
+            content: string | Array<{
+                type: 'text';
+                text: string;
+            }>;
+            role: 'developer';
+            name?: string;
+        } | {
+            content: string | Array<{
+                type: 'text';
+                text: string;
+            }>;
+            role: 'system';
+            name?: string;
+        } | {
+            content: string | Array<{
+                type: 'text';
+                text: string;
+            } | {
+                type: 'image_url';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+                 */
+                image_url: {
+                    url: string;
+                    detail?: 'auto' | 'low' | 'high';
+                };
+            } | {
+                type: 'input_audio';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
+                 */
+                input_audio: {
+                    data: string;
+                    format: 'wav' | 'mp3';
+                };
+            } | {
+                type: 'file';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
+                 */
+                file: {
+                    file_data?: string;
+                    file_id?: string;
+                    filename?: string;
+                };
+            }>;
+            role: 'user';
+            name?: string;
+        } | {
+            role: 'assistant';
+            audio?: {
+                id: string;
+            } | null;
+            content?: string | Array<{
+                type: 'text';
+                text: string;
+            }> | Array<{
+                type: 'refusal';
+                refusal: string;
+            }> | null;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+             */
+            function_call?: {
+                arguments: string;
+                name: string;
+            } | null;
+            name?: string;
+            reasoning_content?: string | null;
+            refusal?: string | null;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
+             */
+            tool_calls?: Array<{
+                id: string;
+                type: 'function';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+                 */
+                function: {
+                    arguments: string;
+                    name: string;
+                };
+            } | {
+                id: string;
+                type: 'custom';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+                 */
+                custom: {
+                    input: string;
+                    name: string;
+                };
+            }>;
+        } | {
+            role: 'tool';
+            content: string | Array<{
+                type: 'text';
+                text: string;
+            } | {
+                type: 'image_url';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+                 */
+                image_url: {
+                    url: string;
+                    detail?: 'auto' | 'low' | 'high';
+                };
+            }>;
+            tool_call_id: string;
+        } | {
+            role: 'function';
+            content: string | null;
+            name: string;
+        }>;
+        /**
+         *
+         * A function tool that can be used to generate a response.
+         *
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1392
+         *
+         */
+        tools?: Array<{
+            type: 'function';
+            /**
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+             */
+            function: {
+                name: string;
+                description?: string;
+                /**
+                 *
+                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                 *
+                 * The parameters the functions accepts, described as a JSON Schema object. See the
+                 * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                 * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                 * documentation about the format.
+                 *
+                 * Omitting parameters defines a function with an empty parameter list.
+                 *
+                 */
+                parameters?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        } | {
+            type: 'custom';
+            custom: {
+                /**
+                 * The name of the custom tool, used to identify it in tool calls
+                 */
+                name: string;
+                /**
+                 * Optional description of the custom tool, used to provide more context
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool. Default is unconstrained text.
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format. Always `text`
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    /**
+                     * Your chosen grammar
+                     */
+                    grammar: {
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar definition
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
+                };
+            };
+        } | {
+            type: 'custom';
+            /**
+             * The name of the custom tool, used to identify it in tool calls
+             */
+            name: string;
+            /**
+             * Optional description of the custom tool, used to provide more context
+             */
+            description?: string;
+            /**
+             * The input format for the custom tool. Default is unconstrained text.
+             */
+            format?: {
+                /**
+                 * Unconstrained text format. Always `text`
+                 */
+                type: 'text';
+            } | {
+                type: 'grammar';
+                /**
+                 * The grammar definition
+                 */
+                definition: string;
+                /**
+                 * The syntax of the grammar definition
+                 */
+                syntax: 'lark' | 'regex';
+            };
+        }>;
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
+         */
+        tool_choice?: 'none' | 'auto' | 'required' | {
+            type: 'allowed_tools';
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1455
+             */
+            allowed_tools: {
+                /**
+                 *
+                 * Constrains the tools available to the model to a pre-defined set.
+                 *
+                 * auto allows the model to pick from among the allowed tools and generate a
+                 * message.
+                 *
+                 * required requires the model to call one or more of the allowed tools.
+                 *
+                 */
+                mode: 'auto' | 'required';
+                /**
+                 * A list of tool definitions that the model should be allowed to call
+                 */
+                tools: Array<{
+                    [key: string]: {
+                        type: 'function';
+                        /**
+                         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+                         */
+                        function: {
+                            name: string;
+                            description?: string;
+                            /**
+                             *
+                             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                             *
+                             * The parameters the functions accepts, described as a JSON Schema object. See the
+                             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                             * documentation about the format.
+                             *
+                             * Omitting parameters defines a function with an empty parameter list.
+                             *
+                             */
+                            parameters?: {
+                                [key: string]: unknown;
+                            };
+                            strict?: boolean | null;
+                        };
+                    };
+                }>;
+            };
+        } | {
+            type: 'function';
+            function: {
+                name: string;
+            };
+        } | {
+            type: 'custom';
+            custom: {
+                /**
+                 * The name of the custom tool, used to identify it in tool calls
+                 */
+                name: string;
+                /**
+                 * Optional description of the custom tool, used to provide more context
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool. Default is unconstrained text.
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format. Always `text`
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    /**
+                     * Your chosen grammar
+                     */
+                    grammar: {
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar definition
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
+                };
+            };
+        };
+        temperature?: number | null;
+        max_tokens?: number | null;
+        max_completion_tokens?: number | null;
+        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+        stream?: boolean | null;
+        stream_options?: {
+            include_usage?: boolean;
+        } | null;
+        user?: string;
+        [key: string]: unknown;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/orcarouter/chat/completions';
+};
+
+export type OrcarouterChatCompletionsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type OrcarouterChatCompletionsWithDefaultAgentError = OrcarouterChatCompletionsWithDefaultAgentErrors[keyof OrcarouterChatCompletionsWithDefaultAgentErrors];
+
+export type OrcarouterChatCompletionsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        choices: Array<{
+            finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
+            index?: number;
+            logprobs: unknown;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
+             */
+            message: {
+                content?: string | null;
+                refusal?: string | null;
+                role: 'assistant';
+                annotations?: Array<unknown> | null;
+                audio?: unknown;
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+                 */
+                function_call?: {
+                    arguments: string;
+                    name: string;
+                } | null;
+                reasoning_content?: string | null;
+                tool_calls?: Array<{
+                    id: string;
+                    type: 'function';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+                     */
+                    function: {
+                        arguments: string;
+                        name: string;
+                    };
+                } | {
+                    id: string;
+                    type: 'custom';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+                     */
+                    custom: {
+                        input: string;
+                        name: string;
+                    };
+                }> | null;
+            };
+        }>;
+        created: number;
+        model: string;
+        object: 'chat.completion';
+        server_tier?: string;
+        system_fingerprint?: string | null;
+        /**
+         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113
+         */
+        usage?: {
+            completion_tokens: number;
+            prompt_tokens: number;
+            total_tokens: number;
+            /**
+             * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
+             */
+            completion_tokens_details?: unknown;
+            /**
+             * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
+             */
+            prompt_tokens_details?: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type OrcarouterChatCompletionsWithDefaultAgentResponse = OrcarouterChatCompletionsWithDefaultAgentResponses[keyof OrcarouterChatCompletionsWithDefaultAgentResponses];
+
+export type OrcarouterChatCompletionsWithAgentData = {
+    body: {
+        model: string;
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
+         */
+        messages: Array<{
+            content: string | Array<{
+                type: 'text';
+                text: string;
+            }>;
+            role: 'developer';
+            name?: string;
+        } | {
+            content: string | Array<{
+                type: 'text';
+                text: string;
+            }>;
+            role: 'system';
+            name?: string;
+        } | {
+            content: string | Array<{
+                type: 'text';
+                text: string;
+            } | {
+                type: 'image_url';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+                 */
+                image_url: {
+                    url: string;
+                    detail?: 'auto' | 'low' | 'high';
+                };
+            } | {
+                type: 'input_audio';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792
+                 */
+                input_audio: {
+                    data: string;
+                    format: 'wav' | 'mp3';
+                };
+            } | {
+                type: 'file';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732
+                 */
+                file: {
+                    file_data?: string;
+                    file_id?: string;
+                    filename?: string;
+                };
+            }>;
+            role: 'user';
+            name?: string;
+        } | {
+            role: 'assistant';
+            audio?: {
+                id: string;
+            } | null;
+            content?: string | Array<{
+                type: 'text';
+                text: string;
+            }> | Array<{
+                type: 'refusal';
+                refusal: string;
+            }> | null;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+             */
+            function_call?: {
+                arguments: string;
+                name: string;
+            } | null;
+            name?: string;
+            reasoning_content?: string | null;
+            refusal?: string | null;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
+             */
+            tool_calls?: Array<{
+                id: string;
+                type: 'function';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+                 */
+                function: {
+                    arguments: string;
+                    name: string;
+                };
+            } | {
+                id: string;
+                type: 'custom';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+                 */
+                custom: {
+                    input: string;
+                    name: string;
+                };
+            }>;
+        } | {
+            role: 'tool';
+            content: string | Array<{
+                type: 'text';
+                text: string;
+            } | {
+                type: 'image_url';
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765
+                 */
+                image_url: {
+                    url: string;
+                    detail?: 'auto' | 'low' | 'high';
+                };
+            }>;
+            tool_call_id: string;
+        } | {
+            role: 'function';
+            content: string | null;
+            name: string;
+        }>;
+        /**
+         *
+         * A function tool that can be used to generate a response.
+         *
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1392
+         *
+         */
+        tools?: Array<{
+            type: 'function';
+            /**
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+             */
+            function: {
+                name: string;
+                description?: string;
+                /**
+                 *
+                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                 *
+                 * The parameters the functions accepts, described as a JSON Schema object. See the
+                 * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                 * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                 * documentation about the format.
+                 *
+                 * Omitting parameters defines a function with an empty parameter list.
+                 *
+                 */
+                parameters?: {
+                    [key: string]: unknown;
+                };
+                strict?: boolean | null;
+            };
+        } | {
+            type: 'custom';
+            custom: {
+                /**
+                 * The name of the custom tool, used to identify it in tool calls
+                 */
+                name: string;
+                /**
+                 * Optional description of the custom tool, used to provide more context
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool. Default is unconstrained text.
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format. Always `text`
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    /**
+                     * Your chosen grammar
+                     */
+                    grammar: {
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar definition
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
+                };
+            };
+        } | {
+            type: 'custom';
+            /**
+             * The name of the custom tool, used to identify it in tool calls
+             */
+            name: string;
+            /**
+             * Optional description of the custom tool, used to provide more context
+             */
+            description?: string;
+            /**
+             * The input format for the custom tool. Default is unconstrained text.
+             */
+            format?: {
+                /**
+                 * Unconstrained text format. Always `text`
+                 */
+                type: 'text';
+            } | {
+                type: 'grammar';
+                /**
+                 * The grammar definition
+                 */
+                definition: string;
+                /**
+                 * The syntax of the grammar definition
+                 */
+                syntax: 'lark' | 'regex';
+            };
+        }>;
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1405
+         */
+        tool_choice?: 'none' | 'auto' | 'required' | {
+            type: 'allowed_tools';
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1455
+             */
+            allowed_tools: {
+                /**
+                 *
+                 * Constrains the tools available to the model to a pre-defined set.
+                 *
+                 * auto allows the model to pick from among the allowed tools and generate a
+                 * message.
+                 *
+                 * required requires the model to call one or more of the allowed tools.
+                 *
+                 */
+                mode: 'auto' | 'required';
+                /**
+                 * A list of tool definitions that the model should be allowed to call
+                 */
+                tools: Array<{
+                    [key: string]: {
+                        type: 'function';
+                        /**
+                         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L174
+                         */
+                        function: {
+                            name: string;
+                            description?: string;
+                            /**
+                             *
+                             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+                             *
+                             * The parameters the functions accepts, described as a JSON Schema object. See the
+                             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+                             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+                             * documentation about the format.
+                             *
+                             * Omitting parameters defines a function with an empty parameter list.
+                             *
+                             */
+                            parameters?: {
+                                [key: string]: unknown;
+                            };
+                            strict?: boolean | null;
+                        };
+                    };
+                }>;
+            };
+        } | {
+            type: 'function';
+            function: {
+                name: string;
+            };
+        } | {
+            type: 'custom';
+            custom: {
+                /**
+                 * The name of the custom tool, used to identify it in tool calls
+                 */
+                name: string;
+                /**
+                 * Optional description of the custom tool, used to provide more context
+                 */
+                description?: string;
+                /**
+                 * The input format for the custom tool. Default is unconstrained text.
+                 */
+                format?: {
+                    /**
+                     * Unconstrained text format. Always `text`
+                     */
+                    type: 'text';
+                } | {
+                    type: 'grammar';
+                    /**
+                     * Your chosen grammar
+                     */
+                    grammar: {
+                        /**
+                         * The grammar definition
+                         */
+                        definition: string;
+                        /**
+                         * The syntax of the grammar definition
+                         */
+                        syntax: 'lark' | 'regex';
+                    };
+                };
+            };
+        };
+        temperature?: number | null;
+        max_tokens?: number | null;
+        max_completion_tokens?: number | null;
+        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+        stream?: boolean | null;
+        stream_options?: {
+            include_usage?: boolean;
+        } | null;
+        user?: string;
+        [key: string]: unknown;
+    };
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/orcarouter/{agentId}/chat/completions';
+};
+
+export type OrcarouterChatCompletionsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type OrcarouterChatCompletionsWithAgentError = OrcarouterChatCompletionsWithAgentErrors[keyof OrcarouterChatCompletionsWithAgentErrors];
+
+export type OrcarouterChatCompletionsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        choices: Array<{
+            finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
+            index?: number;
+            logprobs: unknown;
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
+             */
+            message: {
+                content?: string | null;
+                refusal?: string | null;
+                role: 'assistant';
+                annotations?: Array<unknown> | null;
+                audio?: unknown;
+                /**
+                 * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+                 */
+                function_call?: {
+                    arguments: string;
+                    name: string;
+                } | null;
+                reasoning_content?: string | null;
+                tool_calls?: Array<{
+                    id: string;
+                    type: 'function';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+                     */
+                    function: {
+                        arguments: string;
+                        name: string;
+                    };
+                } | {
+                    id: string;
+                    type: 'custom';
+                    /**
+                     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+                     */
+                    custom: {
+                        input: string;
+                        name: string;
+                    };
+                }> | null;
+            };
+        }>;
+        created: number;
+        model: string;
+        object: 'chat.completion';
+        server_tier?: string;
+        system_fingerprint?: string | null;
+        /**
+         * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L113
+         */
+        usage?: {
+            completion_tokens: number;
+            prompt_tokens: number;
+            total_tokens: number;
+            /**
+             * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L144
+             */
+            completion_tokens_details?: unknown;
+            /**
+             * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
+             */
+            prompt_tokens_details?: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type OrcarouterChatCompletionsWithAgentResponse = OrcarouterChatCompletionsWithAgentResponses[keyof OrcarouterChatCompletionsWithAgentResponses];
+
 export type GetRolesData = {
     body?: never;
     path?: never;
@@ -76786,7 +79382,7 @@ export type GetOrganizationResponses = {
         kbBm25B: number | null;
         kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -77104,7 +79700,7 @@ export type UpdateAppearanceSettingsResponses = {
         kbBm25B: number | null;
         kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -77305,7 +79901,7 @@ export type UpdateSecuritySettingsResponses = {
         kbBm25B: number | null;
         kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -77501,7 +80097,7 @@ export type UpdateLlmSettingsResponses = {
         kbBm25B: number | null;
         kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -77697,7 +80293,7 @@ export type UpdateMcpSettingsResponses = {
         kbBm25B: number | null;
         kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -77893,7 +80489,7 @@ export type UpdateSkillsSettingsResponses = {
         kbBm25B: number | null;
         kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -78090,7 +80686,7 @@ export type UpdateAgentSettingsResponses = {
         kbBm25B: number | null;
         kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -78297,7 +80893,7 @@ export type UpdateConnectionSettingsResponses = {
         kbBm25B: number | null;
         kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -78507,7 +81103,7 @@ export type UpdateIntegrationSettingsResponses = {
         kbBm25B: number | null;
         kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -78713,7 +81309,7 @@ export type UpdateDefaultEnvironmentResponses = {
         kbBm25B: number | null;
         kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -78911,7 +81507,7 @@ export type UpdateAuthSettingsResponses = {
         kbBm25B: number | null;
         kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -79114,7 +81710,7 @@ export type UpdateKnowledgeSettingsResponses = {
         kbBm25B: number | null;
         kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -79307,7 +81903,7 @@ export type DropEmbeddingConfigResponses = {
         kbBm25B: number | null;
         kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -79850,7 +82446,7 @@ export type CompleteOnboardingResponses = {
         kbBm25B: number | null;
         kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -86653,7 +89249,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         modelId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
@@ -86701,11 +89297,11 @@ export type CreateScheduleTriggerRunConversationResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -95787,7 +98383,7 @@ export type GetAllVirtualApiKeysResponses = {
             }>;
             authorName: string | null;
             providerApiKeys: Array<{
-                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                 providerApiKeyId: string;
                 providerApiKeyName: string;
             }>;
@@ -95813,7 +98409,7 @@ export type CreateVirtualApiKeyData = {
         scope?: 'personal' | 'team' | 'org';
         teams?: Array<string>;
         providerApiKeys?: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             providerApiKeyId: string;
         }>;
         ownerId?: string;
@@ -95911,7 +98507,7 @@ export type CreateVirtualApiKeyResponses = {
         }>;
         authorName: string | null;
         providerApiKeys: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             providerApiKeyId: string;
             providerApiKeyName: string;
         }>;
@@ -96101,7 +98697,7 @@ export type GetVirtualApiKeyResponses = {
         }>;
         authorName: string | null;
         providerApiKeys: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             providerApiKeyId: string;
             providerApiKeyName: string;
         }>;
@@ -96118,7 +98714,7 @@ export type UpdateVirtualApiKeyData = {
         scope?: 'personal' | 'team' | 'org';
         teams?: Array<string>;
         providerApiKeys?: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             providerApiKeyId: string;
         }>;
     };
@@ -96216,7 +98812,7 @@ export type UpdateVirtualApiKeyResponses = {
         }>;
         authorName: string | null;
         providerApiKeys: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'orcarouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             providerApiKeyId: string;
             providerApiKeyName: string;
         }>;

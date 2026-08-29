@@ -58,6 +58,8 @@ const LAZY_MODEL_SYNC_TTL_BY_PROVIDER: Partial<
   Record<SupportedProvider, number>
 > = {
   openrouter: TimeInMs.Hour,
+  // Aggregator catalogs change frequently; sync on the same cadence as OpenRouter.
+  orcarouter: TimeInMs.Hour,
   ollama: 5 * TimeInMs.Minute,
   // Same server as `ollama`, so it needs the same TTL: on the default one-day
   // fallback a freshly `ollama pull`-ed model appeared in one provider within

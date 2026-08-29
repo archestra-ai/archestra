@@ -2494,6 +2494,11 @@ const config = {
         process.env.ARCHESTRA_OPENROUTER_CATEGORIES?.trim() ||
         "general-chat,personal-agent",
     },
+    orcarouter: {
+      baseUrl:
+        process.env.ARCHESTRA_ORCAROUTER_BASE_URL ||
+        "https://api.orcarouter.ai/v1",
+    },
     anthropic: {
       baseUrl:
         process.env.ARCHESTRA_ANTHROPIC_BASE_URL || "https://api.anthropic.com",
@@ -2745,6 +2750,9 @@ const config = {
     },
     openrouter: {
       apiKey: process.env.ARCHESTRA_CHAT_OPENROUTER_API_KEY || "",
+    },
+    orcarouter: {
+      apiKey: process.env.ARCHESTRA_CHAT_ORCAROUTER_API_KEY || "",
     },
     anthropic: {
       apiKey: process.env.ARCHESTRA_CHAT_ANTHROPIC_API_KEY || "",

@@ -16,6 +16,7 @@ export const SupportedProvidersSchema = z.enum([
   "groq",
   "xai",
   "openrouter",
+  "orcarouter",
   "vllm",
   "ollama",
   "ollama-native",
@@ -55,6 +56,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "groq:chatCompletions",
   "xai:chatCompletions",
   "openrouter:chatCompletions",
+  "orcarouter:chatCompletions",
   "vllm:chatCompletions",
   "ollama:chatCompletions",
   "ollama-native:chat",
@@ -90,6 +92,7 @@ export const OCR_PDF_INPUT_PROVIDERS: readonly SupportedProvider[] = [
   "bedrock",
   "azure",
   "openrouter",
+  "orcarouter",
   "vllm",
 ];
 export type SupportedProvider = z.infer<typeof SupportedProvidersSchema>;
@@ -171,6 +174,7 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   groq: "Groq",
   xai: "xAI",
   openrouter: "OpenRouter",
+  orcarouter: "OrcaRouter",
   // Named for the generic path rather than the one engine: the `vllm` adapter
   // only speaks the OpenAI `/v1/chat/completions` shape, so every server
   // implementing it — llama.cpp, LM Studio, SGLang, TGI, LocalAI — runs
@@ -453,6 +457,7 @@ export const MODEL_ROUTER_SUPPORTED_PROVIDERS = [
   "mistral",
   "ollama",
   "openrouter",
+  "orcarouter",
   "perplexity",
   "vllm",
   "xai",
@@ -663,6 +668,7 @@ export const DEFAULT_PROVIDER_BASE_URLS: Record<SupportedProvider, string> = {
   groq: "https://api.groq.com/openai/v1",
   xai: "https://api.x.ai/v1",
   openrouter: "https://openrouter.ai/api/v1",
+  orcarouter: "https://api.orcarouter.ai/v1",
   vllm: "",
   ollama: "http://localhost:11434/v1",
   "ollama-native": "http://localhost:11434",
@@ -696,6 +702,20 @@ export const OPENROUTER_FREE_MODEL_ID = "openrouter/free";
  * that always redirect to the newest model in a family.
  */
 export const OPENROUTER_LATEST_ALIAS_PREFIX = "~";
+
+/**
+ * OrcaRouter's built-in "Auto Router" — routes each request to a model
+ * OrcaRouter picks dynamically. Mirrors OpenRouter's `openrouter/auto`.
+ */
+export const ORCAROUTER_AUTO_MODEL_ID = "orcarouter/auto";
+
+/**
+ * OrcaRouter's built-in "Free Models Router" — routes each request to a free
+ * model OrcaRouter picks, filtering for the features the request needs. Used
+ * as the auto-default for fresh OrcaRouter organizations, mirroring
+ * OpenRouter's `openrouter/free`.
+ */
+export const ORCAROUTER_FREE_MODEL_ID = "orcarouter/free";
 
 /**
  * Pattern-based model markers per provider.
@@ -761,6 +781,15 @@ export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
     "x-ai/grok-4.3",
     "deepseek/deepseek-v4-pro",
   ],
+  orcarouter: [
+    "anthropic/claude-opus-4.8",
+    "anthropic/claude-opus-4.7",
+    "openai/gpt-5.5-pro",
+    "openai/gpt-5.5",
+    "google/gemini-3.1-pro-preview",
+    "grok/grok-4.3",
+    "deepseek/deepseek-v4-pro",
+  ],
   ollama: ["gpt-oss:120b", "llama4:maverick", "llama4:scout", "qwen3:235b"],
   "ollama-native": [
     "gpt-oss:120b",
@@ -823,6 +852,7 @@ export const DEFAULT_MODELS: Record<SupportedProvider, string> = {
   anthropic: "claude-opus-4-8",
   openai: "gpt-5.5",
   openrouter: "openrouter/auto",
+  orcarouter: "orcarouter/auto",
   gemini: "gemini-3.6-flash",
   cohere: "command-a-plus-05-2026",
   groq: "openai/gpt-oss-120b",
@@ -1068,6 +1098,9 @@ export const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> =
     // API has no model selection), so there is nothing to sync from models.dev
     "microsoft-365-copilot": null,
     perplexity: null,
+    // OrcaRouter publishes no models.dev catalog; its model list is fetched
+    // from its own OpenAI-compatible /models endpoint.
+    orcarouter: null,
     nvidia: null,
   };
 

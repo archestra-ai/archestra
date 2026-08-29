@@ -710,6 +710,30 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
     extraHeaders: openRouterAttributionHeaders(),
   },
 
+  orcarouter: {
+    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) => {
+      if (!baseURL) {
+        throw new ApiError(400, "OrcaRouter base URL is required.");
+      }
+      // OrcaRouter is OpenAI-compatible and, like OpenRouter, serves
+      // reasoning models that stream thinking as a `reasoning` delta field —
+      // the strict @ai-sdk/openai parser drops it, but the compatible provider
+      // surfaces it as native reasoning parts.
+      return createOpenAICompatible({
+        name: "orcarouter",
+        apiKey,
+        baseURL,
+        headers,
+        fetch,
+        includeUsage: true,
+        supportsStructuredOutputs: true,
+      }).chatModel(modelName);
+    },
+    defaultBaseUrl: config.llm.orcarouter.baseUrl,
+    apiKeyRequiredMessage:
+      "OrcaRouter API key is required. Please configure ARCHESTRA_CHAT_ORCAROUTER_API_KEY.",
+  },
+
   perplexity: {
     // One provider, two transports, discriminated per model: the
     // vendor-prefixed catalog is served by the Agent API — OpenAI-Responses-

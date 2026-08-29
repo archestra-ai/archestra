@@ -50,6 +50,7 @@ import { ollamaAdapterFactory } from "../adapters/ollama";
 import { ollamaNativeAdapterFactory } from "../adapters/ollama-native";
 import { openaiAdapterFactory } from "../adapters/openai";
 import { openrouterAdapterFactory } from "../adapters/openrouter";
+import { orcarouterAdapterFactory } from "../adapters/orcarouter";
 import { perplexityAdapterFactory } from "../adapters/perplexity";
 import { perplexityResponsesAdapterFactory } from "../adapters/perplexity-responses";
 import { vllmAdapterFactory } from "../adapters/vllm";
@@ -74,6 +75,7 @@ import ollamaProxyRoutes from "./ollama";
 import ollamaNativeProxyRoutes from "./ollama-native";
 import openAiProxyRoutes from "./openai";
 import openrouterProxyRoutes from "./openrouter";
+import orcarouterProxyRoutes from "./orcarouter";
 import perplexityProxyRoutes from "./perplexity";
 import vllmProxyRoutes from "./vllm";
 import xaiProxyRoutes from "./xai";
@@ -1805,6 +1807,24 @@ const providerConfigsByProvider = {
     }),
     requestBuilder: makeOpenAiCompatibleBuilder("openai/gpt-4o"),
     model: "openai/gpt-4o",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: true,
+    supportsCompression: true,
+  }),
+  orcarouter: makeConfig({
+    providerName: "OrcaRouter",
+    providerSlug: "orcarouter",
+    provider: "orcarouter",
+    family: "openai",
+    routePlugin: orcarouterProxyRoutes,
+    adapterFactory: orcarouterAdapterFactory,
+    endpoint: (agentId) => `/v1/orcarouter/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder("openai/gpt-5.4-mini"),
+    model: "openai/gpt-5.4-mini",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
     supportsCompression: true,

@@ -17,6 +17,7 @@ import { fetchMicrosoft365CopilotModels } from "./microsoft-365-copilot";
 import { fetchOllamaModels, fetchOllamaNativeModels } from "./ollama";
 import { fetchOpenAiModels } from "./openai";
 import { fetchOpenrouterModels } from "./openrouter";
+import { fetchOrcaRouterModels } from "./orcarouter";
 import type { ModelFetcher, ModelInfo } from "./types";
 import { fetchVllmModels } from "./vllm";
 import { fetchVoyageModels } from "./voyage";
@@ -110,6 +111,7 @@ export const modelFetchers: Record<SupportedProvider, ModelFetcher> = {
   "ollama-native": fetchOllamaNativeModels,
   openai: fetchOpenAiModels,
   openrouter: fetchOpenrouterModels,
+  orcarouter: fetchOrcaRouterModels,
   // Both of the provider's surfaces publish no usable /models endpoint, so
   // the catalog is the two static families side by side: the `sonar*`
   // chat-completions models and the vendor-prefixed Agent API models.

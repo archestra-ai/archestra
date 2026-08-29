@@ -32,6 +32,7 @@ import {
   OllamaNative,
   OpenAi,
   Openrouter,
+  OrcaRouter,
   Perplexity,
   Vllm,
   Xai,
@@ -170,6 +171,7 @@ export const InteractionRequestSchema = z.union([
   Groq.API.ChatCompletionRequestSchema,
   Xai.API.ChatCompletionRequestSchema,
   Openrouter.API.ChatCompletionRequestSchema,
+  OrcaRouter.API.ChatCompletionRequestSchema,
   Vllm.API.ChatCompletionRequestSchema,
   Ollama.API.ChatCompletionRequestSchema,
   Cohere.API.ChatRequestSchema,
@@ -219,6 +221,7 @@ export const InteractionResponseSchema = z.union([
   Groq.API.ChatCompletionResponseSchema,
   Xai.API.ChatCompletionResponseSchema,
   Openrouter.API.ChatCompletionResponseSchema,
+  OrcaRouter.API.ChatCompletionResponseSchema,
   Vllm.API.ChatCompletionResponseSchema,
   Ollama.API.ChatCompletionResponseSchema,
   Cohere.API.ChatResponseSchema,
@@ -530,6 +533,19 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
       .nullable()
       .optional(),
     response: withErrorResponse(Openrouter.API.ChatCompletionResponseSchema),
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["orcarouter:chatCompletions"]),
+    request: withReadFallback(OrcaRouter.API.ChatCompletionRequestSchema),
+    processedRequest: withReadFallback(
+      OrcaRouter.API.ChatCompletionRequestSchema,
+    )
+      .nullable()
+      .optional(),
+    response: withErrorResponse(OrcaRouter.API.ChatCompletionResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),

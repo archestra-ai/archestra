@@ -78,6 +78,7 @@ const fetchUsageExtractors: Record<SupportedProvider, UsageExtractor> = {
   groq: getOpenAIUsage,
   xai: getOpenAIUsage,
   openrouter: getOpenAIUsage,
+  orcarouter: getOpenAIUsage,
   anthropic: getAnthropicUsage,
   azure: getChatOrResponsesUsage,
   cohere: getCohereUsage,

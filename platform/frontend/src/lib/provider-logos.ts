@@ -26,6 +26,7 @@ export const providerToLogoProvider: Record<SupportedProvider, string> = {
   groq: "groq",
   xai: "xai",
   openrouter: "openrouter",
+  orcarouter: "orcarouter",
   vllm: "vllm",
   ollama: "ollama-cloud", // models.dev uses ollama-cloud for the Ollama provider
   "ollama-native": "ollama-cloud",

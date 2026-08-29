@@ -1146,6 +1146,12 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Default: `https://openrouter.ai/api/v1`
   - Use this to point to your own proxy, an OpenRouter-compatible API, or other custom endpoints
 
+- **`ARCHESTRA_ORCAROUTER_BASE_URL`** - Override OrcaRouter API base URL.
+  - Default: `https://api.orcarouter.ai/v1`
+  - Use this to point to your own proxy, an OrcaRouter-compatible API, or other custom endpoints
+
+- **`ARCHESTRA_CHAT_ORCAROUTER_API_KEY`** - Default API key for OrcaRouter in the built-in chat feature. Can be overridden per conversation/team/org.
+
 - **`ARCHESTRA_VLLM_BASE_URL`** - Base URL for your OpenAI-compatible server (vLLM, llama.cpp, LM Studio, SGLang, TGI, LocalAI).
   - Required to enable the OpenAI-compatible provider
   - Example: `http://localhost:8000/v1` (standard vLLM)

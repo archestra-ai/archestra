@@ -25,6 +25,7 @@ export {
 } from "./openai";
 export { openAiResponsesAdapterFactory } from "./openai-responses";
 export { openrouterAdapterFactory } from "./openrouter";
+export { orcarouterAdapterFactory } from "./orcarouter";
 export { perplexityAdapterFactory } from "./perplexity";
 export { perplexityResponsesAdapterFactory } from "./perplexity-responses";
 export { vllmAdapterFactory } from "./vllm";

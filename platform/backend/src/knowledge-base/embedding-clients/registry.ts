@@ -100,6 +100,7 @@ export const EMBEDDING_ADAPTERS: Record<
   // OpenAI-compatible, honor the `dimensions` parameter.
   openai: OPENAI_WIRE,
   openrouter: OPENAI_WIRE,
+  orcarouter: OPENAI_WIRE,
   zhipuai: OPENAI_WIRE,
 
   // OpenAI-compatible, fixed native dimension — drop `dimensions`.

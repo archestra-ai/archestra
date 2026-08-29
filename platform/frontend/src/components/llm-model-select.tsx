@@ -5,6 +5,7 @@ import {
   compareModelsForDisplay,
   isOpenRouterLatestAlias,
   OPENROUTER_AUTO_MODEL_ID,
+  ORCAROUTER_AUTO_MODEL_ID,
   type SupportedProvider,
 } from "@archestra/shared";
 import type { PopoverContentProps } from "@radix-ui/react-popover";
@@ -415,10 +416,12 @@ export function LlmModelSearchableSelect(props: LlmModelSearchableSelectProps) {
 function formatPricing(option: LlmModelSelectOption) {
   const input = option.pricePerMillionInput ?? "0";
   const output = option.pricePerMillionOutput ?? "0";
-  // OpenRouter's Auto Router has no fixed price — it bills at the routed
-  // model's rate. A negative price is the same "dynamic" sentinel.
+  // Both aggregator routers bill at the routed model's rate, so their price is
+  // dynamic rather than a fixed per-token rate. A negative price is the same
+  // "dynamic" sentinel.
   if (
     modelIdOf(option) === OPENROUTER_AUTO_MODEL_ID ||
+    modelIdOf(option) === ORCAROUTER_AUTO_MODEL_ID ||
     Number(input) < 0 ||
     Number(output) < 0
   ) {

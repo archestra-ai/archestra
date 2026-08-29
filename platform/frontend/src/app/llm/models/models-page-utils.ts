@@ -347,14 +347,21 @@ export function canFilterFreeModelsForApiKey(params: {
 }): boolean {
   const { availableApiKeys, apiKeyFilter } = params;
 
+  // Both aggregator providers ship a free-models router (`openrouter/free`,
+  // `orcarouter/free`) that the free-models filter keys off.
   if (apiKeyFilter === "all") {
-    return availableApiKeys.some((key) => key.provider === "openrouter");
+    return availableApiKeys.some(
+      (key) => key.provider === "openrouter" || key.provider === "orcarouter",
+    );
   }
 
   const selectedApiKey = availableApiKeys.find(
     (key) => key.id === apiKeyFilter,
   );
-  return selectedApiKey?.provider === "openrouter";
+  return (
+    selectedApiKey?.provider === "openrouter" ||
+    selectedApiKey?.provider === "orcarouter"
+  );
 }
 
 export function filterModelsForPage<

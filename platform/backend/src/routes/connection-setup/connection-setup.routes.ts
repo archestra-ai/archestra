@@ -78,6 +78,7 @@ const CLIENT_SUPPORTED_PROVIDERS: Record<
     "openai",
     "azure",
     "openrouter",
+    "orcarouter",
     "vllm",
     "ollama",
     "groq",

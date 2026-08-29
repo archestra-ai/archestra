@@ -26,6 +26,7 @@ import OpenAiChatCompletionInteraction from "./llmProviders/openai";
 import OpenAiEmbeddingInteraction from "./llmProviders/openai-embedding";
 import OpenAiResponsesInteraction from "./llmProviders/openai-responses";
 import OpenrouterChatCompletionInteraction from "./llmProviders/openrouter";
+import OrcaRouterChatCompletionInteraction from "./llmProviders/orcarouter";
 import PerplexityChatCompletionInteraction from "./llmProviders/perplexity";
 import PerplexityResponsesInteraction from "./llmProviders/perplexity-responses";
 import VllmChatCompletionInteraction from "./llmProviders/vllm";
@@ -48,6 +49,8 @@ const interactionFactories: Record<Interaction["type"], InteractionFactory> = {
   "cohere:embeddings": (i) => new OpenAiEmbeddingInteraction(i),
   "openrouter:chatCompletions": (i) =>
     new OpenrouterChatCompletionInteraction(i),
+  "orcarouter:chatCompletions": (i) =>
+    new OrcaRouterChatCompletionInteraction(i),
   "anthropic:messages": (i) => new AnthropicMessagesInteraction(i),
   "bedrock:converse": (i) => new BedrockConverseInteraction(i),
   // Bedrock InvokeModel carries the Anthropic Messages wire format.

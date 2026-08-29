@@ -161,6 +161,10 @@ const providerReasoningTuning: Record<SupportedProvider, TuningBuilder> = {
     providerOptions: { openrouter: { reasoning: { enabled: false } } },
   }),
 
+  // OrcaRouter is OpenAI-compatible and exposes no unified reasoning knob, so
+  // there is nothing to tune at the provider level.
+  orcarouter: noTuning,
+
   // Per-request switch for Qwen3-style chat templates; templates without the
   // kwarg ignore it.
   vllm: () => ({

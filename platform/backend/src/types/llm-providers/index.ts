@@ -16,6 +16,7 @@ export { default as Ollama } from "./ollama";
 export { default as OllamaNative } from "./ollama-native";
 export { default as OpenAi } from "./openai";
 export { default as Openrouter } from "./openrouter";
+export { default as OrcaRouter } from "./orcarouter";
 export { default as Perplexity } from "./perplexity";
 export { default as Vllm } from "./vllm";
 export { default as Xai } from "./xai";

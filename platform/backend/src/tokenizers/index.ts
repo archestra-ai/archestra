@@ -67,7 +67,7 @@ function isAnthropicModelOnReseller(
   if (provider === "bedrock") {
     return id.replace(BEDROCK_REGION_PREFIX, "").startsWith("anthropic.");
   }
-  if (provider === "openrouter") {
+  if (provider === "openrouter" || provider === "orcarouter") {
     return id.startsWith("anthropic/");
   }
   return false;
@@ -95,6 +95,7 @@ const tokenizerCache: Record<SupportedProvider, () => Tokenizer> = {
   groq: getTiktokenTokenizer,
   xai: getTiktokenTokenizer,
   openrouter: getTiktokenTokenizer,
+  orcarouter: getTiktokenTokenizer,
   vllm: getTiktokenTokenizer,
   ollama: getTiktokenTokenizer,
   "ollama-native": getTiktokenTokenizer,

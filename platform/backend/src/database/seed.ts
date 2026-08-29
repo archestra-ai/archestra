@@ -700,6 +700,7 @@ function getProviderDisplayName(provider: SupportedProvider): string {
     archestra: "Archestra",
     openai: "OpenAI",
     openrouter: "OpenRouter",
+    orcarouter: "OrcaRouter",
     gemini: "Google",
     cerebras: "Cerebras",
     cohere: "Cohere",

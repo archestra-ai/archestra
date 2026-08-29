@@ -633,7 +633,7 @@ export function AssignedToolsTable({
 
   return (
     <BulkActionsScope className="space-y-3">
-      <FilterBar>
+      <FilterBar leading>
         <SearchInput
           isLoading={isLoading}
           objectNamePlural="tools"

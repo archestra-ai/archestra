@@ -1491,9 +1491,7 @@ describe("model router proxy routes", () => {
     });
 
     expect(response.statusCode).toBe(403);
-    expect(response.json().error.message).toContain(
-      "SuperGrok is per-user",
-    );
+    expect(response.json().error.message).toContain("SuperGrok is per-user");
   });
 
   test("rejects a shared virtual key mapped to another user's Copilot credential", async ({

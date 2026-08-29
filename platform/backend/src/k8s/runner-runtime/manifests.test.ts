@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildRunnerEnvironmentEgressPolicy,
   buildRunnerJob,
   buildRunnerPlatformEgressPolicy,
   buildRunnerSecret,
@@ -260,46 +259,5 @@ describe("buildRunnerPlatformEgressPolicy", () => {
       expect(protocols).toContain("UDP");
       expect(protocols).toContain("TCP");
     }
-  });
-});
-
-describe("buildRunnerEnvironmentEgressPolicy", () => {
-  it("gives the built-in Environment public egress without private-network access", () => {
-    const policy = buildRunnerEnvironmentEgressPolicy(SPEC);
-    const publicRule = policy.spec?.egress?.find((rule) =>
-      rule.to?.some((target) => target.ipBlock?.cidr === "0.0.0.0/0"),
-    );
-
-    expect(policy.metadata?.name).toBe("runner-deploy-app-11111111-egress");
-    expect(policy.spec?.podSelector?.matchLabels).toEqual({
-      [RUNNER_TASK_LABEL]: SPEC.taskId,
-    });
-    expect(publicRule?.to?.[0]?.ipBlock?.except).toContain("10.0.0.0/8");
-  });
-
-  it("uses the shared restricted-policy rules for an Agent Environment", () => {
-    const policy = buildRunnerEnvironmentEgressPolicy({
-      ...SPEC,
-      effectiveNetworkPolicy: {
-        source: "environment",
-        policy: {
-          egressMode: "restricted",
-          domainPreset: "none",
-          allowedDomains: [],
-          allowedCidrs: ["203.0.113.0/24"],
-        },
-      },
-    });
-
-    expect(
-      policy.spec?.egress?.some((rule) =>
-        rule.to?.some((target) => target.ipBlock?.cidr === "203.0.113.0/24"),
-      ),
-    ).toBe(true);
-    expect(
-      policy.spec?.egress?.some((rule) =>
-        rule.to?.some((target) => target.ipBlock?.cidr === "0.0.0.0/0"),
-      ),
-    ).toBe(false);
   });
 });

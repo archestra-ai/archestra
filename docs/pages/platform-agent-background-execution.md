@@ -3,7 +3,7 @@ title: Background Execution
 category: Agents
 order: 7
 description: Run delegated Agent tasks in an isolated deployment
-lastUpdated: 2026-08-28
+lastUpdated: 2026-08-29
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -73,11 +73,29 @@ does not create a different resource type: it supplies a name, instructions,
 image, command, inference protocol, and credential declarations to the same
 form used by **Start from scratch**.
 
-The image field starts with the installation's default Background execution image. The Agent's [environment](/docs/platform-environments) also applies to its deployment, including network egress policy and registry access. Use a purpose-built image for the work the Agent performs. For example, a coding Agent's image can include Git, a language toolchain, and repository tooling.
+The image field starts with the installation's default Background execution image. Use a purpose-built image for the work the Agent performs. For example, a coding Agent's image can include Git, a language toolchain, and repository tooling.
 
 Leave **Command** blank to use the built-in Agent loop supplied by the default image. A custom image can override the command and arguments. Background execution images must include a POSIX shell and `tmux`, which keep the live process attachable from the Executions tab.
 
 The deployment uses the same Agent system prompt and tool access as foreground execution. Keep the Agent's instructions focused on the specialist role you want it to perform in either mode.
+
+### Environments and network egress
+
+Each execution Job uses the Agent's [Environment](/docs/platform-environments),
+including its Kubernetes namespace and network egress policy. If the Agent has
+no Environment policy override, Archestra uses the organization default policy,
+then the built-in **Allow all** policy.
+
+The policy is applied before Kubernetes creates the Job. Archestra emits the
+policy type supported by the cluster: standard Kubernetes `NetworkPolicy`,
+Cilium `CiliumNetworkPolicy`, GKE `FQDNNetworkPolicy`, or AWS
+`ApplicationNetworkPolicy`. This gives executions the same IP, domain, and
+Allow-all floor behavior as MCP server pods and code sandboxes. DNS and the
+Archestra control plane remain reachable so the execution can use the LLM
+proxy and MCP gateway.
+
+See [Network egress policies](/docs/platform-environments#network-egress-policies)
+for policy modes, provider support, and the fixed SSRF floor.
 
 ### Built-in Archestra Agent
 

@@ -1,8 +1,11 @@
 import type { Readable, Writable } from "node:stream";
 import { Readable as NodeReadable } from "node:stream";
 import type * as k8s from "@kubernetes/client-node";
+import { PatchStrategy, setHeaderOptions } from "@kubernetes/client-node";
 import type WebSocket from "ws";
 import config from "@/config";
+import { getK8sCapabilities } from "@/k8s/capabilities";
+import { clusterDnsResolver } from "@/k8s/cluster-dns";
 import { resolveRuntimeOwnerReferences } from "@/k8s/mcp-server-runtime/runtime-owner";
 import {
   createK8sClients,
@@ -30,7 +33,6 @@ import type {
   AgentRun,
 } from "@/types";
 import {
-  buildRunnerEnvironmentEgressPolicy,
   buildRunnerJob,
   buildRunnerPlatformEgressPolicy,
   buildRunnerSecret,
@@ -39,6 +41,11 @@ import {
   RUNNER_TMUX_SESSION,
 } from "./manifests";
 import { RUNNER_LEASE_SCOPE, runnerNames, runnerPodSelector } from "./naming";
+import {
+  buildRunnerEnvironmentEgressPolicies,
+  RUNNER_EGRESS_POLICY_CRDS,
+  type RunnerEgressPolicyObject,
+} from "./network-policy";
 
 /** `K8sClients` is internal to the shared module, so it is derived here. */
 type K8sClients = ReturnType<typeof createK8sClients>;
@@ -111,8 +118,16 @@ class RunnerRuntimeManager {
       { label: "create runner secret" },
     );
 
-    await this.applyNetworkPolicy(
-      buildRunnerEnvironmentEgressPolicy(withOwner),
+    const capabilities = (await getK8sCapabilities()).networkPolicy;
+    const clusterDnsIps = await clusterDnsResolver.getClusterDnsIps(
+      clients.coreApi,
+    );
+    await this.applyEgressPolicies(
+      buildRunnerEnvironmentEgressPolicies({
+        spec: withOwner,
+        capabilities,
+        clusterDnsIps,
+      }),
     );
     await this.applyNetworkPolicy(
       buildRunnerPlatformEgressPolicy({
@@ -490,6 +505,17 @@ class RunnerRuntimeManager {
             namespace,
           }),
       ],
+      ...(Object.entries(RUNNER_EGRESS_POLICY_CRDS).map(
+        ([kind, coordinates]) => [
+          `environment${kind}`,
+          () =>
+            clients.customObjectsApi.deleteNamespacedCustomObject({
+              ...coordinates,
+              name: names.environmentNetworkPolicy,
+              namespace,
+            }),
+        ],
+      ) as Array<[string, () => Promise<unknown>]>),
     ];
 
     for (const [kind, remove] of deletions) {
@@ -550,6 +576,49 @@ class RunnerRuntimeManager {
         namespace,
         body,
       });
+    }
+  }
+
+  private async applyEgressPolicies(
+    policies: RunnerEgressPolicyObject[],
+  ): Promise<void> {
+    for (const policy of policies) {
+      if (policy.kind === "NetworkPolicy") {
+        await this.applyNetworkPolicy(policy.object);
+        continue;
+      }
+      await this.applyCustomEgressPolicy(policy);
+    }
+  }
+
+  private async applyCustomEgressPolicy(
+    policy: Exclude<RunnerEgressPolicyObject, { kind: "NetworkPolicy" }>,
+  ): Promise<void> {
+    const clients = this.requireClients();
+    const metadata = policy.object.metadata as
+      | { name?: string; namespace?: string }
+      | undefined;
+    if (!metadata?.name || !metadata.namespace) {
+      throw new Error(`Runner ${policy.kind} requires a name and namespace`);
+    }
+    const coordinates = RUNNER_EGRESS_POLICY_CRDS[policy.kind];
+    try {
+      await clients.customObjectsApi.createNamespacedCustomObject({
+        ...coordinates,
+        namespace: metadata.namespace,
+        body: policy.object,
+      });
+    } catch (error) {
+      if (!isK8sConflictError(error)) throw error;
+      await clients.customObjectsApi.patchNamespacedCustomObject(
+        {
+          ...coordinates,
+          namespace: metadata.namespace,
+          name: metadata.name,
+          body: policy.object,
+        },
+        setHeaderOptions("Content-Type", PatchStrategy.MergePatch),
+      );
     }
   }
 

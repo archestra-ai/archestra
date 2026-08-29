@@ -18,7 +18,7 @@ describe("AgentExecutionState", () => {
       />,
     );
 
-    expect(screen.getByText("View details")).toBeVisible();
+    expect(screen.getByText("Details")).toBeVisible();
     await user.click(
       screen.getByRole("button", { name: "View failed details" }),
     );

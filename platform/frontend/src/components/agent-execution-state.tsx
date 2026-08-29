@@ -40,7 +40,7 @@ export function AgentExecutionState({
       className={cn(
         "inline-flex shrink-0 items-center gap-1.5 font-medium text-muted-foreground",
         compact ? "text-[11px]" : "text-xs",
-        statusReason && "text-foreground",
+        statusReason && "gap-1 text-[10px] text-foreground",
       )}
     >
       {dot}
@@ -73,16 +73,16 @@ export function AgentExecutionState({
         type="button"
         variant="outline"
         size="sm"
-        className="-mx-1 h-7 gap-1.5 rounded-full border-destructive/20 bg-destructive/5 px-2 hover:border-destructive/30 hover:bg-destructive/10"
+        className="-mx-0.5 h-5 gap-1 rounded-md border-destructive/15 bg-destructive/5 px-1.5 hover:border-destructive/25 hover:bg-destructive/10"
         aria-label={`View ${presentation.label.toLowerCase()} details`}
         onClick={() => setDetailsOpen(true)}
       >
         {status}
-        <span aria-hidden className="h-3 w-px bg-border" />
-        <span className="text-[10px] font-normal text-muted-foreground">
-          View details
+        <span aria-hidden className="h-2.5 w-px bg-border" />
+        <span className="text-[9px] font-normal text-muted-foreground">
+          Details
         </span>
-        <ChevronRight className="size-3 text-muted-foreground/70" />
+        <ChevronRight className="size-2.5 text-muted-foreground/70" />
       </Button>
       <StandardDialog
         open={detailsOpen}

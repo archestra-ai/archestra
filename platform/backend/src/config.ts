@@ -2590,8 +2590,8 @@ const config = {
     xai: {
       baseUrl: process.env.ARCHESTRA_XAI_BASE_URL || "https://api.x.ai/v1",
       /**
-       * "X Premium (SuperGrok)" subscription auth mode on the xAI provider:
-       * reuse a user's X Premium subscription for chat instead of a metered
+       * "SuperGrok" subscription auth mode on the xAI provider:
+       * reuse a user's SuperGrok subscription for chat instead of a metered
        * console API key. xAI serves OAuth sessions through the Grok CLI chat
        * proxy, separately from the metered `api.x.ai` API-key surface above.
        */
@@ -2610,7 +2610,7 @@ const config = {
         /** First-party session protocol version this integration targets. */
         clientVersion:
           process.env.ARCHESTRA_XAI_SUBSCRIPTION_CLIENT_VERSION || "1.0.0",
-        /** Public OAuth client id used for the X Premium device-code login. */
+        /** Public OAuth client id used for the SuperGrok device-code login. */
         clientId:
           process.env.ARCHESTRA_XAI_SUBSCRIPTION_CLIENT_ID ||
           "b1a00492-073a-47ea-816f-4c329264a828",

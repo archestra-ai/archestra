@@ -243,7 +243,7 @@ describe("llmOauthClientsRoutes", () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json().error.message).toContain(
-      "X Premium (SuperGrok) is per-user",
+      "SuperGrok is per-user",
     );
   });
 

@@ -1,4 +1,7 @@
-import type { SupportedProvider } from "@archestra/shared";
+import type {
+  SubscriptionCredentialKind,
+  SupportedProvider,
+} from "@archestra/shared";
 
 /**
  * Map our provider names to logo file names. The names follow models.dev
@@ -12,7 +15,9 @@ import type { SupportedProvider } from "@archestra/shared";
  * models.dev; the three providers models.dev has no logo for are sourced
  * elsewhere — `archestra.svg` is our own brand icon (same mark as
  * `logo-icon.svg`), `vllm.svg` and `microsoft-365-copilot.svg` are the
- * monochrome marks from @lobehub/icons-static-svg.
+ * monochrome marks from @lobehub/icons-static-svg. `xai.svg` is the same
+ * geometric X as models.dev, cropped to fill a square slot the way the
+ * other provider marks do.
  */
 export const providerToLogoProvider: Record<SupportedProvider, string> = {
   openai: "openai",
@@ -44,4 +49,19 @@ export const providerToLogoProvider: Record<SupportedProvider, string> = {
 
 export function providerLogoUrl(provider: SupportedProvider): string {
   return `/model-logos/${providerToLogoProvider[provider]}.svg`;
+}
+
+/**
+ * SuperGrok credentials still live on the `xai` provider. Surfaces that know
+ * the selected key is a SuperGrok subscription should show Grok's mark instead
+ * of the xAI X.
+ */
+export function logoNameForProvider(
+  provider: SupportedProvider,
+  subscriptionKind?: SubscriptionCredentialKind | null,
+): string {
+  if (subscriptionKind === "x-premium") {
+    return "grok";
+  }
+  return providerToLogoProvider[provider];
 }

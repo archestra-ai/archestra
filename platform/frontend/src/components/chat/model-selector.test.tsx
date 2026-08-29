@@ -20,6 +20,10 @@ vi.mock("@/lib/llm-models.query", () => ({
   useLlmModelsByProvider: useLlmModelsByProviderMock,
 }));
 
+vi.mock("@/lib/llm-provider-api-keys.query", () => ({
+  useAvailableLlmProviderApiKeys: () => ({ data: [] }),
+}));
+
 // The dropdown internals are Radix-based and irrelevant to the branches under
 // test. The root mock exposes a toggle button wired to onOpenChange so tests
 // can flip the component's open state, and structural wrappers render their

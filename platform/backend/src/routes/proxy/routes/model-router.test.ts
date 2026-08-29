@@ -1492,7 +1492,7 @@ describe("model router proxy routes", () => {
 
     expect(response.statusCode).toBe(403);
     expect(response.json().error.message).toContain(
-      "X Premium (SuperGrok) is per-user",
+      "SuperGrok is per-user",
     );
   });
 

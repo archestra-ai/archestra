@@ -394,7 +394,7 @@ describe("InlineChatError", () => {
     render(
       <ProviderAuthRequiredCard
         provider="xai"
-        providerLabel="X Premium (SuperGrok)"
+        providerLabel="SuperGrok"
         agentName="Research Agent"
         variant="preflight"
       />,
@@ -407,7 +407,7 @@ describe("InlineChatError", () => {
       /provider API key from Vault/i,
     );
     expect(
-      screen.queryByRole("button", { name: "Sign in with X" }),
+      screen.queryByRole("button", { name: "Sign in with Grok" }),
     ).not.toBeInTheDocument();
   });
 

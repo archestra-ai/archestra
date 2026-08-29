@@ -13,6 +13,7 @@ import { useMemo } from "react";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
 import { SCOPE_META, scopeLabel } from "@/components/scope-vocabulary";
+import { SubscriptionBrandIcon } from "@/components/subscription-brand-icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -146,7 +147,10 @@ export function LlmProviderApiKeyDropdown({
             <span className="flex min-w-0 items-center gap-1.5">
               {selectedKey ? (
                 <>
-                  <ProviderIcon provider={selectedKey.provider} />
+                  <SubscriptionBrandIcon
+                    kind={selectedKey.subscriptionKind}
+                    provider={selectedKey.provider}
+                  />
                   <span className="truncate font-medium">
                     {selectedKey.name}
                   </span>
@@ -267,7 +271,10 @@ export function LlmProviderApiKeyDropdown({
                     className="cursor-pointer"
                   >
                     <div className="flex min-w-0 flex-1 items-center gap-2">
-                      <ProviderIcon provider={key.provider} />
+                      <SubscriptionBrandIcon
+                        kind={key.subscriptionKind}
+                        provider={key.provider}
+                      />
                       <span className="truncate">{key.name}</span>
                       <Badge
                         variant={key.connectRequired ? "outline" : "secondary"}

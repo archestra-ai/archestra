@@ -2,7 +2,7 @@
 title: Costs & Limits
 category: LLM Proxy
 order: 4
-lastUpdated: 2026-08-26
+lastUpdated: 2026-08-29
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -94,7 +94,7 @@ Each interaction records a billing mode. Metered traffic is billed per token, so
 
 The "Actual Cost" line and the per-team, per-agent, and per-model cost figures show billed spend. Subscription usage appears as a separate "Subscription (Not Billed)" line on the Costs chart and as a badge on the affected sessions.
 
-Archestra initially detects the billing mode from the credential itself. Anthropic subscription logins (Claude Code on a Max or Pro plan, for example), ChatGPT subscription logins (Codex), and X Premium (SuperGrok) logins on xAI use credentials with a distinct format, so no configuration is needed.
+Archestra initially detects the billing mode from the credential itself. Anthropic subscription logins (Claude Code on a Max or Pro plan, for example), ChatGPT subscription logins (Codex), and SuperGrok logins use credentials with a distinct format, so no configuration is needed.
 
 Claude Max and Pro users can enable paid usage credits after their included allowance is exhausted. Anthropic identifies a successful response fulfilled from those credits in its rate-limit response headers. Archestra records that interaction as metered, because it is charged at API rates, while responses fulfilled from the plan remain subscription-covered. If those headers are missing or unfamiliar, Archestra keeps the credential-derived classification.
 

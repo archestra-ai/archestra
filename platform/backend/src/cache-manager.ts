@@ -60,7 +60,7 @@ export const CacheKey = {
     "microsoft-365-copilot-device-auth-rate-limit",
   /** ChatGPT/Codex subscription device-flow sign-in rate limiting per user */
   OpenaiCodexDeviceAuthRateLimit: "openai-codex-device-auth-rate-limit",
-  /** X Premium (SuperGrok) subscription device-flow sign-in rate limiting per user */
+  /** SuperGrok subscription device-flow sign-in rate limiting per user */
   XaiSubscriptionDeviceAuthRateLimit: "xai-subscription-device-auth-rate-limit",
   /** RUM event-batch ingest rate limiting per user */
   RumIngestRateLimit: "rum-ingest-rate-limit",

@@ -38,7 +38,7 @@ describe("NoApiKeySetup", () => {
       }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Sign in with X" }),
+      screen.getByRole("button", { name: "Sign in with Grok" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Add API Key" }),

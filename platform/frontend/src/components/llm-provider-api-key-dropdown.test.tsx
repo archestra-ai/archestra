@@ -202,7 +202,7 @@ describe("LlmProviderApiKeyDropdown", () => {
         },
         {
           id: "x-premium-subscription",
-          name: "X Premium (SuperGrok)",
+          name: "SuperGrok",
           provider: "xai",
           scope: "personal",
           subscriptionKind: "x-premium",
@@ -237,7 +237,7 @@ describe("LlmProviderApiKeyDropdown", () => {
     expect(screen.getByText("API keys")).toBeInTheDocument();
     expect(screen.getAllByText("Per-user")).toHaveLength(4);
     expect(
-      screen.getByRole("option", { name: /x premium \(supergrok\)/i }),
+      screen.getByRole("option", { name: /supergrok/i }),
     ).toHaveTextContent("Per-user");
     expect(
       screen.getByRole("option", { name: /openai production/i }),
@@ -247,14 +247,14 @@ describe("LlmProviderApiKeyDropdown", () => {
     ).not.toHaveTextContent("Per-user");
   });
 
-  it("groups an unconnected X Premium entry under personal subscriptions", async () => {
+  it("groups an unconnected SuperGrok entry under personal subscriptions", async () => {
     const user = userEvent.setup();
 
     renderDropdown({
       availableKeys: [
         {
           id: "connect-subscription-x-premium",
-          name: "X Premium (SuperGrok)",
+          name: "SuperGrok",
           provider: "xai",
           scope: "personal",
           subscriptionKind: "x-premium",
@@ -272,7 +272,7 @@ describe("LlmProviderApiKeyDropdown", () => {
 
     expect(screen.getByText("Personal subscriptions")).toBeInTheDocument();
     expect(
-      screen.getByRole("option", { name: /x premium \(supergrok\).*connect/i }),
+      screen.getByRole("option", { name: /supergrok.*connect/i }),
     ).toBeInTheDocument();
     expect(screen.queryByText("API keys")).not.toBeInTheDocument();
   });

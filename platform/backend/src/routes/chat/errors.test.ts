@@ -116,7 +116,7 @@ describe("mapProviderError - per-user provider auth required", () => {
     // subscription fetch wrapper and relayed by the xAI adapter's
     // extractInternalCode.
     const revokedMessage =
-      "Your X Premium (SuperGrok) sign-in has expired or been revoked. Reconnect your X account to continue.";
+      "Your xAI SuperSuperGrok sign-in has expired or been revoked. Reconnect your Grok account to continue.";
     const result = mapProviderError(
       {
         name: "AI_APICallError",
@@ -138,7 +138,7 @@ describe("mapProviderError - per-user provider auth required", () => {
     expect(result.message).toBe(revokedMessage);
     expect(result.authAction).toEqual({
       provider: "xai",
-      providerLabel: "X Premium (SuperGrok)",
+      providerLabel: "SuperGrok",
     });
   });
 });

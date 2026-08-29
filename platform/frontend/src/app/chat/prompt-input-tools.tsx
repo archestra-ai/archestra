@@ -49,7 +49,8 @@ import { useModelSelectorDisplay } from "@/lib/chat/use-model-selector-display.h
 import { useFeature } from "@/lib/config/config.query";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
-import { providerToLogoProvider } from "@/lib/provider-logos";
+import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { logoNameForProvider } from "@/lib/provider-logos";
 import { cn } from "@/lib/utils";
 
 export interface ChatPromptInputToolsProps {
@@ -207,8 +208,18 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   const { isCollapsed: showDefaultLogo, expand: expandModelSelector } =
     useModelSelectorDisplay({ conversationId });
 
+  const selectedApiKeyId = conversationId
+    ? (currentConversationChatApiKeyId ?? null)
+    : (initialApiKeyId ?? null);
+  const { data: availableKeys } = useAvailableLlmProviderApiKeys({
+    includeKeyId: selectedApiKeyId ?? undefined,
+    toastOnError: false,
+  });
+  const selectedKeySubscriptionKind =
+    availableKeys?.find((key) => key.id === selectedApiKeyId)
+      ?.subscriptionKind ?? null;
   const logoProvider = currentProvider
-    ? providerToLogoProvider[currentProvider]
+    ? logoNameForProvider(currentProvider, selectedKeySubscriptionKind)
     : null;
   const providerToConnect = subscriptionProvider ?? currentProvider;
   const subscriptionKind = providerToConnect

@@ -1,9 +1,9 @@
 /**
- * xAI "X Premium (SuperGrok)" subscription credential encoding.
+ * xAI "SuperGrok" subscription credential encoding.
  *
  * This is an alternate auth mode on the existing `xai` provider: instead of a
  * static console API key, the stored credential is the OAuth material minted by
- * the X Premium device-code login (the same subscription third-party Grok CLIs
+ * the SuperGrok device-code login (the same subscription third-party Grok CLIs
  * reuse).
  *
  * Following the ChatGPT/Codex precedent (services/openai-codex-credentials), the
@@ -39,7 +39,7 @@ export interface XaiSubscriptionCredential {
   email?: string;
 }
 
-/** True when a resolved credential string is an X Premium credential. */
+/** True when a resolved credential string is a SuperGrok credential. */
 export function isXaiSubscriptionCredential(
   value: string | undefined,
 ): boolean {

@@ -55,30 +55,30 @@ describe("XaiSubscriptionSignIn persistence handoff", () => {
     );
     render(<XaiSubscriptionSignIn onCredential={onCredential} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Sign in with X" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sign in with Grok" }));
     await flushMicrotasks();
     act(() => vi.advanceTimersByTime(5_000));
     await flushMicrotasks();
 
     expect(onCredential).toHaveBeenCalledWith("xai-subscription:encoded");
-    expect(screen.queryByText(/X account linked/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Grok account linked/)).not.toBeInTheDocument();
 
     await act(async () => resolveSave?.());
-    expect(screen.getByText(/X account linked/)).toBeInTheDocument();
+    expect(screen.getByText(/Grok account linked/)).toBeInTheDocument();
   });
 
   it("returns to a retryable sign-in when credential persistence fails", async () => {
     const onCredential = vi.fn().mockRejectedValue(new Error("save failed"));
     render(<XaiSubscriptionSignIn onCredential={onCredential} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Sign in with X" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sign in with Grok" }));
     await flushMicrotasks();
     act(() => vi.advanceTimersByTime(5_000));
     await flushMicrotasks();
 
-    expect(screen.queryByText(/X account linked/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Grok account linked/)).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Sign in with X" }),
+      screen.getByRole("button", { name: "Sign in with Grok" }),
     ).toBeEnabled();
   });
 });

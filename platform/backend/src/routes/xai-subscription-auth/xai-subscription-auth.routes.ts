@@ -24,7 +24,7 @@ const DEVICE_AUTH_POLL_RATE_LIMIT = {
 };
 
 /**
- * xAI OAuth device flow for the "X Premium (SuperGrok)" subscription (RFC 8628),
+ * xAI OAuth device flow for the SuperGrok subscription (RFC 8628),
  * proxied through the backend.
  *
  * A loopback (localhost) redirect — what a desktop CLI would use — can't work for
@@ -52,7 +52,7 @@ const xaiSubscriptionAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.XaiSubscriptionDeviceAuthStart,
         description:
-          "Start the xAI OAuth device flow used to connect an X Premium (SuperGrok) subscription as an xAI provider credential",
+          "Start the xAI OAuth device flow used to connect a SuperGrok subscription as a provider credential",
         tags: ["xAI Subscription Auth"],
         response: constructResponseSchema(DeviceStartResponseSchema),
       },
@@ -68,7 +68,7 @@ const xaiSubscriptionAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       ) {
         throw new ApiError(
           429,
-          "Too many X sign-in attempts — try again later",
+          "Too many SuperGrok sign-in attempts — try again later",
         );
       }
 
@@ -198,7 +198,7 @@ const xaiSubscriptionAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
           throw new ApiError(
             502,
-            "X sign-in returned no refresh token — the offline_access scope must be requested",
+            "SuperGrok sign-in returned no refresh token — the offline_access scope must be requested",
           );
         }
         const identityClaims = payload.id_token
@@ -214,7 +214,7 @@ const xaiSubscriptionAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
           throw new ApiError(
             502,
-            "X sign-in returned no account identity — reconnect and ensure the openid scope is requested",
+            "SuperGrok sign-in returned no account identity — reconnect and ensure the openid scope is requested",
           );
         }
         const email =
@@ -239,10 +239,10 @@ const xaiSubscriptionAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         case "expired_token":
           throw new ApiError(
             400,
-            "The X sign-in expired before it was authorized — start again",
+            "The SuperGrok sign-in expired before it was authorized — start again",
           );
         case "access_denied":
-          throw new ApiError(400, "X sign-in was declined");
+          throw new ApiError(400, "SuperGrok sign-in was declined");
         default:
           // Remaining poll errors are user-triggered outcomes of the device
           // flow, not backend faults — log at warn, not error.
@@ -252,7 +252,7 @@ const xaiSubscriptionAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
           throw new ApiError(
             502,
-            `X sign-in failed${payload.error ? `: ${payload.error}` : ""}`,
+            `SuperGrok sign-in failed${payload.error ? `: ${payload.error}` : ""}`,
           );
       }
     },
@@ -266,7 +266,7 @@ export default xaiSubscriptionAuthRoutes;
 const DeviceStartResponseSchema = z.object({
   /**
    * Opaque code the frontend round-trips to the poll endpoint. Usable only with
-   * this deployment's client id to authorize the caller's own X account, never
+   * this deployment's client id to authorize the caller's own Grok account, never
    * returned to anyone but the authenticated initiator.
    */
   deviceCode: z.string(),

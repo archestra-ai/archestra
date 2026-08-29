@@ -227,7 +227,7 @@ export const xaiAdapterFactory: LLMProvider<
   },
 
   isSubscriptionCredential(apiKey: string | undefined): boolean {
-    // X Premium (SuperGrok) credentials travel through the proxy as
+    // SuperGrok credentials travel through the proxy as
     // marker-prefixed encoded strings (`xai-subscription:…`). They are covered
     // by a flat-rate plan, so they must classify as subscription — the same rule
     // as ChatGPT/Codex credentials on the openai adapter. Plain console API keys
@@ -253,7 +253,7 @@ export const xaiAdapterFactory: LLMProvider<
       ? metrics.llm.getObservableFetch("xai", options.agent, options.source)
       : undefined;
 
-    // "X Premium (SuperGrok)" subscription auth mode: the resolved credential is
+    // "SuperGrok" subscription auth mode: the resolved credential is
     // an encoded xAI OAuth credential, not a console key. Session traffic uses
     // xAI's dedicated CLI chat proxy and swaps the bearer in a fetch wrapper
     // because createClient is synchronous.
@@ -282,7 +282,7 @@ export const xaiAdapterFactory: LLMProvider<
     ) {
       throw new ApiError(
         401,
-        "Your X Premium (SuperGrok) sign-in is unreadable. Reconnect your X account to keep using your subscription.",
+        "Your xAI SuperSuperGrok sign-in is unreadable. Reconnect your Grok account to keep using your subscription.",
         ArchestraInternalErrorCode.ProviderAuthRequired,
       );
     }
@@ -294,7 +294,7 @@ export const xaiAdapterFactory: LLMProvider<
       ) {
         throw new ApiError(
           400,
-          "X Premium (SuperGrok) credentials cannot use a per-key base URL override — remove it or use an API key instead.",
+          "SuperGrok credentials cannot use a per-key base URL override — remove it or use an API key instead.",
         );
       }
       return new OpenAIProvider({

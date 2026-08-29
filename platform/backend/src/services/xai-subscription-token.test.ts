@@ -313,7 +313,7 @@ describe("xaiSubscriptionTokenManager", () => {
   });
 
   test("drops the cached token when the stored credential was replaced", async () => {
-    // Reconnecting to a different X account swaps the stored refresh token
+    // Reconnecting to a different Grok account swaps the stored refresh token
     // under the same key row; serving the cached access token would answer as
     // the old account.
     const { redeemedRefreshTokens } = stubRedemptionFetch(({ index }) => ({
@@ -669,7 +669,7 @@ describe("rotation persistence compare-and-swap", () => {
     );
     const key = await LlmProviderApiKeyModel.create({
       organizationId: organization.id,
-      name: "X Premium (SuperGrok)",
+      name: "SuperGrok",
       provider: "xai",
       secretId: secret.id,
       scope: "personal",

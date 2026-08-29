@@ -54,7 +54,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("fetchXaiModels with an X Premium subscription credential", () => {
+describe("fetchXaiModels with a SuperGrok subscription credential", () => {
   it("lists models live under the redeemed bearer", async () => {
     const fetchMock = stubXaiFetch();
 
@@ -186,7 +186,7 @@ describe("fetchXaiModels with an X Premium subscription credential", () => {
           userId: "x-user-123",
         }),
       ),
-    ).rejects.toThrow(/Reconnect your X account/);
+    ).rejects.toThrow(/Reconnect your Grok account/);
   });
 
   it.each([

@@ -121,7 +121,7 @@ function mapXaiModel(
 /**
  * Lists xAI models for either credential shape.
  *
- * With an "X Premium (SuperGrok)" subscription credential the stored secret is
+ * With an "SuperGrok" subscription credential the stored secret is
  * an encoded OAuth credential rather than a bearer token, so it is first
  * redeemed for a short-lived access token and sent to xAI's dedicated session
  * proxy with the required account/client headers. Plain API keys continue to
@@ -151,7 +151,7 @@ export async function fetchXaiModels(
   if (subscriptionKind === "x-premium" && !subscriptionCredential) {
     throw new ApiError(
       401,
-      "Your X Premium (SuperGrok) sign-in is unreadable. Reconnect your X account to continue.",
+      "Your xAI SuperSuperGrok sign-in is unreadable. Reconnect your Grok account to continue.",
       ArchestraInternalErrorCode.ProviderAuthRequired,
     );
   }
@@ -162,12 +162,12 @@ export async function fetchXaiModels(
     if (baseUrlOverride) {
       throw new ApiError(
         400,
-        "X Premium (SuperGrok) credentials cannot use a per-key base URL override — remove it or use an API key instead.",
+        "SuperGrok credentials cannot use a per-key base URL override — remove it or use an API key instead.",
       );
     }
     baseUrl = config.llm.xai.subscription.baseUrl;
     // Throws (401) when the refresh token is rejected, so key creation surfaces
-    // a real "reconnect your X account" error instead of an empty list.
+    // a real "reconnect your Grok account" error instead of an empty list.
     // The row id (when the key already exists) lets the manager persist a
     // rotated refresh token instead of discarding it — the issuer invalidates
     // the predecessor, so a discarded rotation leaves the stored token dead.

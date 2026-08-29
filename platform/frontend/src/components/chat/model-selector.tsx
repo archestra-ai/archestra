@@ -7,6 +7,7 @@ import {
   isOpenRouterLatestAlias,
   type ModelInputModality,
   requiresPerplexityAgentApi,
+  type SubscriptionCredentialKind,
   type SupportedProvider,
 } from "@archestra/shared";
 import {
@@ -58,8 +59,9 @@ import { resolveAutoSelectedModel } from "@/lib/chat/use-chat-preferences";
 import { copyToClipboard } from "@/lib/clipboard";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { type LlmModel, useLlmModelsByProvider } from "@/lib/llm-models.query";
+import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { formatPricePerMillion } from "@/lib/model-price-format";
-import { providerToLogoProvider } from "@/lib/provider-logos";
+import { logoNameForProvider } from "@/lib/provider-logos";
 import { cn } from "@/lib/utils";
 
 /** Modalities that can be filtered (excludes "text" since all models support it) */
@@ -479,6 +481,12 @@ export const ModelSelector = memo(function ModelSelector({
       apiKeyId: apiKeyId ?? undefined,
       enabled,
     });
+  const { data: availableKeys } = useAvailableLlmProviderApiKeys({
+    includeKeyId: apiKeyId ?? undefined,
+    toastOnError: false,
+  });
+  const selectedKeySubscriptionKind =
+    availableKeys?.find((key) => key.id === apiKeyId)?.subscriptionKind ?? null;
   const [open, setOpen] = useState(false);
 
   const handleOpenChange = (newOpen: boolean) => {
@@ -504,7 +512,7 @@ export const ModelSelector = memo(function ModelSelector({
   // Get selected model's provider for logo
   const selectedModelProvider = getProviderForModel(selectedModel);
   const selectedModelLogo = selectedModelProvider
-    ? providerToLogoProvider[selectedModelProvider]
+    ? logoNameForProvider(selectedModelProvider, selectedKeySubscriptionKind)
     : null;
 
   // Get display name for selected model
@@ -677,6 +685,7 @@ export const ModelSelector = memo(function ModelSelector({
               availableProviders={availableProviders}
               selectedModel={selectedModel}
               selectedModelLogo={selectedModelLogo}
+              selectedKeySubscriptionKind={selectedKeySubscriptionKind}
               isModelAvailable={isModelAvailable}
               onClear={onClear}
               onSelectModel={handleSelectModel}
@@ -711,6 +720,7 @@ function ModelSelectorDialogBody({
   availableProviders,
   selectedModel,
   selectedModelLogo,
+  selectedKeySubscriptionKind,
   isModelAvailable,
   onClear,
   onSelectModel,
@@ -720,6 +730,7 @@ function ModelSelectorDialogBody({
   availableProviders: SupportedProvider[];
   selectedModel: string;
   selectedModelLogo: string | null;
+  selectedKeySubscriptionKind: SubscriptionCredentialKind | null;
   isModelAvailable: boolean;
   onClear?: () => void;
   onSelectModel: (modelValue: string) => void;
@@ -854,7 +865,10 @@ function ModelSelectorDialogBody({
                     className="group"
                   >
                     <ModelSelectorLogo
-                      provider={providerToLogoProvider[provider]}
+                      provider={logoNameForProvider(
+                        provider,
+                        selectedKeySubscriptionKind,
+                      )}
                     />
                     <ModelSelectorName>
                       {model.displayName}{" "}

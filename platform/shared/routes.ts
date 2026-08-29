@@ -374,7 +374,7 @@ export const RouteId = {
   OpenaiCodexDeviceAuthStart: "openaiCodexDeviceAuthStart",
   OpenaiCodexDeviceAuthPoll: "openaiCodexDeviceAuthPoll",
 
-  // xAI "X Premium (SuperGrok)" device-flow sign-in — connects an X Premium
+  // xAI "SuperGrok" device-flow sign-in — connects a SuperGrok
   // subscription as an xAI provider credential
   XaiSubscriptionDeviceAuthStart: "xaiSubscriptionDeviceAuthStart",
   XaiSubscriptionDeviceAuthPoll: "xaiSubscriptionDeviceAuthPoll",

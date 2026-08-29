@@ -68,11 +68,11 @@ import { EnvironmentResourceDefaultsDialog } from "./environment-resource-defaul
 import { compileValidationRegex } from "./environment-validation-helpers";
 
 const NETWORK_POLICY_DOCS_URL = getDocsUrl(
-  DocsPage.PlatformPrivateRegistry,
+  DocsPage.PlatformEnvironments,
   "network-egress-policies",
 );
 const DOMAIN_PRESETS_DOCS_URL = getDocsUrl(
-  DocsPage.PlatformPrivateRegistry,
+  DocsPage.PlatformEnvironments,
   "domain-presets",
 );
 
@@ -916,7 +916,7 @@ function EnvironmentEditorDialog({
           <div className="space-y-1">
             <h3 className="font-medium text-sm">Network Egress Policy</h3>
             <p className="text-xs text-muted-foreground">
-              Configure outbound network access for MCP workloads in this
+              Configure outbound network access for workloads in this
               environment.{" "}
               <ExternalDocsLink href={NETWORK_POLICY_DOCS_URL}>
                 View docs

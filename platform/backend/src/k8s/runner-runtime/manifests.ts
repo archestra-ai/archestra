@@ -1,8 +1,4 @@
 import type * as k8s from "@kubernetes/client-node";
-import {
-  buildManagedNetworkPolicy,
-  buildUnrestrictedFloorPolicy,
-} from "@/k8s/mcp-server-runtime/network-policy";
 import type { RunnerLaunchSpec } from "@/services/runners/backends";
 import {
   RUNNER_ATTACHMENTS_DIR,
@@ -311,37 +307,6 @@ export function buildRunnerPlatformEgressPolicy(params: {
  * second policy; Kubernetes unions both rule sets so a restricted execution
  * can always reach Archestra without gaining arbitrary public access.
  */
-export function buildRunnerEnvironmentEgressPolicy(
-  spec: KubernetesRunnerLaunchSpec,
-): k8s.V1NetworkPolicy {
-  const names = runnerNames(spec.frozenName);
-  const labels = runnerLabels({ taskId: spec.taskId, runnerId: spec.runnerId });
-  const podSelectorLabels = { [RUNNER_TASK_LABEL]: spec.taskId };
-  const built =
-    !spec.effectiveNetworkPolicy.policy ||
-    spec.effectiveNetworkPolicy.policy.egressMode === "unrestricted"
-      ? buildUnrestrictedFloorPolicy({
-          name: names.environmentNetworkPolicy,
-          podSelectorLabels,
-          labels,
-        })
-      : buildManagedNetworkPolicy({
-          name: names.environmentNetworkPolicy,
-          podSelectorLabels,
-          effectivePolicy: spec.effectiveNetworkPolicy,
-        });
-
-  return {
-    ...built,
-    metadata: {
-      ...built.metadata,
-      namespace: spec.namespace,
-      labels,
-      ownerReferences: spec.ownerReferences,
-    },
-  };
-}
-
 // ===================== internals =====================
 
 /**

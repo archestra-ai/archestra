@@ -3,7 +3,7 @@ title: "Environments"
 category: Administration
 description: "Isolate tools, knowledge, skills, subagents, runtimes, and cost limits across deployment environments"
 order: 3
-lastUpdated: 2026-08-26
+lastUpdated: 2026-08-29
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -19,9 +19,9 @@ This document is the canonical reference for deployment Environments. Include:
   restricted to several environments or none = everywhere; MCP Apps accept
   Default tools as a shared baseline; built-in servers and built-in skills
   are exempt)
-- Network egress policies (namespace + egress policy applied to MCP server pods AND
-  agent code sandboxes), the always-on Allow all floor, provider support matrix,
-  and domain presets
+- Network egress policies (namespace + egress policy applied to MCP server pods,
+  agent code sandboxes, and Agent Background execution Jobs), the always-on
+  Allow all floor, provider support matrix, and domain presets
 - How environments scope per-environment cost limits
 - Link out to: agents, mcp gateway, knowledge connectors, costs & limits
 -->
@@ -82,11 +82,11 @@ This applies to both explicitly assigned resources and the implicit **Auto** acc
 
 ## Network egress policies
 
-An environment can define a Kubernetes **namespace** and a **network egress policy**. Both MCP server pods and agent [code sandboxes](/docs/platform-code-sandbox) for that environment run in its namespace and inherit its egress policy, so their outbound network reach is contained. A policy sets one of three egress modes. **Block all** (`off`) denies all egress. **Allowlist** (`restricted`) permits only selected IP/CIDR ranges and domains. **Allow all** (`unrestricted`) permits egress to the public internet — pods in your cluster still get a [fixed floor](#the-allow-all-floor) of blocked reserved ranges. Domain presets and custom domains require a supported FQDN policy provider; Kubernetes `NetworkPolicy` alone only enforces IP/CIDR rules.
+An environment can define a Kubernetes **namespace** and a **network egress policy**. Self-hosted MCP server pods, agent [code sandboxes](/docs/platform-code-sandbox), and Agent [Background execution Jobs](/docs/platform-agent-background-execution#environments-and-network-egress) run in that namespace and inherit the policy, so their outbound network reach is contained. A policy sets one of three egress modes. **Block all** (`off`) denies all egress. **Allowlist** (`restricted`) permits only selected IP/CIDR ranges and domains. **Allow all** (`unrestricted`) permits egress to the public internet — pods in your cluster still get a [fixed floor](#the-allow-all-floor) of blocked reserved ranges. Domain presets and custom domains require a supported FQDN policy provider; Kubernetes `NetworkPolicy` alone only enforces IP/CIDR rules.
 
 When a workload runs in an environment, Archestra uses the environment's network policy, then the organization default network policy, then the built-in Allow all policy (`unrestricted`).
 
-How a policy applies depends on the workload. A **self-hosted MCP server** (or agent code sandbox) runs as a pod in your cluster, so the policy is enforced continuously at the network layer — a workload that needs broad outbound access (for example one that visits arbitrary sites) fails under a restrictive policy unless its destinations are allowlisted.
+How a policy applies depends on the workload. A **self-hosted MCP server**, agent code sandbox, or Agent Background execution runs in your cluster, so the policy is enforced continuously at the network layer. Archestra selects the cluster's supported policy type before creating the workload. A workload that needs broad outbound access (for example one that visits arbitrary sites) fails under a restrictive policy unless its destinations are allowlisted.
 
 A **remote MCP server** runs outside Archestra and is reached over HTTP, so the policy cannot constrain what the server itself reaches downstream. What Archestra enforces is its own outbound connection to the server: the server's URL host is checked against the environment's policy both when the catalog entry is created or edited (the error is surfaced in the form) and at runtime on every connection. A server whose host the policy forbids is blocked — including one added before the policy was tightened — and its tool calls return an error to the client.
 

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { vi } from "vitest";
 import {
+  BundleModel,
   PluginModel,
   SkillMarketplaceRepoModel,
   SkillModel,
@@ -19,8 +20,17 @@ import { afterEach, beforeEach, describe, expect, test } from "@/test";
 vi.mock("@/config", async () =>
   (await import("@/test/mocks/config")).configModuleMock({
     plugins: { enabled: true },
+    bundles: { enabled: true },
   }),
 );
+
+import config from "@/config";
+
+vi.mock("@/cache-manager");
+
+vi.mock("@/auth");
+
+import { userHasPermission } from "@/auth";
 
 async function seedSkill(params: {
   organizationId: string;
@@ -182,6 +192,232 @@ describe("skill marketplace public route — token validation", () => {
       url: `/skills/m/${rawToken}/repo.git/info/refs?service=git-upload-pack`,
     });
     expect(response.statusCode).toBe(404);
+  });
+});
+
+describe("skill marketplace public route — Bundle desired install set", () => {
+  let app: FastifyInstanceWithZod;
+  let cacheDir: string;
+
+  beforeEach(async () => {
+    vi.mocked(userHasPermission).mockResolvedValue(true);
+    cacheDir = await fs.mkdtemp(
+      path.join(tmpdir(), "archestra-marketplace-install-set-"),
+    );
+    marketplaceMaterializer.reset();
+    vi.spyOn(marketplaceMaterializer, "get").mockReturnValue(
+      new MarketplaceMaterializer({ cacheDir }),
+    );
+    app = await buildApp();
+  });
+
+  afterEach(async () => {
+    await app.close();
+    await fs.rm(cacheDir, { recursive: true, force: true });
+    vi.restoreAllMocks();
+    marketplaceMaterializer.reset();
+  });
+
+  test("reconciles live Bundle additions, removals, and a valid empty Bundle", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const skill = await seedSkill({
+      organizationId: org.id,
+      name: "bundle-skill",
+    });
+    const plugin = await PluginModel.create({
+      organizationId: org.id,
+      userId: user.id,
+      input: {
+        displayName: "Bundle Hook",
+        description: "A Bundle hook",
+        clientType: "claude-code",
+        files: [
+          {
+            path: "hooks/hooks.json",
+            content: "{}\n",
+            encoding: "utf8",
+            mode: "100644",
+          },
+        ],
+      },
+    });
+    if (!plugin) throw new Error("failed to seed plugin");
+    const bundle = await BundleModel.create({
+      organizationId: org.id,
+      name: "Engineering",
+      description: "Bundle delivery",
+      mcpGatewayId: null,
+      skillIds: [skill.id],
+      pluginIds: [plugin.id],
+      localMcpServers: [],
+    });
+    const { rawToken } = await SkillShareLinkModel.create({
+      organizationId: org.id,
+      createdByUserId: user.id,
+      skillIds: [],
+      pluginIds: [],
+      pluginClientType: "claude-code",
+      pluginPlatform: "posix",
+      bundleId: bundle.id,
+      marketplaceName: "org-engineering-bundle",
+    });
+    const url = `/skills/m/${rawToken}/install-set`;
+
+    const initial = await app.inject({ method: "GET", url });
+    expect(initial.statusCode).toBe(200);
+    expect(initial.headers["cache-control"]).toBe("no-store");
+    expect(initial.json()).toEqual({
+      installAggregatePlugin: true,
+      aggregatePluginName: "org-engineering-bundle",
+      pluginNames: [plugin.pluginSlug],
+    });
+
+    vi.mocked(userHasPermission).mockImplementation(
+      async (_userId, _organizationId, resource, action) =>
+        !(resource === "plugin" && action === "admin"),
+    );
+    expect((await app.inject({ method: "GET", url })).json()).toEqual({
+      installAggregatePlugin: true,
+      aggregatePluginName: "org-engineering-bundle",
+      pluginNames: [],
+    });
+    const materialize = vi.spyOn(
+      MarketplaceMaterializer.prototype,
+      "materialize",
+    );
+    const repo = await app.inject({
+      method: "GET",
+      url: `/skills/m/${rawToken}/repo.git/info/refs?service=git-upload-pack`,
+    });
+    expect(repo.statusCode).toBe(200);
+    expect(materialize).toHaveBeenLastCalledWith(
+      expect.objectContaining({ plugins: [] }),
+    );
+    vi.mocked(userHasPermission).mockResolvedValue(true);
+
+    await BundleModel.update({
+      id: bundle.id,
+      organizationId: org.id,
+      name: bundle.name,
+      pluginIds: [],
+    });
+    expect((await app.inject({ method: "GET", url })).json()).toEqual({
+      installAggregatePlugin: true,
+      aggregatePluginName: "org-engineering-bundle",
+      pluginNames: [],
+    });
+
+    await BundleModel.update({
+      id: bundle.id,
+      organizationId: org.id,
+      name: bundle.name,
+      skillIds: [],
+    });
+    expect((await app.inject({ method: "GET", url })).json()).toEqual({
+      installAggregatePlugin: false,
+      aggregatePluginName: null,
+      pluginNames: [],
+    });
+  });
+
+  test("returns 404 for Bundle install sets while Bundles are disabled", async () => {
+    config.bundles.enabled = false;
+    try {
+      const response = await app.inject({
+        method: "GET",
+        url: "/skills/m/archestra_skl_unknown/install-set",
+      });
+
+      expect(response.statusCode).toBe(404);
+    } finally {
+      config.bundles.enabled = true;
+    }
+  });
+
+  test("rate limits by token hash rather than shared requester IP", async () => {
+    const remoteAddress = "10.0.0.1";
+    const firstToken = "archestra_skl_first-rate-limit-token";
+    for (let index = 0; index < 30; index += 1) {
+      const response = await app.inject({
+        method: "GET",
+        url: `/skills/m/${firstToken}/install-set`,
+        remoteAddress,
+      });
+      expect(response.statusCode).toBe(404);
+    }
+
+    const differentToken = await app.inject({
+      method: "GET",
+      url: "/skills/m/archestra_skl_second-rate-limit-token/install-set",
+      remoteAddress,
+    });
+    expect(differentToken.statusCode).toBe(404);
+
+    const limited = await app.inject({
+      method: "GET",
+      url: `/skills/m/${firstToken}/install-set`,
+      remoteAddress,
+    });
+    expect(limited.statusCode).toBe(429);
+  });
+
+  test("returns the same 404 for invalid, revoked, expired, and non-Bundle links", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const skill = await seedSkill({
+      organizationId: org.id,
+      name: "link-skill",
+    });
+    const { link: revoked, rawToken: revokedToken } =
+      await SkillShareLinkModel.create({
+        organizationId: org.id,
+        createdByUserId: user.id,
+        skillIds: [skill.id],
+        marketplaceName: "revoked-link",
+      });
+    await SkillShareLinkModel.revoke({
+      id: revoked.id,
+      organizationId: org.id,
+    });
+    const { rawToken: expiredToken } = await SkillShareLinkModel.create({
+      organizationId: org.id,
+      createdByUserId: user.id,
+      skillIds: [skill.id],
+      marketplaceName: "expired-link",
+      expiresAt: new Date(Date.now() - 1_000),
+    });
+    const { rawToken: ordinaryToken } = await SkillShareLinkModel.create({
+      organizationId: org.id,
+      createdByUserId: user.id,
+      skillIds: [skill.id],
+      marketplaceName: "ordinary-link",
+    });
+    const urls = [
+      "/skills/m/archestra_skl_unknown/install-set",
+      `/skills/m/${revokedToken}/install-set`,
+      `/skills/m/${expiredToken}/install-set`,
+      `/skills/m/${ordinaryToken}/install-set`,
+    ];
+
+    const responses = await Promise.all(
+      urls.map((url) => app.inject({ method: "GET", url })),
+    );
+    for (const response of responses) {
+      expect(response.statusCode).toBe(404);
+      expect(response.body).toBe('{"error":"Not found"}');
+      expect(response.headers["cache-control"]).toBe("no-store");
+    }
   });
 });
 

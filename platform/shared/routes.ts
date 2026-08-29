@@ -819,6 +819,13 @@ export const RouteId = {
   RevokeSkillShareLink: "revokeSkillShareLink",
   RotateSkillShareLink: "rotateSkillShareLink",
 
+  // Bundle Routes
+  GetBundles: "getBundles",
+  GetBundle: "getBundle",
+  CreateBundle: "createBundle",
+  UpdateBundle: "updateBundle",
+  DeleteBundle: "deleteBundle",
+
   // Connection Setup Routes
   CreateConnectionSetup: "createConnectionSetup",
   GetMfilesVafAddOnScript: "getMfilesVafAddOnScript",

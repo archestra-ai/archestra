@@ -34,6 +34,10 @@ import {
 import { toolEntries as appToolEntries, tools as appTools } from "./apps";
 import { captureToolAuditBefore, recordToolAudit } from "./audit";
 import { archestraMcpBranding } from "./branding";
+import {
+  toolEntries as bundleToolEntries,
+  tools as bundleTools,
+} from "./bundles";
 import { toolEntries as chatToolEntries, tools as chatTools } from "./chat";
 import { delegationToolArgsSchema, handleDelegation } from "./delegation";
 import { isDynamicallyAvailableArchestraTool } from "./dynamic-tools";
@@ -152,6 +156,7 @@ function getToolEntries(): Partial<
       ...mcpGatewayToolEntries,
       ...mcpServerToolEntries,
       ...teamToolEntries,
+      ...bundleToolEntries,
       ...limitToolEntries,
       ...policyToolEntries,
       ...toolAssignmentToolEntries,
@@ -188,6 +193,7 @@ function getAllTools(): (typeof identityTools)[number][] {
       ...mcpGatewayTools,
       ...mcpServerTools,
       ...teamTools,
+      ...bundleTools,
       ...limitTools,
       ...policyTools,
       ...toolAssignmentTools,
@@ -231,6 +237,14 @@ function getPluginToolNames(): ReadonlySet<string> {
     pluginToolNamesCache = new Set(pluginTools.map((tool) => tool.name));
   }
   return pluginToolNamesCache;
+}
+
+let bundleToolNamesCache: ReadonlySet<string> | undefined;
+function getBundleToolNames(): ReadonlySet<string> {
+  if (!bundleToolNamesCache) {
+    bundleToolNamesCache = new Set(bundleTools.map((tool) => tool.name));
+  }
+  return bundleToolNamesCache;
 }
 
 export function getArchestraMcpTools() {
@@ -402,6 +416,7 @@ function isToolRuntimeEnabled(canonicalName: string): boolean {
     return config.skillsSandbox.enabled;
   if (getHookToolNames().has(canonicalName)) return config.hooks.enabled;
   if (getPluginToolNames().has(canonicalName)) return config.plugins.enabled;
+  if (getBundleToolNames().has(canonicalName)) return config.bundles.enabled;
   return true;
 }
 

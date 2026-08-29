@@ -25,6 +25,30 @@ export async function deriveMarketplaceName(
 }
 
 /**
+ * Stable marketplace identity for a managed Bundle. Unlike ordinary share
+ * links, a Bundle's marketplace name must survive changes to its membership,
+ * including a transition between skills, native plugins, and local MCPs.
+ */
+export function bundleMarketplaceNameFor(params: {
+  organizationId: string;
+  bundleId: string;
+  organization: Pick<Organization, "appName" | "slug" | "name"> | null;
+}): string {
+  const appSlug =
+    slugify(params.organization?.appName ?? DEFAULT_APP_NAME) || "archestra";
+  const orgSlug =
+    slugify(params.organization?.slug ?? "") ||
+    slugify(params.organization?.name ?? "") ||
+    hexFallback(params.organizationId);
+  // Keep the complete Bundle UUID as an intact suffix. Truncating the leading
+  // branding is safe; truncating identity would let long org names collide.
+  return capLengthWithSuffix(
+    `${appSlug}-${orgSlug}`,
+    `bundle-${params.bundleId.toLowerCase()}`,
+  );
+}
+
+/**
  * Same derivation against an already-loaded organization row, for callers that
  * read it anyway (the static marketplace needs its display name too).
  */
@@ -69,4 +93,14 @@ function hexFallback(organizationId: string): string {
 function capLength(name: string): string {
   const MAX = 64;
   return name.length <= MAX ? name : name.slice(0, MAX).replace(/-+$/g, "");
+}
+
+function capLengthWithSuffix(prefix: string, suffix: string): string {
+  const MAX = 64;
+  if (suffix.length >= MAX) return suffix;
+  const availablePrefixLength = MAX - suffix.length - 1;
+  const trimmedPrefix = prefix
+    .slice(0, availablePrefixLength)
+    .replace(/-+$/g, "");
+  return trimmedPrefix ? `${trimmedPrefix}-${suffix}` : suffix;
 }

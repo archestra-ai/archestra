@@ -25,7 +25,12 @@ import {
   renderStartupGuardScript,
   type StartupGuardContext,
 } from "@/services/startup-guard";
-import { CLAUDE_CODE_GUARD_CLIENT } from "@/services/startup-guard.clients";
+import {
+  CLAUDE_CODE_GUARD_CLIENT,
+  CODEX_GUARD_CLIENT,
+  COPILOT_GUARD_CLIENT,
+} from "@/services/startup-guard.clients";
+import { renderStartupGuardPowerShell } from "@/services/startup-guard.windows";
 
 const execFileAsync = promisify(execFile);
 
@@ -60,6 +65,11 @@ const CTX: StartupGuardContext = {
       "https://archestra.example.com/skill-marketplace/archestra_skl_token123/repo.git",
   },
 };
+
+function bundleSkills(desiredInstallSetUrl: string) {
+  if (!CTX.skills) throw new Error("guard fixture requires skills");
+  return { ...CTX.skills, desiredInstallSetUrl };
+}
 
 async function expectValidBash(script: string): Promise<void> {
   const dir = await mkdtemp(path.join(tmpdir(), "archestra-guard-"));
@@ -883,7 +893,7 @@ describe("buildStartupGuardInstallSection", () => {
     expect(section).toContain(CLAUDE_CODE_GUARD_MARKER_START);
     expect(section).toContain(CLAUDE_CODE_GUARD_MARKER_END);
     expect(section).toContain(
-      `chmod +x "$HOME/${CLAUDE_CODE_GUARD_SCRIPT_RELPATH}"`,
+      `chmod 700 "$HOME/${CLAUDE_CODE_GUARD_SCRIPT_RELPATH}"`,
     );
     // a fresh connect re-arms checks a previous guard disconnected
     expect(section).toContain(
@@ -893,5 +903,256 @@ describe("buildStartupGuardInstallSection", () => {
     expect(section).toContain('command claude "$@"');
     // strip-then-append keeps re-runs from duplicating the block
     expect(section).toContain("awk -v start=");
+  });
+
+  test("keeps live Bundle tokens out of profiles and reconciles from private guard state", async () => {
+    const installSetUrl =
+      "https://archestra.example.com/skills/m/archestra_skl_secret/install-set";
+    const ctx: StartupGuardContext = {
+      ...CTX,
+      skills: bundleSkills(installSetUrl),
+    };
+    const guard = renderStartupGuardScript(ctx, CLAUDE_CODE_GUARD_CLIENT);
+    await expectValidBash(guard);
+    expect(guard).toContain(installSetUrl);
+    expect(guard).toContain("--archestra-refresh-marketplace");
+    expect(guard).toContain("managed-plugins.json");
+    expect(guard).toContain("plugin uninstall");
+    expect(guard).toContain("plugin install");
+    expect(guard).toContain("plugin update -y");
+    expect(guard).toContain('chmod 600 "$ARCH_INSTALL_STATE"');
+
+    const section = buildStartupGuardInstallSection(
+      ctx,
+      CLAUDE_CODE_GUARD_CLIENT,
+    );
+    const profileStart = section.lastIndexOf(CLAUDE_CODE_GUARD_MARKER_START);
+    const profileEnd = section.indexOf(
+      CLAUDE_CODE_GUARD_MARKER_END,
+      profileStart,
+    );
+    const profile = section.slice(profileStart, profileEnd);
+    expect(profile).toContain("--archestra-refresh-marketplace");
+    expect(profile).not.toContain(installSetUrl);
+    expect(profile).not.toContain("archestra_skl_secret");
+    expect(section).toContain("seed the guard's managed state now");
+    expect(section).toContain("managed-plugins.json");
+  });
+
+  test("reconciles managed Bundle plugins after an interactive client session", async () => {
+    const script = renderStartupGuardScript(
+      {
+        ...CTX,
+        skills: bundleSkills(
+          "https://archestra.example.com/skills/m/archestra_skl_secret/install-set",
+        ),
+      },
+      CLAUDE_CODE_GUARD_CLIENT,
+    );
+    const guardHome = await makeGuardHome({ script, curlExitCode: 0 });
+    try {
+      await writeFile(
+        path.join(
+          guardHome.home,
+          ".archestra",
+          "claude-acme-skills.managed-plugins.json",
+        ),
+        '{"aggregatePluginName":"acme-skills","pluginNames":["stale-plugin"]}\n',
+        "utf8",
+      );
+      await writeFile(
+        path.join(guardHome.dir, "bin", "curl"),
+        `#!/bin/sh
+printf '%s' '{"installAggregatePlugin":true,"aggregatePluginName":"acme-skills","pluginNames":["new-plugin"]}'
+`,
+        "utf8",
+      );
+      await chmod(path.join(guardHome.dir, "bin", "curl"), 0o755);
+
+      await execFileAsync(
+        "bash",
+        [guardHome.guardFile, "--archestra-refresh-marketplace"],
+        { env: guardHome.env },
+      );
+
+      const calls = await readFile(guardHome.claudeLog, "utf8");
+      expect(calls).toContain("plugin uninstall stale-plugin@acme-skills");
+      expect(calls).toContain("plugin install new-plugin@acme-skills");
+      expect(calls).toContain("plugin update -y acme-skills@acme-skills");
+      expect(calls.indexOf("plugin uninstall")).toBeLessThan(
+        calls.indexOf("plugin marketplace update"),
+      );
+      expect(calls.indexOf("plugin marketplace update")).toBeLessThan(
+        calls.indexOf("plugin install"),
+      );
+      expect(
+        await readFile(
+          path.join(
+            guardHome.home,
+            ".archestra",
+            "claude-acme-skills.managed-plugins.json",
+          ),
+          "utf8",
+        ),
+      ).toBe(
+        '{"aggregatePluginName":"acme-skills","pluginNames":["new-plugin"]}\n',
+      );
+    } finally {
+      await rm(guardHome.dir, { recursive: true, force: true });
+    }
+  });
+
+  test("persists an empty Bundle state after removals without refreshing an empty marketplace", async () => {
+    const ctx: StartupGuardContext = {
+      ...CTX,
+      skills: bundleSkills(
+        "https://archestra.example.com/skills/m/archestra_skl_secret/install-set",
+      ),
+    };
+    const script = renderStartupGuardScript(ctx, CLAUDE_CODE_GUARD_CLIENT);
+    expect(
+      renderStartupGuardPowerShell(ctx, CLAUDE_CODE_GUARD_CLIENT),
+    ).toContain("if ($ArchNextEntries.Count -gt 0)");
+    const guardHome = await makeGuardHome({ script, curlExitCode: 0 });
+    try {
+      const statePath = path.join(
+        guardHome.home,
+        ".archestra",
+        "claude-acme-skills.managed-plugins.json",
+      );
+      await writeFile(
+        statePath,
+        '{"aggregatePluginName":"acme-skills","pluginNames":["stale-plugin"]}\n',
+        "utf8",
+      );
+      await writeFile(
+        path.join(guardHome.dir, "bin", "curl"),
+        `#!/bin/sh
+printf '%s' '{"installAggregatePlugin":false,"aggregatePluginName":null,"pluginNames":[]}'
+`,
+        "utf8",
+      );
+      await chmod(path.join(guardHome.dir, "bin", "curl"), 0o755);
+
+      await execFileAsync(
+        "bash",
+        [guardHome.guardFile, "--archestra-refresh-marketplace"],
+        { env: guardHome.env },
+      );
+
+      const calls = await readFile(guardHome.claudeLog, "utf8");
+      expect(calls).toContain("plugin uninstall stale-plugin@acme-skills");
+      expect(calls).toContain("plugin uninstall acme-skills@acme-skills");
+      expect(calls).not.toContain("plugin marketplace update");
+      expect(await readFile(statePath, "utf8")).toBe(
+        '{"aggregatePluginName":null,"pluginNames":[]}\n',
+      );
+    } finally {
+      await rm(guardHome.dir, { recursive: true, force: true });
+    }
+  });
+
+  test("renders self-healing native plugin operations for POSIX and PowerShell", () => {
+    const ctx: StartupGuardContext = {
+      ...CTX,
+      skills: bundleSkills(
+        "https://archestra.example.com/skills/m/archestra_skl_secret/install-set",
+      ),
+    };
+    const claude = renderStartupGuardScript(ctx, CLAUDE_CODE_GUARD_CLIENT);
+    expect(claude).toContain(
+      'plugin update -y "$arch_install_name@$ARCH_INSTALL_MARKETPLACE" </dev/null >/dev/null 2>&1 || command claude plugin install',
+    );
+    expect(claude).toContain(
+      'plugin install "$arch_install_name@$ARCH_INSTALL_MARKETPLACE" </dev/null >/dev/null 2>&1 || command claude plugin update -y',
+    );
+
+    const codex = renderStartupGuardScript(ctx, CODEX_GUARD_CLIENT);
+    expect(codex).toContain(
+      'command codex plugin remove "$arch_install_name@$ARCH_INSTALL_MARKETPLACE" </dev/null >/dev/null 2>&1 || true; command codex plugin add',
+    );
+    expect(codex).toContain(
+      'command codex plugin add "$arch_install_name@$ARCH_INSTALL_MARKETPLACE" </dev/null >/dev/null 2>&1 || { command codex plugin remove',
+    );
+
+    const copilot = renderStartupGuardPowerShell(ctx, COPILOT_GUARD_CLIENT);
+    expect(copilot).toContain(
+      "plugin update $ArchPluginRef 2>$null | Out-Null; if ($LASTEXITCODE -ne 0) { & $ArchRefreshReal.Source plugin install",
+    );
+    const codexWindows = renderStartupGuardPowerShell(ctx, CODEX_GUARD_CLIENT);
+    expect(codexWindows).toContain(
+      "plugin remove $ArchPluginRef 2>$null | Out-Null; & $ArchRefreshReal.Source plugin add",
+    );
+  });
+
+  test("reconciles Codex and Copilot Bundle plugins with real POSIX client binaries", async () => {
+    for (const client of [CODEX_GUARD_CLIENT, COPILOT_GUARD_CLIENT]) {
+      const ctx: StartupGuardContext = {
+        ...CTX,
+        skills: bundleSkills(
+          "https://archestra.example.com/skills/m/archestra_skl_secret/install-set",
+        ),
+      };
+      const script = renderStartupGuardScript(ctx, client);
+      const guardHome = await makeGuardHome({ script, curlExitCode: 0 });
+      try {
+        const statePath = path.join(
+          guardHome.home,
+          ".archestra",
+          `${client.binary}-acme-skills.managed-plugins.json`,
+        );
+        const callsPath = path.join(
+          guardHome.home,
+          `${client.binary}-calls.log`,
+        );
+        await writeFile(
+          statePath,
+          '{"aggregatePluginName":"acme-skills","pluginNames":["stale-plugin"]}\n',
+          "utf8",
+        );
+        const clientStub = path.join(guardHome.dir, "bin", client.binary);
+        await writeFile(
+          clientStub,
+          `#!/bin/sh
+echo "$@" >> "$HOME/${client.binary}-calls.log"
+exit 0
+`,
+          "utf8",
+        );
+        await chmod(clientStub, 0o755);
+        await writeFile(
+          path.join(guardHome.dir, "bin", "curl"),
+          `#!/bin/sh
+printf '%s' '{"installAggregatePlugin":true,"aggregatePluginName":"acme-skills","pluginNames":["new-plugin"]}'
+`,
+          "utf8",
+        );
+
+        await execFileAsync(
+          "bash",
+          [guardHome.guardFile, "--archestra-refresh-marketplace"],
+          { env: guardHome.env },
+        );
+
+        const calls = await readFile(callsPath, "utf8");
+        if (client.clientId === "codex") {
+          expect(calls).toContain("plugin remove stale-plugin@acme-skills");
+          expect(calls).toContain("plugin marketplace upgrade acme-skills");
+          expect(calls).toContain("plugin add new-plugin@acme-skills");
+          expect(calls).toContain("plugin remove acme-skills@acme-skills");
+          expect(calls).toContain("plugin add acme-skills@acme-skills");
+        } else {
+          expect(calls).toContain("plugin uninstall stale-plugin@acme-skills");
+          expect(calls).toContain("plugin marketplace update acme-skills");
+          expect(calls).toContain("plugin install new-plugin@acme-skills");
+          expect(calls).toContain("plugin update acme-skills@acme-skills");
+        }
+        expect(await readFile(statePath, "utf8")).toBe(
+          '{"aggregatePluginName":"acme-skills","pluginNames":["new-plugin"]}\n',
+        );
+      } finally {
+        await rm(guardHome.dir, { recursive: true, force: true });
+      }
+    }
   });
 });

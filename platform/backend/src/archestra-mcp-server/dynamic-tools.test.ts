@@ -1,6 +1,7 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   getArchestraToolFullName,
+  TOOL_LIST_BUNDLES_SHORT_NAME,
   TOOL_LIST_AGENTS_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_READ_FILE_FULL_NAME,
@@ -488,6 +489,23 @@ describe("isDynamicallyAvailableArchestraTool", () => {
     }
   });
 
+  test("Bundle built-ins are unavailable to search and run while Bundles are disabled", async () => {
+    const original = config.bundles.enabled;
+    config.bundles.enabled = false;
+    try {
+      const available = await isDynamicallyAvailableArchestraTool({
+        toolName: getArchestraToolFullName(TOOL_LIST_BUNDLES_SHORT_NAME),
+        agentId: agent.id,
+        userId,
+        organizationId,
+      });
+
+      expect(available).toBe(false);
+    } finally {
+      config.bundles.enabled = original;
+    }
+  });
+
   test("query_knowledge_sources available when the user can access a connector", async () => {
     await makeTestConnector({ organizationId });
 
@@ -768,6 +786,26 @@ describe("getUnassignedDiscoverableTools", () => {
     // the meta tools are the dispatch surface itself — never in this set
     expect(names).not.toContain(TOOL_SEARCH_TOOLS_FULL_NAME);
     expect(names).not.toContain(TOOL_RUN_TOOL_FULL_NAME);
+  });
+
+  test("excludes Bundle built-ins from search while Bundles are disabled", async () => {
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    const original = config.bundles.enabled;
+    config.bundles.enabled = false;
+    try {
+      const tools = await getUnassignedDiscoverableTools({
+        assignedToolNames: new Set(),
+        agentId: agent.id,
+        userId,
+        organizationId,
+      });
+
+      expect(tools.map((tool) => tool.name)).not.toContain(
+        getArchestraToolFullName(TOOL_LIST_BUNDLES_SHORT_NAME),
+      );
+    } finally {
+      config.bundles.enabled = original;
+    }
   });
 });
 

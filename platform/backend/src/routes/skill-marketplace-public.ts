@@ -1,12 +1,18 @@
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import { DEFAULT_APP_NAME } from "@archestra/shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { z } from "zod";
+import { isRateLimited } from "@/agents/utils";
+import { userHasPermission } from "@/auth";
+import { CacheKey } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import {
+  BundleModel,
   OrganizationModel,
   PluginModel,
   SkillFileModel,
@@ -17,6 +23,7 @@ import {
 import { pluginDeliveryBudgetError } from "@/plugins/delivery-budget";
 import { marketplaceMaterializer } from "@/skills/marketplace";
 import { serveGitHttpRequest } from "@/skills/marketplace/git-http-backend";
+import { resolvePluginName } from "@/skills/marketplace/manifest";
 import { marketplaceNameFor } from "@/skills/marketplace/marketplace-name";
 import type {
   MaterializePluginInput,
@@ -136,6 +143,60 @@ const skillMarketplacePublicRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   });
 
+  // The startup guards use this live Bundle view to reconcile only entries
+  // they manage. It deliberately lives below the same token-bearing prefix as
+  // the git endpoint, so the auth/logging protections remain identical.
+  fastify.get(`${endpoint}/:token/install-set`, async (request, reply) => {
+    if (!config.bundles.enabled) {
+      return reply
+        .code(404)
+        .header("Cache-Control", "no-store")
+        .send({ error: "Not found" });
+    }
+    const token = (request.params as { token?: string }).token ?? "";
+    // Hash the bearer token before using it as a cache key: users behind the
+    // same NAT get independent limits, while neither logs nor cache retain it.
+    const tokenKey = createHash("sha256").update(token).digest("hex");
+    const [tokenLimited, globallyLimited] = await Promise.all([
+      isRateLimited(
+        `${CacheKey.SkillMarketplaceInstallSetRateLimit}-token-${tokenKey}`,
+        { windowMs: 60_000, maxRequests: 30 },
+      ),
+      isRateLimited(`${CacheKey.SkillMarketplaceInstallSetRateLimit}-global`, {
+        windowMs: 60_000,
+        maxRequests: 600,
+      }),
+    ]);
+    if (tokenLimited || globallyLimited) {
+      return reply
+        .code(429)
+        .header("Cache-Control", "no-store")
+        .send({ error: "Too many requests" });
+    }
+
+    let desired: BundleDesiredInstallSet | null;
+    try {
+      desired = await buildBundleDesiredInstallSet(token);
+    } catch (err) {
+      // Never attach request details here: the token is in the URL.
+      logger.error({ err }, "skill-marketplace: failed to resolve install set");
+      return reply
+        .code(502)
+        .header("Cache-Control", "no-store")
+        .send({ error: "Service unavailable" });
+    }
+    if (!desired) {
+      return reply
+        .code(404)
+        .header("Cache-Control", "no-store")
+        .send({ error: "Not found" });
+    }
+    return reply
+      .header("Cache-Control", "no-store")
+      .header("X-Content-Type-Options", "nosniff")
+      .send(desired);
+  });
+
   // The static marketplace. Same git plumbing; the caller's own credential
   // replaces the URL token and selects which repository they get.
   fastify.route({
@@ -225,6 +286,14 @@ interface ServeContext {
   logContext: Record<string, unknown>;
 }
 
+const BundleDesiredInstallSetSchema = z.object({
+  installAggregatePlugin: z.boolean(),
+  aggregatePluginName: z.string().max(64).nullable(),
+  pluginNames: z.array(z.string().max(64)),
+});
+
+type BundleDesiredInstallSet = z.infer<typeof BundleDesiredInstallSetSchema>;
+
 /** Pipe one git smart-HTTP request at an already-materialized repository. */
 async function serveGitRequest(params: {
   request: FastifyRequest;
@@ -286,19 +355,56 @@ async function buildShareLinkServeContext(
   const parsedPluginPlatform = PluginPlatformSchema.safeParse(
     validated.link.pluginPlatform,
   );
+  if (validated.link.bundleId && !config.bundles.enabled) return null;
+  const bundle = validated.link.bundleId
+    ? await BundleModel.findById({
+        id: validated.link.bundleId,
+        organizationId: validated.link.organizationId,
+      })
+    : null;
+  if (validated.link.bundleId && !bundle) return null;
+  const skillIds =
+    bundle?.skillIds ?? validated.skills.map((skill) => skill.id);
+  const pluginIds =
+    bundle?.pluginIds ?? validated.plugins.map((plugin) => plugin.id);
+  const selectedOptionalIds = new Set(
+    validated.link.selectedOptionalLocalMcpServerIds,
+  );
+  const localMcpServers = (bundle?.localMcpServers ?? [])
+    .filter((server) => !server.optional || selectedOptionalIds.has(server.id))
+    .map(({ name, command, args, envVarNames }) => ({
+      name,
+      command,
+      args,
+      envVarNames,
+    }));
+  const canDeliverBundlePlugins = bundle
+    ? await userCanDeliverBundlePlugins({
+        organizationId: validated.link.organizationId,
+        userId: validated.link.createdByUserId,
+      })
+    : true;
   const [skills, plugins, organization] = await Promise.all([
-    loadSkillsForLink(validated.skills.map((s) => s.id)),
-    loadPluginsForLink({
-      ids: validated.plugins.map((plugin) => plugin.id),
-      organizationId: validated.link.organizationId,
-      clientType: validated.link.pluginClientType,
-      pluginPlatform: parsedPluginPlatform.success
-        ? parsedPluginPlatform.data
-        : null,
-    }),
+    loadSkillsForLink(skillIds),
+    canDeliverBundlePlugins
+      ? loadPluginsForLink({
+          ids: pluginIds,
+          organizationId: validated.link.organizationId,
+          clientType: validated.link.pluginClientType,
+          pluginPlatform: parsedPluginPlatform.success
+            ? parsedPluginPlatform.data
+            : null,
+        })
+      : Promise.resolve([]),
     OrganizationModel.getById(validated.link.organizationId),
   ]);
-  if (skills.length === 0 && plugins.length === 0) return null;
+  if (
+    skills.length === 0 &&
+    plugins.length === 0 &&
+    localMcpServers.length === 0
+  ) {
+    return null;
+  }
 
   const ownerName = organization?.name ?? DEFAULT_APP_NAME;
   const ref: MarketplaceRepoRef = { kind: "link", id: validated.link.id };
@@ -311,9 +417,11 @@ async function buildShareLinkServeContext(
       marketplaceName: validated.link.marketplaceName,
       ownerName,
       displayName:
-        skills.length > 0 ? `${ownerName} Skills` : `${ownerName} Plugins`,
+        bundle?.name ??
+        (skills.length > 0 ? `${ownerName} Skills` : `${ownerName} Plugins`),
       skills,
       plugins,
+      localMcpServers,
     });
   } catch (error) {
     if (
@@ -331,9 +439,97 @@ async function buildShareLinkServeContext(
     logContext: {
       shareLinkId: validated.link.id,
       skillIds: skills.map((s) => s.id),
-      pluginIds: validated.plugins.map((plugin) => plugin.id),
+      pluginIds,
+      bundleId: bundle?.id,
+      localMcpServerIds: (bundle?.localMcpServers ?? [])
+        .filter(
+          (server) => !server.optional || selectedOptionalIds.has(server.id),
+        )
+        .map((server) => server.id),
     },
   };
+}
+
+/**
+ * Resolves only the install entries a Bundle currently wants on a CLI machine.
+ * A valid but empty Bundle is intentional and returns an empty desired set so
+ * its guard can uninstall stale managed plugins.
+ */
+async function buildBundleDesiredInstallSet(
+  token: string,
+): Promise<BundleDesiredInstallSet | null> {
+  const validated = await SkillShareLinkModel.validate({ rawToken: token });
+  if (!validated?.link.bundleId) return null;
+
+  const bundle = await BundleModel.findById({
+    id: validated.link.bundleId,
+    organizationId: validated.link.organizationId,
+  });
+  if (!bundle) return null;
+
+  const targetPlatform = PluginPlatformSchema.safeParse(
+    validated.link.pluginPlatform,
+  );
+  const targetClient = validated.link.pluginClientType;
+  const canDeliverPlugins = await userCanDeliverBundlePlugins({
+    organizationId: validated.link.organizationId,
+    userId: validated.link.createdByUserId,
+  });
+  const [skills, plugins] = await Promise.all([
+    SkillModel.findByIds(bundle.skillIds),
+    canDeliverPlugins &&
+    config.plugins.enabled &&
+    targetClient &&
+    targetPlatform.success
+      ? PluginModel.findApprovedByIds({
+          ids: bundle.pluginIds,
+          organizationId: validated.link.organizationId,
+        })
+      : Promise.resolve([]),
+  ]);
+  const hasSkills = skills.some(
+    (skill) => skill.organizationId === validated.link.organizationId,
+  );
+  const selectedOptionalIds = new Set(
+    validated.link.selectedOptionalLocalMcpServerIds,
+  );
+  const hasLocalMcpServers =
+    (targetClient === "claude-code" || targetClient === "cursor") &&
+    bundle.localMcpServers.some(
+      (server) => !server.optional || selectedOptionalIds.has(server.id),
+    );
+  const pluginNames = plugins
+    .filter(
+      (plugin) =>
+        plugin.clientType === targetClient &&
+        targetPlatform.success &&
+        plugin.supportedPlatforms.includes(targetPlatform.data),
+    )
+    .map((plugin) => resolvePluginName(plugin.pluginSlug))
+    .filter(isSafePluginName);
+  const aggregatePluginName =
+    hasSkills || hasLocalMcpServers ? validated.link.marketplaceName : null;
+
+  return BundleDesiredInstallSetSchema.parse({
+    installAggregatePlugin: aggregatePluginName !== null,
+    aggregatePluginName,
+    pluginNames: Array.from(new Set(pluginNames)).sort(),
+  });
+}
+
+function isSafePluginName(name: string): boolean {
+  return /^(?=.{1,64}$)[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(name);
+}
+
+async function userCanDeliverBundlePlugins(params: {
+  organizationId: string;
+  userId: string;
+}): Promise<boolean> {
+  const [canRead, canAdmin] = await Promise.all([
+    userHasPermission(params.userId, params.organizationId, "plugin", "read"),
+    userHasPermission(params.userId, params.organizationId, "plugin", "admin"),
+  ]);
+  return canRead && canAdmin;
 }
 
 /**

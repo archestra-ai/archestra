@@ -17,6 +17,7 @@ import config, { getConnectionBaseUrlSources } from "@/config";
 import { withDbTransaction } from "@/database";
 import {
   AgentModel,
+  BundleModel,
   ConnectionSetupModel,
   MemberModel,
   OrganizationModel,
@@ -45,7 +46,10 @@ import {
   isReservedMarketplaceName,
   resolvePluginName,
 } from "@/skills/marketplace/manifest";
-import { deriveMarketplaceName } from "@/skills/marketplace/marketplace-name";
+import {
+  bundleMarketplaceNameFor,
+  deriveMarketplaceName,
+} from "@/skills/marketplace/marketplace-name";
 import {
   ApiError,
   type ConnectionSetup,
@@ -130,6 +134,13 @@ const CreateConnectionSetupBodySchema = z.object({
     .array(z.string().uuid())
     .max(PLUGIN_DELIVERY_MAX_COUNT)
     .optional(),
+  /** Managed source whose marketplace contents remain linked after install. */
+  bundleId: z.string().uuid().optional(),
+  /** Optional local MCP definitions explicitly accepted by this adopter. */
+  selectedOptionalLocalMcpServerIds: z
+    .array(z.string().uuid())
+    .max(50)
+    .default([]),
 });
 
 /**
@@ -294,7 +305,9 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         attributePassthrough,
         model,
         skills,
-        pluginIds: requestedPluginIds,
+        pluginIds: bodyPluginIds,
+        bundleId,
+        selectedOptionalLocalMcpServerIds,
       } = body;
       const baseUrl = body.baseUrl.replace(/\/+$/, "");
 
@@ -329,9 +342,53 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      if (mcpGatewayId) {
+      if (bundleId && !config.bundles.enabled) {
+        throw new ApiError(404, "Bundles are not enabled");
+      }
+
+      if (bundleId && (skills || bodyPluginIds !== undefined)) {
+        throw new ApiError(
+          400,
+          "bundleId cannot be combined with explicit skills or plugins",
+        );
+      }
+      const bundle = bundleId
+        ? await BundleModel.findById({ id: bundleId, organizationId })
+        : null;
+      if (bundleId && !bundle) throw new ApiError(404, "Bundle not found");
+      if (bundle) {
+        const canReadBundle = await userHasPermission(
+          user.id,
+          organizationId,
+          "bundle",
+          "read",
+        );
+        if (!canReadBundle) throw new ApiError(404, "Bundle not found");
+        const optionalIds = new Set(
+          bundle.localMcpServers
+            .filter((server) => server.optional)
+            .map((server) => server.id),
+        );
+        if (
+          selectedOptionalLocalMcpServerIds.some((id) => !optionalIds.has(id))
+        ) {
+          throw new ApiError(
+            400,
+            "Selected optional MCP servers must belong to the bundle",
+          );
+        }
+      } else if (selectedOptionalLocalMcpServerIds.length > 0) {
+        throw new ApiError(400, "Optional MCP selections require a bundle");
+      }
+      const effectiveSkillIds = bundle?.skillIds ?? skills?.skillIds ?? [];
+      const requestedPluginIds = bundle?.pluginIds ?? bodyPluginIds;
+      // A Bundle gateway is authoritative. The independent setup selection is
+      // retained only while the Bundle itself leaves its gateway unset.
+      const effectiveMcpGatewayId = bundle?.mcpGatewayId ?? mcpGatewayId;
+
+      if (effectiveMcpGatewayId) {
         await requireGatewayAccess({
-          agentId: mcpGatewayId,
+          agentId: effectiveMcpGatewayId,
           organizationId,
           userId: user.id,
         });
@@ -405,10 +462,10 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      if (skills) {
+      if (effectiveSkillIds.length > 0) {
         await requireSkillRead({ userId: user.id, organizationId });
         await assertSkillsBelongToOrg({
-          skillIds: skills.skillIds,
+          skillIds: effectiveSkillIds,
           organizationId,
         });
       }
@@ -443,10 +500,13 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ids: uniqueIds,
             organizationId,
           });
-          if (plugins.length !== uniqueIds.length) {
+          if (!bundle && plugins.length !== uniqueIds.length) {
             throw new ApiError(404, "Plugin not found or not approved");
           }
-          if (plugins.some((plugin) => plugin.clientType !== clientId)) {
+          if (
+            !bundle &&
+            plugins.some((plugin) => plugin.clientType !== clientId)
+          ) {
             throw new ApiError(
               400,
               "Plugins must target the selected connection client",
@@ -454,6 +514,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
           const requiredPlatform = resolvePluginPlatform(platform);
           if (
+            !bundle &&
             plugins.some(
               (plugin) => !plugin.supportedPlatforms.includes(requiredPlatform),
             )
@@ -461,6 +522,13 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
             throw new ApiError(
               400,
               `Every selected plugin must support ${requiredPlatform}`,
+            );
+          }
+          if (bundle) {
+            plugins = plugins.filter(
+              (plugin) =>
+                plugin.clientType === clientId &&
+                plugin.supportedPlatforms.includes(requiredPlatform),
             );
           }
         }
@@ -493,7 +561,21 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
       const pluginIds = plugins.map((plugin) => plugin.id);
-      if (!mcpGatewayId && !llmProxyId && !skills && pluginIds.length === 0) {
+      const hasBundleLocalMcp =
+        bundle !== null &&
+        ["claude-code", "cursor"].includes(clientId) &&
+        bundle.localMcpServers.some(
+          (server) =>
+            !server.optional ||
+            selectedOptionalLocalMcpServerIds.includes(server.id),
+        );
+      if (
+        !effectiveMcpGatewayId &&
+        !llmProxyId &&
+        effectiveSkillIds.length === 0 &&
+        pluginIds.length === 0 &&
+        !hasBundleLocalMcp
+      ) {
         throw new ApiError(
           400,
           "Select at least one of: MCP gateway, LLM proxy, skills, or an enabled plugin",
@@ -506,15 +588,19 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         clientId,
         platform,
         baseUrl,
-        mcpGatewayId: mcpGatewayId ?? null,
+        // Do not snapshot a request gateway behind an authoritative Bundle
+        // gateway: clearing the Bundle setting later must truly clear MCP.
+        mcpGatewayId: bundle?.mcpGatewayId ? null : (mcpGatewayId ?? null),
+        bundleId: bundle?.id ?? null,
+        selectedOptionalLocalMcpServerIds,
         llmProxyId,
         provider: provider ?? null,
         proxyAuth,
         model: model ?? null,
         virtualApiKeyId,
-        includeSkills: Boolean(skills),
+        includeSkills: effectiveSkillIds.length > 0,
         skillLinkTtlDays: skills?.ttlDays ?? null,
-        skillIds: skills?.skillIds ?? [],
+        skillIds: bundle ? [] : effectiveSkillIds,
         pluginIds,
         expiresAt: new Date(Date.now() + CONNECTION_SETUP_TOKEN_TTL_MS),
       });
@@ -724,7 +810,11 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // A setup that also delivers plugins still mints a share link: the
           // shared URL serves skills only, and splitting the two would make the
           // script register two marketplaces.
-          if (marketplaceRender && marketplaceRender.pluginIds.length === 0) {
+          if (
+            marketplaceRender &&
+            marketplaceRender.pluginIds.length === 0 &&
+            !marketplaceRender.bundleId
+          ) {
             const { rawToken: marketplaceToken } =
               await SkillMarketplaceCredentialModel.create({
                 organizationId: setup.organizationId,
@@ -755,14 +845,20 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 pluginClientType: marketplaceRender.pluginClientType,
                 pluginPlatform: marketplaceRender.pluginPlatform,
                 marketplaceName: marketplaceRender.marketplaceName,
+                bundleId: marketplaceRender.bundleId,
+                selectedOptionalLocalMcpServerIds:
+                  marketplaceRender.selectedOptionalLocalMcpServerIds,
                 name: `Connection setup (${setup.clientId})`,
-                expiresAt: setup.skillLinkTtlDays
-                  ? new Date(
-                      Date.now() + setup.skillLinkTtlDays * 24 * 60 * 60 * 1000,
-                    )
-                  : marketplaceRender.pluginIds.length > 0
-                    ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-                    : null,
+                expiresAt: marketplaceRender.bundleId
+                  ? null
+                  : setup.skillLinkTtlDays
+                    ? new Date(
+                        Date.now() +
+                          setup.skillLinkTtlDays * 24 * 60 * 60 * 1000,
+                      )
+                    : marketplaceRender.pluginIds.length > 0
+                      ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+                      : null,
                 tx,
               });
             await ConnectionSetupModel.attachSkillShareLink({
@@ -774,7 +870,13 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
               cloneUrl: `${proxyBaseUrlToOrigin(setup.baseUrl)}${SKILL_MARKETPLACE_PREFIX}/${linkToken}/repo.git`,
               marketplaceName: marketplaceRender.marketplaceName,
               hasSkills: marketplaceRender.skillIds.length > 0,
+              installAggregatePlugin:
+                marketplaceRender.skillIds.length > 0 ||
+                marketplaceRender.hasLocalMcpServers,
               pluginNames: marketplaceRender.pluginNames,
+              desiredInstallSetUrl: marketplaceRender.bundleId
+                ? `${proxyBaseUrlToOrigin(setup.baseUrl)}${SKILL_MARKETPLACE_PREFIX}/${linkToken}/install-set`
+                : undefined,
             };
           }
 
@@ -820,6 +922,9 @@ interface MarketplaceRenderContext {
   pluginClientType: ConnectionSetupClientId | null;
   pluginPlatform: PluginPlatform | null;
   marketplaceName: string;
+  bundleId: string | null;
+  selectedOptionalLocalMcpServerIds: string[];
+  hasLocalMcpServers: boolean;
 }
 
 /**
@@ -842,10 +947,22 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
 
   const appName = organization.appName ?? DEFAULT_APP_NAME;
 
+  if (setup.bundleId && !config.bundles.enabled) throw GONE();
+  const bundle = setup.bundleId
+    ? await BundleModel.findById({
+        id: setup.bundleId,
+        organizationId: setup.organizationId,
+      })
+    : null;
+  if (setup.bundleId && !bundle) throw GONE();
+
+  // A Bundle controls its gateway at render time. Leaving its gateway unset
+  // deliberately falls back to the independently selected setup gateway.
+  const gatewayId = bundle?.mcpGatewayId ?? setup.mcpGatewayId;
   let mcp: SetupScriptContext["mcp"] = null;
-  if (setup.mcpGatewayId) {
+  if (gatewayId) {
     const gateway = await findAccessibleGateway({
-      agentId: setup.mcpGatewayId,
+      agentId: gatewayId,
       organizationId: setup.organizationId,
       userId: setup.userId,
     });
@@ -915,8 +1032,8 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
     };
   }
 
-  let skillIds: string[] = [];
-  if (setup.includeSkills) {
+  let skillIds: string[] = bundle?.skillIds ?? [];
+  if (setup.includeSkills || bundle) {
     // Reading is enough to install: the shared marketplace URL serves each
     // caller exactly the skills they may already read. Publishing a *snapshot*
     // of a chosen set is still admin-only, and is re-checked below for the
@@ -929,9 +1046,11 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
     );
     if (!canReadSkills) throw GONE();
 
-    skillIds = await ConnectionSetupModel.getSkillIds({
-      connectionSetupId: setup.id,
-    });
+    if (!bundle) {
+      skillIds = await ConnectionSetupModel.getSkillIds({
+        connectionSetupId: setup.id,
+      });
+    }
     if (skillIds.length === 0) throw GONE();
     const skillRows = await SkillModel.findByIds(skillIds);
     if (
@@ -942,9 +1061,12 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
     }
   }
 
-  const pluginIds = await ConnectionSetupModel.getPluginIds({
-    connectionSetupId: setup.id,
-  });
+  let pluginIds = bundle?.pluginIds ?? [];
+  if (!bundle) {
+    pluginIds = await ConnectionSetupModel.getPluginIds({
+      connectionSetupId: setup.id,
+    });
+  }
   let pluginNames: string[] = [];
   if (pluginIds.length > 0) {
     if (!config.plugins.enabled) throw GONE();
@@ -962,39 +1084,76 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       organizationId: setup.organizationId,
     });
     if (
-      plugins.length !== pluginIds.length ||
-      plugins.some(
-        (plugin) =>
-          plugin.clientType !== setup.clientId ||
-          !plugin.supportedPlatforms.includes(
-            resolvePluginPlatform(setup.platform),
-          ),
-      )
+      (!bundle && plugins.length !== pluginIds.length) ||
+      (!bundle &&
+        plugins.some(
+          (plugin) =>
+            plugin.clientType !== setup.clientId ||
+            !plugin.supportedPlatforms.includes(
+              resolvePluginPlatform(setup.platform),
+            ),
+        ))
     ) {
       throw GONE();
     }
-    pluginNames = plugins.map((plugin) => resolvePluginName(plugin.pluginSlug));
+    const compatiblePlugins = plugins.filter(
+      (plugin) =>
+        plugin.clientType === setup.clientId &&
+        plugin.supportedPlatforms.includes(
+          resolvePluginPlatform(setup.platform),
+        ),
+    );
+    pluginIds = compatiblePlugins.map((plugin) => plugin.id);
+    pluginNames = compatiblePlugins.map((plugin) =>
+      resolvePluginName(plugin.pluginSlug),
+    );
   }
 
-  let marketplaceRender: MarketplaceRenderContext | null = null;
-  if (skillIds.length > 0 || pluginIds.length > 0) {
-    const marketplaceName = await deriveMarketplaceName(
-      setup.organizationId,
-      skillIds.length === 0
-        ? "plugins"
-        : pluginIds.length === 0
-          ? "skills"
-          : "extensions",
+  const hasLocalMcpServers =
+    bundle !== null &&
+    ["claude-code", "cursor"].includes(setup.clientId) &&
+    bundle.localMcpServers.some(
+      (server) =>
+        !server.optional ||
+        setup.selectedOptionalLocalMcpServerIds.includes(server.id),
     );
+  let marketplaceRender: MarketplaceRenderContext | null = null;
+  if (skillIds.length > 0 || pluginIds.length > 0 || hasLocalMcpServers) {
+    const marketplaceName = bundle
+      ? bundleMarketplaceNameFor({
+          organizationId: setup.organizationId,
+          bundleId: bundle.id,
+          organization,
+        })
+      : await deriveMarketplaceName(
+          setup.organizationId,
+          skillIds.length === 0
+            ? "plugins"
+            : pluginIds.length === 0
+              ? "skills"
+              : "extensions",
+        );
     if (isReservedMarketplaceName(marketplaceName)) throw GONE();
     marketplaceRender = {
       skillIds,
       pluginIds,
       pluginNames,
-      pluginClientType: pluginIds.length > 0 ? setup.clientId : null,
+      // Bundle links need their target client/platform even while their native
+      // plugin list is empty, so future Bundle membership can reconcile safely.
+      pluginClientType: bundle
+        ? setup.clientId
+        : pluginIds.length > 0
+          ? setup.clientId
+          : null,
       pluginPlatform:
-        pluginIds.length > 0 ? resolvePluginPlatform(setup.platform) : null,
+        bundle || pluginIds.length > 0 || hasLocalMcpServers
+          ? resolvePluginPlatform(setup.platform)
+          : null,
       marketplaceName,
+      bundleId: bundle?.id ?? null,
+      selectedOptionalLocalMcpServerIds:
+        setup.selectedOptionalLocalMcpServerIds,
+      hasLocalMcpServers,
     };
   }
 

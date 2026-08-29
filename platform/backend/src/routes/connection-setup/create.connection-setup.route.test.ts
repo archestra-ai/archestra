@@ -1,5 +1,9 @@
 import { vi } from "vitest";
-import { ConnectionSetupModel, VirtualApiKeyModel } from "@/models";
+import {
+  BundleModel,
+  ConnectionSetupModel,
+  VirtualApiKeyModel,
+} from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -13,6 +17,7 @@ vi.mock("@/auth");
 vi.mock("@/cache-manager");
 
 import { userHasPermission } from "@/auth";
+import config from "@/config";
 
 const mockUserHasPermission = vi.mocked(userHasPermission);
 
@@ -26,6 +31,7 @@ describe("POST /api/connection-setups", () => {
     organizationId = organization.id;
     user = await makeUser();
     await makeMember(user.id, organizationId);
+    config.bundles.enabled = true;
     mockUserHasPermission.mockReset();
     mockUserHasPermission.mockResolvedValue(true);
 
@@ -56,6 +62,199 @@ describe("POST /api/connection-setups", () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json().error.message).toContain("at least one");
+  });
+
+  test("persists a managed bundle and only its reviewed optional MCP servers", async () => {
+    const optionalId = "11111111-1111-4111-8111-111111111111";
+    const bundle = await BundleModel.create({
+      organizationId,
+      name: "Engineering",
+      description: "Local development tools",
+      mcpGatewayId: null,
+      skillIds: [],
+      pluginIds: [],
+      localMcpServers: [
+        {
+          id: optionalId,
+          name: "playwright",
+          description: "Browser automation",
+          command: "npx",
+          args: ["-y", "@playwright/mcp"],
+          envVarNames: [],
+          optional: true,
+        },
+      ],
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "claude-code",
+        baseUrl: "http://localhost:9000/v1",
+        bundleId: bundle.id,
+        selectedOptionalLocalMcpServerIds: [optionalId],
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    const rawToken = response
+      .json()
+      .command.match(/script\/([^']+)'/)?.[1] as string;
+    const setup = await ConnectionSetupModel.findByToken(rawToken);
+    expect(setup).toMatchObject({
+      bundleId: bundle.id,
+      selectedOptionalLocalMcpServerIds: [optionalId],
+    });
+
+    const unknownSelection = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "claude-code",
+        baseUrl: "http://localhost:9000/v1",
+        bundleId: bundle.id,
+        selectedOptionalLocalMcpServerIds: [
+          "22222222-2222-4222-8222-222222222222",
+        ],
+      },
+    });
+    expect(unknownSelection.statusCode).toBe(400);
+  });
+
+  test("uses an authoritative Bundle gateway without snapshotting a request fallback", async ({
+    makeAgent,
+  }) => {
+    const bundleGateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+      name: "Bundle Gateway",
+    });
+    const requestGateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+      name: "Request Gateway",
+    });
+    const bundle = await BundleModel.create({
+      organizationId,
+      name: "Gateway Bundle",
+      description: "Gateway only",
+      mcpGatewayId: bundleGateway.id,
+      skillIds: [],
+      pluginIds: [],
+      localMcpServers: [],
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "claude-code",
+        baseUrl: "http://localhost:9000/v1",
+        bundleId: bundle.id,
+        mcpGatewayId: requestGateway.id,
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    const rawToken = response
+      .json()
+      .command.match(/script\/([^']+)'/)?.[1] as string;
+    expect(
+      (await ConnectionSetupModel.findByToken(rawToken))?.mcpGatewayId,
+    ).toBeNull();
+  });
+
+  test("allows a gateway-only Bundle setup", async ({ makeAgent }) => {
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+      name: "Bundle Gateway",
+    });
+    const bundle = await BundleModel.create({
+      organizationId,
+      name: "Gateway Bundle",
+      description: "Gateway only",
+      mcpGatewayId: gateway.id,
+      skillIds: [],
+      pluginIds: [],
+      localMcpServers: [],
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "claude-code",
+        baseUrl: "http://localhost:9000/v1",
+        bundleId: bundle.id,
+      },
+    });
+    expect(response.statusCode).toBe(200);
+  });
+
+  test("preserves an independent gateway when a Bundle has no gateway", async ({
+    makeAgent,
+  }) => {
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+      name: "Independent Gateway",
+    });
+    const bundle = await BundleModel.create({
+      organizationId,
+      name: "No Gateway Bundle",
+      description: "Independent gateway fallback",
+      mcpGatewayId: null,
+      skillIds: [],
+      pluginIds: [],
+      localMcpServers: [],
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "claude-code",
+        baseUrl: "http://localhost:9000/v1",
+        bundleId: bundle.id,
+        mcpGatewayId: gateway.id,
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    const rawToken = response
+      .json()
+      .command.match(/script\/([^']+)'/)?.[1] as string;
+    expect(
+      (await ConnectionSetupModel.findByToken(rawToken))?.mcpGatewayId,
+    ).toBe(gateway.id);
+  });
+
+  test("rejects Bundle setup creation while Bundles are disabled", async () => {
+    const bundle = await BundleModel.create({
+      organizationId,
+      name: "Engineering",
+      description: "Feature gate",
+      mcpGatewayId: null,
+      skillIds: [],
+      pluginIds: [],
+      localMcpServers: [],
+    });
+
+    config.bundles.enabled = false;
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/connection-setups",
+        payload: {
+          clientId: "claude-code",
+          baseUrl: "http://localhost:9000/v1",
+          bundleId: bundle.id,
+        },
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json().error.message).toBe("Bundles are not enabled");
+    } finally {
+      config.bundles.enabled = true;
+    }
   });
 
   test("provider alone opts the LLM Proxy in; llmProxyId alone selects nothing", async () => {

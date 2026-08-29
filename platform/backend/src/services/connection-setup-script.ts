@@ -109,8 +109,12 @@ export interface SetupScriptSkillsSection {
   marketplaceName: string;
   /** Existing skills plugin is present. Defaults true for older callers/tests. */
   hasSkills?: boolean;
+  /** Install the aggregate marketplace plugin (skills and/or packaged MCPs). */
+  installAggregatePlugin?: boolean;
   /** Opaque hook-bearing plugin entries advertised by the same marketplace. */
   pluginNames?: string[];
+  /** Token-protected live install set for a Bundle-backed marketplace only. */
+  desiredInstallSetUrl?: string;
 }
 
 export interface SetupScriptContext {
@@ -570,13 +574,15 @@ cli claude mcp add --scope user --transport http ${sh(ctx.mcp.serverName)} ${sh(
 
   if (ctx.skills) {
     const hasSkills = ctx.skills.hasSkills ?? true;
+    const installAggregatePlugin =
+      ctx.skills.installAggregatePlugin ?? hasSkills;
     const pluginNames = ctx.skills.pluginNames ?? [];
     const pluginRef = `${ctx.skills.marketplaceName}@${ctx.skills.marketplaceName}`;
     const installs = [
-      ...(hasSkills
+      ...(installAggregatePlugin
         ? [
             `if ! cli claude plugin install ${sh(pluginRef)}; then
-  warn ${sh(`Could not install the skills automatically — run 'claude plugin install ${pluginRef}' or open /plugin inside Claude Code.`)}
+  warn ${sh(`Could not install the bundle automatically — run 'claude plugin install ${pluginRef}' or open /plugin inside Claude Code.`)}
 fi`,
           ]
         : []),
@@ -867,12 +873,24 @@ echo "Codex keeps using your own OpenAI API key login."`
   }
 
   if (ctx.skills) {
-    const installs = (ctx.skills.pluginNames ?? []).map((pluginName) => {
-      const ref = `${pluginName}@${ctx.skills?.marketplaceName}`;
-      return `if ! cli codex plugin add ${sh(ref)}; then
+    const installAggregatePlugin =
+      ctx.skills.installAggregatePlugin ?? ctx.skills.hasSkills ?? true;
+    const aggregateRef = `${ctx.skills.marketplaceName}@${ctx.skills.marketplaceName}`;
+    const installs = [
+      ...(installAggregatePlugin
+        ? [
+            `if ! cli codex plugin add ${sh(aggregateRef)}; then
+  warn ${sh(`Could not install the bundle automatically — run 'codex plugin add ${aggregateRef}'.`)}
+fi`,
+          ]
+        : []),
+      ...(ctx.skills.pluginNames ?? []).map((pluginName) => {
+        const ref = `${pluginName}@${ctx.skills?.marketplaceName}`;
+        return `if ! cli codex plugin add ${sh(ref)}; then
   warn ${sh(`Could not deliver plugin — run 'codex plugin add ${ref}'.`)}
 fi`;
-    });
+      }),
+    ];
     sections.push(`say ${sh(`Registering the "${ctx.skills.marketplaceName}" marketplace`)}
 if ! cli codex plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
   warn "Marketplace may already be registered — run /plugins inside Codex to inspect."
@@ -924,12 +942,24 @@ ARCHESTRA_COPILOT`);
   }
 
   if (ctx.skills) {
-    const installs = (ctx.skills.pluginNames ?? []).map((pluginName) => {
-      const ref = `${pluginName}@${ctx.skills?.marketplaceName}`;
-      return `if ! cli copilot plugin install ${sh(ref)}; then
+    const installAggregatePlugin =
+      ctx.skills.installAggregatePlugin ?? ctx.skills.hasSkills ?? true;
+    const aggregateRef = `${ctx.skills.marketplaceName}@${ctx.skills.marketplaceName}`;
+    const installs = [
+      ...(installAggregatePlugin
+        ? [
+            `if ! cli copilot plugin install ${sh(aggregateRef)}; then
+  warn ${sh(`Could not install the bundle automatically — run 'copilot plugin install ${aggregateRef}'.`)}
+fi`,
+          ]
+        : []),
+      ...(ctx.skills.pluginNames ?? []).map((pluginName) => {
+        const ref = `${pluginName}@${ctx.skills?.marketplaceName}`;
+        return `if ! cli copilot plugin install ${sh(ref)}; then
   warn ${sh(`Could not install plugin — run 'copilot plugin install ${ref}'.`)}
 fi`;
-    });
+      }),
+    ];
     sections.push(`say ${sh(`Registering the "${ctx.skills.marketplaceName}" marketplace`)}
 if ! cli copilot plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
   warn "Marketplace may already be registered — run 'copilot plugin marketplace browse' to inspect."

@@ -78,6 +78,7 @@ $ErrorActionPreference = 'Continue'
 # Invoke-WebRequest paints its progress banner across the TOP console rows —
 # straight over the logo — on every request unless progress is silenced.
 $ProgressPreference = 'SilentlyContinue'
+${ctx.skills?.desiredInstallSetUrl ? renderDynamicMarketplaceRefreshPowerShell(ctx, client) : ""}
 
 $AppName = ${psq(ctx.appName)}
 # One request answers for every checkable remote ('' = no health endpoint
@@ -826,11 +827,19 @@ export function buildWindowsStartupGuardInstallSection(
   ctx: StartupGuardContext,
   client: StartupGuardClient,
 ): string {
-  const refreshBlock = renderWindowsMarketplaceRefreshProfileBlock(ctx, client);
-  const refreshCall = refreshBlock
-    ? `$archClientExit = $LASTEXITCODE
+  const dynamicMarketplaceRefresh = !!ctx.skills?.desiredInstallSetUrl;
+  const refreshBlock = dynamicMarketplaceRefresh
+    ? ""
+    : renderWindowsMarketplaceRefreshProfileBlock(ctx, client);
+  const refreshCall = dynamicMarketplaceRefresh
+    ? `try { & $archGuard --archestra-refresh-marketplace @args | Out-Null } catch { }`
+    : refreshBlock
+      ? `$archClientExit = $LASTEXITCODE
   try { Invoke-Archestra${client.binary}MarketplaceRefresh -ClientArgs $args | Out-Null } catch { }
   $global:LASTEXITCODE = $archClientExit`
+      : "";
+  const initialManagedState = dynamicMarketplaceRefresh
+    ? renderInitialManagedStatePowerShell(ctx, client)
     : "";
   return `Say ${psq(`Installing the ${ctx.appName} startup guard for ${client.label}`)}
 $archGuardPath = Join-Path $env:USERPROFILE ${psq(client.psScriptRelpath)}
@@ -838,6 +847,8 @@ $null = New-Item -ItemType Directory -Force -Path (Split-Path -Parent $archGuard
 $archGuardBody = @'
 ${renderStartupGuardPowerShell(ctx, client)}'@
 [IO.File]::WriteAllText($archGuardPath, $archGuardBody, (New-Object System.Text.UTF8Encoding $true))
+try { & icacls $archGuardPath /inheritance:r /grant:r ($env:USERNAME + ':(RX,W)') 2>$null | Out-Null } catch { }
+${initialManagedState}
 Write-Host ('Updated ' + $archGuardPath)
 # A fresh connect re-arms every check: forget remotes a previous guard
 # disconnected.
@@ -906,7 +917,8 @@ function renderWindowsMarketplaceRefreshProfileBlock(
 ): string {
   if (!ctx.skills || !client.windows.skillsRefreshCommands) return "";
   const pluginNames = [
-    ...(ctx.skills.hasSkills !== false && client.clientId === "claude-code"
+    ...((ctx.skills.installAggregatePlugin ?? ctx.skills.hasSkills !== false) &&
+    client.clientId === "claude-code"
       ? [ctx.skills.marketplaceName]
       : []),
     ...(ctx.skills.pluginNames ?? []),
@@ -942,6 +954,152 @@ ${client.windows.skillsRefreshCommands}
   Set-Content -Path $archRefreshStamp -Value $archRefreshNow -Encoding ascii
   return $true
 }`;
+}
+
+/** Bundle reconciliation lives in the private guard, not the profile, because its URL is bearer-token protected. */
+function renderDynamicMarketplaceRefreshPowerShell(
+  ctx: StartupGuardContext,
+  client: StartupGuardClient,
+): string {
+  const skills = ctx.skills;
+  if (!skills?.desiredInstallSetUrl) return "";
+  const nonInteractive = client.nonInteractiveArgPatterns
+    .map((pattern) => `$_ -eq ${psq(pattern)}`)
+    .join(" -or ");
+  return `
+if ($args.Count -gt 0 -and $args[0] -eq '--archestra-refresh-marketplace') {
+  $ArchClientArgs = @($args | Select-Object -Skip 1)
+  foreach ($_ in $ArchClientArgs) { if (${nonInteractive}) { return } }
+  $ArchInstallSetUrl = ${psq(skills.desiredInstallSetUrl)}
+  $ArchInstallStateDir = Join-Path $env:USERPROFILE '.archestra'
+  $ArchInstallState = Join-Path $ArchInstallStateDir ${psq(`${client.binary}-${skills.marketplaceName}.managed-plugins.json`)}
+  try { New-Item -ItemType Directory -Force -Path $ArchInstallStateDir | Out-Null } catch { return }
+  function Test-ArchInstallName($Name) {
+    return $Name -is [string] -and $Name.Length -le 64 -and $Name -match '^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$'
+  }
+  try {
+    $ArchDesired = (Invoke-WebRequest -Uri $ArchInstallSetUrl -Method Get -TimeoutSec 15 -UseBasicParsing -ErrorAction Stop).Content | ConvertFrom-Json
+    if (-not $ArchDesired.PSObject.Properties['installAggregatePlugin'] -or $ArchDesired.installAggregatePlugin -isnot [bool]) { return }
+    $ArchAggregate = if ($ArchDesired.installAggregatePlugin) { [string]$ArchDesired.aggregatePluginName } else { $null }
+    if ($ArchDesired.installAggregatePlugin -and -not (Test-ArchInstallName $ArchAggregate)) { return }
+    if (-not $ArchDesired.PSObject.Properties['pluginNames']) { return }
+    $ArchDesiredPlugins = @($ArchDesired.pluginNames)
+    if (@($ArchDesiredPlugins | Where-Object { -not (Test-ArchInstallName $_) }).Count -gt 0) { return }
+  } catch { return }
+  $ArchPreviousAggregate = $null
+  $ArchPreviousPlugins = @()
+  if (Test-Path $ArchInstallState) {
+    try {
+      $ArchPrevious = Get-Content -Raw -Path $ArchInstallState | ConvertFrom-Json
+      if ($ArchPrevious.PSObject.Properties['aggregatePluginName'] -and (Test-ArchInstallName $ArchPrevious.aggregatePluginName)) { $ArchPreviousAggregate = [string]$ArchPrevious.aggregatePluginName }
+      if ($ArchPrevious.PSObject.Properties['pluginNames']) { $ArchPreviousPlugins = @($ArchPrevious.pluginNames | Where-Object { Test-ArchInstallName $_ }) }
+    } catch { }
+  }
+  $ArchOldEntries = New-Object 'System.Collections.Generic.HashSet[string]'
+  $ArchNextEntries = New-Object 'System.Collections.Generic.HashSet[string]'
+  foreach ($ArchName in $ArchPreviousPlugins) { [void]$ArchOldEntries.Add([string]$ArchName) }
+  if ($ArchPreviousAggregate) { [void]$ArchOldEntries.Add($ArchPreviousAggregate) }
+  foreach ($ArchName in $ArchDesiredPlugins) { [void]$ArchNextEntries.Add([string]$ArchName) }
+  if ($ArchAggregate) { [void]$ArchNextEntries.Add($ArchAggregate) }
+  $ArchOperations = @()
+  foreach ($ArchName in @($ArchOldEntries | Sort-Object)) { if (-not $ArchNextEntries.Contains($ArchName)) { $ArchOperations += @{ Action = 'remove'; Name = $ArchName } } }
+  foreach ($ArchName in @($ArchNextEntries | Sort-Object)) { if (-not $ArchOldEntries.Contains($ArchName)) { $ArchOperations += @{ Action = 'install'; Name = $ArchName } } else { $ArchOperations += @{ Action = 'update'; Name = $ArchName } } }
+  $ArchRefreshReal = Get-Command -Name ${client.binary} -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+  if (-not $ArchRefreshReal) { $ArchRefreshReal = Get-Command -Name ${client.binary} -ErrorAction SilentlyContinue | Where-Object { $_.CommandType -in @('Application', 'ExternalScript') } | Select-Object -First 1 }
+  if (-not $ArchRefreshReal) { return }
+  $ArchMarketplace = ${psq(skills.marketplaceName)}
+  foreach ($ArchOperation in $ArchOperations) {
+    if ($ArchOperation.Action -ne 'remove') { continue }
+    $ArchPluginRef = $ArchOperation.Name + '@' + $ArchMarketplace
+    ${dynamicMarketplacePowerShellActionCommand(client, "remove")}
+    if ($LASTEXITCODE -ne 0) { return }
+  }
+  if ($ArchNextEntries.Count -gt 0) {
+    ${dynamicMarketplacePowerShellUpdateCommand(client)}
+    if ($LASTEXITCODE -ne 0) { return }
+    foreach ($ArchOperation in $ArchOperations) {
+      if ($ArchOperation.Action -eq 'remove') { continue }
+      $ArchPluginRef = $ArchOperation.Name + '@' + $ArchMarketplace
+      switch ($ArchOperation.Action) {
+        'install' { ${dynamicMarketplacePowerShellActionCommand(client, "install")} }
+        'update' { ${dynamicMarketplacePowerShellActionCommand(client, "update")} }
+      }
+      if ($LASTEXITCODE -ne 0) { return }
+    }
+  }
+  try {
+    $ArchNextState = @{ aggregatePluginName = $ArchAggregate; pluginNames = @($ArchDesiredPlugins | Sort-Object -Unique) }
+    $ArchStateTemp = $ArchInstallState + '.tmp'
+    [IO.File]::WriteAllText($ArchStateTemp, ($ArchNextState | ConvertTo-Json -Compress), (New-Object System.Text.UTF8Encoding $false))
+    Move-Item -Force -Path $ArchStateTemp -Destination $ArchInstallState
+    & icacls $ArchInstallState /inheritance:r /grant:r ($env:USERNAME + ':(R,W)') 2>$null | Out-Null
+  } catch { return }
+  return
+}
+`;
+}
+
+function renderInitialManagedStatePowerShell(
+  ctx: StartupGuardContext,
+  client: StartupGuardClient,
+): string {
+  const skills = ctx.skills;
+  if (!skills) return "";
+  const installAggregatePlugin =
+    skills.installAggregatePlugin ?? skills.hasSkills ?? true;
+  const state = JSON.stringify({
+    aggregatePluginName: installAggregatePlugin ? skills.marketplaceName : null,
+    pluginNames: Array.from(new Set(skills.pluginNames ?? [])).sort(),
+  });
+  return `$archInstallState = Join-Path $env:USERPROFILE ${psq(`.archestra/${client.binary}-${skills.marketplaceName}.managed-plugins.json`)}
+[IO.File]::WriteAllText(($archInstallState + '.tmp'), ${psq(state)}, (New-Object System.Text.UTF8Encoding $false))
+Move-Item -Force -Path ($archInstallState + '.tmp') -Destination $archInstallState
+try { & icacls $archInstallState /inheritance:r /grant:r ($env:USERNAME + ':(R,W)') 2>$null | Out-Null } catch { }`;
+}
+
+function dynamicMarketplacePowerShellUpdateCommand(
+  client: StartupGuardClient,
+): string {
+  switch (client.clientId) {
+    case "claude-code":
+      return "& $ArchRefreshReal.Source plugin marketplace update $ArchMarketplace 2>$null | Out-Null";
+    case "codex":
+      return "& $ArchRefreshReal.Source plugin marketplace upgrade $ArchMarketplace 2>$null | Out-Null";
+    case "copilot-cli":
+      return "& $ArchRefreshReal.Source plugin marketplace update $ArchMarketplace 2>$null | Out-Null";
+  }
+}
+
+function dynamicMarketplacePowerShellActionCommand(
+  client: StartupGuardClient,
+  action: "remove" | "install" | "update",
+): string {
+  switch (client.clientId) {
+    case "claude-code":
+      if (action === "install") {
+        return "& $ArchRefreshReal.Source plugin install $ArchPluginRef 2>$null | Out-Null; if ($LASTEXITCODE -ne 0) { & $ArchRefreshReal.Source plugin update -y $ArchPluginRef 2>$null | Out-Null }";
+      }
+      if (action === "update") {
+        return "& $ArchRefreshReal.Source plugin update -y $ArchPluginRef 2>$null | Out-Null; if ($LASTEXITCODE -ne 0) { & $ArchRefreshReal.Source plugin install $ArchPluginRef 2>$null | Out-Null }";
+      }
+      return "& $ArchRefreshReal.Source plugin uninstall $ArchPluginRef 2>$null | Out-Null";
+    case "codex":
+      if (action === "update") {
+        return "& $ArchRefreshReal.Source plugin remove $ArchPluginRef 2>$null | Out-Null; & $ArchRefreshReal.Source plugin add $ArchPluginRef 2>$null | Out-Null";
+      }
+      if (action === "install") {
+        return "& $ArchRefreshReal.Source plugin add $ArchPluginRef 2>$null | Out-Null; if ($LASTEXITCODE -ne 0) { & $ArchRefreshReal.Source plugin remove $ArchPluginRef 2>$null | Out-Null; & $ArchRefreshReal.Source plugin add $ArchPluginRef 2>$null | Out-Null }";
+      }
+      return "& $ArchRefreshReal.Source plugin remove $ArchPluginRef 2>$null | Out-Null";
+    case "copilot-cli":
+      if (action === "install") {
+        return "& $ArchRefreshReal.Source plugin install $ArchPluginRef 2>$null | Out-Null; if ($LASTEXITCODE -ne 0) { & $ArchRefreshReal.Source plugin update $ArchPluginRef 2>$null | Out-Null }";
+      }
+      if (action === "update") {
+        return "& $ArchRefreshReal.Source plugin update $ArchPluginRef 2>$null | Out-Null; if ($LASTEXITCODE -ne 0) { & $ArchRefreshReal.Source plugin install $ArchPluginRef 2>$null | Out-Null }";
+      }
+      return "& $ArchRefreshReal.Source plugin uninstall $ArchPluginRef 2>$null | Out-Null";
+  }
 }
 
 /**

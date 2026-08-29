@@ -452,6 +452,8 @@ claude mcp add --scope user --transport http ${psq(ctx.mcp.serverName)} ${psq(ct
 
   if (ctx.skills) {
     const hasSkills = ctx.skills.hasSkills ?? true;
+    const installAggregatePlugin =
+      ctx.skills.installAggregatePlugin ?? hasSkills;
     const pluginInstalls = (ctx.skills.pluginNames ?? [])
       .map((pluginName) => {
         const ref = `${pluginName}@${ctx.skills?.marketplaceName}`;
@@ -464,9 +466,9 @@ if ($LASTEXITCODE -ne 0) { Warn ${psq(`Could not install plugin — run 'claude 
 claude plugin marketplace add ${psq(ctx.skills.cloneUrl)}
 if ($LASTEXITCODE -ne 0) { Warn 'Marketplace may already be registered — continuing.' }
 ${
-  hasSkills
+  installAggregatePlugin
     ? `claude plugin install ${psq(pluginRef)}
-if ($LASTEXITCODE -ne 0) { Warn ${psq(`Could not install the skills automatically — run 'claude plugin install ${pluginRef}' or open /plugin inside Claude Code.`)} }`
+if ($LASTEXITCODE -ne 0) { Warn ${psq(`Could not install the bundle automatically — run 'claude plugin install ${pluginRef}' or open /plugin inside Claude Code.`)} }`
     : ""
 }
 ${pluginInstalls}`);
@@ -660,6 +662,9 @@ Write-Host 'Codex keeps using your own OpenAI API key login.'`
   }
 
   if (ctx.skills) {
+    const installAggregatePlugin =
+      ctx.skills.installAggregatePlugin ?? ctx.skills.hasSkills ?? true;
+    const aggregateRef = `${ctx.skills.marketplaceName}@${ctx.skills.marketplaceName}`;
     const pluginInstalls = (ctx.skills.pluginNames ?? [])
       .map((pluginName) => {
         const ref = `${pluginName}@${ctx.skills?.marketplaceName}`;
@@ -670,6 +675,12 @@ if ($LASTEXITCODE -ne 0) { Warn ${psq(`Could not deliver plugin — run 'codex p
     sections.push(`Say ${psq(`Registering the "${ctx.skills.marketplaceName}" marketplace`)}
 codex plugin marketplace add ${psq(ctx.skills.cloneUrl)}
 if ($LASTEXITCODE -ne 0) { Warn 'Marketplace may already be registered — run /plugins inside Codex to inspect.' }
+${
+  installAggregatePlugin
+    ? `codex plugin add ${psq(aggregateRef)}
+if ($LASTEXITCODE -ne 0) { Warn ${psq(`Could not install the bundle automatically — run 'codex plugin add ${aggregateRef}'.`)} }`
+    : ""
+}
 ${pluginInstalls}`);
   }
 
@@ -771,6 +782,9 @@ ${psCopilotModelApply({
   }
 
   if (ctx.skills) {
+    const installAggregatePlugin =
+      ctx.skills.installAggregatePlugin ?? ctx.skills.hasSkills ?? true;
+    const aggregateRef = `${ctx.skills.marketplaceName}@${ctx.skills.marketplaceName}`;
     const pluginInstalls = (ctx.skills.pluginNames ?? [])
       .map((pluginName) => {
         const ref = `${pluginName}@${ctx.skills?.marketplaceName}`;
@@ -781,6 +795,12 @@ if ($LASTEXITCODE -ne 0) { Warn ${psq(`Could not install plugin — run 'copilot
     sections.push(`Say ${psq(`Registering the "${ctx.skills.marketplaceName}" marketplace`)}
 copilot plugin marketplace add ${psq(ctx.skills.cloneUrl)}
 if ($LASTEXITCODE -ne 0) { Warn "Marketplace may already be registered — run 'copilot plugin marketplace browse' to inspect." }
+${
+  installAggregatePlugin
+    ? `copilot plugin install ${psq(aggregateRef)}
+if ($LASTEXITCODE -ne 0) { Warn ${psq(`Could not install the bundle automatically — run 'copilot plugin install ${aggregateRef}'.`)} }`
+    : ""
+}
 ${pluginInstalls}`);
   }
 

@@ -4,6 +4,7 @@ import AgentModel from "@/models/agent";
 import AgentToolModel from "@/models/agent-tool";
 import ApiKeyModel from "@/models/api-key";
 import AppModel from "@/models/app";
+import BundleModel from "@/models/bundle";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
@@ -92,6 +93,7 @@ export const AUDIT_DECISIONS = {
     audited: true,
     model: ChatOpsChannelBindingModel,
   },
+  bundlesTable: { audited: true, model: BundleModel },
   pluginsTable: { audited: true, model: PluginModel },
   environmentsTable: { audited: true, model: EnvironmentModel },
   environmentDefaultUserLimitsTable: {
@@ -560,6 +562,14 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason:
       "join: connection setup × plugin; parent (connectionSetups) ephemeral",
+  },
+  bundleSkillsTable: {
+    audited: false,
+    reason: "join: bundle × skill; parent bundle carries signal",
+  },
+  bundlePluginsTable: {
+    audited: false,
+    reason: "join: bundle × plugin; parent bundle carries signal",
   },
   skillShareLinksTable: {
     audited: true,

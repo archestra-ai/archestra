@@ -1,5 +1,6 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
+  isBundleArchestraToolShortName,
   isPluginArchestraToolShortName,
   isSandboxArchestraToolShortName,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
@@ -396,7 +397,8 @@ function isExcludedFromDiscovery(
 // config, mirroring the registration/execution gates in index.ts
 // (getArchestraMcpTools + executeArchestraTool): the sandbox group (runtime +
 // persistent-files) follows the skills-sandbox flag (see
-// isSandboxToolEnabled), and the plugin group follows the plugins beta flag.
+// isSandboxToolEnabled), plugins follow their beta flag, and Bundles require
+// their independent deployment opt-in.
 // Everything else — including the skill, app, and Projects tools, which are
 // registered unconditionally — is always on.
 function isBuiltInFeatureEnabled(shortName: string): boolean {
@@ -405,6 +407,9 @@ function isBuiltInFeatureEnabled(shortName: string): boolean {
   }
   if (isPluginArchestraToolShortName(shortName)) {
     return config.plugins.enabled;
+  }
+  if (isBundleArchestraToolShortName(shortName)) {
+    return config.bundles.enabled;
   }
   return true;
 }

@@ -3119,6 +3119,35 @@ describe("betaFeatureEnabled", () => {
   });
 });
 
+describe("Bundle config", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    vi.resetModules();
+    process.env = { ...originalEnv };
+    process.env.ARCHESTRA_DATABASE_URL =
+      "postgresql://archestra:pass@localhost:5432/archestra";
+    process.env.ARCHESTRA_BETA = "true";
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  test("requires its own exact true value even when the beta master switch is on", async () => {
+    delete process.env.ARCHESTRA_BUNDLES_ENABLED;
+    expect((await import("./config")).default.bundles.enabled).toBe(false);
+
+    vi.resetModules();
+    process.env.ARCHESTRA_BUNDLES_ENABLED = "true";
+    expect((await import("./config")).default.bundles.enabled).toBe(true);
+
+    vi.resetModules();
+    process.env.ARCHESTRA_BUNDLES_ENABLED = "TRUE";
+    expect((await import("./config")).default.bundles.enabled).toBe(false);
+  });
+});
+
 describe("parseLogFormat", () => {
   beforeEach(() => {
     vi.clearAllMocks();

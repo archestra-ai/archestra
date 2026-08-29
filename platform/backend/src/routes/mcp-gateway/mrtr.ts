@@ -1,4 +1,4 @@
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 
 import config from "@/config";
 
@@ -410,7 +410,16 @@ function verifySignature(encoded: string, signature: string): boolean {
  * both sides agree.
  */
 function digestRequestParams(method: string, requestParams: unknown): string {
-  return createHash("sha256")
+  const key = hmacKey();
+  if (!key) {
+    throw new Error(
+      "Cannot digest MRTR request parameters: no auth secret is configured",
+    );
+  }
+
+  // Key the digest because request parameters may contain credentials. A
+  // plain hash inside the client-visible state would permit offline guessing.
+  return createHmac("sha256", key)
     .update(stableStringify(canonicalRequestParams(method, requestParams)))
     .digest("base64url");
 }

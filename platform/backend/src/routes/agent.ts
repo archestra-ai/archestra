@@ -2700,6 +2700,9 @@ function requireBackgroundExecutionPermission(params: {
   isAdmin: boolean;
 }): void {
   if (params.backgroundExecution == null) return;
+  if (!config.agentBackgroundExecution.enabled) {
+    throw new ApiError(400, "Background execution is not enabled");
+  }
   if (params.agentType !== "agent") {
     throw new ApiError(
       400,

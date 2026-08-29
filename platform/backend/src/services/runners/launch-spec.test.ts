@@ -49,6 +49,8 @@ describe("buildRunnerLaunchSpec", () => {
       organizationId: setup.agent.organizationId,
       runtimeScope: "agent-tests",
       effectiveNetworkPolicy: { source: "built_in", policy: null },
+      appName: "Archestra",
+      executionMode: "one_shot",
       task: "Inspect the repository and report the result.",
     });
 
@@ -95,6 +97,8 @@ describe("buildRunnerLaunchSpec", () => {
       organizationId: setup.agent.organizationId,
       runtimeScope: "agent-tests",
       effectiveNetworkPolicy: { source: "built_in", policy: null },
+      appName: "Archestra",
+      executionMode: "one_shot",
     });
 
     expect(spec.env.ARCHESTRA_LLM_PROXY_URL).toBe(
@@ -136,6 +140,8 @@ describe("buildRunnerLaunchSpec", () => {
         organizationId: setup.agent.organizationId,
         runtimeScope: "agent-tests",
         effectiveNetworkPolicy: { source: "built_in", policy: null },
+        appName: "Archestra",
+        executionMode: "one_shot",
       }),
     ).rejects.toMatchObject({ statusCode: 409 });
   });
@@ -168,6 +174,8 @@ describe("buildRunnerLaunchSpec", () => {
         organizationId: setup.agent.organizationId,
         runtimeScope: "agent-tests",
         effectiveNetworkPolicy: { source: "built_in", policy: null },
+        appName: "Archestra",
+        executionMode: "one_shot",
       }),
     ).rejects.toMatchObject({
       statusCode: 409,
@@ -217,6 +225,8 @@ describe("buildRunnerLaunchSpec", () => {
       organizationId: setup.agent.organizationId,
       runtimeScope: "agent-tests",
       effectiveNetworkPolicy: { source: "built_in", policy: null },
+      appName: "Archestra",
+      executionMode: "one_shot",
     });
 
     expect(spec.secretEnv.GITHUB_TOKEN).toBe("github-token");
@@ -267,6 +277,8 @@ describe("buildRunnerLaunchSpec", () => {
       organizationId: setup.agent.organizationId,
       runtimeScope: "agent-tests",
       effectiveNetworkPolicy: { source: "built_in", policy: null },
+      appName: "Archestra",
+      executionMode: "one_shot",
     });
 
     expect(spec.secretEnv.CLAUDE_CODE_OAUTH_TOKEN).toBe(
@@ -335,6 +347,8 @@ describe("buildRunnerLaunchSpec", () => {
         organizationId: setup.agent.organizationId,
         runtimeScope: "agent-tests",
         effectiveNetworkPolicy: { source: "built_in", policy: null },
+        appName: "Archestra",
+        executionMode: "one_shot",
       }),
     ).rejects.toMatchObject({
       statusCode: 409,

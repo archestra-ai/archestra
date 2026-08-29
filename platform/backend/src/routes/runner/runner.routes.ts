@@ -35,6 +35,10 @@ import {
 const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
   fastify,
 ) => {
+  fastify.addHook("preHandler", async () => {
+    if (!isAnyRunnerBackendEnabled()) throw new ApiError(404, "Not found");
+  });
+
   fastify.get(
     "/api/agents/:id/background-execution/preflight",
     {
@@ -257,7 +261,11 @@ const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
         agentId: agent.id,
         message: request.body.message,
         attachments: request.body.attachments,
-        systemParams: { sessionId: crypto.randomUUID(), source: "chat" },
+        systemParams: {
+          sessionId: crypto.randomUUID(),
+          source: "chat",
+          backgroundExecutionMode: "interactive",
+        },
       });
       request.auditResourceId = { value: task.id };
       request.auditAfter = {
@@ -282,7 +290,7 @@ const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
     {
       schema: {
         operationId: RouteId.GetMyAgentExecutions,
-        description: "List Background execution sessions started by this user",
+        description: "List Background executions started by this user",
         tags: ["Agents"],
         response: constructResponseSchema(
           z.array(SelectAgentExecutionSessionSchema),
@@ -290,7 +298,6 @@ const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
       },
     },
     async (request, reply) => {
-      if (!isAnyRunnerBackendEnabled()) throw new ApiError(404, "Not found");
       return reply.send(
         await AgentRunModel.listForActor({
           actorUserId: request.user.id,
@@ -305,15 +312,13 @@ const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
     {
       schema: {
         operationId: RouteId.GetMyAgentExecution,
-        description:
-          "Get one Background execution session started by this user",
+        description: "Get one Background execution started by this user",
         tags: ["Agents"],
         params: z.object({ taskId: z.string().uuid() }),
         response: constructResponseSchema(SelectAgentExecutionSessionSchema),
       },
     },
     async (request, reply) => {
-      if (!isAnyRunnerBackendEnabled()) throw new ApiError(404, "Not found");
       const execution = await AgentRunModel.findForActorByTaskId({
         taskId: request.params.taskId,
         actorUserId: request.user.id,
@@ -329,8 +334,7 @@ const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
     {
       schema: {
         operationId: RouteId.UpdateAgentExecution,
-        description:
-          "Rename one Background execution session started by this user",
+        description: "Rename one Background execution started by this user",
         tags: ["Agents"],
         params: z.object({ taskId: z.string().uuid() }),
         body: z.object({ title: z.string().trim().min(1).max(100) }),
@@ -338,7 +342,6 @@ const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
       },
     },
     async (request, reply) => {
-      if (!isAnyRunnerBackendEnabled()) throw new ApiError(404, "Not found");
       const execution = await requireOwnedExecution(request);
       request.auditResourceId = { value: execution.taskId };
       request.auditBefore = {
@@ -380,7 +383,6 @@ const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
       },
     },
     async (request, reply) => {
-      if (!isAnyRunnerBackendEnabled()) throw new ApiError(404, "Not found");
       const execution = await requireOwnedExecution(request);
       request.auditResourceId = { value: execution.taskId };
       request.auditBefore = {
@@ -425,7 +427,6 @@ const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
       },
     },
     async (request, reply) => {
-      if (!isAnyRunnerBackendEnabled()) throw new ApiError(404, "Not found");
       const execution = await requireOwnedExecution(request);
       if (!execution.endedAt) {
         throw new ApiError(409, "Stop the execution before deleting it");

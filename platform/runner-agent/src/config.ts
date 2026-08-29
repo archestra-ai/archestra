@@ -18,6 +18,10 @@ export type BackgroundExecutionAgentConfig = {
   gatewayUrl: string;
   gatewayToken: string;
   model: string;
+  /** Interactive Chat terminal, or an unattended task that must settle. */
+  executionMode: "interactive" | "one_shot";
+  /** Server-rendered, white-label-safe terminal header. */
+  banner: string | null;
   /** Agent instructions configured in the platform. */
   systemPrompt: string | null;
   /** Initial instruction, when the session was started with one. */
@@ -54,6 +58,8 @@ export function readConfig(
     gatewayToken: requireValue(env, "ARCHESTRA_MCP_GATEWAY_TOKEN"),
     model:
       readBackgroundExecutionValue(env, "MODEL")?.trim() || "claude-opus-5",
+    executionMode: readExecutionMode(env),
+    banner: readBackgroundExecutionValue(env, "BANNER")?.trim() || null,
     systemPrompt:
       readBackgroundExecutionValue(env, "SYSTEM_PROMPT")?.trim() || null,
     task: readBackgroundExecutionValue(env, "TASK")?.trim() || null,
@@ -70,6 +76,16 @@ export function readConfig(
         0,
       ) * 1000 || null,
   };
+}
+
+function readExecutionMode(
+  env: NodeJS.ProcessEnv,
+): BackgroundExecutionAgentConfig["executionMode"] {
+  const value = readBackgroundExecutionValue(env, "MODE")?.trim() || "one_shot";
+  if (value === "interactive" || value === "one_shot") return value;
+  throw new BackgroundExecutionAgentConfigError(
+    "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODE must be interactive or one_shot.",
+  );
 }
 
 function readProxyProtocol(

@@ -158,6 +158,12 @@ export interface A2ASystemParams {
   chatOpsBindingId?: string;
   chatOpsThreadId?: string;
   /**
+   * Interactive is reserved for a person opening the execution terminal in
+   * Chat. Every other durable task is one-shot so delegation surfaces can
+   * receive a terminal result without waiting for somebody to exit a TUI.
+   */
+  backgroundExecutionMode?: "interactive" | "one_shot";
+  /**
    * Per-turn framing prepended to the executed user turn but NOT
    * persisted with it. Callers with server-side sessions (chatops) put
    * situational context here — "(Telegram conversation, thread id: …)",
@@ -598,6 +604,8 @@ export class A2AManager {
                 task: executedTurnText,
                 modelId: agent.modelId,
                 llmApiKeyId: agent.llmApiKeyId,
+                executionMode:
+                  systemParams?.backgroundExecutionMode ?? "one_shot",
                 titleUserId: actor.kind === "user" ? actor.id : undefined,
                 onTextDelta: runOpts.onTextDelta,
                 abortSignal: runOpts.abortSignal,

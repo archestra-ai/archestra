@@ -1,6 +1,7 @@
 import {
   CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY,
   EXECUTION_ID_HEADER,
+  isDefaultBrandedAppName,
   MODEL_ROUTER_SUPPORTED_PROVIDERS,
   providerDisplayNames,
   requiresOpenAiResponsesApi,
@@ -18,6 +19,7 @@ import {
   UserTokenModel,
   VirtualApiKeyModel,
 } from "@/models";
+import { archestraMarkWithText } from "@/services/archestra-mark";
 import type {
   AgentDeployment,
   AgentExecutionInput,
@@ -77,8 +79,12 @@ export async function buildRunnerLaunchSpec(params: {
   organizationId: string;
   runtimeScope: string;
   effectiveNetworkPolicy: EffectiveNetworkPolicy;
+  /** White-label product name rendered by the built-in terminal UI. */
+  appName: string;
   /** The first instruction, when the task started with one. */
   task?: string | null;
+  /** Whether the Agent owns a live TUI or exits after its first result. */
+  executionMode: "interactive" | "one_shot";
   inputFiles?: AgentExecutionInput[];
   imagePullSecrets?: string[];
 }): Promise<{ spec: RunnerLaunchSpec; virtualApiKeyId: string }> {
@@ -231,6 +237,10 @@ export async function buildRunnerLaunchSpec(params: {
     // qualified model id above.
     ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL: llm.selectedModel,
     ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL_PROVIDER: llm.selectedProvider,
+    ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODE: params.executionMode,
+    ARCHESTRA_AGENT_BACKGROUND_EXECUTION_BANNER: executionBanner(
+      params.appName,
+    ),
     ARCHESTRA_AGENT_BACKGROUND_EXECUTION_STEER_FIFO: RUNNER_STEER_FIFO,
     // The finish contract: a session that has done its work parks this long
     // for further direction, then exits so the execution and task settle.
@@ -314,6 +324,12 @@ export async function buildRunnerLaunchSpec(params: {
       inputFileCount: params.inputFiles?.length ?? 0,
     },
   };
+}
+
+function executionBanner(appName: string): string {
+  return isDefaultBrandedAppName(appName)
+    ? archestraMarkWithText({ appName }).join("\n")
+    : `${appName}\nSecure access to your AI tools`;
 }
 
 function claudeCodeCustomHeaders(params: {

@@ -18,10 +18,12 @@ export function AgentExecutionTerminal({
   taskId,
   active,
   title,
+  onClosed,
 }: {
   taskId: string;
   active: boolean;
   title?: string;
+  onClosed?: () => void;
 }) {
   const transport = useMemo<ExecSessionTransport>(
     () => createAgentExecutionTransport(taskId),
@@ -34,6 +36,8 @@ export function AgentExecutionTerminal({
       transport={transport}
       isActive={active}
       title={title}
+      disconnectedLabel="Execution finishing…"
+      onClosed={onClosed}
     />
   );
 }

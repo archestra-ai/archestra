@@ -41,6 +41,12 @@ export class SteerQueue {
     return this.pending.length > 0;
   }
 
+  /** Queue a complete line read directly from the attached terminal. */
+  enqueue(message: string): void {
+    const normalized = message.trim();
+    if (normalized) this.pending.push(normalized);
+  }
+
   /**
    * Block until a message arrives, or until `timeoutMs` passes with nothing.
    *
@@ -72,10 +78,7 @@ export class SteerQueue {
         this.stream = stream;
         this.lines = lines;
         for await (const line of lines) {
-          const message = line.trim();
-          if (message) {
-            this.pending.push(message);
-          }
+          this.enqueue(line);
         }
         lines.close();
       } catch (error) {

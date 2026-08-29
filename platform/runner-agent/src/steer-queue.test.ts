@@ -52,6 +52,14 @@ describe("SteerQueue", () => {
     });
   });
 
+  it("merges attached-terminal lines into the same ordered turn queue", async () => {
+    await withQueue("from fifo\n", async (queue) => {
+      await queue.waitForMessage();
+      queue.enqueue("  from terminal  ");
+      expect(queue.drain()).toEqual(["from terminal"]);
+    });
+  });
+
   it("stops waiting once the queue is stopped", async () => {
     await withQueue("", async (queue) => {
       queue.stop();

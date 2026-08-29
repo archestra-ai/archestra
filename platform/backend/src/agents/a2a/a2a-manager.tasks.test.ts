@@ -274,6 +274,7 @@ describe("A2AManager full task mode", () => {
         agentId: agent.id,
         taskId: tasked.task?.id,
         deployment: expect.objectContaining({ agentId: agent.id }),
+        executionMode: "one_shot",
       }),
     );
     expect(executeA2AMessage).toHaveBeenCalledTimes(1);

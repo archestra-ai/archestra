@@ -16,6 +16,7 @@ import {
   Loader2,
   Plus,
   Search,
+  TerminalSquare,
   XIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -82,6 +83,7 @@ import {
   listServerNames,
   resolveAgentConnectionGate,
 } from "@/lib/chat/agent-connection-gate";
+import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useConnectors } from "@/lib/knowledge/connector.query";
 import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
@@ -134,6 +136,8 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
     [installOrchestrator],
   );
   const { data: session } = useSession();
+  const backgroundExecutionEnabled =
+    useFeature("agentBackgroundExecution") === true;
   const userId = session?.user?.id;
   const { data: isAgentAdmin } = useHasPermissions({ agent: ["admin"] });
   const createProfile = useCreateProfile();
@@ -302,6 +306,10 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
             <span className="truncate flex-1 text-left">
               {displayAgentName}
             </span>
+            {backgroundExecutionEnabled &&
+              currentAgent?.backgroundExecution && (
+                <ExecutionCapableIndicator />
+              )}
             {/* In Auto mode the agent reaches everything dynamically,
                 so the per-server avatar group + its tool selector are
                 meaningless — hide them. */}
@@ -382,6 +390,10 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                             <span className="text-sm font-medium truncate">
                               {agent.name}
                             </span>
+                            {backgroundExecutionEnabled &&
+                              agent.backgroundExecution && (
+                                <ExecutionCapableIndicator />
+                              )}
                             <AgentBadge
                               type={agent.scope}
                               className="text-[10px] px-1.5 py-0 shrink-0"
@@ -616,6 +628,23 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
     </>
   );
 });
+
+function ExecutionCapableIndicator() {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className="inline-flex shrink-0 text-muted-foreground/60"
+          role="img"
+          aria-label="Isolated execution"
+        >
+          <TerminalSquare className="size-3" />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top">Runs in an isolated execution</TooltipContent>
+    </Tooltip>
+  );
+}
 
 // Reusable dialog header with back button and close
 function DialogHeader({

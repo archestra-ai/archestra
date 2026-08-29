@@ -280,6 +280,7 @@ class RunnerRuntimeManager {
     if (!podName) {
       throw new Error("This session has no running pod to attach to");
     }
+    await this.waitForTmuxSession({ session: params.session, podName });
     const namespace = params.session.runtimeScope;
     const socket = await clients.exec.exec(
       namespace,
@@ -613,6 +614,39 @@ class RunnerRuntimeManager {
   }
 
   /**
+   * Pod Running only means the container process was accepted by Kubernetes;
+   * its bootstrap may still be creating tmux. Wait for the actual attachable
+   * session so the first browser connection is as reliable as a refresh.
+   */
+  private async waitForTmuxSession(params: {
+    session: AgentRun;
+    podName: string;
+  }): Promise<void> {
+    const deadline = Date.now() + RUNNER_ATTACH_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      const ready = await this.execInPod({
+        session: params.session,
+        podName: params.podName,
+        command: [
+          "/bin/sh",
+          "-c",
+          `tmux has-session -t ${RUNNER_TMUX_SESSION} 2>/dev/null`,
+        ],
+      })
+        .then(() => true)
+        .catch(() => false);
+      if (ready) return;
+
+      const pod = await this.findPodPhase(params.session);
+      if (!pod || pod.phase === "Succeeded" || pod.phase === "Failed") {
+        throw new Error("This execution ended before its terminal was ready");
+      }
+      await delay(RUNNER_INPUT_STAGING_POLL_MS);
+    }
+    throw new Error("Timed out waiting for the Agent terminal");
+  }
+
+  /**
    * Whether a Kubernetes client can be built at all.
    *
    * Deliberately not `isK8sConfigured()`, which only reports whether the two
@@ -659,6 +693,7 @@ export default new RunnerRuntimeManager();
 const RUNNER_COMPLETION_POLL_MS = 5_000;
 const RUNNER_INPUT_STAGING_POLL_MS = 500;
 const RUNNER_INPUT_STAGING_TIMEOUT_MS = 5 * 60_000;
+const RUNNER_ATTACH_TIMEOUT_MS = 60_000;
 
 /** Sleep that wakes early on abort, so cancellation is not delayed a full poll. */
 function delay(ms: number, signal?: AbortSignal): Promise<void> {

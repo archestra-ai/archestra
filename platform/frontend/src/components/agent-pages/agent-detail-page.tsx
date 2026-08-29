@@ -50,6 +50,7 @@ import {
 } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { formatPermissionConstraint } from "@/lib/auth/auth.utils";
+import { useFeature } from "@/lib/config/config.query";
 import {
   backToListLabel,
   notYoursToChange,
@@ -238,8 +239,12 @@ function AgentDetails({
 
   const showConnect = connectAction.visible;
   const legacyConnectRequested = searchParams.get("tab") === "connect";
+  const backgroundExecutionEnabled =
+    useFeature("agentBackgroundExecution") === true;
   const hasBackgroundExecution =
-    kind === "agent" && agent.backgroundExecution != null;
+    backgroundExecutionEnabled &&
+    kind === "agent" &&
+    agent.backgroundExecution != null;
   const showingExecutions =
     hasBackgroundExecution && searchParams.get("tab") === "executions";
   const detailHref = agentDetailHref(kind, agent.id);

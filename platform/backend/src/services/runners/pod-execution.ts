@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { Writable } from "node:stream";
-import { toPlaceholderTitle } from "@archestra/shared";
+import { DEFAULT_APP_NAME, toPlaceholderTitle } from "@archestra/shared";
 import type { A2AExecuteResult } from "@/agents/a2a-executor";
+import config from "@/config";
 import logger from "@/logging";
 import {
   AgentExecutionInputModel,
@@ -42,6 +43,7 @@ async function startBackgroundSession(params: {
   chatOpsBindingId?: string;
   chatOpsThreadId?: string;
   task?: string | null;
+  executionMode: "interactive" | "one_shot";
   modelId: string | null;
   llmApiKeyId: string | null;
   titleUserId?: string;
@@ -75,7 +77,9 @@ async function startBackgroundSession(params: {
     organizationId: params.organizationId,
     runtimeScope,
     effectiveNetworkPolicy,
+    appName: organization?.appName ?? DEFAULT_APP_NAME,
     task: params.task,
+    executionMode: params.executionMode,
     inputFiles,
   });
 
@@ -154,7 +158,9 @@ export function resolveAgentDeployment(
     | "backgroundExecutionSecretId"
   >,
 ): AgentDeployment | null {
-  if (!agent.backgroundExecution) return null;
+  if (!config.agentBackgroundExecution.enabled || !agent.backgroundExecution) {
+    return null;
+  }
   return {
     ...agent.backgroundExecution,
     agentId: agent.id,
@@ -183,6 +189,7 @@ export async function runTaskInBackground(params: {
   chatOpsBindingId?: string;
   chatOpsThreadId?: string;
   task?: string | null;
+  executionMode: "interactive" | "one_shot";
   modelId: string | null;
   llmApiKeyId: string | null;
   titleUserId?: string;

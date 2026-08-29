@@ -203,6 +203,43 @@ describe("agent routes", () => {
       expect(response.json().backgroundExecution).toEqual(backgroundExecution);
     });
 
+    test("rejects Background execution configuration while the feature flag is disabled", async () => {
+      const previous = config.agentBackgroundExecution.enabled;
+      config.agentBackgroundExecution.enabled = false;
+      try {
+        const response = await app.inject({
+          method: "POST",
+          url: "/api/agents",
+          payload: {
+            name: `Disabled Background Agent ${crypto.randomUUID().slice(0, 8)}`,
+            agentType: "agent",
+            scope: "personal",
+            teams: [],
+            backgroundExecution: {
+              image: "example.com/coding-agent:latest",
+              command: null,
+              inferenceProtocol: "openai_responses",
+              backend: "kubernetes",
+              steerMode: "pipe",
+              privileged: false,
+              resources: null,
+              environment: null,
+              credentials: null,
+              ttlHours: null,
+              idleTimeoutMinutes: null,
+            },
+          },
+        });
+
+        expect(response.statusCode).toBe(400);
+        expect(response.json().error.message).toBe(
+          "Background execution is not enabled",
+        );
+      } finally {
+        config.agentBackgroundExecution.enabled = previous;
+      }
+    });
+
     test("rejects Background execution on an MCP Gateway", async () => {
       const response = await app.inject({
         method: "POST",

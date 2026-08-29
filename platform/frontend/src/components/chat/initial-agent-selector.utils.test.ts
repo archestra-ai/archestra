@@ -22,6 +22,7 @@ function makeAgent(
     description: overrides.description ?? null,
     icon: overrides.icon ?? null,
     systemPrompt: overrides.systemPrompt ?? null,
+    backgroundExecution: null,
   };
 }
 

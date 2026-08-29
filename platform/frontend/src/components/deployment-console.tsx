@@ -85,6 +85,7 @@ export function DeploymentConsoleTabs({
   onValueChange,
   tabs,
   hideTabBar = false,
+  variant = "segmented",
   children,
   className,
 }: {
@@ -92,6 +93,7 @@ export function DeploymentConsoleTabs({
   onValueChange: (value: string) => void;
   tabs: DeploymentConsoleTab[];
   hideTabBar?: boolean;
+  variant?: "segmented" | "underline";
   children: ReactNode;
   className?: string;
 }) {
@@ -102,14 +104,25 @@ export function DeploymentConsoleTabs({
       className={cn("flex min-h-0 flex-1 flex-col", className)}
     >
       {!hideTabBar && (
-        <TabsList className="h-9 w-fit flex-shrink-0 border bg-slate-100 p-1 dark:bg-slate-800">
+        <TabsList
+          className={cn(
+            "h-9 w-fit flex-shrink-0",
+            variant === "segmented"
+              ? "border bg-slate-100 p-1 dark:bg-slate-800"
+              : "gap-1 rounded-none border-0 bg-transparent p-0",
+          )}
+        >
           {tabs.map((tab) => {
             const trigger = (
               <TabsTrigger
                 key={tab.value}
                 value={tab.value}
                 disabled={tab.disabled}
-                className="px-6"
+                className={cn(
+                  variant === "segmented"
+                    ? "px-6"
+                    : "h-9 rounded-none border-x-0 border-b-2 border-t-0 border-transparent bg-transparent px-3 shadow-none data-[state=active]:border-b-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none dark:data-[state=active]:border-b-foreground dark:data-[state=active]:bg-transparent",
+                )}
                 data-testid={tab.testId}
               >
                 {tab.label}

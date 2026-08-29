@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createInterface } from "node:readline";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -34,30 +35,40 @@ async function main(): Promise<number> {
     throw error;
   }
 
-  write(`Background execution run for ${config.agentName} (${config.agentId})`);
-  write(
-    `Model ${config.model} via the Archestra proxy. Tools from the MCP gateway.`,
-  );
-  write(
-    "Type into this session to steer it; the message lands at the next turn.",
-  );
-  write("");
+  renderHeader(config);
 
   const steerQueue = new SteerQueue(config.steerFifo, (error: unknown) => {
     write(`archestra: could not read the steer channel: ${describe(error)}`);
   });
   steerQueue.start();
+  const terminalInput =
+    config.executionMode === "interactive"
+      ? createInterface({
+          input: process.stdin,
+          output: process.stdout,
+          terminal: process.stdin.isTTY,
+        })
+      : null;
+  terminalInput?.setPrompt(`${ANSI.accent}›${ANSI.reset} `);
+  terminalInput?.on("line", (line) => steerQueue.enqueue(line));
   const shutdown = new AbortController();
   const stop = () => {
     shutdown.abort();
     steerQueue.stop();
+    terminalInput?.close();
   };
   process.once("SIGTERM", stop);
   process.once("SIGINT", stop);
 
   const model = createModel(config);
 
-  const mcpClient = await connectGateway(config);
+  let mcpClient: Client;
+  try {
+    mcpClient = await connectGateway(config);
+  } catch (error) {
+    stop();
+    throw error;
+  }
   const tools = {
     ...loadLocalWorkspaceTools(),
     ...(await loadGatewayTools(mcpClient)),
@@ -67,6 +78,7 @@ async function main(): Promise<number> {
 
   let messages: ModelMessage[] = [];
   if (config.task) {
+    renderTurn("You", config.task);
     messages.push({ role: "user", content: config.task });
   }
 
@@ -76,7 +88,7 @@ async function main(): Promise<number> {
       if (messages.length === 0 || messages.at(-1)?.role === "assistant") {
         // Nothing to answer. Park on the steer channel rather than spinning —
         // this is what makes a session that is idle for days almost free.
-        write("[waiting for direction]");
+        terminalInput?.prompt();
         const incoming = await steerQueue.waitForMessage(config.idleTimeoutMs);
         if (incoming.length === 0) {
           if (config.idleTimeoutMs !== null) {
@@ -87,11 +99,13 @@ async function main(): Promise<number> {
           break;
         }
         for (const message of incoming) {
-          write(`> ${message}`);
           messages.push({ role: "user", content: message });
         }
       }
 
+      process.stdout.write(
+        `\n${ANSI.accent}${config.agentName}${ANSI.reset}\n`,
+      );
       const result = streamText({
         model,
         system: config.systemPrompt ?? undefined,
@@ -121,10 +135,11 @@ async function main(): Promise<number> {
       messages.push(...(await result.response).messages);
       messages = trimHistory(messages);
 
+      if (config.executionMode === "one_shot") break;
+
       // Steers that arrived mid-turn are consumed here, at the boundary, so
       // they join the conversation in order instead of interrupting a call.
       for (const message of steerQueue.drain()) {
-        write(`> ${message}`);
         messages.push({ role: "user", content: message });
       }
     }
@@ -138,6 +153,7 @@ async function main(): Promise<number> {
     }
   } finally {
     steerQueue.stop();
+    terminalInput?.close();
     await Promise.race([
       mcpClient.close().catch(() => undefined),
       new Promise<void>((resolve) => setTimeout(resolve, 1_000)),
@@ -147,6 +163,30 @@ async function main(): Promise<number> {
   }
 
   return exitCode;
+}
+
+function renderHeader(config: BackgroundExecutionAgentConfig): void {
+  if (config.banner) {
+    process.stdout.write(`${ANSI.accent}${config.banner}${ANSI.reset}\n\n`);
+  }
+  write(`${ANSI.bold}${config.agentName}${ANSI.reset}`);
+  write(
+    `${ANSI.dim}${config.model} · isolated execution · ${
+      config.executionMode === "interactive" ? "interactive" : "one-shot"
+    }${ANSI.reset}`,
+  );
+  if (config.executionMode === "interactive") {
+    write(
+      `${ANSI.dim}Enter a follow-up at the prompt. Ctrl-C stops.${ANSI.reset}`,
+    );
+  }
+  write("");
+}
+
+function renderTurn(label: string, content: string): void {
+  write(`${ANSI.accent}${label}${ANSI.reset}`);
+  write(content);
+  write("");
 }
 
 function createModel(config: BackgroundExecutionAgentConfig) {
@@ -193,7 +233,12 @@ async function connectGateway(
     name: "archestra-runner-agent",
     version: "0.1.0",
   });
-  await client.connect(transport);
+  try {
+    await client.connect(transport);
+  } catch (error) {
+    await client.close().catch(() => undefined);
+    throw error;
+  }
   return client;
 }
 
@@ -228,6 +273,12 @@ function trimHistory(messages: ModelMessage[]): ModelMessage[] {
 }
 
 const MAX_HISTORY_MESSAGES = 200;
+const ANSI = {
+  accent: "\u001b[38;5;42m",
+  bold: "\u001b[1m",
+  dim: "\u001b[2m",
+  reset: "\u001b[0m",
+} as const;
 
 main()
   .then((code) => {
@@ -235,5 +286,8 @@ main()
   })
   .catch(() => {
     write("archestra: the session could not start.");
-    process.exitCode = 1;
+    // An MCP transport may retain internal fetch handles after a failed
+    // handshake. This is a task process, so a startup failure is terminal: do
+    // not leave the execution pod looking alive after surfacing the error.
+    process.exit(1);
   });

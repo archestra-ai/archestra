@@ -37,15 +37,37 @@ bearer_token_env_var = "ARCHESTRA_MCP_GATEWAY_TOKEN"
 [mcp_servers.archestra.http_headers]
 "X-Archestra-Execution-Id" = "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID:?}"
 "X-Archestra-Session-Id" = "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID:?}"
+
+[projects."${PWD}"]
+trust_level = "trusted"
 EOF
 chmod 0600 "${CODEX_HOME}/config.toml"
 
 task_file="${runtime_dir}/task.md"
 printf '%s\n' "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK:?}" > "${task_file}"
-exec codex exec \
-  --dangerously-bypass-approvals-and-sandbox \
-  --skip-git-repo-check \
-  --color always \
-  --model "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL}" \
-  --config model_provider='"archestra"' \
-  -- "$(cat "${task_file}")"
+
+common_args=(
+  --dangerously-bypass-approvals-and-sandbox
+  --model "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL}"
+  --config model_provider='"archestra"'
+)
+
+case "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODE:-one_shot}" in
+  interactive)
+    # No subcommand means Codex's native full-screen TUI. The positional prompt
+    # starts the first turn; subsequent terminal input stays in the same Codex
+    # conversation until the person exits or stops the execution.
+    exec codex "${common_args[@]}" -- "$(cat "${task_file}")"
+    ;;
+  one_shot)
+    exec codex exec \
+      "${common_args[@]}" \
+      --skip-git-repo-check \
+      --color always \
+      -- "$(cat "${task_file}")"
+    ;;
+  *)
+    echo "archestra: unknown Background execution mode" >&2
+    exit 78
+    ;;
+esac

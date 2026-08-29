@@ -62,6 +62,9 @@ interface ExecTerminalProps {
   title?: string;
   /** Heading for the copyable equivalent command, when the session reports one. */
   manualCommandTitle?: string;
+  /** Copy shown while the owning resource settles after its pty closes. */
+  disconnectedLabel?: string;
+  onClosed?: () => void;
 }
 
 export function ExecTerminal({
@@ -70,11 +73,15 @@ export function ExecTerminal({
   isActive,
   title = "Interactive Shell",
   manualCommandTitle = "Manual Command",
+  disconnectedLabel = "Session terminated",
+  onClosed,
 }: ExecTerminalProps) {
   // Read through a ref so a new transport object on every render cannot
   // retrigger the effect; `sessionKey` is the reconnect signal.
   const transportRef = useRef(transport);
   transportRef.current = transport;
+  const onClosedRef = useRef(onClosed);
+  onClosedRef.current = onClosed;
   const terminalRef = useRef<HTMLDivElement>(null);
   const terminalInstanceRef = useRef<import("@xterm/xterm").Terminal | null>(
     null,
@@ -177,6 +184,7 @@ export function ExecTerminal({
           if (disposed) return;
           setClosedReason(reason);
           setStatus("disconnected");
+          onClosedRef.current?.();
         },
       });
 
@@ -222,8 +230,8 @@ export function ExecTerminal({
     connecting: "Connecting...",
     connected: "",
     disconnected: closedReason
-      ? `Session terminated — ${closedReason}`
-      : "Session terminated",
+      ? `${disconnectedLabel} — ${closedReason}`
+      : disconnectedLabel,
     error: errorMessage || "Connection error",
   }[status];
 

@@ -63,7 +63,10 @@ jq -n \
         }
       }
     },
-    agents:{defaults:{workspace:$workspace}},
+    agents:{defaults:{
+      workspace:$workspace,
+      model:{primary:("archestra/" + $model)}
+    }},
     mcp:{
       servers:{
         archestra:{
@@ -81,14 +84,30 @@ jq -n \
 chmod 0600 "${config_file}"
 printf '%s\n' "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK:?}" > "${task_file}"
 
-set +e
-openclaw agent \
-  --local \
-  --session-key "agent:main:${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID:?}" \
-  --model "archestra/${model}" \
-  --message-file "${task_file}" 2>&1 | tee "${runtime_dir}/openclaw-output.log"
-status=${PIPESTATUS[0]}
-set -e
-if [[ ${status} -ne 0 ]] || grep -Eq 'FailoverError:|LLM request failed|network connection error' "${runtime_dir}/openclaw-output.log"; then
-  exit 1
-fi
+session_key="agent:main:${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID:?}"
+
+case "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODE:-one_shot}" in
+  interactive)
+    exec openclaw tui \
+      --local \
+      --session "${session_key}" \
+      --message "$(cat "${task_file}")"
+    ;;
+  one_shot)
+    set +e
+    openclaw agent \
+      --local \
+      --session-key "${session_key}" \
+      --model "archestra/${model}" \
+      --message-file "${task_file}" 2>&1 | tee "${runtime_dir}/openclaw-output.log"
+    status=${PIPESTATUS[0]}
+    set -e
+    if [[ ${status} -ne 0 ]] || grep -Eq 'FailoverError:|LLM request failed|network connection error' "${runtime_dir}/openclaw-output.log"; then
+      exit 1
+    fi
+    ;;
+  *)
+    echo "archestra: unknown Background execution mode" >&2
+    exit 78
+    ;;
+esac

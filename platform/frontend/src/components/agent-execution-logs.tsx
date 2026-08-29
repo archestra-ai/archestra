@@ -10,6 +10,7 @@ import {
   DeploymentLogPanel,
   useDeploymentLogAutoScroll,
 } from "@/components/deployment-console";
+import { plainTerminalTranscript } from "@/components/terminal-transcript";
 import type { AgentExecution } from "@/lib/agent-background-execution.query";
 import websocketService from "@/lib/websocket/websocket";
 
@@ -78,9 +79,8 @@ export function AgentExecutionLogs({
 
   return (
     <DeploymentLogPanel
-      title="Session output"
-      detail={execution.deploymentName}
-      content={content}
+      title="Output"
+      content={plainTerminalTranscript(content)}
       error={error}
       scrollAreaRef={scrollAreaRef}
       showScrollToBottom={showScrollToBottom}

@@ -1264,6 +1264,8 @@ export function AgentForm({
       : "The environment for this agent's code sandbox (runtime and network egress) and the tools and knowledge sources it can use.";
   const isBuiltIn = !!agent?.builtIn;
   const agentHooksEnabled = useFeature("agentHooksEnabled");
+  const agentBackgroundExecutionEnabled =
+    useFeature("agentBackgroundExecution") === true;
   // "Auto" (implicit access to all tools) is the default for new agents; admins
   // can switch an agent to "Custom" (explicitly assigned tools). Implicit access
   // is scoped to tools/knowledge visible to the user AND in the agent's
@@ -2032,7 +2034,9 @@ export function AgentForm({
                 passthroughHeaders:
                   passthroughHeaders.length > 0 ? passthroughHeaders : null,
               }),
-              backgroundExecution,
+              ...(agentBackgroundExecutionEnabled && {
+                backgroundExecution,
+              }),
             }),
             // The tools group: what the agent may reach, and how.
             ...(showToolsSections && {
@@ -2093,7 +2097,9 @@ export function AgentForm({
             passthroughHeaders:
               passthroughHeaders.length > 0 ? passthroughHeaders : null,
           }),
-          backgroundExecution,
+          ...(agentBackgroundExecutionEnabled && {
+            backgroundExecution,
+          }),
         });
         if (!created) return false;
         savedAgentId = created?.id ?? "";
@@ -2334,6 +2340,7 @@ export function AgentForm({
     accessAllSubagents,
     supportsEnvironment,
     supportsSubagents,
+    agentBackgroundExecutionEnabled,
     backgroundExecution,
   ]);
 
@@ -3629,7 +3636,7 @@ export function AgentForm({
                   />
                 </div>
 
-                {agentType === "agent" && (
+                {agentType === "agent" && agentBackgroundExecutionEnabled && (
                   <AgentBackgroundExecutionFields
                     value={backgroundExecution}
                     onChange={setBackgroundExecution}

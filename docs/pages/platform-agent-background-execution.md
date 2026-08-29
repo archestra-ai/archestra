@@ -34,6 +34,14 @@ Invocation is explicit and surface-specific:
 - **Ordinary messaging-channel and A2A messages stay in the foreground.** They use the normal Archestra Agent loop unless the caller explicitly starts or delegates a durable task.
 - **Delegation selects the configured runtime.** When another Agent delegates to this Agent, Archestra starts a durable task in the Agent's deployment if Background execution is configured. Without it, the delegation uses the foreground Agent loop.
 
+Background executions have two launch modes. Chat starts the image in
+**interactive** mode and exposes its live terminal; maintained Claude Code and
+Codex images run their native TUIs. Delegation from another Agent, A2A,
+messaging channels, schedules, and task tools uses **one-shot** mode. The same
+image receives the task, exits when it is finished, and lets Archestra settle
+the durable task and deliver its result. This is selected by the invocation
+surface, not by a user-facing Agent setting.
+
 This lets a coordinator Agent stay responsive in a messaging channel while a specialist Agent handles durable work in its own container. It also lets a user start and supervise the same specialist directly from Chat without inventing a separate Agent or permission model.
 
 ## Execution Backend
@@ -133,7 +141,7 @@ resolves those concerns before the backend starts the image.
 | Requirement | Contract |
 | --- | --- |
 | Shell | `/bin/sh` must exist. Archestra uses it for the bootstrap and configured command. |
-| Live session | `tmux` must be on `PATH`. The process runs in one tmux session so the execution can accept terminal input and a user can attach from the Executions tab. |
+| Live terminal | `tmux` must be on `PATH`. The process runs in one tmux session so the execution can accept terminal input and a user can attach from the Executions tab. |
 | Command | Set **Command** and **Arguments** to the executable and arguments for the Agent client. If Command is blank, `archestra-runner-agent` must be on `PATH`. |
 | Initialization | An optional `archestra-agent-init` executable is called immediately before the Agent command. Use it for runtime-only setup such as Git credential configuration. |
 | Output | Write progress and the final result to stdout or stderr. Archestra streams and retains that output as the execution log. Do not print credentials. |
@@ -143,7 +151,11 @@ resolves those concerns before the backend starts the image.
 The initial task is supplied in
 `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK`. The Agent system prompt is
 supplied in `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_SYSTEM_PROMPT`. A custom
-client decides how to combine them.
+client decides how to combine them. It should read
+`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODE`: `interactive` means expose its
+input loop and remain available for follow-ups, while `one_shot` means finish
+the supplied task and exit. Images that support only unattended work can ignore
+interactive mode, but they will not provide a useful Chat terminal.
 
 ### Input files
 
@@ -174,6 +186,7 @@ accept useful follow-up instructions.
 | --- | --- |
 | `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_AGENT_ID`, `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_AGENT_NAME` | Durable Agent identity. |
 | `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID` | Durable execution identifier. |
+| `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODE` | `interactive` for a Chat-owned live terminal; `one_shot` for unattended delegation that must exit when complete. |
 | `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK`, `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_SYSTEM_PROMPT` | Initial task and Agent instructions. |
 | `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ATTACHMENTS_DIR` | Directory containing files attached to the initial execution message. |
 | `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ATTACHMENTS_MANIFEST` | JSON manifest containing each input file's name, path, media type, and size. |
@@ -290,8 +303,8 @@ small terminal indicator distinguishes them and shows whether the execution is
 starting, running, finished, or failed. Navigating elsewhere does not stop the
 execution; reopening the sidebar item restores the live terminal or the
 retained transcript. Archestra generates a concise title from the opening task.
-You can rename any session from its sidebar menu. The same menu stops an active
-session or deletes a finished one. Stopping removes the deployment and keeps
+You can rename any execution from its sidebar menu. The same menu stops an active
+execution or deletes a finished one. Stopping removes the deployment and keeps
 the output produced before cancellation.
 
 ## View Executions from an Agent

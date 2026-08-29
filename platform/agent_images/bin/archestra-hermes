@@ -49,14 +49,35 @@ mkdir -p "${HOME}/.hermes"
 ln -sf "${HERMES_HOME}/config.yaml" "${HOME}/.hermes/config.yaml"
 task_file="${runtime_dir}/task.md"
 printf '%s\n' "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK:?}" > "${task_file}"
-set +e
-hermes chat \
-  --provider archestra \
-  --model "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL:?}" \
-  --query "$(cat "${task_file}")" \
-  --yolo 2>&1 | tee "${runtime_dir}/hermes-output.log"
-status=${PIPESTATUS[0]}
-set -e
-if [[ ${status} -ne 0 ]] || grep -Eq 'HTTP [45][0-9]{2}:|Traceback \(most recent call last\)|LLM request failed|api_validation_error|Context length exceeded|\[exit [1-9][0-9]*\]|Failed to ' "${runtime_dir}/hermes-output.log"; then
-  exit 1
-fi
+
+common_args=(
+  --provider archestra
+  --model "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL:?}"
+  --yolo
+  --accept-hooks
+)
+
+case "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODE:-one_shot}" in
+  interactive)
+    exec hermes chat \
+      "${common_args[@]}" \
+      --tui \
+      --query "$(cat "${task_file}")"
+    ;;
+  one_shot)
+    set +e
+    hermes chat \
+      "${common_args[@]}" \
+      --query "$(cat "${task_file}")" \
+      2>&1 | tee "${runtime_dir}/hermes-output.log"
+    status=${PIPESTATUS[0]}
+    set -e
+    if [[ ${status} -ne 0 ]] || grep -Eq 'HTTP [45][0-9]{2}:|Traceback \(most recent call last\)|LLM request failed|api_validation_error|Context length exceeded|\[exit [1-9][0-9]*\]|Failed to ' "${runtime_dir}/hermes-output.log"; then
+      exit 1
+    fi
+    ;;
+  *)
+    echo "archestra: unknown Background execution mode" >&2
+    exit 78
+    ;;
+esac

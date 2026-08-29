@@ -4,12 +4,11 @@ import { formatDistanceToNow } from "date-fns";
 import { TerminalSquare } from "lucide-react";
 import { useState } from "react";
 import { AgentExecutionLogs } from "@/components/agent-execution-logs";
+import { AgentExecutionState } from "@/components/agent-execution-state";
 import { AgentExecutionTerminal } from "@/components/agent-execution-terminal";
 import { DeploymentConsoleTabs } from "@/components/deployment-console";
 import { QueryLoadError } from "@/components/query-load-error";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import {
   Empty,
   EmptyDescription,
@@ -70,16 +69,17 @@ export function AgentExecutions({ agentId }: { agentId: string }) {
   }
 
   return (
-    <div className="grid min-h-[520px] gap-4 lg:h-[calc(100dvh-16rem)] lg:grid-cols-[18rem_minmax(0,1fr)]">
-      <Card className="min-h-0 py-0">
-        <div className="border-b px-4 py-3">
-          <h2 className="text-sm font-semibold">Execution history</h2>
-          <p className="text-xs text-muted-foreground">{executionCount}</p>
+    <div className="grid min-h-[520px] overflow-hidden rounded-xl border bg-card/30 lg:h-[calc(100dvh-16rem)] lg:grid-cols-[15.5rem_minmax(0,1fr)]">
+      <aside className="flex min-h-0 flex-col border-b bg-muted/10 lg:border-b-0 lg:border-r">
+        <div className="flex items-center justify-between border-b px-4 py-3">
+          <h2 className="text-sm font-medium">History</h2>
+          <span className="text-xs tabular-nums text-muted-foreground">
+            {executionCount}
+          </span>
         </div>
-        <ScrollArea className="min-h-0 flex-1 p-2">
-          <div className="space-y-1">
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="space-y-0.5 p-2">
             {executions.map((execution) => {
-              const status = getExecutionStatus(execution.state);
               const isSelected = execution.taskId === selected?.taskId;
               return (
                 <Button
@@ -87,20 +87,24 @@ export function AgentExecutions({ agentId }: { agentId: string }) {
                   type="button"
                   variant="ghost"
                   className={cn(
-                    "h-auto w-full justify-start rounded-md px-3 py-3 text-left",
-                    isSelected && "bg-accent hover:bg-accent",
+                    "h-auto w-full justify-start rounded-lg px-3 py-2.5 text-left hover:bg-muted/70",
+                    isSelected &&
+                      "bg-muted text-foreground ring-1 ring-inset ring-border hover:bg-muted",
                   )}
                   onClick={() => setSelectedTaskId(execution.taskId)}
                 >
-                  <span className="min-w-0 flex-1 space-y-1.5">
-                    <span className="flex items-center justify-between gap-2">
-                      <span className="truncate font-mono text-xs">
+                  <span className="min-w-0 flex-1 space-y-1">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                        {execution.title}
+                      </span>
+                      <AgentExecutionState state={execution.state} compact />
+                    </span>
+                    <span className="flex items-center gap-1.5 text-[11px] font-normal text-muted-foreground">
+                      <span className="font-mono">
                         {shortTaskId(execution.taskId)}
                       </span>
-                      <ExecutionStatusBadge status={status} />
-                    </span>
-                    <span className="block text-xs font-normal text-muted-foreground">
-                      Started{" "}
+                      <span aria-hidden>·</span>
                       {formatDistanceToNow(new Date(execution.startedAt), {
                         addSuffix: true,
                       })}
@@ -111,7 +115,7 @@ export function AgentExecutions({ agentId }: { agentId: string }) {
             })}
           </div>
         </ScrollArea>
-      </Card>
+      </aside>
 
       {selected && (
         <ExecutionDetails
@@ -131,100 +135,68 @@ function ExecutionDetails({
   execution: AgentExecution;
   canAttach: boolean;
 }) {
-  const [tab, setTab] = useState("logs");
   const active = !execution.endedAt;
-  const status = getExecutionStatus(execution.state);
+  const defaultTab = active && canAttach ? "shell" : "logs";
+  const [tab, setTab] = useState(defaultTab);
 
   return (
-    <Card className="min-h-0 py-0">
-      <div className="flex h-full min-h-0 flex-col p-6">
-        <div className="mb-4 flex flex-shrink-0 items-start justify-between gap-4 rounded-lg border border-border/60 bg-card px-4 py-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="truncate font-mono text-sm font-medium">
-                {execution.taskId}
-              </span>
-              <ExecutionStatusBadge status={status} />
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Started {new Date(execution.startedAt).toLocaleString()}
-            </p>
-            {execution.statusReason && (
-              <p className="mt-2 text-xs text-destructive">
-                {execution.statusReason}
-              </p>
-            )}
+    <section className="flex min-h-0 flex-col">
+      <div className="flex flex-shrink-0 items-start justify-between gap-4 border-b px-5 py-3.5">
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-2">
+            <h2 className="truncate text-sm font-medium">{execution.title}</h2>
+            <AgentExecutionState state={execution.state} compact />
           </div>
+          <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[11px] text-muted-foreground">
+            <span className="font-mono">{shortTaskId(execution.taskId)}</span>
+            <span aria-hidden>·</span>
+            <span>{new Date(execution.startedAt).toLocaleString()}</span>
+          </p>
+          {execution.statusReason && (
+            <p className="mt-2 text-xs text-destructive">
+              {execution.statusReason}
+            </p>
+          )}
         </div>
+      </div>
 
+      <div className="flex min-h-0 flex-1 flex-col p-4">
         <DeploymentConsoleTabs
           value={tab}
           onValueChange={setTab}
+          variant="underline"
           tabs={[
-            { value: "logs", label: "Logs" },
+            { value: "logs", label: "Output" },
             {
               value: "shell",
-              label: "Shell",
+              label: "Terminal",
               disabled: !active || !canAttach,
               disabledReason: !active
-                ? "Execution must be running to start a shell session"
-                : "Only the person who started this execution can open its shell",
+                ? "The terminal is available only while the execution is running"
+                : "Only the person who started this execution can open its terminal",
             },
           ]}
         >
           <TabsContent
             value="logs"
-            className="flex min-h-0 flex-1 flex-col pt-4"
+            className="flex min-h-0 flex-1 flex-col pt-3"
           >
             <AgentExecutionLogs execution={execution} />
           </TabsContent>
           <TabsContent
             value="shell"
-            className="flex min-h-0 flex-1 flex-col pt-4"
+            className="flex min-h-0 flex-1 flex-col pt-3"
           >
             <AgentExecutionTerminal
               taskId={execution.taskId}
               active={tab === "shell" && active && canAttach}
+              title="Live terminal"
             />
           </TabsContent>
         </DeploymentConsoleTabs>
       </div>
-    </Card>
+    </section>
   );
-}
-
-function getExecutionStatus(state: AgentExecution["state"]): {
-  label: string;
-  variant: "default" | "secondary" | "destructive" | "outline";
-} {
-  switch (state) {
-    case "TASK_STATE_COMPLETED":
-      return { label: "Completed", variant: "outline" };
-    case "TASK_STATE_FAILED":
-      return { label: "Failed", variant: "destructive" };
-    case "TASK_STATE_CANCELED":
-      return { label: "Canceled", variant: "secondary" };
-    case "TASK_STATE_REJECTED":
-      return { label: "Rejected", variant: "destructive" };
-    case "TASK_STATE_INPUT_REQUIRED":
-      return { label: "Needs input", variant: "secondary" };
-    case "TASK_STATE_AUTH_REQUIRED":
-      return { label: "Needs auth", variant: "secondary" };
-    case "TASK_STATE_WORKING":
-      return { label: "Running", variant: "default" };
-    case "TASK_STATE_SUBMITTED":
-      return { label: "Queued", variant: "secondary" };
-    default:
-      return { label: "Pending", variant: "secondary" };
-  }
-}
-
-function ExecutionStatusBadge({
-  status,
-}: {
-  status: ReturnType<typeof getExecutionStatus>;
-}) {
-  return <Badge variant={status.variant}>{status.label}</Badge>;
 }
 
 function shortTaskId(taskId: string): string {

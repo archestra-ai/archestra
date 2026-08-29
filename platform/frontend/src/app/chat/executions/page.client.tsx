@@ -4,6 +4,7 @@ import { Loader2, Square, TerminalSquare } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { AgentExecutionLogs } from "@/components/agent-execution-logs";
+import { AgentExecutionState } from "@/components/agent-execution-state";
 import { AgentExecutionTerminal } from "@/components/agent-execution-terminal";
 import { AgentIcon } from "@/components/agent-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -53,7 +54,7 @@ export function BackgroundExecutionChatSession({ taskId }: { taskId: string }) {
               <h1 className="truncate text-sm font-medium">
                 {execution.title}
               </h1>
-              <ExecutionStateBadge state={execution.state} />
+              <AgentExecutionState state={execution.state} compact />
             </div>
             <p className="truncate text-xs text-muted-foreground">
               {execution.agent.name}
@@ -81,7 +82,12 @@ export function BackgroundExecutionChatSession({ taskId }: { taskId: string }) {
 
       <section className="flex min-h-0 flex-1 flex-col p-4 md:p-6">
         {terminalReady ? (
-          <AgentExecutionTerminal taskId={taskId} active title="Live session" />
+          <AgentExecutionTerminal
+            taskId={taskId}
+            active
+            title="Live terminal"
+            onClosed={() => void query.refetch()}
+          />
         ) : live ? (
           <ExecutionBooting inline agentName={execution.agent.name} />
         ) : (
@@ -138,34 +144,4 @@ function ExecutionBooting({
       </div>
     </div>
   );
-}
-
-function ExecutionStateBadge({ state }: { state: string }) {
-  const props = executionStatePresentation(state);
-  return (
-    <span className="inline-flex shrink-0 items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
-      <span className={`size-1.5 rounded-full ${props.dotClassName}`} />
-      {props.label}
-    </span>
-  );
-}
-
-function executionStatePresentation(state: string): {
-  label: string;
-  dotClassName: string;
-} {
-  switch (state) {
-    case "TASK_STATE_WORKING":
-      return { label: "Running", dotClassName: "bg-emerald-500" };
-    case "TASK_STATE_COMPLETED":
-      return { label: "Completed", dotClassName: "bg-muted-foreground/60" };
-    case "TASK_STATE_FAILED":
-      return { label: "Failed", dotClassName: "bg-destructive" };
-    case "TASK_STATE_CANCELED":
-      return { label: "Canceled", dotClassName: "bg-muted-foreground/60" };
-    case "TASK_STATE_INPUT_REQUIRED":
-      return { label: "Needs input", dotClassName: "bg-amber-500" };
-    default:
-      return { label: "Starting", dotClassName: "animate-pulse bg-sky-500" };
-  }
 }

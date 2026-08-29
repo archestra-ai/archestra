@@ -2125,7 +2125,6 @@ describe("AgentForm save payload and failure handling", () => {
     await waitFor(() => expect(updateAgent).toHaveBeenCalled());
     expect(savedBody().considerContextUntrusted).toBe(true);
     expect(Object.keys(savedBody()).sort()).toEqual([
-      "backgroundExecution",
       "considerContextUntrusted",
       "identityProviderId",
       "labels",

@@ -97,4 +97,30 @@ describe("readConfig", () => {
       }).idleTimeoutMs,
     ).toBeNull();
   });
+
+  it("defaults unattended work to one-shot and accepts interactive Chat terminals", () => {
+    expect(readConfig(COMPLETE).executionMode).toBe("one_shot");
+    expect(
+      readConfig({
+        ...COMPLETE,
+        ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODE: "interactive",
+      }).executionMode,
+    ).toBe("interactive");
+    expect(() =>
+      readConfig({
+        ...COMPLETE,
+        ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODE: "forever-ish",
+      }),
+    ).toThrow(/must be interactive or one_shot/);
+  });
+
+  it("carries the platform-rendered terminal banner without inventing a brand", () => {
+    expect(
+      readConfig({
+        ...COMPLETE,
+        ARCHESTRA_AGENT_BACKGROUND_EXECUTION_BANNER: "Acme AI\nSecure tools",
+      }).banner,
+    ).toBe("Acme AI\nSecure tools");
+    expect(readConfig(COMPLETE).banner).toBeNull();
+  });
 });

@@ -42,7 +42,12 @@ RUN pnpm --config.ignore-scripts=false add --global @anthropic-ai/claude-code@2.
  && CLAUDE_PACKAGE_DIR=$(pnpm list --global --json @anthropic-ai/claude-code | jq -r '.[0].dependencies["@anthropic-ai/claude-code"].path') \
  && node "$CLAUDE_PACKAGE_DIR/install.cjs" \
  && claude --version \
+ && mkdir -p /home/node/.claude \
+ && printf '%s\n' '{"hasCompletedOnboarding":true,"lastOnboardingVersion":"2.1.247","theme":"dark","shiftEnterKeyBindingInstalled":true,"projects":{"/home/node/workspace":{"allowedTools":[],"hasTrustDialogAccepted":true}}}' > /home/node/.claude.json \
+ && printf '%s\n' '{"skipDangerousModePermissionPrompt":true}' > /home/node/.claude/settings.json \
+ && chmod 0600 /home/node/.claude.json /home/node/.claude/settings.json \
  && chown -R 1000:1000 /home/node
+ENV DISABLE_AUTOUPDATER=1
 USER 1000:1000
 
 FROM agent-base AS agent-codex
@@ -56,6 +61,8 @@ FROM agent-base AS agent-hermes
 USER root
 RUN python3 -m venv /opt/hermes \
  && /opt/hermes/bin/pip install --no-cache-dir 'hermes-agent[mcp]==0.19.0' \
+ && HERMES_SITE_PACKAGES=$(/opt/hermes/bin/python -c 'import site; print(site.getsitepackages()[0])') \
+ && printf '%s\n' docker > "${HERMES_SITE_PACKAGES}/.install_method" \
  && ln -s /opt/hermes/bin/hermes /usr/local/bin/hermes \
  && hermes --version \
  && chown -R 1000:1000 /home/node

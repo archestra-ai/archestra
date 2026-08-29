@@ -172,6 +172,13 @@ describe("the container bootstrap", () => {
     expect(script()).toContain('status=$?; printf "%s\\n" "$status"');
     expect(script()).toContain('exit "$(cat /var/run/archestra/exit-code)"');
   });
+
+  it("connects stdout capture before the Agent process can emit output", () => {
+    expect(script().indexOf("tmux pipe-pane")).toBeLessThan(
+      script().indexOf("tmux respawn-pane"),
+    );
+    expect(script()).not.toContain("sleep 10");
+  });
 });
 
 describe("buildRunnerSecret", () => {

@@ -155,6 +155,17 @@ describe("Agent Background execution routes", () => {
     ]);
   });
 
+  test("keeps every execution endpoint unavailable when no execution backend is enabled", async () => {
+    vi.spyOn(runnerRuntimeManager, "isEnabled", "get").mockReturnValue(false);
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/agents/${agent.id}/executions`,
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
   test("starts a durable execution as the signed-in user", async () => {
     await app.inject({
       method: "PUT",
@@ -174,6 +185,10 @@ describe("Agent Background execution routes", () => {
       url: `/api/agents/${agent.id}/executions`,
       payload: {
         message: "Implement the requested change.",
+        systemParams: expect.objectContaining({
+          source: "chat",
+          backgroundExecutionMode: "interactive",
+        }),
         attachments: [
           {
             name: "requirements.txt",

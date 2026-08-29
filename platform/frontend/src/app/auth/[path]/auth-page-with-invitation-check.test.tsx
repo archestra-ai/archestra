@@ -352,7 +352,7 @@ describe("AuthPageWithInvitationCheck", () => {
   });
 
   describe("backend connectivity", () => {
-    it("should show connecting message instead of login form when backend is connecting", () => {
+    it("should preview the sign-in surface while the backend connects", () => {
       vi.mocked(useSearchParams).mockReturnValue({
         get: vi.fn().mockReturnValue(null),
       } as unknown as ReturnType<typeof useSearchParams>);
@@ -370,11 +370,12 @@ describe("AuthPageWithInvitationCheck", () => {
 
       render(<AuthPageWithInvitationCheck path="sign-in" />);
 
-      expect(screen.getByText("Connecting...")).toBeInTheDocument();
+      expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
+      expect(screen.getByText("Starting Sparky")).toBeInTheDocument();
       expect(screen.queryByTestId("auth-view")).not.toBeInTheDocument();
     });
 
-    it("should show retry information when connection attempts have failed", () => {
+    it("should keep retry scheduling out of the connecting interface", () => {
       vi.mocked(useSearchParams).mockReturnValue({
         get: vi.fn().mockReturnValue(null),
       } as unknown as ReturnType<typeof useSearchParams>);
@@ -392,9 +393,8 @@ describe("AuthPageWithInvitationCheck", () => {
 
       render(<AuthPageWithInvitationCheck path="sign-in" />);
 
-      expect(
-        screen.getByText(/Still trying to connect, attempt 3 \/ 7/),
-      ).toBeInTheDocument();
+      expect(screen.getByText("Starting Sparky")).toBeInTheDocument();
+      expect(screen.queryByText(/Attempt \d/)).not.toBeInTheDocument();
       expect(screen.queryByTestId("auth-view")).not.toBeInTheDocument();
     });
 
@@ -416,8 +416,8 @@ describe("AuthPageWithInvitationCheck", () => {
 
       render(<AuthPageWithInvitationCheck path="sign-in" />);
 
-      expect(screen.getByText("Unable to Connect")).toBeInTheDocument();
-      expect(screen.getByText("Server Unreachable")).toBeInTheDocument();
+      expect(screen.getByRole("alert")).toBeInTheDocument();
+      expect(screen.getByText("Backend unavailable")).toBeInTheDocument();
       expect(screen.queryByTestId("auth-view")).not.toBeInTheDocument();
     });
 

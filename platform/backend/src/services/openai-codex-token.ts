@@ -74,6 +74,8 @@ class OpenAiCodexTokenManager {
    */
   async getAccessToken(params: {
     refreshToken: string;
+    accessToken?: string;
+    accessTokenExpiresAtMs?: number;
     providerApiKeyId?: string;
     /**
      * The account id of the credential being redeemed. Used to guard rotated-
@@ -82,16 +84,30 @@ class OpenAiCodexTokenManager {
      */
     accountId?: string;
   }): Promise<string> {
-    const { refreshToken, providerApiKeyId, accountId } = params;
+    const {
+      refreshToken,
+      accessToken,
+      accessTokenExpiresAtMs,
+      providerApiKeyId,
+      accountId,
+    } = params;
+
+    const suppliedAccessTokenIsFresh =
+      accessToken !== undefined &&
+      accessTokenExpiresAtMs !== undefined &&
+      accessTokenExpiresAtMs - REFRESH_BUFFER_MS > Date.now();
 
     if (!providerApiKeyId) {
+      if (suppliedAccessTokenIsFresh) {
+        return accessToken;
+      }
       // Follow any rotation already observed for this token, so validating the
       // same credential twice in one process doesn't redeem a dead predecessor.
       const latestToken = this.latestKnownRefreshToken(refreshToken);
-      const { accessToken, rotatedRefreshToken } =
+      const { accessToken: redeemedAccessToken, rotatedRefreshToken } =
         await redeemWithOpenAi(latestToken);
       this.recordValidationRotation(latestToken, rotatedRefreshToken);
-      return accessToken;
+      return redeemedAccessToken;
     }
 
     const callerDigest = hashToken(refreshToken);
@@ -105,6 +121,19 @@ class OpenAiCodexTokenManager {
     }
     if (cached && cached.expiresAtMs - REFRESH_BUFFER_MS > Date.now()) {
       return cached.accessToken;
+    }
+
+    if (!cached && suppliedAccessTokenIsFresh) {
+      this.tokenCache.set(
+        providerApiKeyId,
+        {
+          accessToken,
+          expiresAtMs: accessTokenExpiresAtMs,
+          knownRefreshTokenDigests: [callerDigest],
+        },
+        Math.max(accessTokenExpiresAtMs - Date.now(), 0),
+      );
+      return accessToken;
     }
 
     // Join an in-flight redemption only when the caller's token belongs to the
@@ -244,6 +273,8 @@ class OpenAiCodexTokenManager {
     if (rotatedRefreshToken && rotatedRefreshToken !== refreshToken) {
       this.queuePersist(providerApiKeyId, {
         newRefreshToken: rotatedRefreshToken,
+        newAccessToken: accessToken,
+        newAccessTokenExpiresAtMs: expiresAtMs,
         predecessorRefreshToken: redeemedToken,
         lineageDigests: updatedDigests,
         expectedAccountId: accountId,
@@ -369,6 +400,8 @@ class OpenAiCodexTokenManager {
       apiKey: encodeOpenAiCodexCredential({
         refreshToken: newRefreshToken,
         accountId: existing.accountId,
+        accessToken: params.newAccessToken,
+        accessTokenExpiresAtMs: params.newAccessTokenExpiresAtMs,
       }),
     });
   }
@@ -420,6 +453,8 @@ export function createOpenAiCodexFetch(params: {
     try {
       accessToken = await openAiCodexTokenManager.getAccessToken({
         refreshToken: credential.refreshToken,
+        accessToken: credential.accessToken,
+        accessTokenExpiresAtMs: credential.accessTokenExpiresAtMs,
         providerApiKeyId,
         accountId: credential.accountId,
       });
@@ -439,6 +474,8 @@ export function createOpenAiCodexFetch(params: {
       try {
         freshAccessToken = await openAiCodexTokenManager.getAccessToken({
           refreshToken: credential.refreshToken,
+          accessToken: credential.accessToken,
+          accessTokenExpiresAtMs: credential.accessTokenExpiresAtMs,
           providerApiKeyId,
           accountId: credential.accountId,
         });
@@ -460,7 +497,12 @@ export async function exchangeOpenAiCodexAuthCode(params: {
   code: string;
   codeVerifier: string;
   redirectUri: string;
-}): Promise<{ refreshToken: string; idToken: string }> {
+}): Promise<{
+  refreshToken: string;
+  idToken: string;
+  accessToken: string;
+  accessTokenExpiresAtMs: number;
+}> {
   const { code, codeVerifier, redirectUri } = params;
   const { issuer, clientId } = config.llm.openai.codex;
 
@@ -492,14 +534,23 @@ export async function exchangeOpenAiCodexAuthCode(params: {
     access_token?: string;
     refresh_token?: string;
     id_token?: string;
+    expires_in?: number;
   };
-  if (!payload.refresh_token || !payload.id_token) {
+  if (!payload.refresh_token || !payload.id_token || !payload.access_token) {
     throw new ApiError(
       502,
       "ChatGPT sign-in returned an unexpected token payload",
     );
   }
-  return { refreshToken: payload.refresh_token, idToken: payload.id_token };
+  return {
+    refreshToken: payload.refresh_token,
+    idToken: payload.id_token,
+    accessToken: payload.access_token,
+    accessTokenExpiresAtMs: accessTokenExpiryMs(
+      payload.access_token,
+      payload.expires_in,
+    ),
+  };
 }
 
 /**
@@ -549,6 +600,8 @@ interface InFlightRedemption {
 
 interface PersistRotationParams {
   newRefreshToken: string;
+  newAccessToken: string;
+  newAccessTokenExpiresAtMs: number;
   /** The exact token whose redemption produced `newRefreshToken`. */
   predecessorRefreshToken: string;
   /** Lineage digests known when the rotation happened, for the persist CAS. */
@@ -640,8 +693,13 @@ async function redeemWithOpenAi(refreshToken: string): Promise<{
 
   const response = await fetch(`${issuer}/oauth/token`, {
     method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      originator: config.llm.openai.codex.originator,
+      "user-agent": CODEX_USER_AGENT,
+    },
+    body: JSON.stringify({
       grant_type: "refresh_token",
       refresh_token: refreshToken,
       client_id: clientId,

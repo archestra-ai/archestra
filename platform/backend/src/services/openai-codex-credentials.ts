@@ -31,6 +31,14 @@ export interface OpenAiCodexCredential {
   /** Long-lived ChatGPT OAuth refresh token (rotates on redemption). */
   refreshToken: string;
   /**
+   * Short-lived access token returned by the sign-in exchange. Keeping it with
+   * the refresh token mirrors Codex's own auth store and avoids immediately
+   * refreshing a credential that OpenAI has only just issued.
+   */
+  accessToken?: string;
+  /** Absolute expiry for `accessToken`, in Unix milliseconds. */
+  accessTokenExpiresAtMs?: number;
+  /**
    * The ChatGPT `account_id` (a.k.a. `chatgpt_account_id`), read from the
    * id_token JWT at connect time and sent as the `chatgpt-account-id` header on
    * every Codex request. Required — the Codex backend rejects requests without it.
@@ -77,6 +85,12 @@ export function decodeOpenAiCodexCredential(
     return {
       refreshToken: parsed.refreshToken,
       accountId: parsed.accountId,
+      accessToken:
+        typeof parsed.accessToken === "string" ? parsed.accessToken : undefined,
+      accessTokenExpiresAtMs:
+        typeof parsed.accessTokenExpiresAtMs === "number"
+          ? parsed.accessTokenExpiresAtMs
+          : undefined,
     };
   } catch {
     return null;

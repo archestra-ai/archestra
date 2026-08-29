@@ -73,6 +73,8 @@ export async function fetchOpenAiModels(
     // predecessor, so a discarded rotation leaves the stored token dead.
     await openAiCodexTokenManager.getAccessToken({
       refreshToken: codexCredential.refreshToken,
+      accessToken: codexCredential.accessToken,
+      accessTokenExpiresAtMs: codexCredential.accessTokenExpiresAtMs,
       providerApiKeyId: opts?.providerApiKeyId,
       accountId: codexCredential.accountId,
     });

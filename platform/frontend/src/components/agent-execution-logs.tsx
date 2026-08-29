@@ -16,8 +16,10 @@ import websocketService from "@/lib/websocket/websocket";
 
 export function AgentExecutionLogs({
   execution,
+  title = "Output",
 }: {
   execution: AgentExecution;
+  title?: string;
 }) {
   const [content, setContent] = useState("");
   const [error, setError] = useState<string>();
@@ -79,7 +81,7 @@ export function AgentExecutionLogs({
 
   return (
     <DeploymentLogPanel
-      title="Output"
+      title={title}
       content={plainTerminalTranscript(content)}
       error={error}
       scrollAreaRef={scrollAreaRef}

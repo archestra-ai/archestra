@@ -3,16 +3,20 @@ import {
   ARCHESTRA_TOKEN_PREFIX,
   LEGACY_ARCHESTRA_TOKEN_PREFIXES,
   OAUTH_TOKEN_ID_PREFIX,
+  TOOL_CANCEL_TASK_FULL_NAME,
   TOOL_COPY_FILE_SHORT_NAME,
   TOOL_CREATE_SKILL_FULL_NAME,
   TOOL_DOWNLOAD_FILE_FULL_NAME,
+  TOOL_GET_TASK_FULL_NAME,
   TOOL_LIST_SKILLS_FULL_NAME,
+  TOOL_LIST_TASKS_FULL_NAME,
   TOOL_LOAD_SKILL_FULL_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SCAFFOLD_APP_SHORT_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
+  TOOL_STEER_TASK_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
   TOOL_UPDATE_SKILL_FULL_NAME,
   TOOL_UPLOAD_FILE_FULL_NAME,
@@ -1678,6 +1682,64 @@ describe("createAgentServer tools/list", () => {
     expect(
       response.tools.some((tool) => tool.name === TOOL_TODO_WRITE_FULL_NAME),
     ).toBe(false);
+  });
+
+  test("advertises task controls when the gateway can start delegated tasks", async ({
+    makeAgent,
+    makeAgentTool,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      toolExposureMode: "search_and_run_only",
+    });
+    const targetAgent = await makeAgent({ organizationId: org.id });
+    const delegationTool = await ToolModel.findOrCreateDelegationTool(
+      targetAgent.id,
+    );
+    await makeAgentTool(agent.id, delegationTool.id);
+
+    const { server } = await createAgentServer({
+      agentId: agent.id,
+      tokenAuth: {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: user.id,
+      },
+    });
+    const listToolsHandler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestListToolsHandler>;
+      }
+    )._requestHandlers.get("tools/list");
+    if (!listToolsHandler) {
+      throw new Error("Expected tools/list handler to be registered");
+    }
+
+    const response = await listToolsHandler({
+      method: "tools/list",
+      params: {},
+    });
+    const names = new Set(response.tools.map((tool) => tool.name));
+
+    expect(names).toEqual(
+      new Set([
+        TOOL_RUN_TOOL_FULL_NAME,
+        TOOL_SEARCH_TOOLS_FULL_NAME,
+        TOOL_GET_TASK_FULL_NAME,
+        TOOL_LIST_TASKS_FULL_NAME,
+        TOOL_STEER_TASK_FULL_NAME,
+        TOOL_CANCEL_TASK_FULL_NAME,
+      ]),
+    );
   });
 
   test("keeps assigned skill and sandbox runtime tools top-level in search_and_run_only", async ({

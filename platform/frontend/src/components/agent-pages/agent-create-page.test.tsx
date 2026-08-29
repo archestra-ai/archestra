@@ -107,6 +107,7 @@ describe("AgentCreatePage", () => {
         initialValues: expect.objectContaining({
           name: "Codex",
           icon: "/model-logos/openai.svg",
+          requiredSubscriptionKind: "chatgpt",
           backgroundExecution: expect.objectContaining({
             command: ["archestra-codex"],
             image: "agent-codex:dev",
@@ -170,7 +171,7 @@ describe("AgentCreatePage", () => {
               expect.objectContaining({
                 key: "CLAUDE_CODE_OAUTH_TOKEN",
                 scope: "per_user",
-                required: false,
+                required: true,
               }),
             ]),
           }),

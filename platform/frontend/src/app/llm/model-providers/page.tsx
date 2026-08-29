@@ -374,6 +374,36 @@ export default function ApiKeysPage() {
     [allApiKeys, providerCatalog],
   );
 
+  // Catalog flows can land here with a specific missing subscription. Open
+  // that exact self-service sign-in once the current user's credentials have
+  // resolved, then consume the query parameter so closing the dialog stays
+  // closed. A connected subscription never opens a duplicate create flow.
+  const subscriptionKindToConnect = searchParams.get("connect");
+  useEffect(() => {
+    if (
+      !subscriptionKindToConnect ||
+      subscriptionToConnect ||
+      permissionsPending ||
+      (apiKeyQueriesEnabled && allApiKeysPending)
+    ) {
+      return;
+    }
+    const offer = subscriptionOffers.find(
+      ({ kind, credential }) =>
+        kind === subscriptionKindToConnect && credential === null,
+    );
+    updateQueryParams({ connect: null });
+    if (offer) setSubscriptionToConnect(offer);
+  }, [
+    allApiKeysPending,
+    apiKeyQueriesEnabled,
+    permissionsPending,
+    subscriptionKindToConnect,
+    subscriptionOffers,
+    subscriptionToConnect,
+    updateQueryParams,
+  ]);
+
   /** Keys the cards already stand for, so the table never repeats them. */
   const connectedSubscriptionIds = useMemo(
     () =>

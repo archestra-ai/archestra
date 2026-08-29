@@ -1,4 +1,7 @@
-import { TOOL_START_TASK_FULL_NAME } from "@archestra/shared";
+import {
+  TOOL_GET_TASK_FULL_NAME,
+  TOOL_START_TASK_FULL_NAME,
+} from "@archestra/shared";
 import { vi } from "vitest";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
 import * as a2aExecutor from "@/agents/a2a-executor";
@@ -66,6 +69,35 @@ describe("task tools", () => {
     expect(result.isError).toBe(true);
     expect((result.content[0] as { text: string }).text).toContain(
       "Agent not found",
+    );
+  });
+
+  test("task controls remain callable without individual assignment", async ({
+    makeAgent,
+  }) => {
+    const unassignedAgent = await makeAgent({
+      organizationId,
+      authorId: actorId,
+      agentType: "mcp_gateway",
+      scope: "org",
+    });
+
+    const result = await executeArchestraTool(
+      TOOL_GET_TASK_FULL_NAME,
+      { task_id: crypto.randomUUID() },
+      {
+        ...context,
+        agent: { id: unassignedAgent.id, name: unassignedAgent.name },
+        agentId: unassignedAgent.id,
+      },
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as { text: string }).text).toContain(
+      "Task not found",
+    );
+    expect((result.content[0] as { text: string }).text).not.toContain(
+      "not assigned",
     );
   });
 

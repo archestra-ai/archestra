@@ -1,3 +1,4 @@
+import type { SubscriptionCredentialKind } from "@archestra/shared";
 import { Bot } from "lucide-react";
 import Image from "next/image";
 import type { AgentFormInitialValues } from "@/components/agent-form";
@@ -49,8 +50,8 @@ export function getAgentCatalogTemplates(
           scope: "per_user",
           label: "Claude Code subscription token",
           description:
-            "Optional. Run `claude setup-token` locally. This token is available only to the official Claude Code background runtime, never foreground chat or other Agents.",
-          required: false,
+            "Run `claude setup-token` locally. This token is available only to the official Claude Code background runtime, never foreground chat or other Agents.",
+          required: true,
         },
       ],
     }),
@@ -64,6 +65,7 @@ export function getAgentCatalogTemplates(
       command: ["archestra-codex"],
       inferenceProtocol: "openai_responses",
       steerMode: "tmux_keys",
+      requiredSubscriptionKind: "chatgpt",
     }),
     template({
       id: "hermes",
@@ -201,6 +203,7 @@ function template(params: {
   command: string[] | null;
   inferenceProtocol: "openai_responses" | "openai_chat" | "anthropic";
   steerMode: "pipe" | "tmux_keys";
+  requiredSubscriptionKind?: SubscriptionCredentialKind;
   additionalCredentials?: NonNullable<
     NonNullable<AgentFormInitialValues["backgroundExecution"]>["credentials"]
   >;
@@ -216,6 +219,7 @@ function template(params: {
       description: params.description,
       systemPrompt: `You are ${params.name}, an autonomous coding agent. Complete delegated tasks carefully, use the tools available through ${params.platformName}, verify your work, and report the concrete result.`,
       accessAllTools: true,
+      requiredSubscriptionKind: params.requiredSubscriptionKind,
       backgroundExecution: {
         image: params.image,
         command: params.command,

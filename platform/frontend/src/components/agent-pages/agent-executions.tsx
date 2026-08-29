@@ -1,12 +1,12 @@
 "use client";
 
 import { formatDistanceToNow } from "date-fns";
-import { TerminalSquare } from "lucide-react";
+import { ScrollText, TerminalSquare } from "lucide-react";
 import { useState } from "react";
 import { AgentExecutionLogs } from "@/components/agent-execution-logs";
 import { AgentExecutionState } from "@/components/agent-execution-state";
 import { AgentExecutionTerminal } from "@/components/agent-execution-terminal";
-import { DeploymentConsoleTabs } from "@/components/deployment-console";
+import { DeploymentConsoleTabList } from "@/components/deployment-console";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,7 +17,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import {
   type AgentExecution,
   useAgentExecutions,
@@ -140,62 +140,66 @@ function ExecutionDetails({
   const [tab, setTab] = useState(defaultTab);
 
   return (
-    <section className="flex min-h-0 flex-col">
-      <div className="flex flex-shrink-0 items-start justify-between gap-4 border-b px-5 py-3.5">
-        <div className="min-w-0">
-          <div className="flex min-w-0 items-center gap-2">
-            <h2 className="truncate text-sm font-medium">{execution.title}</h2>
-            <AgentExecutionState state={execution.state} compact />
-          </div>
-          <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[11px] text-muted-foreground">
-            <span className="font-mono">{shortTaskId(execution.taskId)}</span>
-            <span aria-hidden>·</span>
-            <span>{new Date(execution.startedAt).toLocaleString()}</span>
-          </p>
-          {execution.statusReason && (
-            <p className="mt-2 text-xs text-destructive">
-              {execution.statusReason}
+    <Tabs
+      value={tab}
+      onValueChange={setTab}
+      className="flex min-h-0 flex-col gap-0"
+    >
+      <section className="flex min-h-0 flex-1 flex-col">
+        <div className="flex flex-shrink-0 items-center justify-between gap-4 border-b px-5 py-3.5">
+          <div className="min-w-0">
+            <div className="flex min-w-0 items-center gap-2">
+              <h2 className="truncate text-sm font-medium">
+                {execution.title}
+              </h2>
+              <AgentExecutionState state={execution.state} compact />
+            </div>
+            <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[11px] text-muted-foreground">
+              <span className="font-mono">{shortTaskId(execution.taskId)}</span>
+              <span aria-hidden>·</span>
+              <span>{new Date(execution.startedAt).toLocaleString()}</span>
             </p>
-          )}
+            {execution.statusReason && (
+              <p className="mt-2 text-xs text-destructive">
+                {execution.statusReason}
+              </p>
+            )}
+          </div>
+          <DeploymentConsoleTabList
+            variant="compact"
+            tabs={[
+              {
+                value: "logs",
+                label: "Output",
+                icon: <ScrollText className="size-3" />,
+              },
+              {
+                value: "shell",
+                label: "Terminal",
+                icon: <TerminalSquare className="size-3" />,
+                disabled: !active || !canAttach,
+                disabledReason: !active
+                  ? "The terminal is available only while the execution is running"
+                  : "Only the person who started this execution can open its terminal",
+              },
+            ]}
+          />
         </div>
-      </div>
 
-      <div className="flex min-h-0 flex-1 flex-col p-4">
-        <DeploymentConsoleTabs
-          value={tab}
-          onValueChange={setTab}
-          variant="underline"
-          tabs={[
-            { value: "logs", label: "Output" },
-            {
-              value: "shell",
-              label: "Terminal",
-              disabled: !active || !canAttach,
-              disabledReason: !active
-                ? "The terminal is available only while the execution is running"
-                : "Only the person who started this execution can open its terminal",
-            },
-          ]}
-        >
-          <TabsContent
-            value="logs"
-            className="flex min-h-0 flex-1 flex-col pt-3"
-          >
-            <AgentExecutionLogs execution={execution} />
+        <div className="flex min-h-0 flex-1 flex-col p-4">
+          <TabsContent value="logs" className="flex min-h-0 flex-1 flex-col">
+            <AgentExecutionLogs execution={execution} title="" />
           </TabsContent>
-          <TabsContent
-            value="shell"
-            className="flex min-h-0 flex-1 flex-col pt-3"
-          >
+          <TabsContent value="shell" className="flex min-h-0 flex-1 flex-col">
             <AgentExecutionTerminal
               taskId={execution.taskId}
               active={tab === "shell" && active && canAttach}
-              title="Live terminal"
+              title=""
             />
           </TabsContent>
-        </DeploymentConsoleTabs>
-      </div>
-    </section>
+        </div>
+      </section>
+    </Tabs>
   );
 }
 

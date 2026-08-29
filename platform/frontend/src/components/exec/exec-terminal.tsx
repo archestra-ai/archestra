@@ -258,7 +258,9 @@ export function ExecTerminal({
   return (
     <div className="flex flex-col gap-4 flex-1 min-h-0">
       <div className="flex flex-col gap-2 flex-1 min-h-0">
-        <h3 className="text-sm font-semibold flex-shrink-0">{title}</h3>
+        {title && (
+          <h3 className="text-sm font-semibold flex-shrink-0">{title}</h3>
+        )}
         <div className="flex flex-col flex-1 min-h-0 rounded-md border bg-slate-950 overflow-hidden">
           {status === "connecting" && (
             <div className="flex items-center justify-center p-4 text-slate-400 text-sm font-mono">

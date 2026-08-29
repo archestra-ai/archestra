@@ -5,8 +5,12 @@ import {
   getArchestraToolShortName,
   isAgentTool,
   isSkillTool,
+  TOOL_CANCEL_TASK_SHORT_NAME,
+  TOOL_GET_TASK_SHORT_NAME,
+  TOOL_LIST_TASKS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
+  TOOL_STEER_TASK_SHORT_NAME,
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { ZodError, type ZodType, z } from "zod";
@@ -425,10 +429,18 @@ function brandTools(tools: ReturnType<typeof getAllTools>) {
 }
 
 // run_tool / search_tools are the dispatch surface (advertised implicitly in
-// search_and_run_only mode), so they bypass the assignment check.
+// search_and_run_only mode), so they bypass the assignment check. Task control
+// tools are the other half of every delegated-task handle: the dynamic
+// per-Agent delegation tools have no assignment row, but their result promises
+// that the caller can observe and control the returned task. Access to the task
+// itself remains actor-scoped inside each handler.
 const ASSIGNMENT_EXEMPT_SHORT_NAMES = new Set<ArchestraToolShortName>([
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
+  TOOL_GET_TASK_SHORT_NAME,
+  TOOL_LIST_TASKS_SHORT_NAME,
+  TOOL_STEER_TASK_SHORT_NAME,
+  TOOL_CANCEL_TASK_SHORT_NAME,
 ]);
 
 async function checkToolAssignedToAgent(

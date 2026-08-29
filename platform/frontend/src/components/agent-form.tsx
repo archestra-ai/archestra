@@ -19,6 +19,8 @@ import {
   MAX_SUGGESTED_PROMPT_TEXT_LENGTH,
   MAX_SUGGESTED_PROMPT_TITLE_LENGTH,
   MAX_SUGGESTED_PROMPTS,
+  SUBSCRIPTION_CREDENTIALS,
+  type SubscriptionCredentialKind,
   type SupportedProvider,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
@@ -804,6 +806,8 @@ export interface AgentFormInitialValues {
   systemPrompt?: string;
   backgroundExecution?: BackgroundExecutionConfig | null;
   accessAllTools?: boolean;
+  /** Catalog runtimes that must bill an acting user's own subscription. */
+  requiredSubscriptionKind?: SubscriptionCredentialKind;
 }
 
 export interface AgentFormProps {
@@ -1754,6 +1758,18 @@ export function AgentForm({
     () => availableApiKeys.find((k) => k.id === llmApiKeyId),
     [availableApiKeys, llmApiKeyId],
   );
+  const requiredSubscriptionKind = initialValues?.requiredSubscriptionKind;
+  const requiredSubscription = requiredSubscriptionKind
+    ? SUBSCRIPTION_CREDENTIALS[requiredSubscriptionKind]
+    : null;
+  const requiredSubscriptionKey = requiredSubscriptionKind
+    ? availableApiKeys.find(
+        (key) => key.subscriptionKind === requiredSubscriptionKind,
+      )
+    : undefined;
+  const requiredSubscriptionSatisfied =
+    !requiredSubscriptionKind ||
+    selectedApiKey?.subscriptionKind === requiredSubscriptionKind;
   const selectedApiKeyIsSubscription =
     selectedApiKey !== undefined && isPersonalSubscription(selectedApiKey);
 
@@ -1847,6 +1863,23 @@ export function AgentForm({
     },
     [availableApiKeys, currentLlmProvider, modelsByProvider],
   );
+
+  // A maintained catalog runtime can require the vendor's own subscription
+  // rather than merely prefer the most highly ranked key. Apply the connected
+  // personal subscription once its async key list arrives, including its best
+  // compatible model, but never keep overriding later user edits.
+  const catalogSubscriptionAppliedRef = useRef(false);
+  useEffect(() => {
+    if (
+      agent ||
+      catalogSubscriptionAppliedRef.current ||
+      !requiredSubscriptionKey
+    ) {
+      return;
+    }
+    catalogSubscriptionAppliedRef.current = true;
+    handleLlmApiKeyChange(requiredSubscriptionKey.id);
+  }, [agent, handleLlmApiKeyChange, requiredSubscriptionKey]);
 
   // A team-scoped agent must have at least one team, otherwise it is
   // inaccessible to everyone (issue #6624). Applies to admins too.
@@ -2462,6 +2495,7 @@ export function AgentForm({
     !createAgent.isPending &&
     !updateAgent.isPending &&
     !requiresTeamSelection &&
+    requiredSubscriptionSatisfied &&
     mcpEnvConflicts.length === 0 &&
     !environmentConflicts.blocksSave &&
     !(scope === "team" && hasNoAvailableTeams);
@@ -2892,6 +2926,37 @@ export function AgentForm({
                     </Alert>
                   ) : (
                     <>
+                      {requiredSubscription &&
+                        !requiredSubscriptionSatisfied && (
+                          <Alert>
+                            <InfoIcon className="h-4 w-4" />
+                            <AlertTitle>
+                              {requiredSubscription.label} required
+                            </AlertTitle>
+                            <AlertDescription className="space-y-2">
+                              <p>
+                                This maintained runtime uses your existing
+                                subscription and does not fall back to
+                                usage-based API billing.
+                              </p>
+                              {!requiredSubscriptionKey && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  asChild
+                                >
+                                  <Link
+                                    href={`/llm/model-providers?connect=${requiredSubscriptionKind}`}
+                                    target="_blank"
+                                  >
+                                    {requiredSubscription.connect.signInTitle}
+                                  </Link>
+                                </Button>
+                              )}
+                            </AlertDescription>
+                          </Alert>
+                        )}
                       {selectedApiKeyIsSubscription ? (
                         <Alert>
                           <InfoIcon className="h-4 w-4" />

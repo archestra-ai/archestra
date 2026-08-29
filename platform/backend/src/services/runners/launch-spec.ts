@@ -7,6 +7,8 @@ import {
   requiresOpenAiResponsesApi,
   requiresResponsesApi,
   SESSION_ID_HEADER,
+  SUBSCRIPTION_CREDENTIALS,
+  type SubscriptionCredentialKind,
   type SupportedProvider,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
@@ -156,13 +158,25 @@ export async function buildRunnerLaunchSpec(params: {
   const claudeCodeSubscriptionToken =
     credentials.env.CLAUDE_CODE_OAUTH_TOKEN?.trim();
   const usesClaudeCodeSubscription = Boolean(claudeCodeSubscriptionToken);
-  if (
-    usesClaudeCodeSubscription &&
-    params.deployment.command?.[0] !== "archestra-claude-code"
-  ) {
+  const isClaudeCodeRuntime =
+    params.deployment.command?.[0] === "archestra-claude-code";
+  const isCodexRuntime = params.deployment.command?.[0] === "archestra-codex";
+  if (isClaudeCodeRuntime && !usesClaudeCodeSubscription) {
+    throw new ApiError(
+      409,
+      "Connect your Claude Code subscription before starting this Agent. The maintained Claude Code runtime never falls back to usage-based API billing.",
+    );
+  }
+  if (usesClaudeCodeSubscription && !isClaudeCodeRuntime) {
     throw new ApiError(
       409,
       "A Claude Code subscription token can only be injected into the Claude Code catalog runtime.",
+    );
+  }
+  if (isCodexRuntime && llm.selectedProvider !== "openai") {
+    throw new ApiError(
+      409,
+      "The maintained Codex runtime requires an OpenAI model from your ChatGPT subscription.",
     );
   }
 
@@ -190,6 +204,7 @@ export async function buildRunnerLaunchSpec(params: {
         provider: llm.selectedProvider,
         model: llm.selectedModel,
         agentLlmApiKeyId: agent.llmApiKeyId,
+        requiredSubscriptionKind: isCodexRuntime ? "chatgpt" : null,
       });
   if (params.deployment.maxCostUsd) {
     try {
@@ -374,14 +389,33 @@ async function createProviderBackedVirtualKey(params: {
   provider: SupportedProvider;
   model: string;
   agentLlmApiKeyId: string | null;
+  requiredSubscriptionKind: SubscriptionCredentialKind | null;
 }): Promise<Awaited<ReturnType<typeof VirtualApiKeyModel.create>>> {
-  const resolvedProviderCredential = await resolveProviderApiKey({
-    organizationId: params.organizationId,
-    userId: params.actorUserId,
-    provider: params.provider,
-    agentLlmApiKeyId: params.agentLlmApiKeyId ?? undefined,
-    modelName: params.model,
-  });
+  const requiredSubscription = params.requiredSubscriptionKind
+    ? await LlmProviderApiKeyModel.findPersonalSubscriptionKey({
+        organizationId: params.organizationId,
+        userId: params.actorUserId,
+        kind: params.requiredSubscriptionKind,
+      })
+    : null;
+  if (params.requiredSubscriptionKind && !requiredSubscription) {
+    throw new ApiError(
+      409,
+      `Connect your own ${SUBSCRIPTION_CREDENTIALS[params.requiredSubscriptionKind].label} before starting this Agent. The maintained runtime never falls back to usage-based API billing.`,
+    );
+  }
+  const resolvedProviderCredential = requiredSubscription
+    ? {
+        authRequired: undefined,
+        chatApiKeyId: requiredSubscription.apiKey.id,
+      }
+    : await resolveProviderApiKey({
+        organizationId: params.organizationId,
+        userId: params.actorUserId,
+        provider: params.provider,
+        agentLlmApiKeyId: params.agentLlmApiKeyId ?? undefined,
+        modelName: params.model,
+      });
   if (resolvedProviderCredential.authRequired) {
     throw new ApiError(
       409,

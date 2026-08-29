@@ -313,6 +313,133 @@ describe("buildRunnerLaunchSpec", () => {
     expect(virtualKey?.authorId).toBe(setup.user.id);
   });
 
+  test("never falls back to Anthropic API billing for Claude Code", async ({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeAgent,
+  }) => {
+    const setup = await makeConfiguredAgent({
+      provider: "anthropic",
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    });
+    const configuredDeployment = deployment(setup.agent, "anthropic");
+    configuredDeployment.command = ["archestra-claude-code"];
+
+    await expect(
+      buildRunnerLaunchSpec({
+        deployment: configuredDeployment,
+        taskId: crypto.randomUUID(),
+        agentId: setup.agent.id,
+        actorUserId: setup.user.id,
+        organizationId: setup.agent.organizationId,
+        runtimeScope: "agent-tests",
+        effectiveNetworkPolicy: { source: "built_in", policy: null },
+        appName: "Archestra",
+        executionMode: "interactive",
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      message: expect.stringContaining("never falls back"),
+    });
+  });
+
+  test("uses the acting user's ChatGPT subscription for Codex", async ({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeAgent,
+  }) => {
+    const setup = await makeConfiguredAgent({
+      provider: "openai",
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    });
+    const subscriptionSecret = await makeSecret({
+      secret: { apiKey: "chatgpt-oauth:test-refresh-token" },
+    });
+    const subscriptionKey = await makeLlmProviderApiKey(
+      setup.agent.organizationId,
+      subscriptionSecret.id,
+      {
+        provider: "openai",
+        scope: "personal",
+        userId: setup.user.id,
+      },
+    );
+    const configuredDeployment = deployment(setup.agent, "openai_responses");
+    configuredDeployment.command = ["archestra-codex"];
+
+    const { virtualApiKeyId } = await buildRunnerLaunchSpec({
+      deployment: configuredDeployment,
+      taskId: crypto.randomUUID(),
+      agentId: setup.agent.id,
+      actorUserId: setup.user.id,
+      organizationId: setup.agent.organizationId,
+      runtimeScope: "agent-tests",
+      effectiveNetworkPolicy: { source: "built_in", policy: null },
+      appName: "Archestra",
+      executionMode: "interactive",
+    });
+
+    const subscriptionVirtualKeys =
+      await VirtualApiKeyModel.findByProviderApiKeyId(subscriptionKey.id);
+    expect(subscriptionVirtualKeys.map(({ id }) => id)).toContain(
+      virtualApiKeyId,
+    );
+  });
+
+  test("never falls back to an OpenAI API key for Codex", async ({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeAgent,
+  }) => {
+    const setup = await makeConfiguredAgent({
+      provider: "openai",
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    });
+    const configuredDeployment = deployment(setup.agent, "openai_responses");
+    configuredDeployment.command = ["archestra-codex"];
+
+    await expect(
+      buildRunnerLaunchSpec({
+        deployment: configuredDeployment,
+        taskId: crypto.randomUUID(),
+        agentId: setup.agent.id,
+        actorUserId: setup.user.id,
+        organizationId: setup.agent.organizationId,
+        runtimeScope: "agent-tests",
+        effectiveNetworkPolicy: { source: "built_in", policy: null },
+        appName: "Archestra",
+        executionMode: "interactive",
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      message: expect.stringContaining("never falls back"),
+    });
+  });
+
   test("does not inject a Claude subscription token into a custom runtime", async ({
     makeOrganization,
     makeAdmin,

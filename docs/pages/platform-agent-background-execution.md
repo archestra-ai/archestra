@@ -109,13 +109,21 @@ starts the same Agent uses their own connected account; Archestra never shares
 one user's subscription credential with another user.
 
 Claude Code subscriptions are deliberately narrower. The **Claude Code**
-catalog option declares an optional per-user `CLAUDE_CODE_OAUTH_TOKEN`. Each
+catalog option declares a required per-user `CLAUDE_CODE_OAUTH_TOKEN`. Each
 user generates it with `claude setup-token` and saves it from the Agent's
 Overview after the Agent is created. Archestra injects it only into the
 official Claude Code background image. It is not registered as a general
 Anthropic provider credential and cannot be used by Archestra Chat, Hermes,
-OpenClaw, or a custom runtime. Without that token, Claude Code uses the normal
-metered Anthropic credential selected on the Agent.
+OpenClaw, or a custom runtime. A Claude Code execution does not start without
+that token and never falls back to a metered Anthropic API key.
+
+The **Codex** catalog option requires the initiating user's connected ChatGPT
+subscription. If that person has already signed in with ChatGPT under Model
+Providers, the create form selects the subscription and a compatible Codex
+model automatically. Otherwise it links to the same sign-in flow. A Codex
+execution does not start with an ordinary OpenAI API key, so selecting the
+maintained runtime cannot silently switch from subscription access to metered
+API billing.
 
 The **Inference API** setting describes the wire protocol expected by the
 image. Choose **OpenAI Responses** for clients such as Codex and OpenClaw.
@@ -254,7 +262,12 @@ gateway and sends the execution headers described above.
 
 Give the coordinator Agent access to the specialist under **Tools & Knowledge → Subagents**. The coordinator delegates through the specialist's ordinary Agent tool. If the specialist has Background execution configured, Archestra automatically turns that delegation into a durable task in its deployment and returns immediately. There is no separate invocation syntax.
 
-Assign the task tools when the coordinator also needs explicit lifecycle control. `start_task` creates a durable task directly; `get_task`, `list_tasks`, `steer_task`, and `cancel_task` inspect or control it. These tools are also the generic interface for external Agent clients. The coordinator can continue answering other messages while the task works.
+Assign `start_task` when the coordinator should choose a target by Agent ID
+instead of using a specialist's Agent tool. Any gateway that can start a task
+automatically exposes `get_task`, `list_tasks`, `steer_task`, and `cancel_task`;
+these lifecycle controls do not require separate assignment. They are also the
+generic interface for external Agent clients. The coordinator can continue
+answering other messages while the task works.
 
 ### External Agent clients
 

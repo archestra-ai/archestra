@@ -771,7 +771,10 @@ jobs:
           set -euo pipefail
           pids=()
           for shard in 1 2; do
-            port=$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1]);s.close()')
+            # Three macOS runner slots share one host. Derive non-overlapping
+            # ports from the run/attempt/shard instead of discovering a free
+            # port and racing another process to bind it after the probe closes.
+            port=$((20000 + ((GITHUB_RUN_ID + GITHUB_RUN_ATTEMPT * 97) % 14000) * 2 + shard))
             echo "Starting frontend integration shard ${shard}/2 on port ${port}"
             ARCHESTRA_FRONTEND_INT_TESTS_PORT="$port" \
               ARCHESTRA_FRONTEND_INT_TESTS_SHARD="$shard" \

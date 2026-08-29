@@ -59,6 +59,8 @@ jobs:
             scan-exit-code: "true"
             e2e-image: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform
             e2e-tag-suffix: -e2e
+            e2e-slim-image: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform
+            e2e-slim-tag-suffix: -e2e-slim
           - name: MCP Server Base
             runner: ubuntu-latest
             context: ./platform/mcp_server_docker_image
@@ -69,6 +71,8 @@ jobs:
             cache-from: type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:buildcache
             e2e-image: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base
             e2e-tag-suffix: ""
+            e2e-slim-image: ""
+            e2e-slim-tag-suffix: ""
           - name: p4 Shim
             runner: ubuntu-latest
             context: ./platform/p4_shim_docker_image
@@ -79,6 +83,8 @@ jobs:
             cache-from: type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/p4-shim:buildcache-amd64
             e2e-image: ""
             e2e-tag-suffix: ""
+            e2e-slim-image: ""
+            e2e-slim-tag-suffix: ""
     steps:
       # Standard runners ship ~14 GB free; drop the unused preinstalled
       # toolchains so the image build + scan never run out of disk.
@@ -142,6 +148,24 @@ jobs:
         uses: ./.github/actions/scan-docker-image
         with:
           image: ${{ format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
+          dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
+          dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
+          exit-code: ${{ matrix.scan-exit-code }}
+
+      # The full Platform image inherits the slim target, but scanning both
+      # exact digests also covers artifact metadata and prevents the required
+      # check from passing without inspecting the image used by K8s/Lite E2E.
+      - name: Pull exact slim E2E image
+        if: ${{ steps.e2e-image.outputs.reused == 'true' && matrix.e2e-slim-image != '' }}
+        env:
+          E2E_SLIM_IMAGE: ${{ format('{0}:{1}{2}', matrix.e2e-slim-image, github.sha, matrix.e2e-slim-tag-suffix) }}
+        run: docker pull "$E2E_SLIM_IMAGE"
+
+      - name: Scan slim image for CVEs
+        if: ${{ steps.e2e-image.outputs.reused == 'true' && matrix.e2e-slim-image != '' }}
+        uses: ./.github/actions/scan-docker-image
+        with:
+          image: ${{ format('{0}:{1}{2}', matrix.e2e-slim-image, github.sha, matrix.e2e-slim-tag-suffix) }}
           dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
           dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
           exit-code: ${{ matrix.scan-exit-code }}

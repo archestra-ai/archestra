@@ -66,10 +66,10 @@ describe("BackendConnectivityStatus", () => {
     );
 
     expect(screen.getByTestId("child-content")).toBeInTheDocument();
-    expect(screen.queryByText("Connection restored")).not.toBeInTheDocument();
+    expect(screen.queryByText("Ready")).not.toBeInTheDocument();
   });
 
-  it("shows a quiet readiness state while the backend starts", () => {
+  it("previews the sign-in surface while the backend starts", () => {
     vi.mocked(useBackendConnectivity).mockReturnValue({
       status: "connecting",
       attemptCount: 0,
@@ -84,17 +84,16 @@ describe("BackendConnectivityStatus", () => {
       </BackendConnectivityStatus>,
     );
 
-    expect(screen.getByText("Waiting for Sparky")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByText("Starting Sparky")).toBeInTheDocument();
     expect(
-      screen.getByText(
-        "The Sparky backend is still starting. This page will continue automatically.",
-      ),
+      screen.getByText("Finishing startup. Sign-in will appear automatically."),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Attempt \d/)).not.toBeInTheDocument();
     expect(screen.queryByTestId("child-content")).not.toBeInTheDocument();
   });
 
-  it("shows retry progress after failed attempts", () => {
+  it("keeps retry scheduling out of the interface", () => {
     vi.mocked(useBackendConnectivity).mockReturnValue({
       status: "connecting",
       attemptCount: 3,
@@ -109,7 +108,8 @@ describe("BackendConnectivityStatus", () => {
       </BackendConnectivityStatus>,
     );
 
-    expect(screen.getByText("Attempt 3 of 7")).toBeInTheDocument();
+    expect(screen.getByText("Starting Sparky")).toBeInTheDocument();
+    expect(screen.queryByText(/Attempt \d/)).not.toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: /Report issue/i }),
     ).not.toBeInTheDocument();
@@ -196,7 +196,7 @@ describe("BackendConnectivityStatus", () => {
       </BackendConnectivityStatus>,
     );
 
-    expect(screen.getByText("Connection restored")).toBeInTheDocument();
+    expect(screen.getByText("Ready")).toBeInTheDocument();
     expect(screen.getByText("Continuing to sign in.")).toBeInTheDocument();
     expect(screen.queryByTestId("child-content")).not.toBeInTheDocument();
   });
@@ -235,7 +235,7 @@ describe("BackendConnectivityStatus", () => {
       </BackendConnectivityStatus>,
     );
 
-    expect(screen.getByText("Connection restored")).toBeInTheDocument();
+    expect(screen.getByText("Ready")).toBeInTheDocument();
     expect(screen.getByText("Reloading the page.")).toBeInTheDocument();
   });
 });

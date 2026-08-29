@@ -1,11 +1,20 @@
 "use client";
 
 import { GITHUB_REPO_URL } from "@archestra/shared";
-import { Check, ExternalLink, RefreshCcw, ServerOff } from "lucide-react";
+import { ExternalLink, RefreshCcw } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { AppLogo } from "@/components/app-logo";
 import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useBackendConnectivity } from "@/lib/config/backend-connectivity";
 import { useAppName } from "@/lib/hooks/use-app-name";
 
@@ -16,8 +25,7 @@ interface BackendConnectivityStatusProps {
 export function BackendConnectivityStatus({
   children,
 }: BackendConnectivityStatusProps) {
-  const { status, attemptCount, estimatedTotalAttempts, retry } =
-    useBackendConnectivity();
+  const { status, attemptCount, retry } = useBackendConnectivity();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirectTo");
   const [showConnectedMessage, setShowConnectedMessage] = useState(false);
@@ -60,9 +68,7 @@ export function BackendConnectivityStatus({
   if (status === "connected" && showConnectedMessage) {
     return (
       <ConnectivityView
-        indicator={<Check className="size-6" strokeWidth={2} />}
-        indicatorClassName="text-emerald-600 dark:text-emerald-400"
-        title="Connection restored"
+        title="Ready"
         description={
           redirectTo ? "Reloading the page." : "Continuing to sign in."
         }
@@ -74,134 +80,111 @@ export function BackendConnectivityStatus({
     return <>{children}</>;
   }
 
-  return (
-    <ConnectionStatusView
-      status={status}
-      attemptCount={attemptCount}
-      estimatedTotalAttempts={estimatedTotalAttempts}
-      onRetry={retry}
-    />
-  );
+  return <ConnectionStatusView status={status} onRetry={retry} />;
 }
 
 function ConnectionStatusView({
   status,
-  attemptCount,
-  estimatedTotalAttempts,
   onRetry,
 }: {
   status: "connecting" | "unreachable";
-  attemptCount: number;
-  estimatedTotalAttempts: number;
   onRetry: () => void;
 }) {
   const appName = useAppName();
   const isUnreachable = status === "unreachable";
 
+  if (!isUnreachable) {
+    return (
+      <ConnectivityView
+        title={`Starting ${appName}`}
+        description="Finishing startup. Sign-in will appear automatically."
+        busy
+      >
+        <SignInSkeleton />
+      </ConnectivityView>
+    );
+  }
+
   return (
     <ConnectivityView
-      indicator={
-        isUnreachable ? (
-          <ServerOff className="size-6" strokeWidth={1.75} />
-        ) : (
-          <ConnectionSignal />
-        )
-      }
-      indicatorClassName={isUnreachable ? "text-destructive" : undefined}
-      title={isUnreachable ? "Backend unavailable" : `Waiting for ${appName}`}
-      description={
-        isUnreachable
-          ? `The ${appName} backend did not respond. Check that it is running, then try again.`
-          : `The ${appName} backend is still starting. This page will continue automatically.`
-      }
-      detail={
-        !isUnreachable && attemptCount > 0
-          ? `Attempt ${attemptCount} of ${estimatedTotalAttempts}`
-          : undefined
-      }
-      urgent={isUnreachable}
+      title="Backend unavailable"
+      description={`The ${appName} backend did not respond. Check that it is running, then try again.`}
+      urgent
       actions={
-        isUnreachable ? (
-          <>
-            <Button type="button" onClick={onRetry}>
-              <RefreshCcw className="size-4" />
-              <span>Try again</span>
-            </Button>
-            <Button variant="ghost" asChild>
-              <a
-                href={`${GITHUB_REPO_URL}/issues`}
-                target="_blank"
-                rel="noreferrer noopener"
-              >
-                <span>Report issue</span>
-                <ExternalLink className="size-3.5" />
-              </a>
-            </Button>
-          </>
-        ) : undefined
+        <>
+          <Button type="button" onClick={onRetry}>
+            <RefreshCcw className="size-4" />
+            <span>Try again</span>
+          </Button>
+          <Button variant="ghost" asChild>
+            <a
+              href={`${GITHUB_REPO_URL}/issues`}
+              target="_blank"
+              rel="noreferrer noopener"
+            >
+              <span>Report issue</span>
+              <ExternalLink className="size-3.5" />
+            </a>
+          </Button>
+        </>
       }
     />
   );
 }
 
 function ConnectivityView({
-  indicator,
-  indicatorClassName,
   title,
   description,
-  detail,
   actions,
+  children,
+  busy = false,
   urgent = false,
 }: {
-  indicator: React.ReactNode;
-  indicatorClassName?: string;
   title: string;
   description: string;
-  detail?: string;
   actions?: React.ReactNode;
+  children?: React.ReactNode;
+  busy?: boolean;
   urgent?: boolean;
 }) {
   return (
-    <main className="flex min-h-full items-center justify-center px-6 py-12">
-      <section
-        className="w-full max-w-sm text-center"
-        role={urgent ? "alert" : "status"}
-      >
+    <main className="h-full flex items-center justify-center p-4">
+      <div className="space-y-4 w-full max-w-md">
         <AppLogo />
 
-        <div
-          className={`mx-auto mt-10 flex size-10 items-center justify-center text-muted-foreground ${indicatorClassName ?? ""}`}
-          aria-hidden="true"
+        <Card
+          className={urgent ? "border-destructive/40" : undefined}
+          role={urgent ? "alert" : "status"}
+          aria-busy={busy || undefined}
         >
-          {indicator}
-        </div>
+          <CardHeader>
+            <CardTitle className="text-xl">
+              <h1>{title}</h1>
+            </CardTitle>
+            <CardDescription>{description}</CardDescription>
+          </CardHeader>
 
-        <h1 className="mt-5 text-xl font-semibold tracking-tight">{title}</h1>
-        <p className="mx-auto mt-2 max-w-xs text-sm leading-6 text-muted-foreground">
-          {description}
-        </p>
+          {children}
 
-        {detail && (
-          <p className="mt-4 font-mono text-[11px] tracking-wide text-muted-foreground/80">
-            {detail}
-          </p>
-        )}
-
-        {actions && (
-          <div className="mt-7 flex items-center justify-center gap-2">
-            {actions}
-          </div>
-        )}
-      </section>
+          {actions && <CardFooter className="gap-2">{actions}</CardFooter>}
+        </Card>
+      </div>
     </main>
   );
 }
 
-function ConnectionSignal() {
+function SignInSkeleton() {
   return (
-    <span className="relative flex size-3 items-center justify-center">
-      <span className="absolute size-3 animate-ping rounded-full bg-primary/35 motion-reduce:animate-none" />
-      <span className="relative size-2 rounded-full bg-primary" />
-    </span>
+    <CardContent className="space-y-5" aria-hidden="true">
+      <div className="space-y-2">
+        <Skeleton className="h-3 w-12 bg-muted-foreground/15 motion-reduce:animate-none" />
+        <Skeleton className="h-9 w-full bg-muted-foreground/15 motion-reduce:animate-none" />
+      </div>
+      <div className="space-y-2">
+        <Skeleton className="h-3 w-16 bg-muted-foreground/15 motion-reduce:animate-none" />
+        <Skeleton className="h-9 w-full bg-muted-foreground/15 motion-reduce:animate-none" />
+      </div>
+      <Skeleton className="h-9 w-full bg-muted-foreground/15 motion-reduce:animate-none" />
+    </CardContent>
   );
 }

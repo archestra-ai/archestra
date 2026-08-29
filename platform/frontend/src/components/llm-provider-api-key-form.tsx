@@ -1365,11 +1365,14 @@ export function LlmProviderApiKeyForm({
                       <SubscriptionSignIn
                         kind={activeSubscriptionKind}
                         disabled={isPending}
-                        onSecret={(secret) => {
+                        onSecret={async (secret) => {
+                          if (onSubscriptionCredential) {
+                            await onSubscriptionCredential(secret);
+                            return;
+                          }
                           form.setValue("apiKey", secret, {
                             shouldDirty: true,
                           });
-                          return onSubscriptionCredential?.(secret);
                         }}
                       />
                     </>

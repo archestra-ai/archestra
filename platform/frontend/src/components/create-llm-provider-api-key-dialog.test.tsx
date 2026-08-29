@@ -20,13 +20,16 @@ vi.mock("@/components/llm-provider-api-key-form", () => ({
   }: {
     form: { register: (name: string) => Record<string, unknown> };
     credentialMode?: "api-key" | "subscription";
-    onSubscriptionCredential?: (credential: string) => void;
+    onSubscriptionCredential?: (credential: string) => void | Promise<void>;
   }) => (
     <div>
       {credentialMode === "subscription" ? (
         <button
           type="button"
-          onClick={() => onSubscriptionCredential?.("subscription-token")}
+          onClick={() => {
+            const result = onSubscriptionCredential?.("subscription-token");
+            if (result instanceof Promise) void result.catch(() => undefined);
+          }}
         >
           Sign in
         </button>
@@ -260,5 +263,38 @@ describe("CreateLlmProviderApiKeyDialog", () => {
     expect(mutateAsync).not.toHaveBeenCalled();
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(onSuccess).toHaveBeenCalledWith("existing-key-id");
+  });
+
+  it("closes a failed subscription sign-in without an unsaved-changes prompt", async () => {
+    mutateAsync.mockRejectedValueOnce(new Error("credential rejected"));
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+
+    render(
+      <CreateLlmProviderApiKeyDialog
+        open
+        onOpenChange={onOpenChange}
+        title="Sign in with ChatGPT"
+        description="Connect your ChatGPT account"
+        credentialMode="subscription"
+        allowedProviders={["openai"]}
+        defaultValues={{
+          name: "ChatGPT Subscription",
+          provider: "openai",
+          scope: "personal",
+          authMethod: "subscription",
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(mutateAsync).toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(
+      screen.queryByRole("dialog", { name: "Discard unsaved changes?" }),
+    ).not.toBeInTheDocument();
+    expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 });

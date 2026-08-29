@@ -103,10 +103,14 @@ describe("POST /api/openai-codex-auth/device/poll", () => {
     expect(response.statusCode).toBe(200);
     const body = response.json();
     expect(body.status).toBe("complete");
-    expect(decodeOpenAiCodexCredential(body.credential)).toEqual({
+    expect(decodeOpenAiCodexCredential(body.credential)).toMatchObject({
       refreshToken: "rt_1",
       accountId: "acc_xyz",
+      accessToken: "at_1",
     });
+    expect(
+      decodeOpenAiCodexCredential(body.credential)?.accessTokenExpiresAtMs,
+    ).toBeGreaterThan(Date.now());
 
     // First call polls deviceauth/token with { device_auth_id, user_code } —
     // and no client_id, matching the Codex CLI's poll request.

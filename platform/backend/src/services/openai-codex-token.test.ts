@@ -47,6 +47,21 @@ describe("openAiCodexTokenManager.getAccessToken (uncached, no key id)", () => {
       refresh_token: CREDENTIAL.refreshToken,
       client_id: expect.any(String),
     });
+    const headers = new Headers(init?.headers);
+    expect(headers.get("originator")).toBe("archestra");
+    expect(headers.get("user-agent")).toMatch(/^archestra\//);
+  });
+
+  it("uses the access token from sign-in without immediately refreshing it", async () => {
+    const fetchMock = vi.mocked(fetch);
+    const token = await openAiCodexTokenManager.getAccessToken({
+      refreshToken: CREDENTIAL.refreshToken,
+      accessToken: "at_from_sign_in",
+      accessTokenExpiresAtMs: Date.now() + 60 * 60 * 1000,
+    });
+
+    expect(token).toBe("at_from_sign_in");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("surfaces a 401 when OpenAI rejects the refresh token", async () => {
@@ -120,6 +135,40 @@ describe("createOpenAiCodexFetch", () => {
     );
 
     expect(innerFetch).toHaveBeenCalledTimes(2);
+    expect(response.status).toBe(200);
+  });
+
+  it("refreshes instead of replaying a sign-in token rejected before expiry", async () => {
+    const authorizationHeaders: string[] = [];
+    const innerFetch = vi.fn(async (_input, init?: RequestInit) => {
+      authorizationHeaders.push(
+        new Headers(init?.headers).get("authorization") ?? "",
+      );
+      return authorizationHeaders.length === 1
+        ? new Response("nope", { status: 401 })
+        : new Response("{}", { status: 200 });
+    });
+
+    const codexFetch = createOpenAiCodexFetch({
+      credential: {
+        ...CREDENTIAL,
+        accessToken: "at_from_sign_in",
+        accessTokenExpiresAtMs: Date.now() + 60 * 60 * 1000,
+      },
+      providerApiKeyId: "key-early-revocation",
+      sessionId: "sess_1",
+      innerFetch,
+    });
+    const response = await codexFetch(
+      "https://chatgpt.com/backend-api/codex/responses",
+      { method: "POST", body: "{}" },
+    );
+
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+    expect(authorizationHeaders).toEqual([
+      "Bearer at_from_sign_in",
+      "Bearer at_fresh",
+    ]);
     expect(response.status).toBe(200);
   });
 });

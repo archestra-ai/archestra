@@ -261,11 +261,12 @@ const openaiCodexAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return { status: "pending" as const };
       }
 
-      const { refreshToken, idToken } = await exchangeOpenAiCodexAuthCode({
-        code: payload.authorization_code,
-        codeVerifier: payload.code_verifier,
-        redirectUri: `${issuer}/deviceauth/callback`,
-      });
+      const { refreshToken, idToken, accessToken, accessTokenExpiresAtMs } =
+        await exchangeOpenAiCodexAuthCode({
+          code: payload.authorization_code,
+          codeVerifier: payload.code_verifier,
+          redirectUri: `${issuer}/deviceauth/callback`,
+        });
 
       const accountId = extractChatgptAccountId(idToken);
       if (!accountId) {
@@ -279,7 +280,12 @@ const openaiCodexAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       return {
         status: "complete" as const,
-        credential: encodeOpenAiCodexCredential({ refreshToken, accountId }),
+        credential: encodeOpenAiCodexCredential({
+          refreshToken,
+          accountId,
+          accessToken,
+          accessTokenExpiresAtMs,
+        }),
       };
     },
   );

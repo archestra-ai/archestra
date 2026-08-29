@@ -194,7 +194,7 @@ export function CreateLlmProviderApiKeyDialog({
       description={description}
       size="small"
       className="sm:max-w-xl"
-      isDirty={form.formState.isDirty}
+      isDirty={credentialMode === "api-key" && form.formState.isDirty}
     >
       <DialogForm
         onSubmit={handleCreate}

@@ -298,7 +298,9 @@ function OauthClientsTable() {
     {
       id: "actions",
       header: "Actions",
-      size: 100,
+      // Three icon-sm buttons with the table's px-4 inset on both sides, so
+      // the last icon sits 16px from the frame like every other cell edge.
+      size: 128,
       cell: ({ row }) => {
         const isLlm = row.original.kind === "llm";
         const resource = isLlm ? "llmOauthClient" : "mcpOauthClient";

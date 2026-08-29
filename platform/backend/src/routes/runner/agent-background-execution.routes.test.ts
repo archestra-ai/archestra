@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
 import { A2AProtocolRole } from "@/agents/a2a/a2a-protocol";
+import config from "@/config";
 import db, { schema } from "@/database";
 import { runnerRuntimeManager } from "@/k8s/runner-runtime";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
@@ -30,6 +31,8 @@ describe("Agent Background execution routes", () => {
   let agent: Agent;
   let user: User;
   let organizationId: string;
+  let previousFeatureEnabled: boolean;
+  let previousClusterReachable: unknown;
 
   beforeEach(async ({ makeAgent, makeAdmin, makeMember, makeOrganization }) => {
     const organization = await makeOrganization();
@@ -78,10 +81,22 @@ describe("Agent Background execution routes", () => {
     registerAuditLogHook(app);
     const { default: routes } = await import("./runner.routes");
     await app.register(routes);
-    vi.spyOn(runnerRuntimeManager, "isEnabled", "get").mockReturnValue(true);
+    previousFeatureEnabled = config.agentBackgroundExecution.enabled;
+    previousClusterReachable = Reflect.get(
+      runnerRuntimeManager,
+      "clusterReachable",
+    );
+    config.agentBackgroundExecution.enabled = true;
+    Reflect.set(runnerRuntimeManager, "clusterReachable", true);
   });
 
   afterEach(async () => {
+    config.agentBackgroundExecution.enabled = previousFeatureEnabled;
+    Reflect.set(
+      runnerRuntimeManager,
+      "clusterReachable",
+      previousClusterReachable,
+    );
     vi.restoreAllMocks();
     await app.close();
   });
@@ -156,7 +171,7 @@ describe("Agent Background execution routes", () => {
   });
 
   test("keeps every execution endpoint unavailable when no execution backend is enabled", async () => {
-    vi.spyOn(runnerRuntimeManager, "isEnabled", "get").mockReturnValue(false);
+    config.agentBackgroundExecution.enabled = false;
 
     const response = await app.inject({
       method: "GET",

@@ -8030,7 +8030,7 @@ export const startAgentExecution = <ThrowOnError extends boolean = false>(option
 });
 
 /**
- * List Background execution sessions started by this user
+ * List Background executions started by this user
  *
  * Authentication:
  *
@@ -8056,7 +8056,7 @@ export const getMyAgentExecutions = <ThrowOnError extends boolean = false>(optio
 export const deleteAgentExecution = <ThrowOnError extends boolean = false>(options: Options<DeleteAgentExecutionData, ThrowOnError>) => (options.client ?? client).delete<DeleteAgentExecutionResponses, DeleteAgentExecutionErrors, ThrowOnError>({ url: '/api/agent-executions/{taskId}', ...options });
 
 /**
- * Get one Background execution session started by this user
+ * Get one Background execution started by this user
  *
  * Authentication:
  *
@@ -8069,7 +8069,7 @@ export const deleteAgentExecution = <ThrowOnError extends boolean = false>(optio
 export const getMyAgentExecution = <ThrowOnError extends boolean = false>(options: Options<GetMyAgentExecutionData, ThrowOnError>) => (options.client ?? client).get<GetMyAgentExecutionResponses, GetMyAgentExecutionErrors, ThrowOnError>({ url: '/api/agent-executions/{taskId}', ...options });
 
 /**
- * Rename one Background execution session started by this user
+ * Rename one Background execution started by this user
  *
  * Authentication:
  *

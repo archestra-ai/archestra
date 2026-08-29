@@ -331893,7 +331893,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "List Background execution sessions started by this user\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
+        "description": "List Background executions started by this user\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -332273,7 +332273,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "Get one Background execution session started by this user\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
+        "description": "Get one Background execution started by this user\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
         "parameters": [
           {
             "schema": {
@@ -332660,7 +332660,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "Rename one Background execution session started by this user\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
+        "description": "Rename one Background execution started by this user\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents",
         "requestBody": {
           "required": true,
           "content": {

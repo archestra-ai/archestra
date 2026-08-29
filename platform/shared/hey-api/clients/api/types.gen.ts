@@ -84912,7 +84912,9 @@ export type GetAgentExecutionsResponses = {
         organizationId: string;
         taskId: string;
         agentId: string;
-        actorUserId: string;
+        actorKind: 'user' | 'team' | 'organization' | 'system';
+        actorId: string;
+        actorUserId: string | null;
         title: string;
         deploymentName: string;
         backend: 'kubernetes';
@@ -85106,7 +85108,9 @@ export type GetMyAgentExecutionsResponses = {
         organizationId: string;
         taskId: string;
         agentId: string;
-        actorUserId: string;
+        actorKind: 'user' | 'team' | 'organization' | 'system';
+        actorId: string;
+        actorUserId: string | null;
         title: string;
         deploymentName: string;
         backend: 'kubernetes';
@@ -85296,7 +85300,9 @@ export type GetMyAgentExecutionResponses = {
         organizationId: string;
         taskId: string;
         agentId: string;
-        actorUserId: string;
+        actorKind: 'user' | 'team' | 'organization' | 'system';
+        actorId: string;
+        actorUserId: string | null;
         title: string;
         deploymentName: string;
         backend: 'kubernetes';
@@ -85403,7 +85409,9 @@ export type UpdateAgentExecutionResponses = {
         organizationId: string;
         taskId: string;
         agentId: string;
-        actorUserId: string;
+        actorKind: 'user' | 'team' | 'organization' | 'system';
+        actorId: string;
+        actorUserId: string | null;
         title: string;
         deploymentName: string;
         backend: 'kubernetes';

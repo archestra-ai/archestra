@@ -3109,6 +3109,13 @@
       "when": 1788001896559,
       "tag": "0443_stormy_namorita",
       "breakpoints": true
+    },
+    {
+      "idx": 444,
+      "version": "7",
+      "when": 1788014689251,
+      "tag": "0444_managed_bundle_marketplaces",
+      "breakpoints": true
     }
   ]
 }

@@ -76,6 +76,11 @@ export { default as appVersionsTable } from "./app-version";
 export { default as auditLogsTable } from "./audit-log";
 export { default as browserTabStatesTable } from "./browser-tab-state";
 export {
+  bundlePluginsTable,
+  bundleSkillsTable,
+  default as bundlesTable,
+} from "./bundle";
+export {
   chatActiveRunEventsTable,
   chatActiveRunsTable,
 } from "./chat-active-run";

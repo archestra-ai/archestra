@@ -452,6 +452,7 @@ function KnowledgeBasesList() {
         <div>
           <div className="mb-3 flex flex-col gap-2">
             <FilterBar
+              leading
               actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
             >
               <SearchInput

@@ -506,6 +506,7 @@ export default function KnowledgeFilesPage() {
     >
       <BulkActionsScope className="space-y-3">
         <FilterBar
+          leading
           onClearFilters={
             search
               ? () => {

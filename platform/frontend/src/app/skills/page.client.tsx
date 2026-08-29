@@ -794,6 +794,7 @@ function SkillsList() {
             <>
               <div className="mb-3 flex flex-col gap-2">
                 <FilterBar
+                  leading
                   onClearFilters={hasActiveFilters ? clearFilters : undefined}
                   actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
                 >

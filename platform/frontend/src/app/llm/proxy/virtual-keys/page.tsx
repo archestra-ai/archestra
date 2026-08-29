@@ -342,7 +342,7 @@ function VirtualKeysTable() {
     <TableCardView storageKey="archestra-llm-virtual-keys-view">
       <div>
         <div className="mb-3">
-          <FilterBar actions={<TableCardViewToggle />}>
+          <FilterBar leading actions={<TableCardViewToggle />}>
             <SearchInput
               isLoading={query.isFetching}
               objectNamePlural="keys"

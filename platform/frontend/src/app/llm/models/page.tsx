@@ -523,7 +523,7 @@ export default function ModelsPage() {
     >
       <BulkActionsScope className="space-y-3">
         {models.length > 0 && (
-          <FilterBar>
+          <FilterBar leading>
             <SearchInput
               objectNamePlural="models"
               searchFields={["model ID"]}

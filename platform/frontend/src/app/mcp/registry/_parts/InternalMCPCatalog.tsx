@@ -1174,6 +1174,7 @@ export function InternalMCPCatalog({
           }
         >
           <FilterBar
+            leading
             onClearFilters={
               hasAppliedBarFilters ? handleClearBarFilters : undefined
             }

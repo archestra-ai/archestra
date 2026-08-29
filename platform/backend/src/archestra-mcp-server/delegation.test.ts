@@ -7,6 +7,7 @@ import {
   slugify,
 } from "@archestra/shared";
 import { vi } from "vitest";
+import config from "@/config";
 import db, { schema } from "@/database";
 import {
   AgentExcludedSubagentModel,
@@ -108,6 +109,8 @@ describe("delegation tool execution", () => {
     makeAgent,
     makeAgentTool,
   }) => {
+    const previous = config.agentBackgroundExecution.enabled;
+    config.agentBackgroundExecution.enabled = true;
     const targetAgent = await makeAgent({
       name: "Background Worker",
       backgroundExecution: {
@@ -140,19 +143,23 @@ describe("delegation tool execution", () => {
       chatOpsThreadId: "thread-1",
     };
 
-    const result = await executeArchestraTool(
-      `${AGENT_TOOL_PREFIX}${slugify(targetAgent.name)}`,
-      { message: "Implement the change." },
-      context,
-    );
+    try {
+      const result = await executeArchestraTool(
+        `${AGENT_TOOL_PREFIX}${slugify(targetAgent.name)}`,
+        { message: "Implement the change." },
+        context,
+      );
 
-    expect(result.isError).toBe(false);
-    expect(mockStartDelegatedTask).toHaveBeenCalledWith({
-      agentId: targetAgent.id,
-      message: "Implement the change.",
-      context,
-    });
-    expect(mockExecuteA2AMessage).not.toHaveBeenCalled();
+      expect(result.isError).toBe(false);
+      expect(mockStartDelegatedTask).toHaveBeenCalledWith({
+        agentId: targetAgent.id,
+        message: "Implement the change.",
+        context,
+      });
+      expect(mockExecuteA2AMessage).not.toHaveBeenCalled();
+    } finally {
+      config.agentBackgroundExecution.enabled = previous;
+    }
   });
 
   test("propagates the current trust state to delegated subagents", async ({

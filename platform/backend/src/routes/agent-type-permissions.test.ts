@@ -1,5 +1,6 @@
 import { ADMIN_ROLE_NAME, BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import { vi } from "vitest";
+import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -215,6 +216,8 @@ describe("agent type permission isolation (routes)", () => {
       });
       await makeMember(memberUser.id, organizationId, { role: "agent_only" });
       const memberApp = await createAppForUser(memberUser);
+      const previousEnabled = config.agentBackgroundExecution.enabled;
+      config.agentBackgroundExecution.enabled = true;
 
       try {
         const agentRes = await memberApp.inject({
@@ -286,6 +289,7 @@ describe("agent type permission isolation (routes)", () => {
         });
         expect(privilegedAgent.statusCode).toBe(403);
       } finally {
+        config.agentBackgroundExecution.enabled = previousEnabled;
         await memberApp.close();
       }
     });

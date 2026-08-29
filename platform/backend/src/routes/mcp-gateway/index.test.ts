@@ -5,11 +5,14 @@ import {
   MCP_OAUTH_CLIENT_CREDENTIALS_EXTENSION_ID,
   SKILL_TOOL_PREFIX,
   slugify,
+  TOOL_CANCEL_TASK_FULL_NAME,
   TOOL_DELETE_FILE_FULL_NAME,
   TOOL_DOWNLOAD_FILE_FULL_NAME,
   TOOL_EDIT_FILE_FULL_NAME,
+  TOOL_GET_TASK_FULL_NAME,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_LIST_SKILLS_FULL_NAME,
+  TOOL_LIST_TASKS_FULL_NAME,
   TOOL_LOAD_SKILL_FULL_NAME,
   TOOL_READ_FILE_FULL_NAME,
   TOOL_RUN_COMMAND_FULL_NAME,
@@ -17,6 +20,7 @@ import {
   TOOL_SAVE_FILE_FULL_NAME,
   TOOL_SEARCH_FILES_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
+  TOOL_STEER_TASK_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
   TOOL_UPLOAD_FILE_FULL_NAME,
 } from "@archestra/shared";
@@ -1782,13 +1786,17 @@ describe("MCP Gateway (stateless mode)", () => {
         .json()
         .result.tools.map((tool: { name: string }) => tool.name);
       // App tools are deliberately absent: in search_and_run_only mode the
-      // whole app surface is reached through search_tools/run_tool.
+      // whole app surface is reached through search_tools/run_tool. Task
+      // lifecycle controls stay top-level because delegated work is durable.
       expect(toolNames.sort()).toEqual(
         [
+          TOOL_CANCEL_TASK_FULL_NAME,
           TOOL_DELETE_FILE_FULL_NAME,
           TOOL_DOWNLOAD_FILE_FULL_NAME,
           TOOL_EDIT_FILE_FULL_NAME,
+          TOOL_GET_TASK_FULL_NAME,
           TOOL_LIST_SKILLS_FULL_NAME,
+          TOOL_LIST_TASKS_FULL_NAME,
           TOOL_LOAD_SKILL_FULL_NAME,
           TOOL_READ_FILE_FULL_NAME,
           TOOL_RUN_COMMAND_FULL_NAME,
@@ -1796,6 +1804,7 @@ describe("MCP Gateway (stateless mode)", () => {
           TOOL_SAVE_FILE_FULL_NAME,
           TOOL_SEARCH_FILES_FULL_NAME,
           TOOL_SEARCH_TOOLS_FULL_NAME,
+          TOOL_STEER_TASK_FULL_NAME,
           TOOL_UPLOAD_FILE_FULL_NAME,
         ].sort(),
       );

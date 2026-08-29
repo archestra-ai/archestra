@@ -172,6 +172,8 @@ describe("agent routes", () => {
     });
 
     test("persists Background execution on an Agent", async () => {
+      const previous = config.agentBackgroundExecution.enabled;
+      config.agentBackgroundExecution.enabled = true;
       const backgroundExecution = {
         image: "example.com/coding-agent:latest",
         command: null,
@@ -187,20 +189,26 @@ describe("agent routes", () => {
         idleTimeoutMinutes: 30,
       };
 
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/agents",
-        payload: {
-          name: `Background Agent ${crypto.randomUUID().slice(0, 8)}`,
-          agentType: "agent",
-          scope: "personal",
-          teams: [],
-          backgroundExecution,
-        },
-      });
+      try {
+        const response = await app.inject({
+          method: "POST",
+          url: "/api/agents",
+          payload: {
+            name: `Background Agent ${crypto.randomUUID().slice(0, 8)}`,
+            agentType: "agent",
+            scope: "personal",
+            teams: [],
+            backgroundExecution,
+          },
+        });
 
-      expect(response.statusCode).toBe(200);
-      expect(response.json().backgroundExecution).toEqual(backgroundExecution);
+        expect(response.statusCode).toBe(200);
+        expect(response.json().backgroundExecution).toEqual(
+          backgroundExecution,
+        );
+      } finally {
+        config.agentBackgroundExecution.enabled = previous;
+      }
     });
 
     test("rejects Background execution configuration while the feature flag is disabled", async () => {
@@ -241,38 +249,47 @@ describe("agent routes", () => {
     });
 
     test("rejects Background execution on an MCP Gateway", async () => {
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/agents",
-        payload: {
-          name: `Gateway ${crypto.randomUUID().slice(0, 8)}`,
-          agentType: "mcp_gateway",
-          scope: "personal",
-          teams: [],
-          backgroundExecution: {
-            image: "example.com/coding-agent:latest",
-            command: null,
-            inferenceProtocol: "openai_responses",
-            backend: "kubernetes",
-            steerMode: "pipe",
-            privileged: false,
-            resources: null,
-            environment: null,
-            credentials: null,
-            ttlHours: null,
-            idleTimeoutMinutes: null,
+      const previous = config.agentBackgroundExecution.enabled;
+      config.agentBackgroundExecution.enabled = true;
+      try {
+        const response = await app.inject({
+          method: "POST",
+          url: "/api/agents",
+          payload: {
+            name: `Gateway ${crypto.randomUUID().slice(0, 8)}`,
+            agentType: "mcp_gateway",
+            scope: "personal",
+            teams: [],
+            backgroundExecution: {
+              image: "example.com/coding-agent:latest",
+              command: null,
+              inferenceProtocol: "openai_responses",
+              backend: "kubernetes",
+              steerMode: "pipe",
+              privileged: false,
+              resources: null,
+              environment: null,
+              credentials: null,
+              ttlHours: null,
+              idleTimeoutMinutes: null,
+            },
           },
-        },
-      });
+        });
 
-      expect(response.statusCode).toBe(400);
-      expect(response.json().error.message).toContain(
-        "can only be configured for Agents",
-      );
+        expect(response.statusCode).toBe(400);
+        expect(response.json().error.message).toContain(
+          "can only be configured for Agents",
+        );
+      } finally {
+        config.agentBackgroundExecution.enabled = previous;
+      }
     });
 
     test("requires deployment-operator approval for privileged Background execution", async () => {
-      const previous = config.agentBackgroundExecution.allowPrivileged;
+      const previousEnabled = config.agentBackgroundExecution.enabled;
+      const previousAllowPrivileged =
+        config.agentBackgroundExecution.allowPrivileged;
+      config.agentBackgroundExecution.enabled = true;
       config.agentBackgroundExecution.allowPrivileged = false;
       try {
         const response = await app.inject({
@@ -304,7 +321,9 @@ describe("agent routes", () => {
           "disabled by the deployment operator",
         );
       } finally {
-        config.agentBackgroundExecution.allowPrivileged = previous;
+        config.agentBackgroundExecution.enabled = previousEnabled;
+        config.agentBackgroundExecution.allowPrivileged =
+          previousAllowPrivileged;
       }
     });
 

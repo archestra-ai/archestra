@@ -306,6 +306,13 @@ function mapInferenceProfilesToModels(
         };
       }
 
+      if (isBedrockRerankModel(base.id, base.underlyingModelName)) {
+        return {
+          ...base,
+          capabilities: { supportedEndpoints: ["/rerank" as const] },
+        };
+      }
+
       return base;
     })
     .filter((model) => model.id)
@@ -314,7 +321,8 @@ function mapInferenceProfilesToModels(
     .filter(
       (model) =>
         ("capabilities" in model &&
-          model.capabilities?.embeddingDimensions != null) ||
+          (model.capabilities?.embeddingDimensions != null ||
+            model.capabilities?.supportedEndpoints?.includes("/rerank"))) ||
         !isNonChatBedrockModel(model.id, model.underlyingModelName),
     );
 
@@ -362,6 +370,13 @@ function isNonChatBedrockModel(
   return NON_CHAT_BEDROCK_MODEL_PATTERNS.some((pattern) =>
     pattern.test(identifier),
   );
+}
+
+function isBedrockRerankModel(
+  id: string,
+  underlyingModelName?: string | null,
+): boolean {
+  return /rerank/i.test(`${id} ${underlyingModelName ?? ""}`);
 }
 
 /**

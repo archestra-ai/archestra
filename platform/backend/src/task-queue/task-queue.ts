@@ -16,6 +16,7 @@ export class TaskQueueService {
   private laneCounts: Record<TaskLane, number> = {
     content: 0,
     permission: 0,
+    evaluation: 0,
     system: 0,
   };
   private taskLane = new Map<string, TaskLane>();
@@ -138,6 +139,7 @@ export class TaskQueueService {
         contentLaneMaxConcurrent: config.kb.taskWorkerMaxConcurrent,
         permissionLaneMaxConcurrent:
           config.kb.permissionSyncWorkerMaxConcurrent,
+        evaluationLaneMaxConcurrent: EVALUATION_LANE_MAX_CONCURRENT,
         systemLaneMaxConcurrent: SYSTEM_LANE_MAX_CONCURRENT,
       },
       "[TaskQueue] Worker started",
@@ -291,6 +293,8 @@ export class TaskQueueService {
         return config.kb.taskWorkerMaxConcurrent;
       case "permission":
         return config.kb.permissionSyncWorkerMaxConcurrent;
+      case "evaluation":
+        return EVALUATION_LANE_MAX_CONCURRENT;
       case "system":
         return SYSTEM_LANE_MAX_CONCURRENT;
     }
@@ -498,6 +502,9 @@ const STUCK_TASK_TIMEOUT_MS = 5 * 60 * 1000;
 // are lightweight and infrequent; content and permission ingestion have their
 // own configurable caps (config.kb.*).
 const SYSTEM_LANE_MAX_CONCURRENT = 4;
+// Evaluation makes real provider calls and refreshes global BM25 statistics.
+// Keep one slot per worker; the run-model claim serializes across replicas.
+const EVALUATION_LANE_MAX_CONCURRENT = 1;
 const LANES = Object.keys(TASK_LANES) as TaskLane[];
 
 function isUniqueViolation(error: unknown): boolean {

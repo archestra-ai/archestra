@@ -1,5 +1,6 @@
 import {
   CACHE_PRICE_MULTIPLIERS,
+  getKnowledgeRerankerKind,
   PROVIDERS_BILLING_NO_TOKEN_RATE,
   type SupportedProvider,
 } from "@archestra/shared";
@@ -1143,20 +1144,18 @@ class ModelModel {
     if (model.ignored) {
       return false;
     }
-
-    if (model.embeddingDimensions !== null) {
-      return false;
-    }
-
     if (model.inputModalities && !model.inputModalities.includes("text")) {
       return false;
     }
-
-    if (model.outputModalities && !model.outputModalities.includes("text")) {
-      return false;
-    }
-
-    return true;
+    return (
+      getKnowledgeRerankerKind({
+        provider: model.provider,
+        model: model.modelId,
+        embeddingDimensions: model.embeddingDimensions,
+        outputModalities: model.outputModalities,
+        supportedEndpoints: model.supportedEndpoints,
+      }) === "llm"
+    );
   }
 
   static supportsEmbeddings(model: Model): boolean {

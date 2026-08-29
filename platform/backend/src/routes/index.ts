@@ -76,6 +76,7 @@ export { default as perplexityProxyRoutes } from "./proxy/routes/perplexity";
 export { default as vllmProxyRoutes } from "./proxy/routes/vllm";
 export { default as xaiProxyRoutes } from "./proxy/routes/xai";
 export { default as zhipuaiProxyRoutes } from "./proxy/routes/zhipuai";
+export { default as retrievalEvaluationRoutes } from "./retrieval-evaluation";
 export { default as runnerRoutes } from "./runner/runner.routes";
 export { default as scheduleTriggerRoutes } from "./schedule-trigger";
 export { default as secretsRoutes } from "./secrets";

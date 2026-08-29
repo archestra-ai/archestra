@@ -322,6 +322,23 @@ class KbChunkModel {
     return dimensions;
   }
 
+  /** Number of this document's chunks populated at the configured dimension. */
+  static async countEmbeddedByDocument(
+    documentId: string,
+    dimensions: number,
+  ): Promise<number> {
+    const column = getEmbeddingColumnName(dimensions);
+    const result = await db.execute(sql`
+      SELECT count(*)::int AS count
+      FROM kb_chunks
+      WHERE document_id = ${documentId}
+        AND ${sql.raw(column)} IS NOT NULL
+    `);
+    return Number(
+      (result.rows[0] as { count?: number } | undefined)?.count ?? 0,
+    );
+  }
+
   /**
    * Distinct text-search configurations in use across a set of connectors.
    *

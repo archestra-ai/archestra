@@ -38,6 +38,7 @@
     "db:reencrypt-content": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/reencrypt-content.ee.ts",
     "db:reencrypt-secrets": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/reencrypt-secrets.ts",
     "db:seed:mock-data": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/seed-mock-data.ts",
+    "kb:eval": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/kb-retrieval-eval.ts",
     "db:hydrate-from": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/hydrate-from.ts",
     "codegen:access-control-docs": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/codegen-access-control-docs.ts",
     "codegen:archestra-mcp-server-docs": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/codegen-archestra-mcp-server-docs.ts",

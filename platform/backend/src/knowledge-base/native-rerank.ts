@@ -1,4 +1,7 @@
-import type { SupportedProvider } from "@archestra/shared";
+import {
+  getKnowledgeRerankerKind,
+  type SupportedProvider,
+} from "@archestra/shared";
 import {
   getAzureOpenAiBearerTokenProvider,
   isAzureOpenAiEntraIdEnabled,
@@ -17,19 +20,16 @@ interface NativeRerankScore {
  * models (Cohere Rerank) serve only their own rerank route — the
  * chat-completions probe 404s — and the native route is what they are for.
  *
- * Model/deployment names are free-form, so this is a name heuristic (like the
- * Azure first-party model detection): Cohere names its rerank models
- * `rerank-v3.5`, `rerank-english-v3.0`, ...; Azure AI Foundry deployments
- * default to names like `Cohere-rerank-v4.0-fast`. Only providers with a
- * known native rerank surface qualify.
+ * The shared capability contract prefers synced endpoint metadata and only
+ * falls back to the legacy model-name signal when no endpoint metadata exists.
+ * A provider/model pair qualifies only when Archestra implements its rerank
+ * transport.
  */
 export function isNativeRerankModel(params: {
   provider: SupportedProvider;
   model: string;
 }): boolean {
-  return (
-    NATIVE_RERANK_PROVIDERS.has(params.provider) && /rerank/i.test(params.model)
-  );
+  return getKnowledgeRerankerKind(params) === "native-rerank";
 }
 
 /**
@@ -98,11 +98,6 @@ class NativeRerankError extends Error {
     this.name = "NativeRerankError";
   }
 }
-
-const NATIVE_RERANK_PROVIDERS: ReadonlySet<SupportedProvider> = new Set([
-  "cohere",
-  "azure",
-]);
 
 async function buildRerankRequest(params: {
   provider: SupportedProvider;

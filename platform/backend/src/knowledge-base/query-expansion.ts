@@ -4,7 +4,7 @@ import {
   getProviderChatInteractionType,
   withKbObservability,
 } from "./kb-interaction";
-import { resolveRerankerConfig } from "./kb-llm-client";
+import { type RerankerConfig, resolveRerankerConfig } from "./kb-llm-client";
 
 // === Exports ===
 
@@ -19,12 +19,14 @@ async function expandQuery(params: {
   organizationId: string;
   /** The one connector this query is scoped to, or null when it spans several. */
   connectorId?: string | null;
+  config?: RerankerConfig;
 }): Promise<ExpandedQuery[]> {
   const { queryText, organizationId, connectorId = null } = params;
 
   let rerankerConfig: Awaited<ReturnType<typeof resolveRerankerConfig>>;
   try {
-    rerankerConfig = await resolveRerankerConfig(organizationId);
+    rerankerConfig =
+      params.config ?? (await resolveRerankerConfig(organizationId));
   } catch (error) {
     // Query expansion (which reuses the reranker model) is a non-fatal
     // enhancement. If the reranker config is unresolvable, degrade to the
@@ -141,7 +143,7 @@ export const KEYWORD_QUERY_HYBRID_ALPHA_WEIGHT = 4.0;
 
 // ===== Internal helpers =====
 
-interface RerankerConfig {
+interface LlmRerankerConfig {
   // biome-ignore lint/suspicious/noExplicitAny: LLM model type from Vercel AI SDK
   llmModel: any;
   modelName: string;
@@ -164,7 +166,7 @@ function deduplicateQueries(queries: ExpandedQuery[]): ExpandedQuery[] {
 
 async function semanticRephrase(params: {
   queryText: string;
-  rerankerConfig: RerankerConfig;
+  rerankerConfig: LlmRerankerConfig;
   connectorId: string | null;
 }): Promise<string | null> {
   const { queryText, rerankerConfig, connectorId } = params;
@@ -205,7 +207,7 @@ async function semanticRephrase(params: {
 
 async function keywordExpansion(params: {
   queryText: string;
-  rerankerConfig: RerankerConfig;
+  rerankerConfig: LlmRerankerConfig;
   connectorId: string | null;
 }): Promise<string[]> {
   const { queryText, rerankerConfig, connectorId } = params;

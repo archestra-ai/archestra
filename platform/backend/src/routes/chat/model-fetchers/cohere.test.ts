@@ -28,7 +28,7 @@ describe("fetchCohereModels", () => {
           created_at: "2025-03-01",
         },
         { name: "embed-v4.0", endpoints: ["embed"], created_at: "2025-04-15" },
-        // Listed by the API but not driven by the KB client → not offered.
+        // Offered for the Knowledge reranker through Cohere's native endpoint.
         { name: "embed-english-v2.0", endpoints: ["embed"] },
         { name: "rerank-v3.5", endpoints: ["rerank"] },
       ],
@@ -39,7 +39,10 @@ describe("fetchCohereModels", () => {
     const ids = models.map((model) => model.id);
     expect(ids).toContain("command-a-03-2025");
     expect(ids).not.toContain("embed-english-v2.0");
-    expect(ids).not.toContain("rerank-v3.5");
+    expect(ids).toContain("rerank-v3.5");
+    expect(models.find((model) => model.id === "rerank-v3.5")).toMatchObject({
+      capabilities: { supportedEndpoints: ["/rerank"] },
+    });
 
     const v4 = models.find((model) => model.id === "embed-v4.0");
     expect(v4).toMatchObject({

@@ -157,6 +157,8 @@ export const AuditEventNameSchema = z.enum([
   "project.purged",
   "project.bulk_updated",
   "project.bulk_deleted",
+  "retrievalEvaluation.started",
+  "retrievalEvaluation.cancelled",
   "role.created",
   "role.updated",
   "role.deleted",

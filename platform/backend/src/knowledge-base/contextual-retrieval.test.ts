@@ -73,6 +73,15 @@ describe("buildContextualHeaders", () => {
     });
   });
 
+  it("honors a run-only disabled mode instead of the organization mode", async () => {
+    const headers = await buildContextualHeaders({
+      ...DOCUMENT,
+      contextualRetrievalMode: "disabled",
+    });
+
+    expect(headers).toEqual([null]);
+  });
+
   it("copies one document context onto every chunk in the cheaper mode", async () => {
     server.use(
       http.post(`${TEST_BASE_URL}/chat/completions`, () =>

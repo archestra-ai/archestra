@@ -28,6 +28,7 @@ export * from "./incoming-email";
 export * from "./integration-overrides";
 export * from "./interactions";
 export * from "./knowledge-base";
+export * from "./knowledge-reranker";
 export * from "./labels";
 export * from "./linked-idp-auth";
 export * from "./locked-chat-content";

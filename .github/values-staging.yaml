@@ -78,6 +78,9 @@ archestra:
     # Staging-only parallel task-environment shortcut while the Archestra-native
     # coding Agent is evaluated alongside the existing workflow.
     ARCHESTRA_CHATOPS_SLACK_DELEGATION_REACTION: "lobster"
+    # BETA: Knowledge configuration evaluator. Explicit so Archestra staging
+    # keeps it enabled even if the deployment-wide beta switch is changed.
+    ARCHESTRA_KNOWLEDGE_BASE_EVALUATION_ENABLED: "true"
     # BETA: auto-sync-permissions connectors (off by default everywhere else).
     # Explicit so staging keeps the feature even if ARCHESTRA_BETA is ever
     # flipped off.

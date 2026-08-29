@@ -38,6 +38,7 @@ export const TaskTypeSchema = z.enum([
   "skill_publication_backfill",
   "p4_shim_reconcile",
   "kb_bm25_stats_refresh",
+  "retrieval_evaluation",
 ]);
 export type TaskType = z.infer<typeof TaskTypeSchema>;
 
@@ -72,6 +73,7 @@ export type PluginGithubSyncPayload = {
 export const TASK_LANES = {
   content: ["connector_sync", "batch_embedding"],
   permission: ["permission_sync"],
+  evaluation: ["retrieval_evaluation"],
   system: [
     "check_due_connectors",
     "check_due_permission_syncs",

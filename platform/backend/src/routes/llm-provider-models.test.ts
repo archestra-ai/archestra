@@ -386,6 +386,84 @@ describe("chat model routes", () => {
     ]);
   });
 
+  test("knowledge-reranker purpose returns only executable models for the selected key", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+    const bedrockKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "bedrock",
+      scope: "personal",
+      userId: user.id,
+    });
+    const cohereKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "cohere",
+      scope: "personal",
+      userId: user.id,
+    });
+    const bedrockChat = await ModelModel.create({
+      externalId: "bedrock/chat",
+      provider: "bedrock",
+      modelId: "chat",
+      description: "Bedrock Chat",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportedEndpoints: null,
+      lastSyncedAt: new Date(),
+    });
+    const bedrockRerank = await ModelModel.create({
+      externalId: "bedrock/cohere.rerank-v3-5:0",
+      provider: "bedrock",
+      modelId: "cohere.rerank-v3-5:0",
+      description: "Cohere Rerank 3.5",
+      inputModalities: ["text"],
+      outputModalities: null,
+      supportedEndpoints: ["/rerank"],
+      lastSyncedAt: new Date(),
+    });
+    const cohereRerank = await ModelModel.create({
+      externalId: "cohere/rerank-v3.5",
+      provider: "cohere",
+      modelId: "rerank-v3.5",
+      description: "Rerank 3.5",
+      inputModalities: ["text"],
+      outputModalities: null,
+      supportedEndpoints: ["/rerank"],
+      lastSyncedAt: new Date(),
+    });
+    await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+      bedrockKey.id,
+      [bedrockChat, bedrockRerank].map((model) => ({
+        id: model.id,
+        modelId: model.modelId,
+      })),
+      "bedrock",
+    );
+    await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+      cohereKey.id,
+      [{ id: cohereRerank.id, modelId: cohereRerank.modelId }],
+      "cohere",
+    );
+
+    const bedrock = await app.inject({
+      method: "GET",
+      url: `/api/llm-models/available?apiKeyId=${bedrockKey.id}&purpose=knowledge-reranker`,
+    });
+    expect(bedrock.statusCode).toBe(200);
+    expect(bedrock.json().map((model: { id: string }) => model.id)).toEqual([
+      "chat",
+    ]);
+
+    const cohere = await app.inject({
+      method: "GET",
+      url: `/api/llm-models/available?apiKeyId=${cohereKey.id}&purpose=knowledge-reranker`,
+    });
+    expect(cohere.statusCode).toBe(200);
+    expect(cohere.json().map((model: { id: string }) => model.id)).toEqual([
+      "rerank-v3.5",
+    ]);
+  });
+
   test("GET /api/llm-models/available marks responses when lazy sync is pending", async ({
     makeSecret,
     makeLlmProviderApiKey,

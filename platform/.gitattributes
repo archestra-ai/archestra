@@ -41,3 +41,7 @@ backend/src/database/migrations/meta/*.json -diff
 # PostgreSQL dashboard variants (generated from application-metrics.json)
 dev/grafana/dashboards/pg-variants/*.json linguist-generated=true
 dev/grafana/dashboards/pg-variants/*.json -diff
+
+# Binary retrieval-evaluation fixtures are stored as review-safe base64 text.
+backend/src/knowledge-base/evaluation/fixtures/assets/*.b64 linguist-generated=true
+backend/src/knowledge-base/evaluation/fixtures/assets/*.b64 -diff

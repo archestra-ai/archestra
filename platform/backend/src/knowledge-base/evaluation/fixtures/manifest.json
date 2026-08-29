@@ -1,0 +1,25 @@
+{
+  "name": "Archestra built-in Knowledge conformance suite",
+  "version": 3,
+  "purpose": "Synthetic integration, conformance, and regression testing",
+  "origin": "Archestra-authored synthetic fixtures",
+  "externalBenchmark": false,
+  "customerData": false,
+  "independentAnnotation": false,
+  "documents": 24,
+  "queries": 20,
+  "relevanceScale": {
+    "0": "explicit negative",
+    "1": "relevant",
+    "2": "highly relevant",
+    "3": "canonical expected result"
+  },
+  "queryModes": ["pass-fail", "metric-only"],
+  "segments": ["category", "language", "difficulty"],
+  "limitations": [
+    "Not representative of production query traffic",
+    "Not independently annotated",
+    "Not statistically powered for production quality claims",
+    "No-answer scenarios measure forced retrieval because no abstention policy exists"
+  ]
+}

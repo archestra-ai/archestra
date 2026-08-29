@@ -1,5 +1,6 @@
 import {
   EmbeddingDimensionsSchema,
+  getKnowledgeRerankerKind,
   isFreeModel,
   isProviderApiKeyOptional,
   LAZY_MODEL_SYNC_STATUS_HEADER,
@@ -123,12 +124,13 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .string()
             .transform((v) => v === "true")
             .optional(),
+          purpose: z.enum(["chat", "knowledge-reranker"]).default("chat"),
         }),
         response: constructResponseSchema(z.array(LlmModelSchema)),
       },
     },
     async ({ query, organizationId, user }, reply) => {
-      const { provider, apiKeyId, isEmbedding } = query;
+      const { provider, apiKeyId, isEmbedding, purpose } = query;
 
       modelsDevClient.syncIfNeeded();
 
@@ -230,9 +232,21 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const keyLinkedModels = filteredModels
-        .filter(({ model }) =>
-          isEmbedding ? true : ModelModel.supportsTextChat(model),
-        )
+        .filter(({ model }) => {
+          if (isEmbedding) return true;
+          if (purpose === "knowledge-reranker") {
+            return (
+              getKnowledgeRerankerKind({
+                provider: model.provider,
+                model: model.modelId,
+                embeddingDimensions: model.embeddingDimensions,
+                outputModalities: model.outputModalities,
+                supportedEndpoints: model.supportedEndpoints,
+              }) !== null
+            );
+          }
+          return ModelModel.supportsTextChat(model);
+        })
         .map(({ model, isBest, recommendedForAgents }) => ({
           id: model.modelId,
           dbId: model.id,
@@ -244,16 +258,21 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           embeddingDimensions: model.embeddingDimensions,
         }));
 
-      const perUserModels = await getPerUserProviderModels({
-        organizationId,
-        provider,
-        isEmbedding,
-        connectedProviders: new Set(
-          apiKeys
-            .filter((key) => providerRequiresPerUserCredential(key.provider))
-            .map((key) => key.provider),
-        ),
-      });
+      const perUserModels =
+        purpose === "knowledge-reranker"
+          ? []
+          : await getPerUserProviderModels({
+              organizationId,
+              provider,
+              isEmbedding,
+              connectedProviders: new Set(
+                apiKeys
+                  .filter((key) =>
+                    providerRequiresPerUserCredential(key.provider),
+                  )
+                  .map((key) => key.provider),
+              ),
+            });
 
       const models = [...keyLinkedModels, ...perUserModels];
 

@@ -1284,6 +1284,25 @@ describe("ModelModel", () => {
 
       expect(ModelModel.supportsTextChat(model)).toBe(true);
     });
+
+    test("returns false for a rerank-only endpoint", async () => {
+      const model = await ModelModel.create({
+        externalId: "bedrock/cohere.rerank-v3-5:0",
+        provider: "bedrock",
+        modelId: "cohere.rerank-v3-5:0",
+        description: null,
+        contextLength: null,
+        inputModalities: null,
+        outputModalities: null,
+        supportedEndpoints: ["/rerank"],
+        supportsToolCalling: false,
+        promptPricePerToken: null,
+        completionPricePerToken: null,
+        lastSyncedAt: new Date(),
+      });
+
+      expect(ModelModel.supportsTextChat(model)).toBe(false);
+    });
   });
 
   describe("update", () => {

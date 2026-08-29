@@ -1,0 +1,148 @@
+# Knowledge retrieval evaluation (issue #7162).
+#
+# Production administrators run the compiled CLI with `kubectl exec` inside a
+# Helm platform pod. Local development normally runs the backend as a host
+# local_resource, so this file creates one dedicated runner pod and executes the
+# exact same compiled entrypoint there against the Kind development database.
+
+load('ext://uibutton', 'cmd_button', 'text_input', 'bool_input')
+
+kb_eval_namespace = os.getenv('ARCHESTRA_K8S_NAMESPACE', 'archestra-dev')
+kb_eval_image = 'archestra-kb-eval-dev'
+kb_eval_out_dir = os.path.abspath('../backend/.kb-eval/latest')
+kb_eval_secret = 'kb-eval-platform-env'
+
+docker_build(
+  kb_eval_image,
+  '..',
+  dockerfile='../dev/kb-eval.Dockerfile',
+)
+
+# Reuse the development platform configuration (including secrets-manager
+# encryption material and provider endpoints) without baking .env into the
+# image. Explicit env entries below override its host-only database URL.
+k8s_yaml(local(
+  '''sh -c 'tmp="/tmp/kb-eval-env.$$"; trap "rm -f $tmp" EXIT; grep -E "^(ARCHESTRA_.*(_SECRET|_TOKEN|_API_KEY|_PASSWORD)(_|=)|AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|SESSION_TOKEN)=|AZURE_.*(_SECRET|_TOKEN)=)" ../.env > "$tmp" || true; kubectl create secret generic %s --namespace %s --from-env-file="$tmp" --dry-run=client -o yaml' ''' % (kb_eval_secret, kb_eval_namespace),
+  quiet=True,
+))
+
+k8s_yaml(blob('''
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kb-eval-runner
+  namespace: %s
+  labels:
+    app.kubernetes.io/name: kb-eval-runner
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kb-eval-runner
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kb-eval-runner
+    spec:
+      containers:
+        - name: kb-eval
+          image: %s
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c", "sleep infinity"]
+          envFrom:
+            - secretRef:
+                name: %s
+          env:
+            - name: NODE_ENV
+              value: development
+            - name: DATABASE_URL
+              value: postgresql://archestra:archestra_dev_password@postgresql.%s.svc.cluster.local:5432/archestra_dev
+            - name: ARCHESTRA_DATABASE_URL
+              value: postgresql://archestra:archestra_dev_password@postgresql.%s.svc.cluster.local:5432/archestra_dev
+            - name: ARCHESTRA_ANALYTICS
+              value: disabled
+            - name: ARCHESTRA_OLLAMA_BASE_URL
+              value: "%s"
+            - name: ARCHESTRA_OLLAMA_NATIVE_BASE_URL
+              value: "%s"
+''' % (kb_eval_namespace, kb_eval_image, kb_eval_secret, kb_eval_namespace, kb_eval_namespace, os.getenv('ARCHESTRA_OLLAMA_BASE_URL', ''), os.getenv('ARCHESTRA_OLLAMA_NATIVE_BASE_URL', ''))))
+
+k8s_resource(
+  'kb-eval-runner',
+  labels=['knowledge'],
+  resource_deps=['postgresql', 'db-migrate'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False,
+)
+
+def kb_eval_run_sh(organization_id, name, limit, keep_flag):
+  """Exec the production CLI in the runner pod and always copy its artifact out."""
+  run_name = ('--name "%s"' % name) if name else ''
+  return ' '.join([
+    'set -e;',
+    'mkdir -p "%s";' % kb_eval_out_dir,
+    'rm -f "%s/run.json.partial";' % kb_eval_out_dir,
+    'kubectl -n "%s" rollout status deploy/kb-eval-runner --timeout=10m;' % kb_eval_namespace,
+    'kubectl -n "%s" exec deploy/kb-eval-runner -c kb-eval -- rm -f /tmp/kb-eval-run.json;' % kb_eval_namespace,
+    'set +e;',
+    'kubectl -n "%s" exec deploy/kb-eval-runner -c kb-eval --' % kb_eval_namespace,
+    'node /app/backend/dist/standalone-scripts/kb-retrieval-eval.mjs run',
+    '--organization-id "%s" --limit "%s" %s %s' % (organization_id, limit, run_name, keep_flag),
+    '--out /tmp/kb-eval-run.json;',
+    'status=$?;',
+    'set -e;',
+    'pod=$(kubectl -n "%s" get pod -l app.kubernetes.io/name=kb-eval-runner --sort-by=.metadata.creationTimestamp -o jsonpath="{.items[-1:].metadata.name}");' % kb_eval_namespace,
+    'if kubectl -n "%s" cp "$pod:/tmp/kb-eval-run.json" "%s/run.json.partial" -c kb-eval; then mv "%s/run.json.partial" "%s/run.json"; else echo "warning: could not copy the JSON artifact from $pod"; rm -f "%s/run.json.partial"; fi;' % (kb_eval_namespace, kb_eval_out_dir, kb_eval_out_dir, kb_eval_out_dir, kb_eval_out_dir),
+    'echo "artifact: %s/run.json";' % kb_eval_out_dir,
+    'exit $status',
+  ])
+
+local_resource(
+  'kb-eval',
+  cmd=kb_eval_run_sh('auto', 'Tilt dev instance', '10', ''),
+  labels=['knowledge'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False,
+  resource_deps=['kb-eval-runner'],
+  deps=[
+    '../backend/src/knowledge-base/evaluation',
+    '../backend/src/standalone-scripts/kb-retrieval-eval.ts',
+    '../backend/src/knowledge-base/query.ts',
+    '../backend/src/knowledge-base/reranker.ts',
+  ],
+)
+
+cmd_button(
+  name='kb-eval-run',
+  resource='kb-eval',
+  text='Run instance suite',
+  icon_name='science',
+  argv=['sh', '-c', 'cd backend && ' + kb_eval_run_sh('$KB_EVAL_ORG', '$KB_EVAL_NAME', '$KB_EVAL_LIMIT', '$KB_EVAL_KEEP')],
+  inputs=[
+    text_input('KB_EVAL_ORG', label='organization UUID (auto for dev)', default='auto'),
+    text_input('KB_EVAL_NAME', label='run label', default='Tilt dev instance'),
+    text_input('KB_EVAL_LIMIT', label='result limit', default='10'),
+    bool_input('KB_EVAL_KEEP', label='keep fixture KB for inspection', default=False, true_string='--keep-fixture', false_string=''),
+  ],
+)
+
+cmd_button(
+  name='kb-eval-diff',
+  resource='kb-eval',
+  text='Compare two artifacts',
+  icon_name='compare_arrows',
+  argv=['sh', '-c', 'cd backend && pnpm kb:eval diff "$KB_EVAL_BEFORE" "$KB_EVAL_AFTER" $KB_EVAL_ALL'],
+  inputs=[
+    text_input('KB_EVAL_BEFORE', label='before artifact', default='.kb-eval/before.json'),
+    text_input('KB_EVAL_AFTER', label='after artifact', default='.kb-eval/after.json'),
+    bool_input('KB_EVAL_ALL', label='show unchanged queries', default=False, true_string='--all', false_string=''),
+  ],
+)
+
+cmd_button(
+  name='kb-eval-tests',
+  resource='kb-eval',
+  text='Run harness tests',
+  icon_name='check_circle',
+  argv=['sh', '-c', 'cd backend && pnpm exec vitest run src/knowledge-base/evaluation src/knowledge-base/query.test.ts src/knowledge-base/reranker.test.ts'],
+)

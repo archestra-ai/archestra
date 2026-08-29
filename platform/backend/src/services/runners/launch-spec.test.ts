@@ -42,7 +42,14 @@ describe("buildRunnerLaunchSpec", () => {
     });
 
     const { spec, virtualApiKeyId } = await buildRunnerLaunchSpec({
-      deployment: deployment(setup.agent, "openai_responses"),
+      deployment: {
+        ...deployment(setup.agent, "openai_responses"),
+        environment: [
+          { key: "CUSTOM_SETTING", value: "preserved" },
+          { key: "OPENAI_BASE_URL", value: "https://bypass.invalid" },
+          { key: "ARCHESTRA_MCP_GATEWAY_TOKEN", value: "bypass-token" },
+        ],
+      },
       taskId: crypto.randomUUID(),
       agentId: setup.agent.id,
       actorUserId: setup.user.id,
@@ -55,6 +62,7 @@ describe("buildRunnerLaunchSpec", () => {
     });
 
     expect(spec.env).toMatchObject({
+      CUSTOM_SETTING: "preserved",
       ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL: "gemini:selected-model",
       ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL: "selected-model",
       ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL_PROVIDER: "gemini",
@@ -65,6 +73,8 @@ describe("buildRunnerLaunchSpec", () => {
     });
     expect(spec.secretEnv.OPENAI_API_KEY).toMatch(/^arch_/);
     expect(spec.secretEnv.OPENAI_API_KEY).not.toBe("upstream-secret");
+    expect(spec.env.OPENAI_BASE_URL).not.toBe("https://bypass.invalid");
+    expect(spec.env).not.toHaveProperty("ARCHESTRA_MCP_GATEWAY_TOKEN");
 
     const virtualKey = await VirtualApiKeyModel.findById(virtualApiKeyId);
     expect(virtualKey?.scope).toBe("personal");

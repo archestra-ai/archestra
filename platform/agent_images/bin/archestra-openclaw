@@ -39,10 +39,10 @@ mkdir -p "${OPENCLAW_STATE_DIR}"
 # DNS names and ordinary platform URLs are left unchanged.
 openclaw_base_url="$(resolve_docker_desktop_url "${OPENAI_BASE_URL:?}")"
 openclaw_mcp_url="$(resolve_docker_desktop_url "${ARCHESTRA_MCP_GATEWAY_URL:?}")"
+: "${OPENAI_API_KEY:?}"
 
 jq -n \
   --arg base_url "${openclaw_base_url}" \
-  --arg api_key "${OPENAI_API_KEY:?}" \
   --arg model "${model}" \
   --arg task_id "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID:?}" \
   --arg mcp_url "${openclaw_mcp_url}" \
@@ -53,7 +53,7 @@ jq -n \
       providers:{
         archestra:{
           baseUrl:$base_url,
-          apiKey:$api_key,
+          apiKey:env.OPENAI_API_KEY,
           api:"openai-responses",
           headers:{
             "X-Archestra-Execution-Id":$task_id,

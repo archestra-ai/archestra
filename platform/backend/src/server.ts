@@ -1714,6 +1714,7 @@ function registerWebServerShutdown(
     // Stop accepting new runs before snapshotting, so nothing created after this
     // point escapes the cleanup below.
     activeChatRunService.beginShutdown();
+    agentExecutionReconciler.stop();
 
     // Fail this pod's in-flight chat runs first: a long SSE stream keeps Fastify
     // connections open, so waiting for fastify.close() risks SIGKILL before the

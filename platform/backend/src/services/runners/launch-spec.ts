@@ -222,10 +222,9 @@ export async function buildRunnerLaunchSpec(params: {
     // An entry overriding ANTHROPIC_BASE_URL would be exactly the bypass the
     // platform-URL guard above exists to prevent.
     ...Object.fromEntries(
-      (params.deployment.environment ?? []).map(({ key, value }) => [
-        key,
-        value,
-      ]),
+      (params.deployment.environment ?? [])
+        .filter(({ key }) => !RESERVED_RUNTIME_ENV_KEYS.has(key))
+        .map(({ key, value }) => [key, value]),
     ),
     ARCHESTRA_AGENT_BACKGROUND_EXECUTION_AGENT_ID: params.deployment.agentId,
     ARCHESTRA_AGENT_BACKGROUND_EXECUTION_AGENT_NAME: agent.name,
@@ -331,6 +330,29 @@ function executionBanner(appName: string): string {
     ? archestraMarkWithText({ appName }).join("\n")
     : `${appName}\nSecure access to your AI tools`;
 }
+
+const RESERVED_RUNTIME_ENV_KEYS = new Set([
+  "ANTHROPIC_API_KEY",
+  "ANTHROPIC_AUTH_TOKEN",
+  "ANTHROPIC_BASE_URL",
+  "CLAUDE_CODE_OAUTH_TOKEN",
+  "OPENAI_API_KEY",
+  "OPENAI_BASE_URL",
+  "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_AGENT_ID",
+  "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_AGENT_NAME",
+  "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_BANNER",
+  "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODE",
+  "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL",
+  "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODEL_PROVIDER",
+  "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL",
+  "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_STEER_FIFO",
+  "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID",
+  "ARCHESTRA_LLM_PROXY_PROTOCOL",
+  "ARCHESTRA_LLM_PROXY_URL",
+  "ARCHESTRA_MCP_GATEWAY_TOKEN",
+  "ARCHESTRA_MCP_GATEWAY_URL",
+  "ARCHESTRA_VIRTUAL_KEY",
+]);
 
 function claudeCodeCustomHeaders(params: {
   taskId: string;

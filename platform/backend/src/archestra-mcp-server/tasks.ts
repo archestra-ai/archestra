@@ -10,6 +10,7 @@ import type { A2AActor } from "@/agents/a2a/a2a-base";
 import { watchChatOpsTask } from "@/agents/chatops/chatops-task-watcher";
 import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
+import logger from "@/logging";
 import {
   A2AArtifactModel,
   A2ATaskModel,
@@ -113,6 +114,11 @@ export async function startDelegatedTask(params: {
         bindingId: context.chatOpsBindingId,
         threadId: context.chatOpsThreadId,
         agentName: agent.name,
+      }).catch((error) => {
+        logger.warn(
+          { error, taskId: taskRow.id },
+          "Failed to watch Agent task for messaging-channel completion",
+        );
       });
     }
 
@@ -336,9 +342,9 @@ const registry = defineArchestraTools([
         }
         // Narrower than task access on purpose: steering types into a shell
         // holding that person's own credentials.
-        if (!(await mayControlSession(session, actor))) {
+        if (session.actorUserId !== actor.id) {
           return errorResult(
-            "Only the person the run acts as (or an Agent administrator) can steer it.",
+            "Only the person the execution acts as can steer it.",
           );
         }
         const agent = await AgentModel.findById(session.agentId);
@@ -505,14 +511,6 @@ async function requireAccessibleTask(
     if (!isAdmin) return notFound;
   }
   return { row };
-}
-
-async function mayControlSession(
-  session: { actorUserId: string },
-  actor: A2AActor,
-): Promise<boolean> {
-  if (session.actorUserId === actor.id) return true;
-  return userHasPermission(actor.id, actor.organizationId, "agent", "admin");
 }
 
 function taskRowSummary(row: {

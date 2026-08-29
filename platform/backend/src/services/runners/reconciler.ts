@@ -33,6 +33,12 @@ class AgentExecutionReconciler {
     this.timer.unref?.();
   }
 
+  stop(): void {
+    if (!this.timer) return;
+    clearInterval(this.timer);
+    this.timer = null;
+  }
+
   async reconcile(): Promise<void> {
     if (this.isReconciling) return;
     this.isReconciling = true;

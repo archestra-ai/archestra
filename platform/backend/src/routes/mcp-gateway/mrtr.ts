@@ -380,8 +380,9 @@ function sign(encoded: string): string {
       "Cannot sign MRTR request state: no auth secret is configured",
     );
   }
+  const hmac = createHmac("sha256", key);
   // codeql[js/insufficient-password-hash] This HMAC authenticates opaque request state; it does not store or verify passwords.
-  return createHmac("sha256", key).update(encoded).digest("base64url");
+  return hmac.update(encoded).digest("base64url");
 }
 
 function verifySignature(encoded: string, signature: string): boolean {

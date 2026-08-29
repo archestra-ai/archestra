@@ -9,35 +9,15 @@ import {
 } from "@archestra/shared";
 import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import {
-  AppWindow,
   BookOpen,
-  Bot,
-  Boxes,
-  Brain,
   Bug,
-  Cable,
-  CircleDollarSign,
-  Database,
-  Files,
-  FolderKanban,
   Github,
-  Inbox,
-  KeyRound,
   type LucideIcon,
   MessageCircle,
-  MessagesSquare,
   MoreHorizontal,
-  Network,
   PencilRuler,
-  Plug,
-  Puzzle,
-  Route,
-  Settings,
-  ShieldCheck,
   Slack,
-  Sparkles,
   Star,
-  Waypoints,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -53,7 +33,6 @@ import {
   type NavItem,
 } from "@/app/_parts/studio-nav";
 import { AppLogo } from "@/components/app-logo";
-import { McpRegistryAttentionBadge } from "@/components/mcp-registry-attention-badge";
 import { OnboardingDot } from "@/components/onboarding-dot";
 import { SidebarWarningsAccordion } from "@/components/sidebar-warnings-accordion";
 import { Badge } from "@/components/ui/badge";
@@ -100,6 +79,7 @@ function routeSidebarMode(pathname: string): SidebarMode | null {
     "/agents",
     "/skills",
     "/plugins",
+    "/bundles",
     "/mcp",
     "/llm",
     "/knowledge",
@@ -513,6 +493,7 @@ export function AppSidebar() {
   });
   const showConnect = canReadMcpGateway && canReadLlmProxy;
   const pluginsEnabled = useFeature("plugins");
+  const bundlesEnabled = useFeature("bundles");
 
   const [sidebarMode, pickSidebarMode] = useSidebarMode(pathname);
   const chatListFadeIn = useOnce();
@@ -531,14 +512,18 @@ export function AppSidebar() {
   );
 
   // Advertising a page this deployment turned off sends the reader looking for
-  // something that isn't there, so Plugins waits for the flag answer rather
-  // than appearing and then vanishing.
+  // something that isn't there, so beta surfaces wait for the flag answer
+  // rather than appearing and then vanishing.
   const filteredNavGroups = React.useMemo(
     () =>
       contentNavGroups.map((group) => ({
         ...group,
         items: group.items
-          .filter((item) => item.url !== "/plugins" || pluginsEnabled === true)
+          .filter((item) => {
+            if (item.url === "/plugins") return pluginsEnabled === true;
+            if (item.url === "/bundles") return bundlesEnabled === true;
+            return true;
+          })
           // Costs & Limits is one row over two pages, so it has to choose
           // which one it opens: a reader who may read limits but not costs
           // would otherwise land on a page they cannot see.
@@ -548,7 +533,7 @@ export function AppSidebar() {
               : item,
           ),
       })),
-    [pluginsEnabled, permissionMap],
+    [pluginsEnabled, bundlesEnabled, permissionMap],
   );
 
   return (

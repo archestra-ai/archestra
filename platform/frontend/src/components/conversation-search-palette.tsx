@@ -83,6 +83,7 @@ const NAVIGATION_KEYWORDS: Record<string, string> = {
   "/agents": "agent bot ai a2a api invocation",
   "/skills": "skills abilities",
   "/plugins": "plugins extensions",
+  "/bundles": "bundles setup capabilities",
   "/settings/messaging-channels":
     "messaging channels triggers automation webhooks slack ms teams email",
   "/mcp/registry": "mcp catalog registry servers",
@@ -112,6 +113,7 @@ const NAVIGATION_KEYWORDS: Record<string, string> = {
 function useNavigationDestinations() {
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
   const pluginsEnabled = useFeature("plugins");
+  const bundlesEnabled = useFeature("bundles");
   // Connect needs both halves of what it explains, exactly as the sidebar
   // gates its own row.
   const { data: canReadLlmProxy } = useHasPermissions({ llmProxy: ["read"] });
@@ -133,6 +135,7 @@ function useNavigationDestinations() {
           return canReadLlmProxy === true && canReadMcpGateway === true;
         }
         if (item.url === "/plugins") return pluginsEnabled === true;
+        if (item.url === "/bundles") return bundlesEnabled === true;
         return isNavItemPermitted(item, permissionMap);
       })
       .map((item) => ({
@@ -142,7 +145,13 @@ function useNavigationDestinations() {
         keywords: NAVIGATION_KEYWORDS[item.url] ?? "",
         href: item.url,
       }));
-  }, [permissionMap, pluginsEnabled, canReadLlmProxy, canReadMcpGateway]);
+  }, [
+    permissionMap,
+    pluginsEnabled,
+    bundlesEnabled,
+    canReadLlmProxy,
+    canReadMcpGateway,
+  ]);
 }
 
 interface ConversationSearchPaletteProps {

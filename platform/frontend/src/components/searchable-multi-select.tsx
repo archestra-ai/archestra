@@ -13,6 +13,8 @@ import { matchesSearchTokens } from "@/lib/search-tokens";
 import { cn } from "@/lib/utils";
 
 interface SearchableMultiSelectProps {
+  id?: string;
+  "aria-labelledby"?: string;
   value: string[];
   onValueChange: (value: string[]) => void;
   placeholder?: string;
@@ -47,6 +49,8 @@ interface SearchableMultiSelectProps {
 }
 
 export function SearchableMultiSelect({
+  id,
+  "aria-labelledby": ariaLabelledBy,
   value,
   onValueChange,
   placeholder = "Select items...",
@@ -103,7 +107,9 @@ export function SearchableMultiSelect({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <div
+          id={id}
           role="combobox"
+          aria-labelledby={ariaLabelledBy}
           aria-expanded={open}
           aria-disabled={disabled}
           tabIndex={disabled ? -1 : 0}

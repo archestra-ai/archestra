@@ -40,6 +40,7 @@ export function makeConfig(
         "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/agent-archestra:latest",
       agentBackgroundExecutionBackend: null,
       plugins: false,
+      bundles: false,
       sandboxArtifactBytesLimit: DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
       chatAttachmentStorageBytesLimit: DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
       apiBodyLimitBytes: 70 * 1024 * 1024,

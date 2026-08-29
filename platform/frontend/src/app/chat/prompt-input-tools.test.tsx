@@ -86,6 +86,9 @@ vi.mock("@/lib/skills/skill.query", () => ({
 vi.mock("@/lib/organization.query");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
+vi.mock("@/lib/llm-provider-api-keys.query", () => ({
+  useAvailableLlmProviderApiKeys: () => ({ data: [] }),
+}));
 
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {

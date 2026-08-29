@@ -155,10 +155,16 @@ export function buildRunnerJob(spec: KubernetesRunnerLaunchSpec): k8s.V1Job {
               image: spec.image,
               command: ["/bin/sh", "-c", buildRunnerBootstrapScript()],
               env: [
-                ...Object.entries(spec.env).map(([name, value]) => ({
-                  name,
-                  value,
-                })),
+                ...Object.entries({
+                  // tmux decides whether a client supports Unicode from its
+                  // locale. Kubernetes does not provide one by default, which
+                  // made Claude Code replace bullets, emoji, and line art with
+                  // underscores in both kubectl and the browser terminal.
+                  LANG: "C.UTF-8",
+                  LC_ALL: "C.UTF-8",
+                  TERM: "xterm-256color",
+                  ...spec.env,
+                }).map(([name, value]) => ({ name, value })),
                 {
                   name: "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ENTRYPOINT",
                   value: resolveEntrypoint(spec.command),

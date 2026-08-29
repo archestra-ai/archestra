@@ -286,7 +286,7 @@ class RunnerRuntimeManager {
       namespace,
       podName,
       RUNNER_CONTAINER_NAME,
-      ["/bin/sh", "-c", `tmux attach -t ${RUNNER_TMUX_SESSION}`],
+      runnerTerminalAttachCommand(),
       params.stdout,
       params.stderr,
       params.stdin,
@@ -295,7 +295,20 @@ class RunnerRuntimeManager {
     );
     return {
       podName,
-      command: `kubectl exec -it -n ${namespace} ${podName} -c ${RUNNER_CONTAINER_NAME} -- tmux attach -t ${RUNNER_TMUX_SESSION}`,
+      command: [
+        "kubectl",
+        "exec",
+        "-it",
+        "-n",
+        namespace,
+        podName,
+        "-c",
+        RUNNER_CONTAINER_NAME,
+        "--",
+        ...runnerTerminalAttachCommand(),
+      ]
+        .map(shellDisplayArgument)
+        .join(" "),
       socket,
     };
   }
@@ -695,6 +708,19 @@ const RUNNER_INPUT_STAGING_POLL_MS = 500;
 const RUNNER_INPUT_STAGING_TIMEOUT_MS = 5 * 60_000;
 const RUNNER_ATTACH_TIMEOUT_MS = 60_000;
 
+function runnerTerminalAttachCommand(): string[] {
+  return [
+    "env",
+    "LANG=C.UTF-8",
+    "LC_ALL=C.UTF-8",
+    "TERM=xterm-256color",
+    "tmux",
+    "attach",
+    "-t",
+    RUNNER_TMUX_SESSION,
+  ];
+}
+
 /** Sleep that wakes early on abort, so cancellation is not delayed a full poll. */
 function delay(ms: number, signal?: AbortSignal): Promise<void> {
   if (signal?.aborted) return Promise.resolve();
@@ -711,4 +737,8 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
 
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`;
+}
+
+function shellDisplayArgument(value: string): string {
+  return /^[A-Za-z0-9_./:=+-]+$/.test(value) ? value : shellQuote(value);
 }

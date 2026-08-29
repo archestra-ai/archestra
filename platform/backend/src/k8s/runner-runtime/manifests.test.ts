@@ -58,6 +58,26 @@ describe("buildRunnerJob", () => {
     );
   });
 
+  it("gives terminal clients a UTF-8 locale with explicit override support", () => {
+    const env = buildRunnerJob(SPEC).spec?.template.spec?.containers[0]?.env;
+
+    expect(env).toEqual(
+      expect.arrayContaining([
+        { name: "LANG", value: "C.UTF-8" },
+        { name: "LC_ALL", value: "C.UTF-8" },
+        { name: "TERM", value: "xterm-256color" },
+      ]),
+    );
+    expect(
+      buildRunnerJob({
+        ...SPEC,
+        env: { ...SPEC.env, TERM: "custom-terminal" },
+      }).spec?.template.spec?.containers[0]?.env,
+    ).toEqual(
+      expect.arrayContaining([{ name: "TERM", value: "custom-terminal" }]),
+    );
+  });
+
   it("holds the entrypoint until declared input files are staged", () => {
     const container = buildRunnerJob({ ...SPEC, inputFileCount: 2 }).spec
       ?.template.spec?.containers[0];

@@ -143,6 +143,16 @@ export function ExecTerminal({
       terminal.loadAddon(fitAddon);
       terminal.open(terminalRef.current);
 
+      // FitAddon can resize xterm for reasons other than an element resize
+      // (font metrics settling is the common one). Drive the remote PTY from
+      // xterm's authoritative dimensions so tmux can never remain at a stale
+      // width while the browser terminal has already expanded.
+      terminal.onResize(({ cols, rows }) => {
+        if (!disposed && isUsableTerminalDimensions({ cols, rows })) {
+          transportRef.current.sendResize(cols, rows);
+        }
+      });
+
       // Fit after a short delay to ensure container is measured
       requestAnimationFrame(() => {
         if (!disposed) {
@@ -197,10 +207,6 @@ export function ExecTerminal({
         if (disposed) return;
         try {
           fitAddon.fit();
-          const dims = fitAddon.proposeDimensions();
-          if (isUsableTerminalDimensions(dims)) {
-            transportRef.current.sendResize(dims.cols, dims.rows);
-          }
         } catch {
           // Ignore fit errors during transitions
         }

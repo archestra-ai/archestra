@@ -294,10 +294,20 @@ class SlackProvider implements ChatOpsProvider {
 
     const event = body.event;
 
-    // Reaction-based mute: a 🔇/🤫 reaction on any message in a channel thread
-    // mutes that thread. Pure side effect — never forwarded to the agent.
+    // Reactions are explicit user actions. Mute reactions affect the thread;
+    // an operator-configured delegation reaction forwards the reacted message
+    // as a durable-work request from the person who added the reaction.
     if (event.type === "reaction_added") {
-      await this.handleMuteReaction(event, body.team_id ?? null);
+      if (isMuteReaction(event.reaction ?? "")) {
+        await this.handleMuteReaction(event, body.team_id ?? null);
+        return null;
+      }
+      if (
+        config.chatops.slackDelegationReaction &&
+        event.reaction === config.chatops.slackDelegationReaction
+      ) {
+        return await this.parseDelegationReaction(event, body.team_id ?? null);
+      }
       return null;
     }
 
@@ -1498,6 +1508,86 @@ class SlackProvider implements ChatOpsProvider {
   }
 
   /**
+   * Resolve a reacted-to Slack message and present it to the assigned Agent as
+   * an explicit request for durable delegation. The reactor is the actor, so
+   * their Archestra permissions, personal credentials and execution ownership
+   * apply; the original author supplies task content only.
+   */
+  private async parseDelegationReaction(
+    event: SlackReactionEvent,
+    teamId: string | null,
+  ): Promise<IncomingChatMessage | null> {
+    if (
+      !this.client ||
+      event.item?.type !== "message" ||
+      !event.user ||
+      event.user === this.botUserId
+    ) {
+      return null;
+    }
+
+    const { channel: channelId, ts: messageTs } = event.item;
+    try {
+      const result = await this.client.conversations.history({
+        channel: channelId,
+        latest: messageTs,
+        inclusive: true,
+        limit: 1,
+      });
+      const message = result.messages?.find(
+        (candidate) => candidate.ts === messageTs,
+      );
+      if (!message || message.user === this.botUserId) return null;
+
+      const originalText = message.text?.trim() ?? "";
+      const outcomes = await this.downloadSlackFiles(
+        message.files as SlackFile[] | undefined,
+      );
+      const attachments = outcomes.flatMap((outcome) =>
+        outcome.status === "delivered" ? [outcome.attachment] : [],
+      );
+      const skipped = outcomes.flatMap((outcome) =>
+        outcome.status === "skipped" ? [outcome.skipped] : [],
+      );
+      if (!originalText && attachments.length === 0 && skipped.length === 0) {
+        return null;
+      }
+
+      const names = await this.resolveUserNames([event.user]);
+      const senderName = names.get(event.user) ?? event.user;
+      const isDm = isSlackDmChannel(channelId);
+      const taskText = buildExplicitDelegationRequest(originalText);
+
+      return {
+        messageId: messageTs,
+        channelId,
+        workspaceId: teamId ?? this.teamId,
+        threadId: messageTs,
+        senderId: event.user,
+        senderName,
+        text: taskText,
+        rawText: taskText,
+        timestamp: new Date(Number.parseFloat(messageTs) * 1000),
+        isThreadReply: false,
+        metadata: {
+          eventType: event.type,
+          channelType: isDm ? "im" : "channel",
+          conversationType: isDm ? "personal" : "channel",
+          botMentioned: false,
+        },
+        ...(attachments.length > 0 && { attachments }),
+        ...(skipped.length > 0 && { skippedAttachments: skipped }),
+      };
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error), channelId, messageTs },
+        "[SlackProvider] Failed to resolve message for explicit delegation reaction",
+      );
+      return null;
+    }
+  }
+
+  /**
    * Mute a thread when a 🔇/🤫 reaction lands on a message in a channel.
    *
    * The reaction says something about the THREAD, not about the message that
@@ -2524,6 +2614,17 @@ function getHeader(
   const value = headers[key] || headers[key.toLowerCase()];
   if (Array.isArray(value)) return value[0];
   return value;
+}
+
+function buildExplicitDelegationRequest(task: string): string {
+  return [
+    "The user explicitly requested isolated Background execution for the reacted-to message.",
+    "Delegate it as a durable task to the most appropriate accessible Agent with Background execution configured. Acknowledge briefly after starting it; do not perform the task in the foreground.",
+    "",
+    task,
+  ]
+    .join("\n")
+    .trimEnd();
 }
 
 // =============================================================================

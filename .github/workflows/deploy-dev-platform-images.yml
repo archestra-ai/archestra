@@ -132,6 +132,7 @@ jobs:
       push_to_gcr: true
       version: ${{ inputs.version || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
       checkout_ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      include_staging_images: true
     secrets:
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}

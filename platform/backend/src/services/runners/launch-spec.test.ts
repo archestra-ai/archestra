@@ -427,7 +427,7 @@ describe("buildRunnerLaunchSpec", () => {
     });
   });
 
-  test("uses the acting user's ChatGPT subscription for Codex", async ({
+  test("uses the acting user's ChatGPT subscription for maintained Codex runtimes", async ({
     makeOrganization,
     makeAdmin,
     makeMember,
@@ -456,30 +456,32 @@ describe("buildRunnerLaunchSpec", () => {
         userId: setup.user.id,
       },
     );
-    const configuredDeployment = deployment(setup.agent, "openai_responses");
-    configuredDeployment.command = ["archestra-codex"];
+    for (const command of ["archestra-codex", "archestra-lobster-env"]) {
+      const configuredDeployment = deployment(setup.agent, "openai_responses");
+      configuredDeployment.command = [command];
 
-    const { virtualApiKeyId } = await buildRunnerLaunchSpec({
-      deployment: configuredDeployment,
-      taskId: crypto.randomUUID(),
-      agentId: setup.agent.id,
-      actor: {
-        id: setup.user.id,
-        kind: "user",
+      const { virtualApiKeyId } = await buildRunnerLaunchSpec({
+        deployment: configuredDeployment,
+        taskId: crypto.randomUUID(),
+        agentId: setup.agent.id,
+        actor: {
+          id: setup.user.id,
+          kind: "user",
+          organizationId: setup.agent.organizationId,
+        },
         organizationId: setup.agent.organizationId,
-      },
-      organizationId: setup.agent.organizationId,
-      runtimeScope: "agent-tests",
-      effectiveNetworkPolicy: { source: "built_in", policy: null },
-      appName: "Archestra",
-      executionMode: "interactive",
-    });
+        runtimeScope: "agent-tests",
+        effectiveNetworkPolicy: { source: "built_in", policy: null },
+        appName: "Archestra",
+        executionMode: "interactive",
+      });
 
-    const subscriptionVirtualKeys =
-      await VirtualApiKeyModel.findByProviderApiKeyId(subscriptionKey.id);
-    expect(subscriptionVirtualKeys.map(({ id }) => id)).toContain(
-      virtualApiKeyId,
-    );
+      const subscriptionVirtualKeys =
+        await VirtualApiKeyModel.findByProviderApiKeyId(subscriptionKey.id);
+      expect(subscriptionVirtualKeys.map(({ id }) => id)).toContain(
+        virtualApiKeyId,
+      );
+    }
   });
 
   test("never falls back to an OpenAI API key for Codex", async ({

@@ -2052,6 +2052,26 @@ export function parseHackathonGalleryRepo(
 }
 
 /**
+ * Normalize Slack's reaction name for the optional explicit-delegation
+ * shortcut. Slack event payloads omit surrounding colons, while operators
+ * commonly copy the `:emoji:` spelling from the UI.
+ *
+ * @public — exported for focused parser coverage
+ */
+export function parseSlackDelegationReaction(
+  envValue: string | undefined,
+): string | null {
+  const reaction = envValue?.trim().replace(/^:/, "").replace(/:$/, "") ?? "";
+  if (!reaction) return null;
+  if (!/^[a-z0-9_+-]{1,80}$/.test(reaction)) {
+    throw new Error(
+      "ARCHESTRA_CHATOPS_SLACK_DELEGATION_REACTION must be a Slack emoji name, with or without surrounding colons",
+    );
+  }
+  return reaction;
+}
+
+/**
  * The public App Gallery sharing config: each value is the env override, else
  * the baked default (see DEFAULT_HACKATHON_GALLERY_*), so every non-enterprise
  * deployment offers sharing to the official gallery out of the box. The
@@ -3737,6 +3757,12 @@ const config = {
     domain: process.env.ARCHESTRA_NGROK_DOMAIN || "",
   },
   chatops: {
+    // Optional operator-level shortcut: reacting to a Slack message with this
+    // emoji turns that message into an explicit request for durable Agent
+    // delegation. Disabled by default; normal Slack messages stay unchanged.
+    slackDelegationReaction: parseSlackDelegationReaction(
+      process.env.ARCHESTRA_CHATOPS_SLACK_DELEGATION_REACTION,
+    ),
     // The Telegram integration is generally available: on by default, with
     // ARCHESTRA_CHATOPS_TELEGRAM_ENABLED=false as the operator opt-out.
     // Off = the provider never starts (even with a token saved in the DB),

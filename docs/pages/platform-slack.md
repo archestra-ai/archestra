@@ -3,7 +3,7 @@ title: Slack
 category: Agents
 order: 7
 description: Connect Archestra agents to Slack channels
-lastUpdated: 2026-08-28
+lastUpdated: 2026-08-29
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -71,6 +71,12 @@ Channel instructions add to what the agent does. They never take an ability away
 Write them as you would talk to the agent. "Every message in this channel is a task — create it immediately, don't ask for confirmation" is a typical one. Clearing the box removes them.
 
 ![The channel instructions editor open on a Slack channel](/docs/automated_screenshots/platform-slack_channel-instructions.webp)
+
+### Explicit Delegation Reaction
+
+An operator can set `ARCHESTRA_CHATOPS_SLACK_DELEGATION_REACTION` to a Slack emoji name. Reacting to an unaddressed message with that emoji then asks the channel's assigned agent to delegate the message as a durable task to an accessible agent with Background execution configured. The person who adds the reaction owns the execution, so their permissions and personal credentials apply.
+
+This shortcut is disabled by default. It does not change ordinary messages or assign a particular execution agent; use the channel instructions when one channel should always delegate to a specific agent.
 
 ### Commands
 

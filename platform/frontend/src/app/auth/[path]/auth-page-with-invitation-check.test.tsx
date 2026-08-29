@@ -82,6 +82,7 @@ describe("AuthPageWithInvitationCheck", () => {
       attemptCount: 0,
       estimatedTotalAttempts: 7,
       elapsedMs: 0,
+      nextRetryInMs: null,
       retry: mockRetry,
     });
   });
@@ -352,7 +353,7 @@ describe("AuthPageWithInvitationCheck", () => {
   });
 
   describe("backend connectivity", () => {
-    it("should explain the automatic retry behavior while connecting", () => {
+    it("should show when the next automatic retry will run", () => {
       vi.mocked(useSearchParams).mockReturnValue({
         get: vi.fn().mockReturnValue(null),
       } as unknown as ReturnType<typeof useSearchParams>);
@@ -365,6 +366,7 @@ describe("AuthPageWithInvitationCheck", () => {
         attemptCount: 0,
         estimatedTotalAttempts: 7,
         elapsedMs: 0,
+        nextRetryInMs: 8000,
         retry: mockRetry,
       });
 
@@ -373,6 +375,7 @@ describe("AuthPageWithInvitationCheck", () => {
       expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
       expect(screen.getByText("Connecting to Sparky")).toBeInTheDocument();
       expect(screen.getByText("Retrying automatically")).toBeInTheDocument();
+      expect(screen.getByText("Next retry in 8s")).toBeInTheDocument();
       expect(screen.queryByTestId("auth-view")).not.toBeInTheDocument();
     });
 
@@ -389,6 +392,7 @@ describe("AuthPageWithInvitationCheck", () => {
         attemptCount: 3,
         estimatedTotalAttempts: 7,
         elapsedMs: 5000,
+        nextRetryInMs: 8000,
         retry: mockRetry,
       });
 
@@ -412,6 +416,7 @@ describe("AuthPageWithInvitationCheck", () => {
         attemptCount: 5,
         estimatedTotalAttempts: 7,
         elapsedMs: 60000,
+        nextRetryInMs: null,
         retry: mockRetry,
       });
 
@@ -435,6 +440,7 @@ describe("AuthPageWithInvitationCheck", () => {
         attemptCount: 5,
         estimatedTotalAttempts: 7,
         elapsedMs: 60000,
+        nextRetryInMs: null,
         retry: mockRetry,
       });
 
@@ -459,6 +465,7 @@ describe("AuthPageWithInvitationCheck", () => {
         attemptCount: 0,
         estimatedTotalAttempts: 7,
         elapsedMs: 0,
+        nextRetryInMs: null,
         retry: mockRetry,
       });
 

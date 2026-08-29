@@ -37,6 +37,7 @@ describe("BackendConnectivityStatus", () => {
       attemptCount: 0,
       estimatedTotalAttempts: 7,
       elapsedMs: 0,
+      nextRetryInMs: null,
       retry: mockRetry,
     });
 
@@ -56,6 +57,7 @@ describe("BackendConnectivityStatus", () => {
       attemptCount: 0,
       estimatedTotalAttempts: 7,
       elapsedMs: 0,
+      nextRetryInMs: null,
       retry: mockRetry,
     });
 
@@ -69,12 +71,13 @@ describe("BackendConnectivityStatus", () => {
     expect(screen.queryByText("Ready")).not.toBeInTheDocument();
   });
 
-  it("explains the automatic retry behavior while connecting", () => {
+  it("shows when the next automatic retry will run", () => {
     vi.mocked(useBackendConnectivity).mockReturnValue({
       status: "connecting",
       attemptCount: 0,
       estimatedTotalAttempts: 7,
       elapsedMs: 0,
+      nextRetryInMs: 8000,
       retry: mockRetry,
     });
 
@@ -92,9 +95,7 @@ describe("BackendConnectivityStatus", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByText("Retrying automatically")).toBeInTheDocument();
-    expect(
-      screen.getByText("Checks pause longer after each unsuccessful attempt."),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Next retry in 8s")).toBeInTheDocument();
     expect(screen.queryByText(/Attempt \d/)).not.toBeInTheDocument();
     expect(screen.queryByTestId("child-content")).not.toBeInTheDocument();
   });
@@ -105,6 +106,7 @@ describe("BackendConnectivityStatus", () => {
       attemptCount: 3,
       estimatedTotalAttempts: 7,
       elapsedMs: 5000,
+      nextRetryInMs: null,
       retry: mockRetry,
     });
 
@@ -115,6 +117,7 @@ describe("BackendConnectivityStatus", () => {
     );
 
     expect(screen.getByText("Retrying automatically")).toBeInTheDocument();
+    expect(screen.getByText("Checking now")).toBeInTheDocument();
     expect(screen.queryByText(/Attempt \d/)).not.toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: /Report issue/i }),
@@ -127,6 +130,7 @@ describe("BackendConnectivityStatus", () => {
       attemptCount: 5,
       estimatedTotalAttempts: 7,
       elapsedMs: 60000,
+      nextRetryInMs: null,
       retry: mockRetry,
     });
 
@@ -159,6 +163,7 @@ describe("BackendConnectivityStatus", () => {
       attemptCount: 5,
       estimatedTotalAttempts: 7,
       elapsedMs: 60000,
+      nextRetryInMs: null,
       retry: mockRetry,
     });
 
@@ -179,6 +184,7 @@ describe("BackendConnectivityStatus", () => {
       attemptCount: 2,
       estimatedTotalAttempts: 7,
       elapsedMs: 3000,
+      nextRetryInMs: 1000,
       retry: mockRetry,
     });
 
@@ -193,6 +199,7 @@ describe("BackendConnectivityStatus", () => {
       attemptCount: 2,
       estimatedTotalAttempts: 7,
       elapsedMs: 3500,
+      nextRetryInMs: null,
       retry: mockRetry,
     });
 
@@ -218,6 +225,7 @@ describe("BackendConnectivityStatus", () => {
       attemptCount: 2,
       estimatedTotalAttempts: 7,
       elapsedMs: 3000,
+      nextRetryInMs: 1000,
       retry: mockRetry,
     });
 
@@ -232,6 +240,7 @@ describe("BackendConnectivityStatus", () => {
       attemptCount: 2,
       estimatedTotalAttempts: 7,
       elapsedMs: 3500,
+      nextRetryInMs: null,
       retry: mockRetry,
     });
 

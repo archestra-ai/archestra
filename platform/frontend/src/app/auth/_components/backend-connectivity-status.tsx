@@ -24,7 +24,8 @@ interface BackendConnectivityStatusProps {
 export function BackendConnectivityStatus({
   children,
 }: BackendConnectivityStatusProps) {
-  const { status, attemptCount, retry } = useBackendConnectivity();
+  const { status, attemptCount, nextRetryInMs, retry } =
+    useBackendConnectivity();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirectTo");
   const [showConnectedMessage, setShowConnectedMessage] = useState(false);
@@ -79,14 +80,22 @@ export function BackendConnectivityStatus({
     return <>{children}</>;
   }
 
-  return <ConnectionStatusView status={status} onRetry={retry} />;
+  return (
+    <ConnectionStatusView
+      status={status}
+      nextRetryInMs={nextRetryInMs}
+      onRetry={retry}
+    />
+  );
 }
 
 function ConnectionStatusView({
   status,
+  nextRetryInMs,
   onRetry,
 }: {
   status: "connecting" | "unreachable";
+  nextRetryInMs: number | null;
   onRetry: () => void;
 }) {
   const appName = useAppName();
@@ -99,7 +108,7 @@ function ConnectionStatusView({
         description="The backend is not responding yet. Sign-in will appear when it is ready."
         busy
       >
-        <ConnectionActivity />
+        <ConnectionActivity nextRetryInMs={nextRetryInMs} />
       </ConnectivityView>
     );
   }
@@ -172,20 +181,32 @@ function ConnectivityView({
   );
 }
 
-function ConnectionActivity() {
+function ConnectionActivity({
+  nextRetryInMs,
+}: {
+  nextRetryInMs: number | null;
+}) {
+  const retryStatus =
+    nextRetryInMs === null
+      ? "Checking now"
+      : `Next retry in ${Math.max(1, Math.ceil(nextRetryInMs / 1000))}s`;
+
   return (
     <CardContent>
-      <div className="flex items-start gap-3 rounded-md border bg-muted/30 p-3">
+      <div className="flex items-center gap-3 rounded-md border bg-muted/30 p-3">
         <LoaderCircle
-          className="mt-0.5 size-4 shrink-0 animate-spin text-primary motion-reduce:animate-none"
+          className="size-4 shrink-0 animate-spin text-primary motion-reduce:animate-none"
           aria-hidden="true"
         />
-        <div className="space-y-0.5">
-          <p className="text-sm font-medium">Retrying automatically</p>
-          <p className="text-xs leading-5 text-muted-foreground">
-            Checks pause longer after each unsuccessful attempt.
-          </p>
-        </div>
+        <p className="min-w-0 flex-1 text-sm font-medium">
+          Retrying automatically
+        </p>
+        <p
+          className="shrink-0 text-xs tabular-nums text-muted-foreground"
+          aria-live="polite"
+        >
+          <span>{retryStatus}</span>
+        </p>
       </div>
     </CardContent>
   );

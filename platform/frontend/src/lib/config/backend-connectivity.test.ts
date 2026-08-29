@@ -23,6 +23,7 @@ describe("useBackendConnectivity", () => {
     expect(result.current.status).toBe("initializing");
     expect(result.current.attemptCount).toBe(0);
     expect(result.current.elapsedMs).toBe(0);
+    expect(result.current.nextRetryInMs).toBeNull();
   });
 
   it("should start in checking state when autoStart is true", () => {
@@ -91,6 +92,7 @@ describe("useBackendConnectivity", () => {
     });
     expect(checkHealthFn).toHaveBeenCalledTimes(1);
     expect(result.current.attemptCount).toBe(1);
+    expect(result.current.nextRetryInMs).toBe(1000);
     // After first failure, transitions to "connecting"
     expect(result.current.status).toBe("connecting");
 
@@ -100,6 +102,7 @@ describe("useBackendConnectivity", () => {
     });
     expect(checkHealthFn).toHaveBeenCalledTimes(2);
     expect(result.current.attemptCount).toBe(2);
+    expect(result.current.nextRetryInMs).toBe(2000);
 
     // Wait for second retry (2s delay after second failure)
     await act(async () => {
@@ -107,6 +110,7 @@ describe("useBackendConnectivity", () => {
     });
     expect(checkHealthFn).toHaveBeenCalledTimes(3);
     expect(result.current.status).toBe("connected");
+    expect(result.current.nextRetryInMs).toBeNull();
   });
 
   it("should respect maxDelayMs for exponential backoff", async () => {

@@ -525,19 +525,9 @@ Each pod gets one policy, chosen by its environment's egress mode:
 
 A namespace-wide default-deny baseline also selects every MCP pod, so a pod that is still starting up is denied by default rather than left open.
 
-**Blocked reserved ranges** (the Public internet floor):
-
-- `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` - RFC 1918 private ranges (cluster pods, services, nodes)
-- `169.254.0.0/16` - Link-local / cloud metadata endpoints (AWS IMDSv1, GCP, Azure)
-- `168.63.129.16/32` - Azure platform metadata (a public IP outside the private ranges)
-- `100.64.0.0/10` - Carrier-grade NAT (RFC 6598)
-- `127.0.0.0/8`, `0.0.0.0/8` - Loopback and unspecified addresses
-- `::1/128`, `fc00::/7`, `fe80::/10` - The IPv6 equivalents
-- `64:ff9b::/96` - NAT64 (blocks reaching the IPv4 ranges via IPv6; IPv4-mapped IPv6 is already covered by the IPv4 rules)
+Public internet uses a maintained floor for private, metadata, and reserved destinations. See [The Public Internet Floor](/docs/platform-environments#the-public-internet-floor) for the exact ranges and CIDR exception behavior.
 
 **Prerequisite**: your cluster must use a CNI that enforces network policies. Calico, Cilium, and GKE Dataplane V2 enforce standard `NetworkPolicy` objects; on EKS Auto Mode, where `ApplicationNetworkPolicy` is the enforcement mechanism, the policy is emitted as an `ApplicationNetworkPolicy` instead. Where no enforcing dataplane is present, the policies are created but not enforced.
-
-To let a server reach a private service while retaining public internet access, add its range under **Additional allowed CIDRs**. Use **Allowlist** instead when the server should reach only selected destinations. See [Network Policies](/docs/platform-private-registry#network-policies).
 
 ### Accessing the Platform
 

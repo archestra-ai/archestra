@@ -191,31 +191,20 @@ RUN set -eux; \
 FROM base AS builder-base
 WORKDIR /app
 
-# Install the Rust toolchain used to compile the N-API addons during `pnpm build`.
+# Install the Rust toolchain used to compile the N-API addons below.
 # Kept ABOVE the node_modules/source COPYs so this layer depends only on `base` and
 # stays cache-stable across ordinary source changes. When it lived below the COPYs
 # the ~12s apk install re-ran on every source-changing build because the preceding
 # COPY layers were invalidated.
 RUN apk add --no-cache build-base cargo rust
 
-# Version arg for Sentry release tracking
-ARG VERSION=dev
-
-# Copy dependencies from deps stage
+# Copy the dependency graph and native workspace before application source so
+# backend/frontend/shared changes can reuse the exported N-API build layer.
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/backend/node_modules ./backend/node_modules
-COPY --from=deps /app/frontend/node_modules ./frontend/node_modules
-COPY --from=deps /app/shared/node_modules ./shared/node_modules
 COPY --from=deps /app/archestra-rs/sandbox-rs/node_modules ./archestra-rs/sandbox-rs/node_modules
 COPY --from=deps /app/archestra-rs/app-runtime-rs/node_modules ./archestra-rs/app-runtime-rs/node_modules
 COPY --from=deps /app/archestra-rs/image-rs/node_modules ./archestra-rs/image-rs/node_modules
-
-# Copy source files
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
-COPY patches ./patches
-COPY backend ./backend
-COPY frontend ./frontend
-COPY shared ./shared
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY archestra-rs/Cargo.toml archestra-rs/Cargo.lock ./archestra-rs/
 COPY archestra-rs/napi-loader ./archestra-rs/napi-loader
 COPY archestra-rs/sandbox-core ./archestra-rs/sandbox-core
@@ -225,7 +214,30 @@ COPY archestra-rs/app-runtime-rs ./archestra-rs/app-runtime-rs
 COPY archestra-rs/image-core ./archestra-rs/image-core
 COPY archestra-rs/image-rs ./archestra-rs/image-rs
 
-# Build all workspace
+# These tasks stay outside Turbo's shared cache because their artifacts are
+# platform-specific. This Docker layer is architecture-scoped and exportable,
+# so ordinary application source changes no longer recompile Rust.
+RUN --mount=type=cache,target=/root/.cargo/registry \
+    --mount=type=cache,target=/root/.cargo/git \
+    --mount=type=cache,target=/app/archestra-rs/target \
+    pnpm --filter @archestra/sandbox-rs \
+         --filter @archestra/app-runtime-rs \
+         --filter @archestra/image-rs build
+
+# VERSION is intentionally declared after the native RUN. Build args implicitly
+# participate in following RUN cache keys, and every staging commit has a new
+# VERSION even when the Rust workspace is unchanged.
+ARG VERSION=dev
+
+COPY --from=deps /app/backend/node_modules ./backend/node_modules
+COPY --from=deps /app/frontend/node_modules ./frontend/node_modules
+COPY --from=deps /app/shared/node_modules ./shared/node_modules
+COPY turbo.json ./
+COPY patches ./patches
+COPY backend ./backend
+COPY frontend ./frontend
+COPY shared ./shared
+
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # VERSION is exported as env var for child processes (used by Sentry source map upload)
@@ -255,21 +267,17 @@ FROM builder-base AS builder
 #
 # https://docs.docker.com/build/building/secrets/#using-build-secrets
 # https://docs.docker.com/build/building/secrets/#target
-# Cache cargo registry/git, the Rust workspace target dir, turbo's local cache,
-# and Next.js's build cache so a cold `pnpm build` (which recompiles the Rust
-# N-API addon and builds the frontend) reuses prior work on subsequent builds.
-# The cargo targets match the rust-napi-musl-smoke stage above, so that stage
-# warms the registry for this one; cargo isolates artifacts by target triple.
-RUN --mount=type=cache,target=/root/.cargo/registry \
-    --mount=type=cache,target=/root/.cargo/git \
-    --mount=type=cache,target=/app/archestra-rs/target \
-    --mount=type=cache,target=/app/.turbo \
+# Native artifacts were built in builder-base before application source was
+# copied. Include shared's synthetic build task so its source remains in the
+# backend/frontend Turbo cache keys while excluding the three N-API tasks.
+RUN --mount=type=cache,target=/app/.turbo \
     --mount=type=cache,target=/app/frontend/.next/cache \
     --mount=type=secret,id=turbo_team,env=TURBO_TEAM \
     --mount=type=secret,id=turbo_token,env=TURBO_TOKEN \
     --mount=type=secret,id=sentry_auth_token,env=SENTRY_AUTH_TOKEN \
     SENTRY_URL=https://de.sentry.io/ \
-    pnpm build
+    pnpm exec turbo build --filter=@backend --filter=@frontend \
+      --filter=@archestra/shared --only
 
 # Assemble the production backend with `pnpm deploy` — pnpm's recommended
 # monorepo packaging step (https://pnpm.io/cli/deploy). It produces a
@@ -281,8 +289,8 @@ RUN --mount=type=cache,target=/root/.cargo/registry \
 # node_modules (the layout that dropped @archestra/napi-loader and crashed the
 # image with MODULE_NOT_FOUND).
 #
-# Ordering matters: this runs AFTER `pnpm build`, so the compiled *.node addons
-# already exist in each crate dir. deploy copies them via the crates' `files`
+# Ordering matters: this runs after both build steps, so the compiled *.node
+# addons already exist in each crate dir. deploy copies them via the crates' `files`
 # globs — it never rebuilds (install scripts are disabled repo-wide).
 #
 # --legacy keeps pnpm's original deploy implementation, which does not require

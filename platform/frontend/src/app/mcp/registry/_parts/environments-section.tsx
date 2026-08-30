@@ -7,12 +7,26 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import {
+  CollectionFilters,
+  FilterBar,
+  FilterSelect,
+  filterSearchClass,
+} from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
 import { ReinstallConfirmBar } from "@/components/reinstall-confirm-bar";
+import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
+import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -20,11 +34,6 @@ import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -67,9 +76,14 @@ import {
 import { EnvironmentResourceDefaultsDialog } from "./environment-resource-defaults-dialog";
 import { compileValidationRegex } from "./environment-validation-helpers";
 
+const ENVIRONMENTS_DOCS_URL = getDocsUrl(DocsPage.PlatformEnvironments);
 const NETWORK_POLICY_DOCS_URL = getDocsUrl(
   DocsPage.PlatformEnvironments,
   "network-egress-policies",
+);
+const PUBLIC_INTERNET_FLOOR_DOCS_URL = getDocsUrl(
+  DocsPage.PlatformEnvironments,
+  "the-public-internet-floor",
 );
 const DOMAIN_PRESETS_DOCS_URL = getDocsUrl(
   DocsPage.PlatformEnvironments,
@@ -78,6 +92,7 @@ const DOMAIN_PRESETS_DOCS_URL = getDocsUrl(
 
 type NetworkPolicy = NonNullable<EnvironmentWithAssignedCount["networkPolicy"]>;
 type EgressMode = NetworkPolicy["egressMode"];
+type EgressModeFilter = EgressMode | "all";
 type DomainPreset = NetworkPolicy["domainPreset"];
 
 type EnvironmentTableRow =
@@ -102,6 +117,9 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
   const defaultEnvironment = useDefaultEnvironment();
   const [deleteTarget, setDeleteTarget] =
     useState<EnvironmentWithAssignedCount | null>(null);
+  const [search, setSearch] = useState("");
+  const [egressModeFilter, setEgressModeFilter] =
+    useState<EgressModeFilter>("all");
 
   // Which editor is open is derived from the URL (`?edit=<id|default>` /
   // `?create`) so the form survives a reload and is shareable. Only admins
@@ -185,6 +203,33 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
     ],
     [defaultAssignedCatalogCount, defaultEnvironment, environments],
   );
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredRows = useMemo(
+    () =>
+      rows.filter((row) => {
+        const matchesSearch =
+          normalizedSearch === "" ||
+          row.name.toLowerCase().includes(normalizedSearch) ||
+          row.namespace?.toLowerCase().includes(normalizedSearch);
+        const effectiveEgressMode =
+          row.networkPolicy?.egressMode ??
+          defaultEnvironment.networkPolicy?.egressMode ??
+          "unrestricted";
+        const matchesEgressMode =
+          egressModeFilter === "all" ||
+          effectiveEgressMode === egressModeFilter;
+
+        return matchesSearch && matchesEgressMode;
+      }),
+    [
+      defaultEnvironment.networkPolicy?.egressMode,
+      egressModeFilter,
+      normalizedSearch,
+      rows,
+    ],
+  );
+  const hasActiveFilters =
+    normalizedSearch !== "" || egressModeFilter !== "all";
 
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const bulkDelete = useBulkDeleteEnvironments();
@@ -197,13 +242,13 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
     selected: selectedEnvironments,
     selectAllMatching,
   } = useBulkSelection({
-    rows,
+    rows: filteredRows,
     getId: (row) => row.id,
     // The Default row is synthetic — it stands for "no environment" — and the
     // delete route refuses one that still has catalog items assigned.
     canSelect: (row) =>
       row.kind === "environment" && row.assignedCatalogCount === 0,
-    filterSignature: "environments",
+    filterSignature: `environments:${normalizedSearch}:${egressModeFilter}`,
     matchDescription: "can be deleted",
   });
 
@@ -302,7 +347,43 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
   );
 
   return (
-    <div className="space-y-4">
+    <BulkActionsScope className="space-y-4">
+      <CollectionFilters>
+        <FilterBar
+          leading
+          onClearFilters={
+            hasActiveFilters
+              ? () => {
+                  setSearch("");
+                  setEgressModeFilter("all");
+                }
+              : undefined
+          }
+        >
+          <SearchInput
+            placeholder="Search by name or namespace"
+            value={search}
+            onSearchChange={setSearch}
+            syncQueryParams={false}
+            className={filterSearchClass}
+          />
+          <FilterSelect
+            value={egressModeFilter}
+            onValueChange={(value) =>
+              setEgressModeFilter(value as EgressModeFilter)
+            }
+            placeholder="Filter by network egress"
+            items={[
+              { value: "all", label: "All network egress" },
+              { value: "unrestricted", label: "Public internet" },
+              { value: "restricted", label: "Allowlist" },
+              { value: "off", label: "Block all" },
+            ]}
+            inactiveValue="all"
+          />
+        </FilterBar>
+      </CollectionFilters>
+
       <BulkActions
         count={selectedEnvironments.length}
         noun="environment"
@@ -323,7 +404,7 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
 
       <DataTable
         columns={columns}
-        data={rows}
+        data={filteredRows}
         getRowId={(row) => row.id}
         rowSelection={rowSelection}
         onRowSelectionChange={setRowSelection}
@@ -331,6 +412,12 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
         hideSelectedCount
         isLoading={isLoading}
         emptyMessage="No environments"
+        hasActiveFilters={hasActiveFilters}
+        filteredEmptyMessage="No environments match your filters"
+        onClearFilters={() => {
+          setSearch("");
+          setEgressModeFilter("all");
+        }}
       />
 
       {bulkDeleteOpen && (
@@ -397,7 +484,7 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
         onOpenChange={(open) => !open && closeEditor()}
         canEdit={canEdit}
       />
-    </div>
+    </BulkActionsScope>
   );
 }
 
@@ -724,12 +811,24 @@ function EnvironmentEditorDialog({
       : mode === "default"
         ? "Edit default environment"
         : "Edit environment";
-  const dialogDescription =
-    mode === "create"
-      ? "Create an org-level deployment environment."
-      : mode === "default"
-        ? "Update the default environment."
-        : "Update this environment.";
+  const dialogDescription = (
+    <>
+      <span>
+        {mode === "create"
+          ? "Create an org-level deployment environment."
+          : mode === "default"
+            ? "Update the default environment."
+            : "Update this environment."}
+      </span>{" "}
+      <ExternalDocsLink
+        href={ENVIRONMENTS_DOCS_URL}
+        className="underline"
+        showIcon={false}
+      >
+        Learn more
+      </ExternalDocsLink>
+    </>
+  );
 
   return (
     <FormDialog
@@ -822,105 +921,12 @@ function EnvironmentEditorDialog({
             disabled={isPending}
           />
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="environment-validation-regex">Validation rule</Label>
-          <p className="text-xs text-muted-foreground">
-            Allowlist regular expression: config values entered when installing
-            into this environment are accepted only if they match. Leave empty
-            to disable. To block a substring (e.g. <code>prod</code>), use a
-            negative lookahead like{" "}
-            <code className="rounded bg-muted px-1 py-0.5 font-mono">
-              ^(?!.*(prod|production)).*$
-            </code>
-            .
-          </p>
-          <Input
-            id="environment-validation-regex"
-            value={validationRegex}
-            onChange={(e) => setValidationRegex(e.target.value)}
-            placeholder="^(?!.*(prod|production)).*$"
-            className="font-mono"
-            disabled={isPending}
-            aria-invalid={validationRegexError ? true : undefined}
-          />
-          {validationRegexError && (
-            <p className="text-xs text-destructive">{validationRegexError}</p>
-          )}
-        </div>
-        {runtimeEnabled && (
-          <div className="space-y-2">
-            <Label htmlFor="environment-trusted-registries">
-              Trusted image registries
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              List of trusted Docker image registries. Any MCP server whose
-              image isn't on this list is held for admin approval before it can
-              be installed. Leave empty to allow any image.
-            </p>
-            <div className="flex gap-2">
-              <Input
-                id="environment-trusted-registries"
-                value={registryDraft}
-                onChange={(e) => {
-                  setRegistryDraft(e.target.value);
-                  setRegistryError(null);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    addTrustedRegistry();
-                  }
-                }}
-                placeholder="ghcr.io/acme"
-                className="font-mono"
-                disabled={isPending}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={addTrustedRegistry}
-                disabled={isPending || registryDraft.trim() === ""}
-              >
-                <Plus className="h-4 w-4" />
-                Add
-              </Button>
-            </div>
-            {registryError && (
-              <p className="text-xs text-destructive">{registryError}</p>
-            )}
-            {trustedImageRegistries.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {trustedImageRegistries.map((registry) => (
-                  <Badge
-                    key={registry}
-                    variant="secondary"
-                    className="gap-1 font-mono"
-                  >
-                    {registry}
-                    <button
-                      type="button"
-                      onClick={() => removeTrustedRegistry(registry)}
-                      disabled={isPending}
-                      aria-label={`Remove ${registry}`}
-                      className="rounded-full text-muted-foreground hover:text-foreground"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
         <section className="space-y-4 border-t pt-4">
           <div className="space-y-1">
             <h3 className="font-medium text-sm">Network Egress Policy</h3>
             <p className="text-xs text-muted-foreground">
               Configure outbound network access for workloads in this
-              environment.{" "}
-              <ExternalDocsLink href={NETWORK_POLICY_DOCS_URL}>
-                View docs
-              </ExternalDocsLink>
+              environment.
             </p>
           </div>
 
@@ -953,17 +959,121 @@ function EnvironmentEditorDialog({
             disabled={isPending || !egressBaselineLoaded}
           />
         </section>
+        <Accordion type="single" collapsible className="border-t">
+          <AccordionItem value="advanced">
+            <AccordionTrigger className="hover:no-underline">
+              Advanced
+            </AccordionTrigger>
+            <AccordionContent className="space-y-4 pb-4">
+              <div className="space-y-2">
+                <Label htmlFor="environment-validation-regex">
+                  Validation rule
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Allowlist regular expression: config values entered when
+                  installing into this environment are accepted only if they
+                  match. Leave empty to disable. To block a substring (e.g.{" "}
+                  <code>prod</code>), use a negative lookahead like{" "}
+                  <code className="rounded bg-muted px-1 py-0.5 font-mono">
+                    ^(?!.*(prod|production)).*$
+                  </code>
+                  .
+                </p>
+                <Input
+                  id="environment-validation-regex"
+                  value={validationRegex}
+                  onChange={(e) => setValidationRegex(e.target.value)}
+                  placeholder="^(?!.*(prod|production)).*$"
+                  className="font-mono"
+                  disabled={isPending}
+                  aria-invalid={validationRegexError ? true : undefined}
+                />
+                {validationRegexError && (
+                  <p className="text-xs text-destructive">
+                    {validationRegexError}
+                  </p>
+                )}
+              </div>
+              {runtimeEnabled && (
+                <div className="space-y-2">
+                  <Label htmlFor="environment-trusted-registries">
+                    Trusted image registries
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    List of trusted Docker image registries. Any MCP server
+                    whose image isn't on this list is held for admin approval
+                    before it can be installed. Leave empty to allow any image.
+                  </p>
+                  <div className="flex gap-2">
+                    <Input
+                      id="environment-trusted-registries"
+                      value={registryDraft}
+                      onChange={(e) => {
+                        setRegistryDraft(e.target.value);
+                        setRegistryError(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          addTrustedRegistry();
+                        }
+                      }}
+                      placeholder="ghcr.io/acme"
+                      className="font-mono"
+                      disabled={isPending}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={addTrustedRegistry}
+                      disabled={isPending || registryDraft.trim() === ""}
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add
+                    </Button>
+                  </div>
+                  {registryError && (
+                    <p className="text-xs text-destructive">{registryError}</p>
+                  )}
+                  {trustedImageRegistries.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {trustedImageRegistries.map((registry) => (
+                        <Badge
+                          key={registry}
+                          variant="secondary"
+                          className="gap-1 font-mono"
+                        >
+                          {registry}
+                          <button
+                            type="button"
+                            onClick={() => removeTrustedRegistry(registry)}
+                            disabled={isPending}
+                            aria-label={`Remove ${registry}`}
+                            className="rounded-full text-muted-foreground hover:text-foreground"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
       </DialogBody>
       {showConfirm ? (
         <ReinstallConfirmBar
           mode="auto"
+          className="mt-0"
           affectedServerCount={environment?.assignedCatalogCount ?? 0}
           isSubmitting={isPending}
           onCancel={() => setShowConfirm(false)}
           onConfirm={doSave}
         />
       ) : (
-        <DialogStickyFooter>
+        <DialogStickyFooter className="mt-0">
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
@@ -1029,7 +1139,11 @@ export function NetworkPolicyFields({
           <AlertDescription className="block leading-6">
             Egress rules would be accepted and then ignored, so these controls
             stay disabled until the cluster enforces NetworkPolicy.{" "}
-            <ExternalDocsLink href={NETWORK_POLICY_DOCS_URL}>
+            <ExternalDocsLink
+              href={NETWORK_POLICY_DOCS_URL}
+              className="underline"
+              showIcon={false}
+            >
               View docs
             </ExternalDocsLink>
           </AlertDescription>
@@ -1042,7 +1156,11 @@ export function NetworkPolicyFields({
             Nothing has confirmed this cluster acts on NetworkPolicy, so the
             rules below may be accepted and then ignored. They are still
             applied, and the enforcement check runs on the next upgrade.{" "}
-            <ExternalDocsLink href={NETWORK_POLICY_DOCS_URL}>
+            <ExternalDocsLink
+              href={NETWORK_POLICY_DOCS_URL}
+              className="underline"
+              showIcon={false}
+            >
               View docs
             </ExternalDocsLink>
           </AlertDescription>
@@ -1068,7 +1186,11 @@ export function NetworkPolicyFields({
             </code>{" "}
             supports IP/CIDR rules only. Domain allowlists require a supported
             FQDN policy provider.{" "}
-            <ExternalDocsLink href={NETWORK_POLICY_DOCS_URL}>
+            <ExternalDocsLink
+              href={NETWORK_POLICY_DOCS_URL}
+              className="underline"
+              showIcon={false}
+            >
               View docs
             </ExternalDocsLink>
           </AlertDescription>
@@ -1076,41 +1198,43 @@ export function NetworkPolicyFields({
       ) : null}
 
       <div className="space-y-2">
-        <FieldLabel
-          label="Egress"
-          description={
-            <>
-              Controls outbound internet access. Block all (
-              <code className="inline rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]">
-                off
-              </code>{" "}
-              in the API) denies all egress, Allowlist (
-              <code className="inline rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]">
-                restricted
-              </code>
-              ) permits only the CIDR/domain rules below, and Allow all (
-              <code className="inline rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]">
-                unrestricted
-              </code>
-              ) permits everything — workloads hosted in your cluster still get
-              a fixed floor of blocked reserved ranges.
-            </>
-          }
-        />
+        <div className="space-y-1">
+          <Label htmlFor="network-policy-egress">Egress</Label>
+          <p className="text-xs text-muted-foreground">
+            Choose whether workloads can reach nothing, only approved
+            destinations, or the public internet. Public internet keeps private
+            and reserved ranges blocked.{" "}
+            <ExternalDocsLink
+              href={PUBLIC_INTERNET_FLOOR_DOCS_URL}
+              className="underline"
+              showIcon={false}
+            >
+              View blocked ranges
+            </ExternalDocsLink>
+          </p>
+        </div>
         <Select
           value={egressMode}
           onValueChange={(value) => setEgressMode(value as EgressMode)}
           disabled={disabled || enforcementUnavailable}
         >
-          <SelectTrigger className="w-full">
+          <SelectTrigger id="network-policy-egress" className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="off">{EGRESS_MODE_LABELS.off}</SelectItem>
-            <SelectItem value="restricted">
+            <SelectItem value="off" description={EGRESS_MODE_DESCRIPTIONS.off}>
+              {EGRESS_MODE_LABELS.off}
+            </SelectItem>
+            <SelectItem
+              value="restricted"
+              description={EGRESS_MODE_DESCRIPTIONS.restricted}
+            >
               {EGRESS_MODE_LABELS.restricted}
             </SelectItem>
-            <SelectItem value="unrestricted">
+            <SelectItem
+              value="unrestricted"
+              description={EGRESS_MODE_DESCRIPTIONS.unrestricted}
+            >
               {EGRESS_MODE_LABELS.unrestricted}
             </SelectItem>
           </SelectContent>
@@ -1120,30 +1244,55 @@ export function NetworkPolicyFields({
       <div className="space-y-2">
         <FieldLabel
           htmlFor="network-policy-cidrs"
-          label="Allowed CIDRs"
-          description="IPv4 or IPv6 CIDR ranges that workloads in Allowlist mode may reach. These rules are enforced by standard Kubernetes NetworkPolicy."
+          label={
+            egressMode === "unrestricted"
+              ? "Additional allowed CIDRs"
+              : "Allowed CIDRs"
+          }
+          description={
+            egressMode === "unrestricted" ? (
+              <>
+                Optional IPv4 or IPv6 CIDR ranges to allow in addition to public
+                internet. Other private and reserved ranges remain blocked.{" "}
+                <ExternalDocsLink
+                  href={PUBLIC_INTERNET_FLOOR_DOCS_URL}
+                  className="underline"
+                  showIcon={false}
+                >
+                  View blocked ranges
+                </ExternalDocsLink>
+              </>
+            ) : egressMode === "off" ? (
+              "CIDR exceptions are unavailable while all egress is blocked."
+            ) : (
+              "IPv4 or IPv6 CIDR ranges that workloads in Allowlist mode may reach."
+            )
+          }
         />
         <Textarea
           id="network-policy-cidrs"
           value={allowedCidrsText}
           onChange={(e) => setAllowedCidrsText(e.target.value)}
-          placeholder={"203.0.113.0/24\n2001:db8::/32"}
+          placeholder={"10.20.0.0/16\nfd00:1234::/64"}
           className="min-h-20 font-mono text-sm"
-          disabled={
-            disabled || enforcementUnavailable || egressMode !== "restricted"
-          }
+          disabled={disabled || enforcementUnavailable || egressMode === "off"}
         />
       </div>
 
       <div className="space-y-2">
         <FieldLabel
+          htmlFor="network-policy-domain-preset"
           label="Domain preset"
           description={
             <>
               Adds a maintained domain allowlist for common dependency or
               package manager traffic. Requires a supported FQDN policy
               provider.{" "}
-              <ExternalDocsLink href={DOMAIN_PRESETS_DOCS_URL}>
+              <ExternalDocsLink
+                href={DOMAIN_PRESETS_DOCS_URL}
+                className="underline"
+                showIcon={false}
+              >
                 View presets
               </ExternalDocsLink>
             </>
@@ -1154,7 +1303,7 @@ export function NetworkPolicyFields({
           onValueChange={(value) => setDomainPreset(value as DomainPreset)}
           disabled={disabled || egressMode !== "restricted" || !supportsFqdn}
         >
-          <SelectTrigger className="w-full">
+          <SelectTrigger id="network-policy-domain-preset" className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -1196,24 +1345,9 @@ function FieldLabel({
   description: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="space-y-1">
       <Label htmlFor={htmlFor}>{label}</Label>
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="h-5 w-5 text-muted-foreground hover:text-foreground"
-            aria-label={`${label} help`}
-          >
-            <Info className="h-3.5 w-3.5" />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent align="start" className="w-80 text-sm">
-          {description}
-        </PopoverContent>
-      </Popover>
+      <div className="text-xs text-muted-foreground">{description}</div>
     </div>
   );
 }
@@ -1221,7 +1355,14 @@ function FieldLabel({
 const EGRESS_MODE_LABELS: Record<EgressMode, string> = {
   off: "Block all",
   restricted: "Allowlist",
-  unrestricted: "Allow all",
+  unrestricted: "Public internet",
+};
+
+const EGRESS_MODE_DESCRIPTIONS: Record<EgressMode, string> = {
+  off: "Block all outbound traffic.",
+  restricted: "Allow only the CIDRs and domains configured below.",
+  unrestricted:
+    "Allow public destinations plus any additional CIDRs configured below.",
 };
 
 function formatEgressMode(mode: EgressMode) {
@@ -1230,7 +1371,10 @@ function formatEgressMode(mode: EgressMode) {
 
 function formatPolicySummary(policy: NetworkPolicy) {
   if (policy.egressMode === "off") return "No outbound egress";
-  if (policy.egressMode === "unrestricted") return "All outbound egress";
+  if (policy.egressMode === "unrestricted")
+    return policy.allowedCidrs.length > 0
+      ? `${policy.allowedCidrs.length} CIDR exception${policy.allowedCidrs.length === 1 ? "" : "s"}`
+      : "Private ranges blocked in-cluster";
 
   const parts: string[] = [];
   if (policy.domainPreset !== "none") {

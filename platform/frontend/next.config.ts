@@ -58,6 +58,9 @@ const nextConfig: NextConfig = {
     incomingRequests: true,
   },
   experimental: {
+    // Next 16.3 defaults to the TypeScript CLI, but the workspace keeps the
+    // TypeScript 6 compiler API in a shim whose binary is intentionally `tsc6`.
+    useTypeScriptCli: false,
     proxyTimeout: 300000, // 5 minutes in milliseconds - prevents SSE stream timeout
     // Next defaults the proxy body limit to 10MB; raise it well above the
     // backend's 70MB default so an operator who increases ARCHESTRA_API_BODY_LIMIT
@@ -67,10 +70,6 @@ const nextConfig: NextConfig = {
     // the backend's runtime value.) Anything the proxy lets through still gets
     // sized-checked by the backend's bodyLimit, which is the authoritative cap.
     proxyClientMaxBodySize: "200mb",
-    // React <ViewTransition> integration (animates the new-chat → conversation
-    // handoff; see src/lib/view-transition.tsx). Browsers without the View
-    // Transitions API just skip the animation.
-    viewTransition: true,
   },
   httpAgentOptions: {
     keepAlive: true,

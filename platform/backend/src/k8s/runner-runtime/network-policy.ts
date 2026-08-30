@@ -70,18 +70,21 @@ export function buildRunnerEnvironmentEgressPolicies(params: {
     !spec.effectiveNetworkPolicy.policy ||
     spec.effectiveNetworkPolicy.policy.egressMode === "unrestricted"
   ) {
+    const allowedCidrs = spec.effectiveNetworkPolicy.policy?.allowedCidrs ?? [];
     const object = isAwsApplicationNetworkPolicyProvider(capabilities)
       ? buildUnrestrictedFloorAwsApplicationNetworkPolicy({
           name: names.environmentNetworkPolicy,
           podSelectorLabels,
           labels: metadata.labels,
           clusterDnsIps,
+          allowedCidrs,
         })
       : buildUnrestrictedFloorPolicy({
           name: names.environmentNetworkPolicy,
           podSelectorLabels,
           labels: metadata.labels,
           clusterDnsIps,
+          allowedCidrs,
         });
     return [
       withRunnerMetadata({

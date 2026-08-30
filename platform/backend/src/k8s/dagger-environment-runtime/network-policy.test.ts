@@ -135,6 +135,23 @@ describe("buildDaggerEgressPolicies (reuses MCP machinery for the dagger engine)
     expect(except).toContain("34.118.224.0/20");
   });
 
+  it("adds explicit CIDR exceptions to Public internet", () => {
+    const policies = buildDaggerEgressPolicies({
+      environmentId: ENV_ID,
+      effectivePolicy: effective({
+        egressMode: "unrestricted",
+        domainPreset: "none",
+        allowedDomains: [],
+        allowedCidrs: ["10.20.0.0/16"],
+      }),
+      capabilities: caps({}),
+    });
+    const np = policies[0].object as unknown as PolicyManifest;
+    expect(np.spec.egress).toEqual(
+      expect.arrayContaining([{ to: [{ ipBlock: { cidr: "10.20.0.0/16" } }] }]),
+    );
+  });
+
   it("applies the open-egress floor when the environment has no policy (built-in)", () => {
     const policies = buildDaggerEgressPolicies({
       environmentId: ENV_ID,

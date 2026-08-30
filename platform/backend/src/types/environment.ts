@@ -307,7 +307,7 @@ function normalizeNetworkPolicy(value: {
       egressMode === "restricted" ? (value.domainPreset ?? "none") : "none",
     allowedDomains:
       egressMode === "restricted" ? (value.allowedDomains ?? []) : [],
-    allowedCidrs: egressMode === "restricted" ? (value.allowedCidrs ?? []) : [],
+    allowedCidrs: egressMode === "off" ? [] : (value.allowedCidrs ?? []),
   };
 }
 

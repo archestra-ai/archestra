@@ -37,6 +37,7 @@ export interface EnvironmentVariableTableRow {
   value?: string;
   description?: string;
   hasStoredSecret?: boolean;
+  credentialId?: string;
 }
 
 interface EnvironmentVariablesTableProps {
@@ -171,6 +172,11 @@ export function EnvironmentVariablesTable({
           <div className="min-w-0 truncate font-mono">
             {row.key || (
               <span className="text-muted-foreground italic">unnamed</span>
+            )}
+            {row.credentialId && (
+              <div className="truncate font-sans text-[11px] text-muted-foreground">
+                connection: {row.credentialId}
+              </div>
             )}
           </div>
           {showType && (

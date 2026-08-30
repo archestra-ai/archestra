@@ -145,8 +145,8 @@ maintained runtime cannot silently switch from subscription access to metered
 API billing.
 
 The **Inference API** setting describes the wire protocol expected by the
-image. Choose **OpenAI Responses** for clients such as Codex and OpenClaw.
-Choose **OpenAI Chat Completions** for clients such as Hermes. Choose
+image. Choose **OpenAI Responses** for clients such as Codex. Choose **OpenAI
+Chat Completions** for clients such as Hermes and OpenClaw. Choose
 **Anthropic Messages** for clients such as Claude Code. Archestra rejects an
 incompatible model and image before creating a pod.
 
@@ -240,14 +240,13 @@ endpoints instead.
 
 ### Configuration and secrets
 
-Background execution uses the same environment-variable editor as containerized MCP servers. Use a plain-text, boolean, or number variable for non-sensitive configuration, and use **Secret** for credentials. A secret can be either:
+Use **Secret** for sensitive values. Choose a reusable connection when several Agents need the same credential.
 
-- **Per user** — each person supplies their own value before starting background work.
-- **Shared** — an Agent administrator configures one value used by every caller.
+Choose **One-off secret** when the value belongs to one Agent. Set the environment variable expected by the image.
 
-After saving the Agent, its **Overview** shows whether required secrets are ready. Secret values are stored through Archestra's configured secrets provider and injected only into the Background execution deployment; they are not stored in the Agent definition.
+Admins manage shared values under **Settings → Agents → Execution credentials**. Users connect personal values under **Personal settings → Connections**.
 
-When external Vault storage is enabled, the credential control uses the same Vault secret picker as MCP server deployments. Users select a secret and key; they never paste the secret value into the Agent form.
+See [Execution Credentials](/docs/platform-execution-credentials) for connection types and setup.
 
 ### Run controls
 

@@ -266,6 +266,9 @@ function DialogForm({
       autoComplete={autoComplete}
       onSubmit={(e) => {
         e.preventDefault();
+        // Portaled dialog events still bubble through the React tree. Keep a
+        // dialog opened from another form from submitting that ancestor too.
+        e.stopPropagation();
         onSubmit(e);
       }}
       {...props}

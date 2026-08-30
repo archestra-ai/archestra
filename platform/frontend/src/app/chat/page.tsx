@@ -34,6 +34,7 @@ import {
 import { toast } from "sonner";
 import { CreateProjectFromChatDialog } from "@/app/_parts/create-project-from-chat-dialog";
 import { scheduledRunContext } from "@/app/_parts/scheduled-run-sidebar.utils";
+import { AgentExecutionCredentialPrompt } from "@/components/agent-execution-credential-prompt";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { Suggestion } from "@/components/ai-elements/suggestion";
 import { ApiKeyLoadError } from "@/components/api-key-load-error";
@@ -3879,20 +3880,22 @@ export function ChatPageContent({
                                 />
                                 {isInitialExecutionMode &&
                                   executionPreflight.data?.ready === false && (
-                                    <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
-                                      This execution needs credentials before it
-                                      can start.{" "}
-                                      <Link
-                                        className="font-medium text-foreground underline underline-offset-4"
-                                        href={
-                                          "/agents/" +
-                                          initialAgentId +
-                                          "?tab=overview#background-execution-credentials"
-                                        }
-                                      >
-                                        Configure credentials
-                                      </Link>
-                                    </div>
+                                    <AgentExecutionCredentialPrompt
+                                      agentId={initialAgentId ?? ""}
+                                      missing={[
+                                        ...executionPreflight.data.missing,
+                                        ...executionPreflight.data
+                                          .misconfigured,
+                                      ]}
+                                      declarations={
+                                        initialExecutionAgent
+                                          ?.backgroundExecution?.credentials ??
+                                        []
+                                      }
+                                      onConnected={() =>
+                                        executionPreflight.refetch()
+                                      }
+                                    />
                                   )}
                               </>
                             )}

@@ -3,6 +3,7 @@
 import { Plus } from "lucide-react";
 import { useState } from "react";
 import {
+  type CredentialBindingOption,
   EnvironmentVariableDialog,
   type EnvVarDraft,
 } from "@/components/environment-variable-dialog";
@@ -26,6 +27,7 @@ interface DeploymentEnvironmentVariablesEditorProps {
   installationOnlyForSecrets?: boolean;
   allowRequiredStaticSecret?: boolean;
   normalizeKey?: (key: string) => string;
+  credentialBindingOptions?: readonly CredentialBindingOption[];
 }
 
 export function DeploymentEnvironmentVariablesEditor({
@@ -42,6 +44,7 @@ export function DeploymentEnvironmentVariablesEditor({
   installationOnlyForSecrets = false,
   allowRequiredStaticSecret = false,
   normalizeKey,
+  credentialBindingOptions,
 }: DeploymentEnvironmentVariablesEditorProps) {
   const [dialog, setDialog] = useState<
     { mode: "add" } | { mode: "edit"; index: number } | null
@@ -101,6 +104,7 @@ export function DeploymentEnvironmentVariablesEditor({
         installationOnlyForSecrets={installationOnlyForSecrets}
         allowRequiredStaticSecret={allowRequiredStaticSecret}
         normalizeKey={normalizeKey}
+        credentialBindingOptions={credentialBindingOptions}
         onClose={() => setDialog(null)}
         onConfirm={(draft) => {
           if (dialog?.mode === "edit") {

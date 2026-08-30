@@ -6,22 +6,26 @@ import {
   MESSAGING_CHANNEL_LABELS,
   type MessagingChannelId,
 } from "@archestra/shared";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { siKubernetes } from "simple-icons";
 import { AgentSelector } from "@/components/agent-selector";
+import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { ChannelIcon } from "@/components/channel-icon";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import { QueryLoadError } from "@/components/query-load-error";
 import { WithPermissions } from "@/components/roles/with-permissions";
+import { ExecutionCredentialsSection } from "@/components/settings/execution-credentials-section";
 import { IntegrationAvailabilitySection } from "@/components/settings/integration-availability-section";
 import {
   SettingsBlock,
   SettingsSaveBar,
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
+import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -458,7 +462,10 @@ export default function AgentSettingsPage() {
         savedMessage="Available messaging channels updated"
       />
       {executionBackend && (
-        <ExecutionBackendSection executionBackend={executionBackend} />
+        <>
+          <ExecutionCredentialsSection />
+          <ExecutionBackendSection executionBackend={executionBackend} />
+        </>
       )}
     </SettingsSectionStack>
   );
@@ -474,109 +481,80 @@ function ExecutionBackendSection({
   executionBackend: ExecutionBackend;
 }) {
   return (
-    <section className="scroll-mt-24 border-t pt-8">
-      <div className="space-y-1">
-        <h2 className="text-base font-semibold leading-6">Execution Backend</h2>
-        <p className="max-w-3xl text-sm leading-5 text-muted-foreground">
-          Installation-wide defaults for delegated Background executions.
-          Configure per-Agent overrides from the Agent editor. Deployment
-          operators manage these values.{" "}
+    <SettingsBlock
+      id="execution-backend"
+      title="Execution backend"
+      description={
+        <>
+          Execution backends provide the isolated environment where delegated
+          Agent tasks run.{" "}
           <ExternalDocsLink
             href={getDocsUrl(DocsPage.PlatformAgentBackgroundExecution)}
+            className="whitespace-nowrap"
           >
-            Learn how Background execution works
+            Learn more
           </ExternalDocsLink>
-        </p>
-      </div>
-
-      <div className="mt-4 overflow-hidden rounded-xl border bg-card">
-        <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[#326CE5]/10">
-              <svg
-                aria-hidden="true"
-                viewBox="0 0 24 24"
-                className="size-6"
-                fill={`#${siKubernetes.hex}`}
-              >
-                <path d={siKubernetes.path} />
-              </svg>
-            </div>
-            <div className="min-w-0">
-              <h3 className="font-medium">Kubernetes</h3>
-              <p className="text-sm text-muted-foreground">
-                One isolated Job per delegated task
-              </p>
-            </div>
+        </>
+      }
+      control={
+        <ButtonWithTooltip
+          type="button"
+          size="sm"
+          disabled
+          disabledText="Additional execution backends are coming soon."
+        >
+          <Plus className="size-4" />
+          <span>Add backend</span>
+        </ButtonWithTooltip>
+      }
+      notice={
+        !executionBackend.available
+          ? "The feature is enabled, but the Kubernetes backend is unreachable. Check the orchestrator configuration."
+          : undefined
+      }
+    >
+      <div className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-background">
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className="size-5"
+              fill={`#${siKubernetes.hex}`}
+            >
+              <path d={siKubernetes.path} />
+            </svg>
           </div>
-          <div className="flex w-fit items-center gap-2 rounded-full border bg-background px-3 py-1.5 text-sm font-medium">
-            <span
-              className={`size-2 rounded-full ${
-                executionBackend.available ? "bg-green-500" : "bg-red-500"
-              }`}
-            />
-            <span>
-              {executionBackend.available ? "Available" : "Unavailable"}
-            </span>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-sm font-medium">Kubernetes</h3>
+            <p className="text-xs text-muted-foreground">
+              Runs each delegated task in an isolated Kubernetes Job
+            </p>
           </div>
         </div>
-
-        <dl className="grid gap-x-8 gap-y-5 border-t p-5 sm:grid-cols-2 lg:grid-cols-3">
-          <div className="min-w-0 sm:col-span-2">
-            <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Default image
-            </dt>
-            <dd
-              className="mt-1 break-all font-mono text-sm"
-              title={executionBackend.defaultImage}
-            >
-              {executionBackend.defaultImage}
-            </dd>
-          </div>
-          <ExecutionBackendDetail label="Maximum duration">
-            {executionBackend.defaultTtlHours} hours
-          </ExecutionBackendDetail>
-          <ExecutionBackendDetail label="Idle timeout">
-            {executionBackend.defaultIdleTimeoutMinutes} minutes
-          </ExecutionBackendDetail>
-          <ExecutionBackendDetail label="CPU request">
-            {executionBackend.resources.cpuRequest}
-          </ExecutionBackendDetail>
-          <ExecutionBackendDetail label="Memory request">
-            {executionBackend.resources.memoryRequest}
-          </ExecutionBackendDetail>
-          <ExecutionBackendDetail label="Memory limit">
-            {executionBackend.resources.memoryLimit}
-          </ExecutionBackendDetail>
-          <ExecutionBackendDetail label="Privileged containers">
-            {executionBackend.allowPrivileged ? "Allowed" : "Disabled"}
-          </ExecutionBackendDetail>
-        </dl>
-
-        {!executionBackend.available && (
-          <div className="border-t bg-red-500/5 px-5 py-3 text-sm text-red-600 dark:text-red-400">
-            The feature is enabled, but the Kubernetes execution backend is not
-            reachable. Check the orchestrator configuration.
-          </div>
-        )}
+        <div className="self-end sm:self-auto">
+          <TableRowActions
+            itemName="Kubernetes"
+            actions={[
+              {
+                icon: <Pencil className="size-4" />,
+                label: "Edit",
+                disabled: true,
+                disabledTooltip:
+                  "Backend configuration is managed by the deployment today.",
+              },
+              {
+                icon: <Trash2 className="size-4" />,
+                label: "Delete",
+                variant: "destructive",
+                disabled: true,
+                disabledTooltip:
+                  "Kubernetes is the only supported backend and cannot be removed.",
+              },
+            ]}
+          />
+        </div>
       </div>
-    </section>
-  );
-}
-
-function ExecutionBackendDetail({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="min-w-0">
-      <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        {label}
-      </dt>
-      <dd className="mt-1 text-sm">{children}</dd>
-    </div>
+    </SettingsBlock>
   );
 }

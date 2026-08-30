@@ -1,4 +1,8 @@
-import type { archestraApiTypes } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  DocsPage,
+  getDocsUrl,
+} from "@archestra/shared";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -29,7 +33,9 @@ vi.mock("@/lib/user-token.query", () => ({
 }));
 // Registers its own queries and is not part of what these tests assert.
 vi.mock("@/components/mcp-oauth-management", () => ({
-  McpOauthManagement: () => null,
+  McpOauthManagement: ({ heading }: { heading?: { title: string } }) => (
+    <div>{heading?.title}</div>
+  ),
 }));
 vi.mock("@/components/agent-chat-apps", () => ({
   AgentChatApps: () => (
@@ -91,22 +97,68 @@ beforeEach(() => {
   );
 });
 
-describe("A2AConnectionInstructions — Other ways to reach this agent", () => {
-  it("puts raw API examples after user-facing channels and keeps them collapsed", async () => {
+describe("A2AConnectionInstructions — detail layout", () => {
+  it("groups A2A setup before secondary channels and keeps request examples collapsed", async () => {
     const user = userEvent.setup();
     renderChannels();
+
+    const apiHeading = screen.getByRole("heading", { name: "Call via API" });
+    const apiSection = apiHeading.closest("section") as HTMLElement;
+    expect(
+      within(apiSection).getByRole("heading", { name: "Agent Endpoint" }),
+    ).toBeVisible();
+    expect(
+      within(apiSection).getByRole("heading", { name: "Authentication" }),
+    ).toBeVisible();
+    const authenticationSection = within(apiSection)
+      .getByRole("heading", { name: "Authentication" })
+      .closest("section") as HTMLElement;
+    expect(
+      within(authenticationSection).getByText("OAuth clients"),
+    ).toBeVisible();
+    expect(
+      within(authenticationSection).getByText("Platform tokens"),
+    ).toBeVisible();
+    expect(
+      within(authenticationSection).getByRole("link", {
+        name: "Manage your tokens",
+      }),
+    ).toHaveAttribute(
+      "href",
+      "/account/gateway-token?highlight=personal-token",
+    );
+    expect(
+      within(authenticationSection).getByRole("link", { name: "Learn more" }),
+    ).toHaveAttribute(
+      "href",
+      `${getDocsUrl(DocsPage.PlatformAgentTriggersWebhookA2a)}#authentication`,
+    );
 
     const channelsHeading = screen.getByRole("heading", {
       name: "Other ways to reach this agent",
     });
-    const apiTrigger = screen.getByRole("button", { name: /Call via API/ });
     expect(
-      channelsHeading.compareDocumentPosition(apiTrigger) &
+      apiHeading.compareDocumentPosition(channelsHeading) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(screen.queryByText("Continue the conversation")).toBeNull();
 
-    await user.click(apiTrigger);
+    const examplesTrigger = screen.getByRole("button", {
+      name: /Request examples/,
+    });
+    expect(
+      screen.getByText(/Copy A2A requests for common integration workflows/),
+    ).toHaveTextContent(
+      "Copy A2A requests for common integration workflows. The A2A docs cover every method.",
+    );
+    expect(screen.getByRole("link", { name: "A2A docs" })).toHaveAttribute(
+      "href",
+      getDocsUrl(DocsPage.PlatformAgentTriggersWebhookA2a),
+    );
+    expect(screen.queryByText("Continue the conversation")).toBeNull();
+    expect(screen.queryByLabelText("Token for examples")).toBeNull();
+
+    await user.click(examplesTrigger);
+    expect(screen.getByLabelText("Token for examples")).toBeVisible();
     expect(screen.getByText("Continue the conversation")).toBeVisible();
   });
 

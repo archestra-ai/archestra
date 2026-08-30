@@ -13,6 +13,7 @@ import {
 } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
+import { createExecutionCredentialDefinition } from "@/services/runners/execution-credentials";
 import {
   cancelDetachedAgentTask,
   startDetachedAgentTask,
@@ -39,6 +40,18 @@ describe("Agent Background execution routes", () => {
     organizationId = organization.id;
     user = await makeAdmin();
     await makeMember(user.id, organizationId, { role: "admin" });
+    await createExecutionCredentialDefinition({
+      organizationId,
+      userId: user.id,
+      definition: {
+        key: "shared-token",
+        name: "Shared token",
+        description: "Organization credential for delegated work",
+        icon: null,
+        allowPersonal: false,
+        allowOrganization: true,
+      },
+    });
     agent = await makeAgent({
       organizationId,
       authorId: user.id,
@@ -56,12 +69,14 @@ describe("Agent Background execution routes", () => {
         credentials: [
           {
             key: "SHARED_TOKEN",
+            credentialId: "shared-token",
             scope: "shared",
             label: "Shared token",
             required: true,
           },
           {
             key: "PERSONAL_TOKEN",
+            credentialId: "github",
             scope: "per_user",
             label: "Personal token",
             required: true,
@@ -533,6 +548,58 @@ describe("Agent Background execution routes", () => {
     expect(preflight.json().configured).toEqual(["PERSONAL_TOKEN"]);
   });
 
+  test("reuses a typed personal connection across Agents without copying its value", async ({
+    makeAgent,
+  }) => {
+    if (!agent.backgroundExecution) {
+      throw new Error("Test Agent is missing Background execution");
+    }
+    const otherAgent = await makeAgent({
+      organizationId,
+      authorId: user.id,
+      agentType: "agent",
+      scope: "org",
+      backgroundExecution: {
+        ...agent.backgroundExecution,
+        credentials: [
+          {
+            key: "GH_TOKEN",
+            credentialId: "github",
+            scope: "per_user",
+            label: "Git hosting connection",
+            required: true,
+          },
+        ],
+      },
+    });
+
+    const connected = await app.inject({
+      method: "PUT",
+      url: `/api/agents/${agent.id}/background-execution/credentials/PERSONAL_TOKEN`,
+      payload: { value: "one-personal-value" },
+    });
+    expect(connected.statusCode).toBe(200);
+
+    const otherPreflight = await app.inject({
+      method: "GET",
+      url: `/api/agents/${otherAgent.id}/background-execution/preflight`,
+    });
+    expect(otherPreflight.statusCode).toBe(200);
+    expect(otherPreflight.json()).toMatchObject({
+      ready: true,
+      configured: ["GH_TOKEN"],
+      missing: [],
+    });
+
+    const rows = await db
+      .select({
+        credentialId: schema.executionCredentialConnectionsTable.credentialId,
+        userId: schema.executionCredentialConnectionsTable.userId,
+      })
+      .from(schema.executionCredentialConnectionsTable);
+    expect(rows).toEqual([{ credentialId: "github", userId: user.id }]);
+  });
+
   test("audits shared credential rotation without recording the secret value", async () => {
     const response = await app.inject({
       method: "PUT",
@@ -561,6 +628,7 @@ describe("Agent Background execution routes", () => {
       before: expect.any(Object),
       after: expect.any(Object),
     });
+    expect(JSON.stringify(audit)).toContain('"credentialId":"shared-token"');
     expect(JSON.stringify(audit)).not.toContain("never-log-this-value");
     expect(audit.before).not.toEqual(audit.after);
   });

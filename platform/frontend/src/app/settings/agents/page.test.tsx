@@ -79,15 +79,18 @@ vi.mock("@/components/settings/settings-block", () => ({
     title,
     description,
     control,
+    children,
   }: {
     title: React.ReactNode;
     description?: React.ReactNode;
     control: React.ReactNode;
+    children?: React.ReactNode;
   }) => (
     <section>
       <h2>{title}</h2>
       {description ? <p>{description}</p> : null}
       <div>{control}</div>
+      {children}
     </section>
   ),
   SettingsSectionStack: ({ children }: { children: React.ReactNode }) => (
@@ -224,10 +227,12 @@ beforeEach(() => {
 });
 
 describe("AgentSettingsPage", () => {
-  it("shows execution backend health and operator defaults only when enabled", () => {
+  it("shows the configured execution backend as a managed row only when enabled", () => {
     const { rerender } = renderPage();
 
-    expect(screen.queryByText("Execution Backend")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Execution backend" }),
+    ).not.toBeInTheDocument();
 
     mockExecutionBackend = {
       name: "kubernetes",
@@ -248,15 +253,24 @@ describe("AgentSettingsPage", () => {
       </QueryClientProvider>,
     );
 
-    expect(screen.getByText("Execution Backend")).toBeInTheDocument();
-    expect(screen.getByText("Available")).toBeInTheDocument();
     expect(
-      screen.getByText("registry.example.test/agent:latest"),
+      screen.getByRole("heading", { name: "Execution backend" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("72 hours")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add backend" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Edit Kubernetes" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Delete Kubernetes" }),
+    ).toBeDisabled();
+    expect(
+      screen.queryByText("registry.example.test/agent:latest"),
+    ).not.toBeInTheDocument();
 
     const messagingChannels = screen.getByText("Available messaging channels");
-    const executionBackend = screen.getByText("Execution Backend");
+    const executionBackend = screen.getByRole("heading", {
+      name: "Execution backend",
+    });
     expect(
       messagingChannels.compareDocumentPosition(executionBackend) &
         Node.DOCUMENT_POSITION_FOLLOWING,

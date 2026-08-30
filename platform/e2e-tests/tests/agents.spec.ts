@@ -107,7 +107,9 @@ async function deleteFromList(
   { name, confirmLabel }: { name: string; confirmLabel: string },
 ) {
   await selectAgentTableView(page);
-  const rowLocator = page.getByTestId(E2eTestId.AgentsTable).getByTitle(name);
+  const rowLocator = page
+    .getByTestId(E2eTestId.AgentsTable)
+    .getByRole("button", { name: `More actions ${name}`, exact: true });
   await waitForElementWithReload(page, rowLocator, {
     timeout: 30_000,
     intervals: [2000, 3000, 5000],

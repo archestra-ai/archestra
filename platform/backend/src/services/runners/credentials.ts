@@ -1,7 +1,16 @@
 import { isVaultReference } from "@archestra/shared";
 import logger from "@/logging";
-import { AgentModel, SecretModel, UserCredentialModel } from "@/models";
+import {
+  AgentModel,
+  ExecutionCredentialConnectionModel,
+  SecretModel,
+  UserCredentialModel,
+} from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
+import {
+  deleteExecutionCredentialConnection,
+  setExecutionCredentialConnection,
+} from "@/services/runners/execution-credentials";
 import type {
   AgentDeployment,
   AgentDeploymentCredentialDeclaration,
@@ -42,7 +51,13 @@ export async function resolveAgentDeploymentCredentials(params: {
   if (shared.length > 0) {
     const bag = await readSharedBag(params.deployment.secretId);
     for (const declaration of shared) {
-      const value = bag[declaration.key];
+      const value = declaration.credentialId
+        ? await ExecutionCredentialConnectionModel.resolveValue({
+            organizationId: params.organizationId,
+            scope: "organization",
+            credentialId: declaration.credentialId,
+          })
+        : bag[declaration.key];
       if (typeof value === "string" && value.length > 0) {
         env[declaration.key] = value;
       } else if (declaration.required) {
@@ -59,15 +74,28 @@ export async function resolveAgentDeploymentCredentials(params: {
         misconfigured,
       };
     }
+    const legacyDeclarations = perUser.filter(
+      (declaration) => !declaration.credentialId,
+    );
     const resolved = await UserCredentialModel.resolveValues({
       organizationId: params.organizationId,
       userId: params.userId,
       agentId: params.deployment.agentId,
-      keys: perUser.map((declaration) => declaration.key),
+      keys: legacyDeclarations.map((declaration) => declaration.key),
     });
     Object.assign(env, resolved.values);
     for (const declaration of perUser) {
-      if (resolved.missing.includes(declaration.key) && declaration.required) {
+      const value = declaration.credentialId
+        ? await ExecutionCredentialConnectionModel.resolveValue({
+            organizationId: params.organizationId,
+            scope: "personal",
+            userId: params.userId,
+            credentialId: declaration.credentialId,
+          })
+        : resolved.values[declaration.key];
+      if (value) {
+        env[declaration.key] = value;
+      } else if (declaration.required) {
         missing.push(toMissing(declaration));
       }
     }
@@ -98,7 +126,13 @@ export async function preflightAgentDeploymentCredentials(params: {
   if (shared.length > 0) {
     const bag = await readSharedBag(params.deployment.secretId);
     for (const declaration of shared) {
-      const value = bag[declaration.key];
+      const value = declaration.credentialId
+        ? await ExecutionCredentialConnectionModel.resolveValue({
+            organizationId: params.organizationId,
+            scope: "organization",
+            credentialId: declaration.credentialId,
+          })
+        : bag[declaration.key];
       if (typeof value === "string" && value.length > 0) {
         configured.push(declaration.key);
       } else if (declaration.required) {
@@ -112,14 +146,27 @@ export async function preflightAgentDeploymentCredentials(params: {
       missing.push(...perUser.filter((entry) => entry.required).map(toMissing));
       return { configured, missing, misconfigured };
     }
+    const legacyDeclarations = perUser.filter(
+      (declaration) => !declaration.credentialId,
+    );
     const present = await UserCredentialModel.listPresentKeys({
       organizationId: params.organizationId,
       userId: params.userId,
       agentId: params.deployment.agentId,
-      keys: perUser.map((declaration) => declaration.key),
+      keys: legacyDeclarations.map((declaration) => declaration.key),
     });
     for (const declaration of perUser) {
-      if (present.has(declaration.key)) {
+      const connected = declaration.credentialId
+        ? Boolean(
+            await ExecutionCredentialConnectionModel.resolveValue({
+              organizationId: params.organizationId,
+              scope: "personal",
+              userId: params.userId,
+              credentialId: declaration.credentialId,
+            }),
+          )
+        : present.has(declaration.key);
+      if (connected) {
         configured.push(declaration.key);
       } else if (declaration.required) {
         missing.push(toMissing(declaration));
@@ -146,18 +193,38 @@ export async function setAgentDeploymentCredential(params: {
   assertCredentialValue(params.value);
 
   if (declaration.scope === "per_user") {
-    await UserCredentialModel.upsert({
-      organizationId: params.organizationId,
-      userId: params.userId,
-      agentId: params.deployment.agentId,
-      key: declaration.key,
-      value: params.value,
-    });
+    if (declaration.credentialId) {
+      await setExecutionCredentialConnection({
+        organizationId: params.organizationId,
+        scope: "personal",
+        userId: params.userId,
+        credentialId: declaration.credentialId,
+        value: params.value,
+      });
+    } else {
+      await UserCredentialModel.upsert({
+        organizationId: params.organizationId,
+        userId: params.userId,
+        agentId: params.deployment.agentId,
+        key: declaration.key,
+        value: params.value,
+      });
+    }
   } else {
-    await replaceSharedBag({
-      deployment: params.deployment,
-      patch: { [declaration.key]: params.value },
-    });
+    if (declaration.credentialId) {
+      await setExecutionCredentialConnection({
+        organizationId: params.organizationId,
+        scope: "organization",
+        userId: params.userId,
+        credentialId: declaration.credentialId,
+        value: params.value,
+      });
+    } else {
+      await replaceSharedBag({
+        deployment: params.deployment,
+        patch: { [declaration.key]: params.value },
+      });
+    }
   }
 
   return { scope: declaration.scope };
@@ -174,6 +241,17 @@ export async function deleteAgentDeploymentCredential(params: {
   scope: AgentDeploymentCredentialDeclaration["scope"];
 }> {
   const declaration = requireDeclaration(params.deployment, params.key);
+  if (declaration.credentialId) {
+    return {
+      scope: declaration.scope,
+      deleted: await deleteExecutionCredentialConnection({
+        organizationId: params.organizationId,
+        scope: declaration.scope === "per_user" ? "personal" : "organization",
+        userId: params.userId,
+        credentialId: declaration.credentialId,
+      }),
+    };
+  }
   if (declaration.scope === "per_user") {
     return {
       scope: declaration.scope,
@@ -318,6 +396,7 @@ function toMissing(
 ): MissingAgentDeploymentCredential {
   return {
     key: declaration.key,
+    credentialId: declaration.credentialId,
     label: declaration.label,
     description: declaration.description,
   };

@@ -52,10 +52,11 @@ export function getAgentCatalogTemplates(
       additionalCredentials: [
         {
           key: "CLAUDE_CODE_OAUTH_TOKEN",
+          credentialId: "claude-code",
           scope: "per_user",
           label: "Claude Code subscription token",
           description:
-            "Run `claude setup-token` locally. This token is available only to the official Claude Code background runtime, never foreground chat or other Agents.",
+            "A personal Claude subscription token used only by Claude Code background tasks.",
           required: true,
         },
       ],
@@ -91,7 +92,7 @@ export function getAgentCatalogTemplates(
       platformName: appName,
       image: image(archestraImage, "openclaw"),
       command: ["archestra-openclaw"],
-      inferenceProtocol: "openai_responses",
+      inferenceProtocol: "openai_chat",
       steerMode: "tmux_keys",
     }),
   ] as const;
@@ -248,10 +249,11 @@ function template(params: {
         credentials: [
           {
             key: "GITHUB_TOKEN",
+            credentialId: "github",
             scope: "per_user",
             label: "GitHub token",
             description:
-              "A token that can clone repositories, push branches, and open pull requests.",
+              "Used to clone repositories and push changes from background tasks.",
             required: false,
           },
           ...(params.additionalCredentials ?? []),

@@ -856,13 +856,11 @@ export class ChatOpsManager {
     const providerLabel = CHATOPS_PROVIDER_LABELS[provider.providerId];
     const threadRootTs = message.threadId ?? message.messageId;
     // The channel's NAME, not just its id. Agent instructions are routinely
-    // scoped by name — "in #task-feed, hand the task to the Crab Env
-    // subagent" — and the framing used to carry only the opaque channel id, so
-    // a rule like that was unverifiable: the model had to guess which channel
-    // it was standing in. It guesses wrong, and confidently, telling people in
-    // #task-feed to take their request to #task-feed. The binding already
-    // carries the name (it is what the channels table renders); it just never
-    // reached the model.
+    // scoped by name — for example, "in #support-triage, hand the task to the
+    // incident worker" — and the framing used to carry only the opaque channel
+    // id, so a rule like that was unverifiable. The binding already carries the
+    // name (it is what the channels table renders); it just never reached the
+    // model.
     const channelLabel = binding.isDm
       ? null
       : (binding.channelName?.trim() ?? null) || null;

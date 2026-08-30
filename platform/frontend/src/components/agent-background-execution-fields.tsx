@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useFeature } from "@/lib/config/config.query";
+import { useExecutionCredentials } from "@/lib/execution-credentials.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 
 export type BackgroundExecutionConfig = {
@@ -33,6 +34,7 @@ export type BackgroundExecutionConfig = {
   environment: Array<{ key: string; value: string }> | null;
   credentials: Array<{
     key: string;
+    credentialId?: string;
     scope: "shared" | "per_user";
     label: string;
     description?: string;
@@ -72,6 +74,7 @@ export function AgentBackgroundExecutionFields({
   const enabledId = useId();
   const appName = useAppName();
   const runtimeEnabled = useFeature("agentBackgroundExecution");
+  const executionCredentials = useExecutionCredentials(runtimeEnabled === true);
   const configuredDefaultImage = useFeature(
     "agentBackgroundExecutionBaseImage",
   );
@@ -157,12 +160,29 @@ export function AgentBackgroundExecutionFields({
             installationLabel="Per user"
             staticLabel="Shared"
             installationCalloutTitle="Each user provides their own value"
-            requiredDescription="Block delegated tasks until this value is configured."
+            requiredDescription="Required credentials are checked before every run. Chat prompts the user to connect a missing value; other callers receive an error and can retry after it is connected."
             promptedValueLabel="per-user"
             deferStaticSecretValue
             installationOnlyForSecrets
             allowRequiredStaticSecret
             normalizeKey={uppercase}
+            credentialBindingOptions={(executionCredentials.data ?? []).map(
+              (definition) => ({
+                id: definition.key,
+                label: definition.name,
+                icon: definition.icon,
+                defaultKey: defaultCredentialEnvironmentKey(definition.key),
+                description: definition.description,
+                allowedScopes: [
+                  ...(definition.allowPersonal
+                    ? (["installation"] as const)
+                    : []),
+                  ...(definition.allowOrganization
+                    ? (["static"] as const)
+                    : []),
+                ],
+              }),
+            )}
           />
 
           <div className="space-y-4">
@@ -306,23 +326,23 @@ export function AgentBackgroundExecutionFields({
             </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="flex items-center justify-between gap-4 rounded-md border p-3">
-              <div className="space-y-0.5">
-                <Label htmlFor="background-execution-privileged">
-                  Privileged container
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Grants host-level container capabilities. Agent administrators
-                  only.
-                </p>
-              </div>
-              <Switch
-                id="background-execution-privileged"
-                checked={config.privileged}
-                onCheckedChange={(privileged) => update({ privileged })}
-              />
+          <div className="flex w-full items-center justify-between gap-6 rounded-md border p-4">
+            <div className="min-w-0 space-y-1">
+              <Label htmlFor="background-execution-privileged">
+                Privileged mode
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Gives the container elevated access to its host. Enable it only
+                for workloads that require host-level capabilities. Only Agent
+                administrators can turn it on.
+              </p>
             </div>
+            <Switch
+              id="background-execution-privileged"
+              className="shrink-0"
+              checked={config.privileged}
+              onCheckedChange={(privileged) => update({ privileged })}
+            />
           </div>
         </div>
       )}
@@ -360,6 +380,7 @@ function toEnvironmentDrafts(config: BackgroundExecutionConfig): EnvVarDraft[] {
         required: credential.required,
         description: credential.description ?? "",
         value: "",
+        credentialId: credential.credentialId,
       }),
     ),
   ];
@@ -376,6 +397,7 @@ function fromEnvironmentDrafts(
     .filter((draft) => draft.type === "secret")
     .map((draft) => ({
       key: draft.key,
+      credentialId: draft.credentialId,
       scope:
         draft.scope === "installation"
           ? ("per_user" as const)
@@ -390,6 +412,12 @@ function fromEnvironmentDrafts(
     environment: environment.length > 0 ? environment : null,
     credentials: credentials.length > 0 ? credentials : null,
   };
+}
+
+function defaultCredentialEnvironmentKey(key: string): string {
+  if (key === "github") return "GITHUB_TOKEN";
+  if (key === "claude-code") return "CLAUDE_CODE_OAUTH_TOKEN";
+  return uppercase(key.replace(/[.-]+/g, "_"));
 }
 
 function humanizeEnvironmentKey(key: string): string {

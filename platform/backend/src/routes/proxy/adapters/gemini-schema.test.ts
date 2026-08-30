@@ -54,6 +54,53 @@ describe("sanitizeGeminiToolSchema", () => {
     });
   });
 
+  it("converts exclusive numeric bounds into Gemini-compatible constraints", () => {
+    expect(
+      sanitizeGeminiToolSchema({
+        type: "object",
+        properties: {
+          count: { type: "integer", exclusiveMinimum: 0 },
+          ratio: {
+            type: "number",
+            exclusiveMaximum: 1,
+            description: "Normalized ratio.",
+          },
+        },
+      }),
+    ).toEqual({
+      type: "object",
+      properties: {
+        count: {
+          type: "integer",
+          minimum: 0,
+          description: "Value must be greater than `0`.",
+        },
+        ratio: {
+          type: "number",
+          maximum: 1,
+          description: "Normalized ratio. Value must be less than `1`.",
+        },
+      },
+    });
+  });
+
+  it("removes OpenAPI boolean exclusive bounds while preserving their hint", () => {
+    expect(
+      sanitizeGeminiToolSchema({
+        type: "number",
+        minimum: 0,
+        exclusiveMinimum: true,
+        maximum: 10,
+        exclusiveMaximum: false,
+      }),
+    ).toEqual({
+      type: "number",
+      minimum: 0,
+      maximum: 10,
+      description: "Value must be greater than `0`.",
+    });
+  });
+
   it("infers the type from the first value when none is declared", () => {
     expect(sanitizeGeminiToolSchema({ enum: [true] })).toEqual({
       type: "boolean",

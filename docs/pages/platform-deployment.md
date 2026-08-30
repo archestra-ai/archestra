@@ -1701,10 +1701,6 @@ See [Slack](/docs/platform-slack) for setup instructions.
   - Starts with `xapp-`
   - Generated in: Basic Information page → App-Level Tokens (with `connections:write` scope)
 
-- **`ARCHESTRA_CHATOPS_SLACK_DELEGATION_REACTION`** - Optional emoji name for an explicit Background execution shortcut.
-  - When set, reacting to a Slack message with that emoji asks the assigned Agent to delegate the message as a durable task to an accessible Agent with Background execution configured.
-  - Accepts `delegate` or `:delegate:` syntax. Blank disables the shortcut.
-
 #### Telegram
 
 See [Telegram](/docs/platform-telegram) for setup instructions. Telegram uses long polling — no public URL, webhook, or ngrok needed.

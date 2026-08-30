@@ -463,14 +463,13 @@ jobs:
   # servers, and the Vault K8s-auth boot. Everything else runs in the lite
   # job below against the container harness.
   #
-  # Two independent environments split the K8s-bound project set in half.
-  # Each shard pays cluster setup, but both overlap with the image build and
-  # run concurrently; the required report gate sees the matrix as one result.
-  # Hibernation remains single-run on shard 1 because those serial tests share
-  # cluster state and are intentionally off the merge-queue critical path.
+  # One environment, no sharding: current PR measurements showed each extra
+  # shard duplicates several minutes of platform setup to split a baseline
+  # test step of only 1.17 minutes. The setup dominates both compute and wall
+  # time, so keeping one 8-vCPU environment is faster and cheaper overall.
   # The required check is "Merge E2E Test Reports", not this job.
   platform-e2e-k8s-tests:
-    name: Platform E2E Tests (K8s ${{ matrix.name }})
+    name: Platform E2E Tests (K8s)
     # Deliberately NO `needs: [platform-e2e-build]`: this job starts alongside
     # the image build and does all image-independent setup (checkout, pnpm, Kind
     # cluster, MCP dependency images) while the build runs. Setup Archestra
@@ -490,16 +489,6 @@ jobs:
     # minutes after the 25-minute image-poll ceiling and 20-minute K8s leg,
     # so they need 175. Each budget leaves room for setup and uploads.
     timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-e2e-hibernation') && 175 || 60 }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: 1of2
-            shard: --shard=1/2
-            run_hibernation: true
-          - name: 2of2
-            shard: --shard=2/2
-            run_hibernation: false
     permissions:
       contents: read # Required to checkout the repository and read test assets.
       id-token: write # Required for Workload Identity Federation in setup actions.
@@ -580,7 +569,6 @@ jobs:
         uses: ./.github/actions/run-e2e-tests
         with:
           projects: api-k8s --project=vault-k8s
-          shard: ${{ matrix.shard }}
           timeout: "20"
 
       - name: Upload blob report
@@ -589,7 +577,7 @@ jobs:
         with:
           # Suffixed so the report job's blob-report-* download glob (which
           # also matches the lite leg's artifact) picks it up.
-          name: blob-report-k8s-${{ matrix.name }}
+          name: blob-report-k8s
           path: platform/e2e-tests/blob-report/
           retention-days: 1
 
@@ -601,7 +589,7 @@ jobs:
       # blocking every merge.
       - name: Run hibernation E2E tests
         id: e2e-hibernation
-        if: ${{ matrix.run_hibernation && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-e2e-hibernation') }}
+        if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-e2e-hibernation' }}
         continue-on-error: true
         uses: ./.github/actions/run-e2e-tests
         with:
@@ -614,7 +602,7 @@ jobs:
           blob_report_dir: blob-report-hibernation
 
       - name: Upload hibernation blob report
-        if: ${{ !cancelled() && matrix.run_hibernation && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-e2e-hibernation') }}
+        if: ${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-e2e-hibernation') }}
         uses: ./.github/actions/github-upload-artifact
         with:
           name: blob-report-k8s-hibernation

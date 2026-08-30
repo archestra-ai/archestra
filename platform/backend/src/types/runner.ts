@@ -100,6 +100,20 @@ export const AgentDeploymentCredentialDeclarationSchema = z.object({
       "Credential keys are environment variable names (A-Z, 0-9, underscore)",
     ),
   scope: AgentDeploymentCredentialScopeSchema,
+  /**
+   * Stable connection identifier. Declarations sharing this identifier and
+   * scope reuse one stored secret even when their environment variable names
+   * differ. Omitted declarations retain the legacy per-Agent storage model.
+   */
+  credentialId: z
+    .string()
+    .min(1)
+    .max(128)
+    .regex(
+      /^[a-z][a-z0-9._-]*$/,
+      "Credential IDs start with a letter and use lowercase letters, numbers, dots, dashes, or underscores",
+    )
+    .optional(),
   /** Human label shown when prompting a user to supply the credential. */
   label: z.string().min(1).max(200),
   /** How to obtain it, e.g. "Run `claude setup-token` and paste the result". */
@@ -113,6 +127,7 @@ export type AgentDeploymentCredentialDeclaration = z.infer<
 /** One credential the invoking user still needs to supply. */
 export const MissingAgentDeploymentCredentialSchema = z.object({
   key: z.string(),
+  credentialId: z.string().optional(),
   label: z.string(),
   description: z.string().optional(),
 });

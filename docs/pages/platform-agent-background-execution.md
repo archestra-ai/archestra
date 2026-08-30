@@ -3,7 +3,7 @@ title: Background Execution
 category: Agents
 order: 7
 description: Run delegated Agent tasks in an isolated deployment
-lastUpdated: 2026-08-29
+lastUpdated: 2026-08-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -240,14 +240,11 @@ endpoints instead.
 
 ### Configuration and secrets
 
-Background execution uses the same environment-variable editor as containerized MCP servers. Use a plain-text, boolean, or number variable for non-sensitive configuration, and use **Secret** for credentials. A secret can be either:
+Use **Secret** for sensitive values. Choose a reusable execution credential, or choose **One-off secret** when only that Agent needs it. Set the environment variable expected by the image.
 
-- **Per user** — each person supplies their own value before starting background work.
-- **Shared** — an Agent administrator configures one value used by every caller.
+Admins manage organization definitions and shared values under **Settings → Agents → Execution credentials**. Users connect personal values under **Personal settings → Connections** or when an execution first requires one. Values use the configured secrets manager, including read-only Vault.
 
-After saving the Agent, its **Overview** shows whether required secrets are ready. Secret values are stored through Archestra's configured secrets provider and injected only into the Background execution deployment; they are not stored in the Agent definition.
-
-When external Vault storage is enabled, the credential control uses the same Vault secret picker as MCP server deployments. Users select a secret and key; they never paste the secret value into the Agent form.
+See [Agent Execution Credentials](/docs/platform-execution-credentials) for scopes, built-in defaults, custom definitions, and the bring-your-own-image binding format.
 
 ### Run controls
 

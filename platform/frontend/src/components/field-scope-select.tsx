@@ -19,6 +19,7 @@ export type FieldScopeValue = "installation" | "static";
 interface FieldScopeSelectProps {
   value: FieldScopeValue;
   onChange: (next: FieldScopeValue) => void;
+  disabled?: boolean;
   /** When true, "installation" is forbidden (e.g. multi-tenant servers). */
   disableInstallation?: boolean;
   /** Tooltip copy shown when the disabled "Installation" option is hovered. */
@@ -30,6 +31,7 @@ interface FieldScopeSelectProps {
 export function FieldScopeSelect({
   value,
   onChange,
+  disabled = false,
   disableInstallation = false,
   disabledReason,
   installationLabel = "Installation",
@@ -50,9 +52,10 @@ export function FieldScopeSelect({
     <Select
       value={value}
       onValueChange={(next) => onChange(next as FieldScopeValue)}
+      disabled={disabled}
     >
       <SelectTrigger
-        className="h-10"
+        className="h-10 w-full"
         data-testid={E2eTestId.PromptOnInstallationCheckbox}
       >
         <SelectValue />

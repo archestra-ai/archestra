@@ -459,6 +459,19 @@ export const RouteId = {
     "setAgentBackgroundExecutionCredential",
   DeleteAgentBackgroundExecutionCredential:
     "deleteAgentBackgroundExecutionCredential",
+  ListExecutionCredentials: "listExecutionCredentials",
+  CreateExecutionCredential: "createExecutionCredential",
+  GetExecutionCredentialUsage: "getExecutionCredentialUsage",
+  UpdateExecutionCredential: "updateExecutionCredential",
+  DeleteExecutionCredential: "deleteExecutionCredential",
+  SetPersonalExecutionCredentialConnection:
+    "setPersonalExecutionCredentialConnection",
+  DeletePersonalExecutionCredentialConnection:
+    "deletePersonalExecutionCredentialConnection",
+  SetOrganizationExecutionCredentialConnection:
+    "setOrganizationExecutionCredentialConnection",
+  DeleteOrganizationExecutionCredentialConnection:
+    "deleteOrganizationExecutionCredentialConnection",
   GetAgentExecutions: "getAgentExecutions",
   StartAgentExecution: "startAgentExecution",
   GetMyAgentExecutions: "getMyAgentExecutions",

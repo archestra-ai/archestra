@@ -1,8 +1,9 @@
 "use client";
 
 import { E2eTestId, parseVaultReference } from "@archestra/shared";
-import { CheckCircle2, Info, Key } from "lucide-react";
+import { CheckCircle2, Key } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { ExecutionCredentialIcon } from "@/components/execution-credential-icon";
 import { ExternalSecretReferenceDialog } from "@/components/external-secret-reference-dialog";
 import {
   FieldScopeSelect,
@@ -34,6 +35,17 @@ export interface EnvVarDraft {
   required: boolean;
   description: string;
   value: string;
+  /** Stable reusable connection id for Agent Background execution secrets. */
+  credentialId?: string;
+}
+
+export interface CredentialBindingOption {
+  id: string;
+  label: string;
+  description: string;
+  icon?: string | null;
+  defaultKey: string;
+  allowedScopes: readonly FieldScopeValue[];
 }
 
 export type EnvironmentVariableDialogMode = "add" | "edit";
@@ -56,6 +68,7 @@ interface EnvironmentVariableDialogProps {
   installationOnlyForSecrets?: boolean;
   allowRequiredStaticSecret?: boolean;
   normalizeKey?: (key: string) => string;
+  credentialBindingOptions?: readonly CredentialBindingOption[];
   /**
    * Optional validator for a static plain-text value (e.g. an environment's
    * allowlist regex). Returns an error message to show under the value input
@@ -80,6 +93,7 @@ function makeEmptyDraft(
     required: !disableInstallation && !installationOnlyForSecrets,
     description: "",
     value: "",
+    credentialId: undefined,
   };
 }
 
@@ -101,6 +115,7 @@ export function EnvironmentVariableDialog({
   installationOnlyForSecrets = false,
   allowRequiredStaticSecret = false,
   normalizeKey = identity,
+  credentialBindingOptions,
   validateValue,
   onClose,
   onConfirm,
@@ -152,10 +167,20 @@ export function EnvironmentVariableDialog({
     draft.value.length > 0
       ? validateValue(draft.value)
       : null;
+  const requiresCredentialBinding =
+    draft.type === "secret" && !!credentialBindingOptions;
+  const activeCredentialBinding = credentialBindingOptions?.find(
+    (option) => option.id === draft.credentialId,
+  );
+  const credentialIdError =
+    requiresCredentialBinding &&
+    draft.credentialId !== undefined &&
+    !/^[a-z][a-z0-9._-]*$/.test(draft.credentialId);
 
   const canSubmit =
     trimmedKey.length > 0 &&
     !duplicate &&
+    !credentialIdError &&
     !valueError &&
     (!valueRequired || draft.value.trim().length > 0);
 
@@ -186,6 +211,16 @@ export function EnvironmentVariableDialog({
         ) {
           next.required = true;
         }
+        if (patch.type !== "secret") next.credentialId = undefined;
+      }
+      const binding = credentialBindingOptions?.find(
+        (option) => option.id === next.credentialId,
+      );
+      if (binding && !binding.allowedScopes.includes(next.scope)) {
+        const [scope] = binding.allowedScopes;
+        next.scope = scope;
+        next.required = scope === "installation";
+        next.value = "";
       }
       return next;
     });
@@ -251,6 +286,7 @@ export function EnvironmentVariableDialog({
             >
               <SelectTrigger
                 id="env-var-type"
+                className="w-full"
                 data-testid={E2eTestId.SelectEnvironmentVariableType}
               >
                 <SelectValue />
@@ -268,6 +304,7 @@ export function EnvironmentVariableDialog({
             <FieldScopeSelect
               value={draft.scope}
               onChange={(scope) => updateDraft({ scope })}
+              disabled={activeCredentialBinding?.allowedScopes.length === 1}
               disableInstallation={disableInstallation}
               disabledReason={disableInstallationReason}
               installationLabel={installationLabel}
@@ -276,22 +313,23 @@ export function EnvironmentVariableDialog({
           </div>
         </div>
 
+        {requiresCredentialBinding && (
+          <CredentialBindingEditor
+            draft={draft}
+            options={credentialBindingOptions}
+            onChange={updateDraft}
+          />
+        )}
+
         {(draft.scope === "installation" ||
           (allowRequiredStaticSecret &&
             draft.scope === "static" &&
             draft.type === "secret")) && (
-          <ScopeCallout
-            title={installationCalloutTitle}
-            body={
-              <>
-                They&apos;ll see a field labeled{" "}
-                <span className="font-mono">
-                  &quot;{trimmedKey || "KEY"}&quot;
-                </span>{" "}
-                and your description below as the helper text.
-              </>
-            }
-          />
+          <p className="text-xs text-muted-foreground">
+            {installationCalloutTitle}. People will see a field labeled{" "}
+            <span className="font-mono">&quot;{trimmedKey || "KEY"}&quot;</span>{" "}
+            with the description below as helper text.
+          </p>
         )}
         {draft.scope === "static" && (
           <StaticValueEditor
@@ -343,20 +381,84 @@ export function EnvironmentVariableDialog({
   );
 }
 
-function ScopeCallout({
-  title,
-  body,
+function CredentialBindingEditor({
+  draft,
+  options,
+  onChange,
 }: {
-  title: string;
-  body: React.ReactNode;
+  draft: EnvVarDraft;
+  options: readonly CredentialBindingOption[];
+  onChange: (patch: Partial<EnvVarDraft>) => void;
 }) {
+  const reserved = options.find((option) => option.id === draft.credentialId);
+  const selection = reserved?.id ?? "one-off";
   return (
-    <div className="flex items-start gap-3 rounded-md border border-primary/20 bg-primary/5 p-3">
-      <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-      <div className="space-y-0.5 text-xs">
-        <div className="font-medium text-foreground">{title}</div>
-        <div className="text-muted-foreground">{body}</div>
-      </div>
+    <div className="space-y-2">
+      <Label htmlFor="env-var-credential-binding">Credential</Label>
+      <p className="text-xs text-muted-foreground">
+        Choose a reusable execution credential, or keep this as a one-off secret
+        for this Agent.
+      </p>
+      <Select
+        value={selection}
+        onValueChange={(value) => {
+          const option = options.find((entry) => entry.id === value);
+          const scope = option?.allowedScopes.includes(draft.scope)
+            ? draft.scope
+            : option?.allowedScopes[0];
+          onChange(
+            option
+              ? {
+                  credentialId: option.id,
+                  key: draft.key || option.defaultKey,
+                  description: draft.description || option.description,
+                  scope,
+                }
+              : { credentialId: undefined },
+          );
+        }}
+      >
+        <SelectTrigger id="env-var-credential-binding" className="w-full">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent
+          position="popper"
+          className="w-[var(--radix-select-trigger-width)]"
+        >
+          {options.map((option) => (
+            <SelectItem
+              key={option.id}
+              value={option.id}
+              description={
+                option.description ? (
+                  <span className="line-clamp-2 whitespace-normal">
+                    {option.description}
+                  </span>
+                ) : undefined
+              }
+              icon={<ExecutionCredentialIcon icon={option.icon ?? null} />}
+            >
+              {option.label}
+            </SelectItem>
+          ))}
+          <SelectItem
+            value="one-off"
+            description={
+              <span className="line-clamp-2 whitespace-normal">
+                Only this Agent can use this saved value.
+              </span>
+            }
+          >
+            One-off secret
+          </SelectItem>
+        </SelectContent>
+      </Select>
+      {!reserved && (
+        <p className="text-xs text-muted-foreground">
+          This value belongs only to this Agent. Add an execution credential in
+          Agent settings when it should be reusable.
+        </p>
+      )}
     </div>
   );
 }
@@ -371,12 +473,13 @@ function RequiredToggleCard({
   description: string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-md border border-border p-3">
-      <div className="space-y-0.5">
-        <div className="text-sm font-medium">Required variable</div>
+    <div className="flex items-start justify-between gap-3">
+      <div className="space-y-2">
+        <Label htmlFor="env-var-required">Required variable</Label>
         <div className="text-xs text-muted-foreground">{description}</div>
       </div>
       <Switch
+        id="env-var-required"
         checked={checked}
         onCheckedChange={onChange}
         aria-label="Required variable"

@@ -18,6 +18,7 @@ export const DocsPage = {
   PlatformAgentTriggersWebhookA2a: "platform-agent-triggers-webhook-a2a",
   PlatformAgentHooks: "platform-agent-hooks",
   PlatformAgentBackgroundExecution: "platform-agent-background-execution",
+  PlatformExecutionCredentials: "platform-execution-credentials",
   PlatformAgents: "platform-agents",
   PlatformApps: "platform-apps",
   PlatformArchestraMcpServer: "platform-archestra-mcp-server",

@@ -126,6 +126,7 @@ describe("AgentCreatePage", () => {
             credentials: expect.arrayContaining([
               expect.objectContaining({
                 key: "GITHUB_TOKEN",
+                credentialId: "github",
                 required: false,
               }),
             ]),
@@ -239,6 +240,7 @@ describe("AgentCreatePage", () => {
             credentials: expect.arrayContaining([
               expect.objectContaining({
                 key: "CLAUDE_CODE_OAUTH_TOKEN",
+                credentialId: "claude-code",
                 scope: "per_user",
                 required: true,
               }),

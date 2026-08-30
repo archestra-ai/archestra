@@ -722,6 +722,11 @@ export const AUDIT_DECISIONS = {
     reason: "schedule trigger run execution log",
   },
   tasksTable: { audited: false, reason: "task queue runtime state" },
+  retrievalEvaluationRunsTable: {
+    audited: false,
+    reason:
+      "evaluation runtime state; start and cancellation are audited at the API boundary",
+  },
 
   // =========================================================================
   // ChatOps runtime

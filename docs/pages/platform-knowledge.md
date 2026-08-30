@@ -72,7 +72,7 @@ A short primer on the terms behind the settings, and how Archestra puts them tog
 - **BM25.** The standard keyword scoring function, used by Lucene, Elasticsearch, and most search engines — and Archestra's keyword ranker. Rare words count more than common ones, a word that repeats earns less each time, and long passages are held back, so a short passage that answers directly beats a long one that merely repeats the words. Archestra computes it in plain SQL, so it runs on any PostgreSQL with no extension.
 - **Hybrid search.** Vector and keyword ranking run together, each finding what the other misses: the meaning without the words, the words without the meaning. Archestra always runs both; `ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED=false` drops the keyword leg.
 - **Reciprocal Rank Fusion (RRF).** Vector and keyword scores are on different scales, so the two lists are merged by rank position, not score. A chunk near the top of both lists wins. Nothing to configure.
-- **Cross-encoder reranking.** A model reads the question and one chunk together and scores that pair — more accurate than comparing vectors, and far more expensive, so it runs only on the fused shortlist. In Archestra the reranking model is a chat model, or a Cohere Rerank model (a purpose-built cross-encoder). Optional, configured under [Search Ranking Configuration](#search-ranking-configuration).
+- **Cross-encoder reranking.** A model reads the question and one chunk together and scores that pair — more accurate than comparing vectors, and far more expensive, so it runs only on the fused shortlist. In Archestra the reranking model is a chat model or a dedicated model served through a supported native rerank API. Optional, configured under [Search Ranking Configuration](#search-ranking-configuration).
 
 In order, a search is: question → [query expansion](#querying) → vector ranking and keyword ranking in parallel → RRF → reranking → [access filtering](#querying) → [context expansion](#context-expansion). Keyword ranking and reranking are two stages of one search, not alternatives: keyword ranking decides which chunks reach the shortlist, reranking decides the final order of that shortlist. Both live under **Settings > Knowledge > Search Ranking Configuration**, in that order.
 
@@ -104,6 +104,12 @@ BM25 scores from statistics that Archestra rebuilds in the background — right 
 Step 2 of search ranking. The reranking model reads each shortlisted chunk together with the question, scores it, reorders the list, and drops the chunks it finds irrelevant. A chunk that matched on words alone — the right terms in the wrong context — falls away here.
 
 Reranking is optional. Without it, results come back in fused order. Query expansion and [contextual retrieval](#contextual-retrieval) use the same model, so they are off too. Reranking costs one model call per search, recorded in [LLM cost statistics](/docs/platform-llm-proxy) under "Knowledge - Reranker". Set it up under [Search Ranking Configuration](#search-ranking-configuration).
+
+##### Native Cross-Encoder And LLM Reranking
+
+A native cross-encoder is a dedicated ranking model. It receives the question and candidate passages through a rerank API, then returns one relevance score per passage. It does not generate text. This path requires a model and provider served through a native rerank API that Archestra supports.
+
+An LLM reranker uses a chat model with structured output to score the same question-passage pairs. It can also generate query expansions and contextual retrieval text. It does not exercise the native cross-encoder API. The evaluator reports the two procedures separately so a successful LLM reranking check does not imply native cross-encoder coverage.
 
 ### Citations
 
@@ -214,11 +220,109 @@ One card for both ranking stages — what each does is described under [Query Re
 **Reranking** takes the model that scores and reorders search results by relevance. It is optional; without it, results come back in fused order.
 
 - **Key** — any LLM provider API key. Subscription sign-ins do not appear here either.
-- **Model** — any chat model from that provider. Cohere Rerank models are also supported, on Cohere keys and Azure AI Foundry keys, and are called through their native rerank API.
+- **Model** — a model linked to the selected key with an executable Knowledge reranking path. Chat models use structured output. Dedicated rerank models use a supported native rerank API. The picker does not show a rerank-only model when its provider has no implemented rerank transport.
 
-A chat model also powers query expansion and [contextual retrieval](#contextual-retrieval). A Cohere Rerank model only scores results, so both are skipped with one configured.
+Model capability and provider transport are evaluated together. A catalog may identify a model as reranking-capable while a particular provider exposes it through an API Archestra does not yet implement. That provider/model pair is not advertised in this picker.
+
+A chat model also powers query expansion and [contextual retrieval](#contextual-retrieval). A dedicated rerank model only scores results, so both are skipped with one configured.
 
 A chat reranker scores passages by returning a JSON object, so Archestra asks the endpoint to constrain the model's output to that shape. **Test connection** checks that it does. If the test reports that the model replied without a JSON object, the endpoint is not applying the constraint. Enable structured outputs on it — a self-hosted vLLM server needs this — or choose a model that supports them.
+
+### Knowledge Configuration Evaluation
+
+> **Beta feature** — off by default. Set `ARCHESTRA_KNOWLEDGE_BASE_EVALUATION_ENABLED=true` (or enable the `ARCHESTRA_BETA` master switch) to show the evaluator. See [Deployment](/docs/platform-deployment).
+
+Administrators can test Knowledge settings from **Settings > Knowledge > Knowledge Configuration Evaluation**. **Start evaluation** opens a two-step setup for temporary settings and checks. Select any combination of chunking, text or image embedding, keyword ranking, hybrid retrieval, reranking, query expansion, contextual retrieval, context expansion, and OCR. **Select new and changed** chooses checks that have not run before or whose effective setting, model, or credential changed since their most recent evaluation. The table-header checkbox selects or clears every available check. The **Requirements** column shows what each check needs. Unavailable rows state only the missing configuration and who can change it.
+
+Chunking, keyword ranking, and context expansion run entirely inside the platform. They make no model-provider call. Other checks use the organization's configured models and can be metered. The Checks step identifies those calls and possible charges before the run. Hybrid search is deployment-managed through `ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED`; it is not a Knowledge settings control. Keyword, hybrid, and context-expansion checks refresh installation-wide BM25 statistics before and after the run. That scan makes no upstream API call.
+
+The setup accepts temporary embedding, BM25, reranking, contextual retrieval, and Document OCR choices. Those values apply only to that run and never update the organization. The setup uses the same controls as Knowledge Configuration. A run creates an isolated temporary Knowledge Base, executes only the selected components through their production implementations, and removes the fixture afterward. Open it for component outcomes, test-case results, skipped reasons, and a downloadable JSON artifact. Cancellation is cooperative: a provider request already in flight finishes before cleanup begins.
+
+Run twice with different saved or temporary values. **Compare latest settings** shows the values tested before and after. Results include only checks and test cases present in both evaluations. Unpaired items do not count as regressions.
+
+#### Methodology and Provenance
+
+The evaluator is a controlled regression suite, not a benchmark of your Knowledge data. The current built-in suite contains 24 synthetic documents and 20 hand-authored queries. They were created for Archestra and do not come from customer content, user logs, [TREC](https://trec.nist.gov/), [BEIR](https://arxiv.org/abs/2104.08663), or another public benchmark.
+
+The fixtures isolate specific product paths. They include hard lexical negatives, multiple relevant documents, stale and current versions, noisy spelling, Spanish text, ambiguous intent, duplicate content, a multi-chunk document, a bundled image, and a scanned PDF. Expected source IDs, relevance grades, forbidden results, and evidence strings are hand-authored. Fixture tests verify internal consistency, not real-world representativeness.
+
+Execution still uses the saved production configuration. Selected checks call the real chunker, database, embedding model, reranker, OCR model, and query pipeline. Provider-backed checks can vary with model behavior. BM25 statistics also include the installation's indexed corpus, so results are environment-specific.
+
+The methodology combines standard information-retrieval measures with Archestra-specific checks:
+
+| Method | Provenance |
+| --- | --- |
+| **Hit@K, Recall@K, MRR** | Standard ranked-retrieval measures used in academic and industry evaluation. See the [Stanford IR evaluation guide](https://nlp.stanford.edu/IR-book/html/htmledition/evaluation-of-ranked-retrieval-results-1.html). |
+| **Precision@K, nDCG@K, MAP@K** | Standard document-level ranking measures. The suite deduplicates repeated chunks by logical document before calculating them. |
+| **BM25, k1, and b** | Standard lexical-ranking model and parameters. See [Robertson and Zaragoza](https://doi.org/10.1561/1500000019). |
+| **Fixed query/source judgments** | Standard test-collection pattern, similar to TREC relevance judgments. The current 0–3 grades themselves are Archestra-authored. |
+| **Forbidden-result hit rate** | Archestra-specific hard-negative diagnostic built from explicit grade-zero or forbidden judgments. Lower is better. |
+| **Deterministic bootstrap interval** | Standard query-resampling technique. The interval is diagnostic because the synthetic sample remains small and non-representative. |
+| **Evidence strings and stage checks** | Archestra-specific deterministic integration checks. They are not academic relevance metrics. |
+| **Component pass/fail** | Archestra-specific acceptance logic. Every applicable test and required stage must pass. |
+| **BM25 score gap** | Custom tuning metric. It is not a standard IR effectiveness metric. |
+
+Pass/fail scenarios remain deterministic component gates. Model-sensitive scenarios such as multilingual, stale-version, ambiguity, typo, duplicate, and no-answer behavior are metric-only and cannot degrade a run by themselves. The no-answer case measures forced retrieval only; the product has no calibrated abstention threshold.
+
+The suite has no universal quality threshold and does not establish production significance. Bootstrap intervals show uncertainty within these fixed scenarios, not confidence about real user traffic. Validate production quality with representative, human-reviewed queries from your own domain.
+
+#### Evaluation Metrics
+
+An evaluation reports component checks and result metrics.
+
+| Result | Meaning | Read the value |
+| --- | --- | --- |
+| **Checks passed** | Selected Knowledge components that passed every applicable test. | A failed test or stage fails its component check. |
+| **Hit@5** | Test cases with an expected source in the first five results. | `100%` means every case found an expected source. Higher is better. |
+| **Mean reciprocal rank (MRR)** | How close the first expected source ranked to position one. | `100%` means rank one. `50%` means rank two. Higher is better. |
+| **Precision@5** | Relevant logical documents in the first five result positions. | Missing positions count as non-relevant. Higher is better. |
+| **nDCG@5** | Graded relevance with higher positions weighted more strongly. | `100%` means the ideal graded order. Higher is better. |
+| **MAP@5** | Average precision across answerable test cases. | Rewards retrieving every relevant document early. Higher is better. |
+| **Negative hit rate@5** | Test cases where an explicitly forbidden result appeared in the first five positions. | `0%` is the target. Lower is better. |
+| **No-answer forced retrieval** | No-answer controls where retrieval still returned a result. | Diagnostic only until the product supports abstention. Lower is better. |
+| **BM25 score gap** | Difference between the expected result's keyword score and the highest-scoring alternative. | Comparison metric for BM25 tuning. It does not affect test pass or fail. |
+
+##### Hit At 5
+
+Hit@5 is the percentage of tests with an expected source in the top five results. A `100%` value means every test found one. Comparisons use the same 0–100% scale. A move from 80% to 90% is `+10.0%`.
+
+Hit@5 alone does not decide whether a test passes. Tests can require several sources or specific evidence. Test details show each result and first expected rank.
+
+##### Mean Reciprocal Rank (MRR)
+
+MRR measures the rank of the first expected source. Rank one gives `100%`. Rank two gives `50%`. Rank three gives about `33%`. A missing expected source gives `0%`.
+
+MRR distinguishes results that Hit@5 treats equally. Sources at rank one and rank five both satisfy Hit@5. MRR gives the rank-one result a higher score.
+
+##### Graded Ranking Metrics
+
+Precision@5, nDCG@5, and MAP@5 score unique logical documents rather than repeated chunks. Relevance grades use `0` for explicit negatives and `1` through `3` for increasing relevance. This prevents multiple chunks from one document from inflating document-level quality.
+
+The built-in corpus is treated as fully judged for these synthetic queries. Documents without a positive grade count as non-relevant. Do not apply that assumption to an incompletely reviewed production dataset.
+
+The run artifact also reports metrics by category, language, and difficulty. Small segments remain diagnostic. Expand **Confidence and coverage** to inspect deterministic 95% bootstrap intervals and segment counts.
+
+Run comparisons use paired bootstrap intervals over shared test-case IDs. The interval describes uncertainty in the measured delta inside this fixed suite. It does not establish production significance.
+
+No-answer cases are excluded from Recall, MRR, MAP, and nDCG. They report forced-retrieval behavior separately until the product supports an explicit abstention decision.
+
+##### BM25 Score Gap
+
+The BM25 score gap is a custom technical detail for the built-in keyword tests.
+
+```text
+BM25 score gap = expected result score - highest-scoring alternative
+```
+
+BM25 scores are not probabilities or fixed-scale values. Corpus statistics, query wording, chunking, tokenization, and ranking settings affect them. No universal good value exists. Compare the gap only between runs of the same fixed suite.
+
+This gap is not a standard retrieval metric and does not affect test pass or fail. The comparison groups it by improvement, regression, or no change.
+
+##### Comparing Runs
+
+The comparison header shows the changed settings. The results table uses those Before and After configurations.
+
+Comparisons include only test cases that ran with both settings. Unpaired cases do not count as wins or regressions. A changed corpus or expected result limits the comparison.
 
 ### Document OCR
 

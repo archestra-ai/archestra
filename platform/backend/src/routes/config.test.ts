@@ -114,6 +114,7 @@ describe("config routes", () => {
       kbContextualRetrievalDefaultMode: config.kb.contextualRetrievalEnabled
         ? "document"
         : "disabled",
+      knowledgeEvaluationBetaEnabled: expect.any(Boolean),
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise

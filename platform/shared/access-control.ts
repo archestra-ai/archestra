@@ -1490,6 +1490,27 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetKeywordRankingStatus]: {
     knowledgeSettings: ["read"],
   },
+  [RouteId.GetRetrievalEvaluationCapabilities]: {
+    knowledgeSettings: ["read"],
+  },
+  [RouteId.PreviewRetrievalEvaluationCapabilities]: {
+    knowledgeSettings: ["read"],
+  },
+  [RouteId.ListRetrievalEvaluationRuns]: {
+    knowledgeSettings: ["read"],
+  },
+  [RouteId.GetRetrievalEvaluationRun]: {
+    knowledgeSettings: ["read"],
+  },
+  [RouteId.StartRetrievalEvaluation]: {
+    knowledgeSettings: ["update"],
+  },
+  [RouteId.CancelRetrievalEvaluation]: {
+    knowledgeSettings: ["update"],
+  },
+  [RouteId.CompareRetrievalEvaluations]: {
+    knowledgeSettings: ["read"],
+  },
 
   /**
    * Get public identity providers route (minimal info for login page)

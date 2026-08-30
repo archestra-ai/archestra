@@ -113,7 +113,7 @@ describe("knowledgeSettingsService.validateRerankerConfig", () => {
     );
   });
 
-  test("explains the mismatch when a rerank-API model is picked on a provider without a native rerank route", async ({
+  test("rejects a rerank-only model when the provider has no executable route", async ({
     makeOrganization,
     makeSecret,
   }) => {
@@ -127,18 +127,17 @@ describe("knowledgeSettingsService.validateRerankerConfig", () => {
       scope: "org",
       userId: null,
     });
-    // A rerank-API model has no chat-completions route, so the provider
-    // answers the probe with a bare 404.
-    mockGenerateObject.mockRejectedValue(new Error("Not Found"));
-
     const result = await knowledgeSettingsService.validateRerankerConfig({
       keyId: key.id,
       model: "my-rerank-model",
       organizationId: org.id,
     });
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain("Raw error: Not Found");
-    expect(result.error).toContain("select a chat model instead");
+    expect(result).toEqual({
+      ok: false,
+      error:
+        "This provider and model cannot be used for Knowledge reranking. Select a model listed for this API key.",
+    });
+    expect(mockGenerateObject).not.toHaveBeenCalled();
   });
 
   describe("native rerank models", () => {

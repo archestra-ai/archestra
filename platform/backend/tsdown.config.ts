@@ -299,10 +299,16 @@ export default defineConfig((options: UserConfig) => {
       // Encryption-key re-encryption migration, run by the Helm migration Job.
       "src/standalone-scripts/reencrypt-content.ee.ts",
       "src/standalone-scripts/reencrypt-secrets.ts",
+      // Administrator-run retrieval evaluation, executed inside platform pods.
+      "src/standalone-scripts/kb-retrieval-eval.ts",
     ],
 
     // Copy SQL migrations and other assets that need to exist at runtime
-    copy: ["src/database/migrations", "src/static"],
+    copy: [
+      "src/database/migrations",
+      "src/static",
+      "src/knowledge-base/evaluation/fixtures",
+    ],
 
     // Only clean if NOT in watch mode, to avoid race conditions during rebuilds where
     // the output directory is deleted while the server process is trying to restart.

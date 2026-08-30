@@ -46,27 +46,28 @@ export type ModelWithApiKeys =
 export type LinkedApiKey = ModelWithApiKeys["apiKeys"][number];
 
 /**
- * Fetch available chat models from all configured providers.
- * When apiKeyId is provided, only returns models linked to that specific key.
+ * Fetch available models from configured providers. `apiKeyId` scopes the
+ * catalog to one key; `purpose=knowledge-reranker` asks the server to return
+ * only provider/model pairs with an executable Knowledge reranking transport.
  */
 export function useLlmModels(params?: LlmModelsParams) {
-  const apiKeyId = params?.apiKeyId;
+  const { enabled, ...query } = params ?? {};
   const queryClient = useQueryClient();
-  const queryKey = ["llm-models", apiKeyId ?? null] as const;
+  const queryKey = ["llm-models", query] as const;
   return useQuery({
     queryKey,
     queryFn: async (): Promise<LlmModel[]> => {
       const { data, error, response } = await getLlmModels({
-        query: apiKeyId ? { apiKeyId } : undefined,
+        query,
       });
       throwOnApiError(error);
       scheduleRefetchAfterLazyModelSync({ queryClient, queryKey, response });
       return data ?? [];
     },
-    // Keep showing previous models while fetching for a new apiKeyId,
-    // preventing display name flicker (e.g. "Claude Opus 4.1" → raw ID → back).
-    placeholderData: keepPreviousData,
-    enabled: params?.enabled,
+    // Never carry models across key-scoped requests: a model linked to the
+    // previous credential must not remain selectable for the new key.
+    placeholderData: query.apiKeyId ? undefined : keepPreviousData,
+    enabled,
   });
 }
 

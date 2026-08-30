@@ -102,12 +102,14 @@ export type SupportedProvider = z.infer<typeof SupportedProvidersSchema>;
  * `/responses` while the rest accept only `/chat/completions`, and both
  * families use bare ids like `gpt-5.5` and `gpt-4o`, so — unlike Perplexity,
  * where a vendor prefix marks the Agent API — nothing about the id says which
- * surface a model belongs to. Persisted per model so the surface survives to
- * request time.
+ * surface a model belongs to. `/rerank` records dedicated ranking-only models
+ * for capability filtering; chat routing never treats it as a chat surface.
+ * Persisted per model so the surface survives to request time.
  */
 export const ProviderEndpointSchema = z.enum([
   "/chat/completions",
   "/responses",
+  "/rerank",
 ]);
 export type SupportedProviderEndpoint = z.infer<typeof ProviderEndpointSchema>;
 

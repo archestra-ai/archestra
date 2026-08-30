@@ -132,14 +132,24 @@ describe("rerank", () => {
         ],
       }),
     );
+    const onDiagnostics = vi.fn();
 
     const result = await rerank({
       queryText: "test query",
       chunks,
       organizationId: "test-org-id",
+      onDiagnostics,
     });
 
     expect(result.map((r) => r.id)).toEqual(["b", "c", "a"]);
+    expect(onDiagnostics).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "succeeded",
+        kind: "llm",
+        changedOrder: true,
+        filteredCount: 0,
+      }),
+    );
   });
 
   it("reads scores out of a reply wrapped in reasoning tokens and a markdown fence", async () => {
@@ -202,14 +212,19 @@ describe("rerank", () => {
     const chunks = [makeChunk("a", "first"), makeChunk("b", "second")];
 
     serveScores({ fail: true });
+    const onDiagnostics = vi.fn();
 
     const result = await rerank({
       queryText: "test query",
       chunks,
       organizationId: "test-org-id",
+      onDiagnostics,
     });
 
     expect(result.map((r) => r.id)).toEqual(["a", "b"]);
+    expect(onDiagnostics).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "failed", kind: "llm" }),
+    );
   });
 
   it("returns empty array for empty chunks (no LLM call)", async () => {
@@ -226,15 +241,20 @@ describe("rerank", () => {
   it("returns original order when no reranker config is available", async () => {
     mockResolveRerankerConfig.mockResolvedValue(null);
     const chunks = [makeChunk("a", "first"), makeChunk("b", "second")];
+    const onDiagnostics = vi.fn();
 
     const result = await rerank({
       queryText: "test query",
       chunks,
       organizationId: "test-org-id",
+      onDiagnostics,
     });
 
     expect(result.map((r) => r.id)).toEqual(["a", "b"]);
     expect(chatCompletionCalls).toBe(0);
+    expect(onDiagnostics).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "disabled", kind: null }),
+    );
   });
 
   it("records the connector the query was scoped to on the interaction", async () => {
@@ -292,10 +312,12 @@ describe("rerank", () => {
         makeChunk("b", "most relevant"),
         makeChunk("c", "irrelevant"),
       ];
+      const onDiagnostics = vi.fn();
       const result = await rerank({
         queryText: "test query",
         chunks,
         organizationId: "test-org-id",
+        onDiagnostics,
       });
 
       expect(sentDocuments).toEqual([
@@ -305,6 +327,14 @@ describe("rerank", () => {
       ]);
       expect(result.map((r) => r.id)).toEqual(["b", "a"]);
       expect(chatCompletionCalls).toBe(0);
+      expect(onDiagnostics).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: "succeeded",
+          kind: "native-rerank",
+          changedOrder: true,
+          filteredCount: 1,
+        }),
+      );
     });
 
     it("returns original order when the rerank API fails (graceful degradation)", async () => {
@@ -319,14 +349,22 @@ describe("rerank", () => {
       );
 
       const chunks = [makeChunk("a", "first"), makeChunk("b", "second")];
+      const onDiagnostics = vi.fn();
       const result = await rerank({
         queryText: "test query",
         chunks,
         organizationId: "test-org-id",
+        onDiagnostics,
       });
 
       expect(result.map((r) => r.id)).toEqual(["a", "b"]);
       expect(chatCompletionCalls).toBe(0);
+      expect(onDiagnostics).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: "failed",
+          kind: "native-rerank",
+        }),
+      );
     });
   });
 });

@@ -1149,6 +1149,40 @@ describe("QueryService", () => {
       fullTextSearchSpy.mockRestore();
     });
 
+    test("uses an evaluation-only BM25 override without changing the organization", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const { org, connector } = await seedEnglishCorpus({
+        makeOrganization,
+        makeKnowledgeBase,
+        makeKnowledgeBaseConnector,
+      });
+      await OrganizationModel.patch(org.id, { kbBm25K1: 1.5, kbBm25B: 0.3 });
+      await KbChunkModel.refreshBm25Stats();
+      const fullTextSearchSpy = vi
+        .spyOn(KbChunkModel, "fullTextSearch")
+        .mockResolvedValueOnce([]);
+
+      await queryService.queryKeywordOnly({
+        connectorIds: [connector.id],
+        organizationId: org.id,
+        queryText: "ingress timeout",
+        userAcl: ["org:*"],
+        bm25: { k1: 0.6, b: 0.35 },
+      });
+
+      expect(fullTextSearchSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ bm25: { k1: 0.6, b: 0.35 } }),
+      );
+      expect(await OrganizationModel.getById(org.id)).toMatchObject({
+        kbBm25K1: 1.5,
+        kbBm25B: 0.3,
+      });
+      fullTextSearchSpy.mockRestore();
+    });
+
     test("ranks with BM25 at the deployment default tuning when the organization has none — no per-call argument, no setting", async ({
       makeOrganization,
       makeKnowledgeBase,

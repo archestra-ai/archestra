@@ -1796,6 +1796,10 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
   - Default: `100`
   - Each page is one vision-model call billed against the organization's configured OCR model, so this bounds the worst-case cost of a single document. Pages past the cap stay untranscribed and the document is indexed with a partial-extraction warning naming the cap.
 
+- **`ARCHESTRA_KNOWLEDGE_BASE_EVALUATION_ENABLED`** - Beta gate for the [Knowledge configuration evaluator](/docs/platform-knowledge#knowledge-configuration-evaluation), including its Settings card and organization APIs.
+  - Default: unset (falls back to the `ARCHESTRA_BETA` master switch).
+  - Set to `true` to enable it independently, or `false` to hide it and return 404 from its APIs even when the master beta switch is on.
+
 Permission sync for connectors using [auto-sync permissions](/docs/platform-knowledge#auto-sync-permissions) runs in its own worker lane, independent of content sync. Its cadence is not an environment variable: each connector's permission sync interval is set in the connector form, and a pass also runs automatically after a content sync ingests new documents or when triggered manually.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED`** - Beta gate for the whole auto-sync-permissions feature: the connector visibility option, its permission passes, and the Users and Groups tabs.

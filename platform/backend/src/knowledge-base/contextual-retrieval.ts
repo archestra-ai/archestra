@@ -1,4 +1,7 @@
-import type { SupportedProvider } from "@archestra/shared";
+import type {
+  ContextualRetrievalMode,
+  SupportedProvider,
+} from "@archestra/shared";
 import { generateObject, generateText, type ModelMessage } from "ai";
 import { z } from "zod";
 import { isAnthropicNativeEndpoint } from "@/clients/anthropic-endpoint";
@@ -7,7 +10,10 @@ import {
   getProviderChatInteractionType,
   withKbObservability,
 } from "./kb-interaction";
-import { resolveContextualRetrievalConfig } from "./kb-llm-client";
+import {
+  type RerankerConfig,
+  resolveContextualRetrievalConfig,
+} from "./kb-llm-client";
 
 // ===== Exports =====
 
@@ -26,16 +32,26 @@ export async function buildContextualHeaders(params: {
   chunks: string[];
   organizationId: string;
   connectorId: string | null;
+  skipContextualRetrieval?: boolean;
+  rerankerConfig?: RerankerConfig;
+  contextualRetrievalMode?: ContextualRetrievalMode;
 }): Promise<(string | null)[]> {
   const { title, content, chunks, organizationId, connectorId } = params;
   if (chunks.length === 0) return [];
 
   const emptyHeaders = () => chunks.map(() => null);
+  if (params.skipContextualRetrieval) return emptyHeaders();
   if (!content.trim()) return emptyHeaders();
 
   let resolved: Awaited<ReturnType<typeof resolveContextualRetrievalConfig>>;
   try {
     resolved = await resolveContextualRetrievalConfig(organizationId);
+    if (params.contextualRetrievalMode) {
+      resolved = { ...resolved, mode: params.contextualRetrievalMode };
+    }
+    if (params.rerankerConfig) {
+      resolved = { ...resolved, reranker: params.rerankerConfig };
+    }
   } catch (error) {
     logger.warn(
       {

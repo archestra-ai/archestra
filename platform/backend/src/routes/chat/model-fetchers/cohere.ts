@@ -6,7 +6,8 @@ import type { ModelInfo } from "./types";
 
 /**
  * Cohere's `/v2/models` lists chat and embed models alike (each with its
- * `endpoints`). Chat/generate models are surfaced as-is. Embed models come
+ * `endpoints`). Chat/generate and native rerank models are surfaced with their
+ * executable endpoint. Embed models come
  * from the KB's static capability table instead: the listing reports neither
  * dimensions nor modalities, so only models the Cohere embedding client can
  * drive are offered, tagged with their dimension — and they are offered even
@@ -64,5 +65,15 @@ export async function fetchCohereModels(
     capabilities: { embeddingDimensions: entry.dimensions },
   }));
 
-  return [...chatModels, ...embeddingModels];
+  const rerankModels: ModelInfo[] = data.models
+    .filter((model) => (model.endpoints || []).includes("rerank"))
+    .map((model) => ({
+      id: model.name,
+      displayName: model.name,
+      provider: "cohere" as const,
+      createdAt: model.created_at,
+      capabilities: { supportedEndpoints: ["/rerank"] },
+    }));
+
+  return [...chatModels, ...embeddingModels, ...rerankModels];
 }

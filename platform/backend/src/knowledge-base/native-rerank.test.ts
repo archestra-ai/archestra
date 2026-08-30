@@ -36,6 +36,12 @@ describe("isNativeRerankModel", () => {
     expect(
       isNativeRerankModel({ provider: "openai", model: "my-rerank-model" }),
     ).toBe(false);
+    expect(
+      isNativeRerankModel({
+        provider: "bedrock",
+        model: "cohere.rerank-v3-5:0",
+      }),
+    ).toBe(false);
   });
 });
 

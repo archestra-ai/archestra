@@ -20,7 +20,11 @@ describe("fetchBedrockModels", () => {
   // tests filter those out to assert only the chat models a profile listing
   // yields; embedding discovery is covered separately below.
   const chatOnly = (models: Awaited<ReturnType<typeof fetchBedrockModels>>) =>
-    models.filter((m) => m.capabilities?.embeddingDimensions == null);
+    models.filter(
+      (m) =>
+        m.capabilities?.embeddingDimensions == null &&
+        !m.capabilities?.supportedEndpoints?.includes("/rerank"),
+    );
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -121,6 +125,11 @@ describe("fetchBedrockModels", () => {
     expect(chatOnly(models).map((model) => model.id)).toEqual([
       "global.anthropic.claude-opus-4-8",
     ]);
+    expect(
+      models.find((model) => model.id === "cohere.rerank-v3-5:0"),
+    ).toMatchObject({
+      capabilities: { supportedEndpoints: ["/rerank"] },
+    });
   });
 
   test("keeps text-generation models whose names resemble non-chat families", async () => {

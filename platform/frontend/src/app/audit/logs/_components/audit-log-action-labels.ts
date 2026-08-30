@@ -165,6 +165,9 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "project.bulk_deleted": "Projects bulk deleted",
   "project.restored": "Project restored",
   "project.purged": "Project permanently deleted",
+  // Retrieval evaluation
+  "retrievalEvaluation.started": "Knowledge evaluation started",
+  "retrievalEvaluation.cancelled": "Knowledge evaluation cancelled",
   // Role
   "role.created": "Role created",
   "role.updated": "Role updated",
@@ -362,6 +365,7 @@ export const KNOWN_RESOURCE_TYPES: readonly string[] = [
   "member",
   "optimizationRule",
   "organization",
+  "retrievalEvaluation",
   "role",
   "scheduleTrigger",
   "serviceAccount",
@@ -401,6 +405,7 @@ const RESOURCE_LABEL_OVERRIDES: Record<string, string> = {
   knowledgeFile: "Knowledge file",
   optimizationRule: "Optimization rule",
   organization: "Organization",
+  retrievalEvaluation: "Knowledge evaluation",
   scheduleTrigger: "Scheduled task",
   skill: "Agent skill",
   skillShareLink: "Marketplace link",

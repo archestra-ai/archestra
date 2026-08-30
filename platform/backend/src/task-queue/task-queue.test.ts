@@ -123,6 +123,21 @@ describe("TaskQueueService", () => {
       expect((await getTask(task.id))?.status).toBe("completed");
     });
 
+    test("dispatches retrieval evaluation work through its isolated lane", async () => {
+      const handler = vi.fn().mockResolvedValue(undefined);
+      const task = await seedTask({
+        taskType: "retrieval_evaluation",
+        payload: { runId: crypto.randomUUID() },
+      });
+      taskQueueService.registerHandler("retrieval_evaluation", handler);
+      taskQueueService.startWorker();
+
+      await vi.advanceTimersByTimeAsync(1000);
+
+      expect(handler).toHaveBeenCalledWith(task.payload, { taskId: task.id });
+      expect((await getTask(task.id))?.status).toBe("completed");
+    });
+
     test("fails task when no handler is registered for task type", async () => {
       const task = await seedTask({ taskType: "batch_embedding" });
 

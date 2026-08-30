@@ -227,6 +227,7 @@ type SharedProps = {
    * ordering. Used when the caller imposes its own order (e.g. by price).
    */
   preserveOrder?: boolean;
+  triggerAriaLabel?: string;
 };
 
 type SingleSelectProps = SharedProps & {
@@ -356,6 +357,7 @@ export function LlmModelSearchableSelect(props: LlmModelSearchableSelectProps) {
       contentSide={popoverSide}
       contentAlign={popoverAlign}
       contentAvoidCollisions={popoverAvoidCollisions}
+      triggerAriaLabel={props.triggerAriaLabel}
       items={[
         ...(includeAllOption
           ? [

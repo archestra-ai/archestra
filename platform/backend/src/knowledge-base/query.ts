@@ -20,7 +20,11 @@ import {
   buildEmbeddingInteraction,
   withKbObservability,
 } from "./kb-interaction";
-import { type EmbeddingConfig, resolveEmbeddingConfig } from "./kb-llm-client";
+import {
+  type EmbeddingConfig,
+  type RerankerConfig,
+  resolveEmbeddingConfig,
+} from "./kb-llm-client";
 import { isMediaChunkContent, parseImageDataUrl } from "./media-chunk";
 import {
   collapseParentSiblings,
@@ -30,11 +34,32 @@ import {
   expandQuery,
   KEYWORD_QUERY_HYBRID_ALPHA_WEIGHT,
 } from "./query-expansion";
-import rerank from "./reranker";
+import rerank, { type RerankDiagnostics } from "./reranker";
 import type { KnowledgeRetrievalBackend } from "./retrieval-backend";
 import { knowledgeRetrievalBackend } from "./retrieval-backends/registry";
 import { verifyExternalRetrievalResults } from "./retrieval-result-verifier";
 import reciprocalRankFusion from "./rrf";
+
+/** Stage observations used by the in-platform evaluation runner. */
+export interface KnowledgeQueryPlan {
+  expandedQueryCount: number;
+  expandedQueryTypes: Array<"semantic" | "keyword">;
+  keywordRanker: "disabled" | "ts_rank" | "bm25";
+}
+
+interface KnowledgeQueryDiagnostics {
+  onPlan?: (plan: KnowledgeQueryPlan) => void;
+  onRerank?: (diagnostics: RerankDiagnostics) => void;
+  onKeywordResults?: (
+    results: Array<{
+      id: string;
+      documentId: string;
+      chunkIndex: number;
+      sourceId: string | null;
+      score: number;
+    }>,
+  ) => void;
+}
 
 interface ChunkResult {
   /**
@@ -94,6 +119,18 @@ export class QueryService {
      */
     metadataFilter?: KbDocumentMetadataFilter;
     limit?: number;
+    /** Internal evaluation observer; it never changes query behavior. */
+    diagnostics?: KnowledgeQueryDiagnostics;
+    /** Isolate selected production stages for the component evaluator. */
+    evaluation?: {
+      queryExpansionEnabled?: boolean;
+      hybridSearchEnabled?: boolean;
+      rerankingEnabled?: boolean;
+      contextExpansionEnabled?: boolean;
+      bm25?: Bm25Tuning;
+      embedding?: EmbeddingConfig;
+      reranker?: RerankerConfig;
+    };
   }): Promise<ChunkResult[]> {
     const {
       connectorIds,
@@ -108,10 +145,13 @@ export class QueryService {
     if (!bypassAcl && params.userAcl.length === 0) return [];
 
     const queryStartTime = Date.now();
-    const hybridEnabled = config.kb.hybridSearchEnabled;
+    const hybridEnabled =
+      params.evaluation?.hybridSearchEnabled ?? config.kb.hybridSearchEnabled;
     const overFetchLimit = hybridEnabled ? limit * 2 : limit;
 
-    const embeddingConfig = await resolveEmbeddingConfig(organizationId);
+    const embeddingConfig =
+      params.evaluation?.embedding ??
+      (await resolveEmbeddingConfig(organizationId));
     if (!embeddingConfig) {
       logger.warn(
         { organizationId, connectorIds },
@@ -127,15 +167,32 @@ export class QueryService {
     // Resolved once and passed down: the keyword search needs the languages as
     // bound parameters to keep its tsquery index-eligible (see fullTextSearch).
     const [expandedQueries, searchLanguages] = await Promise.all([
-      expandQuery({ queryText, organizationId, connectorId }),
+      params.evaluation?.queryExpansionEnabled === false
+        ? Promise.resolve([{ queryText, type: "semantic" as const, weight: 1 }])
+        : expandQuery({
+            queryText,
+            organizationId,
+            connectorId,
+            config: params.evaluation?.reranker,
+          }),
       hybridEnabled
         ? this.retrievalBackend.getTextSearchLanguages(connectorIds)
         : Promise.resolve([]),
     ]);
 
     const bm25 = hybridEnabled
-      ? await this.resolveBm25(organizationId, searchLanguages, connectorIds)
+      ? await this.resolveBm25({
+          organizationId,
+          searchLanguages,
+          connectorIds,
+          override: params.evaluation?.bm25,
+        })
       : undefined;
+    params.diagnostics?.onPlan?.({
+      expandedQueryCount: expandedQueries.length,
+      expandedQueryTypes: expandedQueries.map((query) => query.type),
+      keywordRanker: hybridEnabled ? (bm25 ? "bm25" : "ts_rank") : "disabled",
+    });
 
     const perQueryResults = await Promise.all(
       expandedQueries.map((eq) =>
@@ -230,12 +287,16 @@ export class QueryService {
     let topResults = deduped.slice(0, overFetchLimit);
 
     const preRerankCount = topResults.length;
-    topResults = await rerank({
-      queryText,
-      chunks: topResults,
-      organizationId,
-      connectorId,
-    });
+    if (params.evaluation?.rerankingEnabled !== false) {
+      topResults = await rerank({
+        queryText,
+        chunks: topResults,
+        organizationId,
+        connectorId,
+        config: params.evaluation?.reranker,
+        onDiagnostics: params.diagnostics?.onRerank,
+      });
+    }
     topResults = topResults.slice(0, limit);
 
     // Widen each surviving hit into the passage the model should read, by
@@ -268,7 +329,10 @@ export class QueryService {
     try {
       topResults = await expandChunkContext({
         results: topResults,
-        radius: config.kb.contextExpansionRadius,
+        radius:
+          params.evaluation?.contextExpansionEnabled === false
+            ? 0
+            : config.kb.contextExpansionRadius,
         userAcl: params.userAcl,
         bypassAcl,
         environmentId,
@@ -313,6 +377,86 @@ export class QueryService {
     });
 
     return this.mapResults(topResults);
+  }
+
+  /**
+   * Production keyword ranking and context expansion without an embedding
+   * provider call. Used only when the administrator selects offline components.
+   */
+  async queryKeywordOnly(params: {
+    connectorIds: string[];
+    organizationId: string;
+    queryText: string;
+    userAcl: AclEntry[];
+    bypassAcl?: boolean;
+    environmentId?: string | null;
+    limit?: number;
+    expandContext?: boolean;
+    diagnostics?: KnowledgeQueryDiagnostics;
+    bm25?: Bm25Tuning;
+  }): Promise<ChunkResult[]> {
+    const {
+      connectorIds,
+      organizationId,
+      queryText,
+      bypassAcl = false,
+      environmentId,
+      limit = 10,
+    } = params;
+    if (connectorIds.length === 0) return [];
+    if (!bypassAcl && params.userAcl.length === 0) return [];
+
+    const searchLanguages =
+      await this.retrievalBackend.getTextSearchLanguages(connectorIds);
+    const bm25 = await this.resolveBm25({
+      organizationId,
+      searchLanguages,
+      connectorIds,
+      override: params.bm25,
+    });
+    params.diagnostics?.onPlan?.({
+      expandedQueryCount: 1,
+      expandedQueryTypes: ["keyword"],
+      keywordRanker: bm25 ? "bm25" : "ts_rank",
+    });
+    const rows = await runSearchLane("keyword", this.retrievalBackend, () =>
+      this.retrievalBackend.keywordSearch({
+        connectorIds,
+        queryText,
+        languages: searchLanguages,
+        bm25,
+        userAcl: params.userAcl,
+        bypassAcl,
+        environmentId,
+        limit,
+      }),
+    );
+    if (rows === null) {
+      throw new KnowledgeBaseSearchTimeoutError(
+        config.kb.searchStatementTimeoutMillis ||
+          config.database.statementTimeoutMillis,
+      );
+    }
+    params.diagnostics?.onKeywordResults?.(
+      rows.map((result) => ({
+        id: result.id,
+        documentId: result.documentId,
+        chunkIndex: result.chunkIndex,
+        sourceId: result.sourceId ?? null,
+        score: Number(result.score),
+      })),
+    );
+    let results = rows;
+    if (params.expandContext) {
+      results = await expandChunkContext({
+        results,
+        radius: config.kb.contextExpansionRadius,
+        userAcl: params.userAcl,
+        bypassAcl,
+        environmentId,
+      });
+    }
+    return this.mapResults(results);
   }
 
   private async searchSingleQuery(params: {
@@ -515,26 +659,37 @@ export class QueryService {
    * settings tab applies to the very next search (scores are computed at query
    * time from stored statistics, so nothing needs rebuilding).
    */
-  private async resolveBm25(
-    organizationId: string,
-    searchLanguages: TextSearchLanguage[],
-    connectorIds: string[],
-  ): Promise<Bm25Tuning | undefined> {
+  private async resolveBm25(params: {
+    organizationId: string;
+    searchLanguages: TextSearchLanguage[];
+    connectorIds: string[];
+    override?: Bm25Tuning;
+  }): Promise<Bm25Tuning | undefined> {
     const [statsReady, org] = await Promise.all([
-      this.retrievalBackend.hasKeywordStatistics(searchLanguages, connectorIds),
-      OrganizationModel.getById(organizationId),
+      this.retrievalBackend.hasKeywordStatistics(
+        params.searchLanguages,
+        params.connectorIds,
+      ),
+      params.override
+        ? Promise.resolve(null)
+        : OrganizationModel.getById(params.organizationId),
     ]);
     if (!statsReady) {
       logger.warn(
-        { organizationId, searchLanguages },
+        {
+          organizationId: params.organizationId,
+          searchLanguages: params.searchLanguages,
+        },
         "[QueryService] BM25 corpus statistics are missing for a text-search configuration in this query; keyword search ranks with ts_rank until the kb_bm25_stats_refresh task has built them",
       );
       return undefined;
     }
-    return {
-      k1: org?.kbBm25K1 ?? config.kb.bm25K1,
-      b: org?.kbBm25B ?? config.kb.bm25B,
-    };
+    return (
+      params.override ?? {
+        k1: org?.kbBm25K1 ?? config.kb.bm25K1,
+        b: org?.kbBm25B ?? config.kb.bm25B,
+      }
+    );
   }
 
   private async verifyResults(params: {

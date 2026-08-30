@@ -117,6 +117,8 @@ interface DataTableProps<TData, TValue> {
   fixedWidthColumnIds?: string[];
   /** Column ids that absorb remaining table width. */
   flexibleColumnIds?: string[];
+  /** Accessible name for a keyboard-focusable horizontal scroll region. */
+  scrollRegionLabel?: string;
 }
 
 export function DataTable<TData, TValue>({
@@ -152,6 +154,7 @@ export function DataTable<TData, TValue>({
   tableClassName,
   fixedWidthColumnIds = [],
   flexibleColumnIds = [],
+  scrollRegionLabel,
 }: DataTableProps<TData, TValue>) {
   const localRangeSelection = useBulkRangeSelectionController();
   const rangeSelection = controlledRangeSelection ?? localRangeSelection;
@@ -300,7 +303,12 @@ export function DataTable<TData, TValue>({
           away with the content on a table wide enough to scroll. */}
       <div className="relative">
         {isLoading && <TableLoadingBar />}
-        <div className="overflow-x-auto rounded-md border">
+        <div
+          className="overflow-x-auto rounded-md border"
+          {...(scrollRegionLabel
+            ? { role: "region", "aria-label": scrollRegionLabel, tabIndex: 0 }
+            : {})}
+        >
           {/* The table never shrinks below the columns' summed configured sizes
             (tanstack defaults unsized columns to 150px) — on narrow screens
             the wrapper scrolls horizontally instead of crushing columns until

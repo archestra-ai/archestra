@@ -12,9 +12,20 @@ import {
   getProviderChatInteractionType,
   withKbObservability,
 } from "./kb-interaction";
-import { resolveRerankerConfig } from "./kb-llm-client";
+import { type RerankerConfig, resolveRerankerConfig } from "./kb-llm-client";
 import { callNativeRerank } from "./native-rerank";
 import { RERANKER_OUTPUT_CONTRACT } from "./reranker-prompt";
+
+/** Diagnostic outcome for in-platform evaluation; ordinary callers omit it. */
+export interface RerankDiagnostics {
+  status: "disabled" | "unavailable" | "succeeded" | "failed";
+  kind: "llm" | "native-rerank" | null;
+  provider: SupportedProvider | null;
+  model: string | null;
+  changedOrder: boolean;
+  filteredCount: number;
+  error: string | null;
+}
 
 async function rerank(params: {
   queryText: string;
@@ -22,8 +33,17 @@ async function rerank(params: {
   organizationId: string;
   /** The one connector this query is scoped to, or null when it spans several. */
   connectorId?: string | null;
+  /** Observe the real reranker path without changing its best-effort behavior. */
+  onDiagnostics?: (diagnostics: RerankDiagnostics) => void;
+  config?: RerankerConfig;
 }): Promise<VectorSearchResult[]> {
-  const { queryText, chunks, organizationId, connectorId = null } = params;
+  const {
+    queryText,
+    chunks,
+    organizationId,
+    connectorId = null,
+    onDiagnostics,
+  } = params;
 
   if (chunks.length === 0) {
     return [];
@@ -31,7 +51,8 @@ async function rerank(params: {
 
   let rerankerConfig: Awaited<ReturnType<typeof resolveRerankerConfig>>;
   try {
-    rerankerConfig = await resolveRerankerConfig(organizationId);
+    rerankerConfig =
+      params.config ?? (await resolveRerankerConfig(organizationId));
   } catch (error) {
     // Reranking is optional and best-effort: an unresolvable reranker config
     // must not fail the whole query. Return the original order; the fault is
@@ -43,6 +64,15 @@ async function rerank(params: {
       },
       "[Reranker] Reranker config unresolvable, returning original order",
     );
+    emitDiagnostics(onDiagnostics, {
+      status: "unavailable",
+      kind: null,
+      provider: null,
+      model: null,
+      changedOrder: false,
+      filteredCount: 0,
+      error: summarize(error),
+    });
     return chunks;
   }
   if (!rerankerConfig) {
@@ -50,11 +80,25 @@ async function rerank(params: {
       { organizationId },
       "[Reranker] No reranker API key configured, skipping reranking",
     );
+    emitDiagnostics(onDiagnostics, {
+      status: "disabled",
+      kind: null,
+      provider: null,
+      model: null,
+      changedOrder: false,
+      filteredCount: 0,
+      error: null,
+    });
     return chunks;
   }
 
   if (rerankerConfig.kind === "native-rerank") {
-    return nativeRerank({ queryText, chunks, config: rerankerConfig });
+    return nativeRerank({
+      queryText,
+      chunks,
+      config: rerankerConfig,
+      onDiagnostics,
+    });
   }
 
   const numberedList = chunks
@@ -145,12 +189,31 @@ ${RERANKER_OUTPUT_CONTRACT}`;
       "[Reranker] LLM score previews",
     );
 
-    return filtered.map((r) => r.chunk);
+    const rerankedChunks = filtered.map((r) => r.chunk);
+    emitDiagnostics(onDiagnostics, {
+      status: "succeeded",
+      kind: "llm",
+      provider: rerankerConfig.provider,
+      model: rerankerConfig.modelName,
+      changedOrder: orderChanged(chunks, rerankedChunks),
+      filteredCount: chunks.length - rerankedChunks.length,
+      error: null,
+    });
+    return rerankedChunks;
   } catch (error) {
     logger.warn(
       { error },
       "[Reranker] LLM reranking failed, returning original order",
     );
+    emitDiagnostics(onDiagnostics, {
+      status: "failed",
+      kind: "llm",
+      provider: rerankerConfig.provider,
+      model: rerankerConfig.modelName,
+      changedOrder: false,
+      filteredCount: 0,
+      error: summarize(error),
+    });
     return chunks;
   }
 }
@@ -174,8 +237,9 @@ async function nativeRerank(params: {
     apiKey: string | null;
     baseUrl: string | null;
   };
+  onDiagnostics?: (diagnostics: RerankDiagnostics) => void;
 }): Promise<VectorSearchResult[]> {
-  const { queryText, chunks, config } = params;
+  const { queryText, chunks, config, onDiagnostics } = params;
 
   logger.info(
     {
@@ -219,14 +283,54 @@ async function nativeRerank(params: {
       "[Reranker] Native rerank scores received",
     );
 
-    return filtered.map((r) => r.chunk);
+    const result = filtered.map((r) => r.chunk);
+    emitDiagnostics(onDiagnostics, {
+      status: "succeeded",
+      kind: "native-rerank",
+      provider: config.provider,
+      model: config.modelName,
+      changedOrder: orderChanged(chunks, result),
+      filteredCount: chunks.length - result.length,
+      error: null,
+    });
+    return result;
   } catch (error) {
     logger.warn(
       { error },
       "[Reranker] Native reranking failed, returning original order",
     );
+    emitDiagnostics(onDiagnostics, {
+      status: "failed",
+      kind: "native-rerank",
+      provider: config.provider,
+      model: config.modelName,
+      changedOrder: false,
+      filteredCount: 0,
+      error: summarize(error),
+    });
     return chunks;
   }
+}
+
+function emitDiagnostics(
+  callback: ((diagnostics: RerankDiagnostics) => void) | undefined,
+  diagnostics: RerankDiagnostics,
+): void {
+  callback?.(diagnostics);
+}
+
+function orderChanged(
+  before: VectorSearchResult[],
+  after: VectorSearchResult[],
+): boolean {
+  return (
+    before.length !== after.length ||
+    before.some((chunk, index) => chunk.id !== after[index]?.id)
+  );
+}
+
+function summarize(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function buildRerankerInteraction(

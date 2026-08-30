@@ -1,4 +1,7 @@
-import { addNomicTaskPrefix } from "@archestra/shared";
+import {
+  addNomicTaskPrefix,
+  getKnowledgeRerankerKind,
+} from "@archestra/shared";
 import { generateObject, generateText, NoObjectGeneratedError } from "ai";
 import { z } from "zod";
 import { createDirectLLMModel } from "@/clients/llm-client";
@@ -107,7 +110,6 @@ class KnowledgeSettingsService {
           "The selected model is not marked as an embedding model with configured dimensions in LLM Providers > Models.",
       };
     }
-
     try {
       const response = await callEmbedding({
         inputs: [addNomicTaskPrefix(model, "hello world", "search_document")],
@@ -156,12 +158,30 @@ class KnowledgeSettingsService {
         error: "The reranker API key could not be resolved. Reconfigure it.",
       };
     }
+    const modelRecord = await ModelModel.findByProviderAndModelId(
+      resolved.provider,
+      model,
+    );
+    const rerankerKind = getKnowledgeRerankerKind({
+      provider: resolved.provider,
+      model,
+      embeddingDimensions: modelRecord?.embeddingDimensions,
+      outputModalities: modelRecord?.outputModalities,
+      supportedEndpoints: modelRecord?.supportedEndpoints,
+    });
+    if (!rerankerKind) {
+      return {
+        ok: false,
+        error:
+          "This provider and model cannot be used for Knowledge reranking. Select a model listed for this API key.",
+      };
+    }
 
     try {
       // Dedicated rerank models are exercised through the provider's native
       // rerank route; everything else through the chat + structured-output
       // capability reranking relies on.
-      if (isNativeRerankModel({ provider: resolved.provider, model })) {
+      if (rerankerKind === "native-rerank") {
         const scores = await callNativeRerank({
           provider: resolved.provider,
           apiKey: resolved.apiKey,

@@ -3345,6 +3345,11 @@ const config = {
       : undefined,
   },
   kb: {
+    // BETA gate for Knowledge configuration evaluation (UI + API). Off by
+    // default; a blank value falls back to the ARCHESTRA_BETA master switch.
+    evaluationEnabled: betaFeatureEnabled(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_EVALUATION_ENABLED,
+    ),
     // BETA gate for the auto-sync-permissions connector visibility: the
     // permission-sync passes, the connector Permissions tab APIs, and manual
     // member overrides. Off by default; a blank value falls back to the

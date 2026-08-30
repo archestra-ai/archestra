@@ -75,6 +75,7 @@ interface SearchableSelectProps {
   contentAlign?: PopoverContentProps["align"];
   contentAvoidCollisions?: PopoverContentProps["avoidCollisions"];
   listClassName?: string;
+  triggerAriaLabel?: string;
 }
 
 export function SearchableSelect({
@@ -103,6 +104,7 @@ export function SearchableSelect({
   contentAlign,
   contentAvoidCollisions,
   listClassName,
+  triggerAriaLabel,
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -177,7 +179,7 @@ export function SearchableSelect({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          aria-label={ariaLabel}
+          aria-label={ariaLabel ?? triggerAriaLabel}
           aria-describedby={ariaDescribedBy}
           aria-invalid={ariaInvalid}
           data-testid={testId}

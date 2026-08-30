@@ -23494,7 +23494,7 @@ export type GetAuditLogsData = {
         /**
          * Filter by action type (dotted name, e.g. agent.created)
          */
-        action?: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentExecution.created' | 'agentExecution.canceled' | 'agentExecution.updated' | 'agentExecution.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
+        action?: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentExecution.created' | 'agentExecution.canceled' | 'agentExecution.updated' | 'agentExecution.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'retrievalEvaluation.started' | 'retrievalEvaluation.cancelled' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
         /**
          * Filter by outcome (success, failure, or denied)
          */
@@ -23603,7 +23603,7 @@ export type GetAuditLogsResponses = {
             actorName: string | null;
             actorEmail: string | null;
             impersonatedBy: string | null;
-            action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentExecution.created' | 'agentExecution.canceled' | 'agentExecution.updated' | 'agentExecution.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
+            action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentExecution.created' | 'agentExecution.canceled' | 'agentExecution.updated' | 'agentExecution.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'retrievalEvaluation.started' | 'retrievalEvaluation.cancelled' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
             outcome: 'success' | 'failure' | 'denied';
             resourceType: string | null;
             resourceId: string | null;
@@ -23725,7 +23725,7 @@ export type GetAuditLogResponses = {
         actorName: string | null;
         actorEmail: string | null;
         impersonatedBy: string | null;
-        action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentExecution.created' | 'agentExecution.canceled' | 'agentExecution.updated' | 'agentExecution.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
+        action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentExecution.created' | 'agentExecution.canceled' | 'agentExecution.updated' | 'agentExecution.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'retrievalEvaluation.started' | 'retrievalEvaluation.cancelled' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
         outcome: 'success' | 'failure' | 'denied';
         resourceType: string | null;
         resourceId: string | null;
@@ -35042,6 +35042,7 @@ export type GetConfigResponses = {
             agentHooksEnabled: boolean;
             chatopsTelegramEnabled: boolean;
             kbAutoSyncPermissionsEnabled: boolean;
+            knowledgeEvaluationBetaEnabled: boolean;
             kbMfilesConnectorEnabled: boolean;
             kbMfilesOauthEnabled: boolean;
             kbBm25DefaultK1: number;
@@ -65608,6 +65609,7 @@ export type GetLlmModelsData = {
         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
         apiKeyId?: string;
         isEmbedding?: string;
+        purpose?: 'chat' | 'knowledge-reranker';
     };
     url: '/api/llm-models/available';
 };
@@ -84558,6 +84560,1570 @@ export type PinProjectResponses = {
 };
 
 export type PinProjectResponse = PinProjectResponses[keyof PinProjectResponses];
+
+export type GetRetrievalEvaluationCapabilitiesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/organization/knowledge-settings/retrieval-evaluations/capabilities';
+};
+
+export type GetRetrievalEvaluationCapabilitiesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetRetrievalEvaluationCapabilitiesError = GetRetrievalEvaluationCapabilitiesErrors[keyof GetRetrievalEvaluationCapabilitiesErrors];
+
+export type GetRetrievalEvaluationCapabilitiesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        corpusDigest: string;
+        goldenDigest: string;
+        totalQueries: number;
+        applicableQueries: number;
+        capabilities: {
+            [key: string]: {
+                status: 'active' | 'disabled' | 'unavailable';
+                detail: string;
+            };
+        };
+        components: Array<{
+            id: 'chunking' | 'text-embedding' | 'image-embedding' | 'keyword-ranking' | 'hybrid-retrieval' | 'reranking' | 'query-expansion' | 'contextual-retrieval' | 'context-expansion' | 'ocr';
+            label: string;
+            description: string;
+            mode: 'offline' | 'online';
+            status: 'active' | 'disabled' | 'unavailable';
+            detail: string;
+            currentFingerprint: string;
+            selectedByDefault: boolean;
+            changedSinceLastEvaluation: boolean;
+            lastEvaluatedAt: string | null;
+            lastRunId: string | null;
+            scenarioIds: Array<string>;
+        }>;
+        scenarios: Array<{
+            id: string;
+            query: string;
+            expected: Array<string>;
+            component: 'chunking' | 'text-embedding' | 'image-embedding' | 'keyword-ranking' | 'hybrid-retrieval' | 'reranking' | 'query-expansion' | 'contextual-retrieval' | 'context-expansion' | 'ocr';
+            tags: Array<string>;
+            category: string;
+            language: string;
+            difficulty: 'easy' | 'medium' | 'hard';
+            answerability: 'answerable' | 'no-answer';
+            gateMode: 'pass-fail' | 'metric-only';
+            forbidden: Array<string>;
+            judgments: Array<{
+                doc: string;
+                relevance: number;
+            }>;
+            requires: Array<'text-embedding' | 'image-embedding' | 'ocr' | 'hybrid-search' | 'bm25' | 'reranker' | 'cross-encoder-reranker' | 'llm-reranker' | 'query-expansion' | 'contextual-retrieval' | 'context-expansion'>;
+            expectAtK: number;
+            applicable: boolean;
+            reasons: Array<string>;
+        }>;
+    };
+};
+
+export type GetRetrievalEvaluationCapabilitiesResponse = GetRetrievalEvaluationCapabilitiesResponses[keyof GetRetrievalEvaluationCapabilitiesResponses];
+
+export type PreviewRetrievalEvaluationCapabilitiesData = {
+    body: {
+        embedding?: {
+            chatApiKeyId: string;
+            model: string;
+        };
+        reranker?: {
+            chatApiKeyId: string;
+            model: string;
+        };
+        ocr?: {
+            chatApiKeyId: string;
+            model: string;
+        };
+        bm25K1?: number;
+        bm25B?: number;
+        contextualRetrievalMode?: ContextualRetrievalModeInput;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/organization/knowledge-settings/retrieval-evaluations/capabilities/preview';
+};
+
+export type PreviewRetrievalEvaluationCapabilitiesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type PreviewRetrievalEvaluationCapabilitiesError = PreviewRetrievalEvaluationCapabilitiesErrors[keyof PreviewRetrievalEvaluationCapabilitiesErrors];
+
+export type PreviewRetrievalEvaluationCapabilitiesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        corpusDigest: string;
+        goldenDigest: string;
+        totalQueries: number;
+        applicableQueries: number;
+        capabilities: {
+            [key: string]: {
+                status: 'active' | 'disabled' | 'unavailable';
+                detail: string;
+            };
+        };
+        components: Array<{
+            id: 'chunking' | 'text-embedding' | 'image-embedding' | 'keyword-ranking' | 'hybrid-retrieval' | 'reranking' | 'query-expansion' | 'contextual-retrieval' | 'context-expansion' | 'ocr';
+            label: string;
+            description: string;
+            mode: 'offline' | 'online';
+            status: 'active' | 'disabled' | 'unavailable';
+            detail: string;
+            currentFingerprint: string;
+            selectedByDefault: boolean;
+            changedSinceLastEvaluation: boolean;
+            lastEvaluatedAt: string | null;
+            lastRunId: string | null;
+            scenarioIds: Array<string>;
+        }>;
+        scenarios: Array<{
+            id: string;
+            query: string;
+            expected: Array<string>;
+            component: 'chunking' | 'text-embedding' | 'image-embedding' | 'keyword-ranking' | 'hybrid-retrieval' | 'reranking' | 'query-expansion' | 'contextual-retrieval' | 'context-expansion' | 'ocr';
+            tags: Array<string>;
+            category: string;
+            language: string;
+            difficulty: 'easy' | 'medium' | 'hard';
+            answerability: 'answerable' | 'no-answer';
+            gateMode: 'pass-fail' | 'metric-only';
+            forbidden: Array<string>;
+            judgments: Array<{
+                doc: string;
+                relevance: number;
+            }>;
+            requires: Array<'text-embedding' | 'image-embedding' | 'ocr' | 'hybrid-search' | 'bm25' | 'reranker' | 'cross-encoder-reranker' | 'llm-reranker' | 'query-expansion' | 'contextual-retrieval' | 'context-expansion'>;
+            expectAtK: number;
+            applicable: boolean;
+            reasons: Array<string>;
+        }>;
+    };
+};
+
+export type PreviewRetrievalEvaluationCapabilitiesResponse = PreviewRetrievalEvaluationCapabilitiesResponses[keyof PreviewRetrievalEvaluationCapabilitiesResponses];
+
+export type ListRetrievalEvaluationRunsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        limit?: number;
+    };
+    url: '/api/organization/knowledge-settings/retrieval-evaluations';
+};
+
+export type ListRetrievalEvaluationRunsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ListRetrievalEvaluationRunsError = ListRetrievalEvaluationRunsErrors[keyof ListRetrievalEvaluationRunsErrors];
+
+export type ListRetrievalEvaluationRunsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        organizationId: string;
+        requestedByUserId: string | null;
+        taskId: string | null;
+        name: string;
+        queryLimit: number;
+        selectedComponents: Array<'chunking' | 'text-embedding' | 'image-embedding' | 'keyword-ranking' | 'hybrid-retrieval' | 'reranking' | 'query-expansion' | 'contextual-retrieval' | 'context-expansion' | 'ocr'>;
+        settingsOverrides: {
+            embedding?: {
+                chatApiKeyId: string;
+                model: string;
+            };
+            reranker?: {
+                chatApiKeyId: string;
+                model: string;
+            };
+            ocr?: {
+                chatApiKeyId: string;
+                model: string;
+            };
+            bm25K1?: number;
+            bm25B?: number;
+            contextualRetrievalMode?: ContextualRetrievalMode;
+        };
+        componentFingerprints: {
+            [key: string]: string;
+        };
+        status: 'queued' | 'running' | 'cancel_requested' | 'cancelled' | 'completed' | 'degraded' | 'blocked' | 'failed';
+        stage: 'queued' | 'preparing' | 'ingesting' | 'ranking' | 'querying' | 'cleanup' | 'completed';
+        progressCurrent: number;
+        progressTotal: number;
+        progressMessage: string | null;
+        fixtureKnowledgeBaseId: string | null;
+        fixtureConnectorId: string | null;
+        bm25Refreshed: boolean;
+        error: string | null;
+        cancellationRequestedAt: string | null;
+        startedAt: string | null;
+        completedAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type ListRetrievalEvaluationRunsResponse = ListRetrievalEvaluationRunsResponses[keyof ListRetrievalEvaluationRunsResponses];
+
+export type StartRetrievalEvaluationData = {
+    body: {
+        name?: string;
+        queryLimit?: number;
+        components?: Array<'chunking' | 'text-embedding' | 'image-embedding' | 'keyword-ranking' | 'hybrid-retrieval' | 'reranking' | 'query-expansion' | 'contextual-retrieval' | 'context-expansion' | 'ocr'>;
+        settingsOverrides?: {
+            embedding?: {
+                chatApiKeyId: string;
+                model: string;
+            };
+            reranker?: {
+                chatApiKeyId: string;
+                model: string;
+            };
+            ocr?: {
+                chatApiKeyId: string;
+                model: string;
+            };
+            bm25K1?: number;
+            bm25B?: number;
+            contextualRetrievalMode?: ContextualRetrievalModeInput;
+        };
+    };
+    path?: never;
+    query?: never;
+    url: '/api/organization/knowledge-settings/retrieval-evaluations';
+};
+
+export type StartRetrievalEvaluationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type StartRetrievalEvaluationError = StartRetrievalEvaluationErrors[keyof StartRetrievalEvaluationErrors];
+
+export type StartRetrievalEvaluationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        requestedByUserId: string | null;
+        taskId: string | null;
+        name: string;
+        queryLimit: number;
+        selectedComponents: Array<'chunking' | 'text-embedding' | 'image-embedding' | 'keyword-ranking' | 'hybrid-retrieval' | 'reranking' | 'query-expansion' | 'contextual-retrieval' | 'context-expansion' | 'ocr'>;
+        settingsOverrides: {
+            embedding?: {
+                chatApiKeyId: string;
+                model: string;
+            };
+            reranker?: {
+                chatApiKeyId: string;
+                model: string;
+            };
+            ocr?: {
+                chatApiKeyId: string;
+                model: string;
+            };
+            bm25K1?: number;
+            bm25B?: number;
+            contextualRetrievalMode?: ContextualRetrievalMode;
+        };
+        componentFingerprints: {
+            [key: string]: string;
+        };
+        status: 'queued' | 'running' | 'cancel_requested' | 'cancelled' | 'completed' | 'degraded' | 'blocked' | 'failed';
+        stage: 'queued' | 'preparing' | 'ingesting' | 'ranking' | 'querying' | 'cleanup' | 'completed';
+        progressCurrent: number;
+        progressTotal: number;
+        progressMessage: string | null;
+        fixtureKnowledgeBaseId: string | null;
+        fixtureConnectorId: string | null;
+        bm25Refreshed: boolean;
+        artifact: {
+            schemaVersion: 2;
+            status: 'completed' | 'degraded' | 'blocked';
+            run: {
+                name: string;
+                organizationId: string;
+                queryLimit: number;
+            };
+            fingerprint: {
+                platformVersion: string;
+                gitSha: string | null;
+                gitDirty: boolean | null;
+                corpusDigest: string;
+                goldenDigest: string;
+                effectiveConfig: {
+                    [key: string]: string | number | boolean;
+                };
+                embedding: {
+                    provider: string;
+                    model: string;
+                    dimensions: number;
+                    inputModalities: Array<string> | null;
+                } | null;
+                reranker: {
+                    provider: string;
+                    model: string;
+                    kind: 'llm' | 'native-rerank';
+                } | null;
+                ocr: {
+                    provider: string;
+                    model: string;
+                } | null;
+            };
+            capabilities: {
+                [key: string]: {
+                    status: 'active' | 'disabled' | 'unavailable';
+                    detail: string;
+                };
+            };
+            ingest: {
+                documents: number;
+                chunks: number;
+                textDocuments: number;
+                imageDocuments: number;
+                ocrDocuments: number;
+                contextualizedChunks: number;
+                wallMs: number;
+            };
+            queries: Array<{
+                id: string;
+                component?: 'chunking' | 'text-embedding' | 'image-embedding' | 'keyword-ranking' | 'hybrid-retrieval' | 'reranking' | 'query-expansion' | 'contextual-retrieval' | 'context-expansion' | 'ocr';
+                query: string;
+                tags: Array<string>;
+                category?: string;
+                language?: string;
+                difficulty?: 'easy' | 'medium' | 'hard';
+                answerability?: 'answerable' | 'no-answer';
+                gateMode?: 'pass-fail' | 'metric-only';
+                requires: Array<'text-embedding' | 'image-embedding' | 'ocr' | 'hybrid-search' | 'bm25' | 'reranker' | 'cross-encoder-reranker' | 'llm-reranker' | 'query-expansion' | 'contextual-retrieval' | 'context-expansion'>;
+                expectAtK: number;
+                expected: Array<string>;
+                forbidden?: Array<string>;
+                returned: Array<{
+                    doc: string;
+                    ref: string;
+                }>;
+                firstRank: {
+                    [key: string]: number | null;
+                };
+                latencyMs: number;
+                metrics: {
+                    hit: {
+                        [key: string]: number;
+                    };
+                    recall: {
+                        [key: string]: number;
+                    };
+                    reciprocalRank: number;
+                    evidence: {
+                        [key: string]: number | null;
+                    };
+                    precision?: {
+                        [key: string]: number;
+                    };
+                    ndcg?: {
+                        [key: string]: number | null;
+                    };
+                    averagePrecision?: {
+                        [key: string]: number | null;
+                    };
+                    negativeHit?: {
+                        [key: string]: number | null;
+                    };
+                    firstForbiddenRank?: number | null;
+                };
+                passed: boolean;
+                stageFailures: Array<string>;
+                stages: {
+                    expandedQueryCount: number;
+                    expandedQueryTypes: Array<'semantic' | 'keyword'>;
+                    keywordRanker: 'disabled' | 'ts_rank' | 'bm25';
+                    reranker: {
+                        status: 'disabled' | 'unavailable' | 'succeeded' | 'failed';
+                        kind: 'llm' | 'native-rerank';
+                        provider: string | null;
+                        model: string | null;
+                        changedOrder: boolean;
+                        filteredCount: number;
+                        error: string | null;
+                    };
+                    contextExpanded: boolean;
+                    rankingScores?: Array<{
+                        doc: string;
+                        ref: string;
+                        score: number;
+                    }>;
+                };
+            }>;
+            skippedQueries: Array<{
+                id: string;
+                component?: 'chunking' | 'text-embedding' | 'image-embedding' | 'keyword-ranking' | 'hybrid-retrieval' | 'reranking' | 'query-expansion' | 'contextual-retrieval' | 'context-expansion' | 'ocr';
+                query: string;
+                requires: Array<'text-embedding' | 'image-embedding' | 'ocr' | 'hybrid-search' | 'bm25' | 'reranker' | 'cross-encoder-reranker' | 'llm-reranker' | 'query-expansion' | 'contextual-retrieval' | 'context-expansion'>;
+                reasons: Array<string>;
+            }>;
+            aggregates: {
+                [key: string]: number;
+            };
+            byTag: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            bySegment?: {
+                category: {
+                    [key: string]: {
+                        [key: string]: number;
+                    };
+                };
+                language: {
+                    [key: string]: {
+                        [key: string]: number;
+                    };
+                };
+                difficulty: {
+                    [key: string]: {
+                        [key: string]: number;
+                    };
+                };
+            };
+            uncertainty?: {
+                method: 'deterministic-bootstrap';
+                confidenceLevel: 0.95;
+                samples: number;
+                seed: string;
+                metrics: {
+                    [key: string]: {
+                        estimate: number;
+                        lower: number;
+                        upper: number;
+                        n: number;
+                    };
+                };
+            };
+            cleanup: {
+                kept: boolean;
+                knowledgeBaseId: string | null;
+                connectorId: string | null;
+                completed: boolean;
+            };
+            selection?: {
+                components: Array<'chunking' | 'text-embedding' | 'image-embedding' | 'keyword-ranking' | 'hybrid-retrieval' | 'reranking' | 'query-expansion' | 'contextual-retrieval' | 'context-expansion' | 'ocr'>;
+                componentFingerprints: {
+                    [key: string]: string;
+                };
+                componentResults: Array<{
+                    component: 'chunking' | 'text-embedding' | 'image-embedding' | 'keyword-ranking' | 'hybrid-retrieval' | 'reranking' | 'query-expansion' | 'contextual-retrieval' | 'context-expansion' | 'ocr';
+                    mode: 'offline' | 'online';
+                    status: 'passed' | 'failed' | 'skipped';
+                    detail: string;
+                }>;
+            };
+            warnings: Array<string>;
+            errors: Array<string>;
+        } | null;
+        error: string | null;
+        cancellationRequestedAt: string | null;
+        startedAt: string | null;
+        completedAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type StartRetrievalEvaluationResponse = StartRetrievalEvaluationResponses[keyof StartRetrievalEvaluationResponses];
+
+export type GetRetrievalEvaluationRunData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/organization/knowledge-settings/retrieval-evaluations/{id}';
+};
+
+export type GetRetrievalEvaluationRunErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetRetrievalEvaluationRunError = GetRetrievalEvaluationRunErrors[keyof GetRetrievalEvaluationRunErrors];
+
+export type GetRetrievalEvaluationRunResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        requestedByUserId: string | null;
+        taskId: string | null;
+        name: string;
+        queryLimit: number;
+        selectedComponents: Array<'chunking' | 'text-embedding' | 'image-embedding' | 'keyword-ranking' | 'hybrid-retrieval' | 'reranking' | 'query-expansion' | 'contextual-retrieval' | 'context-expansion' | 'ocr'>;
+        settingsOverrides: {
+            embedding?: {
+                chatApiKeyId: string;
+                model: string;
+            };
+            reranker?: {
+                chatApiKeyId: string;
+                model: string;
+            };
+            ocr?: {
+                chatApiKeyId: string;
+                model: string;
+            };
+            bm25K1?: number;
+            bm25B?: number;
+            contextualRetrievalMode?: ContextualRetrievalMode;
+        };
+        componentFingerprints: {
+            [key: string]: string;
+        };
+        status: 'queued' | 'running' | 'cancel_requested' | 'cancelled' | 'completed' | 'degraded' | 'blocked' | 'failed';
+        stage: 'queued' | 'preparing' | 'ingesting' | 'ranking' | 'querying' | 'cleanup' | 'completed';
+        progressCurrent: number;
+        progressTotal: number;
+        progressMessage: string | null;
+        fixtureKnowledgeBaseId: string | null;
+        fixtureConnectorId: string | null;
+        bm25Refreshed: boolean;
+        artifact: {
+            schemaVersion: 2;
+            status: 'completed' | 'degraded' | 'blocked';
+            run: {
+                name: string;
+                organizationId: string;
+                queryLimit: number;
+            };
+            fingerprint: {
+                platformVersion: string;
+                gitSha: string | null;
+                gitDirty: boolean | null;
+                corpusDigest: string;
+                goldenDigest: string;
+                effectiveConfig: {
+                    [key: string]: string | number | boolean;
+                };
+                embedding: {
+                    provider: string;
+                    model: string;
+                    dimensions: number;
+                    inputModalities: Array<string> | null;
+                } | null;
+                reranker: {
+                    provider: string;
+                    model: string;
+                    kind: 'llm' | 'native-rerank';
+                } | null;
+                ocr: {
+                    provider: string;
+                    model: string;
+                } | null;
+            };
+            capabilities: {
+                [key: string]: {
+                    status: 'active' | 'disabled' | 'unavailable';
+                    detail: string;
+                };
+            };
+            ingest: {
+                documents: number;
+                chunks: number;
+                textDocuments: number;
+                imageDocuments: number;
+                ocrDocuments: number;
+                contextualizedChunks: number;
+                wallMs: number;
+            };
+            queries: Array<{
+                id: string;
+                component?: 'chunking' | 'text-embedding' | 'image-embedding' | 'keyword-ranking' | 'hybrid-retrieval' | 'reranking' | 'query-expansion' | 'contextual-retrieval' | 'context-expansion' | 'ocr';
+                query: string;
+                tags: Array<string>;
+                category?: string;
+                language?: string;
+                difficulty?: 'easy' | 'medium' | 'hard';
+                answerability?: 'answerable' | 'no-answer';
+                gateMode?: 'pass-fail' | 'metric-only';
+                requires: Array<'text-embedding' | 'image-embedding' | 'ocr' | 'hybrid-search' | 'bm25' | 'reranker' | 'cross-encoder-reranker' | 'llm-reranker' | 'query-expansion' | 'contextual-retrieval' | 'context-expansion'>;
+                expectAtK: number;
+                expected: Array<string>;
+                forbidden?: Array<string>;
+                returned: Array<{
+                    doc: string;
+                    ref: string;
+                }>;
+                firstRank: {
+                    [key: string]: number | null;
+                };
+                latencyMs: number;
+                metrics: {
+                    hit: {
+                        [key: string]: number;
+                    };
+                    recall: {
+                        [key: string]: number;
+                    };
+                    reciprocalRank: number;
+                    evidence: {
+                        [key: string]: number | null;
+                    };
+                    precision?: {
+                        [key: string]: number;
+                    };
+                    ndcg?: {
+                        [key: string]: number | null;
+                    };
+                    averagePrecision?: {
+                        [key: string]: number | null;
+                    };
+                    negativeHit?: {
+                        [key: string]: number | null;
+                    };
+                    firstForbiddenRank?: number | null;
+                };
+                passed: boolean;
+                stageFailures: Array<string>;
+                stages: {
+                    expandedQueryCount: number;
+                    expandedQueryTypes: Array<'semantic' | 'keyword'>;
+                    keywordRanker: 'disabled' | 'ts_rank' | 'bm25';
+                    reranker: {
+                        status: 'disabled' | 'unavailable' | 'succeeded' | 'failed';
+                        kind: 'llm' | 'native-rerank';
+                        provider: string | null;
+                        model: string | null;
+                        changedOrder: boolean;
+                        filteredCount: number;
+                        error: string | null;
+                    };
+                    contextExpanded: boolean;
+                    rankingScores?: Array<{
+                        doc: string;
+                        ref: string;
+                        score: number;
+                    }>;
+                };
+            }>;
+            skippedQueries: Array<{
+                id: string;
+                component?: 'chunking' | 'text-embedding' | 'image-embedding' | 'keyword-ranking' | 'hybrid-retrieval' | 'reranking' | 'query-expansion' | 'contextual-retrieval' | 'context-expansion' | 'ocr';
+                query: string;
+                requires: Array<'text-embedding' | 'image-embedding' | 'ocr' | 'hybrid-search' | 'bm25' | 'reranker' | 'cross-encoder-reranker' | 'llm-reranker' | 'query-expansion' | 'contextual-retrieval' | 'context-expansion'>;
+                reasons: Array<string>;
+            }>;
+            aggregates: {
+                [key: string]: number;
+            };
+            byTag: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            bySegment?: {
+                category: {
+                    [key: string]: {
+                        [key: string]: number;
+                    };
+                };
+                language: {
+                    [key: string]: {
+                        [key: string]: number;
+                    };
+                };
+                difficulty: {
+                    [key: string]: {
+                        [key: string]: number;
+                    };
+                };
+            };
+            uncertainty?: {
+                method: 'deterministic-bootstrap';
+                confidenceLevel: 0.95;
+                samples: number;
+                seed: string;
+                metrics: {
+                    [key: string]: {
+                        estimate: number;
+                        lower: number;
+                        upper: number;
+                        n: number;
+                    };
+                };
+            };
+            cleanup: {
+                kept: boolean;
+                knowledgeBaseId: string | null;
+                connectorId: string | null;
+                completed: boolean;
+            };
+            selection?: {
+                components: Array<'chunking' | 'text-embedding' | 'image-embedding' | 'keyword-ranking' | 'hybrid-retrieval' | 'reranking' | 'query-expansion' | 'contextual-retrieval' | 'context-expansion' | 'ocr'>;
+                componentFingerprints: {
+                    [key: string]: string;
+                };
+                componentResults: Array<{
+                    component: 'chunking' | 'text-embedding' | 'image-embedding' | 'keyword-ranking' | 'hybrid-retrieval' | 'reranking' | 'query-expansion' | 'contextual-retrieval' | 'context-expansion' | 'ocr';
+                    mode: 'offline' | 'online';
+                    status: 'passed' | 'failed' | 'skipped';
+                    detail: string;
+                }>;
+            };
+            warnings: Array<string>;
+            errors: Array<string>;
+        } | null;
+        error: string | null;
+        cancellationRequestedAt: string | null;
+        startedAt: string | null;
+        completedAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetRetrievalEvaluationRunResponse = GetRetrievalEvaluationRunResponses[keyof GetRetrievalEvaluationRunResponses];
+
+export type CancelRetrievalEvaluationData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/organization/knowledge-settings/retrieval-evaluations/{id}/cancel';
+};
+
+export type CancelRetrievalEvaluationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CancelRetrievalEvaluationError = CancelRetrievalEvaluationErrors[keyof CancelRetrievalEvaluationErrors];
+
+export type CancelRetrievalEvaluationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        requestedByUserId: string | null;
+        taskId: string | null;
+        name: string;
+        queryLimit: number;
+        selectedComponents: Array<'chunking' | 'text-embedding' | 'image-embedding' | 'keyword-ranking' | 'hybrid-retrieval' | 'reranking' | 'query-expansion' | 'contextual-retrieval' | 'context-expansion' | 'ocr'>;
+        settingsOverrides: {
+            embedding?: {
+                chatApiKeyId: string;
+                model: string;
+            };
+            reranker?: {
+                chatApiKeyId: string;
+                model: string;
+            };
+            ocr?: {
+                chatApiKeyId: string;
+                model: string;
+            };
+            bm25K1?: number;
+            bm25B?: number;
+            contextualRetrievalMode?: ContextualRetrievalMode;
+        };
+        componentFingerprints: {
+            [key: string]: string;
+        };
+        status: 'queued' | 'running' | 'cancel_requested' | 'cancelled' | 'completed' | 'degraded' | 'blocked' | 'failed';
+        stage: 'queued' | 'preparing' | 'ingesting' | 'ranking' | 'querying' | 'cleanup' | 'completed';
+        progressCurrent: number;
+        progressTotal: number;
+        progressMessage: string | null;
+        fixtureKnowledgeBaseId: string | null;
+        fixtureConnectorId: string | null;
+        bm25Refreshed: boolean;
+        artifact: {
+            schemaVersion: 2;
+            status: 'completed' | 'degraded' | 'blocked';
+            run: {
+                name: string;
+                organizationId: string;
+                queryLimit: number;
+            };
+            fingerprint: {
+                platformVersion: string;
+                gitSha: string | null;
+                gitDirty: boolean | null;
+                corpusDigest: string;
+                goldenDigest: string;
+                effectiveConfig: {
+                    [key: string]: string | number | boolean;
+                };
+                embedding: {
+                    provider: string;
+                    model: string;
+                    dimensions: number;
+                    inputModalities: Array<string> | null;
+                } | null;
+                reranker: {
+                    provider: string;
+                    model: string;
+                    kind: 'llm' | 'native-rerank';
+                } | null;
+                ocr: {
+                    provider: string;
+                    model: string;
+                } | null;
+            };
+            capabilities: {
+                [key: string]: {
+                    status: 'active' | 'disabled' | 'unavailable';
+                    detail: string;
+                };
+            };
+            ingest: {
+                documents: number;
+                chunks: number;
+                textDocuments: number;
+                imageDocuments: number;
+                ocrDocuments: number;
+                contextualizedChunks: number;
+                wallMs: number;
+            };
+            queries: Array<{
+                id: string;
+                component?: 'chunking' | 'text-embedding' | 'image-embedding' | 'keyword-ranking' | 'hybrid-retrieval' | 'reranking' | 'query-expansion' | 'contextual-retrieval' | 'context-expansion' | 'ocr';
+                query: string;
+                tags: Array<string>;
+                category?: string;
+                language?: string;
+                difficulty?: 'easy' | 'medium' | 'hard';
+                answerability?: 'answerable' | 'no-answer';
+                gateMode?: 'pass-fail' | 'metric-only';
+                requires: Array<'text-embedding' | 'image-embedding' | 'ocr' | 'hybrid-search' | 'bm25' | 'reranker' | 'cross-encoder-reranker' | 'llm-reranker' | 'query-expansion' | 'contextual-retrieval' | 'context-expansion'>;
+                expectAtK: number;
+                expected: Array<string>;
+                forbidden?: Array<string>;
+                returned: Array<{
+                    doc: string;
+                    ref: string;
+                }>;
+                firstRank: {
+                    [key: string]: number | null;
+                };
+                latencyMs: number;
+                metrics: {
+                    hit: {
+                        [key: string]: number;
+                    };
+                    recall: {
+                        [key: string]: number;
+                    };
+                    reciprocalRank: number;
+                    evidence: {
+                        [key: string]: number | null;
+                    };
+                    precision?: {
+                        [key: string]: number;
+                    };
+                    ndcg?: {
+                        [key: string]: number | null;
+                    };
+                    averagePrecision?: {
+                        [key: string]: number | null;
+                    };
+                    negativeHit?: {
+                        [key: string]: number | null;
+                    };
+                    firstForbiddenRank?: number | null;
+                };
+                passed: boolean;
+                stageFailures: Array<string>;
+                stages: {
+                    expandedQueryCount: number;
+                    expandedQueryTypes: Array<'semantic' | 'keyword'>;
+                    keywordRanker: 'disabled' | 'ts_rank' | 'bm25';
+                    reranker: {
+                        status: 'disabled' | 'unavailable' | 'succeeded' | 'failed';
+                        kind: 'llm' | 'native-rerank';
+                        provider: string | null;
+                        model: string | null;
+                        changedOrder: boolean;
+                        filteredCount: number;
+                        error: string | null;
+                    };
+                    contextExpanded: boolean;
+                    rankingScores?: Array<{
+                        doc: string;
+                        ref: string;
+                        score: number;
+                    }>;
+                };
+            }>;
+            skippedQueries: Array<{
+                id: string;
+                component?: 'chunking' | 'text-embedding' | 'image-embedding' | 'keyword-ranking' | 'hybrid-retrieval' | 'reranking' | 'query-expansion' | 'contextual-retrieval' | 'context-expansion' | 'ocr';
+                query: string;
+                requires: Array<'text-embedding' | 'image-embedding' | 'ocr' | 'hybrid-search' | 'bm25' | 'reranker' | 'cross-encoder-reranker' | 'llm-reranker' | 'query-expansion' | 'contextual-retrieval' | 'context-expansion'>;
+                reasons: Array<string>;
+            }>;
+            aggregates: {
+                [key: string]: number;
+            };
+            byTag: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            bySegment?: {
+                category: {
+                    [key: string]: {
+                        [key: string]: number;
+                    };
+                };
+                language: {
+                    [key: string]: {
+                        [key: string]: number;
+                    };
+                };
+                difficulty: {
+                    [key: string]: {
+                        [key: string]: number;
+                    };
+                };
+            };
+            uncertainty?: {
+                method: 'deterministic-bootstrap';
+                confidenceLevel: 0.95;
+                samples: number;
+                seed: string;
+                metrics: {
+                    [key: string]: {
+                        estimate: number;
+                        lower: number;
+                        upper: number;
+                        n: number;
+                    };
+                };
+            };
+            cleanup: {
+                kept: boolean;
+                knowledgeBaseId: string | null;
+                connectorId: string | null;
+                completed: boolean;
+            };
+            selection?: {
+                components: Array<'chunking' | 'text-embedding' | 'image-embedding' | 'keyword-ranking' | 'hybrid-retrieval' | 'reranking' | 'query-expansion' | 'contextual-retrieval' | 'context-expansion' | 'ocr'>;
+                componentFingerprints: {
+                    [key: string]: string;
+                };
+                componentResults: Array<{
+                    component: 'chunking' | 'text-embedding' | 'image-embedding' | 'keyword-ranking' | 'hybrid-retrieval' | 'reranking' | 'query-expansion' | 'contextual-retrieval' | 'context-expansion' | 'ocr';
+                    mode: 'offline' | 'online';
+                    status: 'passed' | 'failed' | 'skipped';
+                    detail: string;
+                }>;
+            };
+            warnings: Array<string>;
+            errors: Array<string>;
+        } | null;
+        error: string | null;
+        cancellationRequestedAt: string | null;
+        startedAt: string | null;
+        completedAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CancelRetrievalEvaluationResponse = CancelRetrievalEvaluationResponses[keyof CancelRetrievalEvaluationResponses];
+
+export type CompareRetrievalEvaluationsData = {
+    body?: never;
+    path: {
+        id: string;
+        otherId: string;
+    };
+    query?: never;
+    url: '/api/organization/knowledge-settings/retrieval-evaluations/{id}/compare/{otherId}';
+};
+
+export type CompareRetrievalEvaluationsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CompareRetrievalEvaluationsError = CompareRetrievalEvaluationsErrors[keyof CompareRetrievalEvaluationsErrors];
+
+export type CompareRetrievalEvaluationsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        a: {
+            name: string;
+            warnings: Array<string>;
+            errors: Array<string>;
+        };
+        b: {
+            name: string;
+            warnings: Array<string>;
+            errors: Array<string>;
+        };
+        fingerprintMismatch: Array<string>;
+        fingerprintNotes: Array<string>;
+        configDiff: Array<{
+            key: string;
+            a: string;
+            b: string;
+        }>;
+        singleExpected: boolean;
+        queries: Array<{
+            id: string;
+            component?: 'chunking' | 'text-embedding' | 'image-embedding' | 'keyword-ranking' | 'hybrid-retrieval' | 'reranking' | 'query-expansion' | 'contextual-retrieval' | 'context-expansion' | 'ocr';
+            query: string;
+            tags: Array<string>;
+            expected: Array<string>;
+            gateMode?: 'pass-fail' | 'metric-only';
+            a: {
+                bestRank: number | null;
+                expectedScore: number | null;
+                scoreMargin: number | null;
+                returned: number;
+                hit: {
+                    [key: string]: number;
+                };
+                recall: {
+                    [key: string]: number;
+                };
+                reciprocalRank: number;
+                evidence: {
+                    [key: string]: number | null;
+                };
+                precision?: {
+                    [key: string]: number;
+                };
+                ndcg?: {
+                    [key: string]: number | null;
+                };
+                averagePrecision?: {
+                    [key: string]: number | null;
+                };
+                negativeHit?: {
+                    [key: string]: number | null;
+                };
+            };
+            b: {
+                bestRank: number | null;
+                expectedScore: number | null;
+                scoreMargin: number | null;
+                returned: number;
+                hit: {
+                    [key: string]: number;
+                };
+                recall: {
+                    [key: string]: number;
+                };
+                reciprocalRank: number;
+                evidence: {
+                    [key: string]: number | null;
+                };
+                precision?: {
+                    [key: string]: number;
+                };
+                ndcg?: {
+                    [key: string]: number | null;
+                };
+                averagePrecision?: {
+                    [key: string]: number | null;
+                };
+                negativeHit?: {
+                    [key: string]: number | null;
+                };
+            };
+            direction: {
+                [key: string]: 'improved' | 'regressed' | 'same';
+            };
+            returnedChanged: boolean;
+            changed: boolean;
+        }>;
+        tallies: {
+            [key: string]: {
+                wins: number;
+                losses: number;
+                ties: number;
+            };
+        };
+        aggregates: {
+            [key: string]: {
+                a: number;
+                b: number;
+                delta: number;
+            };
+        };
+        uncertainty: {
+            [key: string]: {
+                estimate: number;
+                lower: number;
+                upper: number;
+                probabilityImproved: number;
+                n: number;
+            };
+        };
+        aggregateScope: 'paired-queries';
+        pairedQueryCount: number;
+        components: {
+            a: Array<'chunking' | 'text-embedding' | 'image-embedding' | 'keyword-ranking' | 'hybrid-retrieval' | 'reranking' | 'query-expansion' | 'contextual-retrieval' | 'context-expansion' | 'ocr'>;
+            b: Array<'chunking' | 'text-embedding' | 'image-embedding' | 'keyword-ranking' | 'hybrid-retrieval' | 'reranking' | 'query-expansion' | 'contextual-retrieval' | 'context-expansion' | 'ocr'>;
+            paired: Array<'chunking' | 'text-embedding' | 'image-embedding' | 'keyword-ranking' | 'hybrid-retrieval' | 'reranking' | 'query-expansion' | 'contextual-retrieval' | 'context-expansion' | 'ocr'>;
+            onlyA: Array<'chunking' | 'text-embedding' | 'image-embedding' | 'keyword-ranking' | 'hybrid-retrieval' | 'reranking' | 'query-expansion' | 'contextual-retrieval' | 'context-expansion' | 'ocr'>;
+            onlyB: Array<'chunking' | 'text-embedding' | 'image-embedding' | 'keyword-ranking' | 'hybrid-retrieval' | 'reranking' | 'query-expansion' | 'contextual-retrieval' | 'context-expansion' | 'ocr'>;
+        };
+        componentResults: Array<{
+            component: 'chunking' | 'text-embedding' | 'image-embedding' | 'keyword-ranking' | 'hybrid-retrieval' | 'reranking' | 'query-expansion' | 'contextual-retrieval' | 'context-expansion' | 'ocr';
+            a: {
+                status: 'passed' | 'failed' | 'skipped';
+                detail: string;
+            } | null;
+            b: {
+                status: 'passed' | 'failed' | 'skipped';
+                detail: string;
+            } | null;
+            changed: boolean;
+        }>;
+        unpaired: {
+            onlyA: Array<string>;
+            onlyB: Array<string>;
+        };
+    };
+};
+
+export type CompareRetrievalEvaluationsResponse = CompareRetrievalEvaluationsResponses[keyof CompareRetrievalEvaluationsResponses];
 
 export type GetAgentBackgroundExecutionPreflightData = {
     body?: never;

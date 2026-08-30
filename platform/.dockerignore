@@ -18,6 +18,7 @@ archestra-rs/sandbox-rs/index.js
 
 # Development
 .tilt
+.env
 .env.local
 .env.*.local
 

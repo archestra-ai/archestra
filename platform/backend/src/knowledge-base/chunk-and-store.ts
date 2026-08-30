@@ -1,9 +1,13 @@
-import type { TextSearchLanguage } from "@archestra/shared";
+import type {
+  ContextualRetrievalMode,
+  TextSearchLanguage,
+} from "@archestra/shared";
 import type pino from "pino";
 import * as metrics from "@/observability/metrics";
 import type { AclEntry } from "@/types";
 import { chunkDocument } from "./chunker";
 import { buildContextualHeaders } from "./contextual-retrieval";
+import type { RerankerConfig } from "./kb-llm-client";
 import { stitchChunkContents } from "./parent-passage";
 import { knowledgeRetrievalBackend } from "./retrieval-backends/registry";
 
@@ -31,6 +35,12 @@ export async function chunkAndStoreDocument(params: {
   ftsLanguage: TextSearchLanguage;
   acl: AclEntry[];
   log: pino.Logger;
+  /** Internal evaluator isolation: do not invoke the optional LLM stage. */
+  skipContextualRetrieval?: boolean;
+  /** Internal evaluator override; ordinary ingestion resolves organization settings. */
+  rerankerConfig?: RerankerConfig;
+  /** Internal evaluator override; ordinary ingestion resolves organization settings. */
+  contextualRetrievalMode?: ContextualRetrievalMode;
 }): Promise<void> {
   const {
     documentId,
@@ -94,6 +104,9 @@ export async function chunkAndStoreDocument(params: {
     chunks: passages.texts,
     organizationId,
     connectorId,
+    skipContextualRetrieval: params.skipContextualRetrieval,
+    rerankerConfig: params.rerankerConfig,
+    contextualRetrievalMode: params.contextualRetrievalMode,
   });
 
   await knowledgeRetrievalBackend.insertChunks(

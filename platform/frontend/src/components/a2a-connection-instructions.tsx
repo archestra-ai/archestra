@@ -5,7 +5,7 @@ import {
   DocsPage,
   getDocsUrl,
 } from "@archestra/shared";
-import { ChevronDown, Mail, MessageCircle } from "lucide-react";
+import { ChevronDown, KeyRound, Mail, MessageCircle } from "lucide-react";
 import Link from "next/link";
 import { useId, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -587,20 +587,49 @@ curl -X POST "${a2aEndpoint}" \\
                 Authentication
               </h4>
               <p className="text-sm text-muted-foreground">
-                Use a platform token for A2A calls. OAuth access tokens and
-                configured identity-provider JWTs also work. LLM API keys do not
-                work.
+                A2A accepts platform tokens, OAuth access tokens, and configured
+                identity-provider JWTs. LLM API keys are not accepted.{" "}
+                <a
+                  href={`${getDocsUrl(DocsPage.PlatformAgentTriggersWebhookA2a)}#authentication`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="whitespace-nowrap underline hover:text-foreground"
+                >
+                  Learn more
+                </a>
               </p>
             </div>
-            <McpOauthManagement
-              resourceId={agent.id}
-              resourceKind="agent"
-              heading={{
-                title: "OAuth clients",
-                description:
-                  "Register applications that call this agent as themselves or on behalf of signed-in users.",
-              }}
-            />
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="space-y-1">
+                <h5 className="text-sm font-medium">Platform tokens</h5>
+                <p className="text-xs text-muted-foreground">
+                  Use a personal token for your own integration, or a team or
+                  organization token for shared access.
+                </p>
+              </div>
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="shrink-0 self-start"
+              >
+                <Link href={manageTokenLink.href}>
+                  <KeyRound className="size-4" />
+                  {manageTokenLink.label}
+                </Link>
+              </Button>
+            </div>
+            <div className="border-t pt-4">
+              <McpOauthManagement
+                resourceId={agent.id}
+                resourceKind="agent"
+                heading={{
+                  title: "OAuth clients",
+                  description:
+                    "Register applications that call this agent as themselves or on behalf of signed-in users.",
+                }}
+              />
+            </div>
           </section>
 
           <Collapsible className="border-t">
@@ -699,14 +728,6 @@ curl -X POST "${a2aEndpoint}" \\
                       ))}
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">
-                  <Link
-                    href={manageTokenLink.href}
-                    className="underline hover:text-foreground"
-                  >
-                    {manageTokenLink.label}
-                  </Link>
-                </p>
               </div>
 
               <div className="space-y-3 border-t pt-4">

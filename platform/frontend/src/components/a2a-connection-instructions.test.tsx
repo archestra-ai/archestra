@@ -1,4 +1,8 @@
-import type { archestraApiTypes } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  DocsPage,
+  getDocsUrl,
+} from "@archestra/shared";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -119,6 +123,23 @@ describe("A2AConnectionInstructions — detail layout", () => {
     expect(
       within(authenticationSection).getByText("OAuth clients"),
     ).toBeVisible();
+    expect(
+      within(authenticationSection).getByText("Platform tokens"),
+    ).toBeVisible();
+    expect(
+      within(authenticationSection).getByRole("link", {
+        name: "Manage your tokens",
+      }),
+    ).toHaveAttribute(
+      "href",
+      "/account/gateway-token?highlight=personal-token",
+    );
+    expect(
+      within(authenticationSection).getByRole("link", { name: "Learn more" }),
+    ).toHaveAttribute(
+      "href",
+      `${getDocsUrl(DocsPage.PlatformAgentTriggersWebhookA2a)}#authentication`,
+    );
 
     const channelsHeading = screen.getByRole("heading", {
       name: "Other ways to reach this agent",

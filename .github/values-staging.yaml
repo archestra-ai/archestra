@@ -75,6 +75,10 @@ archestra:
     # Background execution is intentionally independent of ARCHESTRA_BETA.
     # Enable it only on staging while the capability is being rolled out.
     ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ENABLED: "true"
+    # Execution Jobs run in separate pods, so the API's ordinary loopback URL
+    # cannot reach the platform from a runner. Use the in-cluster Service that
+    # the runner NetworkPolicy already permits on port 9000.
+    ARCHESTRA_AGENT_BACKGROUND_EXECUTION_PLATFORM_BASE_URL: "http://archestra-platform.archestra.svc.cluster.local:9000"
     # BETA: auto-sync-permissions connectors (off by default everywhere else).
     # Explicit so staging keeps the feature even if ARCHESTRA_BETA is ever
     # flipped off.

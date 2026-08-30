@@ -5,7 +5,6 @@ import {
   Circle,
   CircleAlert,
   CircleCheck,
-  KeyRound,
   Plug,
   RefreshCw,
   Trash2,
@@ -83,10 +82,7 @@ export function AgentBackgroundExecutionCard({
       className="scroll-mt-24 overflow-hidden rounded-lg border bg-card"
     >
       <div className="space-y-1 p-4">
-        <div className="flex items-center gap-2">
-          <KeyRound className="h-4 w-4" />
-          <h2 className="font-medium">Execution credentials</h2>
-        </div>
+        <h2 className="text-sm font-semibold">Execution credentials</h2>
         <p className="text-sm text-muted-foreground">
           Manage the credentials this Agent can use during background tasks.
         </p>

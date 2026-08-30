@@ -40,7 +40,7 @@ export function SystemPromptEditor({
   onChange: (value: string) => void;
   readOnly?: boolean;
   height?: string;
-  /** "section" uses bold h3 (matching section headings), "default" uses lighter text */
+  /** "section" uses an h3 matching card section headings; "default" uses lighter text */
   variant?: "default" | "section";
   /** Extra element rendered in the header next to the full-screen button */
   headerExtra?: React.ReactNode;
@@ -89,11 +89,19 @@ export function SystemPromptEditor({
       <div className="flex items-start justify-between gap-3">
         <div>
           {variant === "section" ? (
-            <h3 className="text-base font-semibold">{title}</h3>
+            <h3 className="text-sm font-semibold">{title}</h3>
           ) : (
             <p className="text-sm font-medium">{title}</p>
           )}
-          <p className="text-xs text-muted-foreground">{description}</p>
+          <p
+            className={
+              variant === "section"
+                ? "text-sm text-muted-foreground"
+                : "text-xs text-muted-foreground"
+            }
+          >
+            {description}
+          </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {headerExtra}

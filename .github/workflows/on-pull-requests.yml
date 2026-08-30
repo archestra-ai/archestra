@@ -655,7 +655,7 @@ jobs:
       # platform-specific and the remote cache is shared with dev machines),
       # so every shard really compiles the three Rust crates: measured at
       # 2m30s-3m22s per shard on a cold 4vcpu runner. A warm cargo target
-      # dir turns that into an incremental no-op. All four shards restore
+      # dir turns that into an incremental no-op. All eight shards restore
       # the same entry (shared-key); only shard 1 saves. Fresh PR branches
       # restore the entry maintained by the warm-backend-build-cache job on
       # main pushes (Actions caches only flow down from the default branch).
@@ -677,6 +677,19 @@ jobs:
           restore-keys: |
             backend-vitest-${{ runner.os }}-node24-shard-${{ matrix.shard }}-
 
+      # Node's compile cache persists V8 bytecode for the large module graph
+      # that every Vitest fork imports. A same-host 2,616-test shard improved
+      # from 312.95s cold to 278.36s warm (-11%). Node validates cached code by
+      # content; the source hash bounds stale entries and the restore prefix
+      # lets the next commit reuse bytecode for unchanged modules.
+      - name: Cache Node compile data
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/node-compile-cache
+          key: backend-node-compile-${{ runner.os }}-${{ runner.arch }}-node24-shard-${{ matrix.shard }}-${{ hashFiles('platform/pnpm-lock.yaml', 'platform/backend/vitest.config.ts', 'platform/backend/src/**/*.ts') }}
+          restore-keys: |
+            backend-node-compile-${{ runner.os }}-${{ runner.arch }}-node24-shard-${{ matrix.shard }}-
+
       # Tests load the Rust NAPI bindings (@archestra/app-runtime-rs etc.),
       # which `turbo check:ci` builds implicitly via the task graph. Running
       # vitest directly skips that, so build backend's workspace deps here.
@@ -695,6 +708,7 @@ jobs:
       - name: Run backend unit tests (shard ${{ matrix.shard }} of 8)
         working-directory: ./platform/backend
         env:
+          NODE_COMPILE_CACHE: ${{ runner.temp }}/node-compile-cache
           SHARD: ${{ matrix.shard }}
         run: pnpm exec vitest run --shard="${SHARD}/8"
 

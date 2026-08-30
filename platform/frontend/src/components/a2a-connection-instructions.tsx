@@ -633,17 +633,22 @@ curl -X POST "${a2aEndpoint}" \\
           </section>
 
           <Collapsible className="border-t">
-            <CollapsibleTrigger className="group flex w-full items-center justify-between gap-4 p-4 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
-              <span className="space-y-1">
-                <span className="block text-sm font-semibold">
-                  Request examples
-                </span>
-                <span className="block text-xs font-normal text-muted-foreground">
-                  Copy A2A requests for common integration workflows.
-                </span>
-              </span>
+            <CollapsibleTrigger className="group flex w-full items-center justify-between gap-4 px-4 pb-1 pt-4 text-left transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
+              <span className="text-sm font-semibold">Request examples</span>
               <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
             </CollapsibleTrigger>
+            <p className="px-4 pb-4 text-xs text-muted-foreground">
+              Copy A2A requests for common integration workflows. The{" "}
+              <a
+                href={getDocsUrl(DocsPage.PlatformAgentTriggersWebhookA2a)}
+                target="_blank"
+                rel="noreferrer"
+                className="underline hover:text-foreground"
+              >
+                A2A docs
+              </a>{" "}
+              cover every method.
+            </p>
             <CollapsibleContent className="space-y-4 border-t px-4 pb-4 pt-4">
               <div className="space-y-2">
                 <div className="space-y-1">
@@ -812,18 +817,6 @@ curl -X POST "${a2aEndpoint}" \\
                   </CollapsibleContent>
                 </Collapsible>
               </div>
-              <p className="text-xs text-muted-foreground">
-                The{" "}
-                <a
-                  href={getDocsUrl(DocsPage.PlatformAgentTriggersWebhookA2a)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="underline hover:text-foreground"
-                >
-                  A2A docs
-                </a>
-                <span> cover every method.</span>
-              </p>
             </CollapsibleContent>
           </Collapsible>
         </section>

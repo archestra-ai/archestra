@@ -152,6 +152,15 @@ describe("A2AConnectionInstructions — detail layout", () => {
     const examplesTrigger = screen.getByRole("button", {
       name: /Request examples/,
     });
+    expect(
+      screen.getByText(/Copy A2A requests for common integration workflows/),
+    ).toHaveTextContent(
+      "Copy A2A requests for common integration workflows. The A2A docs cover every method.",
+    );
+    expect(screen.getByRole("link", { name: "A2A docs" })).toHaveAttribute(
+      "href",
+      getDocsUrl(DocsPage.PlatformAgentTriggersWebhookA2a),
+    );
     expect(screen.queryByText("Continue the conversation")).toBeNull();
     expect(screen.queryByLabelText("Token for examples")).toBeNull();
 

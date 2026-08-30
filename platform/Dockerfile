@@ -214,16 +214,39 @@ RUN set -eux; \
     rm -f picomatch-4.0.4.tgz; \
     grep -q '"version": "4.0.4"' "$target/package.json"
 
-# <----- Builder base stage ----->
-FROM base AS builder-base
+# <----- Rust dependency cache ----->
+FROM base AS rust-builder-base
 WORKDIR /app
-
-# Install the Rust toolchain used to compile the N-API addons below.
-# Kept ABOVE the node_modules/source COPYs so this layer depends only on `base` and
-# stays cache-stable across ordinary source changes. When it lived below the COPYs
-# the ~12s apk install re-ran on every source-changing build because the preceding
-# COPY layers were invalidated.
 RUN apk add --no-cache build-base cargo rust
+
+FROM rust-builder-base AS rust-deps
+ARG TARGETARCH
+COPY archestra-rs/Cargo.toml archestra-rs/Cargo.lock ./archestra-rs/
+COPY archestra-rs/sandbox-core/Cargo.toml ./archestra-rs/sandbox-core/
+COPY archestra-rs/sandbox-rs/Cargo.toml archestra-rs/sandbox-rs/build.rs ./archestra-rs/sandbox-rs/
+COPY archestra-rs/app-runtime-core/Cargo.toml ./archestra-rs/app-runtime-core/
+COPY archestra-rs/app-runtime-rs/Cargo.toml archestra-rs/app-runtime-rs/build.rs ./archestra-rs/app-runtime-rs/
+COPY archestra-rs/image-core/Cargo.toml ./archestra-rs/image-core/
+COPY archestra-rs/image-rs/Cargo.toml archestra-rs/image-rs/build.rs ./archestra-rs/image-rs/
+RUN --mount=type=cache,target=/root/.cargo/registry \
+    --mount=type=cache,target=/root/.cargo/git \
+    for crate in sandbox-core sandbox-rs app-runtime-core app-runtime-rs image-core image-rs; do \
+      mkdir -p "archestra-rs/${crate}/src"; \
+      printf 'pub fn dependency_cache_placeholder() {}\n' > "archestra-rs/${crate}/src/lib.rs"; \
+    done && \
+    cd archestra-rs && \
+    case "${TARGETARCH}" in \
+      amd64) RUST_TARGET=x86_64-alpine-linux-musl ;; \
+      arm64) RUST_TARGET=aarch64-alpine-linux-musl ;; \
+      *) echo "Unsupported Rust architecture: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac && \
+    for package in app_runtime_rs image_rs sandbox_rs; do \
+      RUSTFLAGS='-C target-feature=-crt-static' cargo build --release --locked \
+        --target "${RUST_TARGET}" -p "${package}"; \
+    done
+
+# <----- Builder base stage ----->
+FROM rust-builder-base AS builder-base
 
 # Copy the dependency graph and native workspace before application source so
 # backend/frontend/shared changes can reuse the exported N-API build layer.
@@ -243,10 +266,13 @@ COPY archestra-rs/image-rs ./archestra-rs/image-rs
 
 # These tasks stay outside Turbo's shared cache because their artifacts are
 # platform-specific. This Docker layer is architecture-scoped and exportable,
-# so ordinary application source changes no longer recompile Rust.
+# so ordinary application source changes no longer recompile Rust. Touch real
+# sources after importing dummy-crate fingerprints so Cargo always recompiles
+# local crates while retaining the manifest-keyed dependency artifacts.
 RUN --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \
-    --mount=type=cache,target=/app/archestra-rs/target \
+    --mount=type=bind,from=rust-deps,source=/app/archestra-rs/target,target=/app/archestra-rs/target,rw \
+    find archestra-rs -path '*/src/*.rs' -exec touch {} + && \
     pnpm --filter @archestra/sandbox-rs \
          --filter @archestra/app-runtime-rs \
          --filter @archestra/image-rs build
@@ -271,13 +297,14 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV VERSION=${VERSION}
 
 FROM builder-base AS rust-napi-musl-smoke
-# cache cargo registry/git + the workspace target dir so heavy deps
-# (dagger-sdk, tokio, …) aren't recompiled on every build of this stage.
+# Reuse manifest-keyed release dependencies, plus local cargo caches for the
+# debug tests and test-helper feature variant unique to this stage.
 # Smokes every N-API addon under musl: build the .node, then load and call it so
 # a musl-specific loader/linkage regression fails here rather than at runtime.
 RUN --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \
-    --mount=type=cache,target=/app/archestra-rs/target \
+    --mount=type=bind,from=rust-deps,source=/app/archestra-rs/target,target=/app/archestra-rs/target,rw \
+    --mount=type=cache,id=rust-napi-debug,target=/app/archestra-rs/target/debug \
     pnpm --filter @archestra/sandbox-rs --filter @archestra/app-runtime-rs --filter @archestra/image-rs check:musl
 
 # <----- Builder stage ----->

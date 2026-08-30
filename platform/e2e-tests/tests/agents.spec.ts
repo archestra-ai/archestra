@@ -1,12 +1,15 @@
 import { E2eTestId } from "@archestra/shared";
-import type { Page } from "@playwright/test";
-import { expect, test } from "../fixtures";
+import { mergeTests, type Page } from "@playwright/test";
+import { expect, test as uiTest } from "../fixtures";
 import {
   clickButton,
   openAgentRowMenu,
   selectAgentTableView,
   waitForElementWithReload,
 } from "../utils";
+import { test as apiTest } from "./api-fixtures";
+
+const test = mergeTests(uiTest, apiTest);
 
 /**
  * Drive the routed setup wizard (`/<family>/new`, first step of the shared
@@ -101,24 +104,6 @@ async function createViaWizard(
   return id;
 }
 
-/** The delete flow of a list row: row menu (agents) or button, then confirm. */
-async function deleteFromList(
-  page: Page,
-  { name, confirmLabel }: { name: string; confirmLabel: string },
-) {
-  await selectAgentTableView(page);
-  const rowLocator = page.getByTestId(E2eTestId.AgentsTable).getByTitle(name);
-  await waitForElementWithReload(page, rowLocator, {
-    timeout: 30_000,
-    intervals: [2000, 3000, 5000],
-    checkEnabled: false,
-  });
-  await openAgentRowMenu(page, name);
-  await page.getByTestId(`${E2eTestId.DeleteAgentButton}-${name}`).click();
-  await clickButton({ page, options: { name: confirmLabel } });
-  await expect(rowLocator).not.toBeVisible({ timeout: 10_000 });
-}
-
 test("can create and delete an agent", {
   tag: ["@firefox", "@webkit"],
 }, async ({ page, makeRandomString, goToPage }) => {
@@ -200,7 +185,7 @@ test("can create and delete an agent", {
 
 test("can create an MCP gateway and land on the pre-selected connection guide", {
   tag: ["@firefox", "@webkit"],
-}, async ({ page, makeRandomString, goToPage }) => {
+}, async ({ page, request, deleteAgent, makeRandomString, goToPage }) => {
   test.setTimeout(120_000);
 
   const GATEWAY_NAME = makeRandomString(10, "Test MCP Gateway");
@@ -208,22 +193,20 @@ test("can create an MCP gateway and land on the pre-selected connection guide", 
 
   await page.waitForLoadState("domcontentloaded");
 
-  const gatewayId = await createViaWizard(page, "/mcp/gateways", GATEWAY_NAME);
+  let gatewayId: string | undefined;
+  try {
+    gatewayId = await createViaWizard(page, "/mcp/gateways", GATEWAY_NAME);
 
-  // The create lands on the connection instructions, whose guided-setup link
-  // lands on /connection with the new gateway pre-selected.
-  await page
-    .getByRole("link", { name: /Set up a client step by step/ })
-    .click();
-  await page.waitForURL(
-    new RegExp(`/connection\\?gatewayId=${gatewayId}&from=`),
-    { timeout: 15_000 },
-  );
-
-  // Clean up: back to the table and delete the gateway.
-  await goToPage(page, "/mcp/gateways");
-  await deleteFromList(page, {
-    name: GATEWAY_NAME,
-    confirmLabel: "Delete MCP Gateway",
-  });
+    // The create lands on the connection instructions, whose guided-setup link
+    // lands on /connection with the new gateway pre-selected.
+    await page
+      .getByRole("link", { name: /Set up a client step by step/ })
+      .click();
+    await page.waitForURL(
+      new RegExp(`/connection\\?gatewayId=${gatewayId}&from=`),
+      { timeout: 15_000 },
+    );
+  } finally {
+    if (gatewayId) await deleteAgent(request, gatewayId);
+  }
 });

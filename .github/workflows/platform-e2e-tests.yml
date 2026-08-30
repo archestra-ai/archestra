@@ -1209,8 +1209,8 @@ jobs:
     runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 45
     permissions:
-      contents: read
-      id-token: write
+      contents: read # Required to checkout the repository and read test assets.
+      id-token: write # Required for Workload Identity Federation in setup actions.
     steps:
       - name: Reclaim disk space (background)
         run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &

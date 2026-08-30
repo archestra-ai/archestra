@@ -13,31 +13,40 @@ ARG DAGGER_COMMIT=7902e644beeba4468f1ea786015b4be1d6d5bbcd
 ARG KUBECTL_VERSION=v1.35.0
 ARG KUBECTL_COMMIT=66452049f3d692768c39c797b21b793dce80314e
 
-FROM ${GOLANG_IMAGE} AS go-builder
+FROM ${GOLANG_IMAGE} AS go-builder-base
 ARG TARGETARCH
-ARG KIND_VERSION
-ARG KIND_COMMIT
-ARG DOCKER_CLI_VERSION
-ARG DOCKER_CLI_COMMIT
-ARG DAGGER_VERSION
-ARG DAGGER_COMMIT
-ARG KUBECTL_VERSION
-ARG KUBECTL_COMMIT
 RUN if [ "$TARGETARCH" != "amd64" ] && [ "$TARGETARCH" != "arm64" ]; then \
         echo "ERROR: Unsupported architecture: $TARGETARCH. KinD is only available for amd64 and arm64."; \
         exit 1; \
-    fi
-RUN apk add --no-cache git
-COPY docker/dagger-dockercompat /dagger-dockercompat
-RUN git clone --depth 1 --branch "${KIND_VERSION}" https://github.com/kubernetes-sigs/kind.git /kind && \
+    fi && \
+    apk add --no-cache git
+
+# Build the four pinned Go tools in independent stages so BuildKit schedules
+# them concurrently. Go caches stay outside exported layers, and each clone is
+# removed in the same RUN so mode=max never publishes source trees.
+FROM go-builder-base AS kind-builder
+ARG TARGETARCH
+ARG KIND_VERSION
+ARG KIND_COMMIT
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    git clone --depth 1 --branch "${KIND_VERSION}" https://github.com/kubernetes-sigs/kind.git /kind && \
     test "$(git -C /kind rev-parse HEAD)" = "${KIND_COMMIT}" && \
     cd /kind && \
     go mod edit -go=1.25.11 && \
     # golang.org/x/net <0.55.0: CVE-2026-39821 (CRITICAL); fixed in >= 0.55.0
     # golang.org/x/net <0.56.0: CVE-2026-46600 (HIGH); fixed in >= 0.56.0
     go get golang.org/x/net@v0.56.0 && \
-    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o /kind-binary .
-RUN git clone --depth 1 --branch "${DOCKER_CLI_VERSION}" https://github.com/docker/cli.git /docker-cli && \
+    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o /kind-binary . && \
+    cd / && rm -rf /kind
+
+FROM go-builder-base AS docker-cli-builder
+ARG TARGETARCH
+ARG DOCKER_CLI_VERSION
+ARG DOCKER_CLI_COMMIT
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    git clone --depth 1 --branch "${DOCKER_CLI_VERSION}" https://github.com/docker/cli.git /docker-cli && \
     test "$(git -C /docker-cli rev-parse HEAD)" = "${DOCKER_CLI_COMMIT}" && \
     cd /docker-cli && \
     cp vendor.mod go.mod && cp vendor.sum go.sum && \
@@ -63,8 +72,17 @@ RUN git clone --depth 1 --branch "${DOCKER_CLI_VERSION}" https://github.com/dock
     go mod vendor && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=vendor \
     -ldflags "-X github.com/docker/cli/cli/version.Version=${DOCKER_CLI_VERSION#v}" \
-    -o /docker-binary ./cmd/docker
-RUN git clone --depth 1 --branch "${DAGGER_VERSION}" https://github.com/dagger/dagger.git /dagger && \
+    -o /docker-binary ./cmd/docker && \
+    cd / && rm -rf /docker-cli
+
+FROM go-builder-base AS dagger-builder
+ARG TARGETARCH
+ARG DAGGER_VERSION
+ARG DAGGER_COMMIT
+COPY docker/dagger-dockercompat /dagger-dockercompat
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    git clone --depth 1 --branch "${DAGGER_VERSION}" https://github.com/dagger/dagger.git /dagger && \
     test "$(git -C /dagger rev-parse HEAD)" = "${DAGGER_COMMIT}" && \
     cd /dagger && \
     cp -R /dagger-dockercompat ./dockercompat && \
@@ -108,8 +126,16 @@ RUN git clone --depth 1 --branch "${DAGGER_VERSION}" https://github.com/dagger/d
     go mod tidy && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
     -ldflags "-X github.com/dagger/dagger/engine.Version=${DAGGER_VERSION} -X github.com/dagger/dagger/engine.Tag=${DAGGER_VERSION}" \
-    -o /dagger-binary ./cmd/dagger
-RUN git clone --depth 1 --branch "${KUBECTL_VERSION}" https://github.com/kubernetes/kubernetes.git /kubernetes && \
+    -o /dagger-binary ./cmd/dagger && \
+    cd / && rm -rf /dagger /dagger-dockercompat
+
+FROM go-builder-base AS kubectl-builder
+ARG TARGETARCH
+ARG KUBECTL_VERSION
+ARG KUBECTL_COMMIT
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    git clone --depth 1 --branch "${KUBECTL_VERSION}" https://github.com/kubernetes/kubernetes.git /kubernetes && \
     test "$(git -C /kubernetes rev-parse HEAD)" = "${KUBECTL_COMMIT}" && \
     cd /kubernetes && \
     go mod edit -go=1.25.11 && \
@@ -126,7 +152,8 @@ RUN git clone --depth 1 --branch "${KUBECTL_VERSION}" https://github.com/kuberne
     go get golang.org/x/mod@v0.40.0 && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=readonly \
     -ldflags "-X k8s.io/component-base/version.gitVersion=${KUBECTL_VERSION} -X k8s.io/component-base/version.gitCommit=${KUBECTL_COMMIT} -X k8s.io/component-base/version.gitTreeState=clean" \
-    -o /kubectl-binary ./cmd/kubectl
+    -o /kubectl-binary ./cmd/kubectl && \
+    cd / && rm -rf /kubernetes
 
 # pre-bake the Dagger Engine image as a docker-archive so the quickstart can
 # kind-load it into the embedded node instead of pulling ~352MB from the registry
@@ -405,13 +432,13 @@ RUN apk --no-cache upgrade && \
     rm -rf /tmp/*
 
 # install KinD (Kubernetes in Docker), docker-cli, and kubectl for Kubernetes runtime support
-# these binaries are built from source in go-builder with Go 1.26.6 to fix CVE-2025-68121,
+# these binaries are built from source in parallel Go stages with Go 1.26.6 to fix CVE-2025-68121,
 # the Go stdlib HIGH CVEs fixed in 1.25.10 (CVE-2026-42499/39836/39820/33814/33811),
 # the Go stdlib HIGH CVE fixed in 1.25.11 (CVE-2026-42504), and the Go stdlib CRITICAL
 # fixed in 1.26.6 (CVE-2026-39821).
-COPY --from=go-builder /docker-binary /usr/local/bin/docker
-COPY --from=go-builder /kind-binary /usr/local/bin/kind
-COPY --from=go-builder /kubectl-binary /usr/local/bin/kubectl
+COPY --from=docker-cli-builder /docker-binary /usr/local/bin/docker
+COPY --from=kind-builder /kind-binary /usr/local/bin/kind
+COPY --from=kubectl-builder /kubectl-binary /usr/local/bin/kubectl
 RUN chmod +x /usr/local/bin/kind /usr/local/bin/docker /usr/local/bin/kubectl
 # TODO: Once KinD releases a version compiled with Go >= 1.25.11, remove the kind-builder stage
 # at the top of this file and restore the pre-built binary download below for faster builds.
@@ -435,7 +462,7 @@ RUN chmod +x /usr/local/bin/kind /usr/local/bin/docker /usr/local/bin/kubectl
 # to the Dagger Engine; its npm postinstall download is blocked by
 # ignore-scripts, so the binary is pinned and built from source above.
 # keep DAGGER_VERSION in sync with dagger-sdk in archestra-rs/sandbox-core/Cargo.toml.
-COPY --from=go-builder /dagger-binary /usr/local/bin/dagger
+COPY --from=dagger-builder /dagger-binary /usr/local/bin/dagger
 RUN chmod +x /usr/local/bin/dagger
 # point the SDK at the baked-in CLI so it never downloads one at runtime.
 ENV _EXPERIMENTAL_DAGGER_CLI_BIN=/usr/local/bin/dagger

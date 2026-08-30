@@ -281,6 +281,9 @@ jobs:
           provenance: "false"
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+          # Reuse the full build's live BuildKit cache instead of creating a
+          # second builder and re-importing/rebuilding the same graph.
+          setup-builder: "false"
           # All slim layers are a subset of the full build just done on this
           # builder; the registry ref only backstops a same-run builder loss.
           cache-from: |

@@ -72,6 +72,10 @@ inputs:
     description: "Sentry auth token for source map uploads (optional)"
     required: false
     default: ""
+  setup-builder:
+    description: "Set up a new Buildx builder; disable to reuse the current job builder"
+    required: false
+    default: "true"
 
 outputs:
   digest:
@@ -111,6 +115,7 @@ runs:
         INPUT_PREVIOUS_IMAGE: ${{ inputs.previous-image }}
 
     - name: Setup Docker Builder
+      if: ${{ inputs.setup-builder == 'true' }}
       uses: ./.github/actions/setup-docker-builder
 
     - name: Build Docker image

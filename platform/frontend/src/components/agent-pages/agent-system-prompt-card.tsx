@@ -121,7 +121,7 @@ export function AgentSystemPromptCard({
           value={systemPrompt}
           onChange={setSystemPrompt}
           readOnly={readOnly}
-          variant="section"
+          variant="detail-card"
           builtInAgentId={builtInAgentName}
           headerExtra={
             !readOnly && builtInAgentName ? (

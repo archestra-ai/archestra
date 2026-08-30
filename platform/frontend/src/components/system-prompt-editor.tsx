@@ -40,8 +40,8 @@ export function SystemPromptEditor({
   onChange: (value: string) => void;
   readOnly?: boolean;
   height?: string;
-  /** "section" uses an h3 matching card section headings; "default" uses lighter text */
-  variant?: "default" | "section";
+  /** Heading treatment for standalone fields, form sections, and detail cards. */
+  variant?: "default" | "section" | "detail-card";
   /** Extra element rendered in the header next to the full-screen button */
   headerExtra?: React.ReactNode;
   /** Optional built-in agent id to expose built-in-agent-specific template variables */
@@ -88,14 +88,22 @@ export function SystemPromptEditor({
     <div className="space-y-2">
       <div className="flex items-start justify-between gap-3">
         <div>
-          {variant === "section" ? (
-            <h3 className="text-sm font-semibold">{title}</h3>
+          {variant !== "default" ? (
+            <h3
+              className={
+                variant === "detail-card"
+                  ? "text-sm font-semibold"
+                  : "text-base font-semibold"
+              }
+            >
+              {title}
+            </h3>
           ) : (
             <p className="text-sm font-medium">{title}</p>
           )}
           <p
             className={
-              variant === "section"
+              variant === "detail-card"
                 ? "text-sm text-muted-foreground"
                 : "text-xs text-muted-foreground"
             }

@@ -1,7 +1,5 @@
 name: On Pull Requests
 
-# CI optimization baseline: this comment intentionally leaves behavior unchanged.
-
 on:
   pull_request:
     types:
@@ -607,15 +605,15 @@ jobs:
 
   # Backend unit tests, sharded across parallel runners. Vitest's --shard
   # slices the file list deterministically (SHA1 of each path), so the
-  # four jobs partition the suite exactly once. Splitting this out of the
-  # lint job takes the suite off the workflow's critical path. Four shards
-  # on 16-vcpu Blacksmith runners are the measured sweet spot (the July
-  # shape, ~3-3.5 min per shard): the wide 16-shard fan-out on free 4-vcpu
-  # runners paid the per-shard module-import overhead sixteen times (vitest
-  # measured import 365s of a 402s shard wall) and still ran 6-9 min per
-  # shard.
+  # eight jobs partition the suite exactly once. Splitting this out of the
+  # lint job takes the suite off the workflow's critical path. The previous
+  # four-shard shape reached 5m15s on the current suite (PR #7574); an isolated
+  # same-host benchmark reduced a representative shard from 484s (265 files)
+  # to 304s (133 files) at eight-way width. Keep the 16-vCPU runner: the old
+  # 16-shard fan-out on free 4-vCPU runners paid module-import overhead without
+  # enough per-shard parallelism and took 6-9 minutes.
   backend-unit-tests:
-    name: Backend Unit Tests (shard ${{ matrix.shard }}/4)
+    name: Backend Unit Tests (shard ${{ matrix.shard }}/8)
     # bot-pr-guard (see comment above platform-lint-and-unit-tests)
     if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
     runs-on: blacksmith-16vcpu-ubuntu-2404
@@ -639,7 +637,7 @@ jobs:
       # failure picture in one pass.
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     steps:
       - name: Checkout project
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -668,6 +666,17 @@ jobs:
           shared-key: backend-unit-tests
           save-if: ${{ matrix.shard == 1 }}
 
+      # Vitest uses its results cache to schedule historically slow files
+      # first. Persist one cache per shard so fresh runners keep that balancing
+      # data without mixing partial result sets across the matrix.
+      - name: Cache Vitest timing data
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: platform/backend/node_modules/.vite/vitest
+          key: backend-vitest-${{ runner.os }}-node24-shard-${{ matrix.shard }}-${{ hashFiles('platform/pnpm-lock.yaml', 'platform/backend/vitest.config.ts', 'platform/backend/src/**/*.test.ts') }}
+          restore-keys: |
+            backend-vitest-${{ runner.os }}-node24-shard-${{ matrix.shard }}-
+
       # Tests load the Rust NAPI bindings (@archestra/app-runtime-rs etc.),
       # which `turbo check:ci` builds implicitly via the task graph. Running
       # vitest directly skips that, so build backend's workspace deps here.
@@ -683,11 +692,11 @@ jobs:
             pnpm exec turbo build --filter="@backend^..."
           }
 
-      - name: Run backend unit tests (shard ${{ matrix.shard }} of 4)
+      - name: Run backend unit tests (shard ${{ matrix.shard }} of 8)
         working-directory: ./platform/backend
         env:
           SHARD: ${{ matrix.shard }}
-        run: pnpm exec vitest run --shard="${SHARD}/4"
+        run: pnpm exec vitest run --shard="${SHARD}/8"
 
   # Stable-named gate over the shard matrix so branch protection / merge queue
   # can require a single check ("Backend Unit Tests") regardless of shard count.
@@ -714,11 +723,11 @@ jobs:
           echo "✅ All backend unit test shards passed."
 
   frontend-integration-tests:
-    name: Frontend Integration Tests (MSW)
+    name: Frontend Integration Tests (MSW group ${{ matrix.group }}/2)
     # bot-pr-guard (see comment above platform-lint-and-unit-tests)
     if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
     # mac-mini routing (see comment above platform-rust-checks)
-    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubuntu-latest' }}
+    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'blacksmith-8vcpu-ubuntu-2404' }}
     permissions:
       contents: read
     defaults:
@@ -727,6 +736,10 @@ jobs:
     env:
       TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [1, 2]
     steps:
       - name: Checkout project
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -768,6 +781,17 @@ jobs:
         if: runner.os == 'macOS'
         run: pnpm --filter @frontend exec playwright install chromium
 
+      # Next validates its compiler cache against the current source tree. A
+      # group-specific key lets each pair of shards reuse its own dist dirs on
+      # later PR pushes without two jobs racing to save the same cache entry.
+      - name: Cache integration test compiler output
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: platform/frontend/.next-pw-shard-*
+          key: frontend-integration-next-${{ runner.os }}-group-${{ matrix.group }}-${{ hashFiles('platform/pnpm-lock.yaml', 'platform/frontend/src/**', 'platform/frontend/*.ts', 'platform/frontend/*.mjs', 'platform/frontend/*.json') }}
+          restore-keys: |
+            frontend-integration-next-${{ runner.os }}-group-${{ matrix.group }}-
+
       - name: Reap stale MSW webServers
         # Three runner slots share this machine (mac-mini-1, -1-2, -1-3), so
         # cancelled merge-queue runs can leave `next dev` processes behind.
@@ -786,16 +810,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          group=${{ matrix.group }}
+          shard_count=4
+          first_shard=$(( (group - 1) * 2 + 1 ))
+          last_shard=$(( first_shard + 1 ))
           pids=()
-          for shard in 1 2; do
+          for shard in $(seq "$first_shard" "$last_shard"); do
             # Three macOS runner slots share one host. Derive non-overlapping
             # ports from the run/attempt/shard instead of discovering a free
             # port and racing another process to bind it after the probe closes.
-            port=$((20000 + ((GITHUB_RUN_ID + GITHUB_RUN_ATTEMPT * 97) % 14000) * 2 + shard))
-            echo "Starting frontend integration shard ${shard}/2 on port ${port}"
+            port=$((20000 + ((GITHUB_RUN_ID + GITHUB_RUN_ATTEMPT * 97) % 7000) * shard_count + shard))
+            echo "Starting frontend integration shard ${shard}/${shard_count} on port ${port}"
             ARCHESTRA_FRONTEND_INT_TESTS_PORT="$port" \
               ARCHESTRA_FRONTEND_INT_TESTS_SHARD="$shard" \
-              pnpm --filter @frontend exec playwright test --shard="${shard}/2" &
+              pnpm --filter @frontend exec playwright test --shard="${shard}/${shard_count}" &
             pids+=("$!")
           done
 
@@ -811,7 +839,7 @@ jobs:
         if: failure()
         uses: ./.github/actions/github-upload-artifact
         with:
-          name: playwright-integration-report
+          name: playwright-integration-report-group-${{ matrix.group }}
           path: platform/frontend/playwright-report-shard-*/
           retention-days: "7"
 
@@ -819,9 +847,28 @@ jobs:
         if: failure()
         uses: ./.github/actions/github-upload-artifact
         with:
-          name: playwright-integration-traces
+          name: playwright-integration-traces-group-${{ matrix.group }}
           path: platform/frontend/test-results-shard-*/
           retention-days: "7"
+
+  # Keep the existing required check name stable while the work runs in a
+  # matrix. The gate fails if either group fails or is cancelled.
+  frontend-integration-tests-gate:
+    name: Frontend Integration Tests (MSW)
+    runs-on: ubuntu-latest
+    if: always() && (github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]'))
+    needs: [frontend-integration-tests]
+    permissions: {}
+    steps:
+      - name: Check integration test group results
+        env:
+          GROUPS_RESULT: ${{ needs.frontend-integration-tests.result }}
+        run: |
+          if [ "$GROUPS_RESULT" != "success" ]; then
+            echo "::error::One or more frontend integration test groups failed (result: $GROUPS_RESULT)."
+            exit 1
+          fi
+          echo "All frontend integration test groups passed."
 
   # Fallback for the mac-mini routing above: GitHub has no queue timeout for
   # self-hosted runners, so if mac-mini-1 dies, its jobs would sit queued (and

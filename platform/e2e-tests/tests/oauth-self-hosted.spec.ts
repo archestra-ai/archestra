@@ -439,23 +439,4 @@ test.describe("OAuth for Self-Hosted MCP Servers", () => {
       await deleteMcpCatalogItem(request, catalogItem.id);
     }
   });
-
-  // Intermittently returns 401 (auth check fires before state validation)
-  // instead of the expected 400. Tracked alongside MQ flakiness from
-  // https://github.com/archestra-ai/archestra/actions/runs/26282803981.
-  test.skip("OAuth callback fails with invalid state", async ({
-    request,
-    makeApiRequest,
-  }) => {
-    const callbackResponse = await makeApiRequest({
-      request,
-      method: "post",
-      urlSuffix: "/api/oauth/callback",
-      data: { code: "fake-code", state: "invalid-state" },
-      ignoreStatusCheck: true,
-    });
-    expect(callbackResponse.status()).toBe(400);
-    const body = await callbackResponse.json();
-    expect(body.error.message).toContain("Invalid or expired OAuth state");
-  });
 });

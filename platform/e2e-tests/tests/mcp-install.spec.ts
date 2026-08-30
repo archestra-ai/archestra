@@ -98,16 +98,10 @@ test.describe("MCP Install", () => {
     );
   });
 
-  test("Local server with bogus image shows error, logs, and can be fixed", async ({
+  test("Local server with bogus image shows error, logs, and can be fixed @quickstart @k8s-recovery", async ({
     adminPage,
     extractCookieHeaders,
   }) => {
-    // Re-skip pending fix to the underlying K8s pod-deletion race.
-    // Skipped in #4848 (dcd211d55), unskipped in #4876 (2e2f8e328) under
-    // the assumption it had stabilized, but it kept failing the merge
-    // queue for unrelated PRs (most recently #4868). Re-skipping here so
-    // #4868 can land; the race itself still needs a real fix.
-    test.skip();
     // Increase timeout to 4 minutes to allow for K8s deployment attempts
     test.setTimeout(240_000);
     const CATALOG_ITEM_NAME = "e2e__bogus_image_test";

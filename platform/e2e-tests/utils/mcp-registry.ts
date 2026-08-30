@@ -301,6 +301,15 @@ export async function addSharedLocalConnection(params: {
     .getByTestId(E2eTestId.AddServiceAccountConfirmButton)
     .click({ timeout: params.timeoutMs ?? 15_000 });
 
+  // Confirming the dialog must create the selected team's connection before
+  // any install flow can consume it. This keeps the credential owner and the
+  // later tool-result oracle coupled to the same connection.
+  await expect(
+    params.page
+      .getByTestId(E2eTestId.CredentialOwner)
+      .filter({ hasText: params.teamName }),
+  ).toBeVisible({ timeout: params.timeoutMs ?? 15_000 });
+
   const shouldWaitForDialog =
     params.expectDialog ?? Object.keys(params.envValues ?? {}).length > 0;
   if (!shouldWaitForDialog) {
@@ -315,15 +324,6 @@ export async function addSharedLocalConnection(params: {
       return;
     }
 
-    // Direct install (no credential prompt): the new team credential shows up
-    // as a row in the Credentials section.
-    await expect(
-      params.page
-        .getByTestId(E2eTestId.CredentialOwner)
-        .filter({ hasText: params.teamName }),
-    ).toBeVisible({
-      timeout: params.timeoutMs ?? 15_000,
-    });
     return;
   }
 

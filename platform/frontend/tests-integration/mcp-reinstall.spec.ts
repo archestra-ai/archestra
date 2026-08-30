@@ -4,10 +4,7 @@ import { makeInstalledServer } from "../src/mocks/data/servers";
 import { expect, test } from "./fixtures";
 
 test.describe("Reinstall remote MCP server", () => {
-  // FIXME(stale): the reinstall flow no longer surfaces a "Reinstall Server"
-  // dialog, and the page now renders more than one Reinstall control. Needs a
-  // rewrite against the current flow.
-  test.fixme("new required header on a remote catalog: Reinstall opens an input dialog for the missing value", async ({
+  test("new required header on a remote catalog: Reinstall opens an input dialog for the missing value", async ({
     page,
     mcpRegistryPage,
     mswControl,
@@ -37,6 +34,7 @@ test.describe("Reinstall remote MCP server", () => {
       serverType: "remote",
       scope: "personal",
       reinstallRequired: true,
+      reinstallReason: "new-input",
       // McpServerCard.isCurrentUserAuthenticated reads from `users`.
       users: ["test-user-admin"],
     });
@@ -67,7 +65,10 @@ test.describe("Reinstall remote MCP server", () => {
       mcpRegistryPage.cardForCatalogItem(remoteCatalog.name),
     ).toBeVisible();
 
-    await page.getByRole("button", { name: "Reinstall" }).click();
+    await mcpRegistryPage
+      .cardForCatalogItem(remoteCatalog.name)
+      .getByRole("button", { name: "Reinstall", exact: true })
+      .click();
 
     // Regression: the bug opened a plain confirmation modal here, with no
     // input for the newly-required header.
@@ -84,10 +85,7 @@ test.describe("Reinstall remote MCP server", () => {
     await expect(dialog).toBeHidden();
   });
 
-  // FIXME(stale): the reinstall flow no longer surfaces a "Reinstall Server"
-  // dialog, and the page now renders more than one Reinstall control. Needs a
-  // rewrite against the current flow.
-  test.fixme("member without team/org install permission can still reinstall their personal remote install", async ({
+  test("member without team/org install permission can still reinstall their personal remote install", async ({
     page,
     mcpRegistryPage,
     mswControl,
@@ -122,6 +120,7 @@ test.describe("Reinstall remote MCP server", () => {
       serverType: "remote",
       scope: "personal",
       reinstallRequired: true,
+      reinstallReason: "new-input",
       users: ["test-user-admin"],
     });
 
@@ -160,7 +159,10 @@ test.describe("Reinstall remote MCP server", () => {
       mcpRegistryPage.cardForCatalogItem(remoteCatalog.name),
     ).toBeVisible();
 
-    await page.getByRole("button", { name: "Reinstall" }).click();
+    await mcpRegistryPage
+      .cardForCatalogItem(remoteCatalog.name)
+      .getByRole("button", { name: "Reinstall", exact: true })
+      .click();
 
     const dialog = page
       .getByRole("dialog")

@@ -272,7 +272,7 @@ COPY archestra-rs/image-rs ./archestra-rs/image-rs
 RUN --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \
     --mount=type=bind,from=rust-deps,source=/app/archestra-rs/target,target=/app/archestra-rs/target,rw \
-    find archestra-rs -path '*/src/*.rs' -exec touch {} + && \
+    find archestra-rs -type f -path '*/src/*.rs' -exec touch {} + && \
     pnpm --filter @archestra/sandbox-rs \
          --filter @archestra/app-runtime-rs \
          --filter @archestra/image-rs build

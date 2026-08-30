@@ -160,7 +160,7 @@ export function AgentBackgroundExecutionFields({
             installationLabel="Per user"
             staticLabel="Shared"
             installationCalloutTitle="Each user provides their own value"
-            requiredDescription="Block delegated tasks until this value is configured."
+            requiredDescription="Required credentials are checked before every run. Chat prompts the user to connect a missing value; other callers receive an error and can retry after it is connected."
             promptedValueLabel="per-user"
             deferStaticSecretValue
             installationOnlyForSecrets
@@ -326,23 +326,23 @@ export function AgentBackgroundExecutionFields({
             </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="flex items-center justify-between gap-4 rounded-md border p-3">
-              <div className="space-y-0.5">
-                <Label htmlFor="background-execution-privileged">
-                  Privileged container
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Grants host-level container capabilities. Agent administrators
-                  only.
-                </p>
-              </div>
-              <Switch
-                id="background-execution-privileged"
-                checked={config.privileged}
-                onCheckedChange={(privileged) => update({ privileged })}
-              />
+          <div className="flex w-full items-center justify-between gap-6 rounded-md border p-4">
+            <div className="min-w-0 space-y-1">
+              <Label htmlFor="background-execution-privileged">
+                Privileged mode
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Gives the container elevated access to its host. Enable it only
+                for workloads that require host-level capabilities. Only Agent
+                administrators can turn it on.
+              </p>
             </div>
+            <Switch
+              id="background-execution-privileged"
+              className="shrink-0"
+              checked={config.privileged}
+              onCheckedChange={(privileged) => update({ privileged })}
+            />
           </div>
         </div>
       )}

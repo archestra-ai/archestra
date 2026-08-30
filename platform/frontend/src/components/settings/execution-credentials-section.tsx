@@ -58,12 +58,13 @@ export function ExecutionCredentialsSection() {
         title="Execution credentials"
         description={
           <>
-            Reusable secrets for delegated Agent executions. Each credential is
-            connected privately by every user or once for the organization.{" "}
+            Reusable secrets for Background execution. Users connect personal
+            values; administrators can connect organization values.{" "}
             <ExternalDocsLink
               href={getDocsUrl(DocsPage.PlatformExecutionCredentials)}
+              className="whitespace-nowrap"
             >
-              Configure execution credentials
+              Learn more
             </ExternalDocsLink>
           </>
         }

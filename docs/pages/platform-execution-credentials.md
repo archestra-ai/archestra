@@ -1,43 +1,55 @@
 ---
 title: Execution Credentials
 category: Administration
-description: Connect reusable credentials for Background execution
+description: Manage reusable secrets for Background execution
 order: 5
 lastUpdated: 2026-08-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Execution credentials keep secrets out of Agent definitions. One connection can serve every Agent that requests the same credential.
+Execution credentials keep secret values out of Agent definitions. One saved connection can supply multiple Agents.
 
 ![Execution credentials in Agent settings](/docs/automated_screenshots/platform-execution-credentials_settings.webp)
 
-## Connection Types
+## Choose a Scope
 
-A personal connection belongs to one user. It runs only with executions that user starts.
+A personal connection belongs to one user. It is available only when that user starts an execution.
 
-An organization connection is shared. It runs with every Agent bound to that connection.
+An organization connection is shared by Agents in the organization.
 
-GitHub and Claude Code connections are included for personal use. You can add credentials for other services.
+GitHub and Claude Code credential definitions are included for personal use.
 
-## Configure A Credential
+Administrators can add definitions for other services. Each definition controls which scopes it supports.
 
-Go to **Settings → Agents → Execution credentials** to add a credential. Choose who provides its value when you create it.
+## Define a Credential
 
-Connect organization values from the same section. Connect personal values under **Personal settings → Connections**. Archestra also prompts for a missing personal value when an execution starts.
+Go to **Settings → Agents → Execution credentials**. Add a name, description, and supported scopes.
+
+Definitions describe the credential but do not contain its secret value.
+
+## Connect a Value
+
+Connect organization values from **Settings → Agents → Execution credentials**.
+
+Connect personal values under **Personal settings → Connections**. Archestra prompts for a missing personal value when an execution starts.
 
 Saved values are never displayed again. They use the configured [secrets manager](/docs/platform-secrets-management).
 
-## Add A Credential To An Agent
+## Bind a Credential to an Agent
 
-Open the Agent editor and go to **Advanced → Background execution**. Add a **Secret**, then select a reusable connection.
+Open the Agent editor and go to **Advanced → Background execution**.
+
+Add a **Secret**, then choose its **Secret source**.
 
 Set the environment variable expected by the image. The same connection can use `GITHUB_TOKEN` in one image and `GH_TOKEN` in another.
 
-Use **One-off secret** when the value belongs to one Agent. See [Background Execution](/docs/platform-agent-background-execution) for the image contract.
+Choose **Agent-specific secret** to keep the value tied to one Agent.
 
-## GitLab Coding Agent
+See [Background Execution](/docs/platform-agent-background-execution) for the image contract.
 
-A coding Agent needs `GITLAB_TOKEN` to clone private repositories. An admin adds **GitLab** and chooses **Each user**.
+## Rotate or Disconnect
 
-The Agent binds that connection to `GITLAB_TOKEN`. Each developer connects a personal access token once under **Personal settings → Connections**.
+Replacing a saved connection changes future executions for every Agent bound to it.
+
+Disconnecting a personal value makes it unavailable to that user. Deleting a credential definition is blocked while an Agent still uses it.

@@ -1,7 +1,16 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { KeyRound, Plug, RefreshCw, Trash2, Unplug } from "lucide-react";
+import {
+  Circle,
+  CircleAlert,
+  CircleCheck,
+  KeyRound,
+  Plug,
+  RefreshCw,
+  Trash2,
+  Unplug,
+} from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -10,9 +19,8 @@ import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExecutionCredentialConnectionDialog } from "@/components/execution-credential-connection-dialog";
 import { ExecutionCredentialIcon } from "@/components/execution-credential-icon";
 import { ExternalSecretReferenceDialog } from "@/components/external-secret-reference-dialog";
-import { WithPermissions } from "@/components/roles/with-permissions";
 import { StandardFormDialog } from "@/components/standard-dialog";
-import { Badge } from "@/components/ui/badge";
+import { TableRowActions } from "@/components/table-row-actions";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -23,11 +31,6 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { SecretInput } from "@/components/ui/secret-input";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import {
   useAgentBackgroundExecutionPreflight,
   useDeleteAgentBackgroundExecutionCredential,
@@ -77,19 +80,18 @@ export function AgentBackgroundExecutionCard({
   return (
     <section
       id="background-execution-credentials"
-      className="scroll-mt-24 rounded-lg border bg-card p-4"
+      className="scroll-mt-24 overflow-hidden rounded-lg border bg-card"
     >
-      <div className="mb-4 space-y-1">
+      <div className="space-y-1 p-4">
         <div className="flex items-center gap-2">
           <KeyRound className="h-4 w-4" />
-          <h2 className="font-medium">Execution connections</h2>
+          <h2 className="font-medium">Execution credentials</h2>
         </div>
         <p className="text-sm text-muted-foreground">
-          Connect the credentials this Agent requests before starting a
-          background execution.
+          Manage the credentials this Agent can use during background tasks.
         </p>
       </div>
-      <div className="divide-y rounded-lg border">
+      <div className="divide-y border-t">
         {credentials.map((credential) => {
           const configured = preflight?.configured.includes(credential.key);
           const definition = definitions.data?.find(
@@ -98,131 +100,86 @@ export function AgentBackgroundExecutionCard({
           return (
             <div
               key={credential.key}
-              className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center"
+              className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center"
             >
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-background">
-                <ExecutionCredentialIcon icon={definition?.icon ?? null} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex min-w-0 items-center gap-2">
+              <div className="flex min-w-0 flex-1 items-start gap-3">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-background">
+                  <ExecutionCredentialIcon icon={definition?.icon ?? null} />
+                </div>
+                <div className="min-w-0 flex-1">
                   <h3 className="truncate text-sm font-medium">
                     {credential.label}
                   </h3>
-                  {configured ? (
-                    <Badge variant="secondary" className="font-normal">
-                      Configured
-                    </Badge>
-                  ) : null}
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {credential.description ||
+                      `${credential.scope === "shared" ? "Organization" : "Personal"} connection${definition ? ` using ${definition.name}` : ""}`}
+                  </p>
+                  <CredentialConnectionStatus
+                    configured={configured === true}
+                    required={credential.required}
+                    scope={credential.scope}
+                  />
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {credential.description ||
-                    `${credential.scope === "shared" ? "Organization" : "Personal"} connection${definition ? ` using ${definition.name}` : ""}`}
-                </p>
               </div>
-              <div className="flex shrink-0 items-center gap-2 self-end sm:self-auto">
-                <WithPermissions
-                  permissions={
-                    definition && credential.scope === "shared"
-                      ? { agentSettings: ["update"] }
-                      : { agent: ["read"] }
-                  }
-                  noPermissionHandle="tooltip"
-                >
-                  {({ hasPermission }) =>
-                    definition ? (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon-sm"
-                            aria-label={
-                              configured
-                                ? `Replace ${credential.label}`
-                                : `Connect ${credential.label}`
-                            }
-                            disabled={!hasPermission}
-                            onClick={() =>
-                              setConnectionDialog({ credential, definition })
-                            }
-                          >
-                            {configured ? (
-                              <RefreshCw className="size-4" />
+              <div className="shrink-0 self-end sm:self-auto">
+                <TableRowActions
+                  itemName={credential.label}
+                  actions={[
+                    {
+                      icon: configured ? (
+                        <RefreshCw className="size-4" />
+                      ) : (
+                        <Plug className="size-4" />
+                      ),
+                      label: configured
+                        ? "Replace"
+                        : definition
+                          ? "Connect"
+                          : "Set secret",
+                      permissions:
+                        definition && credential.scope === "shared"
+                          ? { agentSettings: ["update"] }
+                          : { agent: ["read"] },
+                      disabled: !definition && setCredential.isPending,
+                      disabledTooltip:
+                        "A credential update is already in progress.",
+                      onClick: () => {
+                        if (definition) {
+                          setConnectionDialog({ credential, definition });
+                        } else {
+                          setManualCredential(credential);
+                        }
+                      },
+                    },
+                  ]}
+                  dropdownActions={
+                    configured
+                      ? [
+                          {
+                            icon: credential.credentialId ? (
+                              <Unplug className="size-4" />
                             ) : (
-                              <Plug className="size-4" />
-                            )}
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          {configured ? "Replace" : "Connect"}
-                        </TooltipContent>
-                      </Tooltip>
-                    ) : (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon-sm"
-                            aria-label={
-                              configured
-                                ? `Replace ${credential.label}`
-                                : `Set ${credential.label}`
-                            }
-                            disabled={!hasPermission || setCredential.isPending}
-                            onClick={() => setManualCredential(credential)}
-                          >
-                            {configured ? (
-                              <RefreshCw className="size-4" />
-                            ) : (
-                              <Plug className="size-4" />
-                            )}
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          {configured ? "Replace secret" : "Set secret"}
-                        </TooltipContent>
-                      </Tooltip>
-                    )
-                  }
-                </WithPermissions>
-                {configured && (
-                  <WithPermissions
-                    permissions={
-                      definition && credential.scope === "shared"
-                        ? { agentSettings: ["update"] }
-                        : { agent: ["read"] }
-                    }
-                    noPermissionHandle="tooltip"
-                  >
-                    {({ hasPermission }) => (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon-sm"
-                            aria-label={`Disconnect ${credential.label}`}
-                            className="text-destructive hover:text-destructive"
-                            disabled={
-                              !hasPermission ||
+                              <Trash2 className="size-4" />
+                            ),
+                            label: credential.credentialId
+                              ? "Disconnect"
+                              : "Delete secret",
+                            permissions:
+                              definition && credential.scope === "shared"
+                                ? { agentSettings: ["update"] }
+                                : { agent: ["read"] },
+                            disabled:
                               deleteCredential.isPending ||
-                              deleteConnection.isPending
-                            }
-                            onClick={() => setCredentialToDelete(credential)}
-                          >
-                            {credential.credentialId ? (
-                              <Unplug className="h-4 w-4" />
-                            ) : (
-                              <Trash2 className="h-4 w-4" />
-                            )}
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Disconnect</TooltipContent>
-                      </Tooltip>
-                    )}
-                  </WithPermissions>
-                )}
+                              deleteConnection.isPending,
+                            disabledTooltip:
+                              "A credential update is already in progress.",
+                            variant: "destructive",
+                            onClick: () => setCredentialToDelete(credential),
+                          },
+                        ]
+                      : []
+                  }
+                />
               </div>
             </div>
           );
@@ -266,13 +223,25 @@ export function AgentBackgroundExecutionCard({
         onOpenChange={(open) => {
           if (!open) setCredentialToDelete(null);
         }}
-        title="Remove execution connection?"
+        title={
+          credentialToDelete?.credentialId
+            ? "Disconnect credential?"
+            : "Delete saved secret?"
+        }
         description={
           credentialToDelete?.credentialId
-            ? `${credentialToDelete.label} will stop working for every Agent that uses this ${credentialToDelete.scope === "shared" ? "organization" : "personal"} connection.`
-            : `The stored value for ${credentialToDelete?.label ?? "this credential"} will be removed from the secret manager.`
+            ? credentialToDelete.scope === "shared"
+              ? `This disconnects ${credentialToDelete.label} for the organization. Every Agent that uses it will lose access.`
+              : `This disconnects ${credentialToDelete.label} from your account. Every Agent that uses it will lose access.`
+            : `The saved value for ${credentialToDelete?.label ?? "this credential"} will be deleted.`
         }
         isPending={deleteCredential.isPending || deleteConnection.isPending}
+        confirmLabel={
+          credentialToDelete?.credentialId ? "Disconnect" : "Delete"
+        }
+        pendingLabel={
+          credentialToDelete?.credentialId ? "Disconnecting..." : "Deleting..."
+        }
         onConfirm={() => {
           if (!credentialToDelete) return;
           const label = credentialToDelete.label;
@@ -303,6 +272,45 @@ export function AgentBackgroundExecutionCard({
         }}
       />
     </section>
+  );
+}
+
+function CredentialConnectionStatus({
+  configured,
+  required,
+  scope,
+}: {
+  configured: boolean;
+  required: boolean;
+  scope: CredentialDeclaration["scope"];
+}) {
+  if (configured) {
+    return (
+      <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+        <CircleCheck className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+        <span>
+          {scope === "shared"
+            ? "Connected for the organization"
+            : "Connected for you"}
+        </span>
+      </p>
+    );
+  }
+
+  if (required) {
+    return (
+      <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+        <CircleAlert className="size-3.5 text-amber-600 dark:text-amber-400" />
+        <span>Required before background tasks can start</span>
+      </p>
+    );
+  }
+
+  return (
+    <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+      <Circle className="size-3.5" />
+      <span>Optional connection not set</span>
+    </p>
   );
 }
 

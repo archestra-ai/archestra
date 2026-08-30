@@ -56,7 +56,7 @@ export function getAgentCatalogTemplates(
           scope: "per_user",
           label: "Claude Code subscription token",
           description:
-            "Run `claude setup-token` locally. This token is available only to the official Claude Code background runtime, never foreground chat or other Agents.",
+            "A personal Claude subscription token used only by Claude Code background tasks.",
           required: true,
         },
       ],
@@ -253,7 +253,7 @@ function template(params: {
             scope: "per_user",
             label: "GitHub token",
             description:
-              "A token that can clone repositories, push branches, and open pull requests.",
+              "Used to clone repositories and push changes from background tasks.",
             required: false,
           },
           ...(params.additionalCredentials ?? []),

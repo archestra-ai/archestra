@@ -6,10 +6,12 @@ import {
   MESSAGING_CHANNEL_LABELS,
   type MessagingChannelId,
 } from "@archestra/shared";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { siKubernetes } from "simple-icons";
 import { AgentSelector } from "@/components/agent-selector";
+import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { ChannelIcon } from "@/components/channel-icon";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
@@ -23,8 +25,8 @@ import {
   SettingsSaveBar,
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
+import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -484,22 +486,26 @@ function ExecutionBackendSection({
       title="Execution backend"
       description={
         <>
-          Installation-wide defaults for delegated Background executions.
-          Configure Agent-specific overrides in the Agent editor.{" "}
+          Execution backends provide the isolated environment where delegated
+          Agent tasks run.{" "}
           <ExternalDocsLink
             href={getDocsUrl(DocsPage.PlatformAgentBackgroundExecution)}
+            className="whitespace-nowrap"
           >
-            Configure Background execution
+            Learn more
           </ExternalDocsLink>
         </>
       }
       control={
-        <Badge
-          variant={executionBackend.available ? "secondary" : "destructive"}
-          className="font-normal"
+        <ButtonWithTooltip
+          type="button"
+          size="sm"
+          disabled
+          disabledText="Additional execution backends are coming soon."
         >
-          {executionBackend.available ? "Available" : "Unavailable"}
-        </Badge>
+          <Plus className="size-4" />
+          <span>Add backend</span>
+        </ButtonWithTooltip>
       }
       notice={
         !executionBackend.available
@@ -507,73 +513,48 @@ function ExecutionBackendSection({
           : undefined
       }
     >
-      <div className="flex items-center gap-3 border-b pb-4">
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-background">
-          <svg
-            aria-hidden="true"
-            viewBox="0 0 24 24"
-            className="size-5"
-            fill={`#${siKubernetes.hex}`}
-          >
-            <path d={siKubernetes.path} />
-          </svg>
+      <div className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-background">
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className="size-5"
+              fill={`#${siKubernetes.hex}`}
+            >
+              <path d={siKubernetes.path} />
+            </svg>
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-sm font-medium">Kubernetes</h3>
+            <p className="text-xs text-muted-foreground">
+              Runs each delegated task in an isolated Kubernetes Job
+            </p>
+          </div>
         </div>
-        <div>
-          <h3 className="text-sm font-medium">Kubernetes</h3>
-          <p className="text-xs text-muted-foreground">
-            One isolated Job per delegated task
-          </p>
+        <div className="self-end sm:self-auto">
+          <TableRowActions
+            itemName="Kubernetes"
+            actions={[
+              {
+                icon: <Pencil className="size-4" />,
+                label: "Edit",
+                disabled: true,
+                disabledTooltip:
+                  "Backend configuration is managed by the deployment today.",
+              },
+              {
+                icon: <Trash2 className="size-4" />,
+                label: "Delete",
+                variant: "destructive",
+                disabled: true,
+                disabledTooltip:
+                  "Kubernetes is the only supported backend and cannot be removed.",
+              },
+            ]}
+          />
         </div>
       </div>
-
-      <dl className="grid gap-x-8 gap-y-5 pt-4 sm:grid-cols-2 lg:grid-cols-3">
-        <div className="min-w-0 sm:col-span-2">
-          <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Default image
-          </dt>
-          <dd
-            className="mt-1 break-all font-mono text-sm"
-            title={executionBackend.defaultImage}
-          >
-            {executionBackend.defaultImage}
-          </dd>
-        </div>
-        <ExecutionBackendDetail label="Maximum duration">
-          {executionBackend.defaultTtlHours} hours
-        </ExecutionBackendDetail>
-        <ExecutionBackendDetail label="Idle timeout">
-          {executionBackend.defaultIdleTimeoutMinutes} minutes
-        </ExecutionBackendDetail>
-        <ExecutionBackendDetail label="CPU request">
-          {executionBackend.resources.cpuRequest}
-        </ExecutionBackendDetail>
-        <ExecutionBackendDetail label="Memory request">
-          {executionBackend.resources.memoryRequest}
-        </ExecutionBackendDetail>
-        <ExecutionBackendDetail label="Memory limit">
-          {executionBackend.resources.memoryLimit}
-        </ExecutionBackendDetail>
-        <ExecutionBackendDetail label="Privileged containers">
-          {executionBackend.allowPrivileged ? "Allowed" : "Disabled"}
-        </ExecutionBackendDetail>
-      </dl>
     </SettingsBlock>
-  );
-}
-
-function ExecutionBackendDetail({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="min-w-0">
-      <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        {label}
-      </dt>
-      <dd className="mt-1 text-sm">{children}</dd>
-    </div>
   );
 }

@@ -771,7 +771,8 @@ export function AccessLevelSelector({
  *   agent.
  * - `tools`: everything the agent reaches — tools and knowledge sources,
  *   subagents, published skills, and hooks.
- * - `advanced`: labels, security, passthrough headers, identity provider.
+ * - `advanced`: background execution, security, passthrough headers, identity
+ *   provider, and labels.
  */
 export type AgentFormSection = "configuration" | "tools" | "advanced";
 
@@ -1349,16 +1350,17 @@ export function AgentForm({
   // bordered panel would read as broken.
   const toolsPanelHasContent = showTools || showSkills || showsHooks;
   // What the Advanced step holds for this record, named in its description.
-  const advancedSettingsSummary = [
-    "labels",
+  const advancedSettingsSummary = formatSettingsList([
+    agentType === "agent" && agentBackgroundExecutionEnabled
+      ? "background execution"
+      : null,
     showSecurity ? "security" : null,
     agentType === "mcp_gateway" ? "header passthrough" : null,
     supportsIdentityProvider && identityProviders.length > 0
       ? "the identity provider to trust"
       : null,
-  ]
-    .filter((part): part is string => !!part)
-    .join(", ");
+    "labels",
+  ]);
   // The environment comes from the form rather than the stored agent: the
   // agent update lands before the skills PUT, so a pending environment change
   // is what the API will judge the assignment against.
@@ -3653,9 +3655,9 @@ export function AgentForm({
             </div>
           )}
 
-          {/* The Advanced step: labels, security, passthrough headers, the
-              identity provider — the settings a record rarely needs, as one
-              open section of their own. A built-in agent has none. */}
+          {/* The Advanced step: background execution, security, passthrough
+              headers, the identity provider, and labels. A built-in agent has
+              none. */}
           {showAdvancedSections && !isBuiltIn && (
             <div
               className={cn(
@@ -3667,24 +3669,9 @@ export function AgentForm({
                 <div className="space-y-1">
                   <h3 className="text-base font-semibold">Advanced</h3>
                   <p className="text-sm text-muted-foreground">
-                    Optional settings — {advancedSettingsSummary}.
+                    Optional settings for {advancedSettingsSummary}.
                   </p>
                 </div>
-                {/* Labels */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <Label>Labels</Label>
-                    </div>
-                  </div>
-                  <ProfileLabels
-                    ref={agentLabelsRef}
-                    labels={labels}
-                    onLabelsChange={setLabels}
-                    showLabel={false}
-                  />
-                </div>
-
                 {agentType === "agent" && agentBackgroundExecutionEnabled && (
                   <AgentBackgroundExecutionFields
                     value={backgroundExecution}
@@ -3832,6 +3819,22 @@ export function AgentForm({
                     </Select>
                   </div>
                 )}
+
+                {/* Labels classify the finished configuration, so they stay at
+                    the bottom of the Advanced step. */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <Label>Labels</Label>
+                    </div>
+                  </div>
+                  <ProfileLabels
+                    ref={agentLabelsRef}
+                    labels={labels}
+                    onLabelsChange={setLabels}
+                    showLabel={false}
+                  />
+                </div>
               </div>
             </div>
           )}
@@ -3925,6 +3928,13 @@ export function AgentForm({
       )}
     </form>
   );
+}
+
+function formatSettingsList(parts: Array<string | null>) {
+  const values = parts.filter((part): part is string => part !== null);
+  if (values.length <= 1) return values[0] ?? "";
+  if (values.length === 2) return values.join(" and ");
+  return `${values.slice(0, -1).join(", ")}, and ${values.at(-1)}`;
 }
 
 type AgentFormFields = {

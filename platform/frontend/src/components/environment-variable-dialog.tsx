@@ -2,6 +2,7 @@
 
 import { E2eTestId, parseVaultReference } from "@archestra/shared";
 import { CheckCircle2, Key } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ExecutionCredentialIcon } from "@/components/execution-credential-icon";
 import { ExternalSecretReferenceDialog } from "@/components/external-secret-reference-dialog";
@@ -9,7 +10,7 @@ import {
   FieldScopeSelect,
   type FieldScopeValue,
 } from "@/components/field-scope-select";
-import { StandardDialog } from "@/components/standard-dialog";
+import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -24,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { MCP_CONFIG_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
 
 export type EnvVarType = "plain_text" | "secret" | "boolean" | "number";
@@ -232,34 +234,35 @@ export function EnvironmentVariableDialog({
   }
 
   return (
-    <StandardDialog
+    <StandardFormDialog
       open={open}
       onOpenChange={(next) => {
         if (!next) onClose();
       }}
       size="small"
+      className="sm:max-w-xl"
+      isDirty={hasDraftChanged(
+        draft,
+        initial ??
+          makeEmptyDraft(disableInstallation, installationOnlyForSecrets),
+      )}
       title={
         mode === "add"
           ? "Add environment variable"
           : "Edit environment variable"
       }
-      description={
-        mode === "add"
-          ? `Configure how this variable is supplied to the ${targetLabel}.`
-          : undefined
-      }
+      description={`Configure the key, value source, and availability for the ${targetLabel}.`}
+      onSubmit={submit}
       footer={
         <>
-          <Button type="button" variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="button" onClick={submit} disabled={!canSubmit}>
+          <DialogCancelButton>Cancel</DialogCancelButton>
+          <Button type="submit" disabled={!canSubmit}>
             {mode === "add" ? "Add variable" : "Save"}
           </Button>
         </>
       }
     >
-      <div className="space-y-4">
+      <div className="space-y-5">
         <div className="space-y-2">
           <Label htmlFor="env-var-key">Key</Label>
           <Input
@@ -277,7 +280,27 @@ export function EnvironmentVariableDialog({
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-2">
+          <Label htmlFor="env-var-description">Description</Label>
+          <Textarea
+            id="env-var-description"
+            value={draft.description}
+            onChange={(e) => updateDraft({ description: e.target.value })}
+            placeholder="What this variable is used for"
+            rows={2}
+          />
+          {(draft.scope === "installation" ||
+            (allowRequiredStaticSecret &&
+              draft.scope === "static" &&
+              draft.type === "secret")) && (
+            <p className="text-xs text-muted-foreground">
+              Shown as helper text when &quot;{trimmedKey || "KEY"}&quot; is
+              requested.
+            </p>
+          )}
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="env-var-type">Type</Label>
             <Select
@@ -300,8 +323,9 @@ export function EnvironmentVariableDialog({
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Scope</Label>
+            <Label htmlFor="env-var-scope">Availability</Label>
             <FieldScopeSelect
+              id="env-var-scope"
               value={draft.scope}
               onChange={(scope) => updateDraft({ scope })}
               disabled={activeCredentialBinding?.allowedScopes.length === 1}
@@ -310,6 +334,11 @@ export function EnvironmentVariableDialog({
               installationLabel={installationLabel}
               staticLabel={staticLabel}
             />
+            {draft.scope === "installation" && (
+              <p className="text-xs text-muted-foreground">
+                {installationCalloutTitle}.
+              </p>
+            )}
           </div>
         </div>
 
@@ -321,16 +350,6 @@ export function EnvironmentVariableDialog({
           />
         )}
 
-        {(draft.scope === "installation" ||
-          (allowRequiredStaticSecret &&
-            draft.scope === "static" &&
-            draft.type === "secret")) && (
-          <p className="text-xs text-muted-foreground">
-            {installationCalloutTitle}. People will see a field labeled{" "}
-            <span className="font-mono">&quot;{trimmedKey || "KEY"}&quot;</span>{" "}
-            with the description below as helper text.
-          </p>
-        )}
         {draft.scope === "static" && (
           <StaticValueEditor
             draft={draft}
@@ -352,17 +371,6 @@ export function EnvironmentVariableDialog({
             description={requiredDescription}
           />
         )}
-
-        <div className="space-y-2">
-          <Label htmlFor="env-var-description">Description</Label>
-          <Textarea
-            id="env-var-description"
-            value={draft.description}
-            onChange={(e) => updateDraft({ description: e.target.value })}
-            placeholder="Optional description"
-            rows={2}
-          />
-        </div>
       </div>
 
       {useExternalSecretsManager && vaultDialogOpen && (
@@ -377,7 +385,7 @@ export function EnvironmentVariableDialog({
           }}
         />
       )}
-    </StandardDialog>
+    </StandardFormDialog>
   );
 }
 
@@ -394,7 +402,20 @@ function CredentialBindingEditor({
   const selection = reserved?.id ?? "one-off";
   return (
     <div className="space-y-2">
-      <Label htmlFor="env-var-credential-binding">Reusable connection</Label>
+      <div className="space-y-1">
+        <Label htmlFor="env-var-credential-binding">Secret source</Label>
+        <p className="text-xs text-muted-foreground">
+          {reserved
+            ? "Uses a saved connection. Rotating it updates every Agent that uses it."
+            : "Saved for this Agent only."}{" "}
+          <Link
+            href="/settings/agents#execution-credentials"
+            className="font-medium text-foreground underline underline-offset-4"
+          >
+            Manage saved connections
+          </Link>
+        </p>
+      </div>
       <Select
         value={selection}
         onValueChange={(value) => {
@@ -445,7 +466,7 @@ function CredentialBindingEditor({
               </span>
             }
           >
-            One-off secret
+            Agent-specific secret
           </SelectItem>
         </SelectContent>
       </Select>
@@ -463,13 +484,14 @@ function RequiredToggleCard({
   description: string;
 }) {
   return (
-    <div className="flex items-start justify-between gap-3">
-      <div className="space-y-2">
+    <div className="flex items-start justify-between gap-4 rounded-md border p-3">
+      <div className="min-w-0 space-y-1">
         <Label htmlFor="env-var-required">Required variable</Label>
         <div className="text-xs text-muted-foreground">{description}</div>
       </div>
       <Switch
         id="env-var-required"
+        className="shrink-0"
         checked={checked}
         onCheckedChange={onChange}
         aria-label="Required variable"
@@ -500,6 +522,7 @@ function StaticValueEditor({
   deferSecretValue: boolean;
 }) {
   if (deferSecretValue && draft.type === "secret") {
+    if (draft.credentialId) return null;
     return (
       <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
         The secret value is configured after saving and is never stored in this
@@ -594,4 +617,16 @@ function StaticValueEditor({
 
 function identity(value: string): string {
   return value;
+}
+
+function hasDraftChanged(current: EnvVarDraft, initial: EnvVarDraft) {
+  return (
+    current.key !== initial.key ||
+    current.type !== initial.type ||
+    current.scope !== initial.scope ||
+    current.required !== initial.required ||
+    current.description !== initial.description ||
+    current.value !== initial.value ||
+    current.credentialId !== initial.credentialId
+  );
 }

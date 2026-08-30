@@ -17,6 +17,7 @@ import {
 export type FieldScopeValue = "installation" | "static";
 
 interface FieldScopeSelectProps {
+  id?: string;
   value: FieldScopeValue;
   onChange: (next: FieldScopeValue) => void;
   disabled?: boolean;
@@ -29,6 +30,7 @@ interface FieldScopeSelectProps {
 }
 
 export function FieldScopeSelect({
+  id,
   value,
   onChange,
   disabled = false,
@@ -55,6 +57,7 @@ export function FieldScopeSelect({
       disabled={disabled}
     >
       <SelectTrigger
+        id={id}
         className="h-10 w-full"
         data-testid={E2eTestId.PromptOnInstallationCheckbox}
       >

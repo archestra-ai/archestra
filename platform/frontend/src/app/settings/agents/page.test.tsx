@@ -227,7 +227,7 @@ beforeEach(() => {
 });
 
 describe("AgentSettingsPage", () => {
-  it("shows execution backend health and operator defaults only when enabled", () => {
+  it("shows the configured execution backend as a managed row only when enabled", () => {
     const { rerender } = renderPage();
 
     expect(
@@ -256,11 +256,16 @@ describe("AgentSettingsPage", () => {
     expect(
       screen.getByRole("heading", { name: "Execution backend" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Available")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add backend" })).toBeDisabled();
     expect(
-      screen.getByText("registry.example.test/agent:latest"),
-    ).toBeInTheDocument();
-    expect(screen.getByText("72 hours")).toBeInTheDocument();
+      screen.getByRole("button", { name: "Edit Kubernetes" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Delete Kubernetes" }),
+    ).toBeDisabled();
+    expect(
+      screen.queryByText("registry.example.test/agent:latest"),
+    ).not.toBeInTheDocument();
 
     const messagingChannels = screen.getByText("Available messaging channels");
     const executionBackend = screen.getByRole("heading", {

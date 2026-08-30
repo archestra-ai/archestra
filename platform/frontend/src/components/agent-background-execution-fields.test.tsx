@@ -14,6 +14,11 @@ Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
 Element.prototype.setPointerCapture = vi.fn();
 Element.prototype.releasePointerCapture = vi.fn();
 Element.prototype.scrollIntoView = vi.fn();
+global.ResizeObserver = class ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+} as typeof ResizeObserver;
 
 vi.mock("@/lib/config/config.query", () => ({
   useFeature: vi.fn(),
@@ -124,7 +129,7 @@ describe("AgentBackgroundExecutionFields", () => {
     let dialog = screen.getByRole("dialog");
     await user.click(within(dialog).getByLabelText("Type"));
     await user.click(screen.getByRole("option", { name: "Secret" }));
-    await user.click(within(dialog).getByLabelText("Reusable connection"));
+    await user.click(within(dialog).getByLabelText("Secret source"));
     await user.click(screen.getByRole("option", { name: "GitHub PAT" }));
     expect(within(dialog).getByLabelText("Key")).toHaveValue("GITHUB_TOKEN");
     await user.click(
@@ -135,7 +140,7 @@ describe("AgentBackgroundExecutionFields", () => {
     dialog = screen.getByRole("dialog");
     await user.click(within(dialog).getByLabelText("Type"));
     await user.click(screen.getByRole("option", { name: "Secret" }));
-    await user.click(within(dialog).getByLabelText("Reusable connection"));
+    await user.click(within(dialog).getByLabelText("Secret source"));
     await user.click(screen.getByRole("option", { name: "GitLab PAT" }));
     fireEvent.change(within(dialog).getByLabelText("Key"), {
       target: { value: "DEPLOY_API_KEY" },

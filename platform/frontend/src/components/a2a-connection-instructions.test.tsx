@@ -98,22 +98,34 @@ beforeEach(() => {
   );
 });
 
-describe("A2AConnectionInstructions — Other ways to reach this agent", () => {
-  it("puts raw API examples after user-facing channels and keeps them collapsed", async () => {
+describe("A2AConnectionInstructions — detail layout", () => {
+  it("groups A2A setup before secondary channels and keeps request examples collapsed", async () => {
     const user = userEvent.setup();
     renderChannels();
+
+    const apiHeading = screen.getByRole("heading", { name: "Call via API" });
+    const apiSection = apiHeading.closest("section") as HTMLElement;
+    expect(
+      within(apiSection).getByRole("heading", { name: "Agent Endpoint" }),
+    ).toBeVisible();
+    expect(
+      within(apiSection).getByRole("heading", { name: "Authentication" }),
+    ).toBeVisible();
 
     const channelsHeading = screen.getByRole("heading", {
       name: "Other ways to reach this agent",
     });
-    const apiTrigger = screen.getByRole("button", { name: /Call via API/ });
     expect(
-      channelsHeading.compareDocumentPosition(apiTrigger) &
+      apiHeading.compareDocumentPosition(channelsHeading) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+
+    const examplesTrigger = screen.getByRole("button", {
+      name: /Request examples/,
+    });
     expect(screen.queryByText("Continue the conversation")).toBeNull();
 
-    await user.click(apiTrigger);
+    await user.click(examplesTrigger);
     expect(screen.getByText("Continue the conversation")).toBeVisible();
   });
 

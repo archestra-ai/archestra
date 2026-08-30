@@ -7,6 +7,7 @@ import config from "@/config";
 import db, { schema } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
 import { OrganizationModel } from "@/models";
+import { OAUTH_CALLBACK_PATH } from "@/routes/route-paths";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
 import { Authnz } from "./middleware";
@@ -122,6 +123,23 @@ describe("Authnz", () => {
         expect(mockReply.status).not.toHaveBeenCalled();
         expect(mockReply.send).not.toHaveBeenCalled();
       }
+    });
+
+    test("skips session auth for the OAuth callback so state is validated in-route", async () => {
+      const request = {
+        url: OAUTH_CALLBACK_PATH,
+        method: "POST",
+        headers: {},
+      } as FastifyRequest;
+      const reply = {
+        status: vi.fn().mockReturnThis(),
+        send: vi.fn(),
+      } as unknown as FastifyReply;
+
+      await authnz.handle(request, reply);
+
+      expect(reply.status).not.toHaveBeenCalled();
+      expect(reply.send).not.toHaveBeenCalled();
     });
 
     test("should skip auth for all supported LLM provider routes", async () => {

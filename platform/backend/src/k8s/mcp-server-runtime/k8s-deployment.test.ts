@@ -5787,15 +5787,6 @@ describe("K8sDeployment.statusSummary", () => {
     expect(summary.deploymentName).toBe("mcp-test-server");
     expect(summary.namespace).toBe("test-namespace");
   });
-
-  test("returns correct deployment name and namespace", () => {
-    const k8sDeployment = createK8sDeploymentInstance();
-
-    const summary = k8sDeployment.statusSummary;
-
-    expect(summary.deploymentName).toBe("mcp-test-server");
-    expect(summary.namespace).toBe("test-namespace");
-  });
 });
 
 describe("K8sDeployment.containerName", () => {

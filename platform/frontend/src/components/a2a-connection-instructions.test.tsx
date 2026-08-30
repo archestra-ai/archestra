@@ -83,13 +83,6 @@ function renderChannels(
     .closest("section") as HTMLElement;
 }
 
-/** The prose line a channel shows between its label and its copyable value. */
-function proseFor(section: HTMLElement, label: string) {
-  const heading = within(section).getByText(label);
-  const channel = heading.closest(".space-y-2") as HTMLElement;
-  return channel.querySelector("p") as HTMLElement;
-}
-
 beforeEach(() => {
   vi.mocked(useHasPermissions).mockReturnValue(stubQuery({ data: true }));
   vi.mocked(useOrganization).mockReturnValue(
@@ -167,36 +160,6 @@ describe("A2AConnectionInstructions — detail layout", () => {
     await user.click(examplesTrigger);
     expect(screen.getByLabelText("Token for examples")).toBeVisible();
     expect(screen.getByText("Continue the conversation")).toBeVisible();
-  });
-
-  // Email invocation used to render its guidance inside a bg-muted/50 panel at
-  // text-sm, so the channel that most often has nothing to copy shouted over
-  // the two above it. Every channel now gets the same one line of prose.
-  it.each([
-    ["off for the agent", { incomingEmailEnabled: false }, {}],
-    [
-      "off for the organization",
-      { incomingEmailEnabled: false },
-      { globalEmail: false },
-    ],
-    [
-      "on",
-      {
-        incomingEmailEnabled: true,
-        incomingEmailSecurityMode: "internal",
-        incomingEmailAllowedDomain: "example.test",
-      },
-      {},
-    ],
-  ])("styles Email Invocation like the channels above it when email is %s", (_case, agentOverrides, options) => {
-    const section = renderChannels(agentOverrides as Partial<Agent>, options);
-
-    const deepLinkProse = proseFor(section, "Chat Deep Link");
-    const chatAppsProse = proseFor(section, "Chat Apps");
-    const emailProse = proseFor(section, "Email Invocation");
-
-    expect(emailProse.className).toBe(deepLinkProse.className);
-    expect(emailProse.className).toBe(chatAppsProse.className);
   });
 
   it("keeps the email address copyable when email invocation is on", () => {

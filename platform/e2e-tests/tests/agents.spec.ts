@@ -119,128 +119,111 @@ async function deleteFromList(
   await expect(rowLocator).not.toBeVisible({ timeout: 10_000 });
 }
 
-test(
-  "can create and delete an agent",
-  {
-    tag: ["@firefox", "@webkit"],
-  },
-  async ({ page, makeRandomString, goToPage }, testInfo) => {
-    // webkit intermittently fails: delete doesn't propagate before the next
-    // assertion, then create-agent-button isn't found on retry. Tracked
-    // alongside MQ flakiness from https://github.com/archestra-ai/archestra/actions/runs/26282803981.
-    test.skip(testInfo.project.name === "webkit", "flaky on webkit");
-    test.setTimeout(120_000);
+test("can create and delete an agent", {
+  tag: ["@firefox", "@webkit"],
+}, async ({ page, makeRandomString, goToPage }) => {
+  test.setTimeout(120_000);
 
-    const AGENT_NAME = makeRandomString(10, "Test Agent");
-    await goToPage(page, "/agents");
+  const AGENT_NAME = makeRandomString(10, "Test Agent");
+  await goToPage(page, "/agents");
 
-    await page.waitForLoadState("domcontentloaded");
+  await page.waitForLoadState("domcontentloaded");
 
-    const agentId = await createViaWizard(page, "/agents", AGENT_NAME);
+  const agentId = await createViaWizard(page, "/agents", AGENT_NAME);
 
-    // The create lands on the Connect section, which shows the agent's A2A
-    // endpoint so the user knows how to use it.
-    await expect(
-      page.getByText(new RegExp(`/v2/a2a/${agentId}`)).first(),
-    ).toBeVisible({ timeout: 15_000 });
-    await expect(
-      page.getByRole("heading", { level: 1, name: new RegExp(AGENT_NAME) }),
-    ).toBeVisible({ timeout: 15_000 });
+  // The create lands on the Connect section, which shows the agent's A2A
+  // endpoint so the user knows how to use it.
+  await expect(
+    page.getByText(new RegExp(`/v2/a2a/${agentId}`)).first(),
+  ).toBeVisible({ timeout: 15_000 });
+  await expect(
+    page.getByRole("heading", { level: 1, name: new RegExp(AGENT_NAME) }),
+  ).toBeVisible({ timeout: 15_000 });
 
-    // The wizard's steps are the edit page's: Tools & Knowledge is there.
-    await page.getByRole("link", { name: "Edit" }).click();
-    await page.waitForURL(new RegExp(`/agents/${agentId}/edit`), {
-      timeout: 15_000,
-    });
-    await page.getByTestId(`${E2eTestId.AgentSetupStep}-tools`).click();
-    await expect(page).toHaveURL(/step=tools/);
-    await expect(page.getByTestId(E2eTestId.AgentToolsSection)).toBeVisible({
-      timeout: 15_000,
-    });
+  // The wizard's steps are the edit page's: Tools & Knowledge is there.
+  await page.getByRole("link", { name: "Edit" }).click();
+  await page.waitForURL(new RegExp(`/agents/${agentId}/edit`), {
+    timeout: 15_000,
+  });
+  await page.getByTestId(`${E2eTestId.AgentSetupStep}-tools`).click();
+  await expect(page).toHaveURL(/step=tools/);
+  await expect(page.getByTestId(E2eTestId.AgentToolsSection)).toBeVisible({
+    timeout: 15_000,
+  });
 
-    await goToPage(page, "/agents");
-    await selectAgentTableView(page);
-    const agentLocator = page
-      .getByTestId(E2eTestId.AgentsTable)
-      .getByTitle(AGENT_NAME);
-    await waitForElementWithReload(page, agentLocator, {
-      timeout: 30_000,
-      intervals: [2000, 3000, 5000],
-      checkEnabled: false,
-    });
+  await goToPage(page, "/agents");
+  await selectAgentTableView(page);
+  const agentLocator = page
+    .getByTestId(E2eTestId.AgentsTable)
+    .getByTitle(AGENT_NAME);
+  await waitForElementWithReload(page, agentLocator, {
+    timeout: 30_000,
+    intervals: [2000, 3000, 5000],
+    checkEnabled: false,
+  });
 
-    // The whole row opens the detail page, not just the name link: click the
-    // icon cell, which carries no control of its own. Retried until the URL
-    // changes, for the same pre-hydration reason as the wizard steps above.
-    const agentDetailUrl = new RegExp(`/agents/${agentId}$`);
-    // The name cell truncates long names in the DOM and carries the full
-    // name as its title, so find the row by that title, not by text.
-    const rowIconCell = page
-      .getByTestId(E2eTestId.AgentsTable)
-      .locator("tr")
-      .filter({ has: page.getByTitle(AGENT_NAME) })
-      .locator('td[data-column-id="icon"]');
-    await expect(async () => {
-      if (!page.url().match(agentDetailUrl)) {
-        await rowIconCell.click();
-      }
-      await expect(page).toHaveURL(agentDetailUrl, { timeout: 3_000 });
-    }).toPass({ timeout: 20_000 });
+  // The whole row opens the detail page, not just the name link: click the
+  // icon cell, which carries no control of its own. Retried until the URL
+  // changes, for the same pre-hydration reason as the wizard steps above.
+  const agentDetailUrl = new RegExp(`/agents/${agentId}$`);
+  // The name cell truncates long names in the DOM and carries the full
+  // name as its title, so find the row by that title, not by text.
+  const rowIconCell = page
+    .getByTestId(E2eTestId.AgentsTable)
+    .locator("tr")
+    .filter({ has: page.getByTitle(AGENT_NAME) })
+    .locator('td[data-column-id="icon"]');
+  await expect(async () => {
+    if (!page.url().match(agentDetailUrl)) {
+      await rowIconCell.click();
+    }
+    await expect(page).toHaveURL(agentDetailUrl, { timeout: 3_000 });
+  }).toPass({ timeout: 20_000 });
 
-    // Delete created agent from the table
-    await goToPage(page, "/agents");
-    await selectAgentTableView(page);
-    await waitForElementWithReload(page, agentLocator, {
-      timeout: 30_000,
-      intervals: [2000, 3000, 5000],
-      checkEnabled: false,
-    });
-    await openAgentRowMenu(page, AGENT_NAME);
-    await page
-      .getByTestId(`${E2eTestId.DeleteAgentButton}-${AGENT_NAME}`)
-      .click();
-    await clickButton({ page, options: { name: "Delete Agent" } });
+  // Delete created agent from the table
+  await goToPage(page, "/agents");
+  await selectAgentTableView(page);
+  await waitForElementWithReload(page, agentLocator, {
+    timeout: 30_000,
+    intervals: [2000, 3000, 5000],
+    checkEnabled: false,
+  });
+  await openAgentRowMenu(page, AGENT_NAME);
+  await page
+    .getByTestId(`${E2eTestId.DeleteAgentButton}-${AGENT_NAME}`)
+    .click();
+  await clickButton({ page, options: { name: "Delete Agent" } });
 
-    // Wait for deletion to complete
-    await expect(agentLocator).not.toBeVisible({ timeout: 10000 });
-  },
-);
+  // Wait for deletion to complete
+  await expect(agentLocator).not.toBeVisible({ timeout: 10000 });
+});
 
-test(
-  "can create an MCP gateway and land on the pre-selected connection guide",
-  {
-    tag: ["@firefox", "@webkit"],
-  },
-  async ({ page, makeRandomString, goToPage }, testInfo) => {
-    test.skip(testInfo.project.name === "webkit", "flaky on webkit");
-    test.setTimeout(120_000);
+test("can create an MCP gateway and land on the pre-selected connection guide", {
+  tag: ["@firefox", "@webkit"],
+}, async ({ page, makeRandomString, goToPage }) => {
+  test.setTimeout(120_000);
 
-    const GATEWAY_NAME = makeRandomString(10, "Test MCP Gateway");
-    await goToPage(page, "/mcp/gateways");
+  const GATEWAY_NAME = makeRandomString(10, "Test MCP Gateway");
+  await goToPage(page, "/mcp/gateways");
 
-    await page.waitForLoadState("domcontentloaded");
+  await page.waitForLoadState("domcontentloaded");
 
-    const gatewayId = await createViaWizard(
-      page,
-      "/mcp/gateways",
-      GATEWAY_NAME,
-    );
+  const gatewayId = await createViaWizard(page, "/mcp/gateways", GATEWAY_NAME);
 
-    // The create lands on the connection instructions, whose guided-setup link
-    // lands on /connection with the new gateway pre-selected.
-    await page
-      .getByRole("link", { name: /Set up a client step by step/ })
-      .click();
-    await page.waitForURL(
-      new RegExp(`/connection\\?gatewayId=${gatewayId}&from=`),
-      { timeout: 15_000 },
-    );
+  // The create lands on the connection instructions, whose guided-setup link
+  // lands on /connection with the new gateway pre-selected.
+  await page
+    .getByRole("link", { name: /Set up a client step by step/ })
+    .click();
+  await page.waitForURL(
+    new RegExp(`/connection\\?gatewayId=${gatewayId}&from=`),
+    { timeout: 15_000 },
+  );
 
-    // Clean up: back to the table and delete the gateway.
-    await goToPage(page, "/mcp/gateways");
-    await deleteFromList(page, {
-      name: GATEWAY_NAME,
-      confirmLabel: "Delete MCP Gateway",
-    });
-  },
-);
+  // Clean up: back to the table and delete the gateway.
+  await goToPage(page, "/mcp/gateways");
+  await deleteFromList(page, {
+    name: GATEWAY_NAME,
+    confirmLabel: "Delete MCP Gateway",
+  });
+});

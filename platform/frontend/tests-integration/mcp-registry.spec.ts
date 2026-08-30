@@ -1,10 +1,7 @@
 import { expect, test } from "./fixtures";
 
 test.describe("MCP Registry", () => {
-  // FIXME(stale): the card's settings button now routes to the server detail
-  // page instead of opening a "<name> Settings" dialog. Rewriting this against
-  // the detail route needs its own fixtures — tracked separately.
-  test.fixme("lists catalog items and opens the edit form when one is clicked", async ({
+  test("lists catalog items and opens the routed edit form", async ({
     mcpRegistryPage,
     page,
   }) => {
@@ -20,19 +17,12 @@ test.describe("MCP Registry", () => {
     );
 
     await mcpRegistryPage.settingsButtonFor("filesystem").click();
+    await page.waitForURL(/\/mcp\/registry\/[^/?#]+$/);
+    await page.getByRole("link", { name: "Edit" }).click();
+    await page.waitForURL(/\/mcp\/registry\/[^/?#]+\/edit/);
 
-    // The settings dialog uses an sr-only DialogTitle of "<name> Settings"
-    // which provides the accessible name Playwright reads.
-    const dialog = page.getByRole("dialog", { name: /filesystem Settings/i });
-    await expect(dialog).toBeVisible();
-
-    // EditCatalogContent renders McpCatalogForm with mode="edit" and
-    // nameDisabled — the Name input is populated with the catalog item's
-    // name and rendered read-only. The form's FormLabel is not linked to the
-    // input via htmlFor, so the placeholder is the most stable hook here.
-    const nameInput = dialog.getByPlaceholder("e.g., GitHub MCP Server");
+    const nameInput = page.getByPlaceholder("e.g., GitHub MCP Server");
     await expect(nameInput).toHaveValue("filesystem");
-    await expect(nameInput).toBeDisabled();
   });
 
   test("renders no cards when catalog and servers are overridden to empty", async ({

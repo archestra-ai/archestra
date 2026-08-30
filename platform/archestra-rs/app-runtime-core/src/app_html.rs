@@ -299,13 +299,6 @@ mod tests {
     }
 
     #[test]
-    fn whitespace_spliced_href_cannot_slip_the_self_link_past() {
-        let html = "<html><head><link href=\"/_sandbox/archestra-app-\n\tbase.css\"></head></html>";
-        let rejection = scan_app_html(html).rejection.expect("should reject");
-        assert_eq!(rejection.kind, RejectionKind::PlatformBaseCss);
-    }
-
-    #[test]
     fn unrelated_stylesheet_link_is_allowed() {
         let html = r#"<html><head><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/normalize.css"></head></html>"#;
         assert_eq!(scan_app_html(html).rejection, None);

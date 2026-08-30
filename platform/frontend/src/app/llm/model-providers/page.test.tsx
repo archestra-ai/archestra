@@ -329,42 +329,6 @@ describe("ApiKeysPage", () => {
     );
   });
 
-  it("does not query API keys while read permission is still loading", () => {
-    vi.mocked(useHasPermissions).mockReturnValue({
-      data: false,
-      isPending: true,
-    } as unknown as ReturnType<typeof useHasPermissions>);
-
-    render(<ApiKeysPage />);
-
-    expect(mockUseLlmProviderApiKeys).toHaveBeenCalledWith({
-      enabled: false,
-    });
-    expect(mockUseLlmProviderApiKeys).toHaveBeenCalledWith({
-      enabled: false,
-      provider: undefined,
-      search: undefined,
-    });
-  });
-
-  it("queries API keys after read permission resolves", () => {
-    vi.mocked(useHasPermissions).mockReturnValue({
-      data: true,
-      isPending: false,
-    } as unknown as ReturnType<typeof useHasPermissions>);
-
-    render(<ApiKeysPage />);
-
-    expect(mockUseLlmProviderApiKeys).toHaveBeenCalledWith({
-      enabled: true,
-    });
-    expect(mockUseLlmProviderApiKeys).toHaveBeenCalledWith({
-      enabled: true,
-      provider: undefined,
-      search: undefined,
-    });
-  });
-
   it("still offers subscriptions to a member who cannot read keys", () => {
     // Their key query never runs, so the cards must state the offer rather than
     // sit in a skeleton waiting on a query that will never resolve.

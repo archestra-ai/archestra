@@ -378,6 +378,41 @@ const COMPLETE_WAKE_PATCH_BODY: MergePatchBody = {
 };
 
 describe("McpServerRuntimeManager ↔ K8sDeployment hibernation seam", () => {
+  test("renders log and diagnostic commands from the loaded deployment identity", async ({
+    makeOrganization,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const cluster = new FakeK8sCluster({ replicas: 1 });
+    const { manager } = makeManager(cluster);
+    const { mcpServer } = await makeLocalInstall({
+      makeOrganization,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    });
+    const deployment = await manager.getOrLoadDeployment(mcpServer.id);
+    if (!deployment) throw new Error("deployment did not load");
+    vi.spyOn(deployment, "getRecentLogs").mockResolvedValue("recent log line");
+
+    await expect(manager.getMcpServerLogs(mcpServer.id, 42)).resolves.toEqual({
+      logs: "recent log line",
+      containerName: DEPLOYMENT_NAME,
+      command: `kubectl logs -n ${NAMESPACE} deployment/${DEPLOYMENT_NAME} --tail=42`,
+      namespace: NAMESPACE,
+    });
+    await expect(
+      manager.getMcpServerLogsCommand(mcpServer.id, 42),
+    ).resolves.toBe(
+      `kubectl logs -n ${NAMESPACE} deployment/${DEPLOYMENT_NAME} --tail=42 -f`,
+    );
+    await expect(
+      manager.getMcpServerDescribeCommand(mcpServer.id),
+    ).resolves.toBe(
+      `kubectl describe deployment -n ${NAMESPACE} ${DEPLOYMENT_NAME}`,
+    );
+    expect(manager.getExecCommand(mcpServer.id)).toContain(`-n ${NAMESPACE}`);
+  });
+
   test("cache-cold wake: a deployment this process never loaded is scaled up and fully woken", async ({
     makeOrganization,
     makeInternalMcpCatalog,

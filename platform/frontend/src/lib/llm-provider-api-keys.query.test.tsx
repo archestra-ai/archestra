@@ -1,29 +1,21 @@
+import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
+import { HttpResponse, http } from "msw";
+import { setupServer } from "msw/node";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-
-const { mockBulkDeleteLlmProviderApiKeys, mockGetLlmProviderApiKeys } =
-  vi.hoisted(() => ({
-    mockBulkDeleteLlmProviderApiKeys: vi.fn(),
-    mockGetLlmProviderApiKeys: vi.fn(),
-  }));
-
-vi.mock("@archestra/shared", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@archestra/shared")>();
-  return {
-    ...actual,
-    archestraApiSdk: {
-      ...actual.archestraApiSdk,
-      bulkDeleteLlmProviderApiKeys: (...args: unknown[]) =>
-        mockBulkDeleteLlmProviderApiKeys(...args),
-      getLlmProviderApiKeys: (...args: unknown[]) =>
-        mockGetLlmProviderApiKeys(...args),
-    },
-  };
-});
 
 vi.mock("sonner");
 
@@ -35,6 +27,42 @@ import {
   useLlmProviderApiKeys,
 } from "./llm-provider-api-keys.query";
 
+const API_ORIGIN = "http://localhost:9000";
+const server = setupServer();
+let listRequests = 0;
+let bulkRequestBody: unknown;
+
+beforeAll(() => {
+  server.listen({ onUnhandledRequest: "error" });
+  archestraApiClient.setConfig({ baseUrl: API_ORIGIN });
+});
+beforeEach(() => {
+  vi.clearAllMocks();
+  listRequests = 0;
+  bulkRequestBody = undefined;
+  server.use(
+    http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () => {
+      listRequests += 1;
+      return HttpResponse.json([]);
+    }),
+    http.delete(
+      `${API_ORIGIN}/api/llm-provider-api-keys/bulk`,
+      async ({ request }) => {
+        bulkRequestBody = await request.json();
+        return HttpResponse.json({
+          succeeded: [{ id: "key-1", name: "First" }],
+          failed: [],
+        });
+      },
+    ),
+  );
+});
+afterEach(() => server.resetHandlers());
+afterAll(() => {
+  server.close();
+  archestraApiClient.setConfig({ baseUrl: "" });
+});
+
 function wrapper({ children }: { children: ReactNode }) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -45,14 +73,15 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 describe("useLlmProviderApiKeys", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   it("enters the error state when the request fails (instead of returning [])", async () => {
-    mockGetLlmProviderApiKeys.mockResolvedValue({
-      error: new Error("Network request failed"),
-    });
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
+        HttpResponse.json(
+          { error: { message: "Network request failed" } },
+          { status: 500 },
+        ),
+      ),
+    );
 
     const { result } = renderHook(() => useLlmProviderApiKeys({}), {
       wrapper,
@@ -67,9 +96,14 @@ describe("useLlmProviderApiKeys", () => {
   });
 
   it("does not toast on failure when toastOnError is false", async () => {
-    mockGetLlmProviderApiKeys.mockResolvedValue({
-      error: new Error("Network request failed"),
-    });
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
+        HttpResponse.json(
+          { error: { message: "Network request failed" } },
+          { status: 500 },
+        ),
+      ),
+    );
 
     const { result } = renderHook(
       () => useLlmProviderApiKeys({ toastOnError: false }),
@@ -81,8 +115,6 @@ describe("useLlmProviderApiKeys", () => {
   });
 
   it("returns the keys on success without an error", async () => {
-    mockGetLlmProviderApiKeys.mockResolvedValue({ data: [] });
-
     const { result } = renderHook(() => useLlmProviderApiKeys({}), {
       wrapper,
     });
@@ -95,16 +127,20 @@ describe("useLlmProviderApiKeys", () => {
 
 describe("useHasAnyApiKey", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
     } as unknown as ReturnType<typeof useHasPermissions>);
   });
 
   it("reports a load error when the first keys fetch fails", async () => {
-    mockGetLlmProviderApiKeys.mockResolvedValue({
-      error: new Error("Network request failed"),
-    });
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
+        HttpResponse.json(
+          { error: { message: "Network request failed" } },
+          { status: 500 },
+        ),
+      ),
+    );
 
     const { result } = renderHook(() => useHasAnyApiKey(), { wrapper });
 
@@ -121,11 +157,15 @@ describe("useHasAnyApiKey", () => {
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.isLoadError).toBe(false);
-    expect(mockGetLlmProviderApiKeys).not.toHaveBeenCalled();
+    expect(listRequests).toBe(0);
   });
 
   it("reports a configured key when the fetch succeeds with keys", async () => {
-    mockGetLlmProviderApiKeys.mockResolvedValue({ data: [{ id: "key-1" }] });
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
+        HttpResponse.json([{ id: "key-1" }]),
+      ),
+    );
 
     const { result } = renderHook(() => useHasAnyApiKey(), { wrapper });
 
@@ -135,18 +175,7 @@ describe("useHasAnyApiKey", () => {
 });
 
 describe("useBulkDeleteLlmProviderApiKeys", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it("sends selected ids through the generated bulk SDK method", async () => {
-    mockBulkDeleteLlmProviderApiKeys.mockResolvedValue({
-      data: {
-        succeeded: [{ id: "key-1", name: "First" }],
-        failed: [],
-      },
-    });
-
+  it("sends selected ids through the bulk HTTP endpoint", async () => {
     const { result } = renderHook(() => useBulkDeleteLlmProviderApiKeys(), {
       wrapper,
     });
@@ -154,8 +183,6 @@ describe("useBulkDeleteLlmProviderApiKeys", () => {
     await expect(
       result.current.mutateAsync([{ id: "key-1" }]),
     ).resolves.toEqual({ succeeded: ["First"], failed: [] });
-    expect(mockBulkDeleteLlmProviderApiKeys).toHaveBeenCalledWith({
-      body: { ids: ["key-1"] },
-    });
+    expect(bulkRequestBody).toEqual({ ids: ["key-1"] });
   });
 });

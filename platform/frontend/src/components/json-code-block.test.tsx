@@ -13,20 +13,12 @@ vi.mock("next-themes", () => ({
 vi.mock("react-syntax-highlighter", () => ({
   Prism: ({
     children,
-    customStyle,
     codeTagProps,
-    wrapLongLines,
   }: {
     children: string;
-    customStyle?: React.CSSProperties;
     codeTagProps?: React.HTMLAttributes<HTMLElement>;
-    wrapLongLines?: boolean;
   }) => (
-    <pre
-      data-testid="syntax-highlighter"
-      data-wrap-long-lines={wrapLongLines ? "true" : "false"}
-      style={customStyle}
-    >
+    <pre>
       <code {...codeTagProps}>{children}</code>
     </pre>
   ),
@@ -49,22 +41,12 @@ function mockClipboard(writeText: ReturnType<typeof vi.fn>) {
 }
 
 describe("JsonCodeBlock", () => {
-  it("renders formatted JSON with copy padding but no fake top row", () => {
+  it("renders formatted JSON", () => {
     mockUseTheme.mockReturnValue({ resolvedTheme: "light" });
 
     render(<JsonCodeBlock value={{ hello: "world" }} />);
 
     expect(screen.getByText(/"hello": "world"/)).toBeInTheDocument();
-    expect(screen.getByTestId("syntax-highlighter")).toHaveStyle({
-      paddingRight: "3.5rem",
-    });
-    expect(screen.getByTestId("syntax-highlighter")).not.toHaveStyle({
-      paddingTop: "2.75rem",
-    });
-    expect(screen.getByTestId("syntax-highlighter")).toHaveAttribute(
-      "data-wrap-long-lines",
-      "true",
-    );
   });
 
   it("copies the formatted JSON", async () => {

@@ -1,5 +1,15 @@
-import { describe, expect, test } from "vitest";
-import { lintMigrationSql, summarizeIssues } from "../src";
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import {
+  findChangedMigrationFiles,
+  findMigrationFiles,
+  isMigrationSqlFile,
+  lintMigrationSql,
+  summarizeIssues,
+} from "../src";
 
 describe("lintMigrationSql", () => {
   test("allows additive nullable columns", () => {
@@ -120,6 +130,36 @@ describe("lintMigrationSql", () => {
     ]);
   });
 
+  test.each([
+    [
+      "drop-constraint",
+      'ALTER TABLE "agents" DROP CONSTRAINT "agents_org_fk";',
+    ],
+    ["drop-index", 'DROP INDEX "agents_name_idx";'],
+    ["drop-type", 'DROP TYPE "agent_status";'],
+    ["rename-type", 'ALTER TYPE "agent_status" RENAME TO "profile_status";'],
+    ["unbounded-delete", 'DELETE FROM "agents";'],
+    ["unbounded-update", 'UPDATE "agents" SET "enabled" = false;'],
+  ])("flags %s", (code, sql) => {
+    const result = lintMigrationSql(sql);
+    expect(result.issues.map((issue) => issue.code)).toContain(code);
+  });
+
+  test("attributes issues to the supplied file and statement line", () => {
+    const result = lintMigrationSql(
+      '\nALTER TABLE "agents" ADD COLUMN "display_name" text;\n\nDROP INDEX "agents_name_idx";',
+      { filePath: "/tmp/0002_contract.sql" },
+    );
+
+    expect(result.issues).toMatchObject([
+      {
+        code: "drop-index",
+        filePath: "/tmp/0002_contract.sql",
+        line: 4,
+      },
+    ]);
+  });
+
   test("allow-breaking marker suppresses contract errors but not warnings", () => {
     const result = lintMigrationSql(`
       -- drizzle-migration-linter: allow-breaking
@@ -192,5 +232,76 @@ describe("summarizeIssues", () => {
     ]);
 
     expect(summary).toEqual({ errors: 1, warnings: 1 });
+  });
+});
+
+describe("migration file discovery", () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "drizzle-linter-files-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  test("findMigrationFiles returns only sorted SQL files", () => {
+    fs.writeFileSync(path.join(tempDir, "0002_second.sql"), "SELECT 2;");
+    fs.writeFileSync(path.join(tempDir, "README.md"), "not SQL");
+    fs.writeFileSync(path.join(tempDir, "0001_first.sql"), "SELECT 1;");
+
+    expect(findMigrationFiles(tempDir)).toEqual([
+      path.join(tempDir, "0001_first.sql"),
+      path.join(tempDir, "0002_second.sql"),
+    ]);
+    expect(() => findMigrationFiles(path.join(tempDir, "missing"))).toThrow(
+      "Migrations directory does not exist",
+    );
+  });
+
+  test("isMigrationSqlFile excludes metadata and non-SQL files", () => {
+    expect(isMigrationSqlFile(path.join(tempDir, "0001.sql"))).toBe(true);
+    expect(isMigrationSqlFile(path.join(tempDir, "meta", "0001.sql"))).toBe(
+      false,
+    );
+    expect(isMigrationSqlFile(path.join(tempDir, "0001.json"))).toBe(false);
+  });
+
+  test("findChangedMigrationFiles includes changed and untracked SQL but excludes meta", () => {
+    execFileSync("git", ["init"], { cwd: tempDir });
+    execFileSync("git", ["config", "user.email", "test@example.com"], {
+      cwd: tempDir,
+    });
+    execFileSync("git", ["config", "user.name", "Test User"], {
+      cwd: tempDir,
+    });
+    const migrationsDir = path.join(tempDir, "migrations");
+    fs.mkdirSync(path.join(migrationsDir, "meta"), { recursive: true });
+    fs.writeFileSync(path.join(migrationsDir, "0001_initial.sql"), "SELECT 1;");
+    execFileSync("git", ["add", "."], { cwd: tempDir });
+    execFileSync("git", ["commit", "-m", "initial"], { cwd: tempDir });
+    const baseRef = execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: tempDir,
+      encoding: "utf8",
+    }).trim();
+
+    fs.writeFileSync(path.join(migrationsDir, "0001_initial.sql"), "SELECT 2;");
+    fs.writeFileSync(path.join(migrationsDir, "0002_new.sql"), "SELECT 3;");
+    fs.writeFileSync(
+      path.join(migrationsDir, "meta", "snapshot.sql"),
+      "SELECT 4;",
+    );
+
+    expect(
+      findChangedMigrationFiles({
+        migrationsDir,
+        baseRef,
+        options: { cwd: tempDir },
+      }),
+    ).toEqual([
+      path.join(migrationsDir, "0001_initial.sql"),
+      path.join(migrationsDir, "0002_new.sql"),
+    ]);
   });
 });

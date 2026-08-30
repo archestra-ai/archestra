@@ -163,8 +163,20 @@ describe("config routes", () => {
       "xai",
       "zhipuai",
     ]);
-    for (const value of Object.values(payload.providerBaseUrls)) {
-      expect(value === null || typeof value === "string").toBe(true);
-    }
+  });
+
+  test("returns configured provider base URLs exactly", async () => {
+    config.llm.azure.baseUrl =
+      "https://configured-resource.openai.azure.com/openai";
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/config",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().providerBaseUrls.azure).toBe(
+      "https://configured-resource.openai.azure.com/openai",
+    );
   });
 });

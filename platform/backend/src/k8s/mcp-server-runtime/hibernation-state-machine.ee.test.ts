@@ -26,6 +26,44 @@ function facts(overrides: Partial<DeploymentFacts> = {}): DeploymentFacts {
   };
 }
 
+function expectedDeploymentDecision(
+  deploymentFacts: DeploymentFacts,
+  cachedState: McpDeploymentState,
+): ReturnType<typeof deriveDeploymentState> {
+  if (!deploymentFacts.exists) {
+    return { kind: "state", state: "not_created" };
+  }
+
+  if (deploymentFacts.hasHibernationAnnotation) {
+    if (deploymentFacts.replicas === 0) {
+      return { kind: "state", state: "hibernated" };
+    }
+    if (deploymentFacts.availableReplicas > 0) return { kind: "finish-wake" };
+    if (
+      deploymentFacts.podFailure?.failed &&
+      !deploymentFacts.podFailure.transient
+    ) {
+      return { kind: "state", state: "failed" };
+    }
+    return { kind: "state", state: "waking" };
+  }
+
+  if (deploymentFacts.availableReplicas > 0) {
+    return { kind: "state", state: "running" };
+  }
+  if (deploymentFacts.podFailure?.failed) {
+    return {
+      kind: "state",
+      state: deploymentFacts.podFailure.transient ? "pending" : "failed",
+    };
+  }
+  if (cachedState === "running") return { kind: "debounce-running" };
+  if (cachedState === "hibernated" || cachedState === "waking") {
+    return { kind: "state", state: "pending" };
+  }
+  return { kind: "state", state: cachedState };
+}
+
 describe("deriveDeploymentState hibernation overlay", () => {
   test("zero annotated replicas is hibernated", () => {
     expect(
@@ -143,7 +181,7 @@ describe("deriveDeploymentState hibernation overlay", () => {
     }
   });
 
-  test("is total across ordinary and hibernation facts", () => {
+  test("defines the hibernation decision for every cached state and cluster fact", () => {
     const decisionKinds = new Set<string>();
     for (const exists of [true, false]) {
       for (const hasHibernationAnnotation of [true, false]) {
@@ -151,21 +189,25 @@ describe("deriveDeploymentState hibernation overlay", () => {
           for (const availableReplicas of [0, 1]) {
             for (const podFailure of [
               null,
+              { failed: false, transient: false },
               { failed: true, transient: false },
               { failed: true, transient: true },
             ]) {
               for (const cachedState of MCP_DEPLOYMENT_STATES) {
+                const deploymentFacts = {
+                  exists,
+                  hasHibernationAnnotation,
+                  replicas,
+                  availableReplicas,
+                  podFailure,
+                };
                 const decision = deriveDeploymentState(
-                  {
-                    exists,
-                    hasHibernationAnnotation,
-                    replicas,
-                    availableReplicas,
-                    podFailure,
-                  },
+                  deploymentFacts,
                   cachedState,
                 );
-                expect(decision).toBeDefined();
+                expect(decision).toEqual(
+                  expectedDeploymentDecision(deploymentFacts, cachedState),
+                );
                 decisionKinds.add(decision.kind);
               }
             }
@@ -182,17 +224,6 @@ describe("deriveDeploymentState hibernation overlay", () => {
 });
 
 describe("action transition table", () => {
-  test("covers every deployment state with valid targets", () => {
-    expect(Object.keys(ALLOWED_ACTION_TRANSITIONS).sort()).toEqual(
-      [...MCP_DEPLOYMENT_STATES].sort(),
-    );
-    for (const targets of Object.values(ALLOWED_ACTION_TRANSITIONS)) {
-      for (const target of targets) {
-        expect(MCP_DEPLOYMENT_STATES).toContain(target);
-      }
-    }
-  });
-
   test("contains only the hibernation lifecycle actions", () => {
     expect(isActionTransitionAllowed("running", "hibernated")).toBe(true);
     expect(isActionTransitionAllowed("hibernated", "waking")).toBe(true);

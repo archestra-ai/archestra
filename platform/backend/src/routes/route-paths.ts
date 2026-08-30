@@ -8,6 +8,8 @@ export const HEALTH_PATH = "/health";
 export const READY_PATH = "/ready";
 export const METRICS_PATH = "/metrics";
 export const WELL_KNOWN_OAUTH_PREFIX = "/.well-known/oauth-";
+/** Public OAuth redirect target; callback state is the authentication proof. */
+export const OAUTH_CALLBACK_PATH = "/api/oauth/callback";
 export const WELL_KNOWN_ACME_PREFIX = "/.well-known/acme-challenge/";
 export const MCP_GATEWAY_PREFIX = "/v1/mcp";
 /**

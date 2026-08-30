@@ -2,28 +2,45 @@ import { describe, expect, test } from "@/test";
 import { measureSkillContextTokens } from "./skill-context-tokens";
 
 describe("measureSkillContextTokens", () => {
-  test("measures a block's size and scales with its length", () => {
-    const short = measureSkillContextTokens({
-      block: "# Skill\nUse pdftotext -layout.",
-      provider: "anthropic",
-      model: "claude-sonnet-4-5",
-    });
-    const long = measureSkillContextTokens({
-      block: "# Skill\nUse pdftotext -layout.\n".repeat(50),
-      provider: "anthropic",
-      model: "claude-sonnet-4-5",
-    });
+  test("uses the resolved model's tokenizer", () => {
+    const block = `export function resolveTargets(modelId: string) {
+  const withoutRegion = modelId.replace(REGION_PREFIX, "");
+  return withoutRegion;
+}
+`.repeat(60);
 
-    expect(short).toBeGreaterThan(0);
-    expect(long).toBeGreaterThan((short ?? 0) * 10);
+    expect(
+      measureSkillContextTokens({
+        block,
+        provider: "bedrock",
+        model: "us.anthropic.claude-opus-4-8",
+      }),
+    ).toBe(2101);
+    expect(
+      measureSkillContextTokens({
+        block,
+        provider: "bedrock",
+        model: "us.amazon.nova-pro-v1:0",
+      }),
+    ).toBe(1741);
   });
 
-  test("falls back to the default tokenizer when no model is resolved", () => {
-    // `load_skill` over the gateway and subagent dispatch have no model in hand;
-    // a measurement is still better than none.
+  test("uses the default cl100k_base tokenizer without a resolved model", () => {
     expect(
-      measureSkillContextTokens({ block: "# Skill\nsome instructions" }),
-    ).toBeGreaterThan(0);
+      measureSkillContextTokens({
+        block: "# Skill\nsome instructions",
+      }),
+    ).toBe(6);
+  });
+
+  test("measures a fixed Anthropic block", () => {
+    expect(
+      measureSkillContextTokens({
+        block: "# Skill\nUse pdftotext -layout.",
+        provider: "anthropic",
+        model: "claude-sonnet-4-5",
+      }),
+    ).toBe(12);
   });
 
   test("returns null for an empty block rather than a misleading zero cost", () => {

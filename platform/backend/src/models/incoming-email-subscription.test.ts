@@ -94,11 +94,8 @@ describe("IncomingEmailSubscriptionModel", () => {
     });
 
     test("returns undefined when no subscriptions exist", async () => {
-      // This test assumes clean database state from test isolation
       const mostRecent = await IncomingEmailSubscriptionModel.getMostRecent();
-
-      // May or may not be undefined depending on other tests, so we just check it doesn't throw
-      expect(mostRecent === undefined || mostRecent !== undefined).toBe(true);
+      expect(mostRecent).toBeUndefined();
     });
   });
 
@@ -153,13 +150,12 @@ describe("IncomingEmailSubscriptionModel", () => {
       expect(found).toBeUndefined();
     });
 
-    test("does not throw for non-existent subscription", async () => {
-      // Should not throw even for non-existent IDs
+    test("returns false for a non-existent subscription", async () => {
       await expect(
         IncomingEmailSubscriptionModel.delete(
           "00000000-0000-0000-0000-000000000000",
         ),
-      ).resolves.not.toThrow();
+      ).resolves.toBe(false);
     });
   });
 
@@ -187,13 +183,12 @@ describe("IncomingEmailSubscriptionModel", () => {
       expect(found).toBeUndefined();
     });
 
-    test("does not throw for non-existent subscription ID", async () => {
-      // Should not throw even for non-existent subscription IDs
+    test("returns false for a non-existent subscription ID", async () => {
       await expect(
         IncomingEmailSubscriptionModel.deleteBySubscriptionId(
           "non-existent-subscription-id",
         ),
-      ).resolves.not.toThrow();
+      ).resolves.toBe(false);
     });
   });
 

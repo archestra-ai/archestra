@@ -14,10 +14,12 @@ const projectNames = {
   setupTeams: "setup-teams",
   credentialsWithVault: "credentials-with-vault",
   quickstart: "quickstart",
+  quickstartRecovery: "quickstart-recovery",
   chromium: "chromium",
   firefox: "firefox",
   webkit: "webkit",
   identityProviders: "identity-providers",
+  identityProvidersSaml: "identity-providers-saml",
   api: "api",
   apiK8s: "api-k8s",
   // SPDX-SnippetBegin
@@ -58,6 +60,7 @@ const uiTestMatch = [
   "**/chat-refresh.spec.ts",
   "**/chat.spec.ts",
   "**/context-window.spec.ts",
+  "**/connection.spec.ts",
   "**/credentials-with-vault.ee.spec.ts",
   "**/dynamic-credentials.spec.ts",
   "**/identity-providers.ee.spec.ts",
@@ -227,10 +230,37 @@ export default defineConfig({
       },
       dependencies: dependencies.testProjects,
     },
+    // SAML is kept executable but off the merge queue until its previously
+    // quarantined Keycloak flow has a green scheduled/manual history.
+    {
+      name: projectNames.identityProvidersSaml,
+      testDir: "./tests",
+      testMatch: testPatterns.identityProviders,
+      grep: /@saml/,
+      use: {
+        ...devices["Desktop Chrome"],
+      },
+      dependencies: dependencies.testProjects,
+    },
     {
       name: projectNames.quickstart,
       testDir: "./tests",
       testMatch: quickstartTestMatch,
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: adminAuthFile,
+      },
+      dependencies: dependencies.testProjects,
+      grepInvert: /@k8s-recovery/,
+    },
+    // Recovery against a deliberately broken image is valuable but has a
+    // documented cluster deletion race. Keep it executable on scheduled and
+    // manual runs without putting that flake back on the merge queue.
+    {
+      name: projectNames.quickstartRecovery,
+      testDir: "./tests",
+      testMatch: quickstartTestMatch,
+      grep: /@k8s-recovery/,
       use: {
         ...devices["Desktop Chrome"],
         storageState: adminAuthFile,
@@ -285,6 +315,7 @@ export default defineConfig({
         // No storageState - identity provider tests authenticate fresh via ensureAdminAuthenticated()
       },
       dependencies: dependencies.testProjects,
+      grepInvert: /@saml/,
     },
     // API integration tests (lite environment)
     {

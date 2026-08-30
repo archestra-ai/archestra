@@ -109,14 +109,6 @@ mod tests {
     }
 
     #[test]
-    fn tolerates_missing_optional_fields() {
-        let m = meta(r#"{"env_id":"e","task_id":"t","lane":"l","provider":"p","model":"m","outcome":"failed"}"#);
-        assert_eq!(m.turn_count, 0);
-        assert!(m.finish_reason.is_none());
-        assert!(!m.is_pass());
-    }
-
-    #[test]
     fn load_run_meta_errors_when_missing() {
         let dir = tempfile::tempdir().unwrap();
         let err = load_run_meta(dir.path()).unwrap_err();

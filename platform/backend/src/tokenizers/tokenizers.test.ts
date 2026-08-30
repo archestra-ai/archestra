@@ -6,21 +6,17 @@ import { TiktokenTokenizer } from "./tiktoken";
 
 describe("Tokenizers", () => {
   describe("TiktokenTokenizer", () => {
-    test("should count tokens in a simple string message", () => {
+    test("counts a fixed string message with cl100k_base", () => {
       const tokenizer = new TiktokenTokenizer();
       const message: ProviderMessage = {
         role: "user",
         content: "Hello, world!",
       };
 
-      const tokenCount = tokenizer.countTokens(message);
-
-      // "Hello, world!" should be around 4 tokens with cl100k_base
-      expect(tokenCount).toBeGreaterThan(0);
-      expect(tokenCount).toBeLessThan(10);
+      expect(tokenizer.countTokens(message)).toBe(5);
     });
 
-    test("should count tokens in an array content message", () => {
+    test("concatenates text content blocks before encoding", () => {
       const tokenizer = new TiktokenTokenizer();
       const message: ProviderMessage = {
         role: "user",
@@ -30,12 +26,10 @@ describe("Tokenizers", () => {
         ],
       };
 
-      const tokenCount = tokenizer.countTokens(message);
-
-      expect(tokenCount).toBeGreaterThan(0);
+      expect(tokenizer.countTokens(message)).toBe(3);
     });
 
-    test("should count tokens in multiple messages", () => {
+    test("sums separately encoded messages", () => {
       const tokenizer = new TiktokenTokenizer();
       const messages: ProviderMessage[] = [
         { role: "user", content: "Hello" },
@@ -43,9 +37,7 @@ describe("Tokenizers", () => {
         { role: "user", content: "How are you?" },
       ];
 
-      const tokenCount = tokenizer.countTokens(messages);
-
-      expect(tokenCount).toBeGreaterThan(0);
+      expect(tokenizer.countTokens(messages)).toBe(10);
     });
 
     test("should handle empty messages", () => {
@@ -55,28 +47,23 @@ describe("Tokenizers", () => {
         content: "",
       };
 
-      const tokenCount = tokenizer.countTokens(message);
-
-      // Should at least count the role
-      expect(tokenCount).toBeGreaterThanOrEqual(0);
+      // The role still contributes to an otherwise empty message.
+      expect(tokenizer.countTokens(message)).toBe(1);
     });
   });
 
   describe("AnthropicTokenizer", () => {
-    test("should count tokens in a simple string message", () => {
+    test("counts a fixed string message with Anthropic's tokenizer", () => {
       const tokenizer = new AnthropicTokenizer();
       const message: ProviderMessage = {
         role: "user",
         content: "Hello, world!",
       };
 
-      const tokenCount = tokenizer.countTokens(message);
-
-      expect(tokenCount).toBeGreaterThan(0);
-      expect(tokenCount).toBeLessThan(10);
+      expect(tokenizer.countTokens(message)).toBe(5);
     });
 
-    test("should count tokens in an array content message", () => {
+    test("concatenates text content blocks before encoding", () => {
       const tokenizer = new AnthropicTokenizer();
       const message: ProviderMessage = {
         role: "user",
@@ -86,12 +73,10 @@ describe("Tokenizers", () => {
         ],
       };
 
-      const tokenCount = tokenizer.countTokens(message);
-
-      expect(tokenCount).toBeGreaterThan(0);
+      expect(tokenizer.countTokens(message)).toBe(3);
     });
 
-    test("should count tokens in multiple messages", () => {
+    test("sums separately encoded messages", () => {
       const tokenizer = new AnthropicTokenizer();
       const messages: ProviderMessage[] = [
         { role: "user", content: "Hello" },
@@ -99,9 +84,7 @@ describe("Tokenizers", () => {
         { role: "user", content: "How are you?" },
       ];
 
-      const tokenCount = tokenizer.countTokens(messages);
-
-      expect(tokenCount).toBeGreaterThan(0);
+      expect(tokenizer.countTokens(messages)).toBe(10);
     });
   });
 
@@ -178,7 +161,7 @@ describe("Tokenizers", () => {
       expect(getTokenizer("bedrock", null)).toBe(getTokenizer("openai"));
     });
 
-    test("should count code-dense text differently for Claude than cl100k_base", () => {
+    test("counts code-dense text with the selected model tokenizer", () => {
       // Why the reseller mapping is load-bearing rather than cosmetic: the two
       // encoders agree on prose and diverge on the code/identifier-heavy
       // payloads that dominate long tool-using conversations. The direction of
@@ -198,30 +181,8 @@ describe("Tokenizers", () => {
       ).countTokens(message);
       const cl100k = getTokenizer("bedrock").countTokens(message);
 
-      expect(claudeOnBedrock).not.toBe(cl100k);
-      // Same text, same provider — only the model-aware mapping changes it.
-      expect(claudeOnBedrock).toBe(
-        getTokenizer("anthropic").countTokens(message),
-      );
-    });
-
-    test("should return consistent token counts for same input", () => {
-      const anthropicTokenizer = getTokenizer("anthropic");
-      const openaiTokenizer = getTokenizer("openai");
-
-      const message: ProviderMessage = {
-        role: "user",
-        content: "This is a test message",
-      };
-
-      const anthropicCount = anthropicTokenizer.countTokens(message);
-      const openaiCount = openaiTokenizer.countTokens(message);
-
-      // Token counts should be in the same ballpark (within 20% of each other)
-      expect(anthropicCount).toBeGreaterThan(0);
-      expect(openaiCount).toBeGreaterThan(0);
-      const errorMargin = Math.max(anthropicCount, openaiCount) * 0.2;
-      expect(Math.abs(anthropicCount - openaiCount)).toBeLessThan(errorMargin);
+      expect(claudeOnBedrock).toBe(2101);
+      expect(cl100k).toBe(1741);
     });
   });
 

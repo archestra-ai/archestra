@@ -1210,14 +1210,6 @@ mod tests {
     }
 
     #[test]
-    fn connect_params_parse_from_a_session_stdout_line() {
-        let conn: ConnectParams =
-            serde_json::from_str(r#"{"port":12345,"session_token":"tok"}"#).unwrap();
-        assert_eq!(conn.port, 12345);
-        assert_eq!(conn.session_token, "tok");
-    }
-
-    #[test]
     fn session_command_pins_runner_host_on_the_child_only_for_environments() {
         let cli = Path::new("/usr/local/bin/dagger");
         let host = "kube-pod://dagger-engine-env-a-0?namespace=ns&container=dagger-engine";

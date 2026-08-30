@@ -10,14 +10,12 @@ import {
 describe("permission.types", () => {
   test("every resource has a label", () => {
     for (const resource of resources) {
-      expect(resourceLabels[resource]).toBeDefined();
       expect(resourceLabels[resource].length).toBeGreaterThan(0);
     }
   });
 
   test("every resource has a description", () => {
     for (const resource of resources) {
-      expect(resourceDescriptions[resource]).toBeDefined();
       expect(resourceDescriptions[resource].length).toBeGreaterThan(0);
     }
   });

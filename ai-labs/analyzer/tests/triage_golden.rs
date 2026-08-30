@@ -42,18 +42,3 @@ fn golden_judgment_renders_to_the_fixture_section() {
         fs::read_to_string(fixture("expected_section.md")).unwrap()
     );
 }
-
-/// One-off fixture generator, kept ignored: `cargo test -p trajectory-analyzer --test
-/// triage_golden regenerate -- --ignored` rewrites the derived fixtures after a deliberate
-/// contract change (then re-verify them by hand against the contract).
-#[test]
-#[ignore]
-fn regenerate_derived_fixtures() {
-    let record = golden_record();
-    fs::write(
-        fixture("record.jsonl"),
-        format!("{}\n", serde_json::to_string(&record).unwrap()),
-    )
-    .unwrap();
-    fs::write(fixture("expected_section.md"), render_section(&record)).unwrap();
-}

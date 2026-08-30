@@ -463,12 +463,10 @@ jobs:
   # servers, and the Vault K8s-auth boot. Everything else runs in the lite
   # job below against the container harness.
   #
-  # One environment, no sharding: every extra shard would pay the full
-  # environment setup again to split a couple of minutes of tests. The job
-  # is NOT purely wait-bound in practice: Setup Archestra Platform (Kind
-  # cluster + helm install + image load) measured 2.4 min on an 8-vcpu
-  # runner vs 13.7 min on 4-vcpu ubuntu-latest, so runner size dominates
-  # its wall-clock — hence the 8-vcpu runner below.
+  # One environment, no sharding: current PR measurements showed each extra
+  # shard duplicates several minutes of platform setup to split a baseline
+  # test step of only 1.17 minutes. The setup dominates both compute and wall
+  # time, so keeping one 8-vCPU environment is faster and cheaper overall.
   # The required check is "Merge E2E Test Reports", not this job.
   platform-e2e-k8s-tests:
     name: Platform E2E Tests (K8s)
@@ -733,7 +731,7 @@ jobs:
           # and don't fight for paint time.
           - name: api
             projects_default: api --project=identity-providers
-            projects_nightly: api --project=identity-providers --project=firefox --project=webkit
+            projects_nightly: api --project=identity-providers --project=identity-providers-saml --project=firefox --project=webkit
             shard: ""
             workers_arg: ""
           - name: chromium-1of2
@@ -1151,7 +1149,7 @@ jobs:
         id: e2e
         uses: ./.github/actions/run-e2e-tests
         with:
-          projects: quickstart
+          projects: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'quickstart --project=quickstart-recovery' || 'quickstart' }}
           # Run all tests tagged @quickstart: MCP install, auth origin, and first-time chat flow
           extra_args: "--grep '@quickstart'"
           env_file: /tmp/quickstart-e2e.env
@@ -1187,6 +1185,90 @@ jobs:
           docker network rm archestra-quickstart-net 2>/dev/null || true
           docker volume rm archestra-ci-postgres-data 2>/dev/null || true
           docker volume rm archestra-ci-app-data 2>/dev/null || true
+
+  # The generic K8s leg deliberately uses the DB secrets manager, while this
+  # project asserts the Readonly Vault path. Run it on the nightly/manual
+  # coverage lane instead of silently skipping it in the DB-backed environment
+  # or adding another K8s stack to every merge-group run.
+  platform-e2e-vault-tests:
+    name: Platform E2E Tests (Vault)
+    needs: [platform-e2e-build]
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    timeout-minutes: 45
+    permissions:
+      contents: read # Required to checkout the repository and read test assets.
+      id-token: write # Required for Workload Identity Federation in setup actions.
+    steps:
+      - name: Reclaim disk space (background)
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+        with:
+          working-directory: ./platform
+
+      - name: Setup Archestra Platform with Readonly Vault
+        uses: ./.github/actions/setup-archestra-platform
+        with:
+          kind-config-path: .github/kind.yaml
+          kind-cluster-name: archestra-ci-cluster
+          helm-values-path: .github/values-ci.yaml
+          deploy-e2e-dependencies: "true"
+          e2e-dependencies-install-mode: "foreground"
+          e2e-dependencies-extra-helm-set: "vault.k8sAuth.enabled=true,vault.k8sAuth.boundServiceAccountName=archestra-platform,vault.k8sAuth.boundServiceAccountNamespace=default"
+          e2e-dependencies-wait-for-vault: "true"
+          build-platform-image: "false"
+          platform-image-tag: ${{ format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
+          platform-context: ./platform
+          platform-image-in-cluster-pull: "true"
+          mcp-server-base-image-tag: ${{ format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
+          image-pull-timeout-seconds: "1500"
+          extra-helm-set: "archestra.env.ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT"
+
+      - name: Run Readonly Vault E2E tests
+        uses: ./.github/actions/run-e2e-tests
+        with:
+          projects: credentials-with-vault
+          timeout: "20"
+
+      - name: Upload blob report
+        if: ${{ !cancelled() }}
+        uses: ./.github/actions/github-upload-artifact
+        with:
+          name: blob-report-vault
+          path: platform/e2e-tests/blob-report/
+          retention-days: 1
+
+  # `rust-napi-musl-smoke` is the Dockerfile stage that actually loads every
+  # musl-built NAPI addon. The merge-group Rust job keeps the fast Cargo target
+  # compile check; this scheduled/manual build owns the slower runtime smoke.
+  platform-rust-napi-musl-smoke:
+    name: Platform Rust NAPI musl Smoke
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Build and smoke musl NAPI addons
+        uses: ./.github/actions/build-docker-image
+        with:
+          context: ./platform
+          target: rust-napi-musl-smoke
+          provenance: "false"
 
   # The merge queue's e2e gate. This is the required "Merge E2E Test Reports"
   # status check — the per-shard jobs are NOT required, so this job is the only

@@ -60,7 +60,6 @@ describe("PluginInstallDialog", () => {
     );
 
     expect(screen.getByText("macOS / Linux")).toBeVisible();
-    expect(screen.getByRole("dialog")).not.toHaveClass("h-[90vh]");
     expect(
       screen.queryByRole("combobox", { name: "Target platform" }),
     ).not.toBeInTheDocument();

@@ -129,8 +129,10 @@ jobs:
           tags: ${{ format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-          # Read-only: the e2e build job owns cache export for this image.
-          cache-from: type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:buildcache
+          # Read-only: E2E and native publish paths own their separate exports.
+          cache-from: |
+            type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:buildcache
+            type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:buildcache-amd64
 
       - name: Build image with registry cache
         if: ${{ !matrix.use-build-action && steps.e2e-image.outputs.reused != 'true' }}

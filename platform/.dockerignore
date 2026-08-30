@@ -23,6 +23,7 @@ archestra-rs/sandbox-rs/index.js
 
 # Tests
 coverage
+e2e-tests
 **/*.test.ts
 **/*.test.tsx
 

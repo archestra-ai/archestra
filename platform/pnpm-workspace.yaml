@@ -181,33 +181,6 @@ verifyDepsBeforeRun: false
 # https://daniakash.com/posts/simplest-supply-chain-defense/
 minimumReleaseAge: 10080
 
-# next 16.3.0-canary.56 (and its same-versioned @next/* swc binaries) ships
-# `turbopackMemoryEviction`, which we need to test as the fix for the Turbopack
-# IOAccelerator memory leak on Apple Silicon (vercel/next.js#92055). Remove
-# once we settle on a stable next release older than the quarantine window.
-minimumReleaseAgeExclude:
-  - next
-  - "@next/*"
-  # TEMPORARY: @ai-sdk/amazon-bedrock 4.0.159 carries the fix for Bedrock
-  # redacted extended thinking — 4.0.158 added the `redactedContent` member to
-  # its stream and response schemas and stopped emitting a reasoning delta
-  # without opening the block first. Unlike the CVE pins above this is a
-  # functional fix, taken early by explicit maintainer decision so the tree does
-  # not carry a local shim for it instead.
-  #
-  # @ai-sdk/openai rides along because the bedrock provider pins its siblings to
-  # exact versions (3.0.99 here), so excluding the one package it is declared on
-  # is not enough to resolve it. Its @ai-sdk/anthropic and @ai-sdk/provider-utils
-  # pins are deliberately NOT excluded — those matured on 2026-08-21 and the
-  # install simply waits for them.
-  #
-  # Both were published 2026-08-20 and clear the 7-day window on 2026-08-27.
-  # Remove both on/after that date. backend pins @ai-sdk/amazon-bedrock 4.0.159
-  # exact and the lockfile pins the rest, so neither exclusion can pull a
-  # release nobody has looked at.
-  - "@ai-sdk/amazon-bedrock"
-  - "@ai-sdk/openai"
-
 # OpenTelemetry instrumentation requires these packages hoisted to root.
 # @hookform/resolvers/zod statically imports `zod/v4/core` but does not declare
 # zod as a peer dependency, so hoist zod to the root node_modules.

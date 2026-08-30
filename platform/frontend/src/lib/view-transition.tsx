@@ -17,12 +17,11 @@ type ViewTransitionProps = {
   children?: React.ReactNode;
 };
 
-// React's <ViewTransition> ships in the React canary that Next bundles for the
-// App Router (integration enabled via experimental.viewTransition in
-// next.config.ts), but not in the standalone `react` package that TypeScript
-// and vitest resolve. Fall back to rendering children unwrapped there — the UI
-// is identical, just without the animation (same graceful degradation as
-// browsers without the View Transitions API).
+// React's <ViewTransition> ships only in the experimental React channel, not in
+// the standalone `react` package that TypeScript and vitest resolve. Fall back
+// to rendering children unwrapped when it is unavailable — the UI is identical,
+// just without the animation (the same graceful degradation as browsers without
+// the View Transitions API).
 const ReactViewTransition = (
   React as unknown as {
     ViewTransition?: React.ComponentType<ViewTransitionProps>;

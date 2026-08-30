@@ -31,14 +31,16 @@ vi.mock("@/lib/environment.query", () => ({
 
 vi.mock("@/components/search-input", () => ({
   SearchInput: ({
+    placeholder,
     value,
     onSearchChange,
   }: {
+    placeholder?: string;
     value: string;
     onSearchChange: (value: string) => void;
   }) => (
     <input
-      aria-label="Search environments by name and namespace"
+      aria-label={placeholder}
       value={value}
       onChange={(event) => onSearchChange(event.target.value)}
     />
@@ -223,7 +225,7 @@ describe("EnvironmentsSection filters", () => {
 
     fireEvent.change(
       screen.getByRole("textbox", {
-        name: "Search environments by name and namespace",
+        name: "Search by name or namespace",
       }),
       { target: { value: "private-services" } },
     );

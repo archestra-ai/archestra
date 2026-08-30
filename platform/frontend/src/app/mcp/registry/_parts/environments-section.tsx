@@ -355,8 +355,7 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
           }
         >
           <SearchInput
-            objectNamePlural="environments"
-            searchFields={["name", "namespace"]}
+            placeholder="Search by name or namespace"
             value={search}
             onSearchChange={setSearch}
             syncQueryParams={false}

@@ -822,9 +822,11 @@ jobs:
 
       - name: Run integration tests
         shell: bash
+        env:
+          GROUP: ${{ matrix.group }}
         run: |
           set -euo pipefail
-          group=${{ matrix.group }}
+          group=$GROUP
           shard_count=4
           first_shard=$(( (group - 1) * 2 + 1 ))
           last_shard=$(( first_shard + 1 ))

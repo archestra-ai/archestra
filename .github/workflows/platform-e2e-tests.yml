@@ -681,9 +681,9 @@ jobs:
           - name: wake
             spec: tests/mcp-hibernation.spec.ts
     permissions:
-      contents: read
-      id-token: write
-      actions: read
+      contents: read # Required to checkout the repository and read test assets.
+      id-token: write # Required for Workload Identity Federation in setup actions.
+      actions: read # Required to poll for build artifacts on fork PRs (wait-timeout-seconds).
     steps:
       - name: Reclaim disk space (background)
         run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &

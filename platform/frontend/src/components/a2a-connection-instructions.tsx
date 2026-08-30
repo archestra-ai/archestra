@@ -601,7 +601,7 @@ curl -X POST "${a2aEndpoint}" \\
             </div>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="space-y-1">
-                <h5 className="text-sm font-medium">Platform tokens</h5>
+                <h5 className="text-xs font-medium">Platform tokens</h5>
                 <p className="text-xs text-muted-foreground">
                   Use a personal token for your own integration, or a team or
                   organization token for shared access.

@@ -83,7 +83,7 @@ export function McpOauthManagement({
   const sectionHeading = heading ? (
     <div className="flex items-start justify-between gap-4">
       <div className="space-y-1">
-        <h4 className="text-sm font-medium">{heading.title}</h4>
+        <h4 className="text-xs font-medium">{heading.title}</h4>
         <p className="text-xs text-muted-foreground">{heading.description}</p>
       </div>
       {createButton}

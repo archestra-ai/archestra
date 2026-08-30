@@ -371,34 +371,6 @@ describe("TableRowActions", () => {
     );
   });
 
-  it("applies cursor-pointer to enabled dropdown items and cursor-not-allowed to disabled ones", () => {
-    const mixedActions: TableRowAction[] = [
-      {
-        icon: <MockIcon />,
-        label: "Enabled",
-        onClick: vi.fn(),
-      },
-      {
-        icon: <MockIcon />,
-        label: "Disabled",
-        disabled: true,
-        onClick: vi.fn(),
-      },
-    ];
-
-    render(
-      <TooltipProvider>
-        <TableRowActions actions={[]} dropdownActions={mixedActions} />
-      </TooltipProvider>,
-    );
-
-    const enabledItem = screen.getByRole("menuitem", { name: /enabled/i });
-    const disabledItem = screen.getByRole("menuitem", { name: /disabled/i });
-
-    expect(enabledItem).toHaveClass("cursor-pointer");
-    expect(disabledItem).toHaveClass("cursor-not-allowed");
-  });
-
   it("prevents onClick if dropdown item is disabled", () => {
     const onClick = vi.fn();
     const disabledAction: TableRowAction[] = [

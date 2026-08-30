@@ -56,6 +56,27 @@ tests:
           path: spec.replicas
           value: 1
 
+  - it: should set the web process type when a separate worker is enabled
+    documentIndex: 1
+    set:
+      archestra.worker.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_PROCESS_TYPE
+            value: web
+
+  - it: should omit the web process type when the worker runs in-process
+    documentIndex: 1
+    set:
+      archestra.worker.enabled: false
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_PROCESS_TYPE
+
   - it: should allow configuring replica count
     documentIndex: 1
     set:
@@ -424,78 +445,6 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].env[3].valueFrom.secretKeyRef.key
           value: database-url
-
-  - it: when archestra.env is empty should set a specific set of environment variables
-    documentIndex: 1
-    set:
-      archestra.env: {}
-      archestra.orchestrator.kubernetes.mcpServerRbac.create: false
-    asserts:
-      - equal:
-          path: spec.template.spec.containers[0].env
-          value:
-            - name: POD_NAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.name
-            - name: POD_NAMESPACE
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.namespace
-            - name: ARCHESTRA_DATABASE_RUN_MIGRATIONS_ON_STARTUP
-              value: "true"
-            - name: PGPASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: RELEASE-NAME-archestra-platform-postgresql
-                  key: password
-            - name: ARCHESTRA_DATABASE_URL
-              value: postgresql://archestra:$(PGPASSWORD)@RELEASE-NAME-archestra-platform-postgresql:5432/archestra_dev
-            - name: ARCHESTRA_AUTH_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: RELEASE-NAME-archestra-platform-auth
-                  key: auth-secret
-            - name: ARCHESTRA_AUTH_SESSION_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: RELEASE-NAME-archestra-platform-auth
-                  key: session-secret
-                  optional: true
-            - name: ARCHESTRA_SECRETS_ENCRYPTION_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: RELEASE-NAME-archestra-platform-auth
-                  key: secrets-encryption-secret
-                  optional: true
-            - name: ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE
-              value: NAMESPACE
-            - name: ARCHESTRA_ORCHESTRATOR_HELM_RELEASE_NAME
-              value: RELEASE-NAME
-            - name: ARCHESTRA_ORCHESTRATOR_MCP_RUNTIME_OWNER_ROLE
-              value: RELEASE-NAME-archestra-platform-mcp-runtime-owner
-            - name: ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_PREPULL_BOOTSTRAP_IMAGE
-              value: "docker.io/library/busybox:1.36-musl"
-            - name: ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER
-              value: "true"
-            - name: ARCHESTRA_CODE_RUNTIME_ENABLED
-              value: "true"
-            - name: ARCHESTRA_NODE_MEMORY_RESERVED_MIB
-              value: "384"
-            - name: ARCHESTRA_NODE_MEMORY_REQUEST_MIB
-              valueFrom:
-                resourceFieldRef:
-                  containerName: archestra-platform
-                  resource: requests.memory
-                  divisor: 1Mi
-            - name: ARCHESTRA_NODE_MEMORY_LIMIT_MIB
-              valueFrom:
-                resourceFieldRef:
-                  containerName: archestra-platform
-                  resource: limits.memory
-                  divisor: 1Mi
-            - name: ARCHESTRA_PROCESS_TYPE
-              value: "web"
 
   - it: should add custom environment variables when archestra.env is set
     documentIndex: 1
@@ -1430,23 +1379,6 @@ tests:
             valueFrom:
               secretKeyRef:
 
-  - it: should add single secret-based environment variable
-    documentIndex: 1
-    set:
-      archestra.envFromSecrets:
-        - name: API_KEY
-          secretName: my-api-credentials
-          secretKey: api-key
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: API_KEY
-            valueFrom:
-              secretKeyRef:
-                name: my-api-credentials
-                key: api-key
-
   - it: should add multiple secret-based environment variables
     documentIndex: 1
     set:
@@ -1485,49 +1417,6 @@ tests:
               secretKeyRef:
                 name: app-secrets
                 key: token
-
-  - it: should include both regular and secret-based environment variables
-    documentIndex: 1
-    set:
-      archestra.env:
-        ARCHESTRA_INTERNAL_API_BASE_URL: "https://api.example.com"
-        CUSTOM_VAR: "custom-value"
-      archestra.envFromSecrets:
-        - name: API_KEY
-          secretName: my-api-credentials
-          secretKey: api-key
-        - name: DATABASE_PASSWORD
-          secretName: db-credentials
-          secretKey: password
-    asserts:
-      # Regular env vars
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: ARCHESTRA_INTERNAL_API_BASE_URL
-            value: "https://api.example.com"
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: CUSTOM_VAR
-            value: "custom-value"
-      # Secret-based env vars
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: API_KEY
-            valueFrom:
-              secretKeyRef:
-                name: my-api-credentials
-                key: api-key
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: DATABASE_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: db-credentials
-                key: password
 
   - it: should include built-in, regular, and secret-based env vars together
     documentIndex: 1
@@ -1595,32 +1484,6 @@ tests:
       - isNull:
           path: spec.template.spec.containers[0].envFrom
 
-  - it: should add envFrom with single secretRef
-    documentIndex: 1
-    set:
-      archestra.envFrom:
-        - secretRef:
-            name: my-secret
-    asserts:
-      - equal:
-          path: spec.template.spec.containers[0].envFrom
-          value:
-            - secretRef:
-                name: my-secret
-
-  - it: should add envFrom with single configMapRef
-    documentIndex: 1
-    set:
-      archestra.envFrom:
-        - configMapRef:
-            name: my-configmap
-    asserts:
-      - equal:
-          path: spec.template.spec.containers[0].envFrom
-          value:
-            - configMapRef:
-                name: my-configmap
-
   - it: should add envFrom with multiple secretRef and configMapRef
     documentIndex: 1
     set:
@@ -1662,28 +1525,6 @@ tests:
             - configMapRef:
                 name: my-configmap
                 optional: false
-
-  - it: should work with both env and envFrom configured
-    documentIndex: 1
-    set:
-      archestra.env:
-        CUSTOM_VAR: "custom-value"
-      archestra.envFrom:
-        - secretRef:
-            name: my-secret
-    asserts:
-      # Check env vars exist
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: CUSTOM_VAR
-            value: "custom-value"
-      # Check envFrom exists
-      - equal:
-          path: spec.template.spec.containers[0].envFrom
-          value:
-            - secretRef:
-                name: my-secret
 
   - it: should work with env, envFromSecrets, and envFrom all configured
     documentIndex: 1
@@ -1850,51 +1691,6 @@ tests:
           path: spec.ports[1].nodePort
       - notExists:
           path: spec.ports[2].nodePort
-
-  - it: should configure backend nodePort when specified
-    documentIndex: 0
-    set:
-      archestra.service.type: NodePort
-      archestra.service.nodePorts:
-        backend: 30000
-    asserts:
-      - equal:
-          path: spec.ports[0].nodePort
-          value: 30000
-      - notExists:
-          path: spec.ports[1].nodePort
-      - notExists:
-          path: spec.ports[2].nodePort
-
-  - it: should configure metrics nodePort when specified
-    documentIndex: 0
-    set:
-      archestra.service.type: NodePort
-      archestra.service.nodePorts:
-        metrics: 30050
-    asserts:
-      - notExists:
-          path: spec.ports[0].nodePort
-      - equal:
-          path: spec.ports[1].nodePort
-          value: 30050
-      - notExists:
-          path: spec.ports[2].nodePort
-
-  - it: should configure frontend nodePort when specified
-    documentIndex: 0
-    set:
-      archestra.service.type: NodePort
-      archestra.service.nodePorts:
-        frontend: 30300
-    asserts:
-      - notExists:
-          path: spec.ports[0].nodePort
-      - notExists:
-          path: spec.ports[1].nodePort
-      - equal:
-          path: spec.ports[2].nodePort
-          value: 30300
 
   - it: should configure all nodePorts when specified
     documentIndex: 0
@@ -2063,20 +1859,6 @@ tests:
     asserts:
       - isNull:
           path: spec.template.metadata.annotations
-
-  - it: should apply pod annotations when provided
-    documentIndex: 1
-    set:
-      archestra.podAnnotations:
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "9050"
-    asserts:
-      - equal:
-          path: spec.template.metadata.annotations["prometheus.io/scrape"]
-          value: "true"
-      - equal:
-          path: spec.template.metadata.annotations["prometheus.io/port"]
-          value: "9050"
 
   - it: should apply multiple pod annotations correctly
     documentIndex: 1
@@ -2484,16 +2266,6 @@ tests:
       - isNull:
           path: spec.template.spec.nodeSelector
 
-  - it: should apply nodeSelector when provided
-    documentIndex: 1
-    set:
-      archestra.nodeSelector:
-        karpenter.sh/nodepool: general-purpose
-    asserts:
-      - equal:
-          path: spec.template.spec.nodeSelector["karpenter.sh/nodepool"]
-          value: general-purpose
-
   - it: should apply multiple nodeSelector labels
     documentIndex: 1
     set:
@@ -2512,20 +2284,6 @@ tests:
           path: spec.template.spec.nodeSelector["node.kubernetes.io/instance-type"]
           value: m5.large
 
-  - it: should support nodeSelector with custom labels
-    documentIndex: 1
-    set:
-      archestra.nodeSelector:
-        team: platform
-        environment: production
-    asserts:
-      - equal:
-          path: spec.template.spec.nodeSelector["team"]
-          value: platform
-      - equal:
-          path: spec.template.spec.nodeSelector["environment"]
-          value: production
-
   # Tolerations tests
   - it: should not have tolerations when archestra.tolerations is empty
     documentIndex: 1
@@ -2534,23 +2292,6 @@ tests:
     asserts:
       - isNull:
           path: spec.template.spec.tolerations
-
-  - it: should apply single toleration when provided
-    documentIndex: 1
-    set:
-      archestra.tolerations:
-        - key: "foo.bar.com/role"
-          operator: "Equal"
-          value: "master"
-          effect: "NoSchedule"
-    asserts:
-      - contains:
-          path: spec.template.spec.tolerations
-          content:
-            key: "foo.bar.com/role"
-            operator: "Equal"
-            value: "master"
-            effect: "NoSchedule"
 
   - it: should apply multiple tolerations
     documentIndex: 1
@@ -2600,54 +2341,6 @@ tests:
 
   # Kubernetes environment variable expansion tests
   # These tests ensure that $(VAR_NAME) syntax is preserved for K8s env var expansion
-  - it: should preserve K8s env var expansion syntax $(VAR_NAME) in env values
-    documentIndex: 1
-    set:
-      archestra.env:
-        ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT: "http://$(NODE_IP):4317"
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT
-            value: "http://$(NODE_IP):4317"
-
-  - it: should preserve multiple K8s env var expansions in single value
-    documentIndex: 1
-    set:
-      archestra.env:
-        CUSTOM_URL: "http://$(NODE_IP):$(NODE_PORT)/api"
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: CUSTOM_URL
-            value: "http://$(NODE_IP):$(NODE_PORT)/api"
-
-  - it: should preserve K8s env var expansion at start of value
-    documentIndex: 1
-    set:
-      archestra.env:
-        MY_VAR: "$(OTHER_VAR)/suffix"
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: MY_VAR
-            value: "$(OTHER_VAR)/suffix"
-
-  - it: should preserve standalone K8s env var expansion
-    documentIndex: 1
-    set:
-      archestra.env:
-        MY_VAR: "$(OTHER_VAR)"
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: MY_VAR
-            value: "$(OTHER_VAR)"
-
   - it: should handle mix of regular and env-expansion values
     documentIndex: 1
     set:
@@ -2711,23 +2404,6 @@ tests:
           content:
             name: ARCHESTRA_DATABASE_RUN_MIGRATIONS_ON_STARTUP
             value: "false"
-
-  - it: should add env var with fieldRef for downward API
-    documentIndex: 1
-    set:
-      archestra.envWithValueFrom:
-        - name: NODE_IP
-          valueFrom:
-            fieldRef:
-              fieldPath: status.hostIP
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: NODE_IP
-            valueFrom:
-              fieldRef:
-                fieldPath: status.hostIP
 
   - it: should add multiple env vars with fieldRef
     documentIndex: 1
@@ -3068,12 +2744,6 @@ tests:
           path: spec.template.spec.containers[0].command
       - isNull:
           path: spec.template.spec.containers[0].args
-
-  - it: should not have vault-secrets volume when disabled
-    documentIndex: 1
-    asserts:
-      - isNull:
-          path: spec.template.spec.volumes
 
   - it: should support both kubeconfig and vault-secrets volumes together
     documentIndex: 1

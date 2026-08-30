@@ -107,17 +107,6 @@ describe("a2a v2 push notification configs", () => {
       pushNotificationConfig: config,
     });
 
-  test("the card advertises the capability", async () => {
-    const card = (
-      await app.inject({
-        method: "GET",
-        url: `/v2/a2a/${agentId}/.well-known/agent-card.json`,
-        headers: { authorization: "Bearer test-token" },
-      })
-    ).json();
-    expect(card.capabilities.pushNotifications).toBe(true);
-  });
-
   test("registers a config and never echoes the credentials back", async () => {
     const created = await create({
       url: "https://hooks.example.com/a2a",

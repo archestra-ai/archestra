@@ -372,6 +372,7 @@ mod tests {
         assert_eq!(m.rollout_id().to_string(), "e/t__l");
         // Older run.json predates the flag -> absent field must default to None, not fail to parse.
         assert_eq!(m.tool_exposure_mode, None);
+        assert_eq!(m.finish_reason, None);
 
         let with_flag: RunMeta = serde_json::from_str(
             r#"{"env_id":"e","task_id":"t","lane":"l","provider":"p","model":"m","outcome":"passed","tool_exposure_mode":"full"}"#,

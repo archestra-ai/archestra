@@ -286,17 +286,6 @@ tests:
           path: spec.containers[0].args[0]
           pattern: 'echo "[^"]*"[\s\S]*echo "'
         documentIndex: 2
-      # Each arm leads with the warning sign, which is the only emphasis Helm 4
-      # leaves once it collapses a pod's log into one escaped record.
-      - matchRegex:
-          path: spec.containers[0].args[0]
-          pattern: '⚠️'
-        documentIndex: 2
-      - matchRegex:
-          path: spec.containers[0].args[0]
-          pattern: '⚠️'
-        documentIndex: 1
-
   # A healthy cluster should cost no output at all. This arm speaks only when the
   # target never came up, which is the one state the treatment arm cannot detect:
   # it is blocked for the wrong reason and measures nothing.

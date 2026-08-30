@@ -117,6 +117,91 @@ describe("cli", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("Invalid base ref");
   });
+
+  test("--all lints every migration without consulting changed-base", () => {
+    const migrationsDir = path.join(tempDir, "migrations");
+    fs.mkdirSync(migrationsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(migrationsDir, "0001_drop.sql"),
+      'DROP TABLE "old_agents";',
+    );
+
+    const result = runCli([
+      "--migrations-dir",
+      migrationsDir,
+      "--changed-base",
+      "missing-ref",
+      "--all",
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain("drop-table");
+  });
+
+  test("--allow-missing-base exits cleanly when the comparison ref is unavailable", () => {
+    const migrationsDir = path.join(tempDir, "migrations");
+    fs.mkdirSync(migrationsDir, { recursive: true });
+
+    const result = runCli([
+      "--migrations-dir",
+      migrationsDir,
+      "--changed-base",
+      "missing-ref",
+      "--allow-missing-base",
+    ]);
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain("Skipping Drizzle migration linter");
+    expect(result.stdout).toContain("No Drizzle migration files to lint");
+  });
+
+  test("prints the no-migrations message for an empty directory", () => {
+    const result = runCli(["--migrations-dir", tempDir, "--all"]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("No Drizzle migration files to lint");
+  });
+
+  test("warning-only migrations report the warning and exit successfully", () => {
+    const migrationPath = writeMigration(
+      "0001_index.sql",
+      'CREATE INDEX "agents_name_idx" ON "agents" ("name");',
+    );
+
+    const result = runCli([migrationPath]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain(
+      "WARNING create-index-without-concurrently",
+    );
+    expect(result.stdout).toContain("0 errors and 1 warning");
+  });
+
+  test.each([
+    [["--format"], "--format requires a value"],
+    [["--format", "xml"], "--format must be either"],
+    [["--unknown"], "Unknown option: --unknown"],
+    [["--migrations-dir"], "--migrations-dir requires a value"],
+  ])("rejects malformed options: %j", (args, message) => {
+    const result = runCli(args);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(message);
+  });
+
+  test("filters explicit non-migration and meta SQL paths", () => {
+    const metaDir = path.join(tempDir, "meta");
+    fs.mkdirSync(metaDir, { recursive: true });
+    const metaSql = path.join(metaDir, "snapshot.sql");
+    const readme = path.join(tempDir, "README.md");
+    fs.writeFileSync(metaSql, 'DROP TABLE "should_not_run";');
+    fs.writeFileSync(readme, "not a migration");
+
+    const result = runCli([metaSql, readme]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("No Drizzle migration files to lint");
+  });
 });
 
 function writeMigration(fileName: string, sql: string): string {

@@ -27,6 +27,7 @@ import {
   METRICS_PATH,
   MFILES_VAF_ADD_ON_PACKAGE_PATH,
   MFILES_VAF_ADD_ON_SCRIPT_PATH,
+  OAUTH_CALLBACK_PATH,
   ORGANIZATION_APPEARANCE_SETTINGS_PATH,
   PUBLIC_CONFIG_PATH,
   READY_PATH,
@@ -199,6 +200,10 @@ export class Authnz {
       url.startsWith(WELL_KNOWN_OAUTH_PREFIX) ||
       // Skip OAuth consent page proxy (handled by frontend)
       url.startsWith("/oauth/") ||
+      // OAuth providers redirect here without a platform session. The one-time
+      // state value is the callback's authentication proof and is validated
+      // by the route before any token exchange.
+      (method === "POST" && url === OAUTH_CALLBACK_PATH) ||
       // Skip ACME challenge paths for SSL certificate domain validation
       url.startsWith(WELL_KNOWN_ACME_PREFIX) ||
       // Sandbox proxy HTML is a static file with no secrets — must load without

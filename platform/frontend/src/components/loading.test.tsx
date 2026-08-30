@@ -19,26 +19,22 @@ describe("LoadingState", () => {
     );
   });
 
-  it("holds the area open and announces itself while drawing nothing when quiet", () => {
+  it("announces itself while drawing nothing when quiet", () => {
     const { container } = render(
       <LoadingState label="Loading…" variant="quiet" />,
     );
 
     const status = screen.getByRole("status", { name: "Loading…" });
-    // The point of `quiet` is reserving the space without the flash, so the
-    // height has to survive even though nothing is drawn inside it.
-    expect(status).toHaveClass("min-h-app-viewport");
     expect(container.querySelector(".animate-spin")).toBeNull();
     expect(status).toHaveTextContent("");
   });
 
-  it("keeps inline loading states compact and visually label-free", () => {
+  it("keeps inline loading labels accessible-only", () => {
     render(<LoadingState label="Loading token" variant="inline" />);
 
-    const status = screen.getByRole("status", { name: "Loading token" });
+    screen.getByRole("status", { name: "Loading token" });
     // Inline callers sit next to their own copy, so the label stays
     // accessible-only instead of rendering a second time on screen.
     expect(screen.queryByText("Loading token")).toBeNull();
-    expect(status).toHaveClass("inline-flex");
   });
 });

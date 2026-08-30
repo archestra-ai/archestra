@@ -375,6 +375,28 @@ describe("UserSearchableMultiSelect", () => {
     );
   });
 
+  it("exposes selected users to assistive technology", async () => {
+    const user = userEvent.setup();
+    render(
+      <UserSearchableMultiSelect
+        value={["user-1"]}
+        onValueChange={vi.fn()}
+        users={mockUsers}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox"));
+
+    expect(screen.getByRole("button", { name: /John Doe/i })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: /Jane Smith/i })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+  });
+
   it("uses userId as fallback when name and email are missing", () => {
     const usersWithNoName = [{ userId: "user-abc" }];
 
@@ -406,24 +428,5 @@ describe("UserSearchableMultiSelect", () => {
     await user.click(screen.getByRole("combobox"));
     const items = screen.getAllByText("test@example.com");
     expect(items.length).toBeGreaterThanOrEqual(1);
-  });
-
-  it("shows checkmark for selected users", async () => {
-    const user = userEvent.setup();
-
-    render(
-      <UserSearchableMultiSelect
-        value={["user-1"]}
-        onValueChange={vi.fn()}
-        users={mockUsers}
-      />,
-    );
-
-    await user.click(screen.getByRole("combobox"));
-    const buttons = screen.getAllByRole("button");
-    const selectedButton = buttons.find((b) =>
-      b.textContent?.includes("John Doe"),
-    );
-    expect(selectedButton).toHaveClass("bg-accent");
   });
 });

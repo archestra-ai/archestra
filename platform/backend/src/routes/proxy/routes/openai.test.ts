@@ -171,6 +171,36 @@ describe("OpenAI proxy streaming", () => {
     vi.restoreAllMocks();
   });
 
+  test("rejects an unauthenticated chat-completions request before creating a provider client", async ({
+    makeAgent,
+  }) => {
+    const createClientSpy = vi.mocked(openaiAdapterFactory.createClient);
+    const app = createOpenAiRouteTestApp();
+    await app.register(openAiProxyRoutes);
+    const agent = await makeAgent({ name: "OpenAI auth gate" });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      remoteAddress: "203.0.113.7",
+      headers: {
+        authorization: "",
+        "content-type": "application/json",
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: "Hello!" }],
+      },
+    });
+
+    expect({ statusCode: response.statusCode, body: response.body }).toEqual({
+      statusCode: 401,
+      body: expect.stringMatching(/Authentication required/i),
+    });
+    expect(createClientSpy).not.toHaveBeenCalled();
+  });
+
   test("streaming response has SSE format", async ({ makeAgent }) => {
     const app = createOpenAiRouteTestApp();
     await app.register(openAiProxyRoutes);

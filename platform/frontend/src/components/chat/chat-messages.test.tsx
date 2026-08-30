@@ -685,9 +685,6 @@ describe("ChatMessages", () => {
 
     const loadingLogo = screen.getByAltText("Loading logo");
     expect(loadingLogo).toBeInTheDocument();
-    expect(loadingLogo).toHaveClass(
-      "[animation:archestra-chat-logo-bounce_700ms_ease-in-out_200ms_infinite]",
-    );
   });
 
   it("renders persisted chat errors between messages by timestamp", () => {

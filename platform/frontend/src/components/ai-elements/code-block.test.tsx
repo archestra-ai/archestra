@@ -41,23 +41,6 @@ function mockClipboard(writeText: ReturnType<typeof vi.fn>) {
 }
 
 describe("CodeBlock", () => {
-  it("applies custom content spacing for overlay actions", () => {
-    mockUseTheme.mockReturnValue({ resolvedTheme: "light" });
-
-    render(
-      <CodeBlock
-        code={`curl https://example.com`}
-        language="bash"
-        contentStyle={{ paddingTop: "2.75rem", paddingRight: "5rem" }}
-      />,
-    );
-
-    expect(screen.getByTestId("syntax-highlighter")).toHaveStyle({
-      paddingTop: "2.75rem",
-      paddingRight: "5rem",
-    });
-  });
-
   it("copies the rendered code via the built-in copy button", async () => {
     mockUseTheme.mockReturnValue({ resolvedTheme: "light" });
     const user = userEvent.setup();

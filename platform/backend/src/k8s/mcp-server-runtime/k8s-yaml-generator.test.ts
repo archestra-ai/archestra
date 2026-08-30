@@ -533,19 +533,79 @@ spec:
   });
 
   describe("validateDeploymentYaml", () => {
-    test("validates correct YAML", () => {
-      const yaml = generateDeploymentYamlTemplate({
-        serverId: "test-id",
-        serverName: "test-server",
-        namespace: "default",
-        dockerImage: "test-image:latest",
-        environment: [],
+    const validDeploymentYaml = `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: independently-authored-server
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: mcp-server
+    spec:
+      containers:
+        - name: mcp-server
+          image: registry.example.com/mcp-server:1.0
+`;
+
+    test("accepts an independently authored Deployment manifest", () => {
+      expect(validateDeploymentYaml(validDeploymentYaml)).toEqual({
+        valid: true,
+        errors: [],
+        warnings: [],
       });
+    });
 
+    test.each([
+      [
+        "apiVersion",
+        validDeploymentYaml.replace("apps/v1", "v1"),
+        'apiVersion must be "apps/v1"',
+      ],
+      [
+        "kind",
+        validDeploymentYaml.replace("kind: Deployment", "kind: Pod"),
+        'kind must be "Deployment"',
+      ],
+      [
+        "metadata",
+        validDeploymentYaml.replace(
+          "metadata:\n  name: independently-authored-server\n",
+          "",
+        ),
+        "metadata is required",
+      ],
+      [
+        "spec",
+        validDeploymentYaml.replace(
+          "spec:\n  replicas",
+          "configuration:\n  replicas",
+        ),
+        "spec is required",
+      ],
+      [
+        "pod template",
+        validDeploymentYaml.replace("  template:\n", "  podTemplate:\n"),
+        "spec.template is required",
+      ],
+      [
+        "pod spec",
+        validDeploymentYaml.replace("    spec:\n", "    podSpec:\n"),
+        "spec.template.spec is required",
+      ],
+      [
+        "containers",
+        validDeploymentYaml.replace(
+          "      containers:",
+          "      initContainers:",
+        ),
+        "spec.template.spec.containers must have at least one container",
+      ],
+    ])("rejects a manifest missing required %s semantics", (_field, yaml, expectedError) => {
       const result = validateDeploymentYaml(yaml);
-
-      expect(result.valid).toBe(true);
-      expect(result.errors).toHaveLength(0);
+      expect(result.valid).toBe(false);
+      expect(result.errors).toContain(expectedError);
     });
 
     test("returns error for invalid YAML syntax", () => {

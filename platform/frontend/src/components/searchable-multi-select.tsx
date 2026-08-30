@@ -213,6 +213,7 @@ export function SearchableMultiSelect({
                   key={item.value}
                   disabled={item.disabled}
                   aria-disabled={item.disabled}
+                  aria-pressed={isSelected}
                   onClick={() => {
                     if (item.disabled) return;
                     handleToggleItem(item.value);

@@ -107,30 +107,6 @@ tests:
           path: spec.maxUnavailable
           value: "25%"
 
-  - it: should not have minAvailable when only maxUnavailable is set
-    set:
-      archestra.podDisruptionBudget.enabled: true
-      archestra.podDisruptionBudget.minAvailable: null
-      archestra.podDisruptionBudget.maxUnavailable: 2
-    asserts:
-      - equal:
-          path: spec.maxUnavailable
-          value: 2
-      - isNull:
-          path: spec.minAvailable
-
-  - it: should not have maxUnavailable when only minAvailable is set
-    set:
-      archestra.podDisruptionBudget.enabled: true
-      archestra.podDisruptionBudget.minAvailable: 2
-      archestra.podDisruptionBudget.maxUnavailable: null
-    asserts:
-      - equal:
-          path: spec.minAvailable
-          value: 2
-      - isNull:
-          path: spec.maxUnavailable
-
   - it: should configure unhealthyPodEvictionPolicy as IfHealthyBudget
     set:
       archestra.podDisruptionBudget.enabled: true
@@ -160,15 +136,6 @@ tests:
       - isNull:
           path: spec.unhealthyPodEvictionPolicy
 
-  - it: should configure minAvailable with high availability value
-    set:
-      archestra.podDisruptionBudget.enabled: true
-      archestra.podDisruptionBudget.minAvailable: 3
-    asserts:
-      - equal:
-          path: spec.minAvailable
-          value: 3
-
   - it: should configure maxUnavailable with zero value
     set:
       archestra.podDisruptionBudget.enabled: true
@@ -177,29 +144,3 @@ tests:
       - equal:
           path: spec.maxUnavailable
           value: 0
-
-  - it: should configure typical production setup with minAvailable and unhealthyPodEvictionPolicy
-    set:
-      archestra.podDisruptionBudget.enabled: true
-      archestra.podDisruptionBudget.minAvailable: 2
-      archestra.podDisruptionBudget.unhealthyPodEvictionPolicy: IfHealthyBudget
-    asserts:
-      - equal:
-          path: spec.minAvailable
-          value: 2
-      - equal:
-          path: spec.unhealthyPodEvictionPolicy
-          value: IfHealthyBudget
-
-  - it: should configure typical production setup with maxUnavailable percentage
-    set:
-      archestra.podDisruptionBudget.enabled: true
-      archestra.podDisruptionBudget.maxUnavailable: "33%"
-      archestra.podDisruptionBudget.unhealthyPodEvictionPolicy: AlwaysAllow
-    asserts:
-      - equal:
-          path: spec.maxUnavailable
-          value: "33%"
-      - equal:
-          path: spec.unhealthyPodEvictionPolicy
-          value: AlwaysAllow

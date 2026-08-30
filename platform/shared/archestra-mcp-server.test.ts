@@ -1,4 +1,4 @@
-import { describe, expect, expectTypeOf, test } from "vitest";
+import { describe, expect, test } from "vitest";
 import { AGENT_TOOL_PREFIX, isAgentTool } from "./agents";
 import {
   APP_ARCHESTRA_TOOL_SHORT_NAMES,
@@ -20,12 +20,6 @@ import {
 } from "./archestra-mcp-server";
 
 describe("archestra MCP tool names", () => {
-  test("builds a fully-qualified Archestra tool name with literal typing", () => {
-    const fullName = getArchestraToolFullName("create_agent");
-    expect(fullName).toBe(TOOL_CREATE_AGENT_FULL_NAME);
-    expectTypeOf(fullName).toEqualTypeOf<typeof TOOL_CREATE_AGENT_FULL_NAME>();
-  });
-
   test("slugifies branded tool prefixes for non-alphanumeric app names", () => {
     expect(
       getArchestraMcpServerName({

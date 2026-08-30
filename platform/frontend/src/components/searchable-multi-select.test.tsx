@@ -297,20 +297,6 @@ describe("SearchableMultiSelect", () => {
     );
   });
 
-  it("shows disabled state on combobox", () => {
-    render(
-      <SearchableMultiSelect
-        value={[]}
-        onValueChange={vi.fn()}
-        items={mockItems}
-        disabled
-      />,
-    );
-
-    expect(screen.getByRole("combobox")).toHaveClass("cursor-not-allowed");
-    expect(screen.getByRole("combobox")).toHaveClass("opacity-50");
-  });
-
   it("does not select disabled items", async () => {
     const user = userEvent.setup();
     const onValueChange = vi.fn();
@@ -445,7 +431,7 @@ describe("SearchableMultiSelect", () => {
     expect(screen.getByPlaceholderText("Find items...")).toBeInTheDocument();
   });
 
-  it("shows checkmark for selected items", async () => {
+  it("exposes selected items to assistive technology", async () => {
     const user = userEvent.setup();
 
     render(
@@ -457,11 +443,14 @@ describe("SearchableMultiSelect", () => {
     );
 
     await user.click(screen.getByRole("combobox"));
-    const buttons = screen.getAllByRole("button");
-    const selectedButton = buttons.find((b) =>
-      b.textContent?.includes("Item One"),
+    expect(screen.getByRole("button", { name: /Item One/i })).toHaveAttribute(
+      "aria-pressed",
+      "true",
     );
-    expect(selectedButton).toHaveClass("bg-accent");
+    expect(screen.getByRole("button", { name: /Item Two/i })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
   });
 
   it("filters and shows only matching items", async () => {

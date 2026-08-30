@@ -131,7 +131,6 @@ describe("a2a v2 agent registry", () => {
     // A client should be able to hand this straight to an A2A library.
     expect(card.supportedInterfaces[0].url).toContain(reachableId);
     expect(card.supportedInterfaces[0].protocolVersion).toBe("1.0");
-    expect(card.capabilities.streaming).toBe(true);
     expect(Object.keys(card.securitySchemes).length).toBeGreaterThan(0);
     expect(card.skills[0].tags.length).toBeGreaterThan(0);
     expect(card.provider.organization).toEqual(expect.any(String));

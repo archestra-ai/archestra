@@ -20,6 +20,7 @@ import oauthRoutes, {
   refreshOAuthToken,
   resolveOAuthScopesForAuthorization,
 } from "./oauth";
+import { OAUTH_CALLBACK_PATH } from "./route-paths";
 
 // Several tests below swap `globalThis.fetch` for a mock and restore it inline
 // after their assertions. If an assertion throws, the inline restore is skipped
@@ -752,6 +753,19 @@ describe("OAuth routes", () => {
     globalThis.fetch = originalFetch;
     vi.restoreAllMocks();
     await app.close();
+  });
+
+  test("rejects an invalid callback state before token exchange", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: OAUTH_CALLBACK_PATH,
+      payload: { code: "fake-code", state: "invalid-state" },
+    });
+
+    expect(response.statusCode, response.body).toBe(400);
+    expect(response.json().error.message).toContain(
+      "Invalid or expired OAuth state",
+    );
   });
 
   test("uses a configured OAuth resource separately from the MCP endpoint URL", async ({

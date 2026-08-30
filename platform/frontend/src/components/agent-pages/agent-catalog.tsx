@@ -52,6 +52,7 @@ export function getAgentCatalogTemplates(
       additionalCredentials: [
         {
           key: "CLAUDE_CODE_OAUTH_TOKEN",
+          credentialId: "claude-code",
           scope: "per_user",
           label: "Claude Code subscription token",
           description:
@@ -248,6 +249,7 @@ function template(params: {
         credentials: [
           {
             key: "GITHUB_TOKEN",
+            credentialId: "github",
             scope: "per_user",
             label: "GitHub token",
             description:

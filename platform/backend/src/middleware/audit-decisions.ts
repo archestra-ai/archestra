@@ -8,6 +8,7 @@ import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
 import EnvironmentResourceDefaultModel from "@/models/environment-resource-default";
+import ExecutionCredentialDefinitionModel from "@/models/execution-credential-definition";
 import GithubAppConfigModel from "@/models/github-app-config";
 import GithubPatModel from "@/models/github-pat";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
@@ -85,6 +86,10 @@ export const AUDIT_DECISIONS = {
   // Audited resources — mutations captured via AUDITABLE_ROUTES
   // =========================================================================
   agentsTable: { audited: true, model: AgentModel },
+  executionCredentialDefinitionsTable: {
+    audited: true,
+    model: ExecutionCredentialDefinitionModel,
+  },
 
   agentToolsTable: { audited: true, model: AgentToolModel },
   apikeysTable: { audited: true, model: ApiKeyModel },
@@ -603,6 +608,11 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason:
       "a person's own credential references, with no administrative CRUD — only the owner can add or remove one, and the value is never stored here",
+  },
+  executionCredentialConnectionsTable: {
+    audited: false,
+    reason:
+      "credential references only; secret values are never stored here and mutations are recorded by the execution credential route",
   },
   skillSandboxesTable: {
     audited: false,

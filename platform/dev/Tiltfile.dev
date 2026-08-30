@@ -15,6 +15,13 @@ mcp_namespace = os.getenv('ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE', 'default')
 # are not part of Tilt's rendered YAML, so tiny sleeping deployments anchor
 # the images and make Tilt build/load them before the backend can schedule one.
 background_execution_enabled = os.getenv('ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ENABLED') == 'true'
+# The public GAR images are the normal local-development path. Build and anchor
+# local targets only when the configured catalog base image explicitly selects
+# the stable :dev tag used by dynamically-created Jobs.
+build_agent_catalog_images_locally = (
+  background_execution_enabled and
+  os.getenv('ARCHESTRA_AGENT_BACKGROUND_EXECUTION_BASE_IMAGE', '').strip() == 'agent-archestra:dev'
+)
 agent_catalog_images = [
   'agent-archestra',
   'agent-claude-code',
@@ -22,7 +29,7 @@ agent_catalog_images = [
   'agent-hermes',
   'agent-openclaw',
 ]
-if background_execution_enabled:
+if build_agent_catalog_images_locally:
   for image_name in agent_catalog_images:
     docker_build(
       image_name,
@@ -113,7 +120,7 @@ frontend_env_vars = get_frontend_env()
 
 code_runtime_enabled = os.getenv('ARCHESTRA_CODE_RUNTIME_ENABLED') == 'true'
 backend_resource_deps = ['db-migrate']
-if background_execution_enabled:
+if build_agent_catalog_images_locally:
   for image_name in agent_catalog_images:
     backend_resource_deps.append(image_name + '-image')
 if code_runtime_enabled:

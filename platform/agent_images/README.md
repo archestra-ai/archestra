@@ -19,6 +19,10 @@ Build a target from `platform/`:
 docker build -f agent_images/Dockerfile --target agent-codex -t agent-codex:dev .
 ```
 
+Tilt pulls the public GAR images by default. Set
+`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_BASE_IMAGE=agent-archestra:dev` to build
+all five targets locally and use them for dynamically-created Jobs.
+
 The native wrappers create their client configuration at run time under
 `/var/run/archestra`. Provider and MCP credentials are never baked into an
 image or written to the workspace. Every model request goes to the Agent-scoped

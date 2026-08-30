@@ -16,6 +16,7 @@ import { LlmModelSearchableSelect } from "@/components/llm-model-select";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import { QueryLoadError } from "@/components/query-load-error";
 import { WithPermissions } from "@/components/roles/with-permissions";
+import { ExecutionCredentialsSection } from "@/components/settings/execution-credentials-section";
 import { IntegrationAvailabilitySection } from "@/components/settings/integration-availability-section";
 import {
   SettingsBlock,
@@ -458,7 +459,10 @@ export default function AgentSettingsPage() {
         savedMessage="Available messaging channels updated"
       />
       {executionBackend && (
-        <ExecutionBackendSection executionBackend={executionBackend} />
+        <>
+          <ExecutionCredentialsSection />
+          <ExecutionBackendSection executionBackend={executionBackend} />
+        </>
       )}
     </SettingsSectionStack>
   );

@@ -37,6 +37,8 @@ export * from "./dual-llm";
 export * from "./enterprise-managed-credentials";
 export * from "./environment";
 export * from "./environment-default-user-limit";
+export * from "./execution-credential-connection";
+export * from "./execution-credential-definition";
 export * from "./external-mcp-skill";
 export * from "./file";
 export * from "./github-app-config";

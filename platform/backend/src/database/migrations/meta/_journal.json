@@ -3109,6 +3109,13 @@
       "when": 1788001896559,
       "tag": "0443_stormy_namorita",
       "breakpoints": true
+    },
+    {
+      "idx": 444,
+      "version": "7",
+      "when": 1788093582316,
+      "tag": "0444_glorious_korg",
+      "breakpoints": true
     }
   ]
 }

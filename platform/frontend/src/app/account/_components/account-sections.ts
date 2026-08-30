@@ -2,6 +2,7 @@ import {
   KeyRound,
   ListChecks,
   MonitorSmartphone,
+  PlugZap,
   ShieldCheck,
   Ticket,
   User,
@@ -27,6 +28,13 @@ export const accountSections = [
     label: "API Keys",
     href: "/account/api-keys",
     Icon: KeyRound,
+  },
+  {
+    id: "connections",
+    label: "Connections",
+    href: "/account/connections",
+    Icon: PlugZap,
+    feature: "agentBackgroundExecution" as const,
   },
   {
     id: "gateway-token",

@@ -56,12 +56,14 @@ describe("Agent Background execution routes", () => {
         credentials: [
           {
             key: "SHARED_TOKEN",
+            credentialId: "github",
             scope: "shared",
             label: "Shared token",
             required: true,
           },
           {
             key: "PERSONAL_TOKEN",
+            credentialId: "github",
             scope: "per_user",
             label: "Personal token",
             required: true,
@@ -99,6 +101,122 @@ describe("Agent Background execution routes", () => {
     );
     vi.restoreAllMocks();
     await app.close();
+  });
+
+  test("lists built-in credentials and tracks personal connections without exposing values", async () => {
+    const initial = await app.inject({
+      method: "GET",
+      url: "/api/execution-credentials",
+    });
+    expect(initial.statusCode).toBe(200);
+    expect(initial.json()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: "github",
+          builtIn: true,
+          personalConfigured: false,
+          organizationConfigured: false,
+        }),
+      ]),
+    );
+
+    const connected = await app.inject({
+      method: "PUT",
+      url: "/api/execution-credentials/github/personal",
+      payload: { value: "personal-github-token" },
+    });
+    expect(connected.statusCode).toBe(200);
+
+    const listed = await app.inject({
+      method: "GET",
+      url: "/api/execution-credentials",
+    });
+    const github = listed
+      .json<Array<Record<string, unknown>>>()
+      .find((definition) => definition.key === "github");
+    expect(github).toEqual(
+      expect.objectContaining({
+        personalConfigured: true,
+        organizationConfigured: false,
+      }),
+    );
+    expect(JSON.stringify(listed.json())).not.toContain(
+      "personal-github-token",
+    );
+  });
+
+  test("lists Agents that block deleting a credential", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/execution-credentials/github/usage",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      agents: [{ id: agent.id, name: agent.name }],
+    });
+  });
+
+  test("creates a custom credential and reuses its organization connection", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/execution-credentials",
+      payload: {
+        key: "gitlab-pat",
+        name: "A GitLab PAT",
+        description: "Access GitLab repositories",
+        icon: null,
+        allowPersonal: false,
+        allowOrganization: true,
+      },
+    });
+    expect(created.statusCode).toBe(200);
+    expect(created.json()).toEqual(
+      expect.objectContaining({ key: "gitlab-pat", name: "A GitLab PAT" }),
+    );
+
+    const connected = await app.inject({
+      method: "PUT",
+      url: "/api/execution-credentials/gitlab-pat/organization",
+      payload: { value: "shared-gitlab-token" },
+    });
+    expect(connected.statusCode).toBe(200);
+
+    const listed = await app.inject({
+      method: "GET",
+      url: "/api/execution-credentials",
+    });
+    expect(
+      listed
+        .json<Array<{ key: string }>>()
+        .slice(0, 2)
+        .map(({ key }) => key),
+    ).toEqual(["claude-code", "github"]);
+    expect(listed.json()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: "gitlab-pat",
+          builtIn: false,
+          organizationConfigured: true,
+        }),
+      ]),
+    );
+
+    const [audit] = await db
+      .select({
+        action: schema.auditLogsTable.action,
+        before: schema.auditLogsTable.before,
+        after: schema.auditLogsTable.after,
+      })
+      .from(schema.auditLogsTable)
+      .where(
+        and(
+          eq(schema.auditLogsTable.organizationId, organizationId),
+          eq(schema.auditLogsTable.action, "executionCredential.updated"),
+        ),
+      );
+    expect(audit).toBeDefined();
+    expect(JSON.stringify(audit)).not.toContain("shared-gitlab-token");
   });
 
   test("lists only executions belonging to the selected Agent with their task outcome", async ({
@@ -531,6 +649,58 @@ describe("Agent Background execution routes", () => {
       url: `/api/agents/${agent.id}/background-execution/preflight`,
     });
     expect(preflight.json().configured).toEqual(["PERSONAL_TOKEN"]);
+  });
+
+  test("reuses a typed personal connection across Agents without copying its value", async ({
+    makeAgent,
+  }) => {
+    if (!agent.backgroundExecution) {
+      throw new Error("Test Agent is missing Background execution");
+    }
+    const otherAgent = await makeAgent({
+      organizationId,
+      authorId: user.id,
+      agentType: "agent",
+      scope: "org",
+      backgroundExecution: {
+        ...agent.backgroundExecution,
+        credentials: [
+          {
+            key: "GH_TOKEN",
+            credentialId: "github",
+            scope: "per_user",
+            label: "Git hosting connection",
+            required: true,
+          },
+        ],
+      },
+    });
+
+    const connected = await app.inject({
+      method: "PUT",
+      url: `/api/agents/${agent.id}/background-execution/credentials/PERSONAL_TOKEN`,
+      payload: { value: "one-personal-value" },
+    });
+    expect(connected.statusCode).toBe(200);
+
+    const otherPreflight = await app.inject({
+      method: "GET",
+      url: `/api/agents/${otherAgent.id}/background-execution/preflight`,
+    });
+    expect(otherPreflight.statusCode).toBe(200);
+    expect(otherPreflight.json()).toMatchObject({
+      ready: true,
+      configured: ["GH_TOKEN"],
+      missing: [],
+    });
+
+    const rows = await db
+      .select({
+        credentialId: schema.executionCredentialConnectionsTable.credentialId,
+        userId: schema.executionCredentialConnectionsTable.userId,
+      })
+      .from(schema.executionCredentialConnectionsTable);
+    expect(rows).toEqual([{ credentialId: "github", userId: user.id }]);
   });
 
   test("audits shared credential rotation without recording the secret value", async () => {

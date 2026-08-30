@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
   getAgentTypePermissionChecker,
   requireAgentModifyPermission,
+  userHasPermission,
 } from "@/auth";
 import config from "@/config";
 import { A2ATaskModel, AgentModel, AgentRunModel, TeamModel } from "@/models";
@@ -31,6 +32,7 @@ import {
   SelectAgentExecutionSessionSchema,
   StartAgentExecutionResponseSchema,
 } from "@/types";
+import executionCredentialRoutes from "./execution-credential.routes";
 
 const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
   fastify,
@@ -38,6 +40,8 @@ const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
   fastify.addHook("preHandler", async () => {
     if (!isAnyRunnerBackendEnabled()) throw new ApiError(404, "Not found");
   });
+
+  await fastify.register(executionCredentialRoutes);
 
   fastify.get(
     "/api/agents/:id/background-execution/preflight",
@@ -100,7 +104,28 @@ const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
         request.params.key,
       );
       if (declaration.scope === "shared") {
-        await requireWritableAgent({ request, agent });
+        if (declaration.credentialId) {
+          await requireExecutionCredentialAdmin(request);
+          const before = await preflightAgentDeploymentCredentials({
+            deployment,
+            organizationId: request.organizationId,
+            userId: request.user.id,
+          });
+          request.auditBefore = {
+            executionConnection: {
+              credentialId: declaration.credentialId,
+              configured: before.configured.includes(declaration.key),
+            },
+          };
+          request.auditAfter = {
+            executionConnection: {
+              credentialId: declaration.credentialId,
+              configured: true,
+            },
+          };
+        } else {
+          await requireWritableAgent({ request, agent });
+        }
       } else {
         request.auditSkip = true;
       }
@@ -138,7 +163,23 @@ const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
         request.params.key,
       );
       if (declaration.scope === "shared") {
-        await requireWritableAgent({ request, agent });
+        if (declaration.credentialId) {
+          await requireExecutionCredentialAdmin(request);
+          request.auditBefore = {
+            executionConnection: {
+              credentialId: declaration.credentialId,
+              configured: true,
+            },
+          };
+          request.auditAfter = {
+            executionConnection: {
+              credentialId: declaration.credentialId,
+              configured: false,
+            },
+          };
+        } else {
+          await requireWritableAgent({ request, agent });
+        }
       } else {
         request.auditSkip = true;
       }
@@ -546,6 +587,23 @@ async function requireWritableAgent(params: {
     userTeamIds,
     userId: params.request.user.id,
   });
+}
+
+async function requireExecutionCredentialAdmin(
+  request: AgentRequest,
+): Promise<void> {
+  const permitted = await userHasPermission(
+    request.user.id,
+    request.organizationId,
+    "agentSettings",
+    "update",
+  );
+  if (!permitted) {
+    throw new ApiError(
+      403,
+      "Organization Agent settings permission is required to manage this connection",
+    );
+  }
 }
 
 function requireCredentialDeclaration(

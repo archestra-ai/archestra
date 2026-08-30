@@ -297,14 +297,14 @@ describe("AuditLogTable", () => {
   it("renders the denormalized resource name next to the type badge", () => {
     mockUseAuditLogs.mockReturnValue(
       withRows([
-        makeEvent({ resourceName: "PotatoAI", before: null, after: null }),
+        makeEvent({ resourceName: "Support Agent", before: null, after: null }),
       ]),
     );
 
     renderTable();
 
     expect(screen.getByText("Agent")).toBeInTheDocument();
-    expect(screen.getByText("PotatoAI")).toBeInTheDocument();
+    expect(screen.getByText("Support Agent")).toBeInTheDocument();
   });
 
   it("shows a bare type chip, without the name, for types outside the picker set", () => {

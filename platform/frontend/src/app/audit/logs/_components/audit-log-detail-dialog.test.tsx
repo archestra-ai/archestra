@@ -137,8 +137,8 @@ describe("AuditLogDetailDialog", () => {
   });
 
   it("shows the resource name alongside the type badge, keeping the ID visible", () => {
-    renderDialog(makeEvent({ resourceName: "PotatoAI" }));
-    expect(screen.getByText("PotatoAI")).toBeInTheDocument();
+    renderDialog(makeEvent({ resourceName: "Support Agent" }));
+    expect(screen.getByText("Support Agent")).toBeInTheDocument();
     expect(screen.getByText("agent-123")).toBeInTheDocument();
   });
 

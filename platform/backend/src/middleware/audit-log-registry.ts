@@ -8,6 +8,7 @@ import chatOpsConfigModel from "@/models/chatops-config";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
 import EnvironmentResourceDefaultModel from "@/models/environment-resource-default";
+import ExecutionCredentialDefinitionModel from "@/models/execution-credential-definition";
 import GithubAppConfigModel from "@/models/github-app-config";
 import GithubPatModel from "@/models/github-pat";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
@@ -148,6 +149,23 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "agent",
     action: "agent.updated",
     fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
+    onlyWhenChanged: true,
+  },
+  "/api/execution-credentials": {
+    resourceType: "executionCredential",
+    fetchById: (id, orgId) =>
+      ExecutionCredentialDefinitionModel.findByIdForAudit(id, orgId),
+  },
+  "/api/execution-credentials/:key": {
+    resourceType: "executionCredential",
+    resourceIdParam: "key",
+    fetchById: (key, orgId) =>
+      ExecutionCredentialDefinitionModel.findByKeyForAudit(key, orgId),
+  },
+  "/api/execution-credentials/:key/organization": {
+    resourceType: "executionCredential",
+    resourceIdParam: "key",
+    action: "executionCredential.updated",
     onlyWhenChanged: true,
   },
   "/api/agents/:id/executions": {

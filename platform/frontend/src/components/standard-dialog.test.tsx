@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { FormEvent } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { Button } from "@/components/ui/button";
 import { StandardDialog, StandardFormDialog } from "./standard-dialog";
@@ -49,5 +50,33 @@ describe("StandardDialog", () => {
     await user.click(screen.getByRole("button", { name: "Submit" }));
 
     expect(onSubmit).toHaveBeenCalledOnce();
+  });
+
+  it("does not submit an ancestor form", async () => {
+    const user = userEvent.setup();
+    const onDialogSubmit = vi.fn();
+    const onAncestorSubmit = vi.fn((event: FormEvent) =>
+      event.preventDefault(),
+    );
+
+    render(
+      <form onSubmit={onAncestorSubmit}>
+        <StandardFormDialog
+          open
+          onOpenChange={vi.fn()}
+          title="Add variable"
+          onSubmit={onDialogSubmit}
+          footer={<Button type="submit">Add variable</Button>}
+        >
+          <label htmlFor="variable-key">Key</label>
+          <input id="variable-key" />
+        </StandardFormDialog>
+      </form>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Add variable" }));
+
+    expect(onDialogSubmit).toHaveBeenCalledOnce();
+    expect(onAncestorSubmit).not.toHaveBeenCalled();
   });
 });

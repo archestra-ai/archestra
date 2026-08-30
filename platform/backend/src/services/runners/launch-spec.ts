@@ -157,9 +157,7 @@ export async function buildRunnerLaunchSpec(params: {
   const usesClaudeCodeSubscription = Boolean(claudeCodeSubscriptionToken);
   const isClaudeCodeRuntime =
     params.deployment.command?.[0] === "archestra-claude-code";
-  const isCodexRuntime = CODEX_RUNTIME_COMMANDS.has(
-    params.deployment.command?.[0] ?? "",
-  );
+  const isCodexRuntime = params.deployment.command?.[0] === "archestra-codex";
   if (isClaudeCodeRuntime && !usesClaudeCodeSubscription) {
     throw new ApiError(
       409,
@@ -373,11 +371,6 @@ const RESERVED_RUNTIME_ENV_KEYS = new Set([
   "ARCHESTRA_MCP_GATEWAY_TOKEN",
   "ARCHESTRA_MCP_GATEWAY_URL",
   "ARCHESTRA_VIRTUAL_KEY",
-]);
-
-const CODEX_RUNTIME_COMMANDS = new Set([
-  "archestra-codex",
-  "archestra-lobster-env",
 ]);
 
 function claudeCodeCustomHeaders(params: {

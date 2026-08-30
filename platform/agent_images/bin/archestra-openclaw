@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ "${ARCHESTRA_LLM_PROXY_PROTOCOL:-}" != "openai_responses" ]]; then
-  echo "archestra: OpenClaw requires an Agent configured for OpenAI Responses" >&2
-  exit 78
-fi
+case "${ARCHESTRA_LLM_PROXY_PROTOCOL:-}" in
+  openai_chat) openclaw_api="openai-completions" ;;
+  openai_responses) openclaw_api="openai-responses" ;;
+  *)
+    echo "archestra: OpenClaw requires an Agent configured for OpenAI Chat Completions or OpenAI Responses" >&2
+    exit 78
+    ;;
+esac
 
 resolve_docker_desktop_url() {
   local url="$1"
@@ -28,9 +32,50 @@ runtime_dir="${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_RUNTIME_DIR:-/var/run/arches
 config_file="${runtime_dir}/openclaw.json"
 task_file="${runtime_dir}/task.md"
 model="${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL:?}"
+runtime_instructions="${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_SYSTEM_PROMPT:-}"
 export OPENCLAW_STATE_DIR="${runtime_dir}/openclaw-state"
 export OPENCLAW_CONFIG_PATH="${config_file}"
 mkdir -p "${OPENCLAW_STATE_DIR}"
+
+# OpenClaw deliberately owns its generated system prompt. Its supported
+# extension point is the workspace bootstrap files, so expose the Agent's
+# runtime instructions through SOUL.md. Task pods use a fresh worktree; the
+# cleanup and exclude bookkeeping also keep this safe for a custom workspace.
+soul_file="${PWD}/SOUL.md"
+soul_created=false
+exclude_file=""
+exclude_backup="${runtime_dir}/git-info-exclude.backup"
+exclude_existed=false
+
+cleanup_bootstrap() {
+  if [[ "${soul_created}" == true ]]; then
+    rm -f "${soul_file}"
+  fi
+  if [[ -n "${exclude_file}" ]]; then
+    if [[ "${exclude_existed}" == true ]]; then
+      cp "${exclude_backup}" "${exclude_file}"
+    else
+      rm -f "${exclude_file}"
+    fi
+  fi
+}
+trap cleanup_bootstrap EXIT
+
+if [[ -n "${runtime_instructions}" && ! -e "${soul_file}" ]]; then
+  printf '# Runtime instructions\n\n%s\n' "${runtime_instructions}" > "${soul_file}"
+  soul_created=true
+
+  git_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  if [[ -n "${git_root}" && "${soul_file}" == "${git_root}"/* ]]; then
+    exclude_file="$(git -C "${git_root}" rev-parse --git-path info/exclude)"
+    mkdir -p "$(dirname "${exclude_file}")"
+    if [[ -f "${exclude_file}" ]]; then
+      cp "${exclude_file}" "${exclude_backup}"
+      exclude_existed=true
+    fi
+    printf '\n/%s\n' "${soul_file#"${git_root}/"}" >> "${exclude_file}"
+  fi
+fi
 
 # Docker Desktop publishes host.internal with a working IPv6 address and a
 # synthetic IPv4 address that cannot accept connections from Kubernetes pods.
@@ -46,15 +91,17 @@ jq -n \
   --arg model "${model}" \
   --arg task_id "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID:?}" \
   --arg mcp_url "${openclaw_mcp_url}" \
+  --arg api "${openclaw_api}" \
   --arg workspace "${PWD}" \
   '{
+    logging:{level:"error",consoleLevel:"silent"},
     models:{
       mode:"replace",
       providers:{
         archestra:{
           baseUrl:$base_url,
           apiKey:env.OPENAI_API_KEY,
-          api:"openai-responses",
+          api:$api,
           headers:{
             "X-Archestra-Execution-Id":$task_id,
             "X-Archestra-Session-Id":$task_id
@@ -65,6 +112,7 @@ jq -n \
     },
     agents:{defaults:{
       workspace:$workspace,
+      skipBootstrap:true,
       model:{primary:("archestra/" + $model)}
     }},
     mcp:{
@@ -82,16 +130,26 @@ jq -n \
     }
   }' > "${config_file}"
 chmod 0600 "${config_file}"
-printf '%s\n' "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK:?}" > "${task_file}"
+if [[ -n "${runtime_instructions}" && "${soul_created}" != true ]]; then
+  printf '%s\n\n# Delegated task\n\n%s\n' \
+    "${runtime_instructions}" \
+    "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK:?}" > "${task_file}"
+else
+  printf '%s\n' "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK:?}" > "${task_file}"
+fi
 
 session_key="agent:main:${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID:?}"
 
 case "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODE:-one_shot}" in
   interactive)
-    exec openclaw tui \
+    set +e
+    openclaw tui \
       --local \
       --session "${session_key}" \
       --message "$(cat "${task_file}")"
+    status=$?
+    set -e
+    exit "${status}"
     ;;
   one_shot)
     set +e
@@ -102,7 +160,7 @@ case "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_MODE:-one_shot}" in
       --message-file "${task_file}" 2>&1 | tee "${runtime_dir}/openclaw-output.log"
     status=${PIPESTATUS[0]}
     set -e
-    if [[ ${status} -ne 0 ]] || grep -Eq 'FailoverError:|LLM request failed|network connection error' "${runtime_dir}/openclaw-output.log"; then
+    if [[ ${status} -ne 0 ]] || grep -Eq "FailoverError:|LLM request failed|network connection error|empty response retries exhausted|Agent couldn't generate a response" "${runtime_dir}/openclaw-output.log"; then
       exit 1
     fi
     ;;

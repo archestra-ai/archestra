@@ -77,34 +77,10 @@ import config, {
   parseRetentionDays,
   parseSampleRate,
   parseSandboxMemoryMaxBytes,
-  parseSlackDelegationReaction,
   parseTrustProxy,
   parseVirtualKeyDefaultExpiration,
   resolveRenderBaseUrl,
 } from "./config";
-
-describe("parseSlackDelegationReaction", () => {
-  test.each([
-    [undefined, null],
-    ["", null],
-    [" lobster ", "lobster"],
-    [":crab:", "crab"],
-    ["+1", "+1"],
-  ])("normalizes %s", (input, expected) => {
-    expect(parseSlackDelegationReaction(input)).toBe(expected);
-  });
-
-  test.each([
-    "two words",
-    "UPPERCASE",
-    ":broken:name:",
-    "emoji!",
-  ])("rejects invalid Slack reaction name %s", (input) => {
-    expect(() => parseSlackDelegationReaction(input)).toThrow(
-      "must be a Slack emoji name",
-    );
-  });
-});
 
 // Mock the logger
 vi.mock("./logging", () => ({

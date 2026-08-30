@@ -4,6 +4,7 @@ import { AccountSectionNav } from "./account-section-nav";
 
 const { usePathname } = vi.hoisted(() => ({ usePathname: vi.fn() }));
 vi.mock("next/navigation", () => ({ usePathname }));
+vi.mock("@/lib/config/config.query", () => ({ useFeature: () => true }));
 
 describe("AccountSectionNav", () => {
   it("links every section to its own route", () => {
@@ -17,6 +18,10 @@ describe("AccountSectionNav", () => {
     expect(screen.getByRole("link", { name: "Sessions" })).toHaveAttribute(
       "href",
       "/account/sessions",
+    );
+    expect(screen.getByRole("link", { name: "Connections" })).toHaveAttribute(
+      "href",
+      "/account/connections",
     );
   });
 

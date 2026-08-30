@@ -240,11 +240,13 @@ endpoints instead.
 
 ### Configuration and secrets
 
-Use **Secret** for sensitive values. Choose a reusable execution credential, or choose **One-off secret** when only that Agent needs it. Set the environment variable expected by the image.
+Use **Secret** for sensitive values. Choose a reusable connection when several Agents need the same credential.
 
-Admins manage organization definitions and shared values under **Settings → Agents → Execution credentials**. Users connect personal values under **Personal settings → Connections** or when an execution first requires one. Values use the configured secrets manager, including read-only Vault.
+Choose **One-off secret** when the value belongs to one Agent. Set the environment variable expected by the image.
 
-See [Agent Execution Credentials](/docs/platform-execution-credentials) for scopes, built-in defaults, custom definitions, and the bring-your-own-image binding format.
+Admins manage shared values under **Settings → Agents → Execution credentials**. Users connect personal values under **Personal settings → Connections**.
+
+See [Execution Credentials](/docs/platform-execution-credentials) for connection types and setup.
 
 ### Run controls
 

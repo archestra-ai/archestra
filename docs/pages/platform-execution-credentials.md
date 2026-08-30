@@ -1,76 +1,43 @@
 ---
-title: Agent Execution Credentials
+title: Execution Credentials
 category: Administration
-description: Define and connect credentials used by Background execution Agents
+description: Connect reusable credentials for Background execution
 order: 5
 lastUpdated: 2026-08-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Execution credentials let an Agent image request a secret without storing that secret in the Agent definition. A connection is entered once and can be used by every compatible Agent.
+Execution credentials keep secrets out of Agent definitions. One connection can serve every Agent that requests the same credential.
 
-## Credential definitions
+![Execution credentials in Agent settings](/docs/automated_screenshots/platform-execution-credentials_settings.webp)
 
-Admins with **Agent settings: Update** access manage definitions under **Settings → Agents → Execution credentials**.
+## Connection Types
 
-Each definition has:
+A personal connection belongs to one user. It runs only with executions that user starts.
 
-- a name, icon, and description shown to users
-- a connection type: personal or organization
+An organization connection is shared. It runs with every Agent bound to that connection.
 
-Archestra includes these definitions:
+GitHub and Claude Code connections are included for personal use. You can add credentials for other services.
 
-| Credential | Connection type | Default image binding |
-| --- | --- | --- |
-| GitHub PAT | Personal | `GITHUB_TOKEN` |
-| Claude Code subscription | Personal | `CLAUDE_CODE_OAUTH_TOKEN` |
+## Configure A Credential
 
-Create definitions for other services, such as a GitLab PAT. The name and connection type are fixed after creation; the icon and description remain editable.
+Go to **Settings → Agents → Execution credentials** to add a credential. Choose who provides its value when you create it.
 
-## Connect values
+Connect organization values from the same section. Connect personal values under **Personal settings → Connections**. Archestra also prompts for a missing personal value when an execution starts.
 
-An organization connection is set by an admin from **Settings → Agents → Execution credentials**. Everyone running an Agent bound to that connection uses the same value.
+Saved values are never displayed again. They use the configured [secrets manager](/docs/platform-secrets-management).
 
-A personal connection is set under **Personal settings → Connections**. Each person supplies their own value. If a required personal connection is missing, Chat opens the same connection dialog before the first execution starts.
+## Add A Credential To An Agent
 
-For GitHub, create a fine-grained token from [GitHub Developer settings](https://github.com/settings/personal-access-tokens/new). For Claude Code, run `claude setup-token` on a machine where the official Claude Code client is signed in.
+Open the Agent editor and go to **Advanced → Background execution**. Add a **Secret**, then select a reusable connection.
 
-Values are stored by the configured [secrets manager](/docs/platform-secrets-management). With read-only Vault enabled, the dialog selects a Vault path and key instead of accepting a pasted value.
+Set the environment variable expected by the image. The same connection can use `GITHUB_TOKEN` in one image and `GH_TOKEN` in another.
 
-Deleting or replacing a connection affects every Agent bound to that connection and scope. Secret values are never displayed after they are saved.
+Use **One-off secret** when the value belongs to one Agent. See [Background Execution](/docs/platform-agent-background-execution) for the image contract.
 
-## Bind a credential to an Agent image
+## GitLab Coding Agent
 
-In the Agent editor, add a **Secret** under **Background execution** and choose:
+A coding Agent needs `GITLAB_TOKEN` to clone private repositories. An admin adds **GitLab** and chooses **Each user**.
 
-- a credential definition for a reusable connection
-- **One-off secret** for a value used only by that Agent
-
-Set the environment variable key expected by the image. A definition can map to different keys in different images. For example, `github` can be injected as `GITHUB_TOKEN` in one image and `GH_TOKEN` in another.
-
-Catalog Agents include useful defaults. GitHub is optional for all five maintained images. Claude Code also requires its personal subscription connection. Remove any declaration the Agent does not need.
-
-## Bring your own image
-
-Declare each secret the image expects in `backgroundExecution.credentials`:
-
-```json
-{
-  "credentialId": "gitlab-pat",
-  "key": "GITLAB_TOKEN",
-  "scope": "per_user",
-  "label": "GitLab PAT",
-  "required": true
-}
-```
-
-`credentialId` identifies the credential definition. `key` is the environment variable injected into the container. Use `scope: "per_user"` for a personal connection or `scope: "shared"` for an organization connection. Omit `credentialId` only for a one-off Agent secret.
-
-Archestra resolves the value when an execution starts and injects it only into that execution's container. Do not bake credentials into an image or place them in command arguments, plain-text environment variables, logs, or Agent instructions.
-
-See [Background Execution](/docs/platform-agent-background-execution) for the complete image contract.
-
-## GitLab coding Agent
-
-An admin creates a **GitLab PAT** definition with personal connections enabled. The Agent binds `gitlab-pat` to `GITLAB_TOKEN`. Each developer connects their own PAT once under **Personal settings → Connections**, then every compatible coding Agent can use it.
+The Agent binds that connection to `GITLAB_TOKEN`. Each developer connects a personal access token once under **Personal settings → Connections**.

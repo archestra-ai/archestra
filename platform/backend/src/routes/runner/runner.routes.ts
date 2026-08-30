@@ -32,7 +32,6 @@ import {
   SelectAgentExecutionSessionSchema,
   StartAgentExecutionResponseSchema,
 } from "@/types";
-import executionCredentialRoutes from "./execution-credential.routes";
 
 const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
   fastify,
@@ -40,8 +39,6 @@ const agentBackgroundExecutionRoutes: FastifyPluginAsyncZod = async (
   fastify.addHook("preHandler", async () => {
     if (!isAnyRunnerBackendEnabled()) throw new ApiError(404, "Not found");
   });
-
-  await fastify.register(executionCredentialRoutes);
 
   fastify.get(
     "/api/agents/:id/background-execution/preflight",

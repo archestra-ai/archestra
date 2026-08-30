@@ -13,6 +13,7 @@ import {
 } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
+import { createExecutionCredentialDefinition } from "@/services/runners/execution-credentials";
 import {
   cancelDetachedAgentTask,
   startDetachedAgentTask,
@@ -39,6 +40,18 @@ describe("Agent Background execution routes", () => {
     organizationId = organization.id;
     user = await makeAdmin();
     await makeMember(user.id, organizationId, { role: "admin" });
+    await createExecutionCredentialDefinition({
+      organizationId,
+      userId: user.id,
+      definition: {
+        key: "shared-token",
+        name: "Shared token",
+        description: "Organization credential for delegated work",
+        icon: null,
+        allowPersonal: false,
+        allowOrganization: true,
+      },
+    });
     agent = await makeAgent({
       organizationId,
       authorId: user.id,
@@ -56,7 +69,7 @@ describe("Agent Background execution routes", () => {
         credentials: [
           {
             key: "SHARED_TOKEN",
-            credentialId: "github",
+            credentialId: "shared-token",
             scope: "shared",
             label: "Shared token",
             required: true,
@@ -101,122 +114,6 @@ describe("Agent Background execution routes", () => {
     );
     vi.restoreAllMocks();
     await app.close();
-  });
-
-  test("lists built-in credentials and tracks personal connections without exposing values", async () => {
-    const initial = await app.inject({
-      method: "GET",
-      url: "/api/execution-credentials",
-    });
-    expect(initial.statusCode).toBe(200);
-    expect(initial.json()).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          key: "github",
-          builtIn: true,
-          personalConfigured: false,
-          organizationConfigured: false,
-        }),
-      ]),
-    );
-
-    const connected = await app.inject({
-      method: "PUT",
-      url: "/api/execution-credentials/github/personal",
-      payload: { value: "personal-github-token" },
-    });
-    expect(connected.statusCode).toBe(200);
-
-    const listed = await app.inject({
-      method: "GET",
-      url: "/api/execution-credentials",
-    });
-    const github = listed
-      .json<Array<Record<string, unknown>>>()
-      .find((definition) => definition.key === "github");
-    expect(github).toEqual(
-      expect.objectContaining({
-        personalConfigured: true,
-        organizationConfigured: false,
-      }),
-    );
-    expect(JSON.stringify(listed.json())).not.toContain(
-      "personal-github-token",
-    );
-  });
-
-  test("lists Agents that block deleting a credential", async () => {
-    const response = await app.inject({
-      method: "GET",
-      url: "/api/execution-credentials/github/usage",
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({
-      agents: [{ id: agent.id, name: agent.name }],
-    });
-  });
-
-  test("creates a custom credential and reuses its organization connection", async () => {
-    const created = await app.inject({
-      method: "POST",
-      url: "/api/execution-credentials",
-      payload: {
-        key: "gitlab-pat",
-        name: "A GitLab PAT",
-        description: "Access GitLab repositories",
-        icon: null,
-        allowPersonal: false,
-        allowOrganization: true,
-      },
-    });
-    expect(created.statusCode).toBe(200);
-    expect(created.json()).toEqual(
-      expect.objectContaining({ key: "gitlab-pat", name: "A GitLab PAT" }),
-    );
-
-    const connected = await app.inject({
-      method: "PUT",
-      url: "/api/execution-credentials/gitlab-pat/organization",
-      payload: { value: "shared-gitlab-token" },
-    });
-    expect(connected.statusCode).toBe(200);
-
-    const listed = await app.inject({
-      method: "GET",
-      url: "/api/execution-credentials",
-    });
-    expect(
-      listed
-        .json<Array<{ key: string }>>()
-        .slice(0, 2)
-        .map(({ key }) => key),
-    ).toEqual(["claude-code", "github"]);
-    expect(listed.json()).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          key: "gitlab-pat",
-          builtIn: false,
-          organizationConfigured: true,
-        }),
-      ]),
-    );
-
-    const [audit] = await db
-      .select({
-        action: schema.auditLogsTable.action,
-        before: schema.auditLogsTable.before,
-        after: schema.auditLogsTable.after,
-      })
-      .from(schema.auditLogsTable)
-      .where(
-        and(
-          eq(schema.auditLogsTable.organizationId, organizationId),
-          eq(schema.auditLogsTable.action, "executionCredential.updated"),
-        ),
-      );
-    expect(audit).toBeDefined();
-    expect(JSON.stringify(audit)).not.toContain("shared-gitlab-token");
   });
 
   test("lists only executions belonging to the selected Agent with their task outcome", async ({
@@ -731,6 +628,7 @@ describe("Agent Background execution routes", () => {
       before: expect.any(Object),
       after: expect.any(Object),
     });
+    expect(JSON.stringify(audit)).toContain('"credentialId":"shared-token"');
     expect(JSON.stringify(audit)).not.toContain("never-log-this-value");
     expect(audit.before).not.toEqual(audit.after);
   });

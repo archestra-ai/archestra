@@ -41,6 +41,9 @@ vi.mock("@/components/roles/with-permissions", () => ({
   WithPermissions: ({ children }: { children: (value: unknown) => unknown }) =>
     children({ hasPermission: true }),
 }));
+vi.mock("@/lib/auth/auth.query", () => ({
+  useHasPermissions: () => ({ data: true }),
+}));
 vi.mock("@/lib/config/config.query", () => ({ useFeature: () => false }));
 vi.mock("@/lib/execution-credentials.query", () => ({
   useExecutionCredentials: () => ({
@@ -100,12 +103,10 @@ describe("ExecutionCredentialsSection", () => {
     await user.type(within(dialog).getByLabelText("Name"), "GitLab PAT");
     await user.click(
       within(dialog).getByRole("combobox", {
-        name: "Who provides this credential?",
+        name: "Provided by",
       }),
     );
-    await user.click(
-      screen.getByRole("option", { name: /Each user provides their own/ }),
-    );
+    await user.click(screen.getByRole("option", { name: /Each user/ }));
     await user.click(within(dialog).getByRole("button", { name: "Add" }));
 
     expect(mocks.create).toHaveBeenCalledWith(
@@ -141,7 +142,10 @@ describe("ExecutionCredentialsSection", () => {
     });
 
     render(<ExecutionCredentialsSection />);
-    await user.click(screen.getByRole("button", { name: "Delete GitLab PAT" }));
+    await user.click(
+      screen.getByRole("button", { name: "More actions GitLab PAT" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
 
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveTextContent("Release Bot");

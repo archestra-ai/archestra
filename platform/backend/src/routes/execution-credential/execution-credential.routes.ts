@@ -1,6 +1,7 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { isAnyRunnerBackendEnabled } from "@/services/runners/backends";
 import {
   createExecutionCredentialDefinition,
   deleteExecutionCredentialConnection,
@@ -12,6 +13,7 @@ import {
   updateExecutionCredentialDefinition,
 } from "@/services/runners/execution-credentials";
 import {
+  ApiError,
   constructResponseSchema,
   ExecutionCredentialDefinitionViewSchema,
   ExecutionCredentialUsageSchema,
@@ -21,6 +23,10 @@ import {
 } from "@/types";
 
 const executionCredentialRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  fastify.addHook("preHandler", async () => {
+    if (!isAnyRunnerBackendEnabled()) throw new ApiError(404, "Not found");
+  });
+
   fastify.get(
     "/api/execution-credentials",
     {
@@ -47,7 +53,7 @@ const executionCredentialRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.CreateExecutionCredential,
-        description: "Create an organization execution credential",
+        description: "Create an execution credential definition",
         tags: ["Agents"],
         body: InsertExecutionCredentialDefinitionSchema,
         response: constructResponseSchema(
@@ -90,7 +96,7 @@ const executionCredentialRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.UpdateExecutionCredential,
-        description: "Update an organization execution credential",
+        description: "Update an execution credential definition",
         tags: ["Agents"],
         params: CredentialKeyParamsSchema,
         body: UpdateExecutionCredentialDefinitionSchema,
@@ -114,7 +120,7 @@ const executionCredentialRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.DeleteExecutionCredential,
-        description: "Delete an organization execution credential",
+        description: "Delete an execution credential definition",
         tags: ["Agents"],
         params: CredentialKeyParamsSchema,
         response: constructResponseSchema(

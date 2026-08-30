@@ -394,11 +394,7 @@ function CredentialBindingEditor({
   const selection = reserved?.id ?? "one-off";
   return (
     <div className="space-y-2">
-      <Label htmlFor="env-var-credential-binding">Credential</Label>
-      <p className="text-xs text-muted-foreground">
-        Choose a reusable execution credential, or keep this as a one-off secret
-        for this Agent.
-      </p>
+      <Label htmlFor="env-var-credential-binding">Reusable connection</Label>
       <Select
         value={selection}
         onValueChange={(value) => {
@@ -453,12 +449,6 @@ function CredentialBindingEditor({
           </SelectItem>
         </SelectContent>
       </Select>
-      {!reserved && (
-        <p className="text-xs text-muted-foreground">
-          This value belongs only to this Agent. Add an execution credential in
-          Agent settings when it should be reusable.
-        </p>
-      )}
     </div>
   );
 }

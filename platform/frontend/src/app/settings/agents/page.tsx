@@ -24,6 +24,7 @@ import {
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -478,93 +479,85 @@ function ExecutionBackendSection({
   executionBackend: ExecutionBackend;
 }) {
   return (
-    <section className="scroll-mt-24 border-t pt-8">
-      <div className="space-y-1">
-        <h2 className="text-base font-semibold leading-6">Execution Backend</h2>
-        <p className="max-w-3xl text-sm leading-5 text-muted-foreground">
+    <SettingsBlock
+      id="execution-backend"
+      title="Execution backend"
+      description={
+        <>
           Installation-wide defaults for delegated Background executions.
-          Configure per-Agent overrides from the Agent editor. Deployment
-          operators manage these values.{" "}
+          Configure Agent-specific overrides in the Agent editor.{" "}
           <ExternalDocsLink
             href={getDocsUrl(DocsPage.PlatformAgentBackgroundExecution)}
           >
-            Learn how Background execution works
+            Configure Background execution
           </ExternalDocsLink>
-        </p>
-      </div>
-
-      <div className="mt-4 overflow-hidden rounded-xl border bg-card">
-        <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[#326CE5]/10">
-              <svg
-                aria-hidden="true"
-                viewBox="0 0 24 24"
-                className="size-6"
-                fill={`#${siKubernetes.hex}`}
-              >
-                <path d={siKubernetes.path} />
-              </svg>
-            </div>
-            <div className="min-w-0">
-              <h3 className="font-medium">Kubernetes</h3>
-              <p className="text-sm text-muted-foreground">
-                One isolated Job per delegated task
-              </p>
-            </div>
-          </div>
-          <div className="flex w-fit items-center gap-2 rounded-full border bg-background px-3 py-1.5 text-sm font-medium">
-            <span
-              className={`size-2 rounded-full ${
-                executionBackend.available ? "bg-green-500" : "bg-red-500"
-              }`}
-            />
-            <span>
-              {executionBackend.available ? "Available" : "Unavailable"}
-            </span>
-          </div>
+        </>
+      }
+      control={
+        <Badge
+          variant={executionBackend.available ? "secondary" : "destructive"}
+          className="font-normal"
+        >
+          {executionBackend.available ? "Available" : "Unavailable"}
+        </Badge>
+      }
+      notice={
+        !executionBackend.available
+          ? "The feature is enabled, but the Kubernetes backend is unreachable. Check the orchestrator configuration."
+          : undefined
+      }
+    >
+      <div className="flex items-center gap-3 border-b pb-4">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-background">
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            className="size-5"
+            fill={`#${siKubernetes.hex}`}
+          >
+            <path d={siKubernetes.path} />
+          </svg>
         </div>
-
-        <dl className="grid gap-x-8 gap-y-5 border-t p-5 sm:grid-cols-2 lg:grid-cols-3">
-          <div className="min-w-0 sm:col-span-2">
-            <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Default image
-            </dt>
-            <dd
-              className="mt-1 break-all font-mono text-sm"
-              title={executionBackend.defaultImage}
-            >
-              {executionBackend.defaultImage}
-            </dd>
-          </div>
-          <ExecutionBackendDetail label="Maximum duration">
-            {executionBackend.defaultTtlHours} hours
-          </ExecutionBackendDetail>
-          <ExecutionBackendDetail label="Idle timeout">
-            {executionBackend.defaultIdleTimeoutMinutes} minutes
-          </ExecutionBackendDetail>
-          <ExecutionBackendDetail label="CPU request">
-            {executionBackend.resources.cpuRequest}
-          </ExecutionBackendDetail>
-          <ExecutionBackendDetail label="Memory request">
-            {executionBackend.resources.memoryRequest}
-          </ExecutionBackendDetail>
-          <ExecutionBackendDetail label="Memory limit">
-            {executionBackend.resources.memoryLimit}
-          </ExecutionBackendDetail>
-          <ExecutionBackendDetail label="Privileged containers">
-            {executionBackend.allowPrivileged ? "Allowed" : "Disabled"}
-          </ExecutionBackendDetail>
-        </dl>
-
-        {!executionBackend.available && (
-          <div className="border-t bg-red-500/5 px-5 py-3 text-sm text-red-600 dark:text-red-400">
-            The feature is enabled, but the Kubernetes execution backend is not
-            reachable. Check the orchestrator configuration.
-          </div>
-        )}
+        <div>
+          <h3 className="text-sm font-medium">Kubernetes</h3>
+          <p className="text-xs text-muted-foreground">
+            One isolated Job per delegated task
+          </p>
+        </div>
       </div>
-    </section>
+
+      <dl className="grid gap-x-8 gap-y-5 pt-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="min-w-0 sm:col-span-2">
+          <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Default image
+          </dt>
+          <dd
+            className="mt-1 break-all font-mono text-sm"
+            title={executionBackend.defaultImage}
+          >
+            {executionBackend.defaultImage}
+          </dd>
+        </div>
+        <ExecutionBackendDetail label="Maximum duration">
+          {executionBackend.defaultTtlHours} hours
+        </ExecutionBackendDetail>
+        <ExecutionBackendDetail label="Idle timeout">
+          {executionBackend.defaultIdleTimeoutMinutes} minutes
+        </ExecutionBackendDetail>
+        <ExecutionBackendDetail label="CPU request">
+          {executionBackend.resources.cpuRequest}
+        </ExecutionBackendDetail>
+        <ExecutionBackendDetail label="Memory request">
+          {executionBackend.resources.memoryRequest}
+        </ExecutionBackendDetail>
+        <ExecutionBackendDetail label="Memory limit">
+          {executionBackend.resources.memoryLimit}
+        </ExecutionBackendDetail>
+        <ExecutionBackendDetail label="Privileged containers">
+          {executionBackend.allowPrivileged ? "Allowed" : "Disabled"}
+        </ExecutionBackendDetail>
+      </dl>
+    </SettingsBlock>
   );
 }
 

@@ -1,12 +1,21 @@
 "use client";
 
-import { useState } from "react";
-import { toast } from "sonner";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
 import { ExecutionCredentialIcon } from "@/components/execution-credential-icon";
+import { ExecutionCredentialDescription } from "@/components/execution-credential-row-content";
 import { ExternalSecretReferenceDialog } from "@/components/external-secret-reference-dialog";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { SecretInput } from "@/components/ui/secret-input";
 import {
   type ExecutionCredentialDefinition,
@@ -26,15 +35,22 @@ export function ExecutionCredentialConnectionDialog({
   onClose: () => void;
   onConnected?: () => void;
 }) {
-  const [value, setValue] = useState("");
   const connect = useSetExecutionCredentialConnection();
+  const form = useForm<ConnectionFormValues>({
+    resolver: zodResolver(ConnectionFormSchema),
+    defaultValues: { value: "" },
+  });
 
   const save = (nextValue: string) => {
     connect.mutate(
-      { key: definition.key, scope, value: nextValue },
+      {
+        key: definition.key,
+        name: definition.name,
+        scope,
+        value: nextValue,
+      },
       {
         onSuccess: () => {
-          toast.success(`${definition.name} connected`);
           onConnected?.();
           onClose();
         },
@@ -71,75 +87,49 @@ export function ExecutionCredentialConnectionDialog({
           ? "This value is private to you and works with every Agent that requests this credential."
           : "This value is available to everyone who runs an Agent bound to this organization connection."
       }
-      onSubmit={(event) => {
-        event.preventDefault();
-        save(value);
-      }}
+      onSubmit={form.handleSubmit(({ value }) => save(value))}
       footer={
         <>
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit" disabled={!value.trim() || connect.isPending}>
+          <Button type="submit" disabled={connect.isPending}>
             {connect.isPending ? "Connecting…" : "Connect"}
           </Button>
         </>
       }
     >
-      <div className="space-y-2">
-        <Label htmlFor="execution-credential-value">Secret value</Label>
-        <CredentialConnectionHelp definition={definition} />
-        <SecretInput
-          id="execution-credential-value"
-          autoFocus
-          revealable
-          autoComplete="off"
-          value={value}
-          onChange={(event) => setValue(event.target.value)}
-          placeholder="Paste secret"
+      <Form {...form}>
+        <FormField
+          control={form.control}
+          name="value"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Secret value</FormLabel>
+              <ExecutionCredentialDescription
+                definition={definition}
+                className=""
+              />
+              <FormControl>
+                <SecretInput
+                  {...field}
+                  autoFocus
+                  revealable
+                  autoComplete="off"
+                  placeholder="Paste secret"
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
         />
-      </div>
+      </Form>
     </StandardFormDialog>
   );
 }
 
-function CredentialConnectionHelp({
-  definition,
-}: {
-  definition: ExecutionCredentialDefinition;
-}) {
-  if (definition.key === "claude-code") {
-    return (
-      <p className="text-xs text-muted-foreground">
-        A personal subscription token created by the official Claude Code
-        client. Run{" "}
-        <code className="rounded bg-muted px-1 py-0.5 font-mono text-[0.9em] text-foreground">
-          claude setup-token
-        </code>{" "}
-        on your machine to get the value.
-      </p>
-    );
-  }
+const ConnectionFormSchema = z.object({
+  value: z.string().trim().min(1, "Secret value is required").max(20_000),
+});
 
-  if (definition.key === "github") {
-    return (
-      <p className="text-xs text-muted-foreground">
-        A GitHub personal access token for repository access. Create one in{" "}
-        <a
-          href="https://github.com/settings/personal-access-tokens/new"
-          target="_blank"
-          rel="noreferrer"
-          className="underline underline-offset-2"
-        >
-          GitHub Developer settings
-        </a>
-        .
-      </p>
-    );
-  }
-
-  if (!definition.description) return null;
-  return (
-    <p className="text-xs text-muted-foreground">{definition.description}</p>
-  );
-}
+type ConnectionFormValues = z.infer<typeof ConnectionFormSchema>;

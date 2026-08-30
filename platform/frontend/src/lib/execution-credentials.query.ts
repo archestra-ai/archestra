@@ -1,5 +1,6 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { reportApiError, throwOnApiError } from "@/lib/utils";
 
 const {
@@ -42,6 +43,7 @@ export function useCreateExecutionCredential() {
       if (error) throw reportApiError(error);
       return data;
     },
+    (_, body) => toast.success(`${body.name} added`),
   );
 }
 
@@ -70,6 +72,7 @@ export function useUpdateExecutionCredential() {
       body,
     }: {
       key: string;
+      name: string;
       body: archestraApiTypes.UpdateExecutionCredentialData["body"];
     }) => {
       const { data, error } = await updateExecutionCredential({
@@ -79,28 +82,32 @@ export function useUpdateExecutionCredential() {
       if (error) throw reportApiError(error);
       return data;
     },
+    (_, input) => toast.success(`${input.name} updated`),
   );
 }
 
 export function useDeleteExecutionCredential() {
-  return useCredentialMutation(async (key: string) => {
-    const { data, error } = await deleteExecutionCredential({ path: { key } });
-    if (error) throw reportApiError(error);
-    return data;
-  });
+  return useCredentialMutation(
+    async ({ key }: { key: string; name: string }) => {
+      const { data, error } = await deleteExecutionCredential({
+        path: { key },
+      });
+      if (error) throw reportApiError(error);
+      return data;
+    },
+    (_, input) => toast.success(`${input.name} deleted`),
+  );
 }
 
 export function useSetExecutionCredentialConnection() {
   return useCredentialMutation(
-    async ({
-      key,
-      scope,
-      value,
-    }: {
+    async (input: {
       key: string;
+      name: string;
       scope: "personal" | "organization";
       value: string;
     }) => {
+      const { key, scope, value } = input;
       const request = { path: { key }, body: { value } };
       const { data, error } =
         scope === "personal"
@@ -109,18 +116,18 @@ export function useSetExecutionCredentialConnection() {
       if (error) throw reportApiError(error);
       return data;
     },
+    (_, input) => toast.success(`${input.name} connected`),
   );
 }
 
 export function useDeleteExecutionCredentialConnection() {
   return useCredentialMutation(
-    async ({
-      key,
-      scope,
-    }: {
+    async (input: {
       key: string;
+      name: string;
       scope: "personal" | "organization";
     }) => {
+      const { key, scope } = input;
       const request = { path: { key } };
       const { data, error } =
         scope === "personal"
@@ -129,16 +136,22 @@ export function useDeleteExecutionCredentialConnection() {
       if (error) throw reportApiError(error);
       return data;
     },
+    (_, input) => toast.success(`${input.name} disconnected`),
   );
 }
 
 function useCredentialMutation<TInput, TOutput>(
   mutationFn: (input: TInput) => Promise<TOutput>,
+  onSuccess?: (data: TOutput, input: TInput) => void,
 ) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn,
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: executionCredentialsQueryKey }),
+    onSuccess: (data, input) => {
+      onSuccess?.(data, input);
+      return queryClient.invalidateQueries({
+        queryKey: executionCredentialsQueryKey,
+      });
+    },
   });
 }

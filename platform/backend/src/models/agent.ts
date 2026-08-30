@@ -3919,8 +3919,9 @@ class AgentModel {
               .map((entry) => entry.key)
               .sort(),
             credentials: (row.backgroundExecution.credentials ?? [])
-              .map(({ key, scope, label, required }) => ({
+              .map(({ key, credentialId, scope, label, required }) => ({
                 key,
+                credentialId: credentialId ?? null,
                 scope,
                 label,
                 required,

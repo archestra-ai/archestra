@@ -61,7 +61,7 @@ export async function createExecutionCredentialDefinition(params: {
 }) {
   assertExactlyOneScopeAllowed({
     allowPersonal: params.definition.allowPersonal ?? true,
-    allowOrganization: params.definition.allowOrganization ?? true,
+    allowOrganization: params.definition.allowOrganization ?? false,
   });
   if (
     await findExecutionCredentialDefinition({

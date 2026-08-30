@@ -57,7 +57,7 @@ export function calculatePaginationMeta(
     limit: params.limit,
     total,
     totalPages,
-    hasNext: currentPage < totalPages,
-    hasPrev: currentPage > 1,
+    hasNext: params.offset + params.limit < total,
+    hasPrev: params.offset > 0,
   };
 }

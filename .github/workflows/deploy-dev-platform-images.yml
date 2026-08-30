@@ -102,9 +102,9 @@ jobs:
       # complete full-image build on this 16-vCPU runner. Use it for every
       # compile-bound amd64 Platform build, including PR/manual multi-arch runs.
       amd64_runner: blacksmith-16vcpu-ubuntu-2404
-      # The standard ARM runner exceeded the five-minute budget even with a
-      # warm native layer; this is the native ARM equivalent of the amd64 runner.
-      arm64_runner: blacksmith-16vcpu-ubuntu-2404-arm
+      # 16-vCPU ARM measured 5m11s after cache/export optimization; use the
+      # native 32-vCPU tier to keep the complete job below the five-minute budget.
+      arm64_runner: blacksmith-32vcpu-ubuntu-2404-arm
       # PRs consume publisher caches read-only instead of spending over a minute
       # rewriting mode=max. Push and manual multi-arch builds still refresh them.
       export_cache: ${{ github.event_name != 'pull_request' }}

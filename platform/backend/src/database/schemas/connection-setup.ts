@@ -3,6 +3,7 @@ import {
   boolean,
   index,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -17,6 +18,7 @@ import type {
   ConnectionSetupProxyAuth,
 } from "@/types/connection-setup";
 import agentsTable from "./agent";
+import bundlesTable from "./bundle";
 import organizationsTable from "./organization";
 import pluginsTable from "./plugin";
 import skillsTable from "./skill";
@@ -53,6 +55,15 @@ const connectionSetupsTable = pgTable(
     mcpGatewayId: uuid("mcp_gateway_id").references(() => agentsTable.id, {
       onDelete: "cascade",
     }),
+    bundleId: uuid("bundle_id").references(() => bundlesTable.id, {
+      onDelete: "cascade",
+    }),
+    selectedOptionalLocalMcpServerIds: jsonb(
+      "selected_optional_local_mcp_server_ids",
+    )
+      .$type<string[]>()
+      .notNull()
+      .default([]),
     llmProxyId: uuid("llm_proxy_id").references(() => agentsTable.id, {
       onDelete: "cascade",
     }),

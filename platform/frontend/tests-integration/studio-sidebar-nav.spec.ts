@@ -94,6 +94,23 @@ async function enablePlugins({
   });
 }
 
+async function enableBundles({
+  mswControl,
+  request,
+}: {
+  mswControl: MswControl;
+  request: APIRequestContext;
+}) {
+  const config = await (
+    await request.get("/internal-test/api/api/config")
+  ).json();
+  await mswControl.use({
+    method: "get",
+    url: "/api/config",
+    body: { ...config, features: { ...config.features, bundles: true } },
+  });
+}
+
 test.describe("studio sidebar navigation", () => {
   test("names every studio page under its section heading", async ({
     page,
@@ -181,6 +198,25 @@ test.describe("studio sidebar navigation", () => {
       "Agents",
       "Skills",
       "Plugins",
+      ...STUDIO_NAV.slice(2),
+    ]);
+  });
+
+  test("offers Bundles with its Beta badge only where the deployment enables it", async ({
+    page,
+    mswControl,
+    request,
+  }) => {
+    await enableBundles({ mswControl, request });
+    await page.goto("/agents");
+
+    const bundles = page.getByRole("link", { name: /^Bundles/ });
+    await expect(bundles).toBeVisible();
+    await expect(bundles.getByText("Beta", { exact: true })).toBeVisible();
+    expect(await rowNames(page)).toEqual([
+      "Agents",
+      "Skills",
+      "Bundles",
       ...STUDIO_NAV.slice(2),
     ]);
   });

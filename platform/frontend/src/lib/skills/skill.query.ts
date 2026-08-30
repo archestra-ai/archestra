@@ -59,6 +59,11 @@ export type SkillVersionSummary =
 export type SkillVersionDetail =
   archestraApiTypes.GetSkillVersionResponses["200"];
 
+export type AllSkillListItem = Pick<
+  archestraApiTypes.GetSkillsResponses["200"]["data"][number],
+  "id" | "name" | "scope" | "authorId" | "authorName" | "teams" | "users"
+>;
+
 export type SkillUsageReference =
   | { kind: "standalone"; skillId: string }
   | { kind: "externalMcp"; mcpServerId: string; uri: string }
@@ -118,6 +123,37 @@ export function useSkillsPaginated(
       return data;
     },
   });
+}
+
+export function useAllSkills(params?: {
+  enabled?: boolean;
+  forAgentId?: string | null;
+}) {
+  const forAgentId = params?.forAgentId ?? null;
+  return useQuery({
+    queryKey: ["skills", "all", forAgentId],
+    enabled: params?.enabled,
+    queryFn: () => fetchAllSkills(forAgentId),
+  });
+}
+
+export async function fetchAllSkills(
+  forAgentId: string | null = null,
+): Promise<AllSkillListItem[]> {
+  const skills: AllSkillListItem[] = [];
+  const limit = 100;
+  let offset = 0;
+  while (true) {
+    const { data, error } = await getSkills({
+      query: { limit, offset, forAgentId: forAgentId ?? undefined },
+    });
+    throwOnApiError(error);
+    if (!data) break;
+    skills.push(...data.data);
+    if (data.data.length < limit) break;
+    offset += limit;
+  }
+  return skills;
 }
 
 /**

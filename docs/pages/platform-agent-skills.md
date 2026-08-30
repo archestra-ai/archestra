@@ -18,6 +18,16 @@ Click a skill's use count (or its chart action) to open usage analytics. It show
 
 ![The Skills page open under the Studio tab of the sidebar, listing the organization's skills](/docs/automated_screenshots/platform-agent-skills_skills-in-studio.webp)
 
+## Bundles
+
+A Bundle is a managed setup for a role or workflow. It can contain Skills, plugins, an MCP gateway, and local MCP servers.
+
+Create Bundles under **Studio → Bundles**. People select one while connecting Cursor or Claude Code. Optional local MCP servers can be removed during review. Required servers stay selected.
+
+The installed marketplace remains linked to the Bundle. Skill updates and packaged MCP changes arrive through the client's marketplace refresh. Environment variable names are stored in the Bundle, but their values stay on each person's machine.
+
+For example, a Software Engineer Bundle can install coding Skills and a local browser server. Updating the Skill later updates every marketplace installation.
+
 ## Progressive disclosure via two tools
 
 Skills are off until an admin enables them for the organization. Enabling assigns `list_skills` and `load_skill` to every existing agent and to every agent created afterwards, and exposes the tools on each agent's MCP gateway so external clients see them too. Any tool can still be dropped from an individual agent's tool picker.

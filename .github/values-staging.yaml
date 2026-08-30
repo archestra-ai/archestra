@@ -72,6 +72,8 @@ archestra:
     ARCHESTRA_MCP_SERVER_ALERTING_ENABLED: "true"
     ARCHESTRA_DYNAMIC_TOOL_ACCESS_ENABLED: "true"
     ARCHESTRA_MCP_SKILLS_ENABLED: "true"
+    # BETA: Bundles stay independently gated, even with the beta master switch on.
+    ARCHESTRA_BUNDLES_ENABLED: "true"
     # Background execution is intentionally independent of ARCHESTRA_BETA.
     # Enable it only on staging while the capability is being rolled out.
     ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ENABLED: "true"

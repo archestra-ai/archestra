@@ -350,6 +350,45 @@ describe("renderSetupScript", () => {
     expect(cursor).not.toContain("cli cursor");
   });
 
+  test("Codex and Copilot install a Bundle aggregate alongside native plugins", async () => {
+    const aggregateRef = "acme-skills@acme-skills";
+    const pluginRef = "plugin-session-attribution-12345678@acme-skills";
+    const context = (clientId: SetupScriptContext["clientId"]): SetupScriptContext => ({
+      clientId,
+      platform: "linux",
+      appName: "Archestra",
+      mcp: null,
+      proxy: null,
+      skills: {
+        ...SKILLS,
+        hasSkills: true,
+        installAggregatePlugin: true,
+        pluginNames: ["plugin-session-attribution-12345678"],
+      },
+    });
+
+    const codex = renderSetupScript(context("codex"));
+    await expectValidBash(codex);
+    expect(codex).toContain(`cli codex plugin add '${aggregateRef}'`);
+    expect(codex).toContain(`cli codex plugin add '${pluginRef}'`);
+
+    const copilot = renderSetupScript(context("copilot-cli"));
+    await expectValidBash(copilot);
+    expect(copilot).toContain(`cli copilot plugin install '${aggregateRef}'`);
+    expect(copilot).toContain(`cli copilot plugin install '${pluginRef}'`);
+
+    const windowsCodex = renderSetupScript({
+      ...context("codex"),
+      platform: "windows",
+    });
+    expect(windowsCodex).toContain(`codex plugin add '${aggregateRef}'`);
+    const windowsCopilot = renderSetupScript({
+      ...context("copilot-cli"),
+      platform: "windows",
+    });
+    expect(windowsCopilot).toContain(`copilot plugin install '${aggregateRef}'`);
+  });
+
   test("Windows plugin-only marketplaces install and refresh supported clients", () => {
     const pluginName = "plugin-windows-terminal-hooks-12345678";
     const pluginRef = `${pluginName}@acme-skills`;
@@ -560,7 +599,7 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
       'cat > "$HOME/.archestra/claude-startup-guard.sh"',
     );
     expect(script).toContain(
-      'chmod +x "$HOME/.archestra/claude-startup-guard.sh"',
+      'chmod 700 "$HOME/.archestra/claude-startup-guard.sh"',
     );
     // …and the profile hook is marker-delimited so re-runs never duplicate it.
     expect(script).toContain("# >>> archestra claude guard >>>");

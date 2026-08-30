@@ -47,6 +47,11 @@ export const TOOL_GET_TEAM_SHORT_NAME = "get_team";
 export const TOOL_LIST_TEAMS_SHORT_NAME = "list_teams";
 export const TOOL_EDIT_TEAM_SHORT_NAME = "edit_team";
 export const TOOL_DELETE_TEAM_SHORT_NAME = "delete_team";
+export const TOOL_CREATE_BUNDLE_SHORT_NAME = "create_bundle";
+export const TOOL_GET_BUNDLE_SHORT_NAME = "get_bundle";
+export const TOOL_LIST_BUNDLES_SHORT_NAME = "list_bundles";
+export const TOOL_EDIT_BUNDLE_SHORT_NAME = "edit_bundle";
+export const TOOL_DELETE_BUNDLE_SHORT_NAME = "delete_bundle";
 export const TOOL_LIST_TEAM_MEMBERS_SHORT_NAME = "list_team_members";
 export const TOOL_ADD_TEAM_MEMBER_SHORT_NAME = "add_team_member";
 export const TOOL_UPDATE_TEAM_MEMBER_ROLE_SHORT_NAME =
@@ -227,6 +232,11 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_LIST_TEAMS_SHORT_NAME,
   TOOL_EDIT_TEAM_SHORT_NAME,
   TOOL_DELETE_TEAM_SHORT_NAME,
+  TOOL_CREATE_BUNDLE_SHORT_NAME,
+  TOOL_GET_BUNDLE_SHORT_NAME,
+  TOOL_LIST_BUNDLES_SHORT_NAME,
+  TOOL_EDIT_BUNDLE_SHORT_NAME,
+  TOOL_DELETE_BUNDLE_SHORT_NAME,
   TOOL_LIST_TEAM_MEMBERS_SHORT_NAME,
   TOOL_ADD_TEAM_MEMBER_SHORT_NAME,
   TOOL_UPDATE_TEAM_MEMBER_ROLE_SHORT_NAME,
@@ -345,6 +355,7 @@ export const ARCHESTRA_TOOL_GROUPS = [
   { id: "mcp_gateways", label: "MCP Gateways" },
   { id: "mcp_servers", label: "MCP Servers" },
   { id: "teams", label: "Teams" },
+  { id: "bundles", label: "Bundles" },
   { id: "limits", label: "Limits" },
   { id: "policies", label: "Policies" },
   { id: "tool_assignment", label: "Tool Assignment" },
@@ -414,6 +425,12 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   list_team_external_groups: "teams",
   add_team_external_group: "teams",
   remove_team_external_group: "teams",
+
+  create_bundle: "bundles",
+  get_bundle: "bundles",
+  list_bundles: "bundles",
+  edit_bundle: "bundles",
+  delete_bundle: "bundles",
 
   create_limit: "limits",
   get_limits: "limits",
@@ -761,6 +778,27 @@ const PLUGIN_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> = new Set(
 
 export function isPluginArchestraToolShortName(shortName: string): boolean {
   return PLUGIN_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName);
+}
+
+/**
+ * Bundle management tools. Never auto-assigned: the group follows the
+ * independently enabled `bundles` deployment flag and stays reachable only
+ * through manual assignment or the search_tools/run_tool dynamic surface.
+ */
+export const BUNDLE_ARCHESTRA_TOOL_SHORT_NAMES = [
+  TOOL_CREATE_BUNDLE_SHORT_NAME,
+  TOOL_GET_BUNDLE_SHORT_NAME,
+  TOOL_LIST_BUNDLES_SHORT_NAME,
+  TOOL_EDIT_BUNDLE_SHORT_NAME,
+  TOOL_DELETE_BUNDLE_SHORT_NAME,
+] as const satisfies readonly ArchestraToolShortName[];
+
+const BUNDLE_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> = new Set(
+  BUNDLE_ARCHESTRA_TOOL_SHORT_NAMES,
+);
+
+export function isBundleArchestraToolShortName(shortName: string): boolean {
+  return BUNDLE_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName);
 }
 
 /**

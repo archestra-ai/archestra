@@ -218,6 +218,45 @@ describe("computeLayout", () => {
     );
   });
 
+  test("packages local MCP servers with client-specific environment interpolation", () => {
+    const files = computeLayout(
+      {
+        ref: { kind: "link", id: "aaaaaaaa-1111-2222-3333-444444444444" },
+        marketplaceName: "org-abcd1234-bundle",
+        ownerName: "Acme Corp",
+        displayName: "Engineering",
+        skills: [],
+        localMcpServers: [
+          {
+            name: "playwright",
+            command: "npx",
+            args: ["-y", "@playwright/mcp"],
+            envVarNames: ["BROWSER_TOKEN"],
+          },
+        ],
+      },
+      2,
+    );
+    const byPath = new Map(files.map((file) => [file.path, file.content]));
+    const root = "plugins/org-abcd1234-bundle";
+    const claude = JSON.parse(byPath.get(`${root}/.mcp.json`) ?? "{}");
+    const cursor = JSON.parse(byPath.get(`${root}/mcp.json`) ?? "{}");
+    const cursorManifest = JSON.parse(
+      byPath.get(`${root}/.cursor-plugin/plugin.json`) ?? "{}",
+    );
+
+    expect(claude.mcpServers.playwright).toEqual({
+      type: "stdio",
+      command: "npx",
+      args: ["-y", "@playwright/mcp"],
+      env: { BROWSER_TOKEN: "$" + "{BROWSER_TOKEN}" },
+    });
+    expect(cursor.mcpServers.playwright.env).toEqual({
+      BROWSER_TOKEN: "$" + "{env:BROWSER_TOKEN}",
+    });
+    expect(cursorManifest.mcpServers).toBe("../mcp.json");
+  });
+
   test("emits each plugin only into its target client catalog", () => {
     const plugins: MaterializePluginInput[] = [
       makePlugin("claude-code", "claude-hook"),

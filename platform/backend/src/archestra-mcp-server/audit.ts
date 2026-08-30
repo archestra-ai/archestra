@@ -8,6 +8,7 @@ import AgentModel from "@/models/agent";
 import AgentToolModel from "@/models/agent-tool";
 import AppModel from "@/models/app";
 import AuditLogModel from "@/models/audit-log";
+import BundleModel from "@/models/bundle";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import KnowledgeBaseModel from "@/models/knowledge-base";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
@@ -268,6 +269,8 @@ const connectorFetch = (id: string, orgId: string) =>
   KnowledgeBaseConnectorModel.findByIdForAudit(id, orgId);
 const assignmentCountFetch = (id: string, _orgId: string) =>
   AgentToolModel.countAssignmentsForOrganization(id);
+const bundleFetch = (id: string, orgId: string) =>
+  BundleModel.findByIdForAudit(id, orgId);
 
 /**
  * agent-resources' create handlers return plain text (no structured id), and
@@ -343,6 +346,26 @@ const TOOL_AUDIT_SPECS: Record<string, ArchestraToolAuditSpec> = {
     action: "team.updated",
     idFromArgs: (a) => str(a.team_id),
     fetchById: teamFetch,
+  },
+
+  create_bundle: {
+    resourceType: "bundle",
+    action: "bundle.created",
+    idFromResult: (s) =>
+      str((s?.bundle as Record<string, unknown> | undefined)?.id),
+    fetchById: bundleFetch,
+  },
+  edit_bundle: {
+    resourceType: "bundle",
+    action: "bundle.updated",
+    idFromArgs: (a) => str(a.id),
+    fetchById: bundleFetch,
+  },
+  delete_bundle: {
+    resourceType: "bundle",
+    action: "bundle.deleted",
+    idFromArgs: (a) => str(a.id),
+    fetchById: bundleFetch,
   },
 
   // Skills (name-addressed; snapshots include content + file fingerprints).

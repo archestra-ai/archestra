@@ -7,7 +7,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useConfig, useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useOrganization } from "@/lib/organization.query";
@@ -18,12 +18,18 @@ const {
   createSetupMock,
   allSkillsMock,
   pluginsMock,
+  bundlesMock,
   skillsMarketplaceVisibleMock,
 } = vi.hoisted(() => ({
   createSetupMock: vi.fn(),
   allSkillsMock: vi.fn(),
   pluginsMock: vi.fn(),
+  bundlesMock: vi.fn(),
   skillsMarketplaceVisibleMock: vi.fn(() => true),
+}));
+
+vi.mock("@/lib/bundle.query", () => ({
+  useBundles: (options?: { enabled?: boolean }) => bundlesMock(options),
 }));
 
 vi.mock("@/lib/connection-setup.query", () => ({
@@ -140,9 +146,17 @@ function renderPanel(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
   vi.mocked(useFeature).mockReturnValue(true);
   vi.mocked(useConfig).mockReturnValue({
-    data: { features: { plugins: true } },
+    data: { features: { plugins: true, bundles: true } },
     isPending: false,
     isError: false,
   } as ReturnType<typeof useConfig>);
@@ -150,14 +164,37 @@ beforeEach(() => {
   vi.mocked(useHasPermissions).mockReturnValue({
     data: true,
   } as ReturnType<typeof useHasPermissions>);
-  vi.mocked(useSession).mockReturnValue({
-    data: { user: { id: "user-1" } },
-  } as ReturnType<typeof useSession>);
   availableKeysMock.mockReturnValue({
     data: [{ provider: "anthropic" }, { provider: "bedrock" }],
   });
   createKeyMock.mockResolvedValue({ id: "key-1" });
   modelsByProviderMock.mockReturnValue({});
+  bundlesMock.mockReturnValue({
+    data: [
+      {
+        id: "bundle-designer",
+        organizationId: "org-1",
+        name: "Designer",
+        description: "Creative app-building skills.",
+        mcpGatewayId: null,
+        skillIds: ["s1"],
+        pluginIds: ["b1"],
+        createdAt: "2026-08-27T00:00:00.000Z",
+        updatedAt: "2026-08-27T00:00:00.000Z",
+      },
+      {
+        id: "bundle-engineer",
+        organizationId: "org-1",
+        name: "Software engineer",
+        description: "Every available engineering capability.",
+        mcpGatewayId: "g1",
+        skillIds: ["s1", "s2"],
+        pluginIds: ["b1"],
+        createdAt: "2026-08-27T00:00:00.000Z",
+        updatedAt: "2026-08-27T00:00:00.000Z",
+      },
+    ],
+  });
   allSkillsMock.mockReturnValue({
     data: [
       { id: "s1", name: "warehouse-postgres", scope: "org", teams: [] },
@@ -229,7 +266,7 @@ describe("ConnectCommandPanel", () => {
     expect(await screen.findByText(COMMAND)).toBeInTheDocument();
 
     // the summary reflects the defaults without any clicks
-    expect(screen.getByText(/My Gateway/)).toBeInTheDocument();
+    expect(screen.getAllByText(/My Gateway/).length).toBeGreaterThan(0);
     expect(screen.getByText(/LLM Proxy/)).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -243,6 +280,218 @@ describe("ConnectCommandPanel", () => {
     expect(
       screen.queryByText("http://localhost:9000/v1"),
     ).not.toBeInTheDocument();
+  });
+
+  it("applies managed bundles to the reviewed setup", async () => {
+    const user = userEvent.setup();
+    allSkillsMock.mockReturnValue({
+      data: [
+        { id: "design-skill", name: "Build App", scope: "org", teams: [] },
+        {
+          id: "engineering-skill",
+          name: "Platform Operations",
+          scope: "org",
+          teams: [],
+        },
+      ],
+    });
+    bundlesMock.mockReturnValue({
+      data: [
+        {
+          id: "bundle-designer",
+          organizationId: "org-1",
+          name: "Designer",
+          description: "Creative app-building skills.",
+          mcpGatewayId: null,
+          skillIds: ["design-skill"],
+          pluginIds: ["b1"],
+          localMcpServers: [
+            {
+              id: "11111111-1111-4111-8111-111111111111",
+              name: "playwright",
+              description: "Local browser automation",
+              command: "npx",
+              args: ["-y", "@playwright/mcp"],
+              envVarNames: [],
+              optional: true,
+            },
+          ],
+          createdAt: "2026-08-27T00:00:00.000Z",
+          updatedAt: "2026-08-27T00:00:00.000Z",
+        },
+        {
+          id: "bundle-engineer",
+          organizationId: "org-1",
+          name: "Software engineer",
+          description: "Engineering baseline.",
+          mcpGatewayId: "g1",
+          skillIds: ["design-skill", "engineering-skill"],
+          pluginIds: ["b1"],
+          localMcpServers: [],
+          createdAt: "2026-08-27T00:00:00.000Z",
+          updatedAt: "2026-08-27T00:00:00.000Z",
+        },
+      ],
+    });
+    const onMcpGatewaySelect = vi.fn();
+    renderPanel({ onMcpGatewaySelect });
+
+    const designerBundle = screen.getByRole("button", {
+      name: "Apply Designer bundle",
+    });
+    const engineerBundle = screen.getByRole("button", {
+      name: "Apply Software engineer bundle",
+    });
+    expect(designerBundle).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(designerBundle);
+    await waitFor(() =>
+      expect(createSetupMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          bundleId: "bundle-designer",
+          selectedOptionalLocalMcpServerIds: [
+            "11111111-1111-4111-8111-111111111111",
+          ],
+        }),
+      ),
+    );
+    expect(designerBundle).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("Selected")).toBeVisible();
+    expect(screen.getByRole("link", { name: "1 shared skill" })).toBeVisible();
+    await user.click(screen.getByRole("checkbox", { name: /playwright/i }));
+    await waitFor(() =>
+      expect(createSetupMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          bundleId: "bundle-designer",
+          selectedOptionalLocalMcpServerIds: [],
+        }),
+      ),
+    );
+
+    await user.click(engineerBundle);
+    await waitFor(() =>
+      expect(createSetupMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          bundleId: "bundle-engineer",
+          selectedOptionalLocalMcpServerIds: [],
+        }),
+      ),
+    );
+    expect(engineerBundle).toHaveAttribute("aria-pressed", "true");
+    expect(designerBundle).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByText("Gateway: My Gateway")).toBeVisible();
+    expect(onMcpGatewaySelect).toHaveBeenCalledWith("g1");
+  });
+
+  it("explains why bundles without capabilities cannot be selected", () => {
+    bundlesMock.mockReturnValue({
+      data: [
+        {
+          id: "bundle-empty",
+          organizationId: "org-1",
+          name: "Empty setup",
+          description: "Configure this later.",
+          mcpGatewayId: null,
+          skillIds: [],
+          pluginIds: [],
+          localMcpServers: [],
+          createdAt: "2026-08-27T00:00:00.000Z",
+          updatedAt: "2026-08-27T00:00:00.000Z",
+        },
+      ],
+    });
+    renderPanel();
+
+    expect(
+      screen.getByRole("button", {
+        name: /Apply Empty setup bundle: unavailable because it has no capabilities/i,
+      }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText("Add capabilities before this bundle can be applied."),
+    ).toBeVisible();
+  });
+
+  it("applies a deep-linked bundle once after bundles load", async () => {
+    bundlesMock.mockReturnValue({ data: undefined, isPending: true });
+    const onMcpGatewaySelect = vi.fn();
+    const onInitialBundleHandled = vi.fn();
+    const { rerender } = renderPanel({
+      initialBundleId: "bundle-engineer",
+      onMcpGatewaySelect,
+      onInitialBundleHandled,
+    });
+
+    bundlesMock.mockReturnValue({
+      data: [
+        {
+          id: "bundle-engineer",
+          organizationId: "org-1",
+          name: "Software engineer",
+          description: "Every available engineering capability.",
+          mcpGatewayId: "g1",
+          skillIds: ["s1", "s2"],
+          pluginIds: ["b1"],
+          localMcpServers: [],
+          createdAt: "2026-08-27T00:00:00.000Z",
+          updatedAt: "2026-08-27T00:00:00.000Z",
+        },
+      ],
+      isPending: false,
+    });
+    rerender(
+      <ConnectCommandPanel
+        {...renderPanelProps({
+          initialBundleId: "bundle-engineer",
+          onMcpGatewaySelect,
+          onInitialBundleHandled,
+        })}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(createSetupMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          bundleId: "bundle-engineer",
+          selectedOptionalLocalMcpServerIds: [],
+        }),
+      ),
+    );
+    expect(onMcpGatewaySelect).toHaveBeenCalledOnce();
+    expect(onMcpGatewaySelect).toHaveBeenCalledWith("g1");
+    expect(onInitialBundleHandled).toHaveBeenCalledOnce();
+
+    rerender(
+      <ConnectCommandPanel
+        {...renderPanelProps({
+          initialBundleId: "bundle-engineer",
+          onMcpGatewaySelect,
+          onInitialBundleHandled,
+        })}
+      />,
+    );
+    expect(onMcpGatewaySelect).toHaveBeenCalledOnce();
+    expect(onInitialBundleHandled).toHaveBeenCalledOnce();
+  });
+
+  it("does not load or apply bundles while the beta is disabled", async () => {
+    vi.mocked(useConfig).mockReturnValue({
+      data: { features: { plugins: true, bundles: false } },
+      isPending: false,
+      isError: false,
+    } as ReturnType<typeof useConfig>);
+    renderPanel({ initialBundleId: "bundle-engineer" });
+
+    expect(bundlesMock).toHaveBeenLastCalledWith({ enabled: false });
+    expect(screen.queryByText("Start with a bundle")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Manage" }),
+    ).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(createSetupMock).toHaveBeenLastCalledWith(
+        expect.not.objectContaining({ bundleId: expect.anything() }),
+      ),
+    );
   });
 
   it("generates a plugin-only setup when no gateway, proxy, or skill exists", async () => {

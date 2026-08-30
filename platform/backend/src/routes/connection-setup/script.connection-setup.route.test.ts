@@ -6,6 +6,7 @@ import {
 } from "@archestra/shared";
 import { vi } from "vitest";
 import {
+  BundleModel,
   ConnectionSetupModel,
   MemberModel,
   PluginModel,
@@ -52,6 +53,7 @@ describe("GET /api/connection-setups/script/:token", () => {
     organizationId = organization.id;
     user = await makeUser();
     await makeMember(user.id, organizationId);
+    config.bundles.enabled = true;
     mockUserHasPermission.mockReset();
     mockUserHasPermission.mockResolvedValue(true);
 
@@ -253,6 +255,118 @@ describe("GET /api/connection-setups/script/:token", () => {
     expect(script).toContain(
       "claude mcp add --scope user --transport http 'prod_gateway'",
     );
+  });
+
+  test("renders a Bundle gateway switch and clears MCP when an authoritative Bundle gateway is unset", async ({
+    makeAgent,
+  }) => {
+    const setupGateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+      name: "Setup Gateway",
+    });
+    const initialBundleGateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+      name: "Initial Bundle Gateway",
+    });
+    const currentBundleGateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+      name: "Current Bundle Gateway",
+    });
+    const skill = await seedSkill({ organizationId, name: "bundle-skill" });
+    const bundle = await BundleModel.create({
+      organizationId,
+      name: "Engineering",
+      description: "Gateway selection",
+      mcpGatewayId: initialBundleGateway.id,
+      skillIds: [skill.id],
+      pluginIds: [],
+      localMcpServers: [],
+    });
+    const { rawToken: switchToCurrentToken } = await createSetup({
+      clientId: "claude-code",
+      baseUrl: "http://localhost:9000/v1",
+      mcpGatewayId: setupGateway.id,
+      bundleId: bundle.id,
+    });
+    const { rawToken: clearBundleGatewayToken } = await createSetup({
+      clientId: "claude-code",
+      baseUrl: "http://localhost:9000/v1",
+      mcpGatewayId: setupGateway.id,
+      bundleId: bundle.id,
+    });
+
+    await BundleModel.update({
+      id: bundle.id,
+      organizationId,
+      mcpGatewayId: currentBundleGateway.id,
+    });
+    const current = await fetchScript(switchToCurrentToken);
+    expect(current.statusCode).toBe(200);
+    expect(current.body).toContain(
+      "claude mcp add --scope user --transport http 'current_bundle_gateway'",
+    );
+    expect(current.body).not.toContain("'setup_gateway'");
+
+    await BundleModel.update({
+      id: bundle.id,
+      organizationId,
+      mcpGatewayId: null,
+    });
+    const fallback = await fetchScript(clearBundleGatewayToken);
+    expect(fallback.statusCode).toBe(200);
+    expect(fallback.body).not.toContain("claude mcp add --scope user");
+  });
+
+  test("returns GONE when the Bundle's current gateway is no longer accessible", async ({
+    makeAgent,
+  }) => {
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+      name: "Bundle Gateway",
+    });
+    const skill = await seedSkill({ organizationId, name: "bundle-skill" });
+    const bundle = await BundleModel.create({
+      organizationId,
+      name: "Engineering",
+      description: "Gateway access",
+      mcpGatewayId: gateway.id,
+      skillIds: [skill.id],
+      pluginIds: [],
+      localMcpServers: [],
+    });
+    const { rawToken } = await createSetup({
+      clientId: "claude-code",
+      baseUrl: "http://localhost:9000/v1",
+      bundleId: bundle.id,
+    });
+
+    mockUserHasPermission.mockResolvedValue(false);
+    expect((await fetchScript(rawToken)).statusCode).toBe(410);
+  });
+
+  test("returns GONE when Bundles are disabled before rendering", async () => {
+    const skill = await seedSkill({ organizationId, name: "bundle-skill" });
+    const bundle = await BundleModel.create({
+      organizationId,
+      name: "Engineering",
+      description: "Feature gate",
+      mcpGatewayId: null,
+      skillIds: [skill.id],
+      pluginIds: [],
+      localMcpServers: [],
+    });
+    const { rawToken } = await createSetup({
+      clientId: "claude-code",
+      baseUrl: "http://localhost:9000/v1",
+      bundleId: bundle.id,
+    });
+
+    config.bundles.enabled = false;
+    expect((await fetchScript(rawToken)).statusCode).toBe(410);
   });
 
   test("default platform (omitted) renders bash", async ({ makeAgent }) => {

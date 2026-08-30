@@ -55,19 +55,22 @@ export function ConnectionFlow({
   const searchParams = useSearchParams();
   const urlGatewayId = searchParams.get("gatewayId");
   const urlClientId = searchParams.get("clientId");
+  const urlBundleId = searchParams.get("bundleId");
+  const [initialBundleId, setInitialBundleId] = useState(
+    () => urlBundleId || undefined,
+  );
 
   const updateUrlParams = useUpdateUrlParams();
 
-  const { data: mcpGateways } = useProfiles({
+  const { data: mcpGateways, isPending: mcpGatewaysPending } = useProfiles({
     filters: {
       agentTypes: ["profile", "mcp_gateway"],
       excludeOtherPersonalAgents: true,
     },
   });
 
-  const { data: canReadMcpGateway } = useHasPermissions({
-    mcpGateway: ["read"],
-  });
+  const { data: canReadMcpGateway, isPending: mcpGatewayPermissionPending } =
+    useHasPermissions({ mcpGateway: ["read"] });
   const { data: canReadLlmProxy } = useHasPermissions({ llmProxy: ["read"] });
 
   const visibleClients = useMemo(() => {
@@ -89,6 +92,7 @@ export function ConnectionFlow({
   const client = visibleClients.find((c) => c.id === clientId) ?? null;
 
   const selectClient = (id: string) => {
+    setInitialBundleId(undefined);
     setClientId(id);
     // Providers vary per client, so clear any bookmarked provider on switch.
     updateUrlParams({ clientId: id, providerId: null });
@@ -245,6 +249,10 @@ export function ConnectionFlow({
         <ConnectCommandPanel
           client={client}
           mcpGateways={canReadMcpGateway ? (mcpGateways ?? []) : null}
+          mcpGatewaysPending={
+            mcpGatewayPermissionPending ||
+            (canReadMcpGateway === true && mcpGatewaysPending)
+          }
           mcpGatewayId={effectiveMcpId}
           onMcpGatewaySelect={handleMcpSelect}
           llmProxyId={canReadLlmProxy ? (llmProxyId ?? null) : null}
@@ -255,6 +263,8 @@ export function ConnectionFlow({
           candidateBaseUrls={candidateBaseUrls}
           baseUrlMetadata={connectionBaseUrls}
           onBaseUrlChange={setUserBaseUrl}
+          initialBundleId={initialBundleId}
+          onInitialBundleHandled={() => setInitialBundleId(undefined)}
         />
       )}
 

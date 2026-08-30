@@ -115,6 +115,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 })
                 .nullable(),
               plugins: z.boolean(),
+              bundles: z.boolean(),
               // Max size of a file the sandbox can stage. The chat composer caps
               // sandbox-routed uploads at this instead of guessing.
               sandboxArtifactBytesLimit: z.number(),
@@ -265,6 +266,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               }
             : null,
           plugins: config.plugins.enabled,
+          bundles: config.bundles.enabled,
           sandboxArtifactBytesLimit: config.skillsSandbox.artifactBytesLimit,
           chatAttachmentStorageBytesLimit:
             config.chat.attachmentStorageBytesLimit,

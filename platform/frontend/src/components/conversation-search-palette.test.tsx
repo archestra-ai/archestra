@@ -195,6 +195,19 @@ describe("ConversationSearchPalette", () => {
     );
   });
 
+  it("only offers Bundles navigation when the beta is enabled", () => {
+    render(<ConversationSearchPalette {...defaultProps} />);
+
+    expect(screen.queryByText("Bundles")).not.toBeInTheDocument();
+
+    vi.mocked(useFeature).mockImplementation(
+      (feature) => feature === "bundles",
+    );
+    render(<ConversationSearchPalette {...defaultProps} />);
+
+    expect(screen.getByText("Bundles")).toBeVisible();
+  });
+
   it("renders conversations when open", () => {
     render(<ConversationSearchPalette {...defaultProps} />);
 

@@ -1,5 +1,6 @@
 import {
   index,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -9,6 +10,7 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 import type { ClientType, PluginPlatform } from "@/types/plugin";
+import bundlesTable from "./bundle";
 import organizationsTable from "./organization";
 import pluginsTable from "./plugin";
 import skillsTable from "./skill";
@@ -40,6 +42,15 @@ const skillShareLinksTable = pgTable(
     tokenStart: varchar("token_start", { length: 22 }).notNull(),
     name: text("name"),
     marketplaceName: text("marketplace_name").notNull(),
+    bundleId: uuid("bundle_id").references(() => bundlesTable.id, {
+      onDelete: "cascade",
+    }),
+    selectedOptionalLocalMcpServerIds: jsonb(
+      "selected_optional_local_mcp_server_ids",
+    )
+      .$type<string[]>()
+      .notNull()
+      .default([]),
     /** Non-null when the link carries plugins; all must share this type. */
     pluginClientType: text("plugin_client_type").$type<ClientType>(),
     /** Target OS family for all executable plugins attached to this link. */

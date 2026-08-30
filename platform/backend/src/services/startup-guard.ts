@@ -94,7 +94,9 @@ interface StartupGuardSkillsSection {
   marketplaceName: string;
   cloneUrl: string;
   hasSkills?: boolean;
+  installAggregatePlugin?: boolean;
   pluginNames?: string[];
+  desiredInstallSetUrl?: string;
 }
 
 /** @public — named by the unit tests that build guard fixtures. */
@@ -310,6 +312,7 @@ set -u
 
 [ "\${${client.disableEnvVar}:-1}" = "0" ] && exit 0
 command -v curl >/dev/null 2>&1 || exit 0
+${ctx.skills?.desiredInstallSetUrl ? renderDynamicMarketplaceRefresh(ctx, client) : ""}
 
 APP_NAME=${sh(ctx.appName)}
 GUARD_PATH="$HOME/${client.scriptRelpath}"
@@ -1061,17 +1064,29 @@ export function buildStartupGuardInstallSection(
 ): string {
   const guardPath = `$HOME/${client.scriptRelpath}`;
   const refreshFunctionName = `archestra_refresh_${client.binary}_marketplace`;
-  const refreshBlock = renderMarketplaceRefreshProfileBlock({
-    ctx,
-    client,
-    functionName: refreshFunctionName,
-  });
+  const dynamicMarketplaceRefresh = !!ctx.skills?.desiredInstallSetUrl;
+  const refreshBlock = dynamicMarketplaceRefresh
+    ? ""
+    : renderMarketplaceRefreshProfileBlock({
+        ctx,
+        client,
+        functionName: refreshFunctionName,
+      });
+  const refreshCall = dynamicMarketplaceRefresh
+    ? `[ -x "${guardPath}" ] && "${guardPath}" --archestra-refresh-marketplace "$@" || true`
+    : refreshBlock
+      ? `${refreshFunctionName} "$@" || true`
+      : ":";
+  const initialManagedState = dynamicMarketplaceRefresh
+    ? renderInitialManagedState(ctx, client)
+    : "";
 
   return `say ${sh(`Installing the ${ctx.appName} startup guard for ${client.label}`)}
-mkdir -p "$(dirname "${guardPath}")"
+mkdir -p -m 700 "$(dirname "${guardPath}")"
 cat > "${guardPath}" <<'${GUARD_FILE_EOF}'
 ${renderStartupGuardScript(ctx, client)}${GUARD_FILE_EOF}
-chmod +x "${guardPath}"
+chmod 700 "${guardPath}"
+${initialManagedState}
 # A fresh connect re-arms every check: forget remotes a previous guard
 # disconnected.
 rm -f "$HOME/${client.skipRelpath}"
@@ -1096,7 +1111,7 @@ ${client.binary}() {
   fi
   command ${client.binary} "$@"
   archestra_client_status=$?
-  ${refreshBlock ? `${refreshFunctionName} "$@" || true` : ":"}
+  ${refreshCall}
   return "$archestra_client_status"
 }
 ${client.markerEnd}
@@ -1129,7 +1144,8 @@ function renderMarketplaceRefreshProfileBlock(params: {
   const { ctx, client, functionName } = params;
   if (!ctx.skills || !client.skillsRefreshCommands) return "";
   const pluginNames = [
-    ...(ctx.skills.hasSkills !== false && client.clientId === "claude-code"
+    ...((ctx.skills.installAggregatePlugin ?? ctx.skills.hasSkills !== false) &&
+    client.clientId === "claude-code"
       ? [ctx.skills.marketplaceName]
       : []),
     ...(ctx.skills.pluginNames ?? []),
@@ -1154,6 +1170,176 @@ ${client.skillsRefreshCommands}
   printf '%s\n' "$arch_refresh_now" > "$arch_refresh_stamp.tmp"
   mv "$arch_refresh_stamp.tmp" "$arch_refresh_stamp"
 }`;
+}
+
+/**
+ * Bundle membership is live, unlike ordinary marketplace installs. The
+ * endpoint URL includes the bearer token, so this whole reconciliation path is
+ * emitted only into the owner-private guard file, never into a shell profile.
+ */
+function renderDynamicMarketplaceRefresh(
+  ctx: StartupGuardContext,
+  client: StartupGuardClient,
+): string {
+  const skills = ctx.skills;
+  if (!skills?.desiredInstallSetUrl) return "";
+  const nonInteractivePatterns = client.nonInteractiveArgPatterns.join("|");
+  return `
+# Bundle marketplace reconciliation runs only after an interactive client exit.
+if [ "\${1:-}" = "--archestra-refresh-marketplace" ]; then
+  shift
+  for archestra_arg in "$@"; do
+    case "$archestra_arg" in ${nonInteractivePatterns}) exit 0 ;; esac
+  done
+  command -v python3 >/dev/null 2>&1 || exit 0
+  umask 077
+  ARCH_INSTALL_SET_URL=${sh(skills.desiredInstallSetUrl)}
+  ARCH_INSTALL_STATE_DIR="$HOME/.archestra"
+  ARCH_INSTALL_STATE="$ARCH_INSTALL_STATE_DIR/${client.binary}-${skills.marketplaceName}.managed-plugins.json"
+  mkdir -p -m 700 "$ARCH_INSTALL_STATE_DIR" 2>/dev/null || exit 0
+  chmod 700 "$ARCH_INSTALL_STATE_DIR" 2>/dev/null || true
+  ARCH_INSTALL_WORK=$(mktemp -d "$ARCH_INSTALL_STATE_DIR/.install-set.XXXXXX" 2>/dev/null) || exit 0
+  ARCH_INSTALL_DESIRED="$ARCH_INSTALL_WORK/desired.json"
+  ARCH_INSTALL_OPERATIONS="$ARCH_INSTALL_WORK/operations"
+  ARCH_INSTALL_NEXT_STATE="$ARCH_INSTALL_WORK/state.json"
+  if ! curl -fsS --connect-timeout 5 --max-time 15 "$ARCH_INSTALL_SET_URL" > "$ARCH_INSTALL_DESIRED" 2>/dev/null; then
+    rm -rf "$ARCH_INSTALL_WORK"
+    exit 0
+  fi
+  if ! python3 - "$ARCH_INSTALL_DESIRED" "$ARCH_INSTALL_STATE" "$ARCH_INSTALL_OPERATIONS" "$ARCH_INSTALL_NEXT_STATE" <<'ARCHESTRA_INSTALL_SET_PY'
+import json, re, sys
+desired_path, state_path, operations_path, next_state_path = sys.argv[1:]
+name_re = re.compile(r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$")
+def valid_name(value):
+    return isinstance(value, str) and len(value) <= 64 and bool(name_re.fullmatch(value))
+def read_state(path):
+    try:
+        with open(path) as f: value = json.load(f)
+    except Exception:
+        return {"aggregatePluginName": None, "pluginNames": []}
+    aggregate = value.get("aggregatePluginName") if isinstance(value, dict) else None
+    names = value.get("pluginNames") if isinstance(value, dict) else []
+    return {"aggregatePluginName": aggregate if valid_name(aggregate) else None,
+            "pluginNames": sorted({name for name in names if valid_name(name)}) if isinstance(names, list) else []}
+with open(desired_path) as f: desired = json.load(f)
+if not isinstance(desired, dict) or not isinstance(desired.get("installAggregatePlugin"), bool): raise SystemExit(1)
+aggregate = desired.get("aggregatePluginName") if desired["installAggregatePlugin"] else None
+if desired["installAggregatePlugin"] and not valid_name(aggregate): raise SystemExit(1)
+names = desired.get("pluginNames")
+if not isinstance(names, list) or any(not valid_name(name) for name in names): raise SystemExit(1)
+next_state = {"aggregatePluginName": aggregate, "pluginNames": sorted(set(names))}
+previous = read_state(state_path)
+old_entries = set(previous["pluginNames"])
+if previous["aggregatePluginName"]: old_entries.add(previous["aggregatePluginName"])
+next_entries = set(next_state["pluginNames"])
+if next_state["aggregatePluginName"]: next_entries.add(next_state["aggregatePluginName"])
+with open(operations_path, "w") as f:
+    for name in sorted(old_entries - next_entries): f.write("remove\\t" + name + "\\n")
+    for name in sorted(next_entries - old_entries): f.write("install\\t" + name + "\\n")
+    for name in sorted(next_entries & old_entries): f.write("update\\t" + name + "\\n")
+with open(next_state_path, "w") as f:
+    json.dump(next_state, f, separators=(",", ":")); f.write("\\n")
+ARCHESTRA_INSTALL_SET_PY
+  then
+    rm -rf "$ARCH_INSTALL_WORK"
+    exit 0
+  fi
+  ARCH_INSTALL_MARKETPLACE=${sh(skills.marketplaceName)}
+  ARCH_INSTALL_FAILED=0
+  while IFS="$(printf '\\t')" read -r arch_install_action arch_install_name; do
+    case "$arch_install_action" in
+      remove) ${dynamicMarketplaceActionCommand(client, "remove")} ;;
+      *) continue ;;
+    esac || { ARCH_INSTALL_FAILED=1; break; }
+  done < "$ARCH_INSTALL_OPERATIONS"
+  if [ "$ARCH_INSTALL_FAILED" != "0" ]; then
+    rm -rf "$ARCH_INSTALL_WORK"
+    exit 0
+  fi
+  if grep -Eq '^(install|update)\t' "$ARCH_INSTALL_OPERATIONS"; then
+    if ! ${dynamicMarketplaceUpdateCommand(client)}; then
+      rm -rf "$ARCH_INSTALL_WORK"
+      exit 0
+    fi
+    while IFS="$(printf '\\t')" read -r arch_install_action arch_install_name; do
+      case "$arch_install_action" in
+        install) ${dynamicMarketplaceActionCommand(client, "install")} ;;
+        update) ${dynamicMarketplaceActionCommand(client, "update")} ;;
+        *) continue ;;
+      esac || { ARCH_INSTALL_FAILED=1; break; }
+    done < "$ARCH_INSTALL_OPERATIONS"
+  fi
+  if [ "$ARCH_INSTALL_FAILED" != "0" ] || ! mv "$ARCH_INSTALL_NEXT_STATE" "$ARCH_INSTALL_STATE"; then
+    rm -rf "$ARCH_INSTALL_WORK"
+    exit 0
+  fi
+  chmod 600 "$ARCH_INSTALL_STATE" 2>/dev/null || true
+  rm -rf "$ARCH_INSTALL_WORK"
+  exit 0
+fi`;
+}
+
+function renderInitialManagedState(
+  ctx: StartupGuardContext,
+  client: StartupGuardClient,
+): string {
+  const skills = ctx.skills;
+  if (!skills) return "";
+  const installAggregatePlugin =
+    skills.installAggregatePlugin ?? skills.hasSkills ?? true;
+  const state = JSON.stringify({
+    aggregatePluginName: installAggregatePlugin ? skills.marketplaceName : null,
+    pluginNames: Array.from(new Set(skills.pluginNames ?? [])).sort(),
+  });
+  return `# Initial installs above succeeded, so seed the guard's managed state now.
+ARCH_INSTALL_STATE="$HOME/.archestra/${client.binary}-${skills.marketplaceName}.managed-plugins.json"
+printf '%s\n' ${sh(state)} > "$ARCH_INSTALL_STATE.tmp"
+mv "$ARCH_INSTALL_STATE.tmp" "$ARCH_INSTALL_STATE"
+chmod 600 "$ARCH_INSTALL_STATE" 2>/dev/null || true`;
+}
+
+function dynamicMarketplaceUpdateCommand(client: StartupGuardClient): string {
+  switch (client.clientId) {
+    case "claude-code":
+      return 'command claude plugin marketplace update "$ARCH_INSTALL_MARKETPLACE" </dev/null >/dev/null 2>&1';
+    case "codex":
+      return 'command codex plugin marketplace upgrade "$ARCH_INSTALL_MARKETPLACE" </dev/null >/dev/null 2>&1';
+    case "copilot-cli":
+      return 'command copilot plugin marketplace update "$ARCH_INSTALL_MARKETPLACE" </dev/null >/dev/null 2>&1';
+  }
+}
+
+function dynamicMarketplaceActionCommand(
+  client: StartupGuardClient,
+  action: "remove" | "install" | "update",
+): string {
+  const ref = '"$arch_install_name@$ARCH_INSTALL_MARKETPLACE"';
+  switch (client.clientId) {
+    case "claude-code":
+      if (action === "install") {
+        return `command claude plugin install ${ref} </dev/null >/dev/null 2>&1 || command claude plugin update -y ${ref} </dev/null >/dev/null 2>&1`;
+      }
+      if (action === "update") {
+        return `command claude plugin update -y ${ref} </dev/null >/dev/null 2>&1 || command claude plugin install ${ref} </dev/null >/dev/null 2>&1`;
+      }
+      return `command claude plugin uninstall ${ref} </dev/null >/dev/null 2>&1`;
+    case "codex":
+      if (action === "update") {
+        return `command codex plugin remove ${ref} </dev/null >/dev/null 2>&1 || true; command codex plugin add ${ref} </dev/null >/dev/null 2>&1`;
+      }
+      if (action === "install") {
+        return `command codex plugin add ${ref} </dev/null >/dev/null 2>&1 || { command codex plugin remove ${ref} </dev/null >/dev/null 2>&1 || true; command codex plugin add ${ref} </dev/null >/dev/null 2>&1; }`;
+      }
+      return `command codex plugin remove ${ref} </dev/null >/dev/null 2>&1`;
+    case "copilot-cli":
+      if (action === "install") {
+        return `command copilot plugin install ${ref} </dev/null >/dev/null 2>&1 || command copilot plugin update ${ref} </dev/null >/dev/null 2>&1`;
+      }
+      if (action === "update") {
+        return `command copilot plugin update ${ref} </dev/null >/dev/null 2>&1 || command copilot plugin install ${ref} </dev/null >/dev/null 2>&1`;
+      }
+      return `command copilot plugin uninstall ${ref} </dev/null >/dev/null 2>&1`;
+  }
 }
 
 /**

@@ -111,6 +111,7 @@ describe("config routes", () => {
       virtualKeyDefaultExpirationSeconds: expect.any(Number),
       chatSecretScanEnabled: true,
       kbAutoSyncPermissionsEnabled: expect.any(Boolean),
+      bundles: expect.any(Boolean),
       kbContextualRetrievalDefaultMode: config.kb.contextualRetrievalEnabled
         ? "document"
         : "disabled",

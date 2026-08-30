@@ -73,6 +73,12 @@ export const TOOL_PERMISSIONS: Record<
   add_team_external_group: { resource: "team", action: "read" },
   remove_team_external_group: { resource: "team", action: "read" },
 
+  create_bundle: { resource: "bundle", action: "create" },
+  get_bundle: { resource: "bundle", action: "read" },
+  list_bundles: { resource: "bundle", action: "read" },
+  edit_bundle: { resource: "bundle", action: "update" },
+  delete_bundle: { resource: "bundle", action: "delete" },
+
   // Limits
   create_limit: { resource: "llmLimit", action: "create" },
   get_limits: { resource: "llmLimit", action: "read" },

@@ -30,6 +30,8 @@ interface CreateSkillShareLinkParams {
   pluginIds?: string[];
   pluginClientType?: ClientType | null;
   pluginPlatform?: PluginPlatform | null;
+  bundleId?: string | null;
+  selectedOptionalLocalMcpServerIds?: string[];
   marketplaceName: string;
   name?: string | null;
   expiresAt?: Date | null;
@@ -57,7 +59,11 @@ class SkillShareLinkModel {
   static async create(
     params: CreateSkillShareLinkParams,
   ): Promise<CreateSkillShareLinkResult> {
-    if (params.skillIds.length === 0 && (params.pluginIds?.length ?? 0) === 0) {
+    if (
+      params.skillIds.length === 0 &&
+      (params.pluginIds?.length ?? 0) === 0 &&
+      !params.bundleId
+    ) {
       throw new Error(
         "skillIds must be non-empty unless pluginIds is non-empty",
       );
@@ -77,6 +83,10 @@ class SkillShareLinkModel {
           tokenStart,
           name: params.name ?? null,
           marketplaceName: params.marketplaceName,
+          bundleId: params.bundleId ?? null,
+          selectedOptionalLocalMcpServerIds: Array.from(
+            new Set(params.selectedOptionalLocalMcpServerIds ?? []),
+          ),
           pluginClientType: params.pluginClientType ?? null,
           pluginPlatform: params.pluginPlatform ?? null,
           expiresAt: params.expiresAt ?? null,

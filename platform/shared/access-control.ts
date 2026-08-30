@@ -45,6 +45,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
     "deploy-to-restricted",
   ],
   plugin: ["read", "create", "update", "delete", "admin"],
+  bundle: ["read", "create", "update", "delete"],
   app: [
     "read",
     "create",
@@ -180,6 +181,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
     "deploy-to-restricted",
   ],
   plugin: ["read", "create", "update", "delete"],
+  bundle: ["read", "create", "update", "delete"],
   app: [
     "read",
     "create",
@@ -278,6 +280,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   agent: ["read", "create", "update", "delete"],
   skill: ["read", "create", "update", "delete"],
   plugin: [],
+  bundle: ["read"],
   app: ["read", "create", "update", "delete"],
   sandbox: ["execute"],
   agentTrigger: [],
@@ -451,6 +454,10 @@ export const permissionDescriptions: Record<string, string> = {
   "plugin:update": "Modify plugin metadata and files",
   "plugin:delete": "Delete plugins",
   "plugin:admin": "Publish executable plugins through connection marketplaces",
+  "bundle:read": "View and apply bundles",
+  "bundle:create": "Create bundles",
+  "bundle:update": "Modify bundle membership",
+  "bundle:delete": "Delete bundles",
   "app:read":
     "View and run MCP Apps within your scope (org, your teams, your own)",
   "app:create": "Create new MCP Apps",
@@ -1932,6 +1939,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.RevokeSkillShareLink]: { skill: ["admin"] },
   [RouteId.RotateSkillShareLink]: { skill: ["admin"] },
 
+  [RouteId.GetBundles]: { bundle: ["read"] },
+  [RouteId.GetBundle]: { bundle: ["read"] },
+  [RouteId.CreateBundle]: { bundle: ["create"] },
+  [RouteId.UpdateBundle]: { bundle: ["update"] },
+  [RouteId.DeleteBundle]: { bundle: ["delete"] },
+
   // MCP App Routes - per-instance scope is enforced in the handlers
   [RouteId.GetApps]: { app: ["read"] },
   [RouteId.GetExternalApp]: { app: ["read"] },
@@ -2080,6 +2093,10 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // Chat
   "/chat": { chat: ["read"] },
   "/chat/[conversationId]": { chat: ["read"] },
+  "/bundles": { bundle: ["read"] },
+  "/bundles/new": { bundle: ["create"] },
+  "/bundles/[bundleId]": { bundle: ["read"] },
+  "/bundles/[bundleId]/edit": { bundle: ["update"] },
 
   // Projects
   "/projects": { project: ["read"] },

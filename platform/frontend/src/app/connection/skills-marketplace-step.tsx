@@ -12,10 +12,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
-import {
-  SECRET_PLACEHOLDER_TOKEN,
-  SecretCopyButton,
-} from "@/components/secret-copy-button";
+import { SECRET_PLACEHOLDER_TOKEN } from "@/components/secret-copy-button";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -30,6 +27,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  type AllSkillListItem,
+  fetchAllSkills,
+  useAllSkills,
+} from "@/lib/skills/skill.query";
 import {
   type SkillShareLink,
   useCreateSkillShareLink,
@@ -768,65 +770,8 @@ function firstActiveLink(links: SkillShareLink[]): SkillShareLink | null {
  * The slice of a skill the connection flow needs to list, attribute, and share
  * it. Derived from the API response so the fields can't drift from it.
  */
-export type ConnectSkill = Pick<
-  archestraApiTypes.GetSkillsResponses["200"]["data"][number],
-  "id" | "name" | "scope" | "authorId" | "authorName" | "teams" | "users"
->;
-
-/**
- * Query over the org's full skill set, for the connect-command step's
- * per-skill picker. Soft-fails to an empty list (with the API-error
- * toast) so a skills outage degrades to "no skills ride along" instead of
- * blocking command generation.
- *
- * `forAgentId` narrows the set to skills visible from that agent's
- * environment — the connect command passes the selected LLM proxy so only
- * skills the connection can actually reach are offered.
- */
-export function useAllSkills(params?: {
-  enabled?: boolean;
-  forAgentId?: string | null;
-}) {
-  const forAgentId = params?.forAgentId ?? null;
-  return useQuery({
-    queryKey: ["skills", "connect-all", forAgentId],
-    queryFn: () => fetchAllSkills(forAgentId),
-    enabled: params?.enabled,
-  });
-}
-
-/** Fetch every skill page by page; on error, toast and return what we have. */
-async function fetchAllSkills(
-  forAgentId: string | null = null,
-): Promise<ConnectSkill[]> {
-  const skills: ConnectSkill[] = [];
-  const limit = 100;
-  let offset = 0;
-  while (true) {
-    const { data, error } = await archestraApiSdk.getSkills({
-      query: { limit, offset, forAgentId: forAgentId ?? undefined },
-    });
-    if (error) {
-      handleApiError(error);
-      return [];
-    }
-    if (!data) break;
-    for (const skill of data.data) {
-      skills.push({
-        id: skill.id,
-        name: skill.name,
-        scope: skill.scope,
-        authorId: skill.authorId,
-        authorName: skill.authorName,
-        teams: skill.teams,
-        users: skill.users,
-      });
-    }
-    if (data.data.length < limit) break;
-    offset += limit;
-  }
-  return skills;
-}
+export type ConnectSkill = AllSkillListItem;
+export { useAllSkills };
 
 function useTotalSkillCount() {
   return useQuery({

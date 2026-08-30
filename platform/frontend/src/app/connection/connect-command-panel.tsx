@@ -5,7 +5,7 @@ import {
   providerRequiresPerUserCredential,
   type SupportedProvider,
 } from "@archestra/shared";
-import { KeyRound, RotateCcw } from "lucide-react";
+import { Check, KeyRound, PackageOpen, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -16,9 +16,12 @@ import { CreditWarningNotice } from "@/components/connection/credit-warning-noti
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { GithubCopilotSignIn } from "@/components/github-copilot-sign-in";
 import { ProviderIcon } from "@/components/provider-icon";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -28,7 +31,9 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { WizardStep } from "@/components/wizard-step";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { type Bundle, useBundles } from "@/lib/bundle.query";
+import { formatBundleCapabilitySummary } from "@/lib/bundle-capabilities";
 import { useConfig } from "@/lib/config/config.query";
 import {
   type CreateConnectionSetupBody,
@@ -79,6 +84,8 @@ type EditableRow =
   | "plugins"
   | "platform";
 
+type ResolvedBundle = Bundle;
+
 const SCRIPT_CLIENT_IDS: readonly string[] = [
   "claude-code",
   "codex",
@@ -127,6 +134,8 @@ interface ConnectCommandPanelProps {
   client: ConnectClient;
   /** null when the user can't read MCP gateways. */
   mcpGateways: AgentSelectorAgent[] | null;
+  /** Whether accessible gateways are still loading. */
+  mcpGatewaysPending?: boolean;
   mcpGatewayId: string | null;
   onMcpGatewaySelect: (id: string) => void;
   /** The org's single LLM Proxy id; null when the user can't read it (or it hasn't loaded). */
@@ -140,6 +149,10 @@ interface ConnectCommandPanelProps {
   candidateBaseUrls: readonly string[];
   baseUrlMetadata: readonly ConnectionBaseUrl[] | null | undefined;
   onBaseUrlChange: (url: string) => void;
+  /** A Bundle selected by an install link, applied once after bundles load. */
+  initialBundleId?: string;
+  /** Clears the deep-link selection after it is applied or found unavailable. */
+  onInitialBundleHandled?: () => void;
 }
 
 /**
@@ -152,6 +165,7 @@ interface ConnectCommandPanelProps {
 export function ConnectCommandPanel({
   client,
   mcpGateways,
+  mcpGatewaysPending,
   mcpGatewayId,
   onMcpGatewaySelect,
   llmProxyId,
@@ -162,14 +176,14 @@ export function ConnectCommandPanel({
   candidateBaseUrls,
   baseUrlMetadata,
   onBaseUrlChange,
+  initialBundleId,
+  onInitialBundleHandled,
 }: ConnectCommandPanelProps) {
   const { eligible: skillsEligible, skills: allSkills } =
     useConnectSkills(llmProxyId);
   // Providers are named the way this organization names them, so a renamed
   // provider reads the same here as in the model-provider settings.
   const providerCatalog = useModelProviderCatalog();
-  // The skill picker labels each row's owner, so it needs the viewer's id.
-  const { data: session } = useSession();
   // Skill selection: `null` means "all skills" (the default, and it keeps
   // including skills created later). Once the user touches any checkbox it
   // becomes an explicit snapshot of chosen ids — so an opt-out (empty set)
@@ -185,6 +199,11 @@ export function ConnectCommandPanel({
   const [pluginSelections, setPluginSelections] = useState<
     ReadonlyMap<string, ReadonlySet<string>>
   >(new Map());
+  const [appliedBundle, setAppliedBundle] = useState<{
+    clientId: string;
+    bundleId: string;
+    selectedOptionalLocalMcpServerIds: string[];
+  } | null>(null);
   const selectedSkills = useMemo(
     () =>
       selectedSkillIds === null
@@ -200,6 +219,11 @@ export function ConnectCommandPanel({
     isError: configError,
   } = useConfig();
   const pluginsEnabled = !configError && configData?.features.plugins === true;
+  const bundlesEnabled = !configError && configData?.features.bundles === true;
+  const { data: managedBundles = [], isPending: bundlesPending } = useBundles({
+    enabled: bundlesEnabled,
+  });
+  const initialBundleHandledRef = useRef<string | null>(null);
   const { data: canAdminPlugins, isPending: pluginsPermissionPending } =
     useHasPermissions({
       plugin: ["read", "admin"],
@@ -341,19 +365,133 @@ export function ConnectCommandPanel({
   const incompatiblePlugins = plugins.filter(
     (plugin) => !plugin.supportedPlatforms.includes(requiredPluginPlatform),
   );
+  const availableSkillIds = new Set(allSkills.map((skill) => skill.id));
+  const availablePluginIds = new Set(
+    compatiblePlugins.map((plugin) => plugin.id),
+  );
+  const bundles: ResolvedBundle[] = bundlesEnabled
+    ? managedBundles.map((bundle) => ({
+        ...bundle,
+        skillIds: bundle.skillIds.filter((id) => availableSkillIds.has(id)),
+        pluginIds: bundle.pluginIds.filter((id) => availablePluginIds.has(id)),
+        localMcpServers: bundle.localMcpServers ?? [],
+      }))
+    : [];
+  const activeBundleId =
+    appliedBundle?.clientId === client.id ? appliedBundle.bundleId : null;
+  const activeBundle =
+    bundles.find((bundle) => bundle.id === activeBundleId) ?? null;
+  const dismissInitialBundle = useCallback(() => {
+    if (!initialBundleId) return;
+    initialBundleHandledRef.current = initialBundleId;
+    onInitialBundleHandled?.();
+  }, [initialBundleId, onInitialBundleHandled]);
+  const applyBundle = useCallback(
+    (bundle: ResolvedBundle) => {
+      setSelectedSkillIds(new Set(bundle.skillIds));
+      setPluginSelections((current) =>
+        new Map(current).set(pluginSelectionContext, new Set(bundle.pluginIds)),
+      );
+      setAppliedBundle({
+        clientId: client.id,
+        bundleId: bundle.id,
+        selectedOptionalLocalMcpServerIds: bundle.localMcpServers
+          .filter((server) => server.optional)
+          .map((server) => server.id),
+      });
+      if (
+        bundle.mcpGatewayId &&
+        mcpGateways?.some((candidate) => candidate.id === bundle.mcpGatewayId)
+      ) {
+        onMcpGatewaySelect(bundle.mcpGatewayId);
+      }
+      setEditing(null);
+    },
+    [client.id, mcpGateways, onMcpGatewaySelect, pluginSelectionContext],
+  );
+  useEffect(() => {
+    if (
+      !bundlesEnabled ||
+      !initialBundleId ||
+      bundlesPending ||
+      initialBundleHandledRef.current === initialBundleId
+    ) {
+      return;
+    }
+
+    const initialBundle = bundles.find(
+      (bundle) => bundle.id === initialBundleId,
+    );
+    if (initialBundle?.mcpGatewayId && mcpGatewaysPending) return;
+
+    dismissInitialBundle();
+    if (initialBundle) applyBundle(initialBundle);
+  }, [
+    applyBundle,
+    bundles,
+    bundlesEnabled,
+    bundlesPending,
+    dismissInitialBundle,
+    initialBundleId,
+    mcpGatewaysPending,
+  ]);
+  const handleBundleSelect = (bundle: ResolvedBundle) => {
+    dismissInitialBundle();
+    applyBundle(bundle);
+  };
+  const handleMcpGatewaySelect = (id: string) => {
+    dismissInitialBundle();
+    onMcpGatewaySelect(id);
+  };
+  const handleProviderSelect = (provider: SupportedProvider) => {
+    dismissInitialBundle();
+    onProviderSelect(provider);
+  };
+  const handleBaseUrlChange = (url: string) => {
+    dismissInitialBundle();
+    onBaseUrlChange(url);
+  };
+  const toggleOptionalLocalMcpServer = (serverId: string, checked: boolean) => {
+    dismissInitialBundle();
+    setAppliedBundle((current) => {
+      if (!current || current.clientId !== client.id) return current;
+      const selected = new Set(current.selectedOptionalLocalMcpServerIds);
+      if (checked) selected.add(serverId);
+      else selected.delete(serverId);
+      return {
+        ...current,
+        selectedOptionalLocalMcpServerIds: [...selected].sort(),
+      };
+    });
+  };
   const togglePlugin = useCallback(
-    (pluginId: string, checked: boolean) =>
+    (pluginId: string, checked: boolean) => {
+      dismissInitialBundle();
+      setAppliedBundle(null);
       setPluginSelections((current) => {
         const currentIds = current.get(pluginSelectionContext) ?? null;
         const next = new Set(currentIds ?? plugins.map((plugin) => plugin.id));
         if (checked) next.add(pluginId);
         else next.delete(pluginId);
         return new Map(current).set(pluginSelectionContext, next);
-      }),
-    [plugins, pluginSelectionContext],
+      });
+    },
+    [dismissInitialBundle, plugins, pluginSelectionContext],
   );
   const hasRunnableAnything = Boolean(
-    gateway || proxyActive || includeSkills || selectedPlugins.length,
+    gateway ||
+      proxyActive ||
+      includeSkills ||
+      selectedPlugins.length ||
+      (activeBundle &&
+        ["claude-code", "cursor"].includes(client.id) &&
+        activeBundle.localMcpServers.some(
+          (server) =>
+            !server.optional ||
+            appliedBundle?.selectedOptionalLocalMcpServerIds.includes(
+              server.id,
+            ),
+        )),
   );
   const hasAnything = Boolean(hasRunnableAnything || plugins.length > 0);
 
@@ -421,9 +559,20 @@ export function ConnectCommandPanel({
     provider: proxyActive ? provider : null,
     proxyAuth: proxyActive ? effectiveProxyAuth : null,
     model: proxyActive ? effectiveModel : null,
+    bundleId: activeBundleId,
+    selectedOptionalLocalMcpServerIds:
+      appliedBundle?.clientId === client.id
+        ? appliedBundle.selectedOptionalLocalMcpServerIds
+        : [],
     // Sorted so reorderings of the same selection don't regenerate.
-    skillIds: includeSkills ? selectedSkills.map((s) => s.id).sort() : null,
-    pluginIds: selectedPlugins.map((plugin) => plugin.id).sort(),
+    skillIds:
+      activeBundleId === null && includeSkills
+        ? selectedSkills.map((s) => s.id).sort()
+        : null,
+    pluginIds:
+      activeBundleId === null
+        ? selectedPlugins.map((plugin) => plugin.id).sort()
+        : null,
   });
   const latestKeyRef = useRef(inputsKey);
   latestKeyRef.current = inputsKey;
@@ -439,8 +588,10 @@ export function ConnectCommandPanel({
         provider: SupportedProvider | null;
         proxyAuth: ConnectProxyAuth | null;
         model: string | null;
+        bundleId: string | null;
+        selectedOptionalLocalMcpServerIds: string[];
         skillIds: string[] | null;
-        pluginIds: string[];
+        pluginIds: string[] | null;
       };
 
       let skills: CreateConnectionSetupBody["skills"];
@@ -454,8 +605,9 @@ export function ConnectCommandPanel({
       if (
         !inputs.gatewayId &&
         !inputs.proxyId &&
+        !inputs.bundleId &&
         !skills &&
-        inputs.pluginIds.length === 0
+        (inputs.pluginIds?.length ?? 0) === 0
       ) {
         return;
       }
@@ -469,8 +621,13 @@ export function ConnectCommandPanel({
         provider: inputs.provider ?? undefined,
         proxyAuth: inputs.proxyAuth ?? undefined,
         model: inputs.model ?? undefined,
-        skills,
-        pluginIds: inputs.pluginIds,
+        ...(inputs.bundleId
+          ? {
+              bundleId: inputs.bundleId,
+              selectedOptionalLocalMcpServerIds:
+                inputs.selectedOptionalLocalMcpServerIds,
+            }
+          : { skills, pluginIds: inputs.pluginIds ?? [] }),
       });
       if (latestKeyRef.current !== key) return; // stale response
       setResult(created);
@@ -521,7 +678,7 @@ export function ConnectCommandPanel({
             className="w-full"
             agents={mcpGateways}
             value={gateway.id}
-            onValueChange={onMcpGatewaySelect}
+            onValueChange={handleMcpGatewaySelect}
             placeholder="Select gateway"
             searchPlaceholder="Search gateways…"
           />
@@ -539,7 +696,7 @@ export function ConnectCommandPanel({
         candidateUrls={candidateBaseUrls}
         metadata={baseUrlMetadata}
         value={baseUrl}
-        onChange={onBaseUrlChange}
+        onChange={handleBaseUrlChange}
       />
     </EditorField>
   );
@@ -548,7 +705,11 @@ export function ConnectCommandPanel({
     <EditorField label="Platform">
       <ConnectionPlatformToggle
         value={platform}
-        onValueChange={setPlatform}
+        onValueChange={(value) => {
+          dismissInitialBundle();
+          setAppliedBundle(null);
+          setPlatform(value);
+        }}
         ariaLabel="Select a platform"
         dataTestId="connect-platform-select"
       />
@@ -587,13 +748,14 @@ export function ConnectCommandPanel({
   // key and appear to do nothing. Move to the first passthrough-capable provider
   // as well, so the toggle can never strand the user in the per-user state.
   const handleProxyAuthChange = (value: string) => {
+    dismissInitialBundle();
     const next = value as ConnectProxyAuth;
     setProxyAuth(next);
     if (next === "provider-key" && providerIsPerUser) {
       const firstPassthrough = supportedProviders.find(
         (p) => !providerRequiresPerUserCredential(p),
       );
-      if (firstPassthrough) onProviderSelect(firstPassthrough);
+      if (firstPassthrough) handleProviderSelect(firstPassthrough);
     }
   };
 
@@ -670,7 +832,10 @@ export function ConnectCommandPanel({
           {modelOptions.length > 1 ? (
             <Select
               value={effectiveModel ?? undefined}
-              onValueChange={setModelChoice}
+              onValueChange={(value) => {
+                dismissInitialBundle();
+                setModelChoice(value);
+              }}
             >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select model" />
@@ -686,7 +851,10 @@ export function ConnectCommandPanel({
           ) : (
             <Input
               value={effectiveModel ?? ""}
-              onChange={(event) => setModelChoice(event.target.value || null)}
+              onChange={(event) => {
+                dismissInitialBundle();
+                setModelChoice(event.target.value || null);
+              }}
               placeholder="Model id"
             />
           )}
@@ -706,12 +874,14 @@ export function ConnectCommandPanel({
       >
         <Checkbox
           id="connect-include-skills"
-          // All or nothing: the shared marketplace URL has no per-skill knob,
-          // so "all" (null) and "none" (empty set) are the only honest states.
+          // The direct control remains all-or-nothing. A bundle can provide a
+          // fixed subset, which the plugin-bearing snapshot delivery preserves.
           checked={selectedSkills.length > 0}
-          onCheckedChange={(checked) =>
-            setSelectedSkillIds(checked === true ? null : new Set())
-          }
+          onCheckedChange={(checked) => {
+            dismissInitialBundle();
+            setAppliedBundle(null);
+            setSelectedSkillIds(checked === true ? null : new Set());
+          }}
         />
         Install shared skills
       </label>
@@ -720,10 +890,17 @@ export function ConnectCommandPanel({
           Only skills in the LLM Proxy's environment are listed.
         </p>
       )}
-      <p className="pl-6 text-xs text-muted-foreground">
-        Everything shared with you is installed, and stays current as skills are
-        added or removed. To share a fixed subset instead, use a snapshot link.
-      </p>
+      {selectedSkillIds === null ? (
+        <p className="pl-6 text-xs text-muted-foreground">
+          Everything shared with you is installed, and stays current as skills
+          are added or removed.
+        </p>
+      ) : (
+        <p className="pl-6 text-xs text-muted-foreground">
+          The selected bundle installs this fixed skill set. Choose another
+          bundle to replace it.
+        </p>
+      )}
     </div>
   );
 
@@ -744,6 +921,8 @@ export function ConnectCommandPanel({
                   : "indeterminate"
             }
             onCheckedChange={(checked) => {
+              dismissInitialBundle();
+              setAppliedBundle(null);
               setPluginSelections((current) => {
                 const next = new Map(current);
                 if (checked === true) next.delete(pluginSelectionContext);
@@ -822,6 +1001,22 @@ export function ConnectCommandPanel({
     <>
       <WizardStep n={2} title="Review the setup">
         <ul className="grid gap-2">
+          {bundles.length > 0 && (
+            <li className="mb-2">
+              <BundlePicker
+                bundles={bundles}
+                activeBundleId={activeBundleId}
+                mcpGateways={mcpGateways}
+                onSelect={handleBundleSelect}
+                selectedOptionalLocalMcpServerIds={
+                  appliedBundle?.clientId === client.id
+                    ? appliedBundle.selectedOptionalLocalMcpServerIds
+                    : []
+                }
+                onToggleOptionalLocalMcpServer={toggleOptionalLocalMcpServer}
+              />
+            </li>
+          )}
           {gateway && (
             <SetupSummaryRow
               editable={!!gatewayEditor}
@@ -913,8 +1108,8 @@ export function ConnectCommandPanel({
                   <span>Install </span>
                   <ResourceLink href="/skills">
                     <span>
-                      <span>{allSkills.length} shared skill</span>
-                      {allSkills.length === 1 ? null : <span>s</span>}
+                      <span>{selectedSkills.length} shared skill</span>
+                      {selectedSkills.length === 1 ? null : <span>s</span>}
                     </span>
                   </ResourceLink>
                 </>
@@ -1009,7 +1204,7 @@ export function ConnectCommandPanel({
                   <button
                     key={p}
                     type="button"
-                    onClick={() => onProviderSelect(p)}
+                    onClick={() => handleProviderSelect(p)}
                     className={cn(
                       "border-b-2 px-2.5 py-2.5 font-mono text-xs transition-colors",
                       p === provider
@@ -1133,6 +1328,159 @@ export function ConnectCommandPanel({
 // ===================================================================
 // Internal pieces
 // ===================================================================
+
+function BundlePicker({
+  bundles,
+  activeBundleId,
+  mcpGateways,
+  onSelect,
+  selectedOptionalLocalMcpServerIds,
+  onToggleOptionalLocalMcpServer,
+}: {
+  bundles: ResolvedBundle[];
+  activeBundleId: string | null;
+  mcpGateways: AgentSelectorAgent[] | null;
+  onSelect: (bundle: ResolvedBundle) => void;
+  selectedOptionalLocalMcpServerIds: string[];
+  onToggleOptionalLocalMcpServer: (serverId: string, checked: boolean) => void;
+}) {
+  const activeBundle =
+    bundles.find((bundle) => bundle.id === activeBundleId) ?? null;
+  return (
+    <fieldset className="rounded-xl border border-border/70 bg-muted/20 p-3.5">
+      <legend className="flex items-center gap-2 px-1 text-sm font-semibold text-foreground">
+        <span>Start with a bundle</span>
+        <Badge variant="secondary">Beta</Badge>
+        <Link
+          href="/bundles"
+          className="text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+        >
+          Manage
+        </Link>
+      </legend>
+      <p className="mb-3 text-xs text-muted-foreground">
+        Apply a curated starting point, then review it below. Skills install
+        together as one generated plugin; native plugins remain separately
+        managed. A bundle can also select its saved MCP gateway.
+      </p>
+      <ScrollArea className="max-h-72" aria-label="Available bundles">
+        <div className="grid gap-2 pr-3 sm:grid-cols-2">
+          {bundles.map((bundle) => {
+            const active = activeBundleId === bundle.id;
+            const empty =
+              bundle.skillIds.length === 0 &&
+              bundle.pluginIds.length === 0 &&
+              bundle.localMcpServers.length === 0;
+            const gatewayName = bundle.mcpGatewayId
+              ? (mcpGateways?.find(
+                  (gateway) => gateway.id === bundle.mcpGatewayId,
+                )?.name ?? "Saved MCP gateway")
+              : null;
+            return (
+              <Button
+                key={bundle.id}
+                type="button"
+                variant="outline"
+                aria-label={`Apply ${bundle.name} bundle${empty ? ": unavailable because it has no capabilities" : ""}`}
+                aria-pressed={active}
+                disabled={empty}
+                title={
+                  empty
+                    ? "This bundle has no capabilities to apply. Edit it to add skills, plugins, or local MCP servers."
+                    : undefined
+                }
+                onClick={() => onSelect(bundle)}
+                className={cn(
+                  "h-auto min-h-28 w-full items-start justify-start gap-3 whitespace-normal rounded-lg p-3.5 text-left hover:border-foreground/30 hover:bg-background",
+                  active &&
+                    "border-foreground/40 bg-background ring-1 ring-foreground/10",
+                )}
+              >
+                <span className="mt-0.5 rounded-md border border-border bg-muted p-2 text-foreground">
+                  <PackageOpen className="size-4" />
+                </span>
+                <span className="grid min-w-0 flex-1 gap-1">
+                  <span className="flex items-center justify-between gap-2 font-medium text-foreground">
+                    <span>{bundle.name}</span>
+                    {active ? (
+                      <Badge variant="secondary" className="gap-1">
+                        <Check className="size-3" />
+                        <span>Selected</span>
+                      </Badge>
+                    ) : null}
+                  </span>
+                  {bundle.description ? (
+                    <span className="text-xs leading-relaxed text-muted-foreground">
+                      {bundle.description}
+                    </span>
+                  ) : null}
+                  <span className="mt-1 text-[11px] font-medium text-muted-foreground">
+                    {formatBundleCapabilitySummary({
+                      skillCount: bundle.skillIds.length,
+                      pluginCount: bundle.pluginIds.length,
+                      localMcpCount: bundle.localMcpServers.length,
+                    })}
+                  </span>
+                  {gatewayName ? (
+                    <span className="text-[11px] text-muted-foreground">
+                      Gateway: {gatewayName}
+                    </span>
+                  ) : null}
+                  {empty ? (
+                    <span className="text-[11px] text-muted-foreground">
+                      Add capabilities before this bundle can be applied.
+                    </span>
+                  ) : null}
+                </span>
+              </Button>
+            );
+          })}
+        </div>
+      </ScrollArea>
+      {activeBundle && activeBundle.localMcpServers.length > 0 ? (
+        <div className="mt-3 grid gap-2 border-t pt-3">
+          <p className="text-xs font-medium text-foreground">
+            Local MCP servers for Cursor and Claude Code
+          </p>
+          {activeBundle.localMcpServers.map((server) => {
+            const checked =
+              !server.optional ||
+              selectedOptionalLocalMcpServerIds.includes(server.id);
+            return (
+              <div
+                key={server.id}
+                className="flex items-start gap-2 rounded-md border bg-background px-3 py-2"
+              >
+                <Checkbox
+                  id={`bundle-local-mcp-${server.id}`}
+                  checked={checked}
+                  disabled={!server.optional}
+                  onCheckedChange={(value) =>
+                    onToggleOptionalLocalMcpServer(server.id, value === true)
+                  }
+                />
+                <Label
+                  htmlFor={`bundle-local-mcp-${server.id}`}
+                  className="grid min-w-0 gap-0.5 text-xs"
+                >
+                  <span className="font-medium text-foreground">
+                    {server.name}
+                    {!server.optional ? <span> (required)</span> : null}
+                  </span>
+                  {server.description ? (
+                    <span className="text-muted-foreground">
+                      {server.description}
+                    </span>
+                  ) : null}
+                </Label>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+    </fieldset>
+  );
+}
 
 /**
  * Shown in place of the command when a per-user provider (GitHub Copilot) is

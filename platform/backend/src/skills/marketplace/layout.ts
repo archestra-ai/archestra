@@ -62,6 +62,14 @@ export interface MaterializeRequest {
   displayName: string;
   skills: MaterializeSkillInput[];
   plugins?: MaterializePluginInput[];
+  localMcpServers?: MaterializeLocalMcpServerInput[];
+}
+
+export interface MaterializeLocalMcpServerInput {
+  name: string;
+  command: string;
+  args: string[];
+  envVarNames: string[];
 }
 
 export interface MaterializePluginInput {
@@ -180,18 +188,46 @@ export function computeLayout(
     ),
   );
   const pluginRoot = `plugins/${req.marketplaceName}`;
-  const simplePluginJson = jsonStringify(
-    buildSimplePluginManifest({
-      marketplaceName: req.marketplaceName,
-      ownerName: req.ownerName,
-      skills: manifestSkills,
-      version,
-    }),
+  const simplePluginManifest = buildSimplePluginManifest({
+    marketplaceName: req.marketplaceName,
+    ownerName: req.ownerName,
+    skills: manifestSkills,
+    version,
+  });
+  const localMcpServers = req.localMcpServers ?? [];
+  const claudePluginManifest =
+    localMcpServers.length > 0
+      ? { ...simplePluginManifest, mcpServers: "./.mcp.json" }
+      : simplePluginManifest;
+  const cursorPluginManifest =
+    localMcpServers.length > 0
+      ? { ...simplePluginManifest, mcpServers: "../mcp.json" }
+      : simplePluginManifest;
+  files.push(
+    textFile(
+      `${pluginRoot}/.claude-plugin/plugin.json`,
+      jsonStringify(claudePluginManifest),
+    ),
   );
   files.push(
-    textFile(`${pluginRoot}/.claude-plugin/plugin.json`, simplePluginJson),
+    textFile(`${pluginRoot}/plugin.json`, jsonStringify(simplePluginManifest)),
   );
-  files.push(textFile(`${pluginRoot}/plugin.json`, simplePluginJson));
+  if (localMcpServers.length > 0) {
+    files.push(
+      textFile(
+        `${pluginRoot}/.mcp.json`,
+        jsonStringify({
+          mcpServers: buildLocalMcpConfig(localMcpServers, "claude-code"),
+        }),
+      ),
+      textFile(
+        `${pluginRoot}/mcp.json`,
+        jsonStringify({
+          mcpServers: buildLocalMcpConfig(localMcpServers, "cursor"),
+        }),
+      ),
+    );
+  }
 
   for (const plugin of plugins) {
     const pluginName = resolvePluginName(plugin.pluginSlug);
@@ -241,7 +277,10 @@ export function computeLayout(
     }
   }
   files.push(
-    textFile(`${pluginRoot}/.cursor-plugin/plugin.json`, simplePluginJson),
+    textFile(
+      `${pluginRoot}/.cursor-plugin/plugin.json`,
+      jsonStringify(cursorPluginManifest),
+    ),
   );
   files.push(
     textFile(
@@ -301,6 +340,28 @@ function textFile(filePath: string, content: string): RevisionPayloadFile {
 
 function jsonStringify(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
+}
+
+function buildLocalMcpConfig(
+  servers: MaterializeLocalMcpServerInput[],
+  client: "claude-code" | "cursor",
+): Record<string, unknown> {
+  return Object.fromEntries(
+    servers.map((server) => [
+      server.name,
+      {
+        type: "stdio",
+        command: server.command,
+        args: server.args,
+        env: Object.fromEntries(
+          server.envVarNames.map((name) => [
+            name,
+            client === "cursor" ? `\${env:${name}}` : `\${${name}}`,
+          ]),
+        ),
+      },
+    ]),
+  );
 }
 
 function buildSkillMarkdown(

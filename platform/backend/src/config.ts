@@ -2347,6 +2347,13 @@ const config = {
      */
     enabled: betaFeatureEnabled(process.env.ARCHESTRA_PLUGINS_ENABLED),
   },
+  bundles: {
+    /**
+     * Bundles can install and reconcile client configuration, so they require
+     * an explicit deployment opt-in. The beta master switch never enables them.
+     */
+    enabled: process.env.ARCHESTRA_BUNDLES_ENABLED === "true",
+  },
   git: {
     binaryPath: process.env.ARCHESTRA_GIT_BINARY_PATH?.trim() || "git",
   },

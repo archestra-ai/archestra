@@ -3,6 +3,7 @@ import AgentModel from "@/models/agent";
 import AgentToolModel from "@/models/agent-tool";
 import ApiKeyModel from "@/models/api-key";
 import AppModel from "@/models/app";
+import BundleModel from "@/models/bundle";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import chatOpsConfigModel from "@/models/chatops-config";
 import EnvironmentModel from "@/models/environment";
@@ -640,6 +641,15 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "skillShareLink",
     action: "skillShareLink.revoked",
     fetchById: (id, orgId) => SkillShareLinkModel.findByIdForAudit(id, orgId),
+  },
+
+  "/api/bundles": {
+    resourceType: "bundle",
+    fetchById: (id, orgId) => BundleModel.findByIdForAudit(id, orgId),
+  },
+  "/api/bundles/:id": {
+    resourceType: "bundle",
+    fetchById: (id, orgId) => BundleModel.findByIdForAudit(id, orgId),
   },
 
   // Plugins

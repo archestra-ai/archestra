@@ -77,6 +77,8 @@ export const activeShareLinkSeed: ShareLink = {
   tokenStart: "archestra_skl_AAAAAAAA",
   name: null,
   marketplaceName: "archestra-test-org-skills",
+  bundleId: null,
+  selectedOptionalLocalMcpServerIds: [],
   pluginClientType: null,
   pluginPlatform: null,
   expiresAt: "2026-09-01T00:00:00.000Z",

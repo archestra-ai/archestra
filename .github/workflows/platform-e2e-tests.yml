@@ -6,9 +6,9 @@ name: Platform E2E Tests
 #
 # MCP idle-hibernation coverage stays OFF the merge queue: the leg is ~10
 # minutes of mostly serial waiting, which every queued merge was paying.
-# The nightly schedule and workflow_dispatch run the complete serial
-# project; the separate "run-e2e-hibernation" label runs it on a PR on
-# demand.
+# The nightly schedule and workflow_dispatch run the hibernation project in
+# four isolated file shards; the separate "run-e2e-hibernation" label
+# runs the same shards on a PR on demand.
 #
 # Three test environments:
 #   - Lite: the platform as one quickstart-mode container plus WireMock and
@@ -493,12 +493,7 @@ jobs:
     # 8-vcpu Blacksmith, as before the runner migration. See the setup-time
     # measurements in the job comment above.
     runs-on: blacksmith-8vcpu-ubuntu-2404
-    # Two budgets, matched to which legs run. The ordinary K8s leg (merge
-    # queue and run-e2e PRs) fits inside 60 minutes. Nightly, dispatch, and
-    # the explicit hibernation label add a hibernation leg allowed 120
-    # minutes after the 25-minute image-poll ceiling and 20-minute K8s leg,
-    # so they need 175. Each budget leaves room for setup and uploads.
-    timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-e2e-hibernation') && 175 || 60 }}
+    timeout-minutes: 60
     permissions:
       contents: read # Required to checkout the repository and read test assets.
       id-token: write # Required for Workload Identity Federation in setup actions.
@@ -591,40 +586,11 @@ jobs:
           path: platform/e2e-tests/blob-report/
           retention-days: 1
 
-      # Serial because these specs share the organization toggle and cluster.
-      # Deliberately NOT run in the merge queue: the leg is ~10 min of mostly
-      # serial waiting that every queued merge paid. Nightly (schedule),
-      # dispatch, and the explicit run-e2e-hibernation label run the full
-      # project; a regression surfaces in the next nightly instead of
-      # blocking every merge.
-      - name: Run hibernation E2E tests
-        id: e2e-hibernation
-        if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-e2e-hibernation' }}
-        continue-on-error: true
-        uses: ./.github/actions/run-e2e-tests
-        with:
-          projects: api-k8s-hibernation
-          extra_args: "--workers=1"
-          timeout: "120"
-          # Its own directory, so this leg neither overwrites the run above nor
-          # depends on the host runner deleting the root-owned files the
-          # container leaves behind.
-          blob_report_dir: blob-report-hibernation
-
-      - name: Upload hibernation blob report
-        if: ${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-e2e-hibernation') }}
-        uses: ./.github/actions/github-upload-artifact
-        with:
-          name: blob-report-k8s-hibernation
-          path: platform/e2e-tests/blob-report-hibernation/
-          if-no-files-found: error
-          retention-days: 1
-
       # always() so this still runs when a failing setup step aborts the job
       # (a plain outcome check is implicitly ANDed with success() and gets
       # skipped exactly when the diagnostics matter most).
       - name: Show logs on failure or flaky tests
-        if: always() && (steps.setup-platform.outcome == 'failure' || steps.e2e.outcome == 'failure' || steps.e2e.outputs.has_flaky_tests == 'true' || steps.e2e-hibernation.outcome == 'failure' || steps.e2e-hibernation.outputs.has_flaky_tests == 'true')
+        if: always() && (steps.setup-platform.outcome == 'failure' || steps.e2e.outcome == 'failure' || steps.e2e.outputs.has_flaky_tests == 'true')
         run: |
           echo "=== Kubernetes Pods ==="
           kubectl get pods -o wide || true
@@ -687,16 +653,120 @@ jobs:
       # the job anyway.
 
       - name: Fail if K8s-bound E2E tests failed
-        if: ${{ always() && (steps.e2e.outcome == 'failure' || steps.e2e-hibernation.outcome == 'failure') }}
-        # Which leg failed goes through the environment rather than straight
-        # into the shell: an expression expanded into a run block is a template
-        # injection, and the static-analysis gate rejects it.
-        env:
-          E2E_OUTCOME: ${{ steps.e2e.outcome }}
-          E2E_HIBERNATION_OUTCOME: ${{ steps.e2e-hibernation.outcome }}
+        if: ${{ always() && steps.e2e.outcome == 'failure' }}
+        run: exit 1
+
+  # Hibernation is deliberately off the merge queue, but the labelled/nightly
+  # run was the workflow's 22-minute critical path: four serial spec files ran
+  # for 16.6 minutes after one cluster setup, with topology alone taking 8.1
+  # minutes. Playwright's dependency-aware --shard partition leaves empty
+  # shards for this serial project, so the matrix partitions its four spec
+  # files explicitly. Each gets an isolated cluster so file-local serial state
+  # remains intact while all independent groups overlap.
+  platform-e2e-hibernation-tests:
+    name: Platform E2E Tests (Hibernation ${{ matrix.name }})
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event.label.name == 'run-e2e-hibernation' }}
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: capacity
+            spec: tests/mcp-hibernation-capacity.spec.ts
+          - name: recovery
+            spec: tests/mcp-hibernation-recovery.spec.ts
+          - name: topology
+            spec: tests/mcp-hibernation-topology.spec.ts
+          - name: wake
+            spec: tests/mcp-hibernation.spec.ts
+    permissions:
+      contents: read
+      id-token: write
+      actions: read
+    steps:
+      - name: Reclaim disk space (background)
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+        with:
+          working-directory: ./platform
+
+      - name: Load platform image (fork PRs, from artifact)
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true }}
+        uses: ./.github/actions/load-platform-image
+        with:
+          source: artifact
+          image-tag: archestra-platform:${{ github.sha }}
+          wait-timeout-seconds: "900"
+
+      - name: Load MCP server base image (fork PRs, from artifact)
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true }}
+        uses: ./.github/actions/load-mcp-server-base-image
+        with:
+          source: artifact
+          image-tag: mcp-server-base:${{ github.sha }}
+          wait-timeout-seconds: "900"
+
+      - name: Setup Archestra Platform
+        id: setup-platform
+        uses: ./.github/actions/setup-archestra-platform
+        with:
+          kind-config-path: .github/kind.yaml
+          kind-cluster-name: archestra-ci-cluster
+          helm-values-path: .github/values-ci.yaml
+          deploy-e2e-dependencies: "true"
+          e2e-dependencies-install-mode: "foreground"
+          e2e-dependencies-extra-helm-set: "vault.k8sAuth.enabled=true,vault.k8sAuth.boundServiceAccountName=archestra-platform,vault.k8sAuth.boundServiceAccountNamespace=default"
+          e2e-dependencies-wait-for-vault: "true"
+          build-platform-image: "false"
+          platform-image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
+          platform-context: ./platform
+          platform-image-in-cluster-pull: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'false' || 'true' }}
+          mcp-server-base-image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('mcp-server-base:{0}', github.sha) || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
+          image-pull-timeout-seconds: "1500"
+
+      - name: Run hibernation E2E tests
+        id: e2e
+        continue-on-error: true
+        uses: ./.github/actions/run-e2e-tests
+        with:
+          projects: api-k8s-hibernation
+          extra_args: "${{ matrix.spec }} --workers=1"
+          timeout: "60"
+          blob_report_dir: blob-report-hibernation-${{ matrix.name }}
+
+      - name: Upload hibernation blob report
+        if: ${{ !cancelled() }}
+        uses: ./.github/actions/github-upload-artifact
+        with:
+          name: blob-report-k8s-hibernation-${{ matrix.name }}
+          path: platform/e2e-tests/blob-report-hibernation-${{ matrix.name }}/
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Show hibernation logs on failure or flaky tests
+        if: always() && (steps.setup-platform.outcome == 'failure' || steps.e2e.outcome == 'failure' || steps.e2e.outputs.has_flaky_tests == 'true')
         run: |
-          echo "The K8s-bound E2E run failed (api-k8s: ${E2E_OUTCOME}, hibernation: ${E2E_HIBERNATION_OUTCOME})."
-          exit 1
+          echo "=== Kubernetes Pods ==="
+          kubectl get pods -A -o wide || true
+          echo "=== Archestra Platform Logs ==="
+          kubectl logs -l app.kubernetes.io/name=archestra-platform -c archestra-platform --tail=500 2>/dev/null || true
+          echo "=== PostgreSQL Logs ==="
+          kubectl logs -l app.kubernetes.io/name=postgresql --tail=200 2>/dev/null || true
+          echo "=== Recent Cluster Events ==="
+          kubectl get events --sort-by=.lastTimestamp -A 2>/dev/null | tail -100 || true
+
+      - name: Fail if hibernation E2E tests failed
+        if: ${{ always() && steps.e2e.outcome == 'failure' }}
+        run: exit 1
 
   # NOTE: there is deliberately no separate fan-in job for the test legs. Their
   # results are already gated by "Merge E2E Test Reports" below (its "Fail
@@ -744,15 +814,25 @@ jobs:
             projects_nightly: api --project=identity-providers --project=identity-providers-saml --project=firefox --project=webkit
             shard: ""
             workers_arg: ""
-          - name: chromium-1of2
+          # Three shards bound the cost of an individual flaky retry. In PR
+          # #7574, one 90-second retry stretched chromium-2of2 to 5m49s while
+          # its sibling finished in 3m01s. Playwright --list confirms that
+          # three-way sharding covers all 67 tests; four-way currently drops
+          # one dependency-partitioned test and is therefore unsafe.
+          - name: chromium-1of3
             projects_default: chromium
             projects_nightly: chromium
-            shard: "--shard=1/2"
+            shard: "--shard=1/3"
             workers_arg: "--workers=2"
-          - name: chromium-2of2
+          - name: chromium-2of3
             projects_default: chromium
             projects_nightly: chromium
-            shard: "--shard=2/2"
+            shard: "--shard=2/3"
+            workers_arg: "--workers=2"
+          - name: chromium-3of3
+            projects_default: chromium
+            projects_nightly: chromium
+            shard: "--shard=3/3"
             workers_arg: "--workers=2"
     permissions:
       contents: read # Required to checkout the repository and read test assets.
@@ -860,7 +940,10 @@ jobs:
     name: Platform E2E Tests (Quickstart)
     needs: [platform-e2e-build]
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' || github.event.label.name == 'run-e2e-hibernation' }}
-    runs-on: ubuntu-latest
+    # The test step is only ~1m40s; image load and platform startup dominate
+    # this 5-6 minute job. Match the other E2E legs' 8-vCPU runner so image
+    # extraction and first-run initialization are not CPU-bound.
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 30
     permissions:
       contents: read # Required to checkout the repository and read test assets.
@@ -1301,6 +1384,7 @@ jobs:
     needs:
       [
         platform-e2e-k8s-tests,
+        platform-e2e-hibernation-tests,
         platform-e2e-lite-tests,
         platform-quickstart-e2e-tests,
       ]
@@ -1320,9 +1404,11 @@ jobs:
       - name: Fail if any e2e job failed
         env:
           K8S_RESULT: ${{ needs.platform-e2e-k8s-tests.result }}
+          HIBERNATION_RESULT: ${{ needs.platform-e2e-hibernation-tests.result }}
           LITE_RESULT: ${{ needs.platform-e2e-lite-tests.result }}
           QUICKSTART_RESULT: ${{ needs.platform-quickstart-e2e-tests.result }}
           EVENT_NAME: ${{ github.event_name }}
+          RUN_HIBERNATION: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-e2e-hibernation' }}
         run: |
           failed=0
           for pair in "k8s:$K8S_RESULT" "lite:$LITE_RESULT" "quickstart:$QUICKSTART_RESULT"; do
@@ -1334,6 +1420,12 @@ jobs:
               failed=1
             fi
           done
+          echo "hibernation: $HIBERNATION_RESULT"
+          if [ "$RUN_HIBERNATION" = "true" ] && [ "$HIBERNATION_RESULT" != "success" ]; then
+            failed=1
+          elif [ "$RUN_HIBERNATION" != "true" ] && [ "$HIBERNATION_RESULT" != "success" ] && [ "$HIBERNATION_RESULT" != "skipped" ]; then
+            failed=1
+          fi
           if [ "$failed" = "1" ]; then
             echo "::error::One or more e2e jobs failed - failing the merge-queue gate."
             exit 1
@@ -1350,6 +1442,7 @@ jobs:
     needs:
       [
         platform-e2e-k8s-tests,
+        platform-e2e-hibernation-tests,
         platform-e2e-lite-tests,
         platform-quickstart-e2e-tests,
       ]
@@ -1398,7 +1491,7 @@ jobs:
           name: playwright-report
           path: platform/e2e-tests/playwright-report/
           # Shorter retention for success, full retention for failures
-          retention-days: ${{ (needs.platform-e2e-k8s-tests.result == 'success' && needs.platform-e2e-lite-tests.result == 'success' && needs.platform-quickstart-e2e-tests.result == 'success') && 7 || 30 }}
+          retention-days: ${{ (needs.platform-e2e-k8s-tests.result == 'success' && (needs.platform-e2e-hibernation-tests.result == 'success' || needs.platform-e2e-hibernation-tests.result == 'skipped') && needs.platform-e2e-lite-tests.result == 'success' && needs.platform-quickstart-e2e-tests.result == 'success') && 7 || 30 }}
 
       - name: Write test summary
         if: always()

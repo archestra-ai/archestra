@@ -60,6 +60,10 @@ jobs:
       include_latest_tag: ${{ inputs.version != 'dev' }}
       checkout_fetch_depth: 0
       checkout_ref: ${{ inputs.checkout_ref }}
+      # This reusable workflow currently publishes the compile-bound Platform
+      # image; keep release builds on the same measured native runners as dev.
+      amd64_runner: blacksmith-16vcpu-ubuntu-2404
+      arm64_runner: blacksmith-32vcpu-ubuntu-2404-arm
       # supply-chain-policy: allow-latest internal release channel
       previous_image: docker.io/archestra/${{ inputs.image_name }}:latest
     secrets:

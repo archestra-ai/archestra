@@ -52,7 +52,7 @@ inputs:
     required: false
     default: ""
   cache-from:
-    description: "External cache sources (e.g. type=registry,ref=...)"
+    description: "External cache sources, one per line (e.g. type=registry,ref=...)"
     required: false
     default: ""
   cache-to:
@@ -72,6 +72,10 @@ inputs:
     description: "Sentry auth token for source map uploads (optional)"
     required: false
     default: ""
+  setup-builder:
+    description: "Set up a new Buildx builder; disable to reuse the current job builder"
+    required: false
+    default: "true"
 
 outputs:
   digest:
@@ -111,6 +115,7 @@ runs:
         INPUT_PREVIOUS_IMAGE: ${{ inputs.previous-image }}
 
     - name: Setup Docker Builder
+      if: ${{ inputs.setup-builder == 'true' }}
       uses: ./.github/actions/setup-docker-builder
 
     - name: Build Docker image
@@ -146,7 +151,12 @@ runs:
 
         [ -n "${INPUT_PLATFORMS}" ] && ARGS+=( --platform "${INPUT_PLATFORMS}" )
         [ -n "${INPUT_TARGET}" ] && ARGS+=( --target "${INPUT_TARGET}" )
-        [ -n "${INPUT_CACHE_FROM}" ] && ARGS+=( --cache-from "${INPUT_CACHE_FROM}" )
+        # Cache specs contain commas, so unlike tags they must split on newlines only.
+        while IFS= read -r cache_from; do
+          cache_from="${cache_from#"${cache_from%%[![:space:]]*}"}"
+          cache_from="${cache_from%"${cache_from##*[![:space:]]}"}"
+          [ -n "${cache_from}" ] && ARGS+=( --cache-from "${cache_from}" )
+        done <<< "${INPUT_CACHE_FROM}"
         [ -n "${INPUT_CACHE_TO}" ] && ARGS+=( --cache-to "${INPUT_CACHE_TO}" )
         [ -n "${INPUT_PROVENANCE}" ] && ARGS+=( --provenance "${INPUT_PROVENANCE}" )
         [ -n "${INPUT_VERSION}" ] && ARGS+=( --build-arg "VERSION=${INPUT_VERSION}" )

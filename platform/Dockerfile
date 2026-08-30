@@ -13,31 +13,40 @@ ARG DAGGER_COMMIT=7902e644beeba4468f1ea786015b4be1d6d5bbcd
 ARG KUBECTL_VERSION=v1.35.0
 ARG KUBECTL_COMMIT=66452049f3d692768c39c797b21b793dce80314e
 
-FROM ${GOLANG_IMAGE} AS go-builder
+FROM ${GOLANG_IMAGE} AS go-builder-base
 ARG TARGETARCH
-ARG KIND_VERSION
-ARG KIND_COMMIT
-ARG DOCKER_CLI_VERSION
-ARG DOCKER_CLI_COMMIT
-ARG DAGGER_VERSION
-ARG DAGGER_COMMIT
-ARG KUBECTL_VERSION
-ARG KUBECTL_COMMIT
 RUN if [ "$TARGETARCH" != "amd64" ] && [ "$TARGETARCH" != "arm64" ]; then \
         echo "ERROR: Unsupported architecture: $TARGETARCH. KinD is only available for amd64 and arm64."; \
         exit 1; \
-    fi
-RUN apk add --no-cache git
-COPY docker/dagger-dockercompat /dagger-dockercompat
-RUN git clone --depth 1 --branch "${KIND_VERSION}" https://github.com/kubernetes-sigs/kind.git /kind && \
+    fi && \
+    apk add --no-cache git
+
+# Build the four pinned Go tools in independent stages so BuildKit schedules
+# them concurrently. Go caches stay outside exported layers, and each clone is
+# removed in the same RUN so mode=max never publishes source trees.
+FROM go-builder-base AS kind-builder
+ARG TARGETARCH
+ARG KIND_VERSION
+ARG KIND_COMMIT
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    git clone --depth 1 --branch "${KIND_VERSION}" https://github.com/kubernetes-sigs/kind.git /kind && \
     test "$(git -C /kind rev-parse HEAD)" = "${KIND_COMMIT}" && \
     cd /kind && \
     go mod edit -go=1.25.11 && \
     # golang.org/x/net <0.55.0: CVE-2026-39821 (CRITICAL); fixed in >= 0.55.0
     # golang.org/x/net <0.56.0: CVE-2026-46600 (HIGH); fixed in >= 0.56.0
     go get golang.org/x/net@v0.56.0 && \
-    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o /kind-binary .
-RUN git clone --depth 1 --branch "${DOCKER_CLI_VERSION}" https://github.com/docker/cli.git /docker-cli && \
+    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o /kind-binary . && \
+    cd / && rm -rf /kind
+
+FROM go-builder-base AS docker-cli-builder
+ARG TARGETARCH
+ARG DOCKER_CLI_VERSION
+ARG DOCKER_CLI_COMMIT
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    git clone --depth 1 --branch "${DOCKER_CLI_VERSION}" https://github.com/docker/cli.git /docker-cli && \
     test "$(git -C /docker-cli rev-parse HEAD)" = "${DOCKER_CLI_COMMIT}" && \
     cd /docker-cli && \
     cp vendor.mod go.mod && cp vendor.sum go.sum && \
@@ -63,8 +72,17 @@ RUN git clone --depth 1 --branch "${DOCKER_CLI_VERSION}" https://github.com/dock
     go mod vendor && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=vendor \
     -ldflags "-X github.com/docker/cli/cli/version.Version=${DOCKER_CLI_VERSION#v}" \
-    -o /docker-binary ./cmd/docker
-RUN git clone --depth 1 --branch "${DAGGER_VERSION}" https://github.com/dagger/dagger.git /dagger && \
+    -o /docker-binary ./cmd/docker && \
+    cd / && rm -rf /docker-cli
+
+FROM go-builder-base AS dagger-builder
+ARG TARGETARCH
+ARG DAGGER_VERSION
+ARG DAGGER_COMMIT
+COPY docker/dagger-dockercompat /dagger-dockercompat
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    git clone --depth 1 --branch "${DAGGER_VERSION}" https://github.com/dagger/dagger.git /dagger && \
     test "$(git -C /dagger rev-parse HEAD)" = "${DAGGER_COMMIT}" && \
     cd /dagger && \
     cp -R /dagger-dockercompat ./dockercompat && \
@@ -108,8 +126,16 @@ RUN git clone --depth 1 --branch "${DAGGER_VERSION}" https://github.com/dagger/d
     go mod tidy && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
     -ldflags "-X github.com/dagger/dagger/engine.Version=${DAGGER_VERSION} -X github.com/dagger/dagger/engine.Tag=${DAGGER_VERSION}" \
-    -o /dagger-binary ./cmd/dagger
-RUN git clone --depth 1 --branch "${KUBECTL_VERSION}" https://github.com/kubernetes/kubernetes.git /kubernetes && \
+    -o /dagger-binary ./cmd/dagger && \
+    cd / && rm -rf /dagger /dagger-dockercompat
+
+FROM go-builder-base AS kubectl-builder
+ARG TARGETARCH
+ARG KUBECTL_VERSION
+ARG KUBECTL_COMMIT
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    git clone --depth 1 --branch "${KUBECTL_VERSION}" https://github.com/kubernetes/kubernetes.git /kubernetes && \
     test "$(git -C /kubernetes rev-parse HEAD)" = "${KUBECTL_COMMIT}" && \
     cd /kubernetes && \
     go mod edit -go=1.25.11 && \
@@ -126,7 +152,8 @@ RUN git clone --depth 1 --branch "${KUBECTL_VERSION}" https://github.com/kuberne
     go get golang.org/x/mod@v0.40.0 && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=readonly \
     -ldflags "-X k8s.io/component-base/version.gitVersion=${KUBECTL_VERSION} -X k8s.io/component-base/version.gitCommit=${KUBECTL_COMMIT} -X k8s.io/component-base/version.gitTreeState=clean" \
-    -o /kubectl-binary ./cmd/kubectl
+    -o /kubectl-binary ./cmd/kubectl && \
+    cd / && rm -rf /kubernetes
 
 # pre-bake the Dagger Engine image as a docker-archive so the quickstart can
 # kind-load it into the embedded node instead of pulling ~352MB from the registry
@@ -187,35 +214,47 @@ RUN set -eux; \
     rm -f picomatch-4.0.4.tgz; \
     grep -q '"version": "4.0.4"' "$target/package.json"
 
-# <----- Builder base stage ----->
-FROM base AS builder-base
+# <----- Rust dependency cache ----->
+FROM base AS rust-builder-base
 WORKDIR /app
-
-# Install the Rust toolchain used to compile the N-API addons during `pnpm build`.
-# Kept ABOVE the node_modules/source COPYs so this layer depends only on `base` and
-# stays cache-stable across ordinary source changes. When it lived below the COPYs
-# the ~12s apk install re-ran on every source-changing build because the preceding
-# COPY layers were invalidated.
 RUN apk add --no-cache build-base cargo rust
 
-# Version arg for Sentry release tracking
-ARG VERSION=dev
+FROM rust-builder-base AS rust-deps
+ARG TARGETARCH
+COPY archestra-rs/Cargo.toml archestra-rs/Cargo.lock ./archestra-rs/
+COPY archestra-rs/sandbox-core/Cargo.toml ./archestra-rs/sandbox-core/
+COPY archestra-rs/sandbox-rs/Cargo.toml archestra-rs/sandbox-rs/build.rs ./archestra-rs/sandbox-rs/
+COPY archestra-rs/app-runtime-core/Cargo.toml ./archestra-rs/app-runtime-core/
+COPY archestra-rs/app-runtime-rs/Cargo.toml archestra-rs/app-runtime-rs/build.rs ./archestra-rs/app-runtime-rs/
+COPY archestra-rs/image-core/Cargo.toml ./archestra-rs/image-core/
+COPY archestra-rs/image-rs/Cargo.toml archestra-rs/image-rs/build.rs ./archestra-rs/image-rs/
+RUN --mount=type=cache,target=/root/.cargo/registry \
+    --mount=type=cache,target=/root/.cargo/git \
+    for crate in sandbox-core sandbox-rs app-runtime-core app-runtime-rs image-core image-rs; do \
+      mkdir -p "archestra-rs/${crate}/src"; \
+      printf 'pub fn dependency_cache_placeholder() {}\n' > "archestra-rs/${crate}/src/lib.rs"; \
+    done && \
+    cd archestra-rs && \
+    case "${TARGETARCH}" in \
+      amd64) RUST_TARGET=x86_64-alpine-linux-musl ;; \
+      arm64) RUST_TARGET=aarch64-alpine-linux-musl ;; \
+      *) echo "Unsupported Rust architecture: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac && \
+    for package in app_runtime_rs image_rs sandbox_rs; do \
+      RUSTFLAGS='-C target-feature=-crt-static' cargo build --release --locked \
+        --target "${RUST_TARGET}" -p "${package}"; \
+    done
 
-# Copy dependencies from deps stage
+# <----- Builder base stage ----->
+FROM rust-builder-base AS builder-base
+
+# Copy the dependency graph and native workspace before application source so
+# backend/frontend/shared changes can reuse the exported N-API build layer.
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/backend/node_modules ./backend/node_modules
-COPY --from=deps /app/frontend/node_modules ./frontend/node_modules
-COPY --from=deps /app/shared/node_modules ./shared/node_modules
 COPY --from=deps /app/archestra-rs/sandbox-rs/node_modules ./archestra-rs/sandbox-rs/node_modules
 COPY --from=deps /app/archestra-rs/app-runtime-rs/node_modules ./archestra-rs/app-runtime-rs/node_modules
 COPY --from=deps /app/archestra-rs/image-rs/node_modules ./archestra-rs/image-rs/node_modules
-
-# Copy source files
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
-COPY patches ./patches
-COPY backend ./backend
-COPY frontend ./frontend
-COPY shared ./shared
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY archestra-rs/Cargo.toml archestra-rs/Cargo.lock ./archestra-rs/
 COPY archestra-rs/napi-loader ./archestra-rs/napi-loader
 COPY archestra-rs/sandbox-core ./archestra-rs/sandbox-core
@@ -225,20 +264,47 @@ COPY archestra-rs/app-runtime-rs ./archestra-rs/app-runtime-rs
 COPY archestra-rs/image-core ./archestra-rs/image-core
 COPY archestra-rs/image-rs ./archestra-rs/image-rs
 
-# Build all workspace
+# These tasks stay outside Turbo's shared cache because their artifacts are
+# platform-specific. This Docker layer is architecture-scoped and exportable,
+# so ordinary application source changes no longer recompile Rust. Touch real
+# sources after importing dummy-crate fingerprints so Cargo always recompiles
+# local crates while retaining the manifest-keyed dependency artifacts.
+RUN --mount=type=cache,target=/root/.cargo/registry \
+    --mount=type=cache,target=/root/.cargo/git \
+    --mount=type=bind,from=rust-deps,source=/app/archestra-rs/target,target=/app/archestra-rs/target,rw \
+    find archestra-rs -type f -path '*/src/*.rs' -exec touch {} + && \
+    pnpm --filter @archestra/sandbox-rs \
+         --filter @archestra/app-runtime-rs \
+         --filter @archestra/image-rs build
+
+# VERSION is intentionally declared after the native RUN. Build args implicitly
+# participate in following RUN cache keys, and every staging commit has a new
+# VERSION even when the Rust workspace is unchanged.
+ARG VERSION=dev
+
+COPY --from=deps /app/backend/node_modules ./backend/node_modules
+COPY --from=deps /app/frontend/node_modules ./frontend/node_modules
+COPY --from=deps /app/shared/node_modules ./shared/node_modules
+COPY turbo.json ./
+COPY patches ./patches
+COPY backend ./backend
+COPY frontend ./frontend
+COPY shared ./shared
+
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # VERSION is exported as env var for child processes (used by Sentry source map upload)
 ENV VERSION=${VERSION}
 
 FROM builder-base AS rust-napi-musl-smoke
-# cache cargo registry/git + the workspace target dir so heavy deps
-# (dagger-sdk, tokio, …) aren't recompiled on every build of this stage.
+# Reuse manifest-keyed release dependencies, plus local cargo caches for the
+# debug tests and test-helper feature variant unique to this stage.
 # Smokes every N-API addon under musl: build the .node, then load and call it so
 # a musl-specific loader/linkage regression fails here rather than at runtime.
 RUN --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \
-    --mount=type=cache,target=/app/archestra-rs/target \
+    --mount=type=bind,from=rust-deps,source=/app/archestra-rs/target,target=/app/archestra-rs/target,rw \
+    --mount=type=cache,id=rust-napi-debug,target=/app/archestra-rs/target/debug \
     pnpm --filter @archestra/sandbox-rs --filter @archestra/app-runtime-rs --filter @archestra/image-rs check:musl
 
 # <----- Builder stage ----->
@@ -255,21 +321,17 @@ FROM builder-base AS builder
 #
 # https://docs.docker.com/build/building/secrets/#using-build-secrets
 # https://docs.docker.com/build/building/secrets/#target
-# Cache cargo registry/git, the Rust workspace target dir, turbo's local cache,
-# and Next.js's build cache so a cold `pnpm build` (which recompiles the Rust
-# N-API addon and builds the frontend) reuses prior work on subsequent builds.
-# The cargo targets match the rust-napi-musl-smoke stage above, so that stage
-# warms the registry for this one; cargo isolates artifacts by target triple.
-RUN --mount=type=cache,target=/root/.cargo/registry \
-    --mount=type=cache,target=/root/.cargo/git \
-    --mount=type=cache,target=/app/archestra-rs/target \
-    --mount=type=cache,target=/app/.turbo \
+# Native artifacts were built in builder-base before application source was
+# copied. Include shared's synthetic build task so its source remains in the
+# backend/frontend Turbo cache keys while excluding the three N-API tasks.
+RUN --mount=type=cache,target=/app/.turbo \
     --mount=type=cache,target=/app/frontend/.next/cache \
     --mount=type=secret,id=turbo_team,env=TURBO_TEAM \
     --mount=type=secret,id=turbo_token,env=TURBO_TOKEN \
     --mount=type=secret,id=sentry_auth_token,env=SENTRY_AUTH_TOKEN \
     SENTRY_URL=https://de.sentry.io/ \
-    pnpm build
+    pnpm exec turbo build --filter=@backend --filter=@frontend \
+      --filter=@archestra/shared --only
 
 # Assemble the production backend with `pnpm deploy` — pnpm's recommended
 # monorepo packaging step (https://pnpm.io/cli/deploy). It produces a
@@ -281,8 +343,8 @@ RUN --mount=type=cache,target=/root/.cargo/registry \
 # node_modules (the layout that dropped @archestra/napi-loader and crashed the
 # image with MODULE_NOT_FOUND).
 #
-# Ordering matters: this runs AFTER `pnpm build`, so the compiled *.node addons
-# already exist in each crate dir. deploy copies them via the crates' `files`
+# Ordering matters: this runs after both build steps, so the compiled *.node
+# addons already exist in each crate dir. deploy copies them via the crates' `files`
 # globs — it never rebuilds (install scripts are disabled repo-wide).
 #
 # --legacy keeps pnpm's original deploy implementation, which does not require
@@ -397,13 +459,13 @@ RUN apk --no-cache upgrade && \
     rm -rf /tmp/*
 
 # install KinD (Kubernetes in Docker), docker-cli, and kubectl for Kubernetes runtime support
-# these binaries are built from source in go-builder with Go 1.26.6 to fix CVE-2025-68121,
+# these binaries are built from source in parallel Go stages with Go 1.26.6 to fix CVE-2025-68121,
 # the Go stdlib HIGH CVEs fixed in 1.25.10 (CVE-2026-42499/39836/39820/33814/33811),
 # the Go stdlib HIGH CVE fixed in 1.25.11 (CVE-2026-42504), and the Go stdlib CRITICAL
 # fixed in 1.26.6 (CVE-2026-39821).
-COPY --from=go-builder /docker-binary /usr/local/bin/docker
-COPY --from=go-builder /kind-binary /usr/local/bin/kind
-COPY --from=go-builder /kubectl-binary /usr/local/bin/kubectl
+COPY --from=docker-cli-builder /docker-binary /usr/local/bin/docker
+COPY --from=kind-builder /kind-binary /usr/local/bin/kind
+COPY --from=kubectl-builder /kubectl-binary /usr/local/bin/kubectl
 RUN chmod +x /usr/local/bin/kind /usr/local/bin/docker /usr/local/bin/kubectl
 # TODO: Once KinD releases a version compiled with Go >= 1.25.11, remove the kind-builder stage
 # at the top of this file and restore the pre-built binary download below for faster builds.
@@ -427,7 +489,7 @@ RUN chmod +x /usr/local/bin/kind /usr/local/bin/docker /usr/local/bin/kubectl
 # to the Dagger Engine; its npm postinstall download is blocked by
 # ignore-scripts, so the binary is pinned and built from source above.
 # keep DAGGER_VERSION in sync with dagger-sdk in archestra-rs/sandbox-core/Cargo.toml.
-COPY --from=go-builder /dagger-binary /usr/local/bin/dagger
+COPY --from=dagger-builder /dagger-binary /usr/local/bin/dagger
 RUN chmod +x /usr/local/bin/dagger
 # point the SDK at the baked-in CLI so it never downloads one at runtime.
 ENV _EXPERIMENTAL_DAGGER_CLI_BIN=/usr/local/bin/dagger

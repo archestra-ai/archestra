@@ -260,7 +260,9 @@ jobs:
           cache-from: |
             type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache
             type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache-amd64
-          cache-to: type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache,mode=max
+          # Exact tree tags handle whole-image reuse; publisher mode=max caches
+          # supply intermediate layers, so E2E only needs to export final layers.
+          cache-to: type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache,mode=min
 
       # Slim variant for the K8s e2e job: the same image minus the ~352MB
       # Dagger engine tar that only the quickstart job uses. Every layer is already in

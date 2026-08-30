@@ -102,6 +102,9 @@ jobs:
       # complete full-image build on this 16-vCPU runner. Use it for every
       # compile-bound amd64 Platform build, including PR/manual multi-arch runs.
       amd64_runner: blacksmith-16vcpu-ubuntu-2404
+      # The standard ARM runner exceeded the five-minute budget even with a
+      # warm native layer; this is the native ARM equivalent of the amd64 runner.
+      arm64_runner: blacksmith-16vcpu-ubuntu-2404-arm
       checkout_ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
       previous_image: ${{ needs.resolve-previous-platform-image.outputs.previous_image }}
     secrets:

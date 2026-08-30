@@ -67,6 +67,11 @@ on:
         required: false
         type: string
         default: "ubuntu-latest"
+      arm64_runner:
+        description: "Runner label for the linux/arm64 build leg"
+        required: false
+        type: string
+        default: "ubuntu-24.04-arm"
     secrets:
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER:
         required: false
@@ -92,8 +97,8 @@ concurrency:
 jobs:
   build-image:
     name: Build ${{ inputs.image_name }} (${{ matrix.os_and_arch }})
-    # Keep arm64 native; compile-bound callers may opt into a larger amd64 runner.
-    runs-on: ${{ matrix.os_and_arch == 'linux/arm64' && 'ubuntu-24.04-arm' || inputs.amd64_runner }}
+    # Keep both architectures native; compile-bound callers may opt into larger runners.
+    runs-on: ${{ matrix.os_and_arch == 'linux/arm64' && inputs.arm64_runner || inputs.amd64_runner }}
     strategy:
       fail-fast: false
       # Build both arches, or amd64 only when amd64_only is set.

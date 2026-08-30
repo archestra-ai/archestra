@@ -1,5 +1,7 @@
 name: On Pull Requests
 
+# CI optimization baseline: this comment intentionally leaves behavior unchanged.
+
 on:
   pull_request:
     types:

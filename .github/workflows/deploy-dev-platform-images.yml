@@ -98,10 +98,10 @@ jobs:
       # so a dev build handed to a tester runs natively on Apple Silicon (arm64).
       # Release images (build-dockerhub-image.yml) are always multi-arch.
       amd64_only: ${{ github.event_name == 'push' }}
-      # This compile-bound leg takes 11-20 min on 4-vCPU ubuntu-latest; the
-      # equivalent E2E build is already proven on this 16-vCPU runner. Keep
-      # multi-arch PR/manual builds unchanged because arm64 is their long pole.
-      amd64_runner: ${{ github.event_name == 'push' && 'blacksmith-16vcpu-ubuntu-2404' || 'ubuntu-latest' }}
+      # Cold PR evidence: 11m36s on 4-vCPU ubuntu-latest versus 3m26s for the
+      # complete full-image build on this 16-vCPU runner. Use it for every
+      # compile-bound amd64 Platform build, including PR/manual multi-arch runs.
+      amd64_runner: blacksmith-16vcpu-ubuntu-2404
       checkout_ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
       previous_image: ${{ needs.resolve-previous-platform-image.outputs.previous_image }}
     secrets:

@@ -1089,7 +1089,7 @@ export function AgentForm({
   const [description, setDescription] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("");
   const [suggestedPrompts, setSuggestedPrompts] = useState<
-    Array<{ summaryTitle: string; prompt: string }>
+    Array<{ id: string; summaryTitle: string; prompt: string }>
   >([]);
   const [suggestedPromptsOpen, setSuggestedPromptsOpen] = useState(false);
   const [selectedDelegationTargetIds, setSelectedDelegationTargetIds] =
@@ -1543,7 +1543,12 @@ export function AgentForm({
       setIcon(nextValues.icon);
       setDescription(nextValues.description);
       setSystemPrompt(nextValues.systemPrompt);
-      setSuggestedPrompts(nextValues.suggestedPrompts);
+      setSuggestedPrompts(
+        nextValues.suggestedPrompts.map((p) => ({
+          ...p,
+          id: crypto.randomUUID(),
+        })),
+      );
       setSuggestedPromptsOpen(false);
       setLlmApiKeyId(nextValues.llmApiKeyId);
       setLlmModel(nextValues.llmModel);
@@ -1948,7 +1953,12 @@ export function AgentForm({
     // Save any unsaved label before submitting
     const updatedLabels = agentLabelsRef.current?.saveUnsavedLabel() || labels;
 
-    const validSuggestedPrompts = normalizeSuggestedPrompts(suggestedPrompts);
+    const validSuggestedPrompts = normalizeSuggestedPrompts(
+      suggestedPrompts.map((p) => ({
+        summaryTitle: p.summaryTitle,
+        prompt: p.prompt,
+      })),
+    );
     const normalizedDescription = shouldShowDescriptionField({
       agentType,
       isBuiltIn,
@@ -2417,7 +2427,10 @@ export function AgentForm({
     icon,
     description,
     systemPrompt,
-    suggestedPrompts,
+    suggestedPrompts: suggestedPrompts.map((p) => ({
+      summaryTitle: p.summaryTitle,
+      prompt: p.prompt,
+    })),
     assignedTeamIds,
     assignedUserIds,
     labels,
@@ -2779,7 +2792,11 @@ export function AgentForm({
                                         e.stopPropagation();
                                         setSuggestedPrompts((prev) => [
                                           ...prev,
-                                          { summaryTitle: "", prompt: "" },
+                                          {
+                                            id: crypto.randomUUID(),
+                                            summaryTitle: "",
+                                            prompt: "",
+                                          },
                                         ]);
                                       }}
                                     >
@@ -2820,7 +2837,11 @@ export function AgentForm({
                           size="sm"
                           onClick={() => {
                             setSuggestedPrompts([
-                              { summaryTitle: "", prompt: "" },
+                              {
+                                id: crypto.randomUUID(),
+                                summaryTitle: "",
+                                prompt: "",
+                              },
                             ]);
                             setSuggestedPromptsOpen(true);
                           }}
@@ -2832,10 +2853,9 @@ export function AgentForm({
                     )}
                     <CollapsibleContent>
                       <div className="border-t p-4 space-y-4">
-                        {suggestedPrompts.map((sp, index) => (
+                        {suggestedPrompts.map((sp) => (
                           <div
-                            // biome-ignore lint/suspicious/noArrayIndexKey: items have no stable ID
-                            key={`sp-${index}`}
+                            key={sp.id}
                             className="space-y-2 rounded-md border p-3 relative"
                           >
                             <Button
@@ -2847,7 +2867,7 @@ export function AgentForm({
                               onClick={() => {
                                 setSuggestedPrompts((prev) => {
                                   const next = prev.filter(
-                                    (_, i) => i !== index,
+                                    (p) => p.id !== sp.id,
                                   );
                                   if (next.length === 0)
                                     setSuggestedPromptsOpen(false);
@@ -2863,8 +2883,8 @@ export function AgentForm({
                                 value={sp.summaryTitle}
                                 onChange={(e) =>
                                   setSuggestedPrompts((prev) =>
-                                    prev.map((p, i) =>
-                                      i === index
+                                    prev.map((p) =>
+                                      p.id === sp.id
                                         ? {
                                             ...p,
                                             summaryTitle: e.target.value,
@@ -2884,8 +2904,8 @@ export function AgentForm({
                                 value={sp.prompt}
                                 onChange={(e) =>
                                   setSuggestedPrompts((prev) =>
-                                    prev.map((p, i) =>
-                                      i === index
+                                    prev.map((p) =>
+                                      p.id === sp.id
                                         ? { ...p, prompt: e.target.value }
                                         : p,
                                     ),

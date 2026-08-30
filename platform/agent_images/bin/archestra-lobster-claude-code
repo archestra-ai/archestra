@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-export ARCHESTRA_LOBSTER_ENV_CLIENT=archestra-codex
+export ARCHESTRA_LOBSTER_ENV_CLIENT=archestra-claude-code
 exec archestra-lobster-worker

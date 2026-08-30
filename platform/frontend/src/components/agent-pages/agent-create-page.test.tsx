@@ -136,6 +136,32 @@ describe("AgentCreatePage", () => {
     expect(screen.getByRole("button", { name: "Catalog" })).toBeInTheDocument();
   });
 
+  it("prefills OpenClaw with its compatible Chat Completions transport", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useFeature).mockImplementation((feature) =>
+      feature === "agentBackgroundExecution"
+        ? true
+        : feature === "agentBackgroundExecutionBaseImage"
+          ? "agent-archestra:dev"
+          : undefined,
+    );
+
+    render(<AgentCreatePage kind="agent" />);
+    await user.click(screen.getByRole("button", { name: /openclaw/i }));
+
+    expect(formProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        initialValues: expect.objectContaining({
+          name: "OpenClaw",
+          backgroundExecution: expect.objectContaining({
+            command: ["archestra-openclaw"],
+            inferenceProtocol: "openai_chat",
+          }),
+        }),
+      }),
+    );
+  });
+
   it("uses the configured product name and sidebar icon for the built-in Agent", async () => {
     const user = userEvent.setup();
     vi.mocked(useFeature).mockImplementation((feature) =>

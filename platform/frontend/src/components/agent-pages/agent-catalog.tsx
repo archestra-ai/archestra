@@ -91,7 +91,7 @@ export function getAgentCatalogTemplates(
       platformName: appName,
       image: image(archestraImage, "openclaw"),
       command: ["archestra-openclaw"],
-      inferenceProtocol: "openai_responses",
+      inferenceProtocol: "openai_chat",
       steerMode: "tmux_keys",
     }),
   ] as const;

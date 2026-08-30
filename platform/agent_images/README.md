@@ -11,8 +11,11 @@ invoking user's Agent-scoped MCP gateway endpoint.
 | `agent-claude-code` | `archestra-claude-code` | Anthropic Messages |
 | `agent-codex` | `archestra-codex` | OpenAI Responses |
 | `agent-hermes` | `archestra-hermes` | OpenAI Chat Completions |
-| `agent-openclaw` | `archestra-openclaw` | OpenAI Responses |
+| `agent-openclaw` | `archestra-openclaw` | OpenAI Chat Completions or Responses |
 | `agent-lobster-env` | `archestra-lobster-env` | OpenAI Responses |
+| `agent-lobster-env-claude-code` | `archestra-lobster-claude-code` | Anthropic Messages |
+| `agent-lobster-env-hermes` | `archestra-lobster-hermes` | OpenAI Chat Completions |
+| `agent-lobster-env-openclaw` | `archestra-lobster-openclaw` | OpenAI Chat Completions or Responses |
 
 Build a target from `platform/`:
 
@@ -57,6 +60,8 @@ to that authenticated HTTPS transport, so a catalog Agent does not also need a
 separate SSH key.
 
 The five public catalog targets are built for development deployments and
-releases. The `agent-lobster-env` target is included only in development image
-publishing for the staging evaluation. Keep native CLI versions exact and
-review their published package scripts before updating them.
+releases. The four `agent-lobster-env*` targets are included only in development
+image publishing for the staging evaluation. They share one repository
+bootstrap and durable-task contract while exercising four native clients. Keep
+native CLI versions exact and review their published package scripts before
+updating them.

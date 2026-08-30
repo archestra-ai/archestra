@@ -59,9 +59,9 @@ USER 1000:1000
 
 FROM rust:1.89.0-bookworm AS lobster-rust-toolchain
 
-# Staging's Archestra-native task environment. It deliberately builds on the
-# maintained Codex runtime, then adds only the repository toolchain and a
-# workflow wrapper; provider and MCP credentials still arrive at launch time.
+# Staging's Codex-backed task worker. The other Lobster workers below apply the
+# same repository toolchain and workflow contract to the remaining maintained
+# runtimes; provider and MCP credentials still arrive at launch time.
 FROM agent-codex AS agent-lobster-env
 USER root
 COPY --from=lobster-rust-toolchain /usr/local/cargo /usr/local/cargo
@@ -90,4 +90,40 @@ USER root
 RUN pnpm add --global openclaw@2026.7.1-2 \
  && openclaw --version \
  && chown -R 1000:1000 /home/node
+USER 1000:1000
+
+FROM agent-claude-code AS agent-lobster-env-claude-code
+USER root
+COPY --from=lobster-rust-toolchain /usr/local/cargo /usr/local/cargo
+COPY --from=lobster-rust-toolchain /usr/local/rustup /usr/local/rustup
+ENV RUSTUP_HOME=/usr/local/rustup
+ENV CARGO_HOME=/usr/local/cargo
+ENV PATH=/usr/local/cargo/bin:$PATH
+RUN cargo --version && rustc --version
+COPY agent_images/lobster-env /opt/archestra/lobster-env
+RUN chmod 0444 /opt/archestra/lobster-env/system-prompt.md
+USER 1000:1000
+
+FROM agent-hermes AS agent-lobster-env-hermes
+USER root
+COPY --from=lobster-rust-toolchain /usr/local/cargo /usr/local/cargo
+COPY --from=lobster-rust-toolchain /usr/local/rustup /usr/local/rustup
+ENV RUSTUP_HOME=/usr/local/rustup
+ENV CARGO_HOME=/usr/local/cargo
+ENV PATH=/usr/local/cargo/bin:$PATH
+RUN cargo --version && rustc --version
+COPY agent_images/lobster-env /opt/archestra/lobster-env
+RUN chmod 0444 /opt/archestra/lobster-env/system-prompt.md
+USER 1000:1000
+
+FROM agent-openclaw AS agent-lobster-env-openclaw
+USER root
+COPY --from=lobster-rust-toolchain /usr/local/cargo /usr/local/cargo
+COPY --from=lobster-rust-toolchain /usr/local/rustup /usr/local/rustup
+ENV RUSTUP_HOME=/usr/local/rustup
+ENV CARGO_HOME=/usr/local/cargo
+ENV PATH=/usr/local/cargo/bin:$PATH
+RUN cargo --version && rustc --version
+COPY agent_images/lobster-env /opt/archestra/lobster-env
+RUN chmod 0444 /opt/archestra/lobster-env/system-prompt.md
 USER 1000:1000

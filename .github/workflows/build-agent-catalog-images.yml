@@ -39,7 +39,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: ${{ fromJSON(inputs.include_staging_images && '["agent-archestra","agent-claude-code","agent-codex","agent-hermes","agent-openclaw","agent-lobster-env"]' || '["agent-archestra","agent-claude-code","agent-codex","agent-hermes","agent-openclaw"]') }}
+        image: ${{ fromJSON(inputs.include_staging_images && '["agent-archestra","agent-claude-code","agent-codex","agent-hermes","agent-openclaw","agent-lobster-env","agent-lobster-env-claude-code","agent-lobster-env-hermes","agent-lobster-env-openclaw"]' || '["agent-archestra","agent-claude-code","agent-codex","agent-hermes","agent-openclaw"]') }}
     permissions:
       contents: read # Required to invoke the reusable image build workflow.
       id-token: write # Required for Workload Identity Federation.

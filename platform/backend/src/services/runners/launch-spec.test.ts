@@ -324,7 +324,7 @@ describe("buildRunnerLaunchSpec", () => {
     expect(spec.secretEnv.GH_TOKEN).toBe("github-token");
   });
 
-  test("scopes a personal Claude subscription token to the Claude Code runtime", async ({
+  test("scopes a personal Claude subscription token to maintained Claude Code runtimes", async ({
     makeOrganization,
     makeAdmin,
     makeMember,
@@ -341,16 +341,14 @@ describe("buildRunnerLaunchSpec", () => {
       makeLlmProviderApiKey,
       makeAgent,
     });
-    const configuredDeployment = deployment(setup.agent, "anthropic");
-    configuredDeployment.command = ["archestra-claude-code"];
-    configuredDeployment.credentials = [
+    const credentials = [
       {
         key: "CLAUDE_CODE_OAUTH_TOKEN",
         scope: "per_user",
         label: "Claude Code subscription token",
         required: false,
       },
-    ];
+    ] as const;
     await UserCredentialModel.upsert({
       organizationId: setup.agent.organizationId,
       userId: setup.user.id,
@@ -358,44 +356,52 @@ describe("buildRunnerLaunchSpec", () => {
       key: "CLAUDE_CODE_OAUTH_TOKEN",
       value: "claude-subscription-token",
     });
-    const taskId = crypto.randomUUID();
+    for (const command of [
+      "archestra-claude-code",
+      "archestra-lobster-claude-code",
+    ]) {
+      const configuredDeployment = deployment(setup.agent, "anthropic");
+      configuredDeployment.command = [command];
+      configuredDeployment.credentials = [...credentials];
+      const taskId = crypto.randomUUID();
 
-    const { spec, virtualApiKeyId } = await buildRunnerLaunchSpec({
-      deployment: configuredDeployment,
-      taskId,
-      agentId: setup.agent.id,
-      actor: {
-        id: setup.user.id,
-        kind: "user",
+      const { spec, virtualApiKeyId } = await buildRunnerLaunchSpec({
+        deployment: configuredDeployment,
+        taskId,
+        agentId: setup.agent.id,
+        actor: {
+          id: setup.user.id,
+          kind: "user",
+          organizationId: setup.agent.organizationId,
+        },
         organizationId: setup.agent.organizationId,
-      },
-      organizationId: setup.agent.organizationId,
-      runtimeScope: "agent-tests",
-      effectiveNetworkPolicy: { source: "built_in", policy: null },
-      appName: "Archestra",
-      executionMode: "one_shot",
-    });
+        runtimeScope: "agent-tests",
+        effectiveNetworkPolicy: { source: "built_in", policy: null },
+        appName: "Archestra",
+        executionMode: "one_shot",
+      });
 
-    expect(spec.secretEnv.CLAUDE_CODE_OAUTH_TOKEN).toBe(
-      "claude-subscription-token",
-    );
-    expect(spec.secretEnv).not.toHaveProperty("ANTHROPIC_API_KEY");
-    expect(spec.secretEnv).not.toHaveProperty("ANTHROPIC_AUTH_TOKEN");
-    expect(spec.secretEnv).not.toHaveProperty("OPENAI_API_KEY");
-    expect(spec.secretEnv.ANTHROPIC_CUSTOM_HEADERS).toContain(
-      `X-Archestra-Execution-Id: ${taskId}`,
-    );
-    expect(spec.secretEnv.ANTHROPIC_CUSTOM_HEADERS).toContain(
-      `X-Archestra-Session-Id: ${taskId}`,
-    );
-    expect(spec.secretEnv.ANTHROPIC_CUSTOM_HEADERS).toMatch(
-      /X-Archestra-Virtual-Key: arch_/,
-    );
+      expect(spec.secretEnv.CLAUDE_CODE_OAUTH_TOKEN).toBe(
+        "claude-subscription-token",
+      );
+      expect(spec.secretEnv).not.toHaveProperty("ANTHROPIC_API_KEY");
+      expect(spec.secretEnv).not.toHaveProperty("ANTHROPIC_AUTH_TOKEN");
+      expect(spec.secretEnv).not.toHaveProperty("OPENAI_API_KEY");
+      expect(spec.secretEnv.ANTHROPIC_CUSTOM_HEADERS).toContain(
+        `X-Archestra-Execution-Id: ${taskId}`,
+      );
+      expect(spec.secretEnv.ANTHROPIC_CUSTOM_HEADERS).toContain(
+        `X-Archestra-Session-Id: ${taskId}`,
+      );
+      expect(spec.secretEnv.ANTHROPIC_CUSTOM_HEADERS).toMatch(
+        /X-Archestra-Virtual-Key: arch_/,
+      );
 
-    const virtualKey = await VirtualApiKeyModel.findById(virtualApiKeyId);
-    expect(virtualKey?.keyType).toBe("passthrough");
-    expect(virtualKey?.scope).toBe("personal");
-    expect(virtualKey?.authorId).toBe(setup.user.id);
+      const virtualKey = await VirtualApiKeyModel.findById(virtualApiKeyId);
+      expect(virtualKey?.keyType).toBe("passthrough");
+      expect(virtualKey?.scope).toBe("personal");
+      expect(virtualKey?.authorId).toBe(setup.user.id);
+    }
   });
 
   test("never falls back to Anthropic API billing for Claude Code", async ({
@@ -415,29 +421,34 @@ describe("buildRunnerLaunchSpec", () => {
       makeLlmProviderApiKey,
       makeAgent,
     });
-    const configuredDeployment = deployment(setup.agent, "anthropic");
-    configuredDeployment.command = ["archestra-claude-code"];
+    for (const command of [
+      "archestra-claude-code",
+      "archestra-lobster-claude-code",
+    ]) {
+      const configuredDeployment = deployment(setup.agent, "anthropic");
+      configuredDeployment.command = [command];
 
-    await expect(
-      buildRunnerLaunchSpec({
-        deployment: configuredDeployment,
-        taskId: crypto.randomUUID(),
-        agentId: setup.agent.id,
-        actor: {
-          id: setup.user.id,
-          kind: "user",
+      await expect(
+        buildRunnerLaunchSpec({
+          deployment: configuredDeployment,
+          taskId: crypto.randomUUID(),
+          agentId: setup.agent.id,
+          actor: {
+            id: setup.user.id,
+            kind: "user",
+            organizationId: setup.agent.organizationId,
+          },
           organizationId: setup.agent.organizationId,
-        },
-        organizationId: setup.agent.organizationId,
-        runtimeScope: "agent-tests",
-        effectiveNetworkPolicy: { source: "built_in", policy: null },
-        appName: "Archestra",
-        executionMode: "interactive",
-      }),
-    ).rejects.toMatchObject({
-      statusCode: 409,
-      message: expect.stringContaining("never falls back"),
-    });
+          runtimeScope: "agent-tests",
+          effectiveNetworkPolicy: { source: "built_in", policy: null },
+          appName: "Archestra",
+          executionMode: "interactive",
+        }),
+      ).rejects.toMatchObject({
+        statusCode: 409,
+        message: expect.stringContaining("never falls back"),
+      });
+    }
   });
 
   test("uses the acting user's ChatGPT subscription for maintained Codex runtimes", async ({
@@ -514,29 +525,31 @@ describe("buildRunnerLaunchSpec", () => {
       makeLlmProviderApiKey,
       makeAgent,
     });
-    const configuredDeployment = deployment(setup.agent, "openai_responses");
-    configuredDeployment.command = ["archestra-codex"];
+    for (const command of ["archestra-codex", "archestra-lobster-env"]) {
+      const configuredDeployment = deployment(setup.agent, "openai_responses");
+      configuredDeployment.command = [command];
 
-    await expect(
-      buildRunnerLaunchSpec({
-        deployment: configuredDeployment,
-        taskId: crypto.randomUUID(),
-        agentId: setup.agent.id,
-        actor: {
-          id: setup.user.id,
-          kind: "user",
+      await expect(
+        buildRunnerLaunchSpec({
+          deployment: configuredDeployment,
+          taskId: crypto.randomUUID(),
+          agentId: setup.agent.id,
+          actor: {
+            id: setup.user.id,
+            kind: "user",
+            organizationId: setup.agent.organizationId,
+          },
           organizationId: setup.agent.organizationId,
-        },
-        organizationId: setup.agent.organizationId,
-        runtimeScope: "agent-tests",
-        effectiveNetworkPolicy: { source: "built_in", policy: null },
-        appName: "Archestra",
-        executionMode: "interactive",
-      }),
-    ).rejects.toMatchObject({
-      statusCode: 409,
-      message: expect.stringContaining("never falls back"),
-    });
+          runtimeScope: "agent-tests",
+          effectiveNetworkPolicy: { source: "built_in", policy: null },
+          appName: "Archestra",
+          executionMode: "interactive",
+        }),
+      ).rejects.toMatchObject({
+        statusCode: 409,
+        message: expect.stringContaining("never falls back"),
+      });
+    }
   });
 
   test("does not inject a Claude subscription token into a custom runtime", async ({

@@ -155,8 +155,9 @@ export async function buildRunnerLaunchSpec(params: {
   const claudeCodeSubscriptionToken =
     credentials.env.CLAUDE_CODE_OAUTH_TOKEN?.trim();
   const usesClaudeCodeSubscription = Boolean(claudeCodeSubscriptionToken);
-  const isClaudeCodeRuntime =
-    params.deployment.command?.[0] === "archestra-claude-code";
+  const isClaudeCodeRuntime = CLAUDE_CODE_RUNTIME_COMMANDS.has(
+    params.deployment.command?.[0] ?? "",
+  );
   const isCodexRuntime = CODEX_RUNTIME_COMMANDS.has(
     params.deployment.command?.[0] ?? "",
   );
@@ -292,7 +293,7 @@ export async function buildRunnerLaunchSpec(params: {
       : {}),
     ...(task ? { ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK: task } : {}),
     ...withNativeClientCredentialAliases(credentials.env),
-    ...(params.deployment.command?.[0] === "archestra-claude-code"
+    ...(isClaudeCodeRuntime
       ? {
           // Claude Code accepts only one custom-header variable. Keep run
           // correlation on both auth paths, and add the passthrough identity
@@ -378,6 +379,11 @@ const RESERVED_RUNTIME_ENV_KEYS = new Set([
 const CODEX_RUNTIME_COMMANDS = new Set([
   "archestra-codex",
   "archestra-lobster-env",
+]);
+
+const CLAUDE_CODE_RUNTIME_COMMANDS = new Set([
+  "archestra-claude-code",
+  "archestra-lobster-claude-code",
 ]);
 
 function claudeCodeCustomHeaders(params: {

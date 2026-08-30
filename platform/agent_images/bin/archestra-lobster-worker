@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_dir="${ARCHESTRA_LOBSTER_ENV_REPOSITORY_DIR:-/home/node/workspace/archestra}"
+public_repo="${ARCHESTRA_LOBSTER_ENV_PUBLIC_REPOSITORY:-https://github.com/archestra-ai/archestra.git}"
+private_repo_slug="${ARCHESTRA_LOBSTER_ENV_PRIVATE_REPOSITORY_SLUG:-archestra-ai/archestra-private}"
+private_repo="${ARCHESTRA_LOBSTER_ENV_PRIVATE_REPOSITORY:-https://github.com/${private_repo_slug}.git}"
+prompt_file="${ARCHESTRA_LOBSTER_ENV_SYSTEM_PROMPT_FILE:-/opt/archestra/lobster-env/system-prompt.md}"
+client="${ARCHESTRA_LOBSTER_ENV_CLIENT:?}"
+task_id="${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_TASK_ID:?}"
+branch="agent/lobster-${task_id%%-*}"
+setup_log="${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_RUNTIME_DIR:-/var/run/archestra}/lobster-bootstrap.log"
+mkdir -p "$(dirname "${setup_log}")"
+
+run_setup() {
+  if ! "$@" >> "${setup_log}" 2>&1; then
+    echo "archestra: repository setup failed while running: $*" >&2
+    tail -40 "${setup_log}" >&2
+    return 1
+  fi
+}
+
+case "${client}" in
+  archestra-claude-code | archestra-codex | archestra-hermes | archestra-openclaw) ;;
+  *)
+    echo "archestra: unsupported Lobster Env client: ${client}" >&2
+    exit 78
+    ;;
+esac
+
+if ! gh auth status --hostname github.com >/dev/null 2>&1; then
+  echo "archestra: Lobster Env requires its per-user GITHUB_TOKEN credential" >&2
+  exit 78
+fi
+
+if [[ ! -d "${repo_dir}/.git" ]]; then
+  # Task pods need the current tree and ordinary branch history, not every
+  # historical blob in the repository. Git fetches an older blob lazily if a
+  # runner actually asks for one.
+  run_setup git clone --quiet --filter=blob:none --single-branch --branch main \
+    --origin origin "${public_repo}" "${repo_dir}"
+else
+  run_setup git -C "${repo_dir}" fetch --quiet origin main
+fi
+
+if git -C "${repo_dir}" remote get-url private >/dev/null 2>&1; then
+  git -C "${repo_dir}" remote set-url private "${private_repo}"
+else
+  git -C "${repo_dir}" remote add private "${private_repo}"
+fi
+git -C "${repo_dir}" config remote.pushDefault private
+git -C "${repo_dir}" config push.default current
+git -C "${repo_dir}" config user.name "Archestra Agent"
+git -C "${repo_dir}" config user.email \
+  "archestra-agent[bot]@users.noreply.github.com"
+(cd "${repo_dir}" && run_setup gh repo set-default "${private_repo_slug}")
+
+# Keep the private mirror's main at least as fresh as the public base. A racing
+# task may have already advanced it, so a non-fast-forward sync is harmless;
+# the ancestry check below is the actual invariant.
+git -C "${repo_dir}" push private \
+  refs/remotes/origin/main:refs/heads/main >/dev/null 2>&1 || true
+run_setup git -C "${repo_dir}" fetch --quiet --filter=blob:none private main
+if ! git -C "${repo_dir}" merge-base --is-ancestor \
+  refs/remotes/origin/main refs/remotes/private/main; then
+  echo "archestra: the private mirror does not contain the current public main" >&2
+  exit 69
+fi
+
+if git -C "${repo_dir}" ls-remote --exit-code --heads private \
+  "refs/heads/${branch}" >/dev/null 2>&1; then
+  run_setup git -C "${repo_dir}" fetch --quiet --filter=blob:none private "${branch}"
+  run_setup git -C "${repo_dir}" checkout --quiet -B "${branch}" "private/${branch}"
+else
+  run_setup git -C "${repo_dir}" checkout --quiet -B "${branch}" origin/main
+fi
+
+baked_instructions="$(< "${prompt_file}")"
+if [[ -n "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_SYSTEM_PROMPT:-}" ]]; then
+  export ARCHESTRA_AGENT_BACKGROUND_EXECUTION_SYSTEM_PROMPT="${baked_instructions}
+
+${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_SYSTEM_PROMPT}"
+else
+  export ARCHESTRA_AGENT_BACKGROUND_EXECUTION_SYSTEM_PROMPT="${baked_instructions}"
+fi
+
+export PATH="${HOME}/.cargo/bin:${PATH}"
+cd "${repo_dir}/platform"
+exec "${client}"

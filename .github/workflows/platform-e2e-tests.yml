@@ -814,25 +814,19 @@ jobs:
             projects_nightly: api --project=identity-providers --project=identity-providers-saml --project=firefox --project=webkit
             shard: ""
             workers_arg: ""
-          # Three shards bound the cost of an individual flaky retry. In PR
-          # #7574, one 90-second retry stretched chromium-2of2 to 5m49s while
-          # its sibling finished in 3m01s. Playwright --list confirms that
-          # three-way sharding covers all 67 tests; four-way currently drops
-          # one dependency-partitioned test and is therefore unsafe.
-          - name: chromium-1of3
+          # Keep two shards. A three-way experiment preserved all 67 selected
+          # tests but repeatedly exposed an agents.spec.ts cleanup failure that
+          # the proven two-way shape did not, while four-way sharding omitted a
+          # dependency-partitioned test entirely.
+          - name: chromium-1of2
             projects_default: chromium
             projects_nightly: chromium
-            shard: "--shard=1/3"
+            shard: "--shard=1/2"
             workers_arg: "--workers=2"
-          - name: chromium-2of3
+          - name: chromium-2of2
             projects_default: chromium
             projects_nightly: chromium
-            shard: "--shard=2/3"
-            workers_arg: "--workers=2"
-          - name: chromium-3of3
-            projects_default: chromium
-            projects_nightly: chromium
-            shard: "--shard=3/3"
+            shard: "--shard=2/2"
             workers_arg: "--workers=2"
     permissions:
       contents: read # Required to checkout the repository and read test assets.

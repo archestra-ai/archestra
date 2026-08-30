@@ -7964,7 +7964,7 @@ export const pinProject = <ThrowOnError extends boolean = false>(options: Option
 export const listExecutionCredentials = <ThrowOnError extends boolean = false>(options?: Options<ListExecutionCredentialsData, ThrowOnError>) => (options?.client ?? client).get<ListExecutionCredentialsResponses, ListExecutionCredentialsErrors, ThrowOnError>({ url: '/api/execution-credentials', ...options });
 
 /**
- * Create an organization execution credential
+ * Create an execution credential definition
  *
  * Authentication:
  *
@@ -7997,7 +7997,7 @@ export const createExecutionCredential = <ThrowOnError extends boolean = false>(
 export const getExecutionCredentialUsage = <ThrowOnError extends boolean = false>(options: Options<GetExecutionCredentialUsageData, ThrowOnError>) => (options.client ?? client).get<GetExecutionCredentialUsageResponses, GetExecutionCredentialUsageErrors, ThrowOnError>({ url: '/api/execution-credentials/{key}/usage', ...options });
 
 /**
- * Delete an organization execution credential
+ * Delete an execution credential definition
  *
  * Authentication:
  *
@@ -8010,7 +8010,7 @@ export const getExecutionCredentialUsage = <ThrowOnError extends boolean = false
 export const deleteExecutionCredential = <ThrowOnError extends boolean = false>(options: Options<DeleteExecutionCredentialData, ThrowOnError>) => (options.client ?? client).delete<DeleteExecutionCredentialResponses, DeleteExecutionCredentialErrors, ThrowOnError>({ url: '/api/execution-credentials/{key}', ...options });
 
 /**
- * Update an organization execution credential
+ * Update an execution credential definition
  *
  * Authentication:
  *

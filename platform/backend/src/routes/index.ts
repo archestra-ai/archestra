@@ -17,7 +17,7 @@ export { default as configRoutes } from "./config";
 export { default as connectionSetupRoutes } from "./connection-setup/connection-setup.routes";
 export { default as defaultUserLimitRoutes } from "./default-user-limit";
 export { default as environmentRoutes } from "./environment";
-export { default as executionCredentialRoutes } from "./execution-credential/execution-credential.routes";
+export { default as runnerExecutionCredentialRoutes } from "./execution-credential/execution-credential.routes";
 export { default as githubAppConfigRoutes } from "./github-app-config";
 export { default as githubCopilotAuthRoutes } from "./github-copilot-auth/github-copilot-auth.routes";
 export { default as githubPatRoutes } from "./github-pat/github-pat.routes";

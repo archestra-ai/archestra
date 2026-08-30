@@ -330631,7 +330631,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "Create an organization execution credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
+        "description": "Create an execution credential definition\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
         "requestBody": {
           "required": true,
           "content": {
@@ -331277,7 +331277,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "Update an organization execution credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
+        "description": "Update an execution credential definition\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
         "requestBody": {
           "required": true,
           "content": {
@@ -331618,7 +331618,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "Delete an organization execution credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
+        "description": "Delete an execution credential definition\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
         "parameters": [
           {
             "schema": {

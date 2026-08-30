@@ -105,6 +105,11 @@ jobs:
       # The standard ARM runner exceeded the five-minute budget even with a
       # warm native layer; this is the native ARM equivalent of the amd64 runner.
       arm64_runner: blacksmith-16vcpu-ubuntu-2404-arm
+      # PRs consume publisher caches read-only instead of spending over a minute
+      # rewriting mode=max. Push and manual multi-arch builds still refresh them.
+      export_cache: ${{ github.event_name != 'pull_request' }}
+      # PR images use the faster E2E-proven output; staging/manual stay unchanged.
+      zstd_compression: ${{ github.event_name == 'pull_request' }}
       checkout_ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
       previous_image: ${{ needs.resolve-previous-platform-image.outputs.previous_image }}
     secrets:

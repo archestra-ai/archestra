@@ -2,7 +2,7 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-08-29
+lastUpdated: 2026-08-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -519,25 +519,15 @@ Archestra protects every MCP server pod from Server-Side Request Forgery (SSRF) 
 
 Each pod gets one policy, chosen by its environment's egress mode:
 
-- **Allow all** (`unrestricted`, the default) — a reserved-range floor: DNS and the public internet are allowed; private, link-local, and metadata ranges are blocked.
+- **Public internet** (`unrestricted`, the default) — DNS and public egress are allowed. Explicit CIDRs can open selected private ranges; other private, link-local, metadata, and reserved ranges remain blocked.
 - **Allowlist** (`restricted`) — only the CIDRs and domains the environment allow-lists, plus DNS.
 - **Block all** (`off`) — all egress is denied.
 
 A namespace-wide default-deny baseline also selects every MCP pod, so a pod that is still starting up is denied by default rather than left open.
 
-**Blocked reserved ranges** (the Allow all floor):
-
-- `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` - RFC 1918 private ranges (cluster pods, services, nodes)
-- `169.254.0.0/16` - Link-local / cloud metadata endpoints (AWS IMDSv1, GCP, Azure)
-- `168.63.129.16/32` - Azure platform metadata (a public IP outside the private ranges)
-- `100.64.0.0/10` - Carrier-grade NAT (RFC 6598)
-- `127.0.0.0/8`, `0.0.0.0/8` - Loopback and unspecified addresses
-- `::1/128`, `fc00::/7`, `fe80::/10` - The IPv6 equivalents
-- `64:ff9b::/96` - NAT64 (blocks reaching the IPv4 ranges via IPv6; IPv4-mapped IPv6 is already covered by the IPv4 rules)
+Public internet uses a maintained floor for private, metadata, and reserved destinations. See [The Public Internet Floor](/docs/platform-environments#the-public-internet-floor) for the exact ranges and CIDR exception behavior.
 
 **Prerequisite**: your cluster must use a CNI that enforces network policies. Calico, Cilium, and GKE Dataplane V2 enforce standard `NetworkPolicy` objects; on EKS Auto Mode, where `ApplicationNetworkPolicy` is the enforcement mechanism, the policy is emitted as an `ApplicationNetworkPolicy` instead. Where no enforcing dataplane is present, the policies are created but not enforced.
-
-To let a server reach a specific internal service — a Grafana instance in the `monitoring` namespace, for example — set its environment's egress mode to **Allowlist** (`restricted`) and add that CIDR or domain to the allow-list. See [Network Policies](/docs/platform-private-registry#network-policies).
 
 ### Accessing the Platform
 

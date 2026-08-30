@@ -113,7 +113,10 @@ export function buildEditorNetworkPolicy(params: {
     allowedDomains: restricted
       ? splitPolicyList(params.allowedDomainsText)
       : [],
-    allowedCidrs: restricted ? splitPolicyList(params.allowedCidrsText) : [],
+    allowedCidrs:
+      params.egressMode === "off"
+        ? []
+        : splitPolicyList(params.allowedCidrsText),
   };
 }
 

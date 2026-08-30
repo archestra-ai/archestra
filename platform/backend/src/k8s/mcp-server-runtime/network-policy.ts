@@ -253,6 +253,8 @@ export function buildUnrestrictedFloorPolicy(params: {
    * set it (MCP pods), so their floor is unchanged.
    */
   additionalDeniedCidrs?: string[];
+  /** CIDRs explicitly allowed in addition to the public-egress floor. */
+  allowedCidrs?: string[];
 }): k8s.V1NetworkPolicy {
   return {
     apiVersion: "networking.k8s.io/v1",
@@ -278,7 +280,10 @@ export function buildUnrestrictedFloorPolicy(params: {
         // public rule below blocks. Empty when the resolver is unknown; the
         // selector rule above still covers the standard kube-dns case.
         ...buildResolverIpDnsEgressRules(params.clusterDnsIps ?? []),
-        ...floorPublicEgressRules(params.additionalDeniedCidrs ?? []),
+        ...floorPublicEgressRules({
+          additionalDeniedCidrs: params.additionalDeniedCidrs ?? [],
+          allowedCidrs: params.allowedCidrs ?? [],
+        }),
       ],
     },
   };
@@ -289,6 +294,7 @@ export function buildUnrestrictedFloorAwsApplicationNetworkPolicy(params: {
   podSelectorLabels: Record<string, string>;
   labels: Record<string, string>;
   clusterDnsIps?: string[];
+  allowedCidrs?: string[];
 }): Record<string, unknown> {
   return {
     apiVersion: "networking.k8s.aws/v1alpha1",
@@ -302,7 +308,7 @@ export function buildUnrestrictedFloorAwsApplicationNetworkPolicy(params: {
       policyTypes: ["Egress"],
       egress: [
         buildAwsDnsBootstrapEgressRule(params.clusterDnsIps ?? []),
-        ...floorPublicEgressRules(),
+        ...floorPublicEgressRules({ allowedCidrs: params.allowedCidrs ?? [] }),
       ],
     },
   };
@@ -399,9 +405,12 @@ const FLOOR_DENIED_IPV6_CIDRS = [
 // private, and cloud-metadata ranges above. Each floor variant prepends its own
 // provider-appropriate DNS rule (selector-based for the plain NetworkPolicy, the
 // cluster resolver ipBlock for the AWS ApplicationNetworkPolicy).
-function floorPublicEgressRules(
-  additionalDeniedCidrs: string[] = [],
-): k8s.V1NetworkPolicyEgressRule[] {
+function floorPublicEgressRules(params: {
+  additionalDeniedCidrs?: string[];
+  allowedCidrs?: string[];
+}): k8s.V1NetworkPolicyEgressRule[] {
+  const additionalDeniedCidrs = params.additionalDeniedCidrs ?? [];
+  const allowedCidrs = params.allowedCidrs ?? [];
   return [
     {
       to: [
@@ -416,6 +425,7 @@ function floorPublicEgressRules(
     {
       to: [{ ipBlock: { cidr: "::/0", except: FLOOR_DENIED_IPV6_CIDRS } }],
     },
+    ...allowedCidrs.map((cidr) => ({ to: [{ ipBlock: { cidr } }] })),
   ];
 }
 

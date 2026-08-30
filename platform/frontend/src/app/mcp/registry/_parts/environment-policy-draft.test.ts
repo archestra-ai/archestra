@@ -114,22 +114,36 @@ describe("buildEditorNetworkPolicy", () => {
     });
   });
 
-  test("off/unrestricted modes drop all allowlists", () => {
-    for (const egressMode of ["off", "unrestricted"] as const) {
-      expect(
-        buildEditorNetworkPolicy({
-          ...base,
-          egressMode,
-          allowedCidrsText: "203.0.113.0/24",
-          allowedDomainsText: "api.example.com",
-        }),
-      ).toEqual({
-        egressMode,
-        domainPreset: "none",
-        allowedDomains: [],
-        allowedCidrs: [],
-      });
-    }
+  test("public internet keeps CIDR exceptions but drops domain allowlists", () => {
+    expect(
+      buildEditorNetworkPolicy({
+        ...base,
+        egressMode: "unrestricted",
+        allowedCidrsText: "10.20.0.0/16",
+        allowedDomainsText: "api.example.com",
+      }),
+    ).toEqual({
+      egressMode: "unrestricted",
+      domainPreset: "none",
+      allowedDomains: [],
+      allowedCidrs: ["10.20.0.0/16"],
+    });
+  });
+
+  test("block all drops every allowlist", () => {
+    expect(
+      buildEditorNetworkPolicy({
+        ...base,
+        egressMode: "off",
+        allowedCidrsText: "10.20.0.0/16",
+        allowedDomainsText: "api.example.com",
+      }),
+    ).toEqual({
+      egressMode: "off",
+      domainPreset: "none",
+      allowedDomains: [],
+      allowedCidrs: [],
+    });
   });
 
   test("a CIDR-only edit keeps the seeded (inherited) domain allowlist even when the env has no policy of its own", () => {

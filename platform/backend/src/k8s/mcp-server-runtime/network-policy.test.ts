@@ -1,3 +1,4 @@
+import type * as k8s from "@kubernetes/client-node";
 import { sanitizeMetadataLabels } from "@/k8s/shared";
 import { describe, expect, test } from "@/test";
 import type { EffectiveNetworkPolicy } from "@/types";
@@ -649,6 +650,40 @@ describe("MCP egress floor and default-deny baseline builders", () => {
 
     // Both variants share the identical public-egress rules.
     expect(anpEgress.slice(1)).toEqual(plain.spec?.egress?.slice(1));
+  });
+
+  test("public internet keeps its floor while allowing explicit CIDR exceptions", () => {
+    const allowedCidrs = ["10.20.0.0/16", "fd00:1234::/64"];
+    const plain = buildUnrestrictedFloorPolicy({
+      name: "mcp-egress-test",
+      podSelectorLabels,
+      labels: MANAGED_LABELS,
+      allowedCidrs,
+    });
+    const aws = buildUnrestrictedFloorAwsApplicationNetworkPolicy({
+      name: "mcp-egress-test",
+      podSelectorLabels,
+      labels: MANAGED_LABELS,
+      allowedCidrs,
+    });
+
+    for (const egress of [
+      plain.spec?.egress ?? [],
+      (aws.spec as { egress: k8s.V1NetworkPolicyEgressRule[] }).egress,
+    ]) {
+      const publicRule = egress.find(
+        (rule) =>
+          rule.to?.[0]?.ipBlock?.cidr === "0.0.0.0/0" &&
+          rule.ports === undefined,
+      );
+      expect(publicRule?.to?.[0]?.ipBlock?.except).toContain("10.0.0.0/8");
+      expect(egress).toEqual(
+        expect.arrayContaining([
+          { to: [{ ipBlock: { cidr: "10.20.0.0/16" } }] },
+          { to: [{ ipBlock: { cidr: "fd00:1234::/64" } }] },
+        ]),
+      );
+    }
   });
 
   test("plain floor adds a resolver-IP DNS allow alongside the selector rule (NodeLocal DNSCache / custom DNS)", () => {

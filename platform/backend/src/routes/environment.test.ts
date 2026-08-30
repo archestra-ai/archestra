@@ -232,6 +232,20 @@ describe("environment routes", () => {
     expect(created.statusCode).toBe(200);
     expect(created.json().networkPolicy).toEqual(policy);
 
+    const publicWithPrivateException = {
+      egressMode: "unrestricted",
+      domainPreset: "none",
+      allowedDomains: [],
+      allowedCidrs: ["10.20.0.0/16"],
+    };
+    const madePublic = await app.inject({
+      method: "PATCH",
+      url: `/api/environments/${created.json().id}`,
+      payload: { networkPolicy: publicWithPrivateException },
+    });
+    expect(madePublic.statusCode).toBe(200);
+    expect(madePublic.json().networkPolicy).toEqual(publicWithPrivateException);
+
     const updated = await app.inject({
       method: "PATCH",
       url: `/api/environments/${created.json().id}`,

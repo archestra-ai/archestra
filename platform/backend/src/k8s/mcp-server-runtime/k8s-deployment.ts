@@ -771,6 +771,8 @@ export default class K8sDeployment {
   private async applyUnrestrictedFloorNetworkPolicy(
     policyName: string,
   ): Promise<void> {
+    const allowedCidrs =
+      this.effectiveNetworkPolicy?.policy?.allowedCidrs ?? [];
     const labels = {
       app: "mcp-server",
       "app.kubernetes.io/managed-by": "archestra",
@@ -810,6 +812,7 @@ export default class K8sDeployment {
           podSelectorLabels: this.getPodSelectorLabels(),
           labels,
           clusterDnsIps,
+          allowedCidrs,
         }),
       });
       await Promise.all([
@@ -831,6 +834,7 @@ export default class K8sDeployment {
         podSelectorLabels: this.getPodSelectorLabels(),
         labels,
         clusterDnsIps,
+        allowedCidrs,
       }),
     );
     await Promise.all([

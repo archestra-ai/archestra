@@ -90,8 +90,8 @@ then the built-in **Public internet** policy.
 The policy is applied before Kubernetes creates the Job. Archestra emits the
 policy type supported by the cluster: standard Kubernetes `NetworkPolicy`,
 Cilium `CiliumNetworkPolicy`, GKE `FQDNNetworkPolicy`, or AWS
-`ApplicationNetworkPolicy`. This gives executions the same IP, domain, and
-Public internet floor behavior as MCP server pods and code sandboxes. DNS and the
+`ApplicationNetworkPolicy`. This gives executions the same IP, domain, Public
+internet CIDR-exception, and floor behavior as MCP server pods and code sandboxes. DNS and the
 Archestra control plane remain reachable so the execution can use the LLM
 proxy and MCP gateway.
 

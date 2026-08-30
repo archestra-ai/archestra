@@ -81,6 +81,10 @@ const NETWORK_POLICY_DOCS_URL = getDocsUrl(
   DocsPage.PlatformEnvironments,
   "network-egress-policies",
 );
+const PUBLIC_INTERNET_FLOOR_DOCS_URL = getDocsUrl(
+  DocsPage.PlatformEnvironments,
+  "the-public-internet-floor",
+);
 const DOMAIN_PRESETS_DOCS_URL = getDocsUrl(
   DocsPage.PlatformEnvironments,
   "domain-presets",
@@ -1135,7 +1139,11 @@ export function NetworkPolicyFields({
           <AlertDescription className="block leading-6">
             Egress rules would be accepted and then ignored, so these controls
             stay disabled until the cluster enforces NetworkPolicy.{" "}
-            <ExternalDocsLink href={NETWORK_POLICY_DOCS_URL}>
+            <ExternalDocsLink
+              href={NETWORK_POLICY_DOCS_URL}
+              className="underline"
+              showIcon={false}
+            >
               View docs
             </ExternalDocsLink>
           </AlertDescription>
@@ -1148,7 +1156,11 @@ export function NetworkPolicyFields({
             Nothing has confirmed this cluster acts on NetworkPolicy, so the
             rules below may be accepted and then ignored. They are still
             applied, and the enforcement check runs on the next upgrade.{" "}
-            <ExternalDocsLink href={NETWORK_POLICY_DOCS_URL}>
+            <ExternalDocsLink
+              href={NETWORK_POLICY_DOCS_URL}
+              className="underline"
+              showIcon={false}
+            >
               View docs
             </ExternalDocsLink>
           </AlertDescription>
@@ -1174,7 +1186,11 @@ export function NetworkPolicyFields({
             </code>{" "}
             supports IP/CIDR rules only. Domain allowlists require a supported
             FQDN policy provider.{" "}
-            <ExternalDocsLink href={NETWORK_POLICY_DOCS_URL}>
+            <ExternalDocsLink
+              href={NETWORK_POLICY_DOCS_URL}
+              className="underline"
+              showIcon={false}
+            >
               View docs
             </ExternalDocsLink>
           </AlertDescription>
@@ -1182,7 +1198,21 @@ export function NetworkPolicyFields({
       ) : null}
 
       <div className="space-y-2">
-        <Label htmlFor="network-policy-egress">Egress</Label>
+        <div className="space-y-1">
+          <Label htmlFor="network-policy-egress">Egress</Label>
+          <p className="text-xs text-muted-foreground">
+            Choose whether workloads can reach nothing, only approved
+            destinations, or the public internet. Public internet keeps private
+            and reserved ranges blocked.{" "}
+            <ExternalDocsLink
+              href={PUBLIC_INTERNET_FLOOR_DOCS_URL}
+              className="underline"
+              showIcon={false}
+            >
+              View blocked ranges
+            </ExternalDocsLink>
+          </p>
+        </div>
         <Select
           value={egressMode}
           onValueChange={(value) => setEgressMode(value as EgressMode)}
@@ -1214,18 +1244,38 @@ export function NetworkPolicyFields({
       <div className="space-y-2">
         <FieldLabel
           htmlFor="network-policy-cidrs"
-          label="Allowed CIDRs"
-          description="IPv4 or IPv6 CIDR ranges that workloads in Allowlist mode may reach. These rules are enforced by standard Kubernetes NetworkPolicy."
+          label={
+            egressMode === "unrestricted"
+              ? "Additional allowed CIDRs"
+              : "Allowed CIDRs"
+          }
+          description={
+            egressMode === "unrestricted" ? (
+              <>
+                Optional IPv4 or IPv6 CIDR ranges to allow in addition to public
+                internet. Other private and reserved ranges remain blocked.{" "}
+                <ExternalDocsLink
+                  href={PUBLIC_INTERNET_FLOOR_DOCS_URL}
+                  className="underline"
+                  showIcon={false}
+                >
+                  View blocked ranges
+                </ExternalDocsLink>
+              </>
+            ) : egressMode === "off" ? (
+              "CIDR exceptions are unavailable while all egress is blocked."
+            ) : (
+              "IPv4 or IPv6 CIDR ranges that workloads in Allowlist mode may reach."
+            )
+          }
         />
         <Textarea
           id="network-policy-cidrs"
           value={allowedCidrsText}
           onChange={(e) => setAllowedCidrsText(e.target.value)}
-          placeholder={"203.0.113.0/24\n2001:db8::/32"}
+          placeholder={"10.20.0.0/16\nfd00:1234::/64"}
           className="min-h-20 font-mono text-sm"
-          disabled={
-            disabled || enforcementUnavailable || egressMode !== "restricted"
-          }
+          disabled={disabled || enforcementUnavailable || egressMode === "off"}
         />
       </div>
 
@@ -1238,7 +1288,11 @@ export function NetworkPolicyFields({
               Adds a maintained domain allowlist for common dependency or
               package manager traffic. Requires a supported FQDN policy
               provider.{" "}
-              <ExternalDocsLink href={DOMAIN_PRESETS_DOCS_URL}>
+              <ExternalDocsLink
+                href={DOMAIN_PRESETS_DOCS_URL}
+                className="underline"
+                showIcon={false}
+              >
                 View presets
               </ExternalDocsLink>
             </>
@@ -1308,7 +1362,7 @@ const EGRESS_MODE_DESCRIPTIONS: Record<EgressMode, string> = {
   off: "Block all outbound traffic.",
   restricted: "Allow only the CIDRs and domains configured below.",
   unrestricted:
-    "Allow public destinations; private and reserved ranges stay blocked.",
+    "Allow public destinations plus any additional CIDRs configured below.",
 };
 
 function formatEgressMode(mode: EgressMode) {
@@ -1318,7 +1372,9 @@ function formatEgressMode(mode: EgressMode) {
 function formatPolicySummary(policy: NetworkPolicy) {
   if (policy.egressMode === "off") return "No outbound egress";
   if (policy.egressMode === "unrestricted")
-    return "Private ranges blocked in-cluster";
+    return policy.allowedCidrs.length > 0
+      ? `${policy.allowedCidrs.length} CIDR exception${policy.allowedCidrs.length === 1 ? "" : "s"}`
+      : "Private ranges blocked in-cluster";
 
   const parts: string[] = [];
   if (policy.domainPreset !== "none") {

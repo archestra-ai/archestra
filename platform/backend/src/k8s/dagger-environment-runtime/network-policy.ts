@@ -101,6 +101,7 @@ export function buildDaggerEgressPolicies(params: {
 
   if (!shouldManageK8sNetworkPolicy(effectivePolicy)) {
     // unrestricted / built-in default: open public egress, private ranges blocked.
+    const allowedCidrs = effectivePolicy.policy?.allowedCidrs ?? [];
     return [
       {
         kind: "NetworkPolicy",
@@ -117,6 +118,7 @@ export function buildDaggerEgressPolicies(params: {
           // range such a resolver usually lives in.
           clusterDnsIps,
           additionalDeniedCidrs: params.additionalDeniedCidrs ?? [],
+          allowedCidrs,
         }),
       },
     ];

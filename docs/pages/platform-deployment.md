@@ -519,7 +519,7 @@ Archestra protects every MCP server pod from Server-Side Request Forgery (SSRF) 
 
 Each pod gets one policy, chosen by its environment's egress mode:
 
-- **Public internet** (`unrestricted`, the default) — DNS and public egress are allowed; private, link-local, metadata, and other reserved ranges are blocked.
+- **Public internet** (`unrestricted`, the default) — DNS and public egress are allowed. Explicit CIDRs can open selected private ranges; other private, link-local, metadata, and reserved ranges remain blocked.
 - **Allowlist** (`restricted`) — only the CIDRs and domains the environment allow-lists, plus DNS.
 - **Block all** (`off`) — all egress is denied.
 
@@ -537,7 +537,7 @@ A namespace-wide default-deny baseline also selects every MCP pod, so a pod that
 
 **Prerequisite**: your cluster must use a CNI that enforces network policies. Calico, Cilium, and GKE Dataplane V2 enforce standard `NetworkPolicy` objects; on EKS Auto Mode, where `ApplicationNetworkPolicy` is the enforcement mechanism, the policy is emitted as an `ApplicationNetworkPolicy` instead. Where no enforcing dataplane is present, the policies are created but not enforced.
 
-To let a server reach a specific internal service — a Grafana instance in the `monitoring` namespace, for example — set its environment's egress mode to **Allowlist** (`restricted`) and add that CIDR or domain to the allow-list. See [Network Policies](/docs/platform-private-registry#network-policies).
+To let a server reach a private service while retaining public internet access, add its range under **Additional allowed CIDRs**. Use **Allowlist** instead when the server should reach only selected destinations. See [Network Policies](/docs/platform-private-registry#network-policies).
 
 ### Accessing the Platform
 

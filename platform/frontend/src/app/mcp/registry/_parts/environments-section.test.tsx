@@ -15,7 +15,10 @@ import {
   useOrganization,
   useUpdateDefaultEnvironment,
 } from "@/lib/organization.query";
-import { EnvironmentsSection } from "./environments-section";
+import {
+  EnvironmentsSection,
+  NetworkPolicyFields,
+} from "./environments-section";
 
 vi.mock("next/navigation");
 vi.mock("@/lib/config/config.query");
@@ -306,6 +309,42 @@ describe("EnvironmentsSection filters", () => {
     expect(
       screen.getByLabelText("Trusted image registries"),
     ).toBeInTheDocument();
+  });
+});
+
+describe("NetworkPolicyFields", () => {
+  test("guides Public internet CIDR exceptions at the point of configuration", () => {
+    render(
+      <NetworkPolicyFields
+        egressMode="unrestricted"
+        setEgressMode={vi.fn()}
+        domainPreset="none"
+        setDomainPreset={vi.fn()}
+        allowedDomainsText=""
+        setAllowedDomainsText={vi.fn()}
+        allowedCidrsText="10.20.0.0/16"
+        setAllowedCidrsText={vi.fn()}
+        supportsFqdn={false}
+        enforcementStatus="verified-enforced"
+        baselineLoaded
+        disabled={false}
+      />,
+    );
+
+    expect(screen.getByLabelText("Additional allowed CIDRs")).toBeEnabled();
+    expect(
+      screen.getByText(/allow in addition to public internet/),
+    ).toBeInTheDocument();
+    const floorLinks = screen.getAllByRole("link", {
+      name: /View blocked ranges/,
+    });
+    expect(floorLinks).toHaveLength(2);
+    for (const link of floorLinks) {
+      expect(link).toHaveAttribute(
+        "href",
+        expect.stringContaining("#the-public-internet-floor"),
+      );
+    }
   });
 });
 

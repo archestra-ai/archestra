@@ -65,6 +65,28 @@ describe("buildRunnerEnvironmentEgressPolicies", () => {
     ).toBe(true);
   });
 
+  it("adds explicit CIDR exceptions to Public internet", () => {
+    const [policy] = buildRunnerEnvironmentEgressPolicies({
+      spec: {
+        ...SPEC,
+        effectiveNetworkPolicy: {
+          source: "environment",
+          policy: {
+            egressMode: "unrestricted",
+            domainPreset: "none",
+            allowedDomains: [],
+            allowedCidrs: ["10.20.0.0/16"],
+          },
+        },
+      },
+      capabilities: CAPABILITIES,
+    });
+    const egress = (policy?.object as k8s.V1NetworkPolicy).spec?.egress ?? [];
+    expect(egress).toContainEqual({
+      to: [{ ipBlock: { cidr: "10.20.0.0/16" } }],
+    });
+  });
+
   it("uses Cilium for a domain allowlist when the cluster supports it", () => {
     const policies = buildRunnerEnvironmentEgressPolicies({
       spec: restrictedSpec(),

@@ -82,7 +82,7 @@ This applies to both explicitly assigned resources and the implicit **Auto** acc
 
 ## Network egress policies
 
-An environment can define a Kubernetes **namespace** and a **network egress policy**. Self-hosted MCP server pods, agent [code sandboxes](/docs/platform-code-sandbox), and Agent [Background execution Jobs](/docs/platform-agent-background-execution#environments-and-network-egress) run in that namespace and inherit the policy, so their outbound network reach is contained. A policy sets one of three egress modes. **Block all** (`off`) denies all egress. **Allowlist** (`restricted`) permits only selected IP/CIDR ranges and domains. **Public internet** (`unrestricted`) permits public egress — pods in your cluster still get a [fixed floor](#the-public-internet-floor) of blocked reserved ranges. Domain presets and custom domains require a supported FQDN policy provider; Kubernetes `NetworkPolicy` alone only enforces IP/CIDR rules.
+An environment can define a Kubernetes **namespace** and a **network egress policy**. Self-hosted MCP server pods, agent [code sandboxes](/docs/platform-code-sandbox), and Agent [Background execution Jobs](/docs/platform-agent-background-execution#environments-and-network-egress) run in that namespace and inherit the policy, so their outbound network reach is contained. A policy sets one of three egress modes. **Block all** (`off`) denies all egress. **Allowlist** (`restricted`) permits only selected IP/CIDR ranges and domains. **Public internet** (`unrestricted`) permits public egress and any additional CIDRs you list. Pods in your cluster still get a [fixed floor](#the-public-internet-floor) of blocked reserved ranges outside those explicit exceptions. Domain presets and custom domains require a supported FQDN policy provider; Kubernetes `NetworkPolicy` alone only enforces IP/CIDR rules.
 
 When a workload runs in an environment, Archestra uses the environment's network policy, then the organization default network policy, then the built-in Public internet policy (`unrestricted`).
 
@@ -91,6 +91,7 @@ When a workload runs in an environment, Archestra uses the environment's network
 | No outbound access                    | **Block all**                                  |
 | Selected internal or public endpoints | **Allowlist**, with those domains or CIDRs     |
 | Public internet without private ranges | **Public internet**                            |
+| Public internet plus a private range   | **Public internet**, with an additional CIDR   |
 
 An environment applies one policy to all of its workloads. Use separate environments when MCP servers need different policies. The environments can share a Kubernetes namespace, but the usual [environment isolation](#tool-knowledge-skill-and-subagent-isolation) still applies.
 
@@ -121,9 +122,11 @@ Public internet mode blocks a fixed set of destinations for pods in your cluster
 - `127.0.0.0/8` and `0.0.0.0/8` — loopback
 - `::1/128`, `fc00::/7`, `fe80::/10`, `64:ff9b::/96` — the IPv6 equivalents
 
-The floor stops a server that fetches a URL from reaching your internal network or a cloud metadata endpoint. It is not configurable, and no environment setting turns it off. DNS to the cluster resolver stays allowed.
+The floor stops a server that fetches a URL from reaching your internal network or a cloud metadata endpoint. DNS to the cluster resolver stays allowed.
 
-To let a workload reach a private address, use Allowlist mode and list the range. Allowlist entries are not checked against the floor.
+To retain public internet access and reach one private range, add that range under **Additional allowed CIDRs**. The explicit CIDR becomes an exception to the floor. Other private and reserved ranges stay blocked. For example, adding `10.20.0.0/16` does not open the rest of `10.0.0.0/8`.
+
+Use **Allowlist** instead when the workload should reach only selected destinations. CIDRs in either mode are explicit network-policy allow rules.
 
 ### Domain Presets
 

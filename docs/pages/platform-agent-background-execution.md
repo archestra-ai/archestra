@@ -3,7 +3,7 @@ title: Background Execution
 category: Agents
 order: 7
 description: Run delegated Agent tasks in an isolated deployment
-lastUpdated: 2026-08-29
+lastUpdated: 2026-08-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -85,13 +85,13 @@ The deployment uses the same Agent system prompt and tool access as foreground e
 Each execution Job uses the Agent's [Environment](/docs/platform-environments),
 including its Kubernetes namespace and network egress policy. If the Agent has
 no Environment policy override, Archestra uses the organization default policy,
-then the built-in **Allow all** policy.
+then the built-in **Public internet** policy.
 
 The policy is applied before Kubernetes creates the Job. Archestra emits the
 policy type supported by the cluster: standard Kubernetes `NetworkPolicy`,
 Cilium `CiliumNetworkPolicy`, GKE `FQDNNetworkPolicy`, or AWS
 `ApplicationNetworkPolicy`. This gives executions the same IP, domain, and
-Allow-all floor behavior as MCP server pods and code sandboxes. DNS and the
+Public internet floor behavior as MCP server pods and code sandboxes. DNS and the
 Archestra control plane remain reachable so the execution can use the LLM
 proxy and MCP gateway.
 

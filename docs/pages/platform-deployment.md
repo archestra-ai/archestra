@@ -2,7 +2,7 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-08-29
+lastUpdated: 2026-08-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -519,13 +519,13 @@ Archestra protects every MCP server pod from Server-Side Request Forgery (SSRF) 
 
 Each pod gets one policy, chosen by its environment's egress mode:
 
-- **Allow all** (`unrestricted`, the default) — a reserved-range floor: DNS and the public internet are allowed; private, link-local, and metadata ranges are blocked.
+- **Public internet** (`unrestricted`, the default) — DNS and public egress are allowed; private, link-local, metadata, and other reserved ranges are blocked.
 - **Allowlist** (`restricted`) — only the CIDRs and domains the environment allow-lists, plus DNS.
 - **Block all** (`off`) — all egress is denied.
 
 A namespace-wide default-deny baseline also selects every MCP pod, so a pod that is still starting up is denied by default rather than left open.
 
-**Blocked reserved ranges** (the Allow all floor):
+**Blocked reserved ranges** (the Public internet floor):
 
 - `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` - RFC 1918 private ranges (cluster pods, services, nodes)
 - `169.254.0.0/16` - Link-local / cloud metadata endpoints (AWS IMDSv1, GCP, Azure)

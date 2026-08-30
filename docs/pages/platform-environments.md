@@ -3,7 +3,7 @@ title: "Environments"
 category: Administration
 description: "Isolate tools, knowledge, skills, subagents, runtimes, and cost limits across deployment environments"
 order: 3
-lastUpdated: 2026-08-29
+lastUpdated: 2026-08-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -21,7 +21,7 @@ This document is the canonical reference for deployment Environments. Include:
   are exempt)
 - Network egress policies (namespace + egress policy applied to MCP server pods,
   agent code sandboxes, and Agent Background execution Jobs), the always-on
-  Allow all floor, provider support matrix, and domain presets
+  Public internet floor, provider support matrix, and domain presets
 - How environments scope per-environment cost limits
 - Link out to: agents, mcp gateway, knowledge connectors, costs & limits
 -->
@@ -82,9 +82,17 @@ This applies to both explicitly assigned resources and the implicit **Auto** acc
 
 ## Network egress policies
 
-An environment can define a Kubernetes **namespace** and a **network egress policy**. Self-hosted MCP server pods, agent [code sandboxes](/docs/platform-code-sandbox), and Agent [Background execution Jobs](/docs/platform-agent-background-execution#environments-and-network-egress) run in that namespace and inherit the policy, so their outbound network reach is contained. A policy sets one of three egress modes. **Block all** (`off`) denies all egress. **Allowlist** (`restricted`) permits only selected IP/CIDR ranges and domains. **Allow all** (`unrestricted`) permits egress to the public internet — pods in your cluster still get a [fixed floor](#the-allow-all-floor) of blocked reserved ranges. Domain presets and custom domains require a supported FQDN policy provider; Kubernetes `NetworkPolicy` alone only enforces IP/CIDR rules.
+An environment can define a Kubernetes **namespace** and a **network egress policy**. Self-hosted MCP server pods, agent [code sandboxes](/docs/platform-code-sandbox), and Agent [Background execution Jobs](/docs/platform-agent-background-execution#environments-and-network-egress) run in that namespace and inherit the policy, so their outbound network reach is contained. A policy sets one of three egress modes. **Block all** (`off`) denies all egress. **Allowlist** (`restricted`) permits only selected IP/CIDR ranges and domains. **Public internet** (`unrestricted`) permits public egress — pods in your cluster still get a [fixed floor](#the-public-internet-floor) of blocked reserved ranges. Domain presets and custom domains require a supported FQDN policy provider; Kubernetes `NetworkPolicy` alone only enforces IP/CIDR rules.
 
-When a workload runs in an environment, Archestra uses the environment's network policy, then the organization default network policy, then the built-in Allow all policy (`unrestricted`).
+When a workload runs in an environment, Archestra uses the environment's network policy, then the organization default network policy, then the built-in Public internet policy (`unrestricted`).
+
+| Workload requirement                  | Egress mode                                    |
+| ------------------------------------- | ---------------------------------------------- |
+| No outbound access                    | **Block all**                                  |
+| Selected internal or public endpoints | **Allowlist**, with those domains or CIDRs     |
+| Public internet without private ranges | **Public internet**                            |
+
+An environment applies one policy to all of its workloads. Use separate environments when MCP servers need different policies. The environments can share a Kubernetes namespace, but the usual [environment isolation](#tool-knowledge-skill-and-subagent-isolation) still applies.
 
 How a policy applies depends on the workload. A **self-hosted MCP server**, agent code sandbox, or Agent Background execution runs in your cluster, so the policy is enforced continuously at the network layer. Archestra selects the cluster's supported policy type before creating the workload. A workload that needs broad outbound access (for example one that visits arbitrary sites) fails under a restrictive policy unless its destinations are allowlisted.
 
@@ -102,9 +110,9 @@ See Kubernetes [NetworkPolicy](https://kubernetes.io/docs/concepts/services-netw
 
 On EKS Auto Mode, `ApplicationNetworkPolicy` only supports IP and domain egress peers, so Archestra automatically adds a DNS bootstrap rule allowing port 53 to the cluster DNS service IP (recorded in the `archestra.io/network-policy-cluster-dns` annotation).
 
-### The Allow All Floor
+### The Public Internet Floor
 
-Allow all blocks a fixed set of destinations for pods in your cluster:
+Public internet mode blocks a fixed set of destinations for pods in your cluster:
 
 - `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` — private ranges, where your other pods, services, and nodes live
 - `169.254.0.0/16` — link-local, including the AWS, GCP, and Azure metadata endpoints

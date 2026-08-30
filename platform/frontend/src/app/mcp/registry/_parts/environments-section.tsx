@@ -7,12 +7,20 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import {
+  CollectionFilters,
+  FilterBar,
+  FilterSelect,
+  filterSearchClass,
+} from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
 import { ReinstallConfirmBar } from "@/components/reinstall-confirm-bar";
+import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
+import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -78,6 +86,7 @@ const DOMAIN_PRESETS_DOCS_URL = getDocsUrl(
 
 type NetworkPolicy = NonNullable<EnvironmentWithAssignedCount["networkPolicy"]>;
 type EgressMode = NetworkPolicy["egressMode"];
+type EgressModeFilter = EgressMode | "all";
 type DomainPreset = NetworkPolicy["domainPreset"];
 
 type EnvironmentTableRow =
@@ -102,6 +111,9 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
   const defaultEnvironment = useDefaultEnvironment();
   const [deleteTarget, setDeleteTarget] =
     useState<EnvironmentWithAssignedCount | null>(null);
+  const [search, setSearch] = useState("");
+  const [egressModeFilter, setEgressModeFilter] =
+    useState<EgressModeFilter>("all");
 
   // Which editor is open is derived from the URL (`?edit=<id|default>` /
   // `?create`) so the form survives a reload and is shareable. Only admins
@@ -185,6 +197,33 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
     ],
     [defaultAssignedCatalogCount, defaultEnvironment, environments],
   );
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredRows = useMemo(
+    () =>
+      rows.filter((row) => {
+        const matchesSearch =
+          normalizedSearch === "" ||
+          row.name.toLowerCase().includes(normalizedSearch) ||
+          row.namespace?.toLowerCase().includes(normalizedSearch);
+        const effectiveEgressMode =
+          row.networkPolicy?.egressMode ??
+          defaultEnvironment.networkPolicy?.egressMode ??
+          "unrestricted";
+        const matchesEgressMode =
+          egressModeFilter === "all" ||
+          effectiveEgressMode === egressModeFilter;
+
+        return matchesSearch && matchesEgressMode;
+      }),
+    [
+      defaultEnvironment.networkPolicy?.egressMode,
+      egressModeFilter,
+      normalizedSearch,
+      rows,
+    ],
+  );
+  const hasActiveFilters =
+    normalizedSearch !== "" || egressModeFilter !== "all";
 
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const bulkDelete = useBulkDeleteEnvironments();
@@ -197,13 +236,13 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
     selected: selectedEnvironments,
     selectAllMatching,
   } = useBulkSelection({
-    rows,
+    rows: filteredRows,
     getId: (row) => row.id,
     // The Default row is synthetic — it stands for "no environment" — and the
     // delete route refuses one that still has catalog items assigned.
     canSelect: (row) =>
       row.kind === "environment" && row.assignedCatalogCount === 0,
-    filterSignature: "environments",
+    filterSignature: `environments:${normalizedSearch}:${egressModeFilter}`,
     matchDescription: "can be deleted",
   });
 
@@ -302,7 +341,44 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
   );
 
   return (
-    <div className="space-y-4">
+    <BulkActionsScope className="space-y-4">
+      <CollectionFilters>
+        <FilterBar
+          leading
+          onClearFilters={
+            hasActiveFilters
+              ? () => {
+                  setSearch("");
+                  setEgressModeFilter("all");
+                }
+              : undefined
+          }
+        >
+          <SearchInput
+            objectNamePlural="environments"
+            searchFields={["name", "namespace"]}
+            value={search}
+            onSearchChange={setSearch}
+            syncQueryParams={false}
+            className={filterSearchClass}
+          />
+          <FilterSelect
+            value={egressModeFilter}
+            onValueChange={(value) =>
+              setEgressModeFilter(value as EgressModeFilter)
+            }
+            placeholder="Filter by network egress"
+            items={[
+              { value: "all", label: "All network egress" },
+              { value: "unrestricted", label: "Public internet" },
+              { value: "restricted", label: "Allowlist" },
+              { value: "off", label: "Block all" },
+            ]}
+            inactiveValue="all"
+          />
+        </FilterBar>
+      </CollectionFilters>
+
       <BulkActions
         count={selectedEnvironments.length}
         noun="environment"
@@ -323,7 +399,7 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
 
       <DataTable
         columns={columns}
-        data={rows}
+        data={filteredRows}
         getRowId={(row) => row.id}
         rowSelection={rowSelection}
         onRowSelectionChange={setRowSelection}
@@ -331,6 +407,12 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
         hideSelectedCount
         isLoading={isLoading}
         emptyMessage="No environments"
+        hasActiveFilters={hasActiveFilters}
+        filteredEmptyMessage="No environments match your filters"
+        onClearFilters={() => {
+          setSearch("");
+          setEgressModeFilter("all");
+        }}
       />
 
       {bulkDeleteOpen && (
@@ -397,7 +479,7 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
         onOpenChange={(open) => !open && closeEditor()}
         canEdit={canEdit}
       />
-    </div>
+    </BulkActionsScope>
   );
 }
 
@@ -914,13 +996,15 @@ function EnvironmentEditorDialog({
         )}
         <section className="space-y-4 border-t pt-4">
           <div className="space-y-1">
-            <h3 className="font-medium text-sm">Network Egress Policy</h3>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="font-medium text-sm">Network Egress Policy</h3>
+              <ExternalDocsLink href={NETWORK_POLICY_DOCS_URL}>
+                Network egress docs
+              </ExternalDocsLink>
+            </div>
             <p className="text-xs text-muted-foreground">
               Configure outbound network access for workloads in this
-              environment.{" "}
-              <ExternalDocsLink href={NETWORK_POLICY_DOCS_URL}>
-                View docs
-              </ExternalDocsLink>
+              environment.
             </p>
           </div>
 
@@ -1088,12 +1172,12 @@ export function NetworkPolicyFields({
               <code className="inline rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]">
                 restricted
               </code>
-              ) permits only the CIDR/domain rules below, and Allow all (
+              ) permits only the CIDR/domain rules below, and Public internet (
               <code className="inline rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]">
                 unrestricted
               </code>
-              ) permits everything — workloads hosted in your cluster still get
-              a fixed floor of blocked reserved ranges.
+              ) permits public egress. Workloads hosted in your cluster still
+              block private, link-local, metadata, and other reserved ranges.
             </>
           }
         />
@@ -1221,7 +1305,7 @@ function FieldLabel({
 const EGRESS_MODE_LABELS: Record<EgressMode, string> = {
   off: "Block all",
   restricted: "Allowlist",
-  unrestricted: "Allow all",
+  unrestricted: "Public internet",
 };
 
 function formatEgressMode(mode: EgressMode) {
@@ -1230,7 +1314,8 @@ function formatEgressMode(mode: EgressMode) {
 
 function formatPolicySummary(policy: NetworkPolicy) {
   if (policy.egressMode === "off") return "No outbound egress";
-  if (policy.egressMode === "unrestricted") return "All outbound egress";
+  if (policy.egressMode === "unrestricted")
+    return "Private ranges blocked in-cluster";
 
   const parts: string[] = [];
   if (policy.domainPreset !== "none") {

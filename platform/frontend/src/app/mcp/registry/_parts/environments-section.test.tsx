@@ -117,7 +117,25 @@ vi.mock("@/components/ui/bulk-actions-context", () => ({
     <>{children}</>
   ),
 }));
-vi.mock("@/components/form-dialog", () => ({ FormDialog: () => null }));
+vi.mock("@/components/form-dialog", () => ({
+  FormDialog: ({
+    open,
+    title,
+    description,
+    children,
+  }: {
+    open: boolean;
+    title: React.ReactNode;
+    description?: React.ReactNode;
+    children: React.ReactNode;
+  }) =>
+    open ? (
+      <section role="dialog" aria-label={String(title)}>
+        <div data-testid="dialog-description">{description}</div>
+        {children}
+      </section>
+    ) : null,
+}));
 vi.mock("@/components/delete-confirm-dialog", () => ({
   DeleteConfirmDialog: () => null,
 }));
@@ -250,6 +268,38 @@ describe("EnvironmentsSection filters", () => {
     expect(table.getByText("Inherited policy")).toBeInTheDocument();
     expect(table.queryByText("Internal tools")).not.toBeInTheDocument();
     expect(table.queryByText("Offline")).not.toBeInTheDocument();
+  });
+
+  test("keeps infrequently used environment controls collapsed", () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("create=1") as unknown as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    vi.mocked(useFeature).mockImplementation((feature) => {
+      if (feature === "environmentNamespaces") return [];
+      if (feature === "orchestratorK8sRuntime") return true;
+      return false;
+    });
+
+    render(<EnvironmentsSection canEdit />);
+
+    expect(
+      within(screen.getByTestId("dialog-description")).getByRole("link", {
+        name: /Learn more/,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Validation rule")).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Trusted image registries"),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
+
+    expect(screen.getByLabelText("Validation rule")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Trusted image registries"),
+    ).toBeInTheDocument();
   });
 });
 

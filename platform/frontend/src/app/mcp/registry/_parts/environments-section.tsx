@@ -17,6 +17,12 @@ import { FormDialog } from "@/components/form-dialog";
 import { ReinstallConfirmBar } from "@/components/reinstall-confirm-bar";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
@@ -75,6 +81,7 @@ import {
 import { EnvironmentResourceDefaultsDialog } from "./environment-resource-defaults-dialog";
 import { compileValidationRegex } from "./environment-validation-helpers";
 
+const ENVIRONMENTS_DOCS_URL = getDocsUrl(DocsPage.PlatformEnvironments);
 const NETWORK_POLICY_DOCS_URL = getDocsUrl(
   DocsPage.PlatformEnvironments,
   "network-egress-policies",
@@ -805,12 +812,24 @@ function EnvironmentEditorDialog({
       : mode === "default"
         ? "Edit default environment"
         : "Edit environment";
-  const dialogDescription =
-    mode === "create"
-      ? "Create an org-level deployment environment."
-      : mode === "default"
-        ? "Update the default environment."
-        : "Update this environment.";
+  const dialogDescription = (
+    <>
+      <span>
+        {mode === "create"
+          ? "Create an org-level deployment environment."
+          : mode === "default"
+            ? "Update the default environment."
+            : "Update this environment."}
+      </span>{" "}
+      <ExternalDocsLink
+        href={ENVIRONMENTS_DOCS_URL}
+        className="underline"
+        showIcon={false}
+      >
+        Learn more
+      </ExternalDocsLink>
+    </>
+  );
 
   return (
     <FormDialog
@@ -903,104 +922,9 @@ function EnvironmentEditorDialog({
             disabled={isPending}
           />
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="environment-validation-regex">Validation rule</Label>
-          <p className="text-xs text-muted-foreground">
-            Allowlist regular expression: config values entered when installing
-            into this environment are accepted only if they match. Leave empty
-            to disable. To block a substring (e.g. <code>prod</code>), use a
-            negative lookahead like{" "}
-            <code className="rounded bg-muted px-1 py-0.5 font-mono">
-              ^(?!.*(prod|production)).*$
-            </code>
-            .
-          </p>
-          <Input
-            id="environment-validation-regex"
-            value={validationRegex}
-            onChange={(e) => setValidationRegex(e.target.value)}
-            placeholder="^(?!.*(prod|production)).*$"
-            className="font-mono"
-            disabled={isPending}
-            aria-invalid={validationRegexError ? true : undefined}
-          />
-          {validationRegexError && (
-            <p className="text-xs text-destructive">{validationRegexError}</p>
-          )}
-        </div>
-        {runtimeEnabled && (
-          <div className="space-y-2">
-            <Label htmlFor="environment-trusted-registries">
-              Trusted image registries
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              List of trusted Docker image registries. Any MCP server whose
-              image isn't on this list is held for admin approval before it can
-              be installed. Leave empty to allow any image.
-            </p>
-            <div className="flex gap-2">
-              <Input
-                id="environment-trusted-registries"
-                value={registryDraft}
-                onChange={(e) => {
-                  setRegistryDraft(e.target.value);
-                  setRegistryError(null);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    addTrustedRegistry();
-                  }
-                }}
-                placeholder="ghcr.io/acme"
-                className="font-mono"
-                disabled={isPending}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={addTrustedRegistry}
-                disabled={isPending || registryDraft.trim() === ""}
-              >
-                <Plus className="h-4 w-4" />
-                Add
-              </Button>
-            </div>
-            {registryError && (
-              <p className="text-xs text-destructive">{registryError}</p>
-            )}
-            {trustedImageRegistries.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {trustedImageRegistries.map((registry) => (
-                  <Badge
-                    key={registry}
-                    variant="secondary"
-                    className="gap-1 font-mono"
-                  >
-                    {registry}
-                    <button
-                      type="button"
-                      onClick={() => removeTrustedRegistry(registry)}
-                      disabled={isPending}
-                      aria-label={`Remove ${registry}`}
-                      className="rounded-full text-muted-foreground hover:text-foreground"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
         <section className="space-y-4 border-t pt-4">
           <div className="space-y-1">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="font-medium text-sm">Network Egress Policy</h3>
-              <ExternalDocsLink href={NETWORK_POLICY_DOCS_URL}>
-                Network egress docs
-              </ExternalDocsLink>
-            </div>
+            <h3 className="font-medium text-sm">Network Egress Policy</h3>
             <p className="text-xs text-muted-foreground">
               Configure outbound network access for workloads in this
               environment.
@@ -1036,6 +960,109 @@ function EnvironmentEditorDialog({
             disabled={isPending || !egressBaselineLoaded}
           />
         </section>
+        <Accordion type="single" collapsible>
+          <AccordionItem value="advanced" className="rounded-md border px-4">
+            <AccordionTrigger className="py-3 hover:no-underline">
+              Advanced
+            </AccordionTrigger>
+            <AccordionContent className="space-y-4 pb-4">
+              <div className="space-y-2">
+                <Label htmlFor="environment-validation-regex">
+                  Validation rule
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Allowlist regular expression: config values entered when
+                  installing into this environment are accepted only if they
+                  match. Leave empty to disable. To block a substring (e.g.{" "}
+                  <code>prod</code>), use a negative lookahead like{" "}
+                  <code className="rounded bg-muted px-1 py-0.5 font-mono">
+                    ^(?!.*(prod|production)).*$
+                  </code>
+                  .
+                </p>
+                <Input
+                  id="environment-validation-regex"
+                  value={validationRegex}
+                  onChange={(e) => setValidationRegex(e.target.value)}
+                  placeholder="^(?!.*(prod|production)).*$"
+                  className="font-mono"
+                  disabled={isPending}
+                  aria-invalid={validationRegexError ? true : undefined}
+                />
+                {validationRegexError && (
+                  <p className="text-xs text-destructive">
+                    {validationRegexError}
+                  </p>
+                )}
+              </div>
+              {runtimeEnabled && (
+                <div className="space-y-2">
+                  <Label htmlFor="environment-trusted-registries">
+                    Trusted image registries
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    List of trusted Docker image registries. Any MCP server
+                    whose image isn't on this list is held for admin approval
+                    before it can be installed. Leave empty to allow any image.
+                  </p>
+                  <div className="flex gap-2">
+                    <Input
+                      id="environment-trusted-registries"
+                      value={registryDraft}
+                      onChange={(e) => {
+                        setRegistryDraft(e.target.value);
+                        setRegistryError(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          addTrustedRegistry();
+                        }
+                      }}
+                      placeholder="ghcr.io/acme"
+                      className="font-mono"
+                      disabled={isPending}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={addTrustedRegistry}
+                      disabled={isPending || registryDraft.trim() === ""}
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add
+                    </Button>
+                  </div>
+                  {registryError && (
+                    <p className="text-xs text-destructive">{registryError}</p>
+                  )}
+                  {trustedImageRegistries.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {trustedImageRegistries.map((registry) => (
+                        <Badge
+                          key={registry}
+                          variant="secondary"
+                          className="gap-1 font-mono"
+                        >
+                          {registry}
+                          <button
+                            type="button"
+                            onClick={() => removeTrustedRegistry(registry)}
+                            disabled={isPending}
+                            aria-label={`Remove ${registry}`}
+                            className="rounded-full text-muted-foreground hover:text-foreground"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
       </DialogBody>
       {showConfirm ? (
         <ReinstallConfirmBar

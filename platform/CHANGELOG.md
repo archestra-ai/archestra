@@ -1,5 +1,36 @@
 # Changelog
 
+## [1.3.47](https://github.com/archestra-ai/archestra/compare/platform-v1.3.46...platform-v1.3.47) (2026-08-30)
+
+
+### Features
+
+* **agents:** add catalog-backed background execution ([#7516](https://github.com/archestra-ai/archestra/issues/7516)) ([e8ab90c](https://github.com/archestra-ai/archestra/commit/e8ab90ccccc6b4212ced2d5b71c00358cdac54ab))
+* **agents:** add staging-native coding environment ([#7545](https://github.com/archestra-ai/archestra/issues/7545)) ([4a54c58](https://github.com/archestra-ai/archestra/commit/4a54c5898af816ee2684c892f3874a443e5d1eda))
+* **agents:** unify Background execution across interfaces ([#7544](https://github.com/archestra-ai/archestra/issues/7544)) ([5db5fc6](https://github.com/archestra-ai/archestra/commit/5db5fc651513ab74c5ef8e8a397bbb4bb384fc25))
+* support CIDR exceptions for public egress ([#7570](https://github.com/archestra-ai/archestra/issues/7570)) ([fdfb9c3](https://github.com/archestra-ai/archestra/commit/fdfb9c35f4093f01ac5d87b6ee05d92f7eee3721))
+
+
+### Bug Fixes
+
+* **agents:** edit system prompt from overview ([#7553](https://github.com/archestra-ai/archestra/issues/7553)) ([cbbed12](https://github.com/archestra-ai/archestra/commit/cbbed12e9085f0eb0565d79cc9438e5df2398b24))
+* **agents:** harden background execution UX ([#7558](https://github.com/archestra-ai/archestra/issues/7558)) ([38edd5c](https://github.com/archestra-ai/archestra/commit/38edd5c049a7a89b9d2c44f441fb29eb3b8eb7fc))
+* brand SuperGrok with Grok marks and fit xAI logos ([#7548](https://github.com/archestra-ai/archestra/issues/7548)) ([05768d3](https://github.com/archestra-ai/archestra/commit/05768d36a954bea774c60519a55bc3b971d513b4))
+* **connect:** hear skip key on macOS bash ([#7550](https://github.com/archestra-ai/archestra/issues/7550)) ([b06a47c](https://github.com/archestra-ai/archestra/commit/b06a47cfc742267b7ea8e3c6147f3f988f2a209b))
+* **costs:** keep statistics tables readable on narrow viewports ([#7549](https://github.com/archestra-ai/archestra/issues/7549)) ([55d3888](https://github.com/archestra-ai/archestra/commit/55d3888efa978c7bdc35332efbdd0cfdee65e329))
+* **frontend:** balance filter spacing and refine backend readiness ([#7539](https://github.com/archestra-ai/archestra/issues/7539)) ([e5bdfd1](https://github.com/archestra-ai/archestra/commit/e5bdfd198655df17070d28518f9b81fe5c24f927))
+* **frontend:** give settings table actions a 16px outer inset ([#7546](https://github.com/archestra-ai/archestra/issues/7546)) ([196af4d](https://github.com/archestra-ai/archestra/commit/196af4d001834949eff01b78d072047d3996d3d3))
+* **frontend:** remove redundant subagent helper copy ([#7551](https://github.com/archestra-ai/archestra/issues/7551)) ([4a9f58b](https://github.com/archestra-ai/archestra/commit/4a9f58b7a5723b777f46bd225ba94665abce2b6e))
+* **frontend:** share collection filter spacing and contain limits usage ([#7547](https://github.com/archestra-ai/archestra/issues/7547)) ([2f60660](https://github.com/archestra-ai/archestra/commit/2f60660bccd0f7703b69785a0f9bca57f9c0bef8))
+* **llm:** reconnect ChatGPT subscriptions ([#7557](https://github.com/archestra-ai/archestra/issues/7557)) ([85f8b24](https://github.com/archestra-ai/archestra/commit/85f8b2477c05ff0a5830867f37e0bedfdc4e47ed))
+* **logs:** rank user filter by activity ([#7552](https://github.com/archestra-ai/archestra/issues/7552)) ([b27e78d](https://github.com/archestra-ai/archestra/commit/b27e78d864609ddee17514ac8727c0a6902b39fa))
+
+
+### Miscellaneous Chores
+
+* enforce Agent Environment egress for background executions ([#7543](https://github.com/archestra-ai/archestra/issues/7543)) ([bae58ec](https://github.com/archestra-ai/archestra/commit/bae58ecfa05b23b75babf7112a6439bf8c123ce6))
+* **frontend:** upgrade Next.js to 16.3.2 ([#7559](https://github.com/archestra-ai/archestra/issues/7559)) ([fce6045](https://github.com/archestra-ai/archestra/commit/fce604517436df7231fd5a7d5b7b2c06722d7eab))
+
 ## [1.3.46](https://github.com/archestra-ai/archestra/compare/platform-v1.3.45...platform-v1.3.46) (2026-08-29)
 
 

@@ -87,8 +87,8 @@ describe("parseSlackDelegationReaction", () => {
   test.each([
     [undefined, null],
     ["", null],
-    [" lobster ", "lobster"],
-    [":crab:", "crab"],
+    [" delegate ", "delegate"],
+    [":wave:", "wave"],
     ["+1", "+1"],
   ])("normalizes %s", (input, expected) => {
     expect(parseSlackDelegationReaction(input)).toBe(expected);

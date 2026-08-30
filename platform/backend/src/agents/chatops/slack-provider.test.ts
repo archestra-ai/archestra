@@ -1255,7 +1255,7 @@ describe("SlackProvider.parseWebhookNotification — explicit delegation reactio
   const messageTs = "8888888888.000001";
 
   beforeEach(() => {
-    config.chatops.slackDelegationReaction = "lobster";
+    config.chatops.slackDelegationReaction = "delegate";
   });
 
   afterEach(() => {
@@ -1270,7 +1270,7 @@ describe("SlackProvider.parseWebhookNotification — explicit delegation reactio
         channel: undefined,
         ts: undefined,
         user: reactorId,
-        reaction: "lobster",
+        reaction: "delegate",
         item: { type: "message", channel: channelId, ts: messageTs },
         ...overrides,
       },

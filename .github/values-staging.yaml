@@ -75,9 +75,6 @@ archestra:
     # Background execution is intentionally independent of ARCHESTRA_BETA.
     # Enable it only on staging while the capability is being rolled out.
     ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ENABLED: "true"
-    # Staging-only parallel task-environment shortcut while the Archestra-native
-    # coding Agent is evaluated alongside the existing workflow.
-    ARCHESTRA_CHATOPS_SLACK_DELEGATION_REACTION: "lobster"
     # BETA: auto-sync-permissions connectors (off by default everywhere else).
     # Explicit so staging keeps the feature even if ARCHESTRA_BETA is ever
     # flipped off.

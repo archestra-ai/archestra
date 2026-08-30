@@ -4197,7 +4197,7 @@ describe("ChatOpsManager Slack conversation context", () => {
       provider: "slack",
       channelId: "C_CTX_NAME",
       workspaceId: "T_CTX",
-      channelName: "task-feed",
+      channelName: "support-triage",
       agentId: agent.id,
     });
 
@@ -4217,7 +4217,7 @@ describe("ChatOpsManager Slack conversation context", () => {
     });
 
     const sent = executorSpy.mock.calls[0][0].message;
-    expect(sent).toContain("#task-feed");
+    expect(sent).toContain("#support-triage");
     // The id stays — tools are handed a channel+ts pair and need it.
     expect(sent).toContain("C_CTX_NAME");
   });

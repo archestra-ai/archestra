@@ -370,7 +370,7 @@ describe("GET /api/audit-logs", () => {
     const matchedRow = await seedRow(organizationId, {
       resourceType: "agent",
       resourceId: "renamed-agent-id",
-      resourceName: "PotatoAI",
+      resourceName: "Support Agent",
     });
     await seedRow(organizationId, {
       resourceType: "agent",
@@ -380,14 +380,14 @@ describe("GET /api/audit-logs", () => {
 
     const response = await app.inject({
       method: "GET",
-      url: "/api/audit-logs?search=potatoai",
+      url: "/api/audit-logs?search=support",
     });
 
     expect(response.statusCode).toBe(200);
     const body = response.json();
     expect(body.data).toHaveLength(1);
     expect(body.data[0].id).toBe(matchedRow.id);
-    expect(body.data[0].resourceName).toBe("PotatoAI");
+    expect(body.data[0].resourceName).toBe("Support Agent");
   });
 
   test("search filter matches actor email case-insensitively", async () => {

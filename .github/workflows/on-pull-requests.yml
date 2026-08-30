@@ -199,8 +199,9 @@ jobs:
     # action refuses to run at all — "Dependency review is not supported on
     # this repository" — and paints a red check that no code change can fix.
     # Skipping is the honest outcome there: the canonical repo is public and
-    # runs this on the same commits before anything merges.
-    if: ${{ github.event_name == 'pull_request' && !github.event.repository.private }}
+    # runs this on the same commits before anything merges. The public API can
+    # compare any two Git refs, including the merge queue's synthetic head.
+    if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
     permissions:
       contents: read # Required for dependency-review-action to read the PR dependency graph via the API.
@@ -216,7 +217,12 @@ jobs:
           # NOTE: disable license check here because we are already doing it in the license-compliance-check job
           # allow-licenses: MIT
           license-check: "false"
-          comment-summary-in-pr: on-failure
+          # The action derives refs from pull_request events. merge_group has
+          # no PR payload, so inspect the temporary merge result explicitly.
+          base-ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_sha || '' }}
+          head-ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.head_sha || '' }}
+          # merge_group has no PR to comment on.
+          comment-summary-in-pr: ${{ github.event_name == 'pull_request' && 'on-failure' || 'never' }}
           # GHSA-82j2-j2ch-gfr8 (rustls-webpki <0.103.13 CRL-parsing DoS) is a
           # transitive dep of dagger-sdk, which pins reqwest 0.11 + rustls-tls
           # (rustls 0.21 caps rustls-webpki at <0.102) — no patched version is
@@ -224,15 +230,6 @@ jobs:
           # engine session, so attacker-controlled CRL parsing is not reachable.
           # Revisit once dagger-sdk moves to reqwest 0.12 / rustls 0.23.
           allow-ghsas: GHSA-82j2-j2ch-gfr8
-
-  dependency-review-merge-group:
-    name: Dependency Review
-    if: ${{ github.event_name == 'merge_group' }}
-    runs-on: ubuntu-latest
-    permissions: {}
-    steps:
-      - name: Skip dependency review for merge queue
-        run: echo "Dependency Review only has PR diff context; PR run already validated dependencies before merge queue."
 
   # Fast feedback on every PR push: lint + typecheck + unit tests.
   # Full E2E runs in the separate "Platform E2E Tests" workflow on merge queue
@@ -484,6 +481,10 @@ jobs:
   # parallel with the pnpm work instead of serializing ~1.5-2 min ahead of it.
   # Needs no pnpm/setup-env: the Dagger sync script is pure shell and cargo
   # operates on the committed lockfile.
+  # Rust workspace checks are owned here, once. The package-level check:ci
+  # tasks in Platform Lint and Unit Tests retain only NAPI build/load smokes;
+  # sandbox-rs's workspace suite previously repeated app-runtime and image
+  # core tests after this job had already covered them.
   platform-rust-checks:
     name: Platform Rust Checks
     # bot-pr-guard (see comment above platform-lint-and-unit-tests)
@@ -522,13 +523,16 @@ jobs:
       - name: Verify Dagger version sync
         run: ./scripts/check-dagger-version-sync.sh
 
-      - name: Rust musl checks
+      - name: Rust workspace checks and musl compile check
         working-directory: ./platform/archestra-rs
         env:
           # The mac-mini runners have the messense x86_64-linux-musl cross
           # toolchain preinstalled (no musl-gcc there).
           CC_x86_64_unknown_linux_musl: ${{ runner.os == 'Linux' && 'musl-gcc' || 'x86_64-unknown-linux-musl-gcc' }}
         run: |
+          cargo fmt --all --check
+          cargo check --workspace --locked
+          cargo test --workspace --locked
           cargo check --workspace --locked --target x86_64-unknown-linux-musl
 
       # Prebuilt binary instead of `cargo install` — the source compile was
@@ -575,6 +579,17 @@ jobs:
 
       - name: Install uv
         uses: ./.github/actions/setup-uv
+
+      # The Node renderer is the second implementation of the analyzer's
+      # persisted triage format. Its golden fixture must remain byte-identical
+      # with the Rust analyzer tests below; it has no package dependencies.
+      - name: Set up Node.js for triage parity
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: "24.11.1"
+
+      - name: Run Node triage parity test
+        run: node --test ../.claude/skills/archestra-dev-bench-analysis/bin/render-triage.test.mjs
 
       - name: Rust formatting
         run: cargo fmt --all --check

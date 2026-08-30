@@ -78,7 +78,7 @@ on:
         type: boolean
         default: true
       zstd_compression:
-        description: "Use zstd level 3 for pushed image layers"
+        description: "Use fast zstd compression for pushed image layers"
         required: false
         type: boolean
         default: false
@@ -165,7 +165,7 @@ jobs:
           target: ${{ inputs.target }}
           push: ${{ inputs.push_image }}
           platforms: ${{ matrix.os_and_arch }}
-          outputs: ${{ inputs.push_image && format('type=image,name={0}/{1},push-by-digest=true,name-canonical=true,push=true{2}', inputs.image_registry, inputs.image_name, inputs.zstd_compression && ',compression=zstd,compression-level=3,force-compression=true,oci-mediatypes=true' || '') || '' }}
+          outputs: ${{ inputs.push_image && format('type=image,name={0}/{1},push-by-digest=true,name-canonical=true,push=true{2}', inputs.image_registry, inputs.image_name, inputs.zstd_compression && ',compression=zstd,compression-level=1,force-compression=true,oci-mediatypes=true' || '') || '' }}
           version: ${{ inputs.version }}
           previous-image: ${{ inputs.previous_image }}
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}

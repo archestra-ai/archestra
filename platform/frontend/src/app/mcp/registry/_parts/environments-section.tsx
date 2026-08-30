@@ -1062,13 +1062,14 @@ function EnvironmentEditorDialog({
       {showConfirm ? (
         <ReinstallConfirmBar
           mode="auto"
+          className="mt-0"
           affectedServerCount={environment?.assignedCatalogCount ?? 0}
           isSubmitting={isPending}
           onCancel={() => setShowConfirm(false)}
           onConfirm={doSave}
         />
       ) : (
-        <DialogStickyFooter>
+        <DialogStickyFooter className="mt-0">
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}

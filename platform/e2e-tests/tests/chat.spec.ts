@@ -197,17 +197,8 @@ const testConfigs: ChatProviderTestConfig[] = [
 // Test Suite
 // =============================================================================
 
-// cerebras: model selector intermittently never renders in CI (15s timeout).
-// Tracked alongside MQ flakiness from https://github.com/archestra-ai/archestra/actions/runs/26282803981.
-// cohere: mocked streaming response intermittently never becomes visible in CI (90s timeout),
-// failing all retries. Tracked from https://github.com/archestra-ai/archestra/actions/runs/26950850016.
-const skippedProviders = new Set<string>(["cerebras", "cohere"]);
-
 for (const config of testConfigs) {
   test.describe(`Chat-UI-${config.providerName}`, () => {
-    if (skippedProviders.has(config.providerName)) {
-      test.skip();
-    }
     // Increase timeout for chat tests since they involve streaming responses
     test.setTimeout(120_000);
 
@@ -269,11 +260,8 @@ for (const config of testConfigs) {
       // The mocked response should contain our expected text. Use a generous
       // timeout — streaming responses in CI can be slow (WireMock + streaming +
       // CI resource contention can take >60s).
-      // Scope to the first (settled) assistant bubble: while the response is
-      // still streaming the client can transiently hold two assistant bubbles
-      // before they reconcile (the same double-render documented in the reconnect
-      // FIXME below), which would otherwise trip strict mode with "resolved to 2
-      // elements" and fail the assertion.
+      // Scope to the first settled assistant bubble while the stream is still
+      // reconciling its temporary client placeholder.
       await expect(page.getByText(config.expectedResponse).first()).toBeVisible(
         {
           timeout: 90_000,
@@ -290,13 +278,7 @@ for (const config of testConfigs) {
 test.describe("Chat active run reconnect", () => {
   test.setTimeout(120_000);
 
-  // FIXME: reloading into an active stream renders the assistant turn twice.
-  // The stream-resume reconnect leaves useChat holding two assistant messages
-  // (the backend active-run replay message plus a churning client placeholder)
-  // that never reconcile, so `getByText("part three")` matches two bubbles. The
-  // React #185 render loop this test also hit is already fixed; only the
-  // duplicate-assistant reconciliation remains.
-  test.fixme("continues a streaming assistant turn after page reload", async ({
+  test("continues a streaming assistant turn after page reload", async ({
     page,
     request,
     makeApiRequest,

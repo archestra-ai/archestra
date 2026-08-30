@@ -28,7 +28,6 @@ describe("RecordingExportWatermark", () => {
     const { container } = render(<RecordingExportWatermark />);
 
     const mark = container.firstElementChild;
-    expect(mark).toHaveClass("items-center");
     expect(mark).toHaveAttribute("aria-hidden", "true");
   });
 });

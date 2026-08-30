@@ -1,7 +1,9 @@
 import { E2eTestId } from "@archestra/shared/e2e-test-ids";
+import type { Page } from "@playwright/test";
 import { makeCatalogItem } from "../src/mocks/data/catalog";
 import { organizationSeed } from "../src/mocks/data/organization";
 import { expect, test } from "./fixtures";
+import type { McpRegistryPage } from "./pages/mcp-registry-page";
 
 // An environment's "validation rule" is an ALLOWLIST regex: a config value is
 // accepted only if it matches. These specs cover the UI wiring of that rule in
@@ -44,11 +46,22 @@ const orgWithDefaultRule = (validationRegex: string | null) => ({
   defaultEnvironmentValidationRegex: validationRegex,
 });
 
+async function openCatalogEditor(params: {
+  page: Page;
+  mcpRegistryPage: McpRegistryPage;
+  id: string;
+  name: string;
+}) {
+  await params.mcpRegistryPage.settingsButtonFor(params.name).click();
+  await params.page.waitForURL(new RegExp(`/mcp/registry/${params.id}$`));
+  await params.page.getByRole("link", { name: "Edit" }).click();
+  await params.page.waitForURL(
+    new RegExp(`/mcp/registry/${params.id}/edit\\?step=configuration`),
+  );
+}
+
 test.describe("MCP environment validation rule", () => {
-  // FIXME(stale): the card's settings button now routes to the server detail
-  // page instead of opening a "<name> Settings" dialog. Rewriting this against
-  // the detail route needs its own fixtures — tracked separately.
-  test.fixme("switching to a stricter environment flags stored values and blocks Save", async ({
+  test("switching to a stricter environment flags stored values and blocks Save", async ({
     page,
     mcpRegistryPage,
     mswControl,
@@ -95,36 +108,39 @@ test.describe("MCP environment validation rule", () => {
 
     await mcpRegistryPage.goto();
     await expect(mcpRegistryPage.heading).toBeVisible();
-    await mcpRegistryPage.settingsButtonFor("switch-test").click();
-
-    const dialog = page.getByRole("dialog", { name: /switch-test Settings/i });
-    await expect(dialog).toBeVisible();
+    await openCatalogEditor({
+      page,
+      mcpRegistryPage,
+      id: item.id,
+      name: item.name,
+    });
+    const editor = page;
 
     // No violation while bound to Production.
-    await expect(dialog.getByRole("alert")).toBeHidden();
+    const validationAlert = editor
+      .getByRole("alert")
+      .filter({ hasText: "TEST_URL" });
+    await expect(validationAlert).toBeHidden();
 
-    await dialog.getByTestId(E2eTestId.SelectEnvironment).click();
+    await editor.getByTestId(E2eTestId.SelectEnvironment).click();
     await page.getByRole("option", { name: "Default" }).click();
 
     // The warning bar names the offending field and Save is disabled.
-    const alert = dialog.getByRole("alert");
+    const alert = validationAlert;
     await expect(alert).toBeVisible();
     await expect(alert).toContainText("TEST_URL");
     await expect(alert).toContainText("Default");
     await expect(
-      dialog.getByRole("button", { name: "Save Changes" }),
+      editor.getByRole("button", { name: "Save", exact: true }),
     ).toBeDisabled();
 
     // Switching back to Production clears the violation.
-    await dialog.getByTestId(E2eTestId.SelectEnvironment).click();
+    await editor.getByTestId(E2eTestId.SelectEnvironment).click();
     await page.getByRole("option", { name: "Production" }).click();
-    await expect(dialog.getByRole("alert")).toBeHidden();
+    await expect(validationAlert).toBeHidden();
   });
 
-  // FIXME(stale): the card's settings button now routes to the server detail
-  // page instead of opening a "<name> Settings" dialog. Rewriting this against
-  // the detail route needs its own fixtures — tracked separately.
-  test.fixme("the env-var dialog blocks a value that violates the rule", async ({
+  test("the env-var dialog blocks a value that violates the rule", async ({
     page,
     mcpRegistryPage,
     mswControl,
@@ -149,10 +165,13 @@ test.describe("MCP environment validation rule", () => {
 
     await mcpRegistryPage.goto();
     await expect(mcpRegistryPage.heading).toBeVisible();
-    await mcpRegistryPage.settingsButtonFor("envvar-test").click();
-
-    const editor = page.getByRole("dialog", { name: /envvar-test Settings/i });
-    await expect(editor).toBeVisible();
+    await openCatalogEditor({
+      page,
+      mcpRegistryPage,
+      id: item.id,
+      name: item.name,
+    });
+    const editor = page;
     await editor.getByRole("button", { name: "Add Variable" }).click();
 
     const varDialog = page.getByRole("dialog", {
@@ -273,10 +292,7 @@ test.describe("MCP environment validation rule", () => {
     ).toBeEnabled();
   });
 
-  // FIXME(stale): the card's settings button now routes to the server detail
-  // page instead of opening a "<name> Settings" dialog. Rewriting this against
-  // the detail route needs its own fixtures — tracked separately.
-  test.fixme("no rule configured blocks nothing", async ({
+  test("no rule configured blocks nothing", async ({
     page,
     mcpRegistryPage,
     mswControl,
@@ -299,10 +315,13 @@ test.describe("MCP environment validation rule", () => {
 
     await mcpRegistryPage.goto();
     await expect(mcpRegistryPage.heading).toBeVisible();
-    await mcpRegistryPage.settingsButtonFor("norule-test").click();
-
-    const editor = page.getByRole("dialog", { name: /norule-test Settings/i });
-    await expect(editor).toBeVisible();
+    await openCatalogEditor({
+      page,
+      mcpRegistryPage,
+      id: item.id,
+      name: item.name,
+    });
+    const editor = page;
     await editor.getByRole("button", { name: "Add Variable" }).click();
 
     const varDialog = page.getByRole("dialog", {
@@ -323,10 +342,7 @@ test.describe("MCP environment validation rule", () => {
     ).toBeEnabled();
   });
 
-  // FIXME(stale): the card's settings button now routes to the server detail
-  // page instead of opening a "<name> Settings" dialog. Rewriting this against
-  // the detail route needs its own fixtures — tracked separately.
-  test.fixme("the header dialog blocks a value that violates the rule", async ({
+  test("the header dialog blocks a value that violates the rule", async ({
     page,
     mcpRegistryPage,
     mswControl,
@@ -353,10 +369,13 @@ test.describe("MCP environment validation rule", () => {
 
     await mcpRegistryPage.goto();
     await expect(mcpRegistryPage.heading).toBeVisible();
-    await mcpRegistryPage.settingsButtonFor("header-test").click();
-
-    const editor = page.getByRole("dialog", { name: /header-test Settings/i });
-    await expect(editor).toBeVisible();
+    await openCatalogEditor({
+      page,
+      mcpRegistryPage,
+      id: item.id,
+      name: item.name,
+    });
+    const editor = page;
     await editor.getByRole("button", { name: "Add Header" }).click();
 
     const headerDialog = page.getByRole("dialog", { name: /Add header/i });

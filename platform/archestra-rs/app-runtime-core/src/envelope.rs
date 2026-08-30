@@ -337,11 +337,15 @@ mod tests {
     #[test]
     fn only_the_first_head_is_targeted() {
         let result = prepare_app_envelope(
-            "<html><head></head><body><p>&lt;head&gt;</p></body></html>",
+            "<html><head id=\"first\"></head><body><head id=\"second\"></head></body></html>",
             CONTEXT_JSON,
             "",
             "",
         );
+        assert!(result.contains(&format!(
+            "<head id=\"first\">{BASE_CSS_LINK}<script {BOOTSTRAP_MARKER}>"
+        )));
+        assert!(result.contains("<head id=\"second\"></head>"));
         assert_eq!(count(&result, BOOTSTRAP_MARKER), 1);
     }
 

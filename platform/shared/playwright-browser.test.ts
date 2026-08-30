@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { ARCHESTRA_MCP_CATALOG_ID } from "./archestra-mcp-server";
 import {
   BROWSER_TOOLS_WITH_LARGE_RESULTS,
   isBrowserMcpTool,
@@ -32,5 +33,9 @@ describe("playwright browser helpers", () => {
   test("recognizes the built-in playwright catalog item", () => {
     expect(isPlaywrightCatalogItem(PLAYWRIGHT_MCP_CATALOG_ID)).toBe(true);
     expect(isBuiltInCatalogId(PLAYWRIGHT_MCP_CATALOG_ID)).toBe(true);
+    expect(isPlaywrightCatalogItem(ARCHESTRA_MCP_CATALOG_ID)).toBe(false);
+    expect(isBuiltInCatalogId(ARCHESTRA_MCP_CATALOG_ID)).toBe(true);
+    expect(isPlaywrightCatalogItem("custom-catalog-id")).toBe(false);
+    expect(isBuiltInCatalogId("custom-catalog-id")).toBe(false);
   });
 });

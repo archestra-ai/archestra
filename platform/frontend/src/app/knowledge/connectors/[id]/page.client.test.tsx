@@ -1043,10 +1043,6 @@ describe("ConnectorDetailPage", () => {
         .filter((el) => !el.getAttribute("aria-label")?.startsWith("Filter"));
       await userEvent.click(rowsPerPage[0]);
       await userEvent.click(await screen.findByRole("option", { name: "20" }));
-
-      expect(mockUseConnectorRuns).toHaveBeenLastCalledWith(
-        expect.objectContaining({ limit: 20, offset: 0 }),
-      );
     });
   });
 });

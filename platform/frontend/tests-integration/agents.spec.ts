@@ -1,13 +1,9 @@
+import { E2eTestId } from "@archestra/shared/e2e-test-ids";
 import { makeAgent, makeAgentsList } from "../src/mocks/data/agents";
 import { expect, test } from "./fixtures";
 
 test.describe("Agents", () => {
-  // FIXME(stale): the agents table row no longer offers the title + "more
-  // actions" affordances this walks, and Create is no longer a dialog — it
-  // routes to the /agents/new setup wizard, whose first step submits the
-  // POST and continues on /agents/<id>/edit?step=tools. Needs rewriting
-  // against the current pages, not re-timing.
-  test.fixme("can create and delete an agent", async ({
+  test("can create and delete an agent", async ({
     page,
     agentsPage,
     mswControl,
@@ -32,8 +28,14 @@ test.describe("Agents", () => {
     await agentsPage.goto();
     await expect(agentsPage.heading).toBeVisible();
     await agentsPage.createButton.click();
+    await page.waitForURL("/agents/new");
     await page.getByRole("textbox", { name: "Name" }).fill(NAME);
-    await page.getByRole("button", { name: "Create" }).click();
+    await page.getByTestId(E2eTestId.AgentSetupNextButton).click();
+    await page.getByTestId(E2eTestId.AgentSetupNextButton).click();
+    await page.getByTestId(E2eTestId.AgentSetupSubmitButton).click();
+    await page.waitForURL(/\/agents\/agent-created#connect$/);
+
+    await agentsPage.goto();
 
     await expect(agentsPage.rowFor(NAME)).toBeVisible();
 
@@ -57,12 +59,7 @@ test.describe("Agents", () => {
     await expect(agentsPage.rowFor(NAME)).toBeHidden();
   });
 
-  // FIXME(stale): the agents table row no longer offers the title + "more
-  // actions" affordances this walks, and Clone no longer opens an edit
-  // dialog — it lands on the clone's /agents/<id>/edit?step=configuration
-  // page, whose Save & Continue submits the PUT. Needs rewriting against the
-  // current pages, not re-timing.
-  test.fixme("can clone an agent and rename it", async ({
+  test("can clone an agent and rename it", async ({
     page,
     agentsPage,
     mswControl,
@@ -87,6 +84,31 @@ test.describe("Agents", () => {
       url: "/api/agents/:id",
       body: cloned,
     });
+    await mswControl.use({
+      method: "get",
+      url: "/api/agents/:id",
+      body: cloned,
+    });
+    await mswControl.use({
+      method: "get",
+      url: "/api/agents/:id/subagent-exclusions",
+      body: { excludedSubagentIds: [] },
+    });
+    await mswControl.use({
+      method: "get",
+      url: "/api/agents/:id/knowledge-source-exclusions",
+      body: { excludedConnectorIds: [] },
+    });
+    await mswControl.use({
+      method: "get",
+      url: "/api/agents/:id/tool-exclusions",
+      body: { excludedToolIds: [] },
+    });
+    await mswControl.use({
+      method: "get",
+      url: "/api/agents/:id/skill-exclusions",
+      body: { excludedSkillIds: [], skills: [] },
+    });
 
     await agentsPage.goto();
     await expect(agentsPage.rowFor(ORIGINAL)).toBeVisible();
@@ -94,21 +116,28 @@ test.describe("Agents", () => {
     await agentsPage.openRowMenu(ORIGINAL);
     await agentsPage.cloneButtonFor(ORIGINAL).click();
 
-    // Clone opens the edit dialog populated with the cloned agent.
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
-
-    // Refresh the list so post-PATCH refetch shows both rows.
+    // Register this after the dynamic `/api/agents/:id` override: without the
+    // exact route winning, `/api/agents/all` is treated as id "all" and the
+    // editor receives one agent object instead of the delegation-target array.
     await mswControl.use({
       method: "get",
-      url: "/api/agents",
-      body: makeAgentsList({ agents: [original, cloned] }),
+      url: "/api/agents/all",
+      body: [original, cloned],
     });
+    await dialog.getByRole("button", { name: "Clone" }).click();
+    await page.waitForURL(/\/agents\/agent-cloned\/edit\?step=configuration$/);
 
     const nameInput = page.getByRole("textbox", { name: "Name" });
     await nameInput.fill(CLONE);
-    await page.getByRole("button", { name: "Update" }).click();
+    await page.getByTestId(E2eTestId.AgentSetupNextButton).click();
+    await page.waitForURL(/step=tools/);
+    await page.getByTestId(E2eTestId.AgentSetupNextButton).click();
+    await page.waitForURL(/step=advanced/);
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await page.waitForURL(/\/agents\/agent-cloned$/);
 
-    await expect(agentsPage.rowFor(CLONE)).toBeVisible();
+    await expect(page.getByRole("heading", { name: CLONE })).toBeVisible();
   });
 });

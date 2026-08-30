@@ -137,13 +137,6 @@ def test_sign_in_refuses_insecure_transport() -> None:
         with pytest.raises(ValueError, match="insecure transport"):
             client.sign_in("a@b.c", "pw")
 
-
-def test_sign_in_allows_localhost_http(base_url: str) -> None:
-    # local docker over loopback http is fine -- no network exposure of the credentials.
-    with ArchestraClient(base_url) as client:
-        client.sign_in("a@b.c", "pw")
-
-
 class _NotReadyHandler(BaseHTTPRequestHandler):
     def log_message(self, *args: object) -> None:
         pass

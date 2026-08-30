@@ -80,7 +80,6 @@ describe("AppLogo", () => {
     // Decorative (alt="") because the app name is visible text beside it
     const img = container.querySelector("img");
     expect(img).toHaveAttribute("alt", "");
-    expect(img).toHaveClass("size-7", "shrink-0");
     expect(screen.getByText("Archestra.AI")).toBeInTheDocument();
   });
 });

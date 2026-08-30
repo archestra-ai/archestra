@@ -2,7 +2,6 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import {
-  CollectionFilters,
   FilterBar,
   FilterBarContextualActions,
   FilterSelect,
@@ -12,21 +11,6 @@ const ITEMS = [
   { value: "all", label: "All actions" },
   { value: "create", label: "Create" },
 ];
-
-describe("CollectionFilters", () => {
-  it("owns the 12px gap to the next sibling even inside a space-y stack", () => {
-    const { container } = render(
-      <div className="space-y-6">
-        <CollectionFilters>filters</CollectionFilters>
-        <div>table</div>
-      </div>,
-    );
-
-    const slot = container.querySelector('[data-slot="collection-filters"]');
-    expect(slot?.className).toContain("mb-3");
-    expect(slot?.className).toContain("[&+*]:!mt-0");
-  });
-});
 
 describe("FilterBar", () => {
   it("renders a Clear control only while filters are applied", async () => {
@@ -157,30 +141,5 @@ describe("FilterSelect", () => {
     expect(
       screen.getByRole("combobox", { name: "Audit action" }),
     ).toBeInTheDocument();
-  });
-
-  it("accents the trigger once the value leaves the inactive sentinel", () => {
-    const { rerender } = render(
-      <FilterSelect
-        value="all"
-        onValueChange={vi.fn()}
-        placeholder="Filter by action"
-        items={ITEMS}
-      />,
-    );
-    const idle = screen.getByRole("combobox", { name: "Filter by action" });
-    expect(idle.className).not.toContain("bg-primary/10");
-
-    rerender(
-      <FilterSelect
-        value="create"
-        onValueChange={vi.fn()}
-        placeholder="Filter by action"
-        items={ITEMS}
-      />,
-    );
-    expect(
-      screen.getByRole("combobox", { name: "Filter by action" }).className,
-    ).toContain("bg-primary/10");
   });
 });

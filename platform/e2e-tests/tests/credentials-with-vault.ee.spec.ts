@@ -68,8 +68,7 @@ test("Then we create folder in Vault for Default Team and exemplary secret", asy
   await ensureVaultSecretExists();
 });
 
-// TODO: Fix flaky test
-test.skip("Then we configure vault for Default Team", async ({ adminPage }) => {
+test("configures Vault for Default Team", async ({ adminPage }) => {
   test.skip(!byosEnabled, "BYOS Vault is not enabled in this environment.");
   await goToPage(adminPage, "/settings/teams");
   // Wait for the configure button to appear - page may take time to render
@@ -100,8 +99,6 @@ test.skip("Then we configure vault for Default Team", async ({ adminPage }) => {
 });
 
 test.describe("Chat API Keys with Readonly Vault", () => {
-  // TODO: Fix flaky Vault test - external service timing issues in CI
-  test.skip();
   ["team", "personal"].forEach((scope) => {
     test(`should create a ${scope} scoped chat API key with vault secret`, async ({
       adminPage,
@@ -275,16 +272,12 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
     extractCookieHeaders,
     makeRandomString,
   }) => {
-    test.skip(
-      true,
-      "Currently failing: readonly-vault tool assign returns 'team connection not shared with selected team'",
-    );
     test.skip(!byosEnabled, "BYOS Vault is not enabled in this environment.");
     const cookieHeaders = await extractCookieHeaders(adminPage);
     const catalogItemName = makeRandomString(10, "mcp");
 
     await ensureVaultSecretExists();
-    await ensureDefaultTeamVaultFolder(cookieHeaders);
+    const defaultTeamId = await ensureDefaultTeamVaultFolder(cookieHeaders);
 
     const createCatalogResponse =
       await archestraApiSdk.createInternalMcpCatalogItem({
@@ -318,16 +311,6 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
       name: createCatalogResponse.data.name,
     };
 
-    const teamsResponse = await archestraApiSdk.getTeams({
-      headers: { Cookie: cookieHeaders },
-    });
-    const defaultTeamId = teamsResponse.data?.data.find(
-      (team) => team.name === DEFAULT_TEAM_NAME,
-    )?.id;
-    if (!defaultTeamId) {
-      throw new Error(`Team "${DEFAULT_TEAM_NAME}" not found`);
-    }
-
     const installResponse = await archestraApiSdk.installMcpServer({
       headers: { Cookie: cookieHeaders },
       body: {
@@ -352,47 +335,12 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
       gatewayName: makeRandomString(10, "shared-gw"),
     });
 
-    const toolsResponse = await archestraApiSdk.getTools({
-      headers: { Cookie: cookieHeaders },
+    await assignCatalogCredentialToGateway({
+      page: adminPage,
+      catalogItemName: newCatalogItem.name,
+      credentialName: DEFAULT_TEAM_NAME,
+      gatewayName: sharedGateway.name,
     });
-    const toolIds =
-      toolsResponse.data
-        ?.filter((tool) => tool.name.startsWith(`${newCatalogItem.name}__`))
-        .map((tool) => tool.id) ?? [];
-    if (toolIds.length === 0) {
-      throw new Error(
-        `No discovered tools found for readonly-vault catalog ${newCatalogItem.name}`,
-      );
-    }
-
-    const serversResponse = await archestraApiSdk.getMcpServers({
-      headers: { Cookie: cookieHeaders },
-      query: { catalogId: newCatalogItem.id },
-    });
-    const defaultTeamServer = serversResponse.data?.find(
-      (server) => server.teamId === defaultTeamId,
-    );
-    if (!defaultTeamServer) {
-      throw new Error(
-        `No team installation found for readonly-vault catalog ${newCatalogItem.name}`,
-      );
-    }
-
-    for (const toolId of toolIds) {
-      const assignResponse = await archestraApiSdk.assignToolToAgent({
-        headers: { Cookie: cookieHeaders },
-        path: {
-          agentId: sharedGateway.id,
-          toolId,
-        },
-        body: { mcpServerId: defaultTeamServer.id },
-      });
-      if (assignResponse.error) {
-        throw new Error(
-          `Failed to assign readonly-vault tool ${toolId}: ${JSON.stringify(assignResponse.error)}`,
-        );
-      }
-    }
 
     // Verify tool call result using default team credential
     await verifyToolCallResultViaApi({
@@ -406,6 +354,10 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
     // CLEANUP: Delete the catalog item
     await archestraApiSdk.deleteInternalMcpCatalogItem({
       path: { id: newCatalogItem.id },
+      headers: { Cookie: cookieHeaders },
+    });
+    await archestraApiSdk.deleteAgent({
+      path: { id: sharedGateway.id },
       headers: { Cookie: cookieHeaders },
     });
 
@@ -424,15 +376,6 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
     makeRandomString,
   }) => {
     test.skip(!byosEnabled, "BYOS Vault is not enabled in this environment.");
-    // Marked as expected-fail: the `addCustomSelfHostedCatalogItem` fixture
-    // waits for a button named "Set external secret" inside the env-var
-    // sub-dialog, but the current UI renders the trigger as just
-    // "Set secret" — the "Set external secret" string is the *title* of
-    // the sub-dialog that opens after the trigger is clicked, not the
-    // trigger's own label. Restore alignment by either renaming the UI
-    // trigger or switching the fixture selector back to /Set secret/i,
-    // then remove this annotation.
-    test.fail();
     test.setTimeout(90_000);
 
     const cookieHeaders = await extractCookieHeaders(adminPage);

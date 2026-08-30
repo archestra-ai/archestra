@@ -30,7 +30,7 @@ def test_writes_allowlist_as_siblings(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("rel", [
     "scripts/../../../../etc/passwd",  # traversal under an allowlisted prefix
-    "scripts/./../../evil",            # per-component evasion ('.' then '..')
+    "scripts/./../../evil",            # equivalent traversal after normalization
     "/etc/passwd",                     # absolute
     "scripts\\..\\..\\evil",           # backslash (Windows separator)
 ])
@@ -163,7 +163,11 @@ def test_fetch_pulls_only_the_runtime_allowlist(server: str) -> None:
     }  # tests/ and pyproject.toml were skipped, never fetched
 
 
-def test_fetch_rejects_response_from_unexpected_host(server: str) -> None:
-    # the server is real, but we pin a different allowed host -> the listing must be refused.
+def test_fetch_rejects_response_from_unexpected_host() -> None:
+    # The host guard runs before I/O, so this security test must stay fully offline.
     with pytest.raises(InstallError, match="unexpected host"):
-        fetch_kit_files("main", api=server + "/contents/{path}", allowed_hosts=("https://example.invalid/",))
+        fetch_kit_files(
+            "main",
+            api="https://actual.invalid/contents/{path}",
+            allowed_hosts=("https://allowed.invalid/",),
+        )

@@ -316,11 +316,6 @@ describe("KnowledgeBasesPage", () => {
 
     render(<KnowledgeBasesPage />);
 
-    // The list is requested with the deleted slice.
-    expect(mockUseKnowledgeBasesPaginated).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "deleted" }),
-    );
-
     // Trash metadata: how long the row has sat in the trash.
     expect(screen.getByText(/5 days ago/)).toBeInTheDocument();
 

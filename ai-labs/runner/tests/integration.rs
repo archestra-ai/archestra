@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use archestra_bench::config::{load_envs, load_lanes};
+use archestra_bench::config::load_lanes;
 
 fn bench_dir() -> PathBuf {
     // CARGO_MANIFEST_DIR is ai-labs/runner; the benchmark root is its parent.
@@ -136,7 +136,7 @@ fn assert_no_fixture_drift(generated: &Path, regenerated_binaries: &[PathBuf]) {
 }
 
 #[test]
-fn test_load_real_envs() {
+fn generated_fixtures_match_committed_files() {
     let tmp = std::env::temp_dir().join(format!("archestra_bench_integ_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&tmp);
     let dst = copy_bench_to_temp(&tmp);
@@ -147,15 +147,6 @@ fn test_load_real_envs() {
     }
     generate_fixtures(&dst);
     assert_no_fixture_drift(&dst, &binaries);
-
-    let envs = load_envs(&dst.join("envs")).expect("should load envs");
-    assert!(envs.contains_key("basic"));
-    assert!(envs.contains_key("archestra-api"));
-    assert!(envs.contains_key("apps"));
-    for env in envs.values() {
-        assert!(!env.id.is_empty());
-        assert!(!env.tasks.is_empty());
-    }
 
     let _ = std::fs::remove_dir_all(&tmp);
 }

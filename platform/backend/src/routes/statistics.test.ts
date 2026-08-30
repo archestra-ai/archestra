@@ -199,6 +199,43 @@ describe("GET /api/statistics/users", () => {
 
     expect(response.statusCode).toBe(200);
   });
+
+  test("returns overview totals and leaders through the route", async ({
+    makeAgent,
+    makeInteraction,
+    makeTeam,
+  }) => {
+    const team = await makeTeam(organizationId, currentUser.id, {
+      name: "Overview Team",
+    });
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      name: "Overview Agent",
+      teams: [team.id],
+    });
+    await makeInteraction(agent.id, {
+      inputTokens: 80,
+      outputTokens: 20,
+      cost: "3.0000000000",
+      model: "gpt-4o",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/statistics/overview?timeframe=24h",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      totalRequests: 1,
+      totalTokens: 100,
+      totalCost: 3,
+      topTeam: "Overview Team",
+      topAgent: "Overview Agent",
+      topModel: "gpt-4o",
+    });
+  });
 });
 
 describe("GET /api/statistics/apps", () => {

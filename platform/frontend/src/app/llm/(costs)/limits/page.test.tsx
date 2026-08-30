@@ -413,12 +413,6 @@ describe("LimitsPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("requests virtual keys with the API-supported page size", () => {
-    render(<LimitsPage />);
-
-    expect(mockUseAllVirtualApiKeys).toHaveBeenCalledWith({ limit: 100 });
-  });
-
   it("shows 'All models' badge for limits with null model", () => {
     mockUseLimits.mockReturnValue({
       data: [

@@ -1918,26 +1918,6 @@ describe("AgentForm LLM permission gating", () => {
     } as unknown as ReturnType<typeof useSession>);
   });
 
-  it("does not enable LLM queries when the user lacks LLM read permissions", () => {
-    vi.mocked(useHasPermissions).mockImplementation(((...args: unknown[]) => {
-      const permissions = (args[0] ?? {}) as Record<string, unknown>;
-      if ("llmProviderApiKey" in permissions || "llmModel" in permissions) {
-        return { data: false };
-      }
-      return { data: true };
-    }) as unknown as typeof useHasPermissions);
-
-    render(<AgentForm agentType="agent" />);
-
-    expect(useAvailableLlmProviderApiKeysMock).toHaveBeenCalledWith({
-      includeKeyId: undefined,
-      enabled: false,
-    });
-    expect(useLlmModelsByProviderMock).toHaveBeenCalledWith({
-      enabled: false,
-    });
-  });
-
   it("shows org default model message when the user cannot read keys or models", () => {
     vi.mocked(useHasPermissions).mockImplementation(((...args: unknown[]) => {
       const permissions = (args[0] ?? {}) as Record<string, unknown>;

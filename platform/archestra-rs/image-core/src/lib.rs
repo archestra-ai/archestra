@@ -206,5 +206,8 @@ mod tests {
         )
         .expect("a tiny image trivially fits");
         assert!(result.bytes.len() <= 10_000_000);
+        let decoded =
+            image::load_from_memory(&result.bytes).expect("result bytes should decode as an image");
+        assert_eq!((decoded.width(), decoded.height()), (64, 64));
     }
 }

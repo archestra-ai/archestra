@@ -1203,15 +1203,11 @@ test.describe("Identity Provider Role Mapping E2E", () => {
 });
 
 test.describe("Identity Provider SAML E2E Flow with Keycloak", () => {
-  test("should configure SAML provider, login via SSO, update, and delete", async ({
+  test("should configure SAML provider, login via SSO, update, and delete @saml", async ({
     page,
     browser,
     goToPage,
   }) => {
-    test.skip(
-      true,
-      "Currently failing in CI (identity-providers.ee.spec.ts:968 SAML/Keycloak flow)",
-    );
     test.slow();
 
     // Fetch IdP metadata dynamically (Keycloak regenerates certs on restart)

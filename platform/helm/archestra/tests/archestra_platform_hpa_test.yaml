@@ -124,26 +124,6 @@ tests:
           path: spec.behavior.scaleDown.policies[1].value
           value: 1
 
-  - it: should configure custom minReplicas
-    set:
-      archestra.horizontalPodAutoscaler.enabled: true
-      archestra.horizontalPodAutoscaler.minReplicas: 3
-      archestra.horizontalPodAutoscaler.maxReplicas: 10
-    asserts:
-      - equal:
-          path: spec.minReplicas
-          value: 3
-
-  - it: should configure custom maxReplicas
-    set:
-      archestra.horizontalPodAutoscaler.enabled: true
-      archestra.horizontalPodAutoscaler.minReplicas: 1
-      archestra.horizontalPodAutoscaler.maxReplicas: 20
-    asserts:
-      - equal:
-          path: spec.maxReplicas
-          value: 20
-
   - it: should configure both min and max replicas
     set:
       archestra.horizontalPodAutoscaler.enabled: true

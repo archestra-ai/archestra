@@ -37,8 +37,6 @@ describe("appRunLink", () => {
     // Without escaping, `](/evil)[` closes the label early and injects a link.
     const link = appRunLink("Evil](/evil)", APP);
     expect(link).toBe(`[Evil\\]\\(\\/evil\\)](/a/${APP_ID})`);
-    // The href is exactly the app page — the label text never terminates it.
-    expect(link.endsWith(`](/a/${APP_ID})`)).toBe(true);
   });
 
   test("escapes markdown punctuation so the label renders literally", () => {

@@ -99,10 +99,9 @@ export async function addCustomSelfHostedCatalogItem({
     }
 
     if (envVars.vaultSecret) {
-      // Button text changed: "Set Secret" → "Set external secret".
-      await envVarDialog
-        .getByRole("button", { name: /Set external secret/i })
-        .click();
+      // The control is labelled "Set secret"; the dialog it opens is
+      // "Set external secret".
+      await envVarDialog.getByRole("button", { name: /^Set secret$/i }).click();
       const externalSecretDialog = page.getByRole("dialog", {
         name: /Set external secret/i,
       });

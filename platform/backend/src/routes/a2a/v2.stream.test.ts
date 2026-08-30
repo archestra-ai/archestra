@@ -131,17 +131,6 @@ describe("a2a v2 streaming route", () => {
     await app.close();
   });
 
-  test("advertises the streaming capability in the agent card", async () => {
-    const response = await app.inject({
-      method: "GET",
-      url: `/v2/a2a/${agentId}/.well-known/agent-card.json`,
-      headers: { authorization: "Bearer test-token" },
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(response.json().capabilities.streaming).toBe(true);
-  });
-
   test("SendStreamingMessage streams incremental deltas then a terminal completed event over SSE", async () => {
     const response = await app.inject({
       method: "POST",

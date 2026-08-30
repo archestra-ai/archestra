@@ -1,5 +1,6 @@
 import type OpenAIProvider from "openai";
 import { vi } from "vitest";
+import config from "@/config";
 import { describe, expect, test } from "@/test";
 
 vi.mock("@/observability");
@@ -49,11 +50,13 @@ describe("azureAdapterFactory", () => {
   });
 
   describe("getBaseUrl", () => {
-    test("returns string or undefined depending on config", () => {
-      // In test environments ARCHESTRA_AZURE_OPENAI_BASE_URL is unset,
-      // so baseUrl coerces to undefined via `config.llm.azure.baseUrl || undefined`
-      const url = azureAdapterFactory.getBaseUrl();
-      expect(url === undefined || typeof url === "string").toBe(true);
+    test("returns the configured Azure endpoint", () => {
+      config.llm.azure.baseUrl =
+        "https://configured-resource.openai.azure.com/openai";
+
+      expect(azureAdapterFactory.getBaseUrl()).toBe(
+        "https://configured-resource.openai.azure.com/openai",
+      );
     });
   });
 

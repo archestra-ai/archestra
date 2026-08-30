@@ -20,6 +20,7 @@ import {
 import { ApiError, constructResponseSchema, UuidIdSchema } from "@/types";
 import { checkPreregisteredCredentialBinding } from "./oauth-issuer-binding";
 import { validateAuthorizationResponseIssuer } from "./oauth-issuer-validation";
+import { OAUTH_CALLBACK_PATH } from "./route-paths";
 
 /**
  * Generate PKCE code verifier
@@ -1170,7 +1171,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
    * Exchanges authorization code for access token
    */
   fastify.post(
-    "/api/oauth/callback",
+    OAUTH_CALLBACK_PATH,
     {
       schema: {
         operationId: RouteId.HandleOAuthCallback,

@@ -1,7 +1,4 @@
-import {
-  MCP_DEPLOYMENT_STATES,
-  type McpDeploymentState,
-} from "@archestra/shared";
+import { MCP_DEPLOYMENT_STATES } from "@archestra/shared";
 import { describe, expect, test } from "@/test";
 import {
   applyDeploymentObservation,
@@ -18,6 +15,24 @@ function facts(
     podFailure: null,
     ...overrides,
   };
+}
+
+function expectedDecision(
+  facts: OrdinaryDeploymentFacts,
+  cachedState: (typeof MCP_DEPLOYMENT_STATES)[number],
+) {
+  if (!facts.exists) return { kind: "state" as const, state: "not_created" };
+  if (facts.availableReplicas > 0) {
+    return { kind: "state" as const, state: "running" };
+  }
+  if (facts.podFailure?.failed) {
+    return {
+      kind: "state" as const,
+      state: facts.podFailure.transient ? "pending" : "failed",
+    };
+  }
+  if (cachedState === "running") return { kind: "debounce-running" as const };
+  return { kind: "state" as const, state: cachedState };
 }
 
 describe("deriveOrdinaryDeploymentState", () => {
@@ -79,21 +94,25 @@ describe("deriveOrdinaryDeploymentState", () => {
     }
   });
 
-  test("is total across ordinary facts and cached states", () => {
+  test("defines the ordinary decision for every cached state and cluster fact", () => {
     const decisionKinds = new Set<string>();
     for (const exists of [true, false]) {
       for (const availableReplicas of [0, 1]) {
         for (const podFailure of [
           null,
+          { failed: false, transient: false },
           { failed: true, transient: false },
           { failed: true, transient: true },
         ]) {
           for (const cachedState of MCP_DEPLOYMENT_STATES) {
+            const clusterFacts = { exists, availableReplicas, podFailure };
             const decision = deriveOrdinaryDeploymentState(
-              { exists, availableReplicas, podFailure },
+              clusterFacts,
               cachedState,
             );
-            expect(decision).toBeDefined();
+            expect(decision).toEqual(
+              expectedDecision(clusterFacts, cachedState),
+            );
             decisionKinds.add(decision.kind);
           }
         }
@@ -112,15 +131,5 @@ describe("applyDeploymentObservation", () => {
         );
       }
     }
-  });
-
-  test("returns a deployment state", () => {
-    const observed: McpDeploymentState = "failed";
-    expect(
-      applyDeploymentObservation({
-        cachedState: "pending",
-        observedState: observed,
-      }),
-    ).toBe(observed);
   });
 });

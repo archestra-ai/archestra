@@ -113,6 +113,11 @@ export function useBrowserStream({
   const isEditingUrlRef = useRef(false);
   /** Track if subscription is paused due to window/tab losing focus */
   const isPausedDueToFocusRef = useRef(false);
+  const activeConversationIdRef = useRef(activeConversationId);
+
+  useEffect(() => {
+    activeConversationIdRef.current = activeConversationId;
+  }, [activeConversationId]);
 
   // Wrapper that updates BOTH ref (immediately) and state (for UI)
   // This prevents race conditions where screenshot updates come in
@@ -130,7 +135,7 @@ export function useBrowserStream({
       if (e.key === ACTIVE_BROWSER_CONVERSATION_KEY && e.newValue) {
         try {
           const data = JSON.parse(e.newValue) as ActiveBrowserConversation;
-          if (data.conversationId !== activeConversationId) {
+          if (data.conversationId !== activeConversationIdRef.current) {
             setActiveConversationId(data.conversationId);
           }
         } catch {
@@ -141,7 +146,7 @@ export function useBrowserStream({
 
     window.addEventListener("storage", handleStorageChange);
     return () => window.removeEventListener("storage", handleStorageChange);
-  }, [isPopup, activeConversationId]);
+  }, [isPopup]);
 
   // For main panel (not popup), store active conversation in localStorage when subscribing
   useEffect(() => {

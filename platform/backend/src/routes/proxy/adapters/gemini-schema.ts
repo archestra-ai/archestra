@@ -56,6 +56,7 @@ export function sanitizeGeminiToolSchema(schema: unknown): unknown {
 
   const result: SchemaObject = { ...(schema as SchemaObject) };
   normalizeEnum(result);
+  normalizeExclusiveBounds(result);
   recurseSubschemas(result);
   ensureNodeType(result);
   return result;
@@ -119,6 +120,48 @@ function normalizeEnum(node: SchemaObject): void {
   }
 }
 
+function normalizeExclusiveBounds(node: SchemaObject): void {
+  normalizeExclusiveBound({
+    node,
+    exclusiveKey: "exclusiveMinimum",
+    inclusiveKey: "minimum",
+    comparison: "greater than",
+  });
+  normalizeExclusiveBound({
+    node,
+    exclusiveKey: "exclusiveMaximum",
+    inclusiveKey: "maximum",
+    comparison: "less than",
+  });
+}
+
+function normalizeExclusiveBound(params: {
+  node: SchemaObject;
+  exclusiveKey: "exclusiveMinimum" | "exclusiveMaximum";
+  inclusiveKey: "minimum" | "maximum";
+  comparison: "greater than" | "less than";
+}): void {
+  const { node, exclusiveKey, inclusiveKey, comparison } = params;
+  const exclusiveValue = node[exclusiveKey];
+  const bound =
+    typeof exclusiveValue === "number"
+      ? exclusiveValue
+      : exclusiveValue === true && typeof node[inclusiveKey] === "number"
+        ? node[inclusiveKey]
+        : undefined;
+
+  delete node[exclusiveKey];
+  if (typeof bound !== "number") return;
+
+  if (node[inclusiveKey] === undefined) {
+    node[inclusiveKey] = bound;
+  }
+  node.description = appendDescription(
+    node.description,
+    `Value must be ${comparison} \`${bound}\`.`,
+  );
+}
+
 function recurseSubschemas(node: SchemaObject): void {
   for (const key of SUBSCHEMA_MAP_KEYS) {
     const map = node[key];
@@ -179,6 +222,10 @@ function appendConstraint(description: unknown, values: unknown[]): string {
     rendered.length === 1
       ? `Value must be ${rendered[0]}.`
       : `Value must be one of: ${rendered.join(", ")}.`;
+  return appendDescription(description, note);
+}
+
+function appendDescription(description: unknown, note: string): string {
   return typeof description === "string" && description.length > 0
     ? `${description} ${note}`
     : note;

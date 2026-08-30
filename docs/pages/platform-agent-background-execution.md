@@ -145,8 +145,8 @@ maintained runtime cannot silently switch from subscription access to metered
 API billing.
 
 The **Inference API** setting describes the wire protocol expected by the
-image. Choose **OpenAI Responses** for clients such as Codex and OpenClaw.
-Choose **OpenAI Chat Completions** for clients such as Hermes. Choose
+image. Choose **OpenAI Responses** for clients such as Codex. Choose **OpenAI
+Chat Completions** for clients such as Hermes and OpenClaw. Choose
 **Anthropic Messages** for clients such as Claude Code. Archestra rejects an
 incompatible model and image before creating a pod.
 

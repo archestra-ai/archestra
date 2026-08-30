@@ -35,11 +35,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -960,9 +955,9 @@ function EnvironmentEditorDialog({
             disabled={isPending || !egressBaselineLoaded}
           />
         </section>
-        <Accordion type="single" collapsible>
-          <AccordionItem value="advanced" className="rounded-md border px-4">
-            <AccordionTrigger className="py-3 hover:no-underline">
+        <Accordion type="single" collapsible className="border-t">
+          <AccordionItem value="advanced">
+            <AccordionTrigger className="hover:no-underline">
               Advanced
             </AccordionTrigger>
             <AccordionContent className="space-y-4 pb-4">
@@ -1186,41 +1181,29 @@ export function NetworkPolicyFields({
       ) : null}
 
       <div className="space-y-2">
-        <FieldLabel
-          label="Egress"
-          description={
-            <>
-              Controls outbound internet access. Block all (
-              <code className="inline rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]">
-                off
-              </code>{" "}
-              in the API) denies all egress, Allowlist (
-              <code className="inline rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]">
-                restricted
-              </code>
-              ) permits only the CIDR/domain rules below, and Public internet (
-              <code className="inline rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]">
-                unrestricted
-              </code>
-              ) permits public egress. Workloads hosted in your cluster still
-              block private, link-local, metadata, and other reserved ranges.
-            </>
-          }
-        />
+        <Label htmlFor="network-policy-egress">Egress</Label>
         <Select
           value={egressMode}
           onValueChange={(value) => setEgressMode(value as EgressMode)}
           disabled={disabled || enforcementUnavailable}
         >
-          <SelectTrigger className="w-full">
+          <SelectTrigger id="network-policy-egress" className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="off">{EGRESS_MODE_LABELS.off}</SelectItem>
-            <SelectItem value="restricted">
+            <SelectItem value="off" description={EGRESS_MODE_DESCRIPTIONS.off}>
+              {EGRESS_MODE_LABELS.off}
+            </SelectItem>
+            <SelectItem
+              value="restricted"
+              description={EGRESS_MODE_DESCRIPTIONS.restricted}
+            >
               {EGRESS_MODE_LABELS.restricted}
             </SelectItem>
-            <SelectItem value="unrestricted">
+            <SelectItem
+              value="unrestricted"
+              description={EGRESS_MODE_DESCRIPTIONS.unrestricted}
+            >
               {EGRESS_MODE_LABELS.unrestricted}
             </SelectItem>
           </SelectContent>
@@ -1247,6 +1230,7 @@ export function NetworkPolicyFields({
 
       <div className="space-y-2">
         <FieldLabel
+          htmlFor="network-policy-domain-preset"
           label="Domain preset"
           description={
             <>
@@ -1264,7 +1248,7 @@ export function NetworkPolicyFields({
           onValueChange={(value) => setDomainPreset(value as DomainPreset)}
           disabled={disabled || egressMode !== "restricted" || !supportsFqdn}
         >
-          <SelectTrigger className="w-full">
+          <SelectTrigger id="network-policy-domain-preset" className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -1306,24 +1290,9 @@ function FieldLabel({
   description: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="space-y-1">
       <Label htmlFor={htmlFor}>{label}</Label>
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="h-5 w-5 text-muted-foreground hover:text-foreground"
-            aria-label={`${label} help`}
-          >
-            <Info className="h-3.5 w-3.5" />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent align="start" className="w-80 text-sm">
-          {description}
-        </PopoverContent>
-      </Popover>
+      <div className="text-xs text-muted-foreground">{description}</div>
     </div>
   );
 }
@@ -1332,6 +1301,13 @@ const EGRESS_MODE_LABELS: Record<EgressMode, string> = {
   off: "Block all",
   restricted: "Allowlist",
   unrestricted: "Public internet",
+};
+
+const EGRESS_MODE_DESCRIPTIONS: Record<EgressMode, string> = {
+  off: "Block all outbound traffic.",
+  restricted: "Allow only the CIDRs and domains configured below.",
+  unrestricted:
+    "Allow public destinations; private and reserved ranges stay blocked.",
 };
 
 function formatEgressMode(mode: EgressMode) {

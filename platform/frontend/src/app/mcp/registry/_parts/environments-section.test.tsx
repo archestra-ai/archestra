@@ -289,6 +289,12 @@ describe("EnvironmentsSection filters", () => {
         name: /Learn more/,
       }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(/IPv4 or IPv6 CIDR ranges that workloads/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Allowed CIDRs help" }),
+    ).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Validation rule")).not.toBeInTheDocument();
     expect(
       screen.queryByLabelText("Trusted image registries"),

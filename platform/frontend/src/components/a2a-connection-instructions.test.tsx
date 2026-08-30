@@ -29,7 +29,9 @@ vi.mock("@/lib/user-token.query", () => ({
 }));
 // Registers its own queries and is not part of what these tests assert.
 vi.mock("@/components/mcp-oauth-management", () => ({
-  McpOauthManagement: () => null,
+  McpOauthManagement: ({ heading }: { heading?: { title: string } }) => (
+    <div>{heading?.title}</div>
+  ),
 }));
 vi.mock("@/components/agent-chat-apps", () => ({
   AgentChatApps: () => (
@@ -111,6 +113,12 @@ describe("A2AConnectionInstructions — detail layout", () => {
     expect(
       within(apiSection).getByRole("heading", { name: "Authentication" }),
     ).toBeVisible();
+    const authenticationSection = within(apiSection)
+      .getByRole("heading", { name: "Authentication" })
+      .closest("section") as HTMLElement;
+    expect(
+      within(authenticationSection).getByText("OAuth clients"),
+    ).toBeVisible();
 
     const channelsHeading = screen.getByRole("heading", {
       name: "Other ways to reach this agent",
@@ -124,8 +132,10 @@ describe("A2AConnectionInstructions — detail layout", () => {
       name: /Request examples/,
     });
     expect(screen.queryByText("Continue the conversation")).toBeNull();
+    expect(screen.queryByLabelText("Token for examples")).toBeNull();
 
     await user.click(examplesTrigger);
+    expect(screen.getByLabelText("Token for examples")).toBeVisible();
     expect(screen.getByText("Continue the conversation")).toBeVisible();
   });
 

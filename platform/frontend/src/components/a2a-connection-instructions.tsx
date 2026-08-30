@@ -96,6 +96,7 @@ export function A2AConnectionInstructions({
   const [backgroundExampleMessageId] = useState(() => generateUuid());
   const endpointHeadingId = useId();
   const examplesHeadingId = useId();
+  const exampleTokenSelectId = useId();
 
   // Mirror the /connection page's base-URL fallback chain so the A2A panel
   // honors the same admin curation (descriptions, default flag, hidden URLs).
@@ -591,94 +592,6 @@ curl -X POST "${a2aEndpoint}" \\
                 work.
               </p>
             </div>
-            <div className="space-y-3">
-              <Select
-                value={effectiveTokenId}
-                onValueChange={setSelectedTokenId}
-              >
-                <SelectTrigger className="min-h-[60px] w-full py-2.5">
-                  <SelectValue placeholder="Select token">
-                    {effectiveTokenId && (
-                      <div className="flex flex-col items-start gap-0.5 text-left">
-                        <div>{getTokenDisplayName()}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {isPersonalTokenSelected
-                            ? "For your own integrations"
-                            : selectedTeamToken?.isOrganizationToken
-                              ? "Shared across the organization"
-                              : "Shared with this team"}
-                        </div>
-                      </div>
-                    )}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {userToken && (
-                    <SelectItem value={PERSONAL_TOKEN_ID}>
-                      <div className="flex flex-col items-start gap-0.5">
-                        <div>Personal Token</div>
-                        <div className="text-xs text-muted-foreground">
-                          For your own integrations
-                        </div>
-                      </div>
-                    </SelectItem>
-                  )}
-                  {tokens
-                    ?.filter((token) => !token.isOrganizationToken)
-                    .map((token) => {
-                      const unusable = token.worksWithProfile === false;
-                      return (
-                        <SelectItem
-                          key={token.id}
-                          value={token.id}
-                          disabled={unusable}
-                        >
-                          <div className="flex flex-col items-start gap-0.5">
-                            <div>
-                              {token.team?.name
-                                ? `Team Token (${token.team.name})`
-                                : token.name}
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                              {unusable
-                                ? unusableTokenReason
-                                : "Shared with this team"}
-                            </div>
-                          </div>
-                        </SelectItem>
-                      );
-                    })}
-                  {tokens
-                    ?.filter((token) => token.isOrganizationToken)
-                    .map((token) => (
-                      <SelectItem key={token.id} value={token.id}>
-                        <div className="flex flex-col items-start gap-0.5">
-                          <div>Organization Token</div>
-                          <div className="text-xs text-muted-foreground">
-                            Shared across the organization
-                          </div>
-                        </div>
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                <Link
-                  href={manageTokenLink.href}
-                  className="underline hover:text-foreground"
-                >
-                  {manageTokenLink.label}
-                </Link>
-              </p>
-              {agent.identityProviderId && (
-                <p className="text-xs text-muted-foreground">
-                  External identity-provider JWTs are also accepted.
-                </p>
-              )}
-            </div>
-          </section>
-
-          <div className="border-t p-4">
             <McpOauthManagement
               resourceId={agent.id}
               resourceKind="agent"
@@ -688,7 +601,7 @@ curl -X POST "${a2aEndpoint}" \\
                   "Register applications that call this agent as themselves or on behalf of signed-in users.",
               }}
             />
-          </div>
+          </section>
 
           <Collapsible className="border-t">
             <CollapsibleTrigger className="group flex w-full items-center justify-between gap-4 p-4 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
@@ -703,7 +616,100 @@ curl -X POST "${a2aEndpoint}" \\
               <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-4 border-t px-4 pb-4 pt-4">
-              <div className="space-y-3">
+              <div className="space-y-2">
+                <div className="space-y-1">
+                  <Label htmlFor={exampleTokenSelectId}>
+                    Token for examples
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Select the platform token used when revealing or copying a
+                    request.
+                  </p>
+                </div>
+                <Select
+                  value={effectiveTokenId}
+                  onValueChange={setSelectedTokenId}
+                >
+                  <SelectTrigger
+                    id={exampleTokenSelectId}
+                    className="min-h-[60px] w-full py-2.5"
+                  >
+                    <SelectValue placeholder="Select token">
+                      {effectiveTokenId && (
+                        <div className="flex flex-col items-start gap-0.5 text-left">
+                          <div>{getTokenDisplayName()}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {isPersonalTokenSelected
+                              ? "For your own integrations"
+                              : selectedTeamToken?.isOrganizationToken
+                                ? "Shared across the organization"
+                                : "Shared with this team"}
+                          </div>
+                        </div>
+                      )}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {userToken && (
+                      <SelectItem value={PERSONAL_TOKEN_ID}>
+                        <div className="flex flex-col items-start gap-0.5">
+                          <div>Personal Token</div>
+                          <div className="text-xs text-muted-foreground">
+                            For your own integrations
+                          </div>
+                        </div>
+                      </SelectItem>
+                    )}
+                    {tokens
+                      ?.filter((token) => !token.isOrganizationToken)
+                      .map((token) => {
+                        const unusable = token.worksWithProfile === false;
+                        return (
+                          <SelectItem
+                            key={token.id}
+                            value={token.id}
+                            disabled={unusable}
+                          >
+                            <div className="flex flex-col items-start gap-0.5">
+                              <div>
+                                {token.team?.name
+                                  ? `Team Token (${token.team.name})`
+                                  : token.name}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {unusable
+                                  ? unusableTokenReason
+                                  : "Shared with this team"}
+                              </div>
+                            </div>
+                          </SelectItem>
+                        );
+                      })}
+                    {tokens
+                      ?.filter((token) => token.isOrganizationToken)
+                      .map((token) => (
+                        <SelectItem key={token.id} value={token.id}>
+                          <div className="flex flex-col items-start gap-0.5">
+                            <div>Organization Token</div>
+                            <div className="text-xs text-muted-foreground">
+                              Shared across the organization
+                            </div>
+                          </div>
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  <Link
+                    href={manageTokenLink.href}
+                    className="underline hover:text-foreground"
+                  >
+                    {manageTokenLink.label}
+                  </Link>
+                </p>
+              </div>
+
+              <div className="space-y-3 border-t pt-4">
                 <CurlExampleSection
                   key={`card-${effectiveTokenId}`}
                   code={agentCardCurlCode}

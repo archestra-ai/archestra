@@ -156,11 +156,9 @@ type AgentVisibilityChoice = AgentScope | "user";
 
 import {
   useCreateProfile,
-  useDefaultAgentId,
   useDelegationTargetAgents,
   useDeleteProfile,
   useProfile,
-  useUpdateDefaultAgentId,
   useUpdateProfile,
 } from "@/lib/agent.query";
 import {
@@ -200,7 +198,6 @@ import {
 import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import { useLlmModelsByProvider } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
-import { useOrganization } from "@/lib/organization.query";
 import { useSkillsPaginated } from "@/lib/skills/skill.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";
 import { cn, isReportedApiError } from "@/lib/utils";
@@ -930,7 +927,6 @@ export function AgentForm({
   // Only for the create rollback: a refused follow-up write deletes the record
   // the create just made, so nothing half set up is left behind.
   const deleteAgent = useDeleteProfile();
-  const updateDefaultAgentId = useUpdateDefaultAgentId();
   const syncDelegations = useSyncAgentDelegations();
   // Every set below is seeded from its own request and saved back as a full
   // replace, so all of them gate on `isSuccess` rather than `isFetched`:
@@ -1164,14 +1160,6 @@ export function AgentForm({
   // read a tools-only edit as nothing to save.
   const [hasPendingToolChanges, setHasPendingToolChanges] = useState(false);
   const [scope, setScope] = useState<AgentScope>("personal");
-  // The caller's personal default lives on the member, not the agent, so it is
-  // read from its own query and tracked as an override on top: null until the
-  // switch is touched, so a late-arriving query result cannot be mistaken for
-  // an edit.
-  const { data: memberDefaultAgentId } = useDefaultAgentId();
-  const [personalDefaultOverride, setPersonalDefaultOverride] = useState<
-    boolean | null
-  >(null);
   const [knowledgeBaseIds, setKnowledgeBaseIds] = useState<string[]>([]);
   const [connectorIds, setConnectorIds] = useState<string[]>([]);
   const [autoConfigureOnToolDiscovery, setAutoConfigureOnToolDiscovery] =
@@ -1412,27 +1400,6 @@ export function AgentForm({
   // create mode too, before any gateway exists.
   const { data: session } = useSession();
   const currentUserId = session?.user?.id ?? null;
-  const { data: organization } = useOrganization();
-  // Any chat agent this form can show is one the caller can start a chat
-  // with, so any of them can be their default — a team's or the
-  // organization's as readily as their own. Hidden only for built-ins and
-  // other agent types, which no chat starts on.
-  const isCurrentlyPersonalDefault =
-    !!agent?.id && agent.id === memberDefaultAgentId;
-  const canTogglePersonalDefault = isInternalAgent && !isBuiltIn;
-  // Pinning the agent the organization already defaults to changes nothing
-  // today — the agents list reads that row as `default (org)` and offers no
-  // pin at all. The switch stays, because it is the only place the pin can be
-  // taken back off, but it has to say what it is (and is not) doing here.
-  const isOrganizationDefault =
-    !!agent?.id && agent.id === organization?.defaultAgentId;
-  const personalDefault =
-    canTogglePersonalDefault &&
-    (personalDefaultOverride ?? isCurrentlyPersonalDefault);
-  const personalDefaultChanged =
-    canTogglePersonalDefault &&
-    personalDefaultOverride !== null &&
-    personalDefaultOverride !== isCurrentlyPersonalDefault;
   // Rows the admin has picked, kept for as long as they stay picked. Without
   // this a skill chosen from one search vanishes the moment the query changes —
   // it is in neither the catalog page nor the new search hits — while its id
@@ -1598,7 +1565,6 @@ export function AgentForm({
       setKnowledgeBaseIds(nextValues.knowledgeBaseIds);
       setConnectorIds(nextValues.connectorIds);
       setScope(nextValues.scope);
-      setPersonalDefaultOverride(null);
       setPassthroughHeaders(nextValues.passthroughHeaders);
       setBackgroundExecution(nextValues.backgroundExecution);
       setToolExposureMode(nextValues.toolExposureMode);
@@ -2278,16 +2244,6 @@ export function AgentForm({
         });
       }
 
-      // The personal default is a member setting, saved through its own route
-      // once the agent exists. Only when the switch was actually moved: an
-      // untouched switch means the member did not ask for this agent to become
-      // their default, and nothing else in the product decides that for them.
-      if (savedAgentId && personalDefaultChanged) {
-        await updateDefaultAgentId.mutateAsync(
-          personalDefault ? savedAgentId : null,
-        );
-      }
-
       // Persist the Auto-mode disabled-subagents set only when it changed (same
       // no-op-audit reasoning as delegations, and edit-mode-only for the same
       // reason). Skipped for built-ins.
@@ -2400,9 +2356,6 @@ export function AgentForm({
     disabledSubagentIdsToSave,
     updateAgent,
     createAgent,
-    updateDefaultAgentId,
-    personalDefault,
-    personalDefaultChanged,
     syncDelegations,
     syncSubagentExclusions,
     currentKnowledgeSourceExclusions,
@@ -2519,7 +2472,6 @@ export function AgentForm({
     initialSnapshotRef.current !== null &&
     (hasUnsavedChanges(initialSnapshotRef.current, currentSnapshot) ||
       channelAssignmentsDirty ||
-      personalDefaultChanged ||
       hasPendingToolChanges ||
       hasUnsavedChanges(
         [...currentDelegations.map((delegate) => delegate.id)].sort(),
@@ -2893,11 +2845,7 @@ export function AgentForm({
               {showsAccessSection && (
                 <SettingsSection
                   title="Access"
-                  description={
-                    canTogglePersonalDefault
-                      ? "Who this agent is shared with, and whether new chats start on it."
-                      : `Who this ${agentTypeDisplayName[agentType] || "agent"} is shared with.`
-                  }
+                  description={`Who this ${agentTypeDisplayName[agentType] || "agent"} is shared with.`}
                 >
                   {/* Visibility / Scope: who can use it, once it has a name and a
                     place to run. */}
@@ -2923,31 +2871,6 @@ export function AgentForm({
                         onUserIdsChange={setAssignedUserIds}
                         hasNoAvailableTeams={hasNoAvailableTeams}
                         showTeamRequired={true}
-                      />
-                    </div>
-                  )}
-                  {/* Personal default (the caller's own personal chat agent) */}
-                  {canTogglePersonalDefault && (
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="space-y-0.5">
-                        <Label
-                          htmlFor="personal-default-agent"
-                          className="text-sm font-medium cursor-pointer"
-                        >
-                          My default agent
-                        </Label>
-                        <p className="text-sm text-muted-foreground">
-                          {isOrganizationDefault
-                            ? "Your organization already starts everyone's chats on this agent, so pinning it changes nothing today — it keeps this agent yours if the organization default moves."
-                            : "Your new chats start on this agent — from the composer, from an app you open in chat, anywhere a chat begins without naming one. Yours alone, one at a time, and ahead of the organization default."}
-                        </p>
-                      </div>
-                      <Switch
-                        id="personal-default-agent"
-                        checked={personalDefault}
-                        onCheckedChange={setPersonalDefaultOverride}
-                        disabled={readOnly}
-                        data-testid={E2eTestId.PersonalDefaultAgentSwitch}
                       />
                     </div>
                   )}

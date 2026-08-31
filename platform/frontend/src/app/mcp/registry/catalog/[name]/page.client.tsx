@@ -2,7 +2,6 @@
 
 import type { archestraCatalogTypes } from "@archestra/shared";
 import {
-  ArrowLeft,
   BookOpen,
   Code2,
   ExternalLink,
@@ -16,7 +15,8 @@ import {
   Terminal,
   Users,
 } from "lucide-react";
-import Link from "next/link";
+import { PageBackLink } from "@/components/page-back-link";
+import { PageLayout } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,14 +36,44 @@ export function McpRegistryServerDetailPage({ name }: { name: string }) {
   const { data: server, isPending } = useMcpRegistryServer(name);
 
   return (
-    <div className="space-y-6">
-      <Button variant="ghost" size="sm" asChild>
-        <Link href="/mcp/registry">
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to MCP Registry
-        </Link>
-      </Button>
-
+    <PageLayout
+      maxWidth="wizard"
+      title={
+        server ? (
+          <span className="flex min-w-0 items-center gap-3">
+            {server.icon && (
+              <img
+                src={server.icon}
+                alt=""
+                className="h-10 w-10 shrink-0 rounded-lg border bg-background p-1"
+              />
+            )}
+            <span className="min-w-0 truncate">
+              {server.display_name || server.name}
+            </span>
+          </span>
+        ) : (
+          <span>MCP Server</span>
+        )
+      }
+      documentTitle={server ? server.display_name || server.name : "MCP Server"}
+      description={
+        server ? (
+          <span className="flex flex-col gap-1">
+            {server.display_name && server.display_name !== server.name && (
+              <span className="font-mono text-xs">{server.name}</span>
+            )}
+            {server.description && <span>{server.description}</span>}
+          </span>
+        ) : undefined
+      }
+      backLink={
+        <PageBackLink href="/mcp/registry">Back to MCP Registry</PageBackLink>
+      }
+      actionButton={
+        server ? <ServerHeaderActions server={server} /> : undefined
+      }
+    >
       {isPending ? (
         <DetailPageSkeleton />
       ) : !server ? (
@@ -62,7 +92,7 @@ export function McpRegistryServerDetailPage({ name }: { name: string }) {
       ) : (
         <ServerDetails server={server} />
       )}
-    </div>
+    </PageLayout>
   );
 }
 
@@ -71,78 +101,19 @@ function ServerDetails({
 }: {
   server: archestraCatalogTypes.ArchestraMcpServerManifest;
 }) {
-  const displayName = server.display_name || server.name;
-
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex min-w-0 items-start gap-4">
-          {server.icon && (
-            <img
-              src={server.icon}
-              alt={`${displayName} icon`}
-              className="h-12 w-12 shrink-0 rounded-lg border bg-background p-1"
-            />
-          )}
-          <div className="min-w-0 space-y-1.5">
-            <h1 className="text-2xl font-semibold tracking-tight">
-              {displayName}
-            </h1>
-            {server.display_name && server.display_name !== server.name && (
-              <p className="font-mono text-xs text-muted-foreground">
-                {server.name}
-              </p>
-            )}
-            {server.description && (
-              <p className="max-w-2xl text-sm text-muted-foreground">
-                {server.description}
-              </p>
-            )}
-            <div className="flex flex-wrap gap-2 pt-1">
-              {server.server && (
-                <Badge variant="secondary" className="capitalize">
-                  {server.server.type}
-                </Badge>
-              )}
-              {server.category && (
-                <Badge variant="outline">{server.category}</Badge>
-              )}
-              {server.programming_language && (
-                <Badge variant="outline">{server.programming_language}</Badge>
-              )}
-              {server.license && (
-                <Badge variant="outline">{server.license}</Badge>
-              )}
-            </div>
-          </div>
-        </div>
-        <div className="flex shrink-0 gap-2">
-          {server.github_info?.url && (
-            <Button variant="outline" size="sm" asChild>
-              <a
-                href={server.github_info.url}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Github className="h-4 w-4 mr-1" />
-                GitHub
-              </a>
-            </Button>
-          )}
-          {(server.documentation || server.homepage) && (
-            <Button variant="outline" size="sm" asChild>
-              <a
-                href={server.documentation || server.homepage}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <BookOpen className="h-4 w-4 mr-1" />
-                Docs
-              </a>
-            </Button>
-          )}
-        </div>
+      <div className="flex flex-wrap gap-2">
+        {server.server && (
+          <Badge variant="secondary" className="capitalize">
+            {server.server.type}
+          </Badge>
+        )}
+        {server.category && <Badge variant="outline">{server.category}</Badge>}
+        {server.programming_language && (
+          <Badge variant="outline">{server.programming_language}</Badge>
+        )}
+        {server.license && <Badge variant="outline">{server.license}</Badge>}
       </div>
 
       <Separator />
@@ -491,6 +462,41 @@ function ServerDetails({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function ServerHeaderActions({
+  server,
+}: {
+  server: archestraCatalogTypes.ArchestraMcpServerManifest;
+}) {
+  return (
+    <div className="flex shrink-0 gap-2">
+      {server.github_info?.url && (
+        <Button variant="outline" size="sm" asChild>
+          <a
+            href={server.github_info.url}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Github className="h-4 w-4 mr-1" />
+            GitHub
+          </a>
+        </Button>
+      )}
+      {(server.documentation || server.homepage) && (
+        <Button variant="outline" size="sm" asChild>
+          <a
+            href={server.documentation || server.homepage}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <BookOpen className="h-4 w-4 mr-1" />
+            Docs
+          </a>
+        </Button>
+      )}
     </div>
   );
 }

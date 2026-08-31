@@ -216,17 +216,19 @@ function SkillEditWizard({ skill }: { skill: SkillDetail }) {
           }}
         />
       }
-      maxWidth="wizard"
-    >
-      <div className="space-y-6">
+      actionButton={
         <WizardStepper
+          compact
           steps={SKILL_EDIT_STEPS}
           activeStep={step}
           onStepClick={(target) => {
             if (target !== step) goToStep(target);
           }}
         />
-
+      }
+      maxWidth="wizard"
+    >
+      <div className="space-y-6">
         {isReadOnly && (
           <Alert>
             <Info className="h-4 w-4" />

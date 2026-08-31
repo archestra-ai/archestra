@@ -91,13 +91,19 @@ export function AgentEditPage({
   if (heldAgent)
     return <SetupWizard kind={kind} agent={heldAgent} isGone={isGone} />;
 
+  const unloadedHeader = {
+    title: `Edit ${config.singular}`,
+    description: config.editDescription,
+  };
+
   return (
-    <AgentPageShell backHref={config.basePath} backLabel={config.plural}>
+    <AgentPageShell
+      backHref={config.basePath}
+      backLabel={config.plural}
+      header={unloadedHeader}
+    >
       {isPending ? (
-        <div className="space-y-4">
-          <Skeleton className="h-8 w-64" />
-          <Skeleton className="h-96 w-full rounded-xl" />
-        </div>
+        <Skeleton className="h-96 w-full rounded-xl" />
       ) : isError ? (
         // The request failed rather than answering "no such record": offer a
         // retry instead of telling the user their agent does not exist.
@@ -218,51 +224,43 @@ function SetupWizard({
     !agent.accessAllTools;
 
   const formAgentType = agent.agentType === "profile" ? "profile" : kind;
-
-  return (
-    <AgentPageShell
-      backHref={detailHref}
-      backLabel={`Back to ${config.singularInSentence}`}
-      onBackRequest={() => requestNavigate(detailHref)}
-    >
-      <div className="space-y-6">
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-muted/40">
-            <AgentIcon
-              icon={agent.icon}
-              fallbackType={config.defaultIconType}
-              size={24}
-            />
-          </div>
-          <div className="min-w-0 space-y-1">
-            <h1 className="flex flex-wrap items-center gap-2 text-2xl font-semibold tracking-tight">
-              <span className="min-w-0 truncate">Edit {agent.name}</span>
-              <AgentBadge
-                type={isBuiltIn ? "builtIn" : agent.scope}
-                className="font-normal"
-              />
-            </h1>
-            {isBuiltIn && agent.description ? (
-              <p className="text-sm text-muted-foreground">
-                {agent.description.replace(/\.?$/, ".")}{" "}
-                <ExternalDocsLink
-                  href={getDocsUrl(DocsPage.PlatformBuiltInSubagents)}
-                  className="underline"
-                  showIcon={false}
-                >
-                  Learn more
-                </ExternalDocsLink>
-              </p>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                {config.editDescription}
-              </p>
-            )}
-          </div>
+  const wizardHeader = {
+    title: (
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-muted/40">
+          <AgentIcon
+            icon={agent.icon}
+            fallbackType={config.defaultIconType}
+            size={24}
+          />
         </div>
-
-        {steps.length > 1 && (
+        <span className="min-w-0 truncate">Edit {agent.name}</span>
+        <AgentBadge
+          type={isBuiltIn ? "builtIn" : agent.scope}
+          className="font-normal"
+        />
+      </div>
+    ),
+    description:
+      isBuiltIn && agent.description ? (
+        <>
+          {agent.description.replace(/\.?$/, ".")}{" "}
+          <ExternalDocsLink
+            href={getDocsUrl(DocsPage.PlatformBuiltInSubagents)}
+            className="underline"
+            showIcon={false}
+          >
+            Learn more
+          </ExternalDocsLink>
+        </>
+      ) : (
+        (agent.description ?? "")
+      ),
+    action:
+      steps.length > 1 ? (
+        <div className="block">
           <WizardStepper
+            compact
             steps={steps}
             activeStep={step}
             onStepClick={(target) => {
@@ -270,8 +268,18 @@ function SetupWizard({
             }}
             stepTestIdPrefix={E2eTestId.AgentSetupStep}
           />
-        )}
+        </div>
+      ) : undefined,
+  };
 
+  return (
+    <AgentPageShell
+      backHref={detailHref}
+      backLabel={`Back to ${config.singularInSentence}`}
+      onBackRequest={() => requestNavigate(detailHref)}
+      header={wizardHeader}
+    >
+      <div className="space-y-6">
         {isGone ? (
           <Alert variant="destructive">
             <TriangleAlert className="h-4 w-4" />
@@ -319,7 +327,7 @@ function SetupWizard({
             const savingWith = isSaving ? saveIntentRef.current : null;
             return (
               <WizardFooter>
-                <div>
+                <div className="flex [&>button]:w-full sm:[&>button]:w-auto">
                   {prevStep ? (
                     <Button
                       type="button"
@@ -341,7 +349,7 @@ function SetupWizard({
                     </Button>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center [&>button]:w-full sm:[&>button]:w-auto">
                   {/* Save is on every step: it writes the step and returns to
                       the Overview — once clean it just returns. On the last
                       step it is the one action; before it, the step's own

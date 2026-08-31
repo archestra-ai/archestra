@@ -1,9 +1,10 @@
 "use client";
 
-import { ArrowLeft, Loader2, Play } from "lucide-react";
-import Link from "next/link";
+import { Loader2, Play } from "lucide-react";
 import { useParams } from "next/navigation";
 import { LoadingState } from "@/components/loading";
+import { PageBackLink } from "@/components/page-back-link";
+import { PageLayout } from "@/components/page-layout";
 import { ScheduleRunsList } from "@/components/scheduled-tasks/schedule-runs-list";
 import { Button } from "@/components/ui/button";
 import { useProject } from "@/lib/projects/projects.query";
@@ -36,27 +37,22 @@ export function ProjectScheduleRunsClient() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8">
-      {/* Back link */}
-      <Link
-        href={`/projects/${projectId}`}
-        className="mb-6 flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        {projectName}
-      </Link>
-
-      {/* Header */}
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold">{triggerName} — Runs</h1>
-          {trigger && (
-            <p className="mt-1 text-sm text-muted-foreground">
-              {trigger.agent?.name ?? "Default agent"} ·{" "}
-              {formatCronSchedule(trigger.cronExpression)} · {trigger.timezone}
-            </p>
-          )}
-        </div>
+    <PageLayout
+      title={`${triggerName} — Runs`}
+      description={
+        trigger ? (
+          <>
+            {trigger.agent?.name ?? "Default agent"} ·{" "}
+            {formatCronSchedule(trigger.cronExpression)} · {trigger.timezone}
+          </>
+        ) : undefined
+      }
+      backLink={
+        <PageBackLink href={`/projects/${projectId}`}>
+          {projectName}
+        </PageBackLink>
+      }
+      actionButton={
         <Button
           variant="outline"
           size="sm"
@@ -70,9 +66,10 @@ export function ProjectScheduleRunsClient() {
           )}
           <span>Run now</span>
         </Button>
-      </div>
-
+      }
+      maxWidth="wizard"
+    >
       <ScheduleRunsList triggerId={triggerId} />
-    </div>
+    </PageLayout>
   );
 }

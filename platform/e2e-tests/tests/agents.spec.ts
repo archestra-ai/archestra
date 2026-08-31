@@ -124,12 +124,22 @@ test("can create and delete an agent", {
   await expect(
     page.getByRole("heading", { level: 1, name: new RegExp(AGENT_NAME) }),
   ).toBeVisible({ timeout: 15_000 });
+  const detailHeader = await page.locator("[data-page-header]").boundingBox();
 
   // The wizard's steps are the edit page's: Tools & Knowledge is there.
   await page.getByRole("link", { name: "Edit" }).click();
   await page.waitForURL(new RegExp(`/agents/${agentId}/edit`), {
     timeout: 15_000,
   });
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: new RegExp(`Edit ${AGENT_NAME}`),
+    }),
+  ).toBeVisible({ timeout: 15_000 });
+  const wizardHeader = await page.locator("[data-page-header]").boundingBox();
+  expect(wizardHeader?.width).toBe(detailHeader?.width);
+  expect(wizardHeader?.height).toBe(detailHeader?.height);
   await page.getByTestId(`${E2eTestId.AgentSetupStep}-tools`).click();
   await expect(page).toHaveURL(/step=tools/);
   await expect(page.getByTestId(E2eTestId.AgentToolsSection)).toBeVisible({
@@ -210,3 +220,108 @@ test("can create an MCP gateway and land on the pre-selected connection guide", 
     if (gatewayId) await deleteAgent(request, gatewayId);
   }
 });
+
+test("keeps the shared page header visible while desktop content scrolls", async ({
+  page,
+  goToPage,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await goToPage(page, "/agents");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Agents" }),
+  ).toBeVisible();
+
+  const scrollContainer = page.locator("[data-page-scroll-container]");
+  const pageHeader = page.locator("[data-page-header]");
+  await pageHeader.evaluate((element) => {
+    const content = element.nextElementSibling;
+    if (!content) throw new Error("Page content is missing");
+    const spacer = document.createElement("div");
+    spacer.style.height = "1600px";
+    spacer.style.flexShrink = "0";
+    spacer.setAttribute("aria-hidden", "true");
+    content.append(spacer);
+  });
+  const initialTop = await pageHeader.evaluate(
+    (element) => element.getBoundingClientRect().top,
+  );
+
+  await scrollContainer.evaluate((element) => {
+    element.scrollTop = 1000;
+  });
+
+  await expect
+    .poll(() =>
+      pageHeader.evaluate((element) => element.getBoundingClientRect().top),
+    )
+    .toBe(initialTop);
+});
+
+test("keeps shared page chrome in normal document flow on mobile", async ({
+  page,
+  goToPage,
+}) => {
+  await page.setViewportSize({ width: 390, height: 720 });
+  await goToPage(page, "/agents");
+  const pageHeader = page.locator("[data-page-header]");
+  await expect(pageHeader).toBeVisible();
+  await page.locator("main").evaluate((element) => {
+    const spacer = document.createElement("div");
+    spacer.style.height = "1600px";
+    spacer.style.flexShrink = "0";
+    spacer.setAttribute("aria-hidden", "true");
+    element.append(spacer);
+  });
+  const initialTop = await pageHeader.evaluate(
+    (element) => element.getBoundingClientRect().top,
+  );
+
+  await page.locator("main").evaluate((element) => {
+    element.scrollTop = 600;
+  });
+
+  await expect
+    .poll(() =>
+      pageHeader.evaluate((element) => element.getBoundingClientRect().top),
+    )
+    .toBeLessThan(initialTop);
+});
+
+test(
+  "can create an MCP gateway and land on the pre-selected connection guide",
+  {
+    tag: ["@firefox", "@webkit"],
+  },
+  async ({ page, makeRandomString, goToPage }, testInfo) => {
+    test.skip(testInfo.project.name === "webkit", "flaky on webkit");
+    test.setTimeout(120_000);
+
+    const GATEWAY_NAME = makeRandomString(10, "Test MCP Gateway");
+    await goToPage(page, "/mcp/gateways");
+
+    await page.waitForLoadState("domcontentloaded");
+
+    const gatewayId = await createViaWizard(
+      page,
+      "/mcp/gateways",
+      GATEWAY_NAME,
+    );
+
+    // The create lands on the connection instructions, whose guided-setup link
+    // lands on /connection with the new gateway pre-selected.
+    await page
+      .getByRole("link", { name: /Set up a client step by step/ })
+      .click();
+    await page.waitForURL(
+      new RegExp(`/connection\\?gatewayId=${gatewayId}&from=`),
+      { timeout: 15_000 },
+    );
+
+    // Clean up: back to the table and delete the gateway.
+    await goToPage(page, "/mcp/gateways");
+    await deleteFromList(page, {
+      name: GATEWAY_NAME,
+      confirmLabel: "Delete MCP Gateway",
+    });
+  },
+);

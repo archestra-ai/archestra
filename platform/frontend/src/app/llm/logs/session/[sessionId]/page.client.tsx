@@ -7,12 +7,12 @@ import {
 import { Bot, Download, Layers, Loader2, User } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { use } from "react";
-import { BackLink } from "@/components/agent-pages/agent-page-shell";
 import { BilledCost } from "@/components/billed-cost";
 import { ClientSourceBadge } from "@/components/client-source-badge";
 import { type DetailFact, DetailFacts } from "@/components/detail-facts";
 import { LoadingState } from "@/components/loading";
 import MessageThread from "@/components/message-thread";
+import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { SourceBadge } from "@/components/source-badge";
 import { TruncatedText } from "@/components/truncated-text";
@@ -277,7 +277,7 @@ export default function SessionDetailPage({
     <PageLayout
       title={<span className="line-clamp-2">{sessionTitle || "Session"}</span>}
       documentTitle={sessionTitle || "Session"}
-      backLink={<BackLink href="/llm/logs">Back to Sessions</BackLink>}
+      backLink={<PageBackLink href="/llm/logs">Back to Sessions</PageBackLink>}
       // Who and what this session was, beside the title rather than repeated
       // as a second heading over a card below it.
       description={

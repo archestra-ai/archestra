@@ -159,6 +159,17 @@ function NewSkillWizard() {
         title="Add a new skill"
         description={STEP_DESCRIPTIONS[effectiveStep]}
         backLink={<SkillBackLink href="/skills" label="Skills" />}
+        actionButton={
+          <WizardStepper
+            compact
+            steps={steps}
+            activeStep={effectiveStep}
+            onStepClick={(target) => {
+              const targetIndex = steps.findIndex((s) => s.id === target);
+              if (targetIndex < stepIndex) setStep(target);
+            }}
+          />
+        }
         maxWidth="wizard"
       >
         <div className="space-y-6">
@@ -166,17 +177,6 @@ function NewSkillWizard() {
             <LoadingState variant="page" />
           ) : (
             <>
-              <WizardStepper
-                steps={steps}
-                activeStep={effectiveStep}
-                // Only steps already passed are reachable from the stepper; the
-                // footer's Continue button is the way forward.
-                onStepClick={(target) => {
-                  const targetIndex = steps.findIndex((s) => s.id === target);
-                  if (targetIndex < stepIndex) setStep(target);
-                }}
-              />
-
               {effectiveStep === "source" && (
                 <div className="mx-auto max-w-3xl space-y-8">
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

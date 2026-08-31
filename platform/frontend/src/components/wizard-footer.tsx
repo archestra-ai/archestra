@@ -12,7 +12,7 @@ export function WizardFooter({
   return (
     <div
       className={cn(
-        "sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-2 border-t bg-background px-6 py-4",
+        "sticky bottom-0 z-10 flex flex-col items-stretch gap-2 border-t bg-background px-6 py-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between [&>button]:w-full [&>div]:w-full [&>div>button]:w-full sm:[&>button]:w-auto sm:[&>div]:w-auto sm:[&>div>button]:w-auto",
         className,
       )}
     >

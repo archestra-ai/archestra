@@ -208,6 +208,13 @@ describe("AgentDetailPage", () => {
     expect(screen.getByRole("heading", { name: "Overview" })).toBeVisible();
     expect(screen.getByText("Production")).toBeVisible();
     expect(screen.queryByRole("link", { name: "Connect" })).toBeNull();
+    expect(screen.queryByText("system prompt editor")).toBeNull();
+  });
+
+  it("keeps the focused system prompt editor on the Agent detail page", () => {
+    render(<AgentDetailPage kind="agent" id="a1" />);
+
+    expect(screen.getByText("system prompt editor")).toBeVisible();
   });
 
   it("omits the connection section for a built-in agent", () => {

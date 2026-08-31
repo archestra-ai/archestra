@@ -1,20 +1,18 @@
 "use client";
 
-import { ArrowLeft } from "lucide-react";
-import Link from "next/link";
 import type { ReactNode } from "react";
-import { Button } from "@/components/ui/button";
+import { PageBackLink } from "@/components/page-back-link";
+import { PageLayout } from "@/components/page-layout";
 
 /**
- * Column for the create/edit wizard pages: the padded band the app layout
- * would otherwise give a list page, a back link, and a max-width column. The
- * detail page renders `PageLayout` instead, whose header band spans the full
- * width.
+ * Shared agent-family wizard shell. It delegates all header, width, minimum
+ * width, and content behavior to the same PageLayout used by detail pages.
  */
 export function AgentPageShell({
   backHref,
   backLabel,
   onBackRequest,
+  header,
   children,
 }: {
   /** Left unset for a state with nowhere to go back to; no link is rendered. */
@@ -25,59 +23,30 @@ export function AgentPageShell({
    * guard can ask before leaving. Omit it and the link navigates directly.
    */
   onBackRequest?: () => void;
+  /** Structured header rendered by the same PageLayout as agent details. */
+  header: {
+    title: ReactNode;
+    description?: ReactNode;
+    action?: ReactNode;
+  };
   children: ReactNode;
 }) {
   return (
-    <div className="mx-auto w-full px-6 py-6 md:px-6">
-      <div className="mx-auto max-w-5xl space-y-6">
-        {backHref && (
-          <BackLink href={backHref} onNavigate={onBackRequest}>
+    <PageLayout
+      maxWidth="wizard"
+      minWidth="phone"
+      title={header.title}
+      description={header.description}
+      actionButton={header.action}
+      backLink={
+        backHref ? (
+          <PageBackLink href={backHref} onNavigate={onBackRequest}>
             {backLabel}
-          </BackLink>
-        )}
-        {children}
-      </div>
-    </div>
-  );
-}
-
-export function BackLink({
-  href,
-  onNavigate,
-  children,
-}: {
-  href: string;
-  onNavigate?: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <Button
-      variant="ghost"
-      size="sm"
-      className="-ml-2 text-muted-foreground"
-      asChild
+          </PageBackLink>
+        ) : undefined
+      }
     >
-      <Link
-        href={href}
-        onClick={(event) => {
-          // A modified click opens the target elsewhere and leaves this page
-          // (and its unsaved edits) standing, so let the browser have it.
-          if (
-            !onNavigate ||
-            event.metaKey ||
-            event.ctrlKey ||
-            event.shiftKey ||
-            event.altKey
-          ) {
-            return;
-          }
-          event.preventDefault();
-          onNavigate();
-        }}
-      >
-        <ArrowLeft className="h-4 w-4" />
-        {children}
-      </Link>
-    </Button>
+      {children}
+    </PageLayout>
   );
 }

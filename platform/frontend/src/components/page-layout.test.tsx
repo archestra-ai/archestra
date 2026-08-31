@@ -341,6 +341,22 @@ describe("PageLayout header", () => {
     expect(screen.getByRole("heading", { level: 1 })).toHaveClass("min-w-0");
   });
 
+  it("does not change header height when an action is present without a description", () => {
+    render(
+      <PageLayout
+        title="Edit agent"
+        description=""
+        actionButton={<button type="button">Step 1</button>}
+      >
+        <div />
+      </PageLayout>,
+    );
+
+    expect(
+      screen.getByRole("heading", { level: 1 }).parentElement,
+    ).not.toHaveClass("mb-2");
+  });
+
   it("floors table pages at phone width so copy does not collapse to a sliver", () => {
     const { container } = render(
       <PageLayout minWidth="phone" title="Costs">
@@ -351,6 +367,41 @@ describe("PageLayout header", () => {
     expect(
       container.querySelectorAll(".min-w-\\[20rem\\]").length,
     ).toBeGreaterThan(0);
+    const header = container.querySelector("[data-page-header]");
+    expect(header?.parentElement).not.toHaveClass("overflow-x-auto");
+    expect(header?.nextElementSibling).toHaveClass("overflow-x-auto");
+  });
+
+  it("gives every wizard-width detail page the safe phone floor by default", () => {
+    const { container } = render(
+      <PageLayout maxWidth="wizard" title="Edit agent">
+        <div>form</div>
+      </PageLayout>,
+    );
+
+    expect(
+      container.querySelectorAll(".min-w-\\[20rem\\]").length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("keeps wizard and detail header copy within one shared height contract", () => {
+    render(
+      <PageLayout
+        maxWidth="wizard"
+        title="Add a new skill"
+        description="Choose where the skill comes from before configuring it."
+      >
+        <div />
+      </PageLayout>,
+    );
+
+    expect(
+      screen.getByRole("heading", { level: 1 }).parentElement?.parentElement,
+    ).toHaveClass("min-h-10", "sm:h-[3.75rem]");
+    expect(document.querySelector("[data-page-description]")).toHaveClass(
+      "hidden",
+      "sm:line-clamp-1",
+    );
   });
 });
 

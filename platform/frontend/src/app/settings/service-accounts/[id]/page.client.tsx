@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
-import { BackLink } from "@/components/agent-pages/agent-page-shell";
 import { CopyableCode } from "@/components/copyable-code";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
@@ -20,6 +19,7 @@ import { ExternalDocsLink } from "@/components/external-docs-link";
 import { FormDialog } from "@/components/form-dialog";
 import { LoadingState, LoadingWrapper } from "@/components/loading";
 import { OverviewSummary } from "@/components/overview-summary";
+import { PageBackLink } from "@/components/page-back-link";
 import { QueryLoadError } from "@/components/query-load-error";
 import {
   AccountHealthBadge,
@@ -202,9 +202,9 @@ export default function ServiceAccountDetailPage({
       documentTitle: serviceAccount.name,
       status: <AccountHealthBadge health={health} />,
       backLink: (
-        <BackLink href="/settings/service-accounts">
+        <PageBackLink href="/settings/service-accounts">
           Back to service accounts
-        </BackLink>
+        </PageBackLink>
       ),
     });
 

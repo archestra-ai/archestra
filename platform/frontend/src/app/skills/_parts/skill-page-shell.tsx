@@ -1,11 +1,10 @@
 "use client";
 
-import { ArrowLeft, FileX } from "lucide-react";
-import Link from "next/link";
+import { FileX } from "lucide-react";
 import type { MouseEvent } from "react";
 import { LoadingState } from "@/components/loading";
+import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
-import { Button } from "@/components/ui/button";
 import {
   Empty,
   EmptyDescription,
@@ -26,17 +25,9 @@ export function SkillBackLink({
   onClick?: (event: MouseEvent<HTMLAnchorElement>) => void;
 }) {
   return (
-    <Button
-      variant="ghost"
-      size="sm"
-      className="-ml-2 text-muted-foreground"
-      asChild
-    >
-      <Link href={href} onClick={onClick}>
-        <ArrowLeft className="h-4 w-4" />
-        {label}
-      </Link>
-    </Button>
+    <PageBackLink href={href} onClick={onClick}>
+      {label}
+    </PageBackLink>
   );
 }
 

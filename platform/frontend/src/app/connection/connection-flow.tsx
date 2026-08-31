@@ -230,7 +230,7 @@ export function ConnectionFlow({
   }
 
   return (
-    <div className="flex max-w-5xl flex-col">
+    <div className="flex flex-col">
       {/* Step 1 — Client */}
       <WizardStep n={1} title="Select your client" last={!client}>
         <ClientPicker

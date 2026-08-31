@@ -192,25 +192,30 @@ export function AppShell({ children }: AppShellProps) {
           <main
             id={MAIN_CONTENT_ID}
             tabIndex={-1}
-            className="h-app-viewport w-full flex flex-col bg-background min-w-0 relative overflow-y-auto focus:outline-none"
+            className="h-app-viewport w-full flex flex-col bg-background min-w-0 relative overflow-y-auto md:overflow-hidden focus:outline-none"
           >
-            <ConnectivityBar />
-            <EnvSiteNotificationBar />
-            {notification && (
-              <SiteNotificationBar
-                content={notification.content}
-                notificationId={notification.id}
-              />
-            )}
-            <ImpersonationBanner />
-            <header className="h-14 border-b border-border flex md:hidden items-center justify-between px-6 bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/50">
-              <NavAwareSidebarTrigger />
-              <div
-                id={MOBILE_HEADER_ACTIONS_CONTAINER_ID}
-                className="flex items-center gap-2"
-              />
-            </header>
-            <div className="flex-1 min-h-0 min-w-0 flex flex-col">
+            <div className="shrink-0">
+              <ConnectivityBar />
+              <EnvSiteNotificationBar />
+              {notification && (
+                <SiteNotificationBar
+                  content={notification.content}
+                  notificationId={notification.id}
+                />
+              )}
+              <ImpersonationBanner />
+              <header className="h-14 border-b border-border flex md:hidden items-center justify-between px-6 bg-card/50 backdrop-blur supports-backdrop-filter:bg-card/50">
+                <NavAwareSidebarTrigger />
+                <div
+                  id={MOBILE_HEADER_ACTIONS_CONTAINER_ID}
+                  className="flex items-center gap-2"
+                />
+              </header>
+            </div>
+            <div
+              data-page-scroll-container
+              className="flex-1 min-h-0 min-w-0 flex flex-col overflow-visible md:overflow-y-auto"
+            >
               <div
                 className={cn(
                   "flex-1 flex flex-col",

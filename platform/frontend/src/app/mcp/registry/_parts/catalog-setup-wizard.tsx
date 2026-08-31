@@ -115,15 +115,18 @@ export const SETUP_STEPS: Array<{ id: SetupStepId; title: string }> = [
 export function SetupStepper({
   activeStep,
   onStepClick,
+  compact = false,
 }: {
   activeStep: SetupStepId;
   onStepClick?: (step: SetupStepId) => void;
+  compact?: boolean;
 }) {
   return (
     <WizardStepper
       steps={SETUP_STEPS}
       activeStep={activeStep}
       onStepClick={onStepClick}
+      compact={compact}
     />
   );
 }

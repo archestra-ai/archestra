@@ -1,7 +1,7 @@
 import { E2eTestId } from "@archestra/shared";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentFormProps } from "@/components/agent-form";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -77,6 +77,10 @@ describe("AgentCreatePage", () => {
     vi.mocked(useFeature).mockReturnValue(false);
     vi.mocked(useAppName).mockReturnValue("Archestra");
     vi.mocked(useAppIconLogo).mockReturnValue("/logo-icon.svg");
+    vi.mocked(usePathname).mockReturnValue("/agents/new");
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams() as ReturnType<typeof useSearchParams>,
+    );
     vi.mocked(useRouter).mockReturnValue({
       push,
       replace: vi.fn(),
@@ -266,6 +270,14 @@ describe("AgentCreatePage", () => {
     expect(
       screen.getByRole("heading", { level: 1, name: "Create MCP Gateway" }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Name the gateway and choose who can use it, then pick the tools it exposes and connect a client.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "MCP Gateways" }),
+    ).toBeInTheDocument();
     // The last step alone offers to create; earlier steps only move on.
     expect(screen.queryByTestId(E2eTestId.AgentSetupSubmitButton)).toBeNull();
 
@@ -309,6 +321,9 @@ describe("AgentCreatePage", () => {
     await user.click(screen.getByRole("button", { name: "fire created" }));
     expect(push).not.toHaveBeenCalled();
     expect(screen.getByText("Agent created")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Create Agent" }),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(/you do not have permission to view it/i),
     ).toBeInTheDocument();

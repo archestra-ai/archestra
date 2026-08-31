@@ -61,11 +61,11 @@ export default function McpCatalogLayout({
     return <>{children}</>;
   }
 
-  // Edit/new/catalog pages carry their own headers — render bare content (no
-  // overflow wrapper, so in-page sticky footers pin to the viewport).
+  // Detail and wizard routes render PageLayout themselves. Keep them bare so
+  // the shared shell owns the full-width header, padding, and sticky footer.
   const isFullPage = pathname.startsWith("/mcp/registry/");
   if (isFullPage) {
-    return <div className="mx-auto w-full px-6 py-6 md:px-6">{children}</div>;
+    return <>{children}</>;
   }
 
   return isMainRegistry ? (

@@ -79,6 +79,7 @@ function NewPluginGate() {
       <PageLayout
         title="Plugins"
         description="Plugins are disabled for this deployment."
+        maxWidth="wizard"
       >
         <div />
       </PageLayout>
@@ -166,22 +167,22 @@ function NewPluginWizard() {
         title="Add a new plugin"
         description={STEP_DESCRIPTIONS[step]}
         backLink={<PluginBackLink href="/plugins" label="Plugins" />}
-        maxWidth="wizard"
-      >
-        <div className="space-y-6">
+        actionButton={
           <WizardStepper
+            compact
             steps={CREATE_STEPS}
             activeStep={step}
-            // Only steps already passed are reachable from the stepper; the
-            // footer's Continue button is the way forward.
             onStepClick={(target) => {
               const targetIndex = CREATE_STEPS.findIndex(
-                (s) => s.id === target,
+                (candidate) => candidate.id === target,
               );
               if (targetIndex < stepIndex) setStep(target);
             }}
           />
-
+        }
+        maxWidth="wizard"
+      >
+        <div className="space-y-6">
           {step === "source" && (
             <div className="mx-auto max-w-3xl space-y-8">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

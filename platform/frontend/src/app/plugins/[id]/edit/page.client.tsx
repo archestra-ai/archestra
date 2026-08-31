@@ -111,6 +111,7 @@ export function PluginEditPage({ id }: { id: string }) {
       <PageLayout
         title="Plugins"
         description="Plugins are disabled for this deployment."
+        maxWidth="wizard"
       >
         <div />
       </PageLayout>
@@ -351,19 +352,21 @@ function PluginEditWizard({ plugin }: { plugin: PluginDetail }) {
           }}
         />
       }
-      maxWidth="wizard"
-    >
-      <div className="space-y-6">
-        {!isGithubPlugin && (
+      actionButton={
+        !isGithubPlugin ? (
           <WizardStepper
+            compact
             steps={[...editSteps]}
             activeStep={step}
             onStepClick={(target) => {
               if (target !== step) goToStep(target);
             }}
           />
-        )}
-
+        ) : undefined
+      }
+      maxWidth="wizard"
+    >
+      <div className="space-y-6">
         {canUpdate === false && (
           <Alert>
             <Info className="h-4 w-4" />

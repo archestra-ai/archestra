@@ -60918,6 +60918,8 @@ export type GetConnectorResponses = {
             objectTypeIds?: Array<number>;
             batchSize?: number;
             permissionExtensionMethod?: string;
+        } | {
+            [key: string]: unknown;
         };
         secretId: string | null;
         environmentId: string | null;

@@ -141,25 +141,27 @@ const KnowledgeBaseWithConnectorsSchema = SelectKnowledgeBaseSchema.extend({
   assignedAgents: z.array(AssignedAgentSummarySchema),
 });
 
-// `permissionSyncState` (probe cursors/fingerprints) is internal permission-
-// sync bookkeeping — never part of the API surface.
+/**
+ * `permissionSyncState` (probe cursors/fingerprints) is internal permission-
+ * sync bookkeeping and never part of the API surface.
+ */
 const KnowledgeBaseConnectorResponseSchema =
   SelectKnowledgeBaseConnectorSchema.omit({ permissionSyncState: true });
 
 /**
- * The connector LIST response. Identical to the detail response except that
- * `config` also accepts a shape the current `ConnectorConfigSchema` no longer
- * recognizes — a config persisted by an older version and since drifted.
- *
- * The active list drops such rows (they still have a detail page, an edit form
- * and a delete button to reach them by id), but the trash cannot: it is the
- * only surface offering restore and permanent delete, so a row it refuses to
- * render is a row nobody can ever recover or purge. Valid configs still match
- * the discriminated union first and keep their precise shape.
+ * Connector rows can outlive the config schema that created them. Read
+ * responses therefore accept an opaque object after trying the current,
+ * precisely typed config union first. Create and update inputs remain strict,
+ * so this only keeps existing rows reachable for inspection, repair, or
+ * deletion instead of turning schema drift into a 500.
  */
-const KnowledgeBaseConnectorListItemSchema =
+const KnowledgeBaseConnectorReadResponseSchema =
   KnowledgeBaseConnectorResponseSchema.extend({
     config: z.union([ConnectorConfigSchema, z.record(z.string(), z.unknown())]),
+  });
+
+const KnowledgeBaseConnectorListItemSchema =
+  KnowledgeBaseConnectorReadResponseSchema.extend({
     assignedAgents: z.array(AssignedAgentSummarySchema),
   });
 
@@ -1081,7 +1083,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Connectors"],
         params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(
-          KnowledgeBaseConnectorResponseSchema.extend({
+          KnowledgeBaseConnectorReadResponseSchema.extend({
             totalDocsIngested: z.number(),
           }),
         ),

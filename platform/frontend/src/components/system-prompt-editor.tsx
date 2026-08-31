@@ -32,6 +32,7 @@ export function SystemPromptEditor({
   readOnly,
   height = "200px",
   variant = "default",
+  showTitle = true,
   headerExtra,
   builtInAgentId,
 }: {
@@ -42,6 +43,12 @@ export function SystemPromptEditor({
   height?: string;
   /** Heading treatment for standalone fields, form sections, and detail cards. */
   variant?: "default" | "section" | "detail-card";
+  /**
+   * Off where the host already names the editor. `title` still labels the
+   * editor for assistive technology and titles the full-screen dialog — it is
+   * only the visible duplicate that goes.
+   */
+  showTitle?: boolean;
   /** Extra element rendered in the header next to the full-screen button */
   headerExtra?: React.ReactNode;
   /** Optional built-in agent id to expose built-in-agent-specific template variables */
@@ -88,19 +95,20 @@ export function SystemPromptEditor({
     <div className="space-y-2">
       <div className="flex items-start justify-between gap-3">
         <div>
-          {variant !== "default" ? (
-            <h3
-              className={
-                variant === "detail-card"
-                  ? "text-sm font-semibold"
-                  : "text-base font-semibold"
-              }
-            >
-              {title}
-            </h3>
-          ) : (
-            <p className="text-sm font-medium">{title}</p>
-          )}
+          {showTitle &&
+            (variant !== "default" ? (
+              <h3
+                className={
+                  variant === "detail-card"
+                    ? "text-sm font-semibold"
+                    : "text-base font-semibold"
+                }
+              >
+                {title}
+              </h3>
+            ) : (
+              <p className="text-sm font-medium">{title}</p>
+            ))}
           <p
             className={
               variant === "detail-card"

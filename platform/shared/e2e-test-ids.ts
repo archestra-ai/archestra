@@ -48,16 +48,18 @@ export const E2eTestId = {
   TokenSelect: "token-select",
   ProfileTokenManagerTeamsSelect: "profile-token-manager-teams-select",
   ConnectAgentButton: "connect-agent-button",
-  /** Submit of the agent/proxy/gateway setup wizard's form step. */
+  /**
+   * Submit of the create wizard's form step, and of the detail page's own
+   * configuration tabs, which is where an existing record is edited.
+   */
   AgentSetupSubmitButton: "agent-setup-submit-button",
   /** "Next step" control of a clean (nothing to save) wizard step. */
   AgentSetupNextButton: "agent-setup-next-button",
-  /** "Finish" control of the wizard's last step. */
-  AgentSetupFinishButton: "agent-setup-finish-button",
-  /** Wizard step button, suffixed by the step id (`-tools`, `-connect`, …). */
+  /**
+   * Create-wizard step button and detail-page configuration tab, suffixed by
+   * the step/tab id (`-tools`, `-connect`, …).
+   */
   AgentSetupStep: "agent-setup-step",
-  /** The detail page's Edit action. */
-  AgentDetailEditButton: "agent-detail-edit-button",
   ConnectCatalogItemButton: "connect-catalog-item-button",
   SelectCredentialTypePersonal: "select-credential-type-personal",
   CredentialsCount: "credentials-count",

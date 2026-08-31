@@ -3,7 +3,7 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, invocation paths, knowledge sources, and prompt templating
-lastUpdated: 2026-08-28
+lastUpdated: 2026-08-31
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -22,9 +22,11 @@ An agent can include:
 
 ## Creating and Editing an Agent
 
-**Create Agent** opens a setup wizard with three steps. **Configuration** asks for the name, visibility, instructions, and model. **Tools & Knowledge** picks the tools, knowledge sources, subagents, skills, and hooks. **Advanced** holds labels, security, and the identity provider. Nothing is saved until you press **Create** on the last step — the agent then opens on its page's **Connect** section, which shows how to reach it.
+**Create Agent** opens a setup wizard with three steps. **Configuration** asks for the name, visibility, instructions, and model. **Tools & Knowledge** picks the tools, knowledge sources, subagents, skills, and hooks. **Advanced** holds labels, security, and the identity provider. Nothing is saved until you press **Create** on the last step — the agent then opens on its page's **Connect** tab, which shows how to reach it.
 
-Every agent has its own page. The **Overview** section repeats the wizard's configuration as read-only cards, followed by a **Connect** section with the endpoint, authentication options, primary examples, and secondary channels. **Edit** in the page header reopens the wizard for full settings control. **Save** on any step saves and returns to the agent page; **Save & Continue** saves and moves to the next step.
+Every agent has its own page, and that page is where you change it. The same three groups are its tabs, edited in place: **Configuration**, **Tools & Knowledge**, and **Advanced**. **Save changes** writes the tab you are on and leaves you there, so a rename is one save rather than a walk through the rest. **Connect** holds the endpoint, authentication options, and examples.
+
+Switching tabs with unsaved edits asks before it discards them. If you cannot change an agent, its configuration still opens — read-only, with the reason.
 
 ## Tool Access Modes
 

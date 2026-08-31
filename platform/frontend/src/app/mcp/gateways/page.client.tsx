@@ -27,8 +27,8 @@ import { AgentIcon } from "@/components/agent-icon";
 import { AgentNameCell } from "@/components/agent-name-cell";
 import {
   AGENT_PAGE_CONFIGS,
+  agentConfigureHref,
   agentDetailHref,
-  agentEditHref,
   agentNewHref,
   resolveLegacyAgentDialogRedirect,
 } from "@/components/agent-pages/agent-page-config";
@@ -414,7 +414,7 @@ function McpGateways({
         agent={agent}
         canModify={canModify}
         onEdit={(target) =>
-          router.push(agentEditHref("mcp_gateway", target.id))
+          router.push(agentConfigureHref("mcp_gateway", target.id))
         }
         onDelete={setDeletingGatewayId}
         onRestore={(agentId) => {
@@ -1009,7 +1009,7 @@ function McpGateways({
                 // Land on the clone's Configuration step so it can be renamed
                 // straight away.
                 router.push(
-                  agentEditHref("mcp_gateway", cloned.id, "configuration"),
+                  agentConfigureHref("mcp_gateway", cloned.id, "configuration"),
                 );
               }}
             />

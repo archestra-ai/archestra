@@ -1,4 +1,3 @@
-import { E2eTestId } from "@archestra/shared";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -27,19 +26,41 @@ vi.mock("@/lib/agent.query", () => ({
   useExportAgent: vi.fn(),
 }));
 
-// Everything the header opens is covered by its own tests; the page only has
-// to mount them.
-vi.mock("./agent-overview", () => ({
-  useAgentOverviewFacts: () => [{ label: "Model", value: "overview" }],
+// Everything the page mounts is covered by its own tests; the page only has to
+// mount the right one for the tab it is on. The form stub reports which
+// section it was asked for, and hands back a dirty-marker so the navigation
+// guard can be driven.
+vi.mock("@/components/agent-form", () => ({
+  AgentForm: (props: {
+    sections: string[];
+    readOnly?: boolean;
+    onDirtyChange?: (dirty: boolean) => void;
+    footer: (state: {
+      isCreate: boolean;
+      isSaving: boolean;
+      isDirty: boolean;
+      canSubmit: boolean;
+      readOnly: boolean;
+    }) => React.ReactNode;
+  }) => (
+    <div>
+      <span>{`form section: ${props.sections.join(",")}`}</span>
+      {props.readOnly && <span>form is read-only</span>}
+      <button type="button" onClick={() => props.onDirtyChange?.(true)}>
+        make dirty
+      </button>
+      {props.footer({
+        isCreate: false,
+        isSaving: false,
+        isDirty: true,
+        canSubmit: true,
+        readOnly: !!props.readOnly,
+      })}
+    </div>
+  ),
 }));
 vi.mock("./agent-connect-content", () => ({
   AgentConnectContent: () => <div>connect content</div>,
-}));
-vi.mock("./agent-background-execution-card", () => ({
-  AgentBackgroundExecutionCard: () => <div>background execution</div>,
-}));
-vi.mock("./agent-system-prompt-card", () => ({
-  AgentSystemPromptCard: () => <div>system prompt editor</div>,
 }));
 vi.mock("./agent-executions", () => ({
   AgentExecutions: () => <div>execution history</div>,
@@ -87,10 +108,20 @@ function mockAgent(agent: unknown) {
   } as unknown as ReturnType<typeof useProfile>);
 }
 
+function mockTab(tab?: string) {
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams(tab ? `tab=${tab}` : "") as unknown as ReturnType<
+      typeof useSearchParams
+    >,
+  );
+}
+
 describe("AgentDetailPage", () => {
+  const replace = vi.fn();
+
   beforeEach(() => {
     vi.clearAllMocks();
-    access = { ...access, resource: "agent", isBuiltIn: false };
+    access = { ...access, resource: "agent", canEdit: true, isBuiltIn: false };
     vi.mocked(useAppName).mockReturnValue("Archestra");
     vi.mocked(useEnvironments).mockReturnValue({
       data: { environments: [{ id: "env-1", name: "Production" }] },
@@ -106,12 +137,10 @@ describe("AgentDetailPage", () => {
     vi.mocked(useFeature).mockReturnValue(false);
     vi.mocked(useRouter).mockReturnValue({
       push: vi.fn(),
-      replace: vi.fn(),
+      replace,
     } as unknown as ReturnType<typeof useRouter>);
     vi.mocked(usePathname).mockReturnValue("/agents/a1");
-    vi.mocked(useSearchParams).mockReturnValue(
-      new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
-    );
+    mockTab();
     vi.mocked(useDeleteProfile).mockReturnValue({
       mutate: vi.fn(),
       isPending: false,
@@ -169,35 +198,91 @@ describe("AgentDetailPage", () => {
     expect(screen.queryByRole("button", { name: /restore/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /permanently/i })).toBeNull();
     expect(screen.queryByText(/is in the trash/i)).toBeNull();
-    // Connect stays on the same page, and Edit stays in the header.
-    expect(screen.getByText("connect content")).toBeInTheDocument();
-    expect(
-      screen.getByTestId(E2eTestId.AgentDetailEditButton),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Connect" })).toBeNull();
   });
 
-  it("shows overview and system prompt editing before connection instructions", () => {
+  it("opens on the editable configuration instead of a read-only summary", () => {
+    // The Edit button and the wizard route it opened are gone: the record's
+    // settings are the page.
     render(<AgentDetailPage kind="agent" id="a1" />);
 
-    expect(screen.getByRole("heading", { name: "Overview" })).toBeVisible();
-    const overview = screen.getByText("overview");
-    const systemPrompt = screen.getByText("system prompt editor");
-    const connect = screen.getByText("connect content");
-    expect(
-      overview.compareDocumentPosition(systemPrompt) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(
-      systemPrompt.compareDocumentPosition(connect) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(
-      screen.getByRole("link", { name: /Full configuration/i }),
-    ).toHaveAttribute("href", "/agents/a1/edit");
+    expect(screen.getByText("form section: configuration")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Edit" })).toBeNull();
   });
 
-  it("keeps the MCP Gateway Overview but moves its environment into the header", () => {
+  it("puts every configuration step and every view on a tab of the same page", () => {
+    render(<AgentDetailPage kind="agent" id="a1" />);
+
+    const tabHrefs = ["Configuration", "Tools & Knowledge", "Advanced"].map(
+      (name) =>
+        screen.getAllByRole("link", { name })[0]?.getAttribute("href") ?? null,
+    );
+    expect(tabHrefs).toEqual([
+      "/agents/a1",
+      "/agents/a1?tab=tools",
+      "/agents/a1?tab=advanced",
+    ]);
+    expect(screen.getAllByRole("link", { name: "Connect" })[0]).toHaveAttribute(
+      "href",
+      "/agents/a1?tab=connect",
+    );
+  });
+
+  it("mounts only the section the current tab names", () => {
+    mockTab("tools");
+    render(<AgentDetailPage kind="agent" id="a1" />);
+
+    expect(screen.getByText("form section: tools")).toBeVisible();
+    expect(screen.queryByText("connect content")).toBeNull();
+  });
+
+  it("shows the connection instructions on their own tab, with no form", () => {
+    mockTab("connect");
+    render(<AgentDetailPage kind="agent" id="a1" />);
+
+    expect(screen.getByText("connect content")).toBeVisible();
+    expect(screen.queryByText(/form section/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+  });
+
+  it("corrects a ?tab= this record has no tab for", () => {
+    // Executions is an agent-with-background-execution tab; asking for it on a
+    // record without one renders Configuration, and the URL is put right so a
+    // reload does not keep asking.
+    mockTab("executions");
+    render(<AgentDetailPage kind="agent" id="a1" />);
+
+    expect(screen.getByText("form section: configuration")).toBeVisible();
+    expect(replace).toHaveBeenCalledWith("/agents/a1", { scroll: false });
+  });
+
+  it("guards a tab change while the configuration holds unsaved edits", async () => {
+    const user = userEvent.setup();
+    render(<AgentDetailPage kind="agent" id="a1" />);
+
+    await user.click(screen.getByRole("button", { name: "make dirty" }));
+    await user.click(screen.getAllByRole("link", { name: "Advanced" })[0]);
+
+    expect(screen.getByText(/discard unsaved changes\?/i)).toBeInTheDocument();
+    // Nothing has navigated yet: the answer decides.
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("refuses the configuration in place for a reader who cannot change it", () => {
+    // The form used to be a second route the header's Edit button refused to
+    // open. It is the page now, so the refusal is stated over the read-only
+    // form instead.
+    access = { ...access, canEdit: false, canModify: false };
+    render(<AgentDetailPage kind="agent" id="a1" />);
+
+    expect(screen.getByText("form is read-only")).toBeVisible();
+    expect(
+      screen.getByText(/you can view this agent's configuration/i),
+    ).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+  });
+
+  it("keeps the MCP Gateway's environment in the header", () => {
     mockAgent({
       ...baseAgent,
       agentType: "mcp_gateway",
@@ -205,28 +290,22 @@ describe("AgentDetailPage", () => {
     });
     render(<AgentDetailPage kind="mcp_gateway" id="a1" />);
 
-    expect(screen.getByRole("heading", { name: "Overview" })).toBeVisible();
     expect(screen.getByText("Production")).toBeVisible();
-    expect(screen.queryByRole("link", { name: "Connect" })).toBeNull();
-    expect(screen.queryByText("system prompt editor")).toBeNull();
   });
 
-  it("keeps the focused system prompt editor on the Agent detail page", () => {
-    render(<AgentDetailPage kind="agent" id="a1" />);
-
-    expect(screen.getByText("system prompt editor")).toBeVisible();
-  });
-
-  it("omits the connection section for a built-in agent", () => {
+  it("renders no tab bar for a built-in record, which has one tab", () => {
     access = { ...access, isBuiltIn: true };
     mockAgent({ ...baseAgent, builtIn: true });
     render(<AgentDetailPage kind="agent" id="a1" />);
 
+    expect(screen.getByText("form section: configuration")).toBeVisible();
+    expect(
+      screen.queryByRole("link", { name: "Tools & Knowledge" }),
+    ).toBeNull();
     expect(screen.queryByText("connect content")).toBeNull();
-    expect(screen.getByRole("heading", { name: "Overview" })).toBeVisible();
   });
 
-  it("names delegated task history Executions and opens it from the page header", () => {
+  it("names delegated task history Executions and opens it from a tab", () => {
     vi.mocked(useFeature).mockReturnValue(true);
     mockAgent({ ...baseAgent, backgroundExecution: {} });
     render(<AgentDetailPage kind="agent" id="a1" />);
@@ -246,6 +325,6 @@ describe("AgentDetailPage", () => {
     render(<AgentDetailPage kind="agent" id="a1" />);
 
     expect(screen.queryByRole("link", { name: "Executions" })).toBeNull();
-    expect(screen.queryByText("background execution")).toBeNull();
+    expect(screen.queryByText("execution history")).toBeNull();
   });
 });

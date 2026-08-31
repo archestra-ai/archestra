@@ -28,8 +28,8 @@ import { AgentIcon } from "@/components/agent-icon";
 import { AgentNameCell } from "@/components/agent-name-cell";
 import {
   AGENT_PAGE_CONFIGS,
+  agentConfigureHref,
   agentDetailHref,
-  agentEditHref,
   agentNewHref,
   resolveLegacyAgentDialogRedirect,
 } from "@/components/agent-pages/agent-page-config";
@@ -397,7 +397,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       <AgentActions
         agent={agent}
         canModify={canModify}
-        onEdit={(target) => router.push(agentEditHref("agent", target.id))}
+        onEdit={(target) => router.push(agentConfigureHref("agent", target.id))}
         onView={(target) => router.push(agentDetailHref("agent", target.id))}
         onDelete={setDeletingAgentId}
         onRestore={(agentId) => {
@@ -907,7 +907,9 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               onCloned={(cloned) => {
                 // Land on the clone's Configuration step so it can be renamed
                 // straight away.
-                router.push(agentEditHref("agent", cloned.id, "configuration"));
+                router.push(
+                  agentConfigureHref("agent", cloned.id, "configuration"),
+                );
               }}
             />
 

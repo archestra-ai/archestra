@@ -3,6 +3,7 @@
 import { ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { agentConfigureHref } from "@/components/agent-pages/agent-page-config";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { useProfile } from "@/lib/agent.query";
 import { useCanManageGateway } from "@/lib/auth/use-can-manage-gateway";
@@ -94,10 +95,11 @@ export function GatewayServersSummary({
 
   const editLink =
     canManage && gatewayId ? (
-      // Just open the gateway's edit form (same tab, matching the page's other
-      // links) — don't force-open the tool picker; the user curates from there.
+      // Just open the gateway's configuration (same tab, matching the page's
+      // other links) — don't force-open the tool picker; the user curates from
+      // there.
       <Link
-        href={`/mcp/gateways/${encodeURIComponent(gatewayId)}/edit`}
+        href={agentConfigureHref("mcp_gateway", gatewayId)}
         className="text-muted-foreground/80 underline decoration-muted-foreground/30 underline-offset-2 hover:text-foreground"
       >
         Edit on gateway

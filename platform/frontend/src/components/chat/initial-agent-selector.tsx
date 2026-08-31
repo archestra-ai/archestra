@@ -28,6 +28,7 @@ import { RemoteServerInstallDialog } from "@/app/mcp/registry/_parts/remote-serv
 import { AgentBadge } from "@/components/agent-badge";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
+import { agentConfigureHref } from "@/components/agent-pages/agent-page-config";
 import { ToolChecklist } from "@/components/agent-tools-editor";
 import { sortCatalogItems } from "@/components/agent-tools-editor.utils";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
@@ -1083,7 +1084,7 @@ function AgentSettingsView({
       <div className="border-t px-4 py-3 shrink-0 flex items-center justify-between gap-3">
         {canReadAgents ? (
           <Link
-            href={`/agents/${agent.id}/edit`}
+            href={agentConfigureHref("agent", agent.id)}
             className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5"
           >
             Full configuration <ExternalLink className="size-3" />

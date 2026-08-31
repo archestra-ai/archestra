@@ -33,7 +33,7 @@ test.describe("Agents", () => {
     await page.getByTestId(E2eTestId.AgentSetupNextButton).click();
     await page.getByTestId(E2eTestId.AgentSetupNextButton).click();
     await page.getByTestId(E2eTestId.AgentSetupSubmitButton).click();
-    await page.waitForURL(/\/agents\/agent-created#connect$/);
+    await page.waitForURL(/\/agents\/agent-created\?tab=connect$/);
 
     await agentsPage.goto();
 
@@ -127,17 +127,22 @@ test.describe("Agents", () => {
       body: [original, cloned],
     });
     await dialog.getByRole("button", { name: "Clone" }).click();
-    await page.waitForURL(/\/agents\/agent-cloned\/edit\?step=configuration$/);
+    // The clone lands on its own page, open on Configuration, so it can be
+    // renamed without a second navigation.
+    await page.waitForURL(/\/agents\/agent-cloned$/);
 
     const nameInput = page.getByRole("textbox", { name: "Name" });
     await nameInput.fill(CLONE);
-    await page.getByTestId(E2eTestId.AgentSetupNextButton).click();
-    await page.waitForURL(/step=tools/);
-    await page.getByTestId(E2eTestId.AgentSetupNextButton).click();
-    await page.waitForURL(/step=advanced/);
-    await page.getByRole("button", { name: "Save", exact: true }).click();
-    await page.waitForURL(/\/agents\/agent-cloned$/);
+    await page.getByTestId(E2eTestId.AgentSetupSubmitButton).click();
 
     await expect(page.getByRole("heading", { name: CLONE })).toBeVisible();
+    // Saving stays put: the record's page is where it was being edited.
+    await expect(page).toHaveURL(/\/agents\/agent-cloned$/);
+
+    // The remaining configuration is a tab of the same page, not a step of a
+    // separate wizard.
+    await page.getByTestId(`${E2eTestId.AgentSetupStep}-tools`).click();
+    await page.waitForURL(/\/agents\/agent-cloned\?tab=tools$/);
+    await expect(page.getByTestId(E2eTestId.AgentToolsSection)).toBeVisible();
   });
 });

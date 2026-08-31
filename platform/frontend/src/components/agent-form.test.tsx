@@ -736,12 +736,20 @@ const advisorAgent = {
   builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
 };
 
+/**
+ * The step panel a control belongs to. Each panel is one run of settings
+ * sections, and the one that is not the active step is hidden rather than
+ * unmounted.
+ */
+const panelOf = (node: HTMLElement) =>
+  node.closest("section")?.parentElement ?? null;
+
 // The Tools section carries its own Auto/Custom tabs, so the subagent ones have
 // to be reached through their section.
 const subagentModeTab = (name: "Auto" | "Custom") => {
   const section = screen
     .getByRole("heading", { name: "Subagents" })
-    .closest("div") as HTMLElement;
+    .closest("section") as HTMLElement;
   return within(section).getByRole("tab", { name });
 };
 
@@ -1252,7 +1260,7 @@ const orgSkill = (name: string, id: string) => ({
 const skillsModeTab = (name: "Auto" | "Custom") => {
   const section = screen
     .getByRole("heading", { name: "Published skills" })
-    .closest("div") as HTMLElement;
+    .closest("section") as HTMLElement;
   return within(section).getByRole("tab", { name });
 };
 
@@ -2158,6 +2166,8 @@ describe("AgentForm save payload and failure handling", () => {
       "name",
       "scope",
       "suggestedPrompts",
+      // The instructions are part of this panel now, so one save covers them.
+      "systemPrompt",
       "teams",
       "users",
     ]);
@@ -2505,9 +2515,9 @@ describe("AgentForm save payload and failure handling", () => {
     );
 
     const toolsEditor = await screen.findByText("Mock Tools Editor");
-    expect(toolsEditor.closest(".divide-y")).toHaveClass("hidden");
+    expect(panelOf(toolsEditor)).toHaveClass("hidden");
     expect(
-      screen.getByPlaceholderText("Enter agent name").closest(".divide-y"),
+      panelOf(screen.getByPlaceholderText("Enter agent name")),
     ).not.toHaveClass("hidden");
 
     await user.type(
@@ -2523,9 +2533,9 @@ describe("AgentForm save payload and failure handling", () => {
         submitEnabled={false}
       />,
     );
-    expect(
-      screen.getByText("Mock Tools Editor").closest(".divide-y"),
-    ).not.toHaveClass("hidden");
+    expect(panelOf(screen.getByText("Mock Tools Editor"))).not.toHaveClass(
+      "hidden",
+    );
     // Same mount: the name typed on the first step is still there.
     expect(screen.getByPlaceholderText("Enter agent name")).toHaveValue(
       "New Agent",
@@ -2534,9 +2544,9 @@ describe("AgentForm save payload and failure handling", () => {
     rerender(
       <AgentForm agentType="agent" activeSection="advanced" submitEnabled />,
     );
-    expect(screen.getByText("Advanced").closest(".divide-y")).not.toHaveClass(
-      "hidden",
-    );
+    expect(
+      panelOf(screen.getByRole("heading", { name: "Security" })),
+    ).not.toHaveClass("hidden");
     await user.click(screen.getByRole("button", { name: /create/i }));
 
     await waitFor(() => expect(createAgent).toHaveBeenCalled());
@@ -2598,15 +2608,24 @@ describe("AgentForm read-only footer", () => {
     useAgentDelegationsMock.mockReturnValue({ data: [], isSuccess: true });
   });
 
-  it("gives a read-only form an exit instead of no footer at all", async () => {
-    // Reached by URL on a record the viewer may not change: every field is
-    // disabled and there is nothing to save, so without this the only way off
-    // the page was the browser's back button.
-    render(<AgentForm agentType="agent" agent={baseAgent} readOnly />);
+  it("tells the caller's footer that the form is read-only", async () => {
+    // The form no longer decides what a viewer sees instead of a submit row:
+    // it is embedded in a page that already says why the record cannot be
+    // changed, and that page renders no footer at all.
+    const footer = vi.fn(() => <span>footer rendered</span>);
+    render(
+      <AgentFormWithoutFooter
+        agentType="agent"
+        agent={baseAgent}
+        readOnly
+        footer={footer}
+      />,
+    );
 
-    const cancel = await screen.findByRole("link", { name: "Cancel" });
-    expect(cancel).toHaveAttribute("href", `/agents/${baseAgent.id}`);
-    // Nothing that implies a save: the caller's submit row is not rendered.
+    expect(await screen.findByText("footer rendered")).toBeInTheDocument();
+    expect(footer).toHaveBeenCalledWith(
+      expect.objectContaining({ readOnly: true }),
+    );
     expect(screen.queryByRole("button", { name: /update/i })).toBeNull();
   });
 
@@ -2616,6 +2635,5 @@ describe("AgentForm read-only footer", () => {
     expect(
       await screen.findByRole("button", { name: /update/i }),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Cancel" })).toBeNull();
   });
 });

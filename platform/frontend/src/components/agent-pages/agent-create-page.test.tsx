@@ -48,6 +48,7 @@ vi.mock("@/components/agent-form", () => ({
           isSaving: false,
           isDirty: false,
           canSubmit: true,
+          readOnly: false,
         })}
       </div>
     );
@@ -310,7 +311,7 @@ describe("AgentCreatePage", () => {
     const user = userEvent.setup();
     render(<AgentCreatePage kind="agent" />);
     await user.click(screen.getByRole("button", { name: "fire created" }));
-    expect(push).toHaveBeenCalledWith("/agents/new-1#connect");
+    expect(push).toHaveBeenCalledWith("/agents/new-1?tab=connect");
   });
 
   it("stays put with a success state when the creator may not read what it made", async () => {
@@ -348,7 +349,7 @@ describe("AgentCreatePage", () => {
 
     mockPermissions({ canRead: true });
     rerender(<AgentCreatePage kind="agent" />);
-    expect(push).toHaveBeenCalledWith("/agents/new-1#connect");
+    expect(push).toHaveBeenCalledWith("/agents/new-1?tab=connect");
   });
 
   it("shows the success state when the pending permission settles to a no", async () => {

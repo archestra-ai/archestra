@@ -803,6 +803,12 @@ export interface AgentFormFooterState {
    * flight.
    */
   canSubmit: boolean;
+  /**
+   * Every field is disabled and there is nothing to save. The host decides
+   * what a viewer sees instead of a submit row — a page that already says why
+   * shows nothing at all.
+   */
+  readOnly: boolean;
 }
 
 /** Editable values a create flow may seed from a catalog template. */
@@ -2540,13 +2546,8 @@ export function AgentForm({
     isSaving: isSaving || createAgent.isPending || updateAgent.isPending,
     isDirty,
     canSubmit,
+    readOnly,
   };
-  // Where a read-only form's Cancel goes: the record it is showing, which is
-  // where the editable footer's Cancel lands too. A legacy `profile` has no
-  // family of its own, so it resolves to its canonical gateway route.
-  const readOnlyExitHref = agent
-    ? agentDetailHref(agentPageKindForType(agent.agentType), agent.id)
-    : agentListHref(agentPageKindForType(agentType));
   return (
     <form
       className="flex flex-col"
@@ -2763,6 +2764,7 @@ export function AgentForm({
                     onChange={setSystemPrompt}
                     readOnly={readOnly}
                     variant="section"
+                    showTitle={false}
                     builtInAgentId={builtInAgentName}
                     headerExtra={
                       defaultSystemPrompt !== undefined && !readOnly ? (
@@ -3957,18 +3959,7 @@ export function AgentForm({
           </AlertDescription>
         </Alert>
       )}
-      {readOnly ? (
-        // A read-only form disables every field and has nothing to save, but
-        // it still needs an exit: with no footer at all, a viewer who reached
-        // this page by URL could only leave it with the browser's back button.
-        <WizardFooter>
-          <Button type="button" variant="outline" asChild>
-            <Link href={readOnlyExitHref}>Cancel</Link>
-          </Button>
-        </WizardFooter>
-      ) : (
-        footer(footerState)
-      )}
+      {footer(footerState)}
     </form>
   );
 }

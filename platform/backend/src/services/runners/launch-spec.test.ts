@@ -1,6 +1,7 @@
 import type { SupportedProvider } from "@archestra/shared";
 import config from "@/config";
 import {
+  LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
   TeamTokenModel,
@@ -89,6 +90,72 @@ describe("buildRunnerLaunchSpec", () => {
     const virtualKey = await VirtualApiKeyModel.findById(virtualApiKeyId);
     expect(virtualKey?.scope).toBe("personal");
     expect(virtualKey?.authorId).toBe(setup.user.id);
+  });
+
+  test("routes a Gemini Vertex AI execution through its keyless stored credential", async ({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+    makeAgent,
+  }) => {
+    config.llm.gemini.vertexAi.enabled = true;
+    config.llm.gemini.vertexAi.project = "test-project";
+
+    const organization = await makeOrganization();
+    const user = await makeAdmin();
+    await makeMember(user.id, organization.id, { role: "admin" });
+    const providerKey = await LlmProviderApiKeyModel.create({
+      organizationId: organization.id,
+      secretId: null,
+      name: "Vertex AI workload identity",
+      provider: "gemini",
+      scope: "org",
+      userId: null,
+      teamId: null,
+      baseUrl: null,
+      inferenceBaseUrl: null,
+    });
+    const model = await ModelModel.create({
+      externalId: "gemini/keyless-model",
+      provider: "gemini",
+      modelId: "keyless-model",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      lastSyncedAt: new Date(),
+    });
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(providerKey.id, [
+      model.id,
+    ]);
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      authorId: user.id,
+      agentType: "agent",
+      modelId: model.id,
+      llmApiKeyId: providerKey.id,
+    });
+
+    const { spec, virtualApiKeyId } = await buildRunnerLaunchSpec({
+      deployment: deployment(agent, "openai_responses"),
+      taskId: crypto.randomUUID(),
+      agentId: agent.id,
+      actor: {
+        id: user.id,
+        kind: "user",
+        organizationId: organization.id,
+      },
+      organizationId: organization.id,
+      runtimeScope: "agent-tests",
+      effectiveNetworkPolicy: { source: "built_in", policy: null },
+      appName: "Archestra",
+      executionMode: "one_shot",
+    });
+
+    expect(spec.secretEnv.OPENAI_API_KEY).toMatch(/^arch_/);
+    const providerVirtualKeys = await VirtualApiKeyModel.findByProviderApiKeyId(
+      providerKey.id,
+    );
+    expect(providerVirtualKeys.map(({ id }) => id)).toContain(virtualApiKeyId);
   });
 
   test("uses organization-scoped access for a system execution actor", async ({

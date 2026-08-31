@@ -13,6 +13,7 @@ const SPEC: KubernetesRunnerLaunchSpec = {
   image: "registry.example.test/agent-archestra:latest",
   command: null,
   privileged: false,
+  nodeSelector: {},
   resources: null,
   env: {},
   secretEnv: {},

@@ -11,7 +11,7 @@ import {
 } from "@archestra/shared";
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
-import { getProviderEnvApiKey } from "@/config";
+import config, { getProviderEnvApiKey } from "@/config";
 import logger from "@/logging";
 import { LlmProviderApiKeyModel, ModelModel, TeamModel } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
@@ -183,7 +183,9 @@ export async function resolveProviderApiKey(params: {
         provider,
         azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
         anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
-      })
+      }) ||
+      (provider === "gemini" && config.llm.gemini.vertexAi.enabled) ||
+      (provider === "bedrock" && config.llm.bedrock.iamAuthEnabled)
     ) {
       return {
         apiKey: undefined,

@@ -162,6 +162,21 @@ export const handlers: HttpHandler[] = [
     environments: [],
     defaultAssignedCatalogCount: 0,
   }),
+  // Fetched by the agent settings page's messaging-channels section. No
+  // configured providers and no bindings keep the strict unhandled-request
+  // guard satisfied.
+  ...getJson("/api/chatops/status", { providers: [] }),
+  ...getJson("/api/chatops/bindings", {
+    data: [],
+    pagination: {
+      currentPage: 1,
+      limit: 100,
+      total: 0,
+      totalPages: 0,
+      hasNext: false,
+      hasPrev: false,
+    },
+  }),
   ...getJson("/api/teams", teamsSeed),
   ...getJson("/api/members", {
     data: [],

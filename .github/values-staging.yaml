@@ -87,6 +87,9 @@ archestra:
     ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ALLOW_PRIVILEGED: "true"
     ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NODE_SELECTOR: "archestra-runners=true"
     ARCHESTRA_AGENT_BACKGROUND_EXECUTION_EPHEMERAL_STORAGE_LIMIT: "60Gi"
+    # Scale-from-zero on the runners pool plus a cold multi-GB image pull can
+    # take 6+ minutes before the container starts.
+    ARCHESTRA_AGENT_BACKGROUND_EXECUTION_POD_START_TIMEOUT_SECONDS: "900"
     # BETA: auto-sync-permissions connectors (off by default everywhere else).
     # Explicit so staging keeps the feature even if ARCHESTRA_BETA is ever
     # flipped off.

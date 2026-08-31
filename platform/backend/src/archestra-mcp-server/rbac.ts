@@ -188,6 +188,7 @@ export const TOOL_PERMISSIONS: Record<
   list_tasks: { resource: "agent", action: "read" },
   steer_task: { resource: "agent", action: "read" },
   cancel_task: { resource: "agent", action: "read" },
+  post_task_file: { resource: "agent", action: "read" },
   // Persistent file store — these operate on `skill_sandbox_files`, not the
   // sandbox itself, so they gate on `file:manage`. Per-file authorization
   // (authorship, project membership) stays in the handlers.

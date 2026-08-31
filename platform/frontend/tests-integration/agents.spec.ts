@@ -65,8 +65,12 @@ test.describe("Agents", () => {
     mswControl,
   }) => {
     const ORIGINAL = "Original Agent";
+    const CLONE_DRAFT = "Original Agent (copy)";
     const CLONE = "Cloned Agent";
     const original = makeAgent({ id: "agent-original", name: ORIGINAL });
+    // What the clone comes back as, before it is renamed — the rename is what
+    // this test drives, so the draft must not already carry the target name.
+    const clonedDraft = makeAgent({ id: "agent-cloned", name: CLONE_DRAFT });
     const cloned = makeAgent({ id: "agent-cloned", name: CLONE });
 
     await mswControl.use({
@@ -77,7 +81,7 @@ test.describe("Agents", () => {
     await mswControl.use({
       method: "post",
       url: "/api/agents/:id/clone",
-      body: cloned,
+      body: clonedDraft,
     });
     await mswControl.use({
       method: "put",
@@ -87,7 +91,7 @@ test.describe("Agents", () => {
     await mswControl.use({
       method: "get",
       url: "/api/agents/:id",
-      body: cloned,
+      body: clonedDraft,
     });
     await mswControl.use({
       method: "get",
@@ -124,18 +128,32 @@ test.describe("Agents", () => {
     await mswControl.use({
       method: "get",
       url: "/api/agents/all",
-      body: [original, cloned],
+      body: [original, clonedDraft],
     });
     await dialog.getByRole("button", { name: "Clone" }).click();
     // The clone lands on its own page, open on Configuration, so it can be
     // renamed without a second navigation.
     await page.waitForURL(/\/agents\/agent-cloned$/);
 
+    // The configuration is the page, so the clone's name is editable on the
+    // screen the clone landed on.
     const nameInput = page.getByRole("textbox", { name: "Name" });
-    await nameInput.fill(CLONE);
-    await page.getByTestId(E2eTestId.AgentSetupSubmitButton).click();
+    await expect(nameInput).toHaveValue(CLONE_DRAFT);
 
-    await expect(page.getByRole("heading", { name: CLONE })).toBeVisible();
+    const save = page.getByTestId(E2eTestId.AgentSetupSubmitButton);
+    // Nothing has changed yet, so there is nothing to save.
+    await expect(save).toBeDisabled();
+    await nameInput.fill(CLONE);
+    await expect(save).toBeEnabled();
+
+    const saved = page.waitForResponse(
+      (response) =>
+        response.url().includes("/api/agents/agent-cloned") &&
+        response.request().method() === "PUT",
+    );
+    await save.click();
+    const putBody = JSON.parse((await saved).request().postData() ?? "{}");
+    expect(putBody.name).toBe(CLONE);
     // Saving stays put: the record's page is where it was being edited.
     await expect(page).toHaveURL(/\/agents\/agent-cloned$/);
 

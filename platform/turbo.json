@@ -67,6 +67,7 @@
         "E2E_WIREMOCK_BASE_URL",
         "E2E_WIREMOCK_INTERNAL_URL",
         "E2E_KEYCLOAK_BACKEND_URL",
+        "E2E_HIBERNATION_TIMING_PROFILE",
         "KUBECONFIG"
       ]
     },

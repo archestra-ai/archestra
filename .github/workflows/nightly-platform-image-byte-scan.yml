@@ -1,0 +1,66 @@
+name: Nightly Platform Image Byte Scan
+
+# Independently regenerates vulnerability inventory from the exact full and
+# slim image bytes produced by the latest successful scheduled Platform E2E
+# run. This compensates for the fast required check trusting build-time SBOM
+# attestations after validating their digest binding and completeness.
+
+on:
+  schedule:
+    # Platform E2E starts at 03:00 UTC. Leave ample room for its full nightly
+    # browser/hibernation suite before selecting the latest successful run.
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+    inputs:
+      image-sha:
+        description: "Optional exact SHA tag produced by Platform E2E"
+        required: false
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: nightly-platform-image-byte-scan
+  cancel-in-progress: false
+
+jobs:
+  scan-platform-image-bytes:
+    name: Nightly Docker Image Scanning (Platform, byte-derived)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read # Required to locate the latest successful scheduled Platform E2E run.
+      contents: read # Required to checkout the validator and local scan actions.
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Resolve scheduled E2E image SHA
+        id: image-sha
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_IMAGE_SHA: ${{ inputs.image-sha }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          image_sha=$INPUT_IMAGE_SHA
+          if [ -z "$image_sha" ]; then
+            image_sha=$(gh api \
+              "repos/${REPOSITORY}/actions/workflows/platform-e2e-tests.yml/runs?event=schedule&status=success&per_page=1" \
+              --jq '.workflow_runs[0].head_sha')
+          fi
+          if [[ ! "$image_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::No valid successful scheduled Platform E2E image SHA was found."
+            exit 1
+          fi
+          echo "value=${image_sha}" >> "$GITHUB_OUTPUT"
+
+      - name: Scan exact full and slim Platform image bytes
+        uses: ./.github/actions/scan-platform-image-bytes
+        with:
+          image-sha: ${{ steps.image-sha.outputs.value }}
+          dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
+          dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}

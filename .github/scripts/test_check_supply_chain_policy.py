@@ -16,7 +16,7 @@ _SPEC.loader.exec_module(policy)
 
 
 class IterCandidateFilesTest(unittest.TestCase):
-    def test_scans_both_yml_and_yaml_under_github(self) -> None:
+    def test_scans_workflows_github_scripts_and_dockerfiles(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             github = root / ".github"
@@ -25,6 +25,8 @@ class IterCandidateFilesTest(unittest.TestCase):
             (github / "values.yaml").write_text("b: 2\n")
             (github / "bench").mkdir()
             (github / "bench" / "job.yaml").write_text("c: 3\n")
+            (github / "scripts").mkdir()
+            (github / "scripts" / "download.sh").write_text("curl --version\n")
             (root / "Dockerfile").write_text("FROM scratch\n")
 
             found = {p.relative_to(root).as_posix() for p in policy.iter_candidate_files(root)}
@@ -32,6 +34,7 @@ class IterCandidateFilesTest(unittest.TestCase):
         self.assertIn(".github/workflow.yml", found)
         self.assertIn(".github/values.yaml", found)
         self.assertIn(".github/bench/job.yaml", found)
+        self.assertIn(".github/scripts/download.sh", found)
         self.assertIn("Dockerfile", found)
 
 

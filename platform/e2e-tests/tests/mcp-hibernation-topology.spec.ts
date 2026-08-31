@@ -18,6 +18,10 @@ import {
   waitForServerInstallation,
 } from "../utils";
 import { expect, test } from "./api-fixtures";
+import {
+  assertHibernationTimingProfile,
+  hibernationTiming,
+} from "./hibernation-timing";
 
 /**
  * Deployment annotations written by `K8sDeployment.hibernate()` and removed by
@@ -72,22 +76,8 @@ const CUSTOM_YAML_REPLICAS = 2;
  */
 const INSTALL_WAIT_ATTEMPTS = 120;
 
-/**
- * How long after a deployment's last use the platform is certain to have
- * hibernated it, if it is ever going to:
- *
- *   - 120 s idle window (the CI cluster's
- *     ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS, the shortest the
- *     platform accepts),
- *   - + 30 s the sweep adds as grace, because the persisted last-used stamp is
- *     throttled by that much,
- *   - + up to one sweep tick, which runs at min(window / 2, 60) s = 60 s,
- *
- * so 210 s, plus margin for a slow patch. Two uses: nothing may claim a
- * deployment "was not hibernated" before this much has elapsed, and nothing
- * should wait longer than this for a hibernation that is going to happen.
- */
-const HIBERNATION_DEADLINE_MS = 240_000;
+const HIBERNATION_DEADLINE_MS = hibernationTiming.hibernationDeadlineMs;
+const HIBERNATION_POLL_INTERVALS = hibernationTiming.clusterPollIntervals;
 
 interface InstallFixture {
   id: string;
@@ -393,6 +383,7 @@ test.describe("MCP idle hibernation - deployment topologies", () => {
       // installs spending their full INSTALL_WAIT_ATTEMPTS budget plus the
       // tool-discovery polls, since the fixtures are built one after another.
       test.setTimeout(1_200_000);
+      await assertHibernationTimingProfile({ request, makeApiRequest });
 
       const kc = new k8s.KubeConfig();
       kc.loadFromDefault();
@@ -953,7 +944,7 @@ test.describe("MCP idle hibernation - deployment topologies", () => {
     await expect
       .poll(() => readHibernationShape(sharedDeploymentName), {
         timeout: HIBERNATION_DEADLINE_MS,
-        intervals: [5_000, 10_000],
+        intervals: HIBERNATION_POLL_INTERVALS,
       })
       .toEqual({
         replicas: 0,
@@ -1022,7 +1013,7 @@ test.describe("MCP idle hibernation - deployment topologies", () => {
     await expect
       .poll(() => readHibernationShape(customYamlDeploymentName), {
         timeout: HIBERNATION_DEADLINE_MS,
-        intervals: [5_000, 10_000],
+        intervals: HIBERNATION_POLL_INTERVALS,
       })
       .toEqual({
         replicas: 0,

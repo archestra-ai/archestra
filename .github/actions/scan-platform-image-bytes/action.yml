@@ -1,0 +1,40 @@
+name: Scan Platform Image Bytes
+description: Validate, pull, and byte-scan exact full and slim Platform images
+
+inputs:
+  image-sha:
+    description: "Exact SHA tag produced by Platform E2E"
+    required: true
+  dockerhub-user:
+    description: "Docker Hub username for Docker Scout"
+    required: true
+  dockerhub-password:
+    description: "Docker Hub password/token for Docker Scout"
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve, pull, and retag exact image digests
+      shell: bash
+      env:
+        IMAGE_REPO: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform
+        IMAGE_SHA: ${{ inputs.image-sha }}
+      run: |
+        set -euo pipefail
+        full_ref=$(bash .github/scripts/resolve-attested-image.sh "${IMAGE_REPO}:${IMAGE_SHA}-e2e")
+        slim_ref=$(bash .github/scripts/resolve-attested-image.sh "${IMAGE_REPO}:${IMAGE_SHA}-e2e-slim")
+        docker pull "$full_ref"
+        docker pull "$slim_ref"
+        docker tag "$full_ref" "archestra-platform:${IMAGE_SHA}"
+        docker tag "$slim_ref" "archestra-platform-slim:${IMAGE_SHA}"
+
+    - name: Scan exact full and slim image bytes for CVEs
+      uses: ./.github/actions/scan-docker-image
+      with:
+        image: local://archestra-platform:${{ inputs.image-sha }}
+        additional-images: local://archestra-platform-slim:${{ inputs.image-sha }}
+        concurrent: "false"
+        dockerhub-user: ${{ inputs.dockerhub-user }}
+        dockerhub-password: ${{ inputs.dockerhub-password }}
+        exit-code: "true"

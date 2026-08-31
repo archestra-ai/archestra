@@ -2528,6 +2528,17 @@ describe("parseMcpIdleHibernationSeconds", () => {
     });
   });
 
+  test("an explicit test minimum accelerates E2E without changing the kill switch", () => {
+    expect(parseMcpIdleHibernationSeconds("1", 8)).toEqual({
+      windowSeconds: 8,
+      hardDisabled: false,
+    });
+    expect(parseMcpIdleHibernationSeconds("0", 8)).toEqual({
+      windowSeconds: 1800,
+      hardDisabled: true,
+    });
+  });
+
   test("values at or above the floor pass through", () => {
     expect(parseMcpIdleHibernationSeconds("120")).toEqual({
       windowSeconds: 120,

@@ -43,6 +43,10 @@ inputs:
     description: "SLSA provenance attestation. Empty preserves buildx defaults; set 'false' to skip for images that are not published."
     required: false
     default: ""
+  sbom:
+    description: "SBOM attestation configuration. Empty disables an explicit SBOM; accepts Buildx --sbom values."
+    required: false
+    default: ""
   version:
     description: "Version to pass as VERSION build arg"
     required: false
@@ -131,6 +135,7 @@ runs:
         INPUT_OUTPUTS: ${{ inputs.outputs }}
         INPUT_TARGET: ${{ inputs.target }}
         INPUT_PROVENANCE: ${{ inputs.provenance }}
+        INPUT_SBOM: ${{ inputs.sbom }}
         INPUT_VERSION: ${{ inputs.version }}
         INPUT_CACHE_FROM: ${{ inputs.cache-from }}
         INPUT_CACHE_TO: ${{ inputs.cache-to }}
@@ -159,6 +164,7 @@ runs:
         done <<< "${INPUT_CACHE_FROM}"
         [ -n "${INPUT_CACHE_TO}" ] && ARGS+=( --cache-to "${INPUT_CACHE_TO}" )
         [ -n "${INPUT_PROVENANCE}" ] && ARGS+=( --provenance "${INPUT_PROVENANCE}" )
+        [ -n "${INPUT_SBOM}" ] && ARGS+=( --sbom "${INPUT_SBOM}" )
         [ -n "${INPUT_VERSION}" ] && ARGS+=( --build-arg "VERSION=${INPUT_VERSION}" )
 
         # Tags arrive newline- or comma-separated.

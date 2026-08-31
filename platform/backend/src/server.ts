@@ -1644,6 +1644,18 @@ const startWebServer = async () => {
     if (enableE2eTestEndpoints) {
       fastify.get("/test", async () => ({
         value: testValue,
+        mcpIdleHibernation: {
+          windowSeconds: config.orchestrator.mcpIdleHibernation.windowSeconds,
+          lastUsedRefreshIntervalMs:
+            config.orchestrator.mcpIdleHibernation.lastUsedRefreshIntervalMs,
+          demandHeartbeatIntervalMs:
+            config.orchestrator.mcpIdleHibernation.demandHeartbeatIntervalMs,
+          sweepIntervalMs:
+            Math.min(
+              config.orchestrator.mcpIdleHibernation.windowSeconds / 2,
+              60,
+            ) * 1000,
+        },
       }));
     }
 

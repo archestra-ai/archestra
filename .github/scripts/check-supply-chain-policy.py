@@ -120,6 +120,7 @@ def ends_with_continuation(line: str) -> bool:
 def iter_candidate_files(repo_root: Path):
     yield from sorted((repo_root / ".github").rglob("*.yml"))
     yield from sorted((repo_root / ".github").rglob("*.yaml"))
+    yield from sorted((repo_root / ".github" / "scripts").rglob("*.sh"))
     yield from sorted(repo_root.rglob("Dockerfile*"))
     docker_dir = repo_root / "platform" / "docker"
     if docker_dir.exists():

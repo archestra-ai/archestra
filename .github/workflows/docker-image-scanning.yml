@@ -12,6 +12,12 @@ on:
       - reopened
       - labeled
   merge_group:
+  workflow_dispatch:
+    inputs:
+      image-sha:
+        description: "Exact SHA tag produced by Platform E2E (PRs use the synthetic merge SHA)"
+        required: true
+        type: string
 
 permissions: {}
 
@@ -36,6 +42,115 @@ jobs:
       - name: Skip full image scan on ordinary PR updates
         run: echo "Docker image scanning runs on merge queue or when the run-docker-scan label is added."
 
+  # Platform is isolated from the generic matrix because it scans two images.
+  # Attested E2E images take the fast path: Scout reads their build-time SBOMs
+  # by immutable digest, so no image layers are pulled or re-indexed. A labeled
+  # PR without E2E images still builds and scans both variants locally.
+  docker-image-scanning-platform:
+    name: Docker Image Scanning (Platform)
+    if: ${{ github.event_name == 'pull_request' && github.event.label.name == 'run-docker-scan' && github.event.pull_request.head.repo.fork != true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Reclaim disk space (background)
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Resolve attested E2E image digests
+        id: e2e-images
+        env:
+          IMAGE_REPO: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform
+          GIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          full_tag="${IMAGE_REPO}:${GIT_SHA}-e2e"
+          slim_tag="${IMAGE_REPO}:${GIT_SHA}-e2e-slim"
+
+          if full_ref=$(bash .github/scripts/resolve-attested-image.sh "$full_tag") \
+            && slim_ref=$(bash .github/scripts/resolve-attested-image.sh "$slim_tag"); then
+            primary=$full_ref
+            additional=$slim_ref
+            {
+              echo "primary=${primary}"
+              echo "additional=${additional}"
+              echo "reused=true"
+            } >> "$GITHUB_OUTPUT"
+          else
+            echo "Using byte-derived local scan for both Platform variants."
+            {
+              echo "primary=archestra-platform:${GIT_SHA}"
+              echo "additional=archestra-platform-slim:${GIT_SHA}"
+              echo "reused=false"
+            } >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build full Platform image with workspace cache
+        if: ${{ steps.e2e-images.outputs.reused != 'true' }}
+        uses: ./.github/actions/build-docker-image
+        with:
+          context: ./platform
+          dockerfile: ./platform/Dockerfile
+          load: "true"
+          tags: archestra-platform:${{ github.sha }}
+          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+          cache-from: |
+            type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:buildcache
+            type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:buildcache-amd64
+
+      - name: Build slim Platform image with workspace cache
+        if: ${{ steps.e2e-images.outputs.reused != 'true' }}
+        uses: ./.github/actions/build-docker-image
+        with:
+          context: ./platform
+          dockerfile: ./platform/Dockerfile
+          target: unified-slim
+          load: "true"
+          tags: archestra-platform-slim:${{ github.sha }}
+          setup-builder: "false"
+          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+          cache-from: |
+            type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:buildcache
+            type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:buildcache-amd64
+
+      - name: Scan full and slim Platform images for CVEs
+        uses: ./.github/actions/scan-docker-image
+        with:
+          image: ${{ steps.e2e-images.outputs.primary }}
+          additional-images: ${{ steps.e2e-images.outputs.additional }}
+          dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
+          dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
+          exit-code: "true"
+
+  manual-platform-byte-scan:
+    name: Manual Docker Image Scanning (Platform, byte-derived)
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Scan exact full and slim Platform image bytes
+        uses: ./.github/actions/scan-platform-image-bytes
+        with:
+          image-sha: ${{ inputs.image-sha }}
+          dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
+          dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
+
   docker-image-scanning:
     name: Docker Image Scanning (${{ matrix.name }})
     # Platform and MCP merge-queue scans run after their E2E image builds in
@@ -45,22 +160,10 @@ jobs:
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read # Required to checkout the repository and read Docker build inputs.
-      id-token: write # Required to pull exact-SHA images previously built by E2E.
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: Platform
-            runner: ubuntu-latest
-            context: ./platform
-            dockerfile: ./platform/Dockerfile
-            local-tag-prefix: archestra-platform
-            use-build-action: true
-            scan-exit-code: "true"
-            e2e-image: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform
-            e2e-tag-suffix: -e2e
-            e2e-slim-image: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform
-            e2e-slim-tag-suffix: -e2e-slim
           - name: MCP Server Base
             runner: ubuntu-latest
             context: ./platform/mcp_server_docker_image
@@ -96,13 +199,6 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 1
-
-      - name: Authenticate to Google Artifact Registry
-        if: ${{ matrix.e2e-image != '' }}
-        uses: ./.github/actions/auth-to-gar
-        with:
-          service_account: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-          workload_identity_provider: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
       - name: Reuse exact E2E image when available
         id: e2e-image
@@ -150,24 +246,6 @@ jobs:
         uses: ./.github/actions/scan-docker-image
         with:
           image: ${{ format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
-          dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
-          dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
-          exit-code: ${{ matrix.scan-exit-code }}
-
-      # The full Platform image inherits the slim target, but scanning both
-      # exact digests also covers artifact metadata and prevents the required
-      # check from passing without inspecting the image used by K8s/Lite E2E.
-      - name: Pull exact slim E2E image
-        if: ${{ steps.e2e-image.outputs.reused == 'true' && matrix.e2e-slim-image != '' }}
-        env:
-          E2E_SLIM_IMAGE: ${{ format('{0}:{1}{2}', matrix.e2e-slim-image, github.sha, matrix.e2e-slim-tag-suffix) }}
-        run: docker pull "$E2E_SLIM_IMAGE"
-
-      - name: Scan slim image for CVEs
-        if: ${{ steps.e2e-image.outputs.reused == 'true' && matrix.e2e-slim-image != '' }}
-        uses: ./.github/actions/scan-docker-image
-        with:
-          image: ${{ format('{0}:{1}{2}', matrix.e2e-slim-image, github.sha, matrix.e2e-slim-tag-suffix) }}
           dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
           dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
           exit-code: ${{ matrix.scan-exit-code }}

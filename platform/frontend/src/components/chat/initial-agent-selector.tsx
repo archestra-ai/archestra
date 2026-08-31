@@ -954,7 +954,7 @@ function AgentSettingsView({
         <SystemPromptEditor
           value={instructions}
           onChange={setInstructions}
-          height="120px"
+          minHeight={120}
         />
 
         {agent?.accessAllTools ? (

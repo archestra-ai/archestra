@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -14,6 +14,9 @@ vi.mock("@/lib/docs/docs", () => ({
 
 import { SystemPromptEditor } from "./system-prompt-editor";
 
+/** The sized box around the editor, which is what grows and is dragged. */
+const editorBox = () => screen.getByTestId("editor").parentElement;
+
 describe("SystemPromptEditor", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -27,13 +30,15 @@ describe("SystemPromptEditor", () => {
 
     render(<SystemPromptEditor value="" onChange={vi.fn()} />);
 
-    expect(screen.getByText("Handlebars")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "docs(opens in new tab)" }),
     ).toHaveAttribute(
       "href",
       "https://archestra.ai/docs/platform-agents#system-prompt-templating",
     );
+    // Ours is the only link: sending a reader to handlebarsjs.com answered a
+    // question the variables list answers better.
+    expect(screen.getAllByRole("link")).toHaveLength(1);
   });
 
   it("hides the Archestra docs link under white-labeling", () => {
@@ -41,10 +46,7 @@ describe("SystemPromptEditor", () => {
 
     render(<SystemPromptEditor value="" onChange={vi.fn()} />);
 
-    expect(screen.getByText("Handlebars")).toBeInTheDocument();
-    expect(
-      screen.queryByRole("link", { name: "docs(opens in new tab)" }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
     expect(
       screen.getByText(
         (_, el) =>
@@ -53,59 +55,58 @@ describe("SystemPromptEditor", () => {
     ).toBeInTheDocument();
   });
 
-  it("keeps the editor at the height it was given, and offers full screen instead of a taller box", () => {
+  it("grows the box to fit the text, between its floor and its ceiling", () => {
+    // The mock editor reports 20px a line plus 16px of padding, so the floor
+    // holds for a short prompt and the text drives the height past it.
     mockGetFrontendDocsUrl.mockReturnValue(null);
 
-    render(<SystemPromptEditor value="" onChange={vi.fn()} height="120px" />);
-
-    expect(screen.getByRole("textbox", { name: "Instruction" })).toBeVisible();
-    expect(screen.getByTestId("editor")).toHaveAttribute(
-      "data-height",
-      "120px",
-    );
-    expect(screen.queryByRole("button", { name: /expand/i })).toBeNull();
-    expect(
-      screen.getByRole("button", { name: /full screen/i }),
-    ).toBeInTheDocument();
-  });
-
-  it("opens the instruction full screen on the same value, and closes back to the form", async () => {
-    mockGetFrontendDocsUrl.mockReturnValue(null);
-    const user = userEvent.setup();
-    const onChange = vi.fn();
-
-    render(
+    const { rerender } = render(
       <SystemPromptEditor
-        title="System prompt"
-        value="Hello {{user.name}}"
-        onChange={onChange}
-        height="120px"
-        headerExtra={<button type="button">Reset to Default</button>}
+        value="one line"
+        onChange={vi.fn()}
+        minHeight={120}
       />,
     );
-    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(editorBox()).toHaveStyle({ height: "120px" });
 
-    await user.click(screen.getByRole("button", { name: /full screen/i }));
-    const dialog = screen.getByRole("dialog", { name: "System prompt" });
-    // The whole viewport: a second editor on the same value, the header's
-    // extra action alongside the way back.
-    const editors = within(dialog).getAllByTestId("editor");
-    expect(editors).toHaveLength(1);
-    expect(editors[0]).toHaveValue("Hello {{user.name}}");
-    expect(editors[0]).toHaveAttribute("data-height", "100%");
-    expect(
-      within(dialog).getByRole("button", { name: "Reset to Default" }),
-    ).toBeInTheDocument();
-
-    // Typing there is typing in the form.
-    await user.type(editors[0], "!");
-    expect(onChange).toHaveBeenLastCalledWith("Hello {{user.name}}!");
-
-    await user.click(
-      within(dialog).getByRole("button", { name: /exit full screen/i }),
+    rerender(
+      <SystemPromptEditor
+        value={Array.from({ length: 10 }, (_, i) => `line ${i}`).join("\n")}
+        onChange={vi.fn()}
+        minHeight={120}
+      />,
     );
-    expect(screen.queryByRole("dialog")).toBeNull();
-    expect(screen.getAllByTestId("editor")).toHaveLength(1);
+    expect(editorBox()).toHaveStyle({ height: "216px" });
+
+    // Past the ceiling the editor scrolls rather than pushing the form down.
+    rerender(
+      <SystemPromptEditor
+        value={Array.from({ length: 100 }, (_, i) => `line ${i}`).join("\n")}
+        onChange={vi.fn()}
+        minHeight={120}
+        maxHeight={400}
+      />,
+    );
+    expect(editorBox()).toHaveStyle({ height: "400px" });
+  });
+
+  it("offers a resize grip instead of a full-screen dialog", async () => {
+    mockGetFrontendDocsUrl.mockReturnValue(null);
+    const user = userEvent.setup();
+
+    render(<SystemPromptEditor value="" onChange={vi.fn()} minHeight={120} />);
+
+    expect(screen.queryByRole("button", { name: /full screen/i })).toBeNull();
+
+    // Sizing it by hand is not mouse-only: the grip takes the arrow keys.
+    const grip = screen.getByRole("separator", { name: /resize instruction/i });
+    grip.focus();
+    await user.keyboard("{ArrowDown}");
+    expect(editorBox()).toHaveStyle({ height: "144px" });
+
+    // And a dragged box stops following the text.
+    await user.keyboard("{ArrowUp}{ArrowUp}{ArrowUp}{ArrowUp}");
+    expect(editorBox()).toHaveStyle({ height: "120px" });
   });
 
   it("warns about expressions Handlebars cannot parse", async () => {
@@ -146,14 +147,11 @@ describe("SystemPromptEditor", () => {
     await waitFor(() => expect(screen.queryByText("{{user.*}}")).toBeNull());
   });
 
-  it("leaves the full-screen editor read-only when the form is", async () => {
+  it("keeps the editor read-only when the form is", () => {
     mockGetFrontendDocsUrl.mockReturnValue(null);
-    const user = userEvent.setup();
 
     render(<SystemPromptEditor value="x" onChange={vi.fn()} readOnly />);
-    await user.click(screen.getByRole("button", { name: /full screen/i }));
-    expect(
-      within(screen.getByRole("dialog")).getByTestId("editor"),
-    ).toHaveAttribute("readonly");
+
+    expect(screen.getByTestId("editor")).toHaveAttribute("readonly");
   });
 });

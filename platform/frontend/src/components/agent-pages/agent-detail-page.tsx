@@ -599,8 +599,11 @@ function AgentDetails({
                   // Nothing to save onto once the record is gone; the PUT would
                   // only come back 404. A reader who cannot change it has no
                   // save row at all — the alert above already says why.
+                  // No rule above the save row either: the panel's sections
+                  // are already ruled apart, and a second line right under the
+                  // last of them read as a stray divider.
                   readOnly ? null : (
-                    <WizardFooter className="sm:justify-end">
+                    <WizardFooter className="border-t-0 sm:justify-end">
                       <Button
                         type="submit"
                         disabled={

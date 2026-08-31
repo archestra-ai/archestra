@@ -56,15 +56,13 @@ const baseAgent = {
 } as unknown as Agent;
 
 function renderChannels(overrides: Partial<Agent> = {}) {
-  render(
+  const { container } = render(
     <A2AConnectionInstructions
       agent={{ ...baseAgent, ...overrides }}
       layout="detail"
     />,
   );
-  return screen
-    .getByRole("heading", { name: "Other ways to reach this agent" })
-    .closest("section") as HTMLElement;
+  return container;
 }
 
 beforeEach(() => {
@@ -79,75 +77,60 @@ beforeEach(() => {
 });
 
 describe("A2AConnectionInstructions — detail layout", () => {
-  it("groups A2A setup before secondary channels and keeps request examples collapsed", async () => {
+  it("gives each concern its own section, with the examples collapsed", async () => {
     const user = userEvent.setup();
+    vi.mocked(useUserToken).mockReturnValue(
+      stubQuery({ data: { tokenStart: "arch_bb566777c" } }),
+    );
     renderChannels();
 
-    const apiHeading = screen.getByRole("heading", { name: "Call via API" });
-    const apiSection = apiHeading.closest("section") as HTMLElement;
+    // Four sections, in the order someone works through them. There is no
+    // "Call via API" wrapper any more: the tab is already named A2A.
     expect(
-      within(apiSection).getByRole("heading", { name: "Agent Endpoint" }),
-    ).toBeVisible();
-    expect(
-      within(apiSection).getByRole("heading", { name: "Authentication" }),
-    ).toBeVisible();
-    const authenticationSection = within(apiSection)
+      screen
+        .getAllByRole("heading", { level: 3 })
+        .map((heading) => heading.textContent),
+    ).toEqual(["Endpoint", "Authentication", "OAuth clients", "Examples"]);
+    expect(screen.queryByText("Call via API")).toBeNull();
+
+    // The token is readable and copyable where authentication is explained,
+    // rather than only inside an example.
+    const authentication = screen
       .getByRole("heading", { name: "Authentication" })
       .closest("section") as HTMLElement;
+    expect(within(authentication).getByText("arch_bb566777c***")).toBeVisible();
     expect(
-      within(authenticationSection).getByText("OAuth clients"),
-    ).toBeVisible();
-    expect(
-      within(authenticationSection).getByText("Platform tokens"),
-    ).toBeVisible();
-    expect(
-      within(authenticationSection).getByRole("link", {
-        name: "Manage your tokens",
+      within(authentication).getByRole("button", {
+        name: "Copy your platform token",
       }),
-    ).toHaveAttribute(
-      "href",
-      "/account/gateway-token?highlight=personal-token",
-    );
+    ).toBeEnabled();
     expect(
-      within(authenticationSection).getByRole("link", { name: "Learn more" }),
+      within(authentication).getByRole("link", { name: "Learn more" }),
     ).toHaveAttribute(
       "href",
       `${getDocsUrl(DocsPage.PlatformAgentTriggersWebhookA2a)}#authentication`,
     );
 
-    const channelsHeading = screen.getByRole("heading", {
-      name: "Other ways to reach this agent",
-    });
-    expect(
-      apiHeading.compareDocumentPosition(channelsHeading) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-
-    const examplesTrigger = screen.getByRole("button", {
-      name: /Request examples/,
-    });
-    expect(
-      screen.getByText(/Copy A2A requests for common integration workflows/),
-    ).toHaveTextContent(
-      "Copy A2A requests for common integration workflows. The A2A docs cover every method.",
-    );
-    expect(screen.getByRole("link", { name: "A2A docs" })).toHaveAttribute(
-      "href",
-      getDocsUrl(DocsPage.PlatformAgentTriggersWebhookA2a),
-    );
+    // Reference material stays folded away, and the chat deep link is folded
+    // with it rather than sitting in a section of its own.
     expect(screen.queryByText("Continue the conversation")).toBeNull();
     expect(screen.queryByLabelText("Token for examples")).toBeNull();
+    expect(screen.queryByText("Chat Deep Link")).toBeNull();
 
-    await user.click(examplesTrigger);
+    await user.click(screen.getByRole("button", { name: /Show examples/ }));
     expect(screen.getByLabelText("Token for examples")).toBeVisible();
     expect(screen.getByText("Continue the conversation")).toBeVisible();
+    expect(screen.getByText("Chat Deep Link")).toBeVisible();
   });
 
-  it("does not duplicate Email outside the messaging collection", () => {
-    const section = renderChannels({
+  it("leaves the messaging channels to their own tab", () => {
+    // Channels are a section of the record's page now, so the A2A tab neither
+    // lists them nor singles Email out.
+    const container = renderChannels({
       incomingEmailEnabled: true,
     } as Partial<Agent>);
 
-    expect(within(section).queryByText("Email Invocation")).toBeNull();
+    expect(within(container).queryByText("Email Invocation")).toBeNull();
+    expect(within(container).queryByText("Messaging channels")).toBeNull();
   });
 });

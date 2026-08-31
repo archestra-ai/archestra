@@ -224,12 +224,13 @@ describe("AgentDetailPage", () => {
     render(<AgentDetailPage kind="agent" id="a1" />);
 
     expect(
+      // Connect is named for the protocol on the agents family: A2A.
       [
         "General",
         "Tools & Knowledge",
         "Messaging Channels",
         "Advanced",
-        "Connect",
+        "A2A",
       ].map(
         (name) =>
           screen.getAllByRole("link", { name })[0]?.getAttribute("href") ??

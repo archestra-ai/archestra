@@ -472,7 +472,7 @@ function AgentDetails({
         // only its General, so it renders no bar naming it.
         sections.length > 1
           ? sections.map((entry) => ({
-              label: AGENT_SECTION_LABELS[entry],
+              label: sectionLabel(entry, kind),
               href: agentDetailHref(kind, agent.id, entry),
               testId: `${E2eTestId.AgentSetupStep}-${entry}`,
               selected: entry === section,
@@ -751,6 +751,19 @@ function KebabItem({
       )}
     </DropdownMenuItem>
   );
+}
+
+/**
+ * What a section is called on this record's page. Connect is the exception:
+ * an agent is reached over A2A, a gateway by an MCP client, so the tab is
+ * named for the protocol on the family that has one.
+ */
+function sectionLabel(
+  section: AgentDetailSection,
+  kind: AgentPageKind,
+): string {
+  if (section === "connect" && kind === "agent") return "A2A";
+  return AGENT_SECTION_LABELS[section];
 }
 
 const AGENT_SECTION_LABELS: Record<AgentDetailSection, string> = {

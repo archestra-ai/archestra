@@ -4,28 +4,20 @@ import {
   type archestraApiTypes,
   MESSAGING_CHANNEL_LABELS,
 } from "@archestra/shared";
-import {
-  ArrowRight,
-  ExternalLink,
-  Info,
-  LockKeyhole,
-  MessagesSquare,
-  Search,
-} from "lucide-react";
+import { ArrowRight, Info, LockKeyhole, Plus, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ChannelDetailsDialog } from "@/app/settings/messaging-channels/_components/channel-details-dialog";
-import { EmailChannelDetailsDialog } from "@/app/settings/messaging-channels/_components/email-channel-details-dialog";
 import { AgentEmailSettingsDialog } from "@/app/settings/messaging-channels/email/agent-email-settings-dialog";
 import { AgentIcon } from "@/components/agent-icon";
 import { ChannelIcon } from "@/components/channel-icon";
 import { CopyButton } from "@/components/copy-button";
 import { FormDialog } from "@/components/form-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
+import { SettingsSection } from "@/components/settings-section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   DialogBody,
   DialogForm,
@@ -41,18 +33,15 @@ import {
   useAllChatOpsBindings,
   useApplyChatOpsBindingPlan,
   useChatOpsStatus,
-  useUpdateChatOpsBinding,
 } from "@/lib/chatops/chatops.query";
 import { useAgentEmailAddress } from "@/lib/chatops/incoming-email.query";
 import { useConfig } from "@/lib/config/config.query";
 import { useMessagingChannelCatalog } from "@/lib/integration-overrides";
-import { cn } from "@/lib/utils";
 
 type Agent = archestraApiTypes.GetAgentResponses["200"];
 type Binding =
   archestraApiTypes.ListChatOpsBindingsResponses["200"]["data"][number];
 type ChatProvider = "ms-teams" | "slack" | "telegram";
-type SetupProvider = ChatProvider | "email";
 type AgentReferenceData = {
   id: string;
   name: string;
@@ -64,24 +53,16 @@ type AgentReferenceData = {
 export function AgentChatAppsEditor({
   agent,
   readOnly = false,
-  showHeading = true,
   onDirtyChange,
   standaloneSave = true,
   onSaveHandlerChange,
 }: {
   agent: Agent;
   readOnly?: boolean;
-  /**
-   * Off where the host already names the section — a settings surface puts
-   * the title in its own label column, and a second one inside the editor
-   * would say it twice.
-   */
-  showHeading?: boolean;
   onDirtyChange?: (isDirty: boolean) => void;
   standaloneSave?: boolean;
   onSaveHandlerChange?: (handler: (() => Promise<boolean>) | null) => void;
 }) {
-  const [searchQuery, setSearchQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [optionOrder, setOptionOrder] = useState<string[]>([]);
   const [optionOrderKey, setOptionOrderKey] = useState<string | null>(null);
@@ -235,31 +216,7 @@ export function AgentChatAppsEditor({
     optionOrder,
     currentIds,
   );
-  const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
-  const showEmailRow =
-    emailChannelVisible &&
-    (!normalizedQuery ||
-      ["email", emailAddress, agent.incomingEmailSecurityMode].some((value) =>
-        value?.toLocaleLowerCase().includes(normalizedQuery),
-      ));
-  const filteredOptions = orderedOptions.filter(
-    (option) =>
-      !normalizedQuery ||
-      [
-        MESSAGING_CHANNEL_LABELS[option.provider],
-        option.name,
-        option.workspaceName,
-        option.assignedAgentName,
-      ].some((value) => value?.toLocaleLowerCase().includes(normalizedQuery)),
-  );
-
   const normalizedSelectedIds = [...selectedIds].sort();
-  const selectedChannelCount =
-    selectedIds.length +
-    Number(emailChannelVisible && agent.incomingEmailEnabled);
-  const selectedChannelCountLabel = `${selectedChannelCount} channel${
-    selectedChannelCount === 1 ? "" : "s"
-  } selected`;
   const isDirty =
     initializedAgentId === agent.id &&
     (normalizedSelectedIds.length !== currentIds.length ||
@@ -272,9 +229,7 @@ export function AgentChatAppsEditor({
     !assignmentRefreshFailed &&
     (foreignAgentIds.length === 0 ||
       (!agentNamesPending && !agentNamesLoadingError));
-  const isLoadingAgentNames = foreignAgentIds.length > 0 && agentNamesPending;
-  const didAgentNamesFail =
-    foreignAgentIds.length > 0 && agentNamesLoadingError;
+  const agentNamesFailed = foreignAgentIds.length > 0 && agentNamesLoadingError;
 
   useEffect(() => {
     if (
@@ -530,258 +485,148 @@ export function AgentChatAppsEditor({
     return null;
   }
 
+  const assignedOptions = orderedOptions.filter((option) =>
+    selectedIds.includes(option.id),
+  );
+  // Configured, or already carrying channels: a provider whose status has not
+  // caught up still has rooms in the pool, and hiding its chip would make them
+  // unreachable.
+  const connectedProviders = visibleProviders.filter(
+    (provider) =>
+      providers?.some(
+        (status) => status.id === provider && status.configured,
+      ) || assignmentOptions.some((option) => option.provider === provider),
+  );
+  const unconnectedProviders = visibleProviders.filter(
+    (provider) => !connectedProviders.includes(provider),
+  );
+  const nothingConnected =
+    !providerAvailabilityPending && connectedProviders.length === 0;
+  // Bindings arrive page by page, and a half-loaded pool would show an agent
+  // as holding fewer channels than it does.
+  const listLoading =
+    isPending ||
+    !allBindingsLoaded ||
+    providersPending ||
+    providerAvailabilityPending;
+
   return (
-    <section
-      aria-labelledby={showHeading ? "chat-apps-heading" : undefined}
-      aria-label={showHeading ? undefined : "Messaging channels"}
-      className="space-y-4"
-    >
-      {showHeading && (
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2">
-            <MessagesSquare className="size-4 text-muted-foreground" />
-            <h3 id="chat-apps-heading" className="text-base font-semibold">
-              Messaging channels
-            </h3>
-          </div>
-          <p className="max-w-2xl text-sm text-muted-foreground">
-            Set instructions and reply behavior for each assigned channel.
-          </p>
-        </div>
-      )}
-
-      <ProviderSetupLinks
-        visibleProviders={
-          emailChannelVisible
-            ? [...visibleProviders, "email"]
-            : visibleProviders
-        }
-        loadingProviders={[
-          ...CHAT_PROVIDERS.filter(
-            (provider) => !messagingChannelCatalog.isHidden(provider),
-          ),
-          ...(emailChannelVisible ? (["email"] as const) : []),
-        ]}
-        providerStatuses={providers}
-        emailConfigured={config?.features.incomingEmail?.enabled === true}
-        isPending={providersPending || providerAvailabilityPending}
-        isLoadingError={providersLoadingError}
-        onRetry={refetchProviders}
-      />
-
-      <div className="overflow-hidden rounded-md border">
-        {assignmentRefreshFailed ? (
-          <QueryLoadError
-            title="Cannot refresh channel assignments"
-            onRetry={() => void refreshSelection()}
-            className="min-h-32"
-          />
-        ) : isPending || !allBindingsLoaded ? (
-          <div className="space-y-3 p-4">
-            <Skeleton className="h-9 w-full" />
-            <Skeleton className="h-16 w-full" />
-            <Skeleton className="h-16 w-full" />
-          </div>
-        ) : isLoadingError || isFetchNextPageError ? (
-          <QueryLoadError
-            title="Cannot load channel assignments"
-            onRetry={() => refetch()}
-            className="min-h-32"
-          />
-        ) : isLoadingAgentNames ? (
-          <div className="space-y-3 p-4">
-            <Skeleton className="h-9 w-full" />
-            <Skeleton className="h-16 w-full" />
-            <Skeleton className="h-16 w-full" />
-          </div>
-        ) : didAgentNamesFail ? (
-          <QueryLoadError
-            title="Cannot load the agents assigned to these channels"
-            onRetry={() => refetchAgentNames()}
-            className="min-h-32"
-          />
-        ) : (
-          <>
-            <div className="space-y-2 border-b p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-sm font-medium">Channel assignments</span>
-                <span className="text-xs tabular-nums text-muted-foreground">
-                  {selectedChannelCountLabel}
-                </span>
-              </div>
-              <div className="relative">
-                <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  id="agent-channel-search"
-                  aria-label="Search channels"
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") event.preventDefault();
-                  }}
-                  placeholder="Search channels, workspaces, or agents"
-                  className="pl-9"
-                  disabled={readOnly || isSaving}
-                />
-              </div>
+    <>
+      {/* Every chat provider hidden but email still on: there is no pool to
+          pick from, so the section would only ever show an empty state. */}
+      {visibleProviders.length > 0 && (
+        <SettingsSection
+          title="Channels"
+          description="Where this agent listens and replies."
+        >
+          {assignmentRefreshFailed ? (
+            <QueryLoadError
+              title="Cannot refresh channel assignments"
+              onRetry={() => void refreshSelection()}
+            />
+          ) : isLoadingError || isFetchNextPageError ? (
+            <QueryLoadError
+              title="Cannot load channel assignments"
+              onRetry={() => void refetch()}
+            />
+          ) : providersLoadingError ? (
+            /* Which providers are connected decides which chips the picker
+               can offer, so an unknown status is not "none connected". */
+            <QueryLoadError
+              title="Cannot load chat app status"
+              onRetry={() => void refetchProviders()}
+            />
+          ) : agentNamesFailed ? (
+            /* Without the names, a transfer cannot say which agent loses
+               the channel — so the save is withheld, not guessed at. */
+            <QueryLoadError
+              title="Cannot load the agents assigned to these channels"
+              onRetry={() => void refetchAgentNames()}
+            />
+          ) : listLoading ? (
+            <div className="space-y-2">
+              <Skeleton className="h-14 w-full" />
+              <Skeleton className="h-14 w-full" />
             </div>
-            <ScrollArea className="h-[30vh] min-h-32 max-h-64 sm:h-[45vh] sm:max-h-96">
-              {filteredOptions.length > 0 || showEmailRow ? (
-                <div className="w-0 min-w-full divide-y">
-                  {showEmailRow && (
-                    <AgentEmailChannelRow
-                      agent={agent}
-                      emailAddress={emailAddress}
-                      readOnly={readOnly}
-                      onEdit={() => setEmailSettingsOpen(true)}
-                    />
-                  )}
-                  {filteredOptions.map((option) => {
-                    const checked = selectedIds.includes(option.id);
-                    const canEditChannel = !readOnly && checked;
-                    const assignedAgent = option.assignedAgentId
-                      ? option.assignedAgentId === agent.id
-                        ? {
-                            id: agent.id,
-                            name: agent.name,
-                            icon: agent.icon,
-                            href: `/agents/${agent.id}`,
-                          }
-                        : (agentReferences.get(option.assignedAgentId) ?? {
-                            id: option.assignedAgentId,
-                            name: option.assignedAgentName ?? "another agent",
-                            icon: null,
-                          })
-                      : undefined;
-                    return (
-                      <div key={option.id}>
-                        <div
-                          data-channel-assignment-row
-                          className={cn(
-                            "relative w-full min-w-0 overflow-hidden px-4 py-3",
-                            option.disabledReason || readOnly
-                              ? cn(
-                                  "bg-muted/20 opacity-65",
-                                  !option.virtualDm && "cursor-pointer",
-                                )
-                              : checked
-                                ? "cursor-pointer bg-primary/[0.04] hover:bg-primary/[0.07]"
-                                : "cursor-pointer hover:bg-muted/40",
-                          )}
-                        >
-                          {!option.virtualDm && (
-                            <button
-                              type="button"
-                              className="absolute inset-0 cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                              aria-label={`${canEditChannel ? "Edit channel" : "View details"} for ${assignmentOptionLabel(option)}`}
-                              onClick={() => setDetailsBindingId(option.id)}
-                            />
-                          )}
-                          <div className="pointer-events-none relative grid grid-cols-[1rem_1rem_minmax(0,1fr)] items-start gap-x-3 sm:grid-cols-[1rem_1rem_minmax(0,1fr)_8rem]">
-                            <Checkbox
-                              id={`chat-channel-${option.id}`}
-                              aria-label={assignmentOptionLabel(option)}
-                              aria-describedby={`chat-channel-details-${option.id}`}
-                              checked={checked}
-                              disabled={
-                                readOnly || !!option.disabledReason || isSaving
-                              }
-                              onCheckedChange={(value) =>
-                                setOptionChecked(option.id, value === true)
-                              }
-                              className="pointer-events-auto relative z-10 mt-0.5"
-                            />
-                            <ChannelIcon
-                              channel={option.provider}
-                              className="mt-0.5 size-4 shrink-0"
-                            />
-                            <span className="min-w-0 flex-1">
-                              <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                <span className="truncate text-sm font-medium text-foreground">
-                                  {option.name}
-                                </span>
-                                {pendingChannelDetails[option.id] && (
-                                  <Badge
-                                    variant="outline"
-                                    className="px-1.5 py-0 text-[10px] font-normal"
-                                  >
-                                    Changes pending
-                                  </Badge>
-                                )}
-                              </span>
-                              <span
-                                id={`chat-channel-details-${option.id}`}
-                                className="mt-0.5 block text-xs text-muted-foreground"
-                              >
-                                {option.disabledReason ? (
-                                  <span className="flex items-start gap-1.5 text-amber-700 dark:text-amber-400">
-                                    <LockKeyhole className="mt-0.5 size-3 shrink-0" />
-                                    <span>{option.disabledReason}</span>
-                                  </span>
-                                ) : (
-                                  <AssignmentStatus
-                                    option={option}
-                                    checked={checked}
-                                    targetAgent={{
-                                      id: agent.id,
-                                      name: agent.name,
-                                      icon: agent.icon,
-                                      href: `/agents/${agent.id}`,
-                                    }}
-                                    assignedAgent={assignedAgent}
-                                  />
-                                )}
-                              </span>
-                            </span>
-                            {!option.virtualDm ? (
-                              <span
-                                aria-hidden="true"
-                                className="pointer-events-none relative z-10 col-start-3 mt-2 inline-flex h-8 w-32 items-center justify-center justify-self-start rounded-md border bg-background px-3 text-xs font-medium sm:col-start-4 sm:row-start-1 sm:mt-0 sm:justify-self-stretch"
-                              >
-                                {canEditChannel
-                                  ? "Edit channel"
-                                  : "View details"}
-                              </span>
-                            ) : (
-                              <span
-                                aria-hidden="true"
-                                className="col-start-3 h-8 w-32 sm:col-start-4 sm:row-start-1"
-                              />
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+          ) : nothingConnected ? (
+            /* Nothing to assign, and the reason is not this agent's to fix:
+               providers are connected once for the whole organization. This
+               is the only place the section points at Settings. */
+            <ProvidersEmptyState providers={visibleProviders} />
+          ) : (
+            <div className="space-y-2">
+              {assignedOptions.length === 0 ? (
+                <div className="rounded-md border border-dashed px-4 py-6 text-center">
+                  <p className="text-sm font-medium">Not in any channel yet</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Add one and this agent starts answering there.
+                  </p>
                 </div>
               ) : (
-                <div className="flex h-full items-center justify-center px-6 text-center text-sm text-muted-foreground">
-                  <span>No channels match your search.</span>
+                <ul className="space-y-2">
+                  {assignedOptions.map((option) => (
+                    <AssignedChannelRow
+                      key={option.id}
+                      option={option}
+                      readOnly={readOnly}
+                      isSaving={isSaving}
+                      hasPendingDetails={!!pendingChannelDetails[option.id]}
+                      onOpenDetails={() => setDetailsBindingId(option.id)}
+                      onRemove={() => setOptionChecked(option.id, false)}
+                    />
+                  ))}
+                </ul>
+              )}
+              {!readOnly && (
+                <AddChannelPicker
+                  options={orderedOptions}
+                  selectedIds={selectedIds}
+                  connectedProviders={connectedProviders}
+                  unconnectedProviders={unconnectedProviders}
+                  agentId={agent.id}
+                  agentReferences={agentReferences}
+                  disabled={isSaving}
+                  onPick={(id) => setOptionChecked(id, true)}
+                />
+              )}
+              {standaloneSave && (
+                <div className="flex flex-col gap-3 pt-1 sm:flex-row sm:items-center sm:justify-end">
+                  {isDirty && (
+                    <p className="mr-auto text-xs text-muted-foreground">
+                      Save the channel changes before you continue.
+                    </p>
+                  )}
+                  <PermissionButton
+                    type="button"
+                    permissions={{ agentTrigger: ["update"] }}
+                    onClick={() => void requestSave()}
+                    disabled={
+                      readOnly || !isDirty || isSaving || !agentNamesReady
+                    }
+                  >
+                    <span>
+                      {isSaving ? "Saving..." : "Save channel changes"}
+                    </span>
+                  </PermissionButton>
                 </div>
               )}
-            </ScrollArea>
-            {standaloneSave && (
-              <div className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-xs text-muted-foreground">
-                  {isDirty
-                    ? "Save the channel changes before you continue."
-                    : "Add the chat app to a group. Then send a message to show the group channel here."}
-                </p>
-                <PermissionButton
-                  type="button"
-                  permissions={{ agentTrigger: ["update"] }}
-                  onClick={() => void requestSave()}
-                  disabled={
-                    readOnly || !isDirty || isSaving || !agentNamesReady
-                  }
-                >
-                  <span>{isSaving ? "Saving..." : "Save channel changes"}</span>
-                </PermissionButton>
-              </div>
-            )}
-          </>
-        )}
-      </div>
+            </div>
+          )}
+        </SettingsSection>
+      )}
+
+      <SettingsSection
+        title="Email"
+        description="An address that reaches this agent."
+      >
+        <AgentEmailSection
+          agent={agent}
+          emailAddress={emailAddress}
+          providerEnabled={emailProviderEnabled}
+          readOnly={readOnly}
+          onEdit={() => setEmailSettingsOpen(true)}
+        />
+      </SettingsSection>
 
       <ReassignmentConfirmDialog
         open={!!pendingPlan}
@@ -836,372 +681,414 @@ export function AgentChatAppsEditor({
         onOpenChange={setEmailSettingsOpen}
         providerEnabled={emailProviderEnabled}
       />
-    </section>
+    </>
   );
 }
 
-function AgentEmailChannelRow({
+/**
+ * One channel this agent already answers in. The list is the agent's own and
+ * stays short, so a row says what it is and offers the two things you do with
+ * it; picking new ones is {@link AddChannelPicker}'s job.
+ */
+function AssignedChannelRow({
+  option,
+  readOnly,
+  isSaving,
+  hasPendingDetails,
+  onOpenDetails,
+  onRemove,
+}: {
+  option: AssignmentOption;
+  readOnly: boolean;
+  isSaving: boolean;
+  hasPendingDetails: boolean;
+  onOpenDetails: () => void;
+  onRemove: () => void;
+}) {
+  const label = assignmentOptionLabel(option);
+  // Listed but not yet ours: a staged claim reads exactly like a saved one
+  // otherwise, and the two have very different consequences on Save.
+  const staged = option.virtualDm
+    ? "New direct message"
+    : option.assignedAgentName
+      ? `Moving from ${option.assignedAgentName}`
+      : null;
+  return (
+    // Named: the row's controls say "Settings" and an X, which only mean
+    // something next to the channel they belong to.
+    <li
+      aria-label={label}
+      className="flex items-center gap-3 rounded-md border px-3 py-2.5"
+    >
+      <ChannelIcon channel={option.provider} className="size-4 shrink-0" />
+      <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        <span className="truncate text-sm font-medium">{option.name}</span>
+        <span className="truncate text-xs text-muted-foreground">
+          {[MESSAGING_CHANNEL_LABELS[option.provider], option.workspaceName]
+            .filter(Boolean)
+            .join(" · ")}
+        </span>
+        {staged && (
+          <Badge
+            variant="outline"
+            className="px-1.5 py-0 text-[10px] font-normal"
+          >
+            {staged}
+          </Badge>
+        )}
+        {hasPendingDetails && (
+          <Badge
+            variant="outline"
+            className="px-1.5 py-0 text-[10px] font-normal"
+          >
+            Changes pending
+          </Badge>
+        )}
+      </span>
+      {/* A direct message that does not exist yet has nothing to configure. */}
+      {!option.virtualDm && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={onOpenDetails}
+        >
+          {readOnly ? "View details" : "Settings"}
+        </Button>
+      )}
+      {!readOnly && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label={`Remove ${label}`}
+          disabled={isSaving || !!option.disabledReason}
+          onClick={onRemove}
+        >
+          <X className="size-4" />
+        </Button>
+      )}
+    </li>
+  );
+}
+
+/**
+ * Claiming a channel out of the organization's pool.
+ *
+ * One provider at a time, chosen with the chips: a list of lists made the
+ * reader parse headers and rows at once, and grouping only earns its place
+ * where you are genuinely scanning across products. A provider nobody has
+ * connected sits in the same row, so the answer to "where is my Telegram
+ * chat" is beside the question rather than in a status strip above it.
+ */
+function AddChannelPicker({
+  options,
+  selectedIds,
+  connectedProviders,
+  unconnectedProviders,
+  agentId,
+  agentReferences,
+  disabled,
+  onPick,
+}: {
+  options: AssignmentOption[];
+  selectedIds: string[];
+  connectedProviders: ChatProvider[];
+  unconnectedProviders: ChatProvider[];
+  agentId: string;
+  agentReferences: Map<string, { id: string; name: string }>;
+  disabled: boolean;
+  onPick: (optionId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [provider, setProvider] = useState<ChatProvider | null>(null);
+  const [query, setQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+  // Opening replaces the button with the panel, so focus would otherwise fall
+  // back to the document and leave a keyboard user nowhere.
+  useEffect(() => {
+    if (open) searchRef.current?.focus();
+  }, [open]);
+  const activeProvider = provider ?? connectedProviders[0] ?? null;
+  const normalized = query.trim().toLocaleLowerCase();
+
+  const unassigned = options.filter(
+    (option) => !selectedIds.includes(option.id),
+  );
+  const matches = (option: AssignmentOption) =>
+    !normalized ||
+    assignmentOptionLabel(option).toLocaleLowerCase().includes(normalized);
+  const shown = unassigned.filter(
+    (option) => option.provider === activeProvider && matches(option),
+  );
+  // Searched here, found there: rather than an empty list, say where it is.
+  const elsewhere = unassigned.filter(
+    (option) => option.provider !== activeProvider && matches(option),
+  );
+
+  if (!open) {
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={disabled}
+        onClick={() => setOpen(true)}
+      >
+        <Plus className="size-4" />
+        Add channel
+      </Button>
+    );
+  }
+
+  return (
+    <div className="rounded-md border">
+      <div className="flex flex-wrap items-center gap-1.5 border-b p-2">
+        {connectedProviders.map((candidate) => (
+          <Button
+            key={candidate}
+            type="button"
+            size="sm"
+            variant={candidate === activeProvider ? "secondary" : "ghost"}
+            onClick={() => setProvider(candidate)}
+          >
+            <ChannelIcon channel={candidate} className="size-3.5" />
+            {MESSAGING_CHANNEL_LABELS[candidate]}
+          </Button>
+        ))}
+        {/* An unconnected provider is only worth naming at the moment someone
+            looks for one of its channels and does not find it. */}
+        {unconnectedProviders.map((candidate) => (
+          <Button
+            key={candidate}
+            type="button"
+            size="sm"
+            variant="ghost"
+            asChild
+          >
+            <Link href={`/settings/messaging-channels/${candidate}`}>
+              <Plus className="size-3.5" />
+              {MESSAGING_CHANNEL_LABELS[candidate]}
+            </Link>
+          </Button>
+        ))}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="ml-auto"
+          aria-label="Close channel picker"
+          onClick={() => {
+            setOpen(false);
+            setQuery("");
+          }}
+        >
+          <X className="size-4" />
+        </Button>
+      </div>
+      <div className="p-2">
+        <Input
+          ref={searchRef}
+          aria-label="Search channels"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder={
+            activeProvider
+              ? `Search ${MESSAGING_CHANNEL_LABELS[activeProvider]} channels...`
+              : "Search channels..."
+          }
+        />
+      </div>
+      <ScrollArea className="max-h-64">
+        <div className="p-2 pt-0">
+          {shown.map((option) => {
+            const heldBy =
+              option.assignedAgentId && option.assignedAgentId !== agentId
+                ? (agentReferences.get(option.assignedAgentId)?.name ??
+                  option.assignedAgentName ??
+                  "another agent")
+                : null;
+            return (
+              <button
+                key={option.id}
+                type="button"
+                disabled={!!option.disabledReason}
+                className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left hover:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={() => {
+                  onPick(option.id);
+                  setOpen(false);
+                  setQuery("");
+                }}
+              >
+                <span className="min-w-0 flex-1 truncate text-sm">
+                  {option.name}
+                </span>
+                {option.disabledReason ? (
+                  <span className="flex shrink-0 items-center gap-1 text-xs text-amber-700 dark:text-amber-400">
+                    <LockKeyhole className="size-3" />
+                    {option.disabledReason}
+                  </span>
+                ) : option.virtualDm ? (
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    A private chat with this agent
+                  </span>
+                ) : (
+                  heldBy && (
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      Answered by {heldBy}
+                    </span>
+                  )
+                )}
+              </button>
+            );
+          })}
+          {shown.length === 0 && (
+            <p className="px-2 py-6 text-center text-sm text-muted-foreground">
+              {elsewhere.length > 0 && activeProvider ? (
+                <>
+                  No {MESSAGING_CHANNEL_LABELS[activeProvider]} channels match.{" "}
+                  <button
+                    type="button"
+                    className="underline hover:text-foreground"
+                    onClick={() => setProvider(elsewhere[0].provider)}
+                  >
+                    {elsewhere.length} in{" "}
+                    {MESSAGING_CHANNEL_LABELS[elsewhere[0].provider]}
+                  </button>
+                </>
+              ) : normalized ? (
+                "No channels match."
+              ) : (
+                "Every channel here is already assigned to this agent."
+              )}
+            </p>
+          )}
+        </div>
+      </ScrollArea>
+    </div>
+  );
+}
+
+/** Nothing is connected, and connecting is an organization-wide job. */
+function ProvidersEmptyState({ providers }: { providers: ChatProvider[] }) {
+  return (
+    <div className="rounded-md border border-dashed px-4 py-6">
+      <p className="text-sm font-medium">No messaging providers connected</p>
+      <p className="mt-1 max-w-prose text-xs text-muted-foreground">
+        {listProviderNames(providers)} are connected once for the whole
+        organization. Until one is, there is nothing to assign here.
+      </p>
+      <div className="mt-4 flex flex-wrap gap-2">
+        {providers.map((provider) => (
+          <Button
+            key={provider}
+            type="button"
+            variant="outline"
+            size="sm"
+            asChild
+          >
+            <Link href={`/settings/messaging-channels/${provider}`}>
+              <ChannelIcon channel={provider} className="size-4" />
+              Connect {MESSAGING_CHANNEL_LABELS[provider]}
+            </Link>
+          </Button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Email is one address with its own settings, not a room picked off a list,
+ * so it gets its own section and its own three states: not set up for the
+ * organization at all, set up but off for this agent, and on.
+ */
+function AgentEmailSection({
   agent,
   emailAddress,
+  providerEnabled,
   readOnly,
   onEdit,
 }: {
   agent: Agent;
   emailAddress: string | null;
+  providerEnabled: boolean;
   readOnly: boolean;
   onEdit: () => void;
 }) {
-  const enabled = agent.incomingEmailEnabled;
-  return (
-    <div
-      data-email-channel-row
-      data-channel-assignment-row
-      className={cn(
-        "relative w-full min-w-0 overflow-hidden px-4 py-3",
-        readOnly
-          ? "bg-muted/20 opacity-65"
-          : enabled
-            ? "cursor-pointer bg-primary/[0.04] hover:bg-primary/[0.07]"
-            : "cursor-pointer hover:bg-muted/40",
-      )}
-    >
-      <button
-        type="button"
-        className="absolute inset-0 cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-default"
-        aria-label={`${enabled ? "Edit email" : "Enable email"} for Email channel ${emailAddress || "Email"}`}
-        disabled={readOnly}
-        onClick={onEdit}
-      />
-      <div className="pointer-events-none relative grid grid-cols-[1rem_1rem_minmax(0,1fr)] items-start gap-x-3 sm:grid-cols-[1rem_1rem_minmax(0,1fr)_8rem]">
-        <Checkbox
-          id="agent-email-channel"
-          aria-label="Email channel"
-          aria-describedby="agent-email-channel-details"
-          checked={enabled}
-          disabled={readOnly}
-          onCheckedChange={onEdit}
-          className="pointer-events-auto relative z-10 mt-0.5"
-        />
-        <ChannelIcon channel="email" className="mt-0.5 size-4 shrink-0" />
-        <span className="min-w-0">
-          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span
-              className="min-w-0 max-w-full truncate text-sm font-medium text-foreground"
-              title={emailAddress || "Email"}
-            >
-              {emailAddress || "Email"}
-            </span>
-            {emailAddress && (
-              <span className="pointer-events-auto relative z-10 -my-1">
-                <CopyButton text={emailAddress} />
-              </span>
-            )}
-          </span>
-          <span
-            id="agent-email-channel-details"
-            className="mt-0.5 block text-xs text-muted-foreground"
-          >
-            {enabled
-              ? `Email is enabled with ${agent.incomingEmailSecurityMode} access.`
-              : "Email is not enabled for this agent."}
-          </span>
-        </span>
-        <span
-          aria-hidden="true"
-          className="pointer-events-none relative z-10 col-start-3 mt-2 inline-flex h-8 w-32 items-center justify-center justify-self-start rounded-md border bg-background px-3 text-xs font-medium sm:col-start-4 sm:row-start-1 sm:mt-0 sm:justify-self-stretch"
-        >
-          {enabled ? "Edit email" : "Enable email"}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-/** Read-only chat-app status and assigned-channel summary for agent detail. */
-export function AgentChatApps({ agent }: { agent: Agent }) {
-  const [detailsBindingId, setDetailsBindingId] = useState<string | null>(null);
-  const [emailDetailsOpen, setEmailDetailsOpen] = useState(false);
-  const { data: canUpdateChannels = false } = useHasPermissions({
-    agentTrigger: ["update"],
-  });
-  const { data: canUpdateAgent = false } = useHasPermissions({
-    agent: ["update"],
-  });
-  const updateBinding = useUpdateChatOpsBinding();
-  const {
-    data,
-    isPending,
-    isLoadingError,
-    refetch,
-    hasNextPage,
-    isFetchingNextPage,
-    isFetchNextPageError,
-    fetchNextPage,
-  } = useAllChatOpsBindings();
-  const {
-    data: providers,
-    isPending: providersPending,
-    isLoadingError: providersLoadingError,
-    refetch: refetchProviders,
-  } = useChatOpsStatus();
-  const {
-    data: config,
-    isPending: configPending,
-    isLoadingError: configLoadingError,
-    refetch: refetchConfig,
-  } = useConfig();
-  const messagingChannelCatalog = useMessagingChannelCatalog();
-  const emailProviderEnabled = config?.features.incomingEmail?.enabled === true;
-  const emailChannelVisible =
-    emailProviderEnabled && !messagingChannelCatalog.isHidden("email");
-  const { data: emailAddressData } = useAgentEmailAddress(
-    emailChannelVisible && agent.incomingEmailEnabled ? agent.id : null,
-  );
-  const emailAddress = emailAddressData?.emailAddress ?? null;
-
-  useEffect(() => {
-    if (hasNextPage && !isFetchingNextPage && !isFetchNextPageError) {
-      void fetchNextPage();
-    }
-  }, [fetchNextPage, hasNextPage, isFetchingNextPage, isFetchNextPageError]);
-
-  if (configLoadingError) {
+  if (!providerEnabled) {
     return (
-      <QueryLoadError
-        title="Cannot load chat app availability"
-        onRetry={() => refetchConfig()}
-      />
+      <div className="rounded-md border border-dashed px-4 py-6">
+        <p className="text-sm font-medium">Incoming email isn&apos;t set up</p>
+        <p className="mt-1 max-w-prose text-xs text-muted-foreground">
+          Set it up once for the organization and every agent gets its own
+          address.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="mt-4"
+          asChild
+        >
+          <Link href="/settings/messaging-channels/email">
+            Set up email in Settings
+          </Link>
+        </Button>
+      </div>
     );
   }
 
-  const telegramEnabled = config?.features.chatopsTelegramEnabled === true;
-  const visibleProviders = CHAT_PROVIDERS.filter(
-    (provider) =>
-      !messagingChannelCatalog.isHidden(provider) &&
-      (provider !== "telegram" || telegramEnabled),
-  );
-  if (!configPending && visibleProviders.length === 0 && !emailChannelVisible) {
-    return null;
+  if (!agent.incomingEmailEnabled) {
+    return (
+      <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2.5">
+        <span className="text-sm">Give this agent an address</span>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={readOnly}
+          onClick={onEdit}
+        >
+          Turn on
+        </Button>
+      </div>
+    );
   }
 
-  const visibleProviderIds = new Set(visibleProviders);
-  const assignedBindings = (data?.bindings ?? []).filter(
-    (binding) =>
-      visibleProviderIds.has(binding.provider) && binding.agentId === agent.id,
-  );
-  const detailsBinding =
-    assignedBindings.find((binding) => binding.id === detailsBindingId) ?? null;
   return (
-    <section aria-labelledby="chat-apps-heading" className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2">
-            <MessagesSquare className="size-4 text-muted-foreground" />
-            <h4 id="chat-apps-heading" className="text-sm font-medium">
-              Messaging channels
-            </h4>
-          </div>
-        </div>
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 rounded-md border px-3 py-2.5">
+        <ChannelIcon channel="email" className="size-4 shrink-0" />
+        <span
+          className="min-w-0 flex-1 truncate font-mono text-xs"
+          title={emailAddress ?? undefined}
+        >
+          {emailAddress ?? "Address pending"}
+        </span>
+        {emailAddress && <CopyButton text={emailAddress} />}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={readOnly}
+          onClick={onEdit}
+        >
+          Settings
+        </Button>
       </div>
-
-      <ProviderSetupLinks
-        visibleProviders={
-          emailChannelVisible
-            ? [...visibleProviders, "email"]
-            : visibleProviders
-        }
-        loadingProviders={[
-          ...CHAT_PROVIDERS.filter(
-            (provider) => !messagingChannelCatalog.isHidden(provider),
-          ),
-          ...(emailChannelVisible ? (["email"] as const) : []),
-        ]}
-        providerStatuses={providers}
-        emailConfigured={config?.features.incomingEmail?.enabled === true}
-        isPending={providersPending || configPending}
-        isLoadingError={providersLoadingError}
-        onRetry={refetchProviders}
-      />
-
-      {isPending ? (
-        <div className="flex gap-2">
-          <Skeleton className="h-7 w-28" />
-          <Skeleton className="h-7 w-36" />
-        </div>
-      ) : isLoadingError || isFetchNextPageError ? (
-        <QueryLoadError
-          title="Cannot load all assigned channels"
-          onRetry={() => refetch()}
-        />
-      ) : assignedBindings.length > 0 ||
-        (emailChannelVisible && agent.incomingEmailEnabled) ? (
-        <AssignedChannelCollection
-          bindings={assignedBindings}
-          emailAddress={emailAddress}
-          emailEnabled={emailChannelVisible && agent.incomingEmailEnabled}
-          onSelectBinding={setDetailsBindingId}
-          onSelectEmail={() => setEmailDetailsOpen(true)}
-          canEditChannels={canUpdateChannels}
-          canEditEmail={canUpdateAgent}
-        />
-      ) : (
-        <div className="rounded-md border border-dashed px-4 py-5 text-center">
-          <p className="text-sm font-medium">No channels assigned</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Edit this agent&apos;s configuration to assign chat channels.
-          </p>
-        </div>
-      )}
-      <ChannelDetailsDialog
-        binding={detailsBinding}
-        assignedAgent={{ id: agent.id, name: agent.name, icon: agent.icon }}
-        open={!!detailsBinding}
-        readOnly={!canUpdateChannels}
-        isSaving={updateBinding.isPending}
-        onOpenChange={(open) => {
-          if (!open) setDetailsBindingId(null);
-        }}
-        onSave={({ channelInstructions, answerAllMessages }) => {
-          if (!detailsBinding) return;
-          updateBinding.mutate(
-            {
-              id: detailsBinding.id,
-              channelInstructions,
-              ...(!detailsBinding.isDm &&
-                detailsBinding.provider !== "telegram" && {
-                  answerAllMessages,
-                }),
-            },
-            { onSuccess: () => setDetailsBindingId(null) },
-          );
-        }}
-      />
-      {canUpdateAgent ? (
-        <AgentEmailSettingsDialog
-          agent={agent}
-          open={emailDetailsOpen}
-          onOpenChange={setEmailDetailsOpen}
-          providerEnabled={emailProviderEnabled}
-        />
-      ) : (
-        <EmailChannelDetailsDialog
-          agent={agent}
-          emailAddress={emailAddress}
-          open={emailDetailsOpen}
-          onOpenChange={setEmailDetailsOpen}
-        />
-      )}
-    </section>
+      <p className="text-xs text-muted-foreground">
+        Who can email it: {agent.incomingEmailSecurityMode}
+      </p>
+    </div>
   );
 }
 
-function AssignedChannelCollection({
-  bindings,
-  emailAddress,
-  emailEnabled,
-  onSelectBinding,
-  onSelectEmail,
-  canEditChannels,
-  canEditEmail,
-}: {
-  bindings: Binding[];
-  emailAddress: string | null;
-  emailEnabled: boolean;
-  onSelectBinding: (bindingId: string) => void;
-  onSelectEmail: () => void;
-  canEditChannels: boolean;
-  canEditEmail: boolean;
-}) {
-  const totalChannels = bindings.length + Number(emailEnabled);
-
-  return (
-    <div className="overflow-hidden rounded-md border">
-      <div className="flex items-center justify-between gap-2 border-b bg-muted/20 px-3 py-2.5">
-        <p className="text-sm font-medium text-muted-foreground">
-          Assigned channels
-        </p>
-        <Badge variant="secondary" className="tabular-nums">
-          {totalChannels}
-        </Badge>
-      </div>
-      <ScrollArea className={cn(totalChannels > 4 && "h-80 max-h-[50vh]")}>
-        <div className="w-0 min-w-full divide-y">
-          {emailEnabled && (
-            <div className="relative grid w-full min-w-0 cursor-pointer grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-3 px-3 py-3 hover:bg-muted/40 sm:grid-cols-[1rem_minmax(0,1fr)_8rem]">
-              <button
-                type="button"
-                className="absolute inset-0 cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                aria-label={`${canEditEmail ? "Edit email" : "View details"} for Email channel ${emailAddress || "Email"}`}
-                onClick={onSelectEmail}
-              />
-              <ChannelIcon channel="email" className="size-4 shrink-0" />
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span
-                    className="truncate text-sm font-medium"
-                    title={emailAddress || "Email"}
-                  >
-                    {emailAddress || "Email"}
-                  </span>
-                  {emailAddress && (
-                    <span className="relative z-10 -my-1">
-                      <CopyButton text={emailAddress} />
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Email invocation
-                </p>
-              </div>
-              <span
-                aria-hidden="true"
-                className="pointer-events-none relative z-10 col-start-2 mt-2 inline-flex h-8 w-32 items-center justify-center justify-self-start rounded-md border bg-background px-3 text-xs font-medium sm:col-start-3 sm:row-start-1 sm:mt-0 sm:justify-self-stretch"
-              >
-                {canEditEmail ? "Edit email" : "View details"}
-              </span>
-            </div>
-          )}
-          {bindings.map((binding) => {
-            const provider = binding.provider as ChatProvider;
-            const label = channelName(binding);
-            const behavior = binding.isDm
-              ? "Direct messages"
-              : provider === "telegram" || binding.answerAllMessages
-                ? "All messages"
-                : "Mentions only";
-            return (
-              <div
-                key={binding.id}
-                className="relative grid w-full min-w-0 cursor-pointer grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-3 overflow-hidden px-3 py-3 hover:bg-muted/40 sm:grid-cols-[1rem_minmax(0,1fr)_8rem]"
-              >
-                <button
-                  type="button"
-                  className="absolute inset-0 cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                  aria-label={`${canEditChannels ? "Edit channel" : "View details"} for ${MESSAGING_CHANNEL_LABELS[provider]} channel ${label}`}
-                  onClick={() => onSelectBinding(binding.id)}
-                />
-                <ChannelIcon channel={provider} className="size-4 shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="truncate text-sm font-medium">
-                      {label}
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">{behavior}</p>
-                </div>
-                <span
-                  aria-hidden="true"
-                  className="pointer-events-none relative z-10 col-start-2 mt-2 inline-flex h-8 w-32 items-center justify-center justify-self-start rounded-md border bg-background px-3 text-xs font-medium sm:col-start-3 sm:row-start-1 sm:mt-0 sm:justify-self-stretch"
-                >
-                  {canEditChannels ? "Edit channel" : "View details"}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </ScrollArea>
-    </div>
-  );
+/** "Slack, Microsoft Teams and Telegram" — an Oxford-free list for prose. */
+function listProviderNames(providers: ChatProvider[]): string {
+  const names = providers.map((provider) => MESSAGING_CHANNEL_LABELS[provider]);
+  if (names.length <= 1) return names[0] ?? "Messaging providers";
+  return `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 }
 
 type AssignmentOption = {
@@ -1242,72 +1129,6 @@ const CHAT_PROVIDERS = [
   "telegram",
 ] as const satisfies readonly ChatProvider[];
 const VIRTUAL_DM_PREFIX = "virtual-dm:";
-
-function ProviderSetupLinks({
-  visibleProviders,
-  loadingProviders,
-  providerStatuses,
-  emailConfigured,
-  isPending,
-  isLoadingError,
-  onRetry,
-}: {
-  visibleProviders: SetupProvider[];
-  loadingProviders: readonly SetupProvider[];
-  providerStatuses: Array<{ id: string; configured: boolean }> | undefined;
-  emailConfigured: boolean;
-  isPending: boolean;
-  isLoadingError: boolean;
-  onRetry: () => unknown;
-}) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      {isPending ? (
-        loadingProviders.map((provider) => (
-          <Skeleton key={provider} className="h-9 w-32 rounded-md" />
-        ))
-      ) : isLoadingError ? (
-        <QueryLoadError
-          title="Cannot load chat app status"
-          onRetry={onRetry}
-          className="min-h-24 w-full"
-        />
-      ) : (
-        visibleProviders.map((provider) => {
-          const configured =
-            provider === "email"
-              ? emailConfigured
-              : providerStatuses?.some(
-                  (status) => status.id === provider && status.configured,
-                );
-          return (
-            <Link
-              key={provider}
-              href={`/settings/messaging-channels/${provider}`}
-              className="group inline-flex min-w-0 items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors hover:bg-muted/50"
-            >
-              <ChannelIcon channel={provider} className="size-4 shrink-0" />
-              <span className="truncate font-medium">
-                {MESSAGING_CHANNEL_LABELS[provider]}
-              </span>
-              <span
-                className={cn(
-                  "text-xs",
-                  configured
-                    ? "text-green-600 dark:text-green-400"
-                    : "text-muted-foreground group-hover:text-foreground",
-                )}
-              >
-                {configured ? "Connected" : "Set up"}
-              </span>
-              <ExternalLink className="size-3.5 shrink-0 text-muted-foreground" />
-            </Link>
-          );
-        })
-      )}
-    </div>
-  );
-}
 
 function sortAssignmentOptionIds(
   options: AssignmentOption[],
@@ -1594,94 +1415,6 @@ function assignmentOptionLabel(option: AssignmentOption) {
   return option.isDm
     ? `${provider} direct message`
     : `${provider} channel ${option.name}`;
-}
-
-function AssignmentStatus({
-  option,
-  checked,
-  targetAgent,
-  assignedAgent,
-}: {
-  option: AssignmentOption;
-  checked: boolean;
-  targetAgent: AgentReferenceData;
-  assignedAgent: AgentReferenceData | undefined;
-}) {
-  if (option.virtualDm) {
-    return checked ? (
-      <span>
-        Save creates a direct message for <AgentReference agent={targetAgent} />
-        .
-      </span>
-    ) : (
-      <span>No direct message assigned.</span>
-    );
-  }
-  if (option.assignedAgentId === targetAgent.id) {
-    return checked ? (
-      <span>
-        Assigned to <AgentReference agent={targetAgent} />.
-      </span>
-    ) : (
-      <span>
-        Save removes this channel from <AgentReference agent={targetAgent} />.
-      </span>
-    );
-  }
-  if (assignedAgent) {
-    return checked ? (
-      <span>
-        Save moves this channel from <AgentReference agent={assignedAgent} /> to{" "}
-        <AgentReference agent={targetAgent} />.
-      </span>
-    ) : (
-      <span>
-        Assigned to <AgentReference agent={assignedAgent} />.
-      </span>
-    );
-  }
-  return checked ? (
-    <span>
-      Save assigns this channel to <AgentReference agent={targetAgent} />.
-    </span>
-  ) : (
-    <span>No agent assigned.</span>
-  );
-}
-
-function AgentReference({
-  agent,
-  allowWrap = false,
-}: {
-  agent: AgentReferenceData;
-  allowWrap?: boolean;
-}) {
-  const content = (
-    <>
-      <AgentIcon icon={agent.icon} size={13} />
-      <span className={allowWrap ? "break-words" : "truncate"}>
-        {agent.name}
-      </span>
-    </>
-  );
-  const className = cn(
-    "pointer-events-auto relative z-10 inline-flex min-w-0 items-center gap-1 font-medium text-foreground",
-    allowWrap && "items-start",
-  );
-
-  return agent.href ? (
-    <Link
-      href={agent.href}
-      title={agent.name}
-      className={cn(className, "hover:underline")}
-    >
-      {content}
-    </Link>
-  ) : (
-    <span title={agent.name} className={className}>
-      {content}
-    </span>
-  );
 }
 
 function PlainAgentIdentity({ agent }: { agent: AgentReferenceData }) {

@@ -2899,16 +2899,16 @@ export function AgentForm({
               <SettingsSectionGroup
                 className={cn(!isActiveSection("messaging") && "hidden")}
               >
-                <SettingsSection>
-                  <AgentChatAppsEditor
-                    agent={agent}
-                    readOnly={readOnly}
-                    showHeading={false}
-                    onDirtyChange={setChannelAssignmentsDirty}
-                    standaloneSave={false}
-                    onSaveHandlerChange={registerChannelAssignmentsSave}
-                  />
-                </SettingsSection>
+                {/* The editor renders its own Channels and Email sections:
+                    the two are different kinds of thing, and neither belongs
+                    inside the other's list. */}
+                <AgentChatAppsEditor
+                  agent={agent}
+                  readOnly={readOnly}
+                  onDirtyChange={setChannelAssignmentsDirty}
+                  standaloneSave={false}
+                  onSaveHandlerChange={registerChannelAssignmentsSave}
+                />
               </SettingsSectionGroup>
             )}
 

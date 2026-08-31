@@ -106,7 +106,7 @@ Agents can be triggered through:
 
 Provider setup is managed from **Settings → Messaging Channels**. Slack, MS Teams, Telegram, and Incoming Email each have their own setup flow.
 
-The agent page shows its messaging channels and email status. Select **Edit** → **Configuration** to change channel assignments, channel instructions, reply behavior, or incoming email. You can edit the system prompt directly on the agent page.
+The agent page has a **Messaging Channels** tab. It lists the channels this agent answers in, and the address that reaches it by email. Select **Add channel** to claim another one, or **Settings** on a row to set that channel's instructions and reply behavior. You can edit the system prompt on the **General** tab.
 
 Go to **Settings → Agents → Available messaging channels** to remove any channel your organization does not allow. A channel you remove disappears from the pickers and stops listening — a connected Slack bot stops answering, and email stops reaching agents.
 

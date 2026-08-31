@@ -31,14 +31,6 @@ vi.mock("@/components/mcp-oauth-management", () => ({
     <div>{heading?.title}</div>
   ),
 }));
-vi.mock("@/components/agent-chat-apps", () => ({
-  AgentChatApps: () => (
-    <div className="space-y-2">
-      <h4>Messaging channels</h4>
-      <p className="text-xs text-muted-foreground">Assigned channels</p>
-    </div>
-  ),
-}));
 
 type Agent = archestraApiTypes.GetAllAgentsResponses["200"][number];
 

@@ -32,6 +32,12 @@ export type RunnerLaunchSpec = {
   activeDeadlineSeconds: number | null;
   /** Writable scratch-space ceiling enforced by the execution backend. */
   ephemeralStorageLimit: string;
+  /**
+   * Steers the pod onto a dedicated node pool: applied verbatim as the pod's
+   * nodeSelector, with one matching NoSchedule toleration per entry. Empty
+   * means no steering.
+   */
+  nodeSelector: Record<string, string>;
   imagePullSecrets: string[];
   effectiveNetworkPolicy: EffectiveNetworkPolicy;
   /** Number of durable input files the backend must stage before entrypoint. */

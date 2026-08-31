@@ -150,6 +150,23 @@ export function buildRunnerJob(spec: KubernetesRunnerLaunchSpec): k8s.V1Job {
         metadata: { labels },
         spec: {
           restartPolicy: "Never",
+          // A dedicated runner pool keeps heavy privileged sessions from
+          // pressuring the platform's own nodes. The selector's pairs double
+          // as tolerations so a pool tainted with the same key=value admits
+          // exactly these pods.
+          ...(Object.keys(spec.nodeSelector).length > 0
+            ? {
+                nodeSelector: spec.nodeSelector,
+                tolerations: Object.entries(spec.nodeSelector).map(
+                  ([key, value]) => ({
+                    key,
+                    operator: "Equal",
+                    value,
+                    effect: "NoSchedule",
+                  }),
+                ),
+              }
+            : {}),
           ...(spec.imagePullSecrets.length > 0
             ? {
                 imagePullSecrets: spec.imagePullSecrets.map((name) => ({

@@ -1848,6 +1848,7 @@ export const parseSandboxMemoryMaxBytes = (
 export function parseLabelSelector(
   value: string | undefined,
   defaultValue: Record<string, string>,
+  envName = "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_PLATFORM_POD_SELECTOR",
 ): Record<string, string> {
   const raw = value?.trim();
   if (!raw) return defaultValue;
@@ -1858,7 +1859,7 @@ export function parseLabelSelector(
     const labelValue = rest.join("=").trim();
     if (!label || !labelValue) {
       logger.error(
-        `ARCHESTRA_AGENT_BACKGROUND_EXECUTION_PLATFORM_POD_SELECTOR is not a key=value list (${raw}); using the default`,
+        `${envName} is not a key=value list (${raw}); using the default`,
       );
       return defaultValue;
     }
@@ -2311,6 +2312,19 @@ const config = {
     platformPodSelector: parseLabelSelector(
       process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_PLATFORM_POD_SELECTOR,
       { "archestra.io/p4-shim-client": "true" },
+    ),
+    /**
+     * Steers runner pods onto a dedicated node pool: a key=value list that
+     * becomes each runner pod's nodeSelector, plus one matching NoSchedule
+     * toleration per entry so a pool tainted with the same pairs admits them.
+     * Empty (the default) schedules runners like any other pod. Heavy
+     * privileged runners sharing nodes with the platform can evict it under
+     * memory or disk pressure; a dedicated autoscaled pool contains that.
+     */
+    nodeSelector: parseLabelSelector(
+      process.env.ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NODE_SELECTOR,
+      {},
+      "ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NODE_SELECTOR",
     ),
     /** How often the reconciler syncs runner state and applies TTL/idle stops. */
     reconcileIntervalSeconds: parsePositiveInt(

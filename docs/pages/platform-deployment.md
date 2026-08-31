@@ -2,7 +2,7 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-08-30
+lastUpdated: 2026-08-31
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -856,6 +856,9 @@ Background execution runs delegated Agent tasks in dedicated Kubernetes pods. Yo
 
 - **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_EPHEMERAL_STORAGE_LIMIT`** - Maximum writable scratch space for one execution. Kubernetes enforces the limit on the run's `emptyDir` volume.
   - Default: `10Gi`
+
+- **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NODE_SELECTOR`** - Steers background pods onto a dedicated node pool, written as `key=value` pairs. The pairs become each pod's node selector, with a matching `NoSchedule` toleration per pair. Empty schedules background pods like any other workload. Use it when heavy runs should not share nodes with the platform.
+  - Default: unset
 
 - **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_PLATFORM_POD_SELECTOR`** - Label selector matching the platform's own API pods, written as `key=value` pairs. Background pods get an egress policy allowing exactly that destination. Override it when your deployment labels the platform differently.
   - Default: `archestra.io/p4-shim-client=true`

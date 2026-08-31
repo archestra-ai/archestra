@@ -15,6 +15,7 @@ const SPEC: KubernetesRunnerLaunchSpec = {
   image: "registry.example.test/agent-archestra:latest",
   command: null,
   privileged: false,
+  nodeSelector: {},
   resources: { cpuRequest: "500m", memoryRequest: "1Gi", memoryLimit: "4Gi" },
   env: {
     ARCHESTRA_AGENT_BACKGROUND_EXECUTION_AGENT_ID:
@@ -163,6 +164,26 @@ describe("buildRunnerJob", () => {
       buildRunnerJob(SPEC).spec?.template.spec?.volumes?.[0]?.emptyDir
         ?.sizeLimit,
     ).toBe("10Gi");
+  });
+
+  it("steers pods onto a dedicated pool only when a selector is configured", () => {
+    const plain = buildRunnerJob(SPEC).spec?.template.spec;
+    expect(plain?.nodeSelector).toBeUndefined();
+    expect(plain?.tolerations).toBeUndefined();
+
+    const steered = buildRunnerJob({
+      ...SPEC,
+      nodeSelector: { "archestra-runners": "true" },
+    }).spec?.template.spec;
+    expect(steered?.nodeSelector).toEqual({ "archestra-runners": "true" });
+    expect(steered?.tolerations).toEqual([
+      {
+        key: "archestra-runners",
+        operator: "Equal",
+        value: "true",
+        effect: "NoSchedule",
+      },
+    ]);
   });
 
   it("gives a privileged runner a real filesystem for /var/lib/docker", () => {

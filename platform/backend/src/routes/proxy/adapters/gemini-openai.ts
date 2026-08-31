@@ -10,6 +10,7 @@ import type {
 } from "@/types";
 import { geminiAdapterFactory } from "./gemini";
 import {
+  encodeSignedToolCallId,
   type GeminiOpenaiContext,
   geminiResponseToOpenai,
   geminiUsageViewToOpenai,
@@ -138,6 +139,10 @@ class GeminiOpenaiStreamAdapter
   private ctx: GeminiOpenaiContext;
   private toolNameCodec: GeminiToolNameCodec;
   private pendingToolCallEvents: string[] = [];
+  // Gemini 3 thought signatures per tool-call index, mirrored from the chunks
+  // so both SSE emission paths can encode them into the wire tool-call ids.
+  private toolCallSignatures: Map<number, string> = new Map();
+  private seenToolCalls = 0;
 
   constructor(ctx: GeminiOpenaiContext, request?: GeminiRequest) {
     this.inner = geminiAdapterFactory.createStreamAdapter();
@@ -151,6 +156,17 @@ class GeminiOpenaiStreamAdapter
 
   processChunk(chunk: GeminiStreamChunk) {
     const decodedChunk = this.toolNameCodec.decodeResponse(chunk);
+    for (const part of decodedChunk.candidates?.[0]?.content?.parts ?? []) {
+      if ("functionCall" in part && part.functionCall) {
+        if (part.thoughtSignature) {
+          this.toolCallSignatures.set(
+            this.seenToolCalls,
+            part.thoughtSignature,
+          );
+        }
+        this.seenToolCalls += 1;
+      }
+    }
     const innerResult = this.inner.processChunk(decodedChunk);
     const sseData = this.toOpenaiSse(decodedChunk);
 
@@ -197,7 +213,11 @@ class GeminiOpenaiStreamAdapter
         delta: {
           tool_calls: toolCalls.map((toolCall, index) => ({
             index,
-            id: toolCall.id,
+            id: encodeSignedToolCallId({
+              id: toolCall.id,
+              name: toolCall.name,
+              thoughtSignature: this.toolCallSignatures.get(index),
+            }),
             type: "function" as const,
             function: { name: toolCall.name, arguments: toolCall.arguments },
           })),
@@ -251,7 +271,11 @@ class GeminiOpenaiStreamAdapter
             tool_calls: [
               {
                 index: Math.max(this.state.toolCalls.length - 1, 0),
-                id: part.functionCall.id,
+                id: encodeSignedToolCallId({
+                  id: part.functionCall.id,
+                  name: part.functionCall.name,
+                  thoughtSignature: part.thoughtSignature,
+                }),
                 type: "function",
                 function: {
                   name: part.functionCall.name,

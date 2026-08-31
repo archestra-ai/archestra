@@ -12,6 +12,7 @@ import {
 import { and, asc, desc, eq, ilike, inArray, ne, or, sql } from "drizzle-orm";
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
+import config from "@/config";
 import db, { schema, type Transaction } from "@/database";
 import logger from "@/logging";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
@@ -338,10 +339,7 @@ class LlmProviderApiKeyModel {
       eq(schema.llmProviderApiKeysTable.isSystem, true),
       inArray(
         schema.llmProviderApiKeysTable.provider,
-        getProvidersWithOptionalApiKey({
-          azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
-          anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
-        }),
+        getConfiguredProvidersWithOptionalApiKey(),
       ),
     );
     if (secretOrSystemCondition) {
@@ -492,10 +490,7 @@ class LlmProviderApiKeyModel {
       sql`${schema.llmProviderApiKeysTable.secretId} IS NOT NULL`,
       inArray(
         schema.llmProviderApiKeysTable.provider,
-        getProvidersWithOptionalApiKey({
-          azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
-          anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
-        }),
+        getConfiguredProvidersWithOptionalApiKey(),
       ),
     );
 
@@ -608,10 +603,7 @@ class LlmProviderApiKeyModel {
             sql`${schema.llmProviderApiKeysTable.secretId} IS NOT NULL`,
             inArray(
               schema.llmProviderApiKeysTable.provider,
-              getProvidersWithOptionalApiKey({
-                azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
-                anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
-              }),
+              getConfiguredProvidersWithOptionalApiKey(),
             ),
           ),
         ),
@@ -735,10 +727,7 @@ class LlmProviderApiKeyModel {
       sql`${schema.llmProviderApiKeysTable.secretId} IS NOT NULL`,
       inArray(
         schema.llmProviderApiKeysTable.provider,
-        getProvidersWithOptionalApiKey({
-          azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
-          anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
-        }),
+        getConfiguredProvidersWithOptionalApiKey(),
       ),
     );
 
@@ -1224,10 +1213,21 @@ function canUseProviderApiKey(
     return true;
   }
 
-  return getProvidersWithOptionalApiKey({
+  return getConfiguredProvidersWithOptionalApiKey().includes(apiKey.provider);
+}
+
+function getConfiguredProvidersWithOptionalApiKey(): SupportedProvider[] {
+  const providers = getProvidersWithOptionalApiKey({
     azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
     anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
-  }).includes(apiKey.provider);
+  });
+  if (config.llm.gemini.vertexAi.enabled) {
+    providers.push("gemini");
+  }
+  if (config.llm.bedrock.iamAuthEnabled) {
+    providers.push("bedrock");
+  }
+  return providers;
 }
 
 export default LlmProviderApiKeyModel;

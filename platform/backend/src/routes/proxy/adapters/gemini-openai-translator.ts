@@ -108,24 +108,33 @@ export function openaiToGemini(req: OpenAiRequest): {
       // a tool result must be nested inside `functionResponse.parts` with
       // displayName/$ref references (Gemini 3 only), which our schema does not
       // model, so tool-result content is forwarded as text.
-      contents.push({
-        role: "user",
-        parts: [
-          {
-            functionResponse: {
-              id: decodeSignedToolCallId(message.tool_call_id).id,
-              // Resolved from the assistant turn that made the call; Gemini 3
-              // rejects a functionResponse whose name does not match it. The
-              // synthetic fallback only covers a result with no visible call.
-              name:
-                (message.tool_call_id
-                  ? toolCallNames.get(message.tool_call_id)
-                  : undefined) ?? "tool_result",
-              response: { content: stringifyTextContent(message.content) },
-            },
-          },
-        ],
-      });
+      const functionResponsePart = {
+        functionResponse: {
+          id: decodeSignedToolCallId(message.tool_call_id).id,
+          // Resolved from the assistant turn that made the call; Gemini 3
+          // rejects a functionResponse whose name does not match it. The
+          // synthetic fallback only covers a result with no visible call.
+          name:
+            (message.tool_call_id
+              ? toolCallNames.get(message.tool_call_id)
+              : undefined) ?? "tool_result",
+          response: { content: stringifyTextContent(message.content) },
+        },
+      };
+      // Parallel tool calls arrive as one assistant turn with N tool_calls
+      // followed by N separate tool messages. Gemini requires all N
+      // functionResponse parts in ONE user turn — it rejects the history when
+      // the response-part count does not match the call turn — so consecutive
+      // tool results fold into the same entry.
+      const previous = contents[contents.length - 1];
+      if (
+        previous?.role === "user" &&
+        previous.parts.every((part) => "functionResponse" in part)
+      ) {
+        previous.parts.push(functionResponsePart);
+      } else {
+        contents.push({ role: "user", parts: [functionResponsePart] });
+      }
     }
   }
 

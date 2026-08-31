@@ -1,7 +1,7 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { FormEvent } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const applyBindingPlan = vi.fn(
   (
@@ -141,10 +141,7 @@ import {
   useChatOpsStatus,
 } from "@/lib/chatops/chatops.query";
 import { useConfig } from "@/lib/config/config.query";
-import {
-  AgentChatAppsEditor as AgentChatApps,
-  AgentChatApps as AgentChatAppsDetail,
-} from "./agent-chat-apps";
+import { AgentChatAppsEditor as AgentChatApps } from "./agent-chat-apps";
 
 const bindings = [
   {
@@ -175,6 +172,67 @@ const agent = {
   scope: "org",
   authorId: "user-1",
 } as never;
+
+/**
+ * Claiming a channel goes through the picker now: there is no checkbox list of
+ * the whole pool, so a test clicks Add channel, switches provider if it needs
+ * one that is not the default, and picks the row.
+ */
+async function addChannel(
+  user: ReturnType<typeof userEvent.setup>,
+  channelName: string,
+  provider?: string,
+) {
+  await openPicker(user, provider);
+  // A claimed row's accessible name carries "Answered by ..." after the
+  // channel, so match the start rather than the whole string.
+  await user.click(
+    await screen.findByRole("button", {
+      name: new RegExp(`^${channelName}`),
+    }),
+  );
+}
+
+/** One assigned row, by the channel it holds. */
+function channelRow(channelName: string) {
+  // A direct message's row is labelled "<Provider> direct message", so match
+  // case-insensitively rather than making every caller know the casing.
+  return screen.getByRole("listitem", {
+    name: new RegExp(`${channelName}$`, "i"),
+  });
+}
+
+/** Opening the picker, optionally on a provider other than the first. */
+async function openPicker(
+  user: ReturnType<typeof userEvent.setup>,
+  provider?: string,
+) {
+  await user.click(screen.getByRole("button", { name: /add channel/i }));
+  if (provider) {
+    await user.click(await screen.findByRole("button", { name: provider }));
+  }
+}
+
+/** Dropping one this agent already holds, from its row. */
+async function removeChannel(
+  user: ReturnType<typeof userEvent.setup>,
+  label: string,
+) {
+  await user.click(screen.getByRole("button", { name: `Remove ${label}` }));
+}
+
+beforeAll(() => {
+  // The add-channel picker is a Radix Popover, which reaches for APIs jsdom
+  // does not implement.
+  Element.prototype.scrollIntoView = vi.fn();
+  Element.prototype.hasPointerCapture = vi.fn();
+  Element.prototype.releasePointerCapture = vi.fn();
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+});
 
 describe("AgentChatAppsEditor", () => {
   beforeEach(() => {
@@ -233,272 +291,63 @@ describe("AgentChatAppsEditor", () => {
     } as never);
   });
 
-  it("shows chat app connection status and channels assigned to this agent", () => {
+  it("names the agent holding a channel, without linking one it cannot read", async () => {
+    const user = userEvent.setup();
     render(<AgentChatApps agent={agent} />);
 
+    await openPicker(user, "MS Teams");
     expect(
-      screen.getByRole("link", { name: /Slack\s*Connected/ }),
+      await screen.findByRole("button", {
+        name: /^OperationsAnswered by Incident Agent/,
+      }),
     ).toBeVisible();
-    expect(
-      screen.getByRole("link", { name: /MS Teams\s*Set up/ }),
-    ).toBeVisible();
-    expect(
-      screen.getByRole("link", { name: /Telegram\s*Set up/ }),
-    ).toBeVisible();
-    expect(screen.getByText("General")).toBeVisible();
-    expect(screen.getByText("Operations")).toBeVisible();
-    expect(screen.getByRole("link", { name: "Incident Agent" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Incident Agent" })).toBeNull();
   });
 
-  it("does not link an assigned agent the caller cannot read", () => {
+  it("falls back to a placeholder when the holding agent cannot be read", async () => {
+    const user = userEvent.setup();
     vi.mocked(useProfiles).mockReturnValue({
       data: [],
       isPending: false,
       isLoadingError: false,
       refetch: refetchAgentNames,
     } as never);
-
     render(<AgentChatApps agent={agent} />);
 
-    expect(screen.getByText("another agent")).toBeVisible();
-    expect(screen.queryByRole("link", { name: "another agent" })).toBeNull();
+    await openPicker(user, "MS Teams");
+    expect(
+      await screen.findByRole("button", {
+        name: /^OperationsAnswered by another agent/,
+      }),
+    ).toBeVisible();
   });
 
-  it("keeps the detail summary read-only", () => {
-    render(<AgentChatAppsDetail agent={agent} />);
+  it("lists the channels this agent holds, and offers a way to add more", () => {
+    render(<AgentChatApps agent={agent} />);
 
+    // The agent's own channels, not the organization's whole pool: General is
+    // assigned here, Operations belongs to another agent and is not listed.
     expect(screen.getByText("General")).toBeVisible();
+    expect(screen.queryByText("Operations")).toBeNull();
+    expect(screen.getByRole("button", { name: "Add channel" })).toBeVisible();
+    // No provider strip: a connected provider needs no announcement.
     expect(
-      screen.getByRole("link", { name: /Slack\s*Connected/ }),
-    ).toHaveAttribute("href", "/settings/messaging-channels/slack");
-    expect(
-      screen.getByRole("link", { name: /MS Teams\s*Set up/ }),
-    ).toHaveAttribute("href", "/settings/messaging-channels/ms-teams");
-    expect(
-      screen.getByRole("link", { name: /Telegram\s*Set up/ }),
-    ).toHaveAttribute("href", "/settings/messaging-channels/telegram");
-    expect(
-      screen.getByRole("link", { name: /Email\s*Connected/ }),
-    ).toHaveAttribute("href", "/settings/messaging-channels/email");
-    expect(
-      screen.queryByRole("button", { name: "Manage channels" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /instructions/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("switch", { name: /Answer all messages/i }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("includes an enabled email channel in detail and Edit collections", async () => {
-    const user = userEvent.setup();
-    const emailAgent = {
-      id: "agent-1",
-      name: "Operations Agent",
-      scope: "org",
-      incomingEmailEnabled: true,
-      incomingEmailSecurityMode: "private",
-    } as never;
-    const { unmount } = render(<AgentChatAppsDetail agent={emailAgent} />);
-
-    expect(screen.getByText("operations@example.com")).toBeVisible();
-    await user.click(
-      screen.getByRole("button", {
-        name: "Edit email for Email channel operations@example.com",
-      }),
-    );
-    expect(
-      screen.getByRole("dialog", { name: "Email settings" }),
-    ).toBeVisible();
-    unmount();
-    render(<AgentChatApps agent={emailAgent} />);
-
-    const emailCheckbox = screen.getByRole("checkbox", {
-      name: "Email channel",
-    });
-    expect(emailCheckbox).toBeChecked();
-    expect(screen.getByText("operations@example.com")).toBeVisible();
-    await user.click(emailCheckbox);
-    expect(
-      screen.getByRole("dialog", { name: "Email settings" }),
-    ).toBeVisible();
-  });
-
-  it("shows assignment controls immediately without another editing mode", () => {
-    render(<AgentChatApps agent={agent} />);
-
-    expect(
-      screen.getByRole("textbox", { name: "Search channels" }),
-    ).toBeVisible();
-    expect(
-      screen.getByRole("checkbox", { name: "Slack channel General" }),
-    ).toBeVisible();
-    expect(
-      screen.getByRole("button", {
-        name: "Edit channel for Slack channel General",
-      }),
-    ).toBeVisible();
-    expect(
-      screen.getByRole("button", { name: "Save channel changes" }),
-    ).toBeVisible();
-    expect(
-      screen.queryByRole("button", { name: "Manage channels" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("dialog", {
-        name: "Choose channels for Operations Agent",
-      }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("checkbox", { name: "Slack channel General" }),
-    ).toBeVisible();
-  });
-
-  it("opens details from the row without changing assignment", async () => {
-    const user = userEvent.setup();
-    render(<AgentChatApps agent={agent} />);
-    const checkbox = screen.getByRole("checkbox", {
-      name: "MS Teams channel Operations",
-    });
-    const row = checkbox.closest("[data-channel-assignment-row]");
-    expect(row).not.toBeNull();
-    const rowTarget = within(row as HTMLElement).getByRole("button", {
-      name: "View details for MS Teams channel Operations",
-    });
-
-    await user.click(rowTarget);
-
-    expect(checkbox).not.toBeChecked();
-    expect(screen.getByRole("dialog", { name: "Operations" })).toBeVisible();
-  });
-
-  it("keeps list order when a channel is checked", async () => {
-    const user = userEvent.setup();
-    render(<AgentChatApps agent={agent} />);
-    const labelsBefore = screen
-      .getAllByRole("checkbox")
-      .map((checkbox) => checkbox.getAttribute("aria-label"));
-
-    await user.click(
-      screen.getByRole("checkbox", { name: "Slack direct message" }),
-    );
-
-    expect(
-      screen
-        .getAllByRole("checkbox")
-        .map((checkbox) => checkbox.getAttribute("aria-label")),
-    ).toEqual(labelsBefore);
-  });
-
-  it("keeps list order and scroll position when a channel is unchecked", async () => {
-    const user = userEvent.setup();
-    const { container } = render(<AgentChatApps agent={agent} />);
-    const viewport = container.querySelector(
-      '[data-slot="scroll-area-viewport"]',
-    ) as HTMLElement;
-    viewport.scrollTop = 80;
-    const labelsBefore = screen
-      .getAllByRole("checkbox")
-      .map((checkbox) => checkbox.getAttribute("aria-label"));
-
-    await user.click(
-      screen.getByRole("checkbox", { name: "Slack channel General" }),
-    );
-
-    expect(
-      screen
-        .getAllByRole("checkbox")
-        .map((checkbox) => checkbox.getAttribute("aria-label")),
-    ).toEqual(labelsBefore);
-    expect(viewport.scrollTop).toBe(80);
-  });
-
-  it("shows assigned channels in a bounded clickable table", async () => {
-    const user = userEvent.setup();
-    const assigned = Array.from({ length: 5 }, (_, index) => ({
-      ...bindings[0],
-      id: `assigned-${index + 1}`,
-      channelId: `C-${index + 1}`,
-      channelName: `Assigned channel ${index + 1}`,
-    }));
-    vi.mocked(useAllChatOpsBindings).mockReturnValue({
-      data: { bindings: assigned },
-      isPending: false,
-      isLoadingError: false,
-      hasNextPage: false,
-      isFetchingNextPage: false,
-      fetchNextPage: vi.fn(),
-      refetch: refetchBindings,
-    } as never);
-
-    render(<AgentChatAppsDetail agent={agent} />);
-
-    expect(screen.getByText("Assigned channel 1")).toBeVisible();
-    expect(screen.getByText("Assigned channel 5")).toBeVisible();
-    await user.click(
-      screen.getByRole("button", {
-        name: "Edit channel for Slack channel Assigned channel 1",
-      }),
-    );
-    const details = screen.getByRole("dialog", { name: "Assigned channel 1" });
-    expect(
-      within(details).getByRole("button", { name: "Save channel details" }),
-    ).toBeDisabled();
-    await user.click(
-      within(details).getByRole("switch", { name: "Answer all messages" }),
-    );
-    await user.type(
-      within(details).getByLabelText("Channel instructions"),
-      "Reply with detail-page guidance.",
-    );
-    await user.click(
-      within(details).getByRole("button", { name: "Save channel details" }),
-    );
-    expect(updateBinding).toHaveBeenCalledWith(
-      {
-        id: "assigned-1",
-        answerAllMessages: true,
-        channelInstructions: "Reply with detail-page guidance.",
-      },
-      { onSuccess: expect.any(Function) },
-    );
-    await user.click(
-      within(details).getAllByRole("button", { name: "Close" })[0],
-    );
-  });
-
-  it("keeps detail dialogs read-only without update permission", async () => {
-    const user = userEvent.setup();
-    hasUpdatePermission.mockReturnValue(false);
-    render(<AgentChatAppsDetail agent={agent} />);
-
-    await user.click(
-      screen.getByRole("button", {
-        name: "View details for Slack channel General",
-      }),
-    );
-    const details = screen.getByRole("dialog", { name: "General" });
-    expect(
-      within(details).getByLabelText("Channel instructions"),
-    ).toHaveAttribute("readonly");
-    expect(
-      within(details).queryByRole("button", { name: "Save channel details" }),
+      screen.queryByRole("link", { name: /Slack\s*Connected/ }),
     ).toBeNull();
   });
 
-  it("shows Telegram group channels as receiving all messages without updating reply behavior", async () => {
+  it("points at the provider holding a channel the search found elsewhere", async () => {
     const user = userEvent.setup();
     vi.mocked(useAllChatOpsBindings).mockReturnValue({
       data: {
         bindings: [
+          ...bindings,
           {
             ...bindings[0],
-            id: "telegram-channel",
-            provider: "telegram",
-            channelId: "telegram-group",
-            channelName: "Telegram group",
-            answerAllMessages: false,
+            id: "binding-3",
+            channelId: "C3",
+            channelName: "Escalations",
+            agentId: null,
           },
         ],
       },
@@ -509,34 +358,64 @@ describe("AgentChatAppsEditor", () => {
       fetchNextPage: vi.fn(),
       refetch: refetchBindings,
     } as never);
+    render(<AgentChatApps agent={agent} />);
 
-    render(<AgentChatAppsDetail agent={agent} />);
-
-    expect(screen.getByText("All messages")).toBeVisible();
-    expect(screen.queryByText("Mentions only")).toBeNull();
-    await user.click(
-      screen.getByRole("button", {
-        name: "Edit channel for Telegram channel Telegram group",
-      }),
-    );
-    const details = screen.getByRole("dialog", { name: "Telegram group" });
-    expect(
-      within(details).queryByRole("switch", { name: "Answer all messages" }),
-    ).toBeNull();
+    // The picker opens on the first connected provider — MS Teams here — but
+    // Escalations is a Slack room, so the search must say where it went.
+    await openPicker(user);
     await user.type(
-      within(details).getByLabelText("Channel instructions"),
-      "Use concise replies.",
+      screen.getByRole("textbox", { name: "Search channels" }),
+      "Escalations",
     );
-    await user.click(
-      within(details).getByRole("button", { name: "Save channel details" }),
-    );
-    expect(updateBinding).toHaveBeenCalledWith(
-      {
-        id: "telegram-channel",
-        channelInstructions: "Use concise replies.",
+
+    expect(screen.getByText(/No MS Teams channels match/)).toBeVisible();
+    await user.click(await screen.findByRole("button", { name: "1 in Slack" }));
+
+    expect(
+      await screen.findByRole("button", { name: /^Escalations/ }),
+    ).toBeVisible();
+  });
+
+  it("says so when a provider has nothing left to add", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useAllChatOpsBindings).mockReturnValue({
+      data: {
+        bindings: [
+          bindings[0],
+          // A direct message already exists and is already ours, so Slack has
+          // neither a room nor a DM left to offer.
+          {
+            ...bindings[0],
+            id: "binding-dm",
+            channelId: "D1",
+            channelName: "Direct message",
+            isDm: true,
+          },
+        ],
       },
-      { onSuccess: expect.any(Function) },
-    );
+      isPending: false,
+      isLoadingError: false,
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      fetchNextPage: vi.fn(),
+      refetch: refetchBindings,
+    } as never);
+    render(<AgentChatApps agent={agent} />);
+
+    await openPicker(user);
+
+    expect(
+      screen.getByText("Every channel here is already assigned to this agent."),
+    ).toBeVisible();
+  });
+
+  it("opens a channel's settings from its row", async () => {
+    const user = userEvent.setup();
+    render(<AgentChatApps agent={agent} />);
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+
+    expect(screen.getByRole("dialog", { name: "General" })).toBeVisible();
   });
 
   it("does not submit the enclosing Edit form", async () => {
@@ -548,13 +427,7 @@ describe("AgentChatAppsEditor", () => {
       </form>,
     );
 
-    await user.type(
-      screen.getByRole("textbox", { name: "Search channels" }),
-      "operations{Enter}",
-    );
-    await user.click(
-      screen.getByRole("checkbox", { name: "MS Teams channel Operations" }),
-    );
+    await addChannel(user, "Operations", "MS Teams");
     await user.click(
       screen.getByRole("button", { name: "Save channel changes" }),
     );
@@ -567,30 +440,30 @@ describe("AgentChatAppsEditor", () => {
     ).toBeVisible();
   });
 
-  it("disables all assignment controls for a read-only viewer", () => {
+  it("offers a read-only viewer no way to change the assignments", () => {
     render(<AgentChatApps agent={agent} readOnly />);
 
-    expect(
-      screen.getByRole("textbox", { name: "Search channels" }),
-    ).toBeDisabled();
-    expect(
-      screen.getByRole("checkbox", { name: "Slack channel General" }),
-    ).toBeDisabled();
+    expect(screen.getByText("General")).toBeVisible();
+    expect(screen.getByRole("button", { name: "View details" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Add channel" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Remove / })).toBeNull();
     expect(
       screen.getByRole("button", { name: "Save channel changes" }),
     ).toBeDisabled();
   });
 
-  it("disables pending direct messages without trigger-create permission", () => {
+  it("disables pending direct messages without trigger-create permission", async () => {
+    const user = userEvent.setup();
     hasCreatePermission.mockReturnValue(false);
 
     render(<AgentChatApps agent={agent} />);
 
-    const directMessage = screen.getByRole("checkbox", {
-      name: "Slack direct message",
+    await openPicker(user, "Slack");
+    const directMessage = await screen.findByRole("button", {
+      name: /^Direct message/,
     });
     expect(directMessage).toBeDisabled();
-    expect(directMessage).toHaveAccessibleDescription(
+    expect(directMessage).toHaveTextContent(
       "You do not have permission to create a direct message assignment.",
     );
   });
@@ -599,11 +472,7 @@ describe("AgentChatAppsEditor", () => {
     const user = userEvent.setup();
     const { rerender } = render(<AgentChatApps agent={agent} />);
 
-    await user.click(
-      screen.getByRole("button", {
-        name: "Edit channel for Slack channel General",
-      }),
-    );
+    await user.click(screen.getByRole("button", { name: "Settings" }));
     const dialog = screen.getByRole("dialog", { name: "General" });
     await user.click(
       within(dialog).getByRole("switch", { name: "Answer all messages" }),
@@ -640,11 +509,7 @@ describe("AgentChatAppsEditor", () => {
     expect(
       screen.getByRole("button", { name: "Save channel changes" }),
     ).toBeEnabled();
-    await user.click(
-      screen.getByRole("button", {
-        name: "Edit channel for Slack channel General",
-      }),
-    );
+    await user.click(screen.getByRole("button", { name: "Settings" }));
     expect(screen.getByLabelText("Channel instructions")).toHaveValue(
       "Handle priority requests.",
     );
@@ -678,9 +543,7 @@ describe("AgentChatAppsEditor", () => {
     const onDirtyChange = vi.fn();
     render(<AgentChatApps agent={agent} onDirtyChange={onDirtyChange} />);
 
-    await user.click(
-      screen.getByRole("checkbox", { name: "MS Teams channel Operations" }),
-    );
+    await addChannel(user, "Operations", "MS Teams");
 
     await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(true));
     expect(
@@ -704,9 +567,7 @@ describe("AgentChatAppsEditor", () => {
     expect(
       screen.queryByRole("button", { name: "Save channel changes" }),
     ).toBeNull();
-    await user.click(
-      screen.getByRole("checkbox", { name: "Slack channel General" }),
-    );
+    await removeChannel(user, "Slack channel General");
     await waitFor(() => expect(saveChanges).not.toBeNull());
 
     let saved = false;
@@ -738,12 +599,10 @@ describe("AgentChatAppsEditor", () => {
     } as never);
     render(<AgentChatApps agent={agent} />);
 
+    await addChannel(user, "Escalations", "Slack");
     await user.click(
-      screen.getByRole("checkbox", { name: "Slack channel Escalations" }),
-    );
-    await user.click(
-      screen.getByRole("button", {
-        name: "Edit channel for Slack channel Escalations",
+      within(channelRow("Escalations")).getByRole("button", {
+        name: "Settings",
       }),
     );
     await user.click(
@@ -783,13 +642,10 @@ describe("AgentChatAppsEditor", () => {
     const user = userEvent.setup();
     render(<AgentChatApps agent={agent} />);
 
-    const channel = screen.getByRole("checkbox", {
-      name: "MS Teams channel Operations",
-    });
-    await user.click(channel);
+    await addChannel(user, "Operations", "MS Teams");
     await user.click(
-      screen.getByRole("button", {
-        name: "Edit channel for MS Teams channel Operations",
+      within(channelRow("Operations")).getByRole("button", {
+        name: "Settings",
       }),
     );
     await user.type(
@@ -799,7 +655,7 @@ describe("AgentChatAppsEditor", () => {
     await user.click(screen.getByRole("button", { name: "Done" }));
     expect(screen.getByText("Changes pending")).toBeVisible();
 
-    await user.click(channel);
+    await removeChannel(user, "MS Teams channel Operations");
 
     expect(screen.queryByText("Changes pending")).toBeNull();
     expect(
@@ -807,25 +663,15 @@ describe("AgentChatAppsEditor", () => {
     ).toBeDisabled();
   });
 
-  it("does not offer chat apps that the organization turned off", () => {
+  it("does not offer chat apps that the organization turned off", async () => {
+    const user = userEvent.setup();
     isChannelHidden.mockImplementation((provider) => provider === "telegram");
 
     render(<AgentChatApps agent={agent} />);
 
-    expect(
-      screen.queryByRole("link", { name: /Telegram/ }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: /Slack\s*Connected/ }),
-    ).toBeVisible();
-  });
-
-  it("does not offer Email when the organization turned it off", () => {
-    isChannelHidden.mockImplementation((provider) => provider === "email");
-
-    render(<AgentChatAppsDetail agent={agent} />);
-
-    expect(screen.queryByRole("link", { name: /Email/ })).toBeNull();
+    await openPicker(user);
+    expect(screen.getByRole("button", { name: "Slack" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: /Telegram/ })).toBeNull();
   });
 
   it("keeps Email available when every chat provider is hidden", () => {
@@ -833,41 +679,10 @@ describe("AgentChatAppsEditor", () => {
 
     render(<AgentChatApps agent={agent} />);
 
-    expect(
-      screen.getByRole("button", {
-        name: "Enable email for Email channel operations@example.com",
-      }),
-    ).toBeVisible();
-    expect(
-      screen.getByRole("link", { name: /Email\s*Connected/ }),
-    ).toBeVisible();
-  });
-
-  it("uses agent permission for Email and trigger permission for chat channels", async () => {
-    const user = userEvent.setup();
-    hasAgentUpdatePermission.mockReturnValue(false);
-    const emailAgent = {
-      id: "agent-1",
-      name: "Operations Agent",
-      scope: "org",
-      authorId: "user-1",
-      incomingEmailEnabled: true,
-      incomingEmailSecurityMode: "private",
-    } as never;
-
-    render(<AgentChatAppsDetail agent={emailAgent} />);
-
-    expect(
-      screen.getByRole("button", {
-        name: "Edit channel for Slack channel General",
-      }),
-    ).toBeVisible();
-    await user.click(
-      screen.getByRole("button", {
-        name: "View details for Email channel operations@example.com",
-      }),
-    );
-    expect(screen.queryByRole("dialog", { name: "Email settings" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Turn on" })).toBeVisible();
+    // Nothing to pick from, so the channel section says nothing at all.
+    expect(screen.queryByText("Channels")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add channel" })).toBeNull();
   });
 
   it("shows an error instead of marking unknown provider status as disconnected", () => {
@@ -881,10 +696,8 @@ describe("AgentChatAppsEditor", () => {
     render(<AgentChatApps agent={agent} />);
 
     expect(screen.getByText("Cannot load chat app status")).toBeVisible();
-    expect(
-      screen.queryByRole("link", { name: /Slack\s*Set up/ }),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /Set up/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add channel" })).toBeNull();
+    expect(screen.queryByText("No messaging providers connected")).toBeNull();
   });
 
   it("shows an error when chat app availability cannot load", () => {
@@ -907,27 +720,13 @@ describe("AgentChatAppsEditor", () => {
     const user = userEvent.setup();
     render(<AgentChatApps agent={agent} />);
 
-    expect(screen.getByText("Operations")).toBeVisible();
-    const ownerLink = screen.getByRole("link", { name: "Incident Agent" });
-    expect(ownerLink).toHaveAttribute("href", "/agents/agent-2");
-    expect(ownerLink.querySelector("img, svg")).not.toBeNull();
+    // Another agent's channel is not listed here until it is claimed.
+    expect(screen.queryByText("Operations")).toBeNull();
+    await addChannel(user, "Operations", "MS Teams");
+    // Claimed but not yet saved, and the row says whose it still is.
     expect(
-      screen.getByRole("checkbox", {
-        name: "MS Teams channel Operations",
-      }),
-    ).toHaveAccessibleDescription("Assigned to Incident Agent.");
-    await user.click(
-      screen.getByRole("checkbox", {
-        name: "MS Teams channel Operations",
-      }),
-    );
-    expect(
-      screen.getByRole("checkbox", {
-        name: "MS Teams channel Operations",
-      }),
-    ).toHaveAccessibleDescription(
-      "Save moves this channel from Incident Agent to Operations Agent.",
-    );
+      within(channelRow("Operations")).getByText("Moving from Incident Agent"),
+    ).toBeVisible();
     await user.click(
       screen.getByRole("button", { name: "Save channel changes" }),
     );
@@ -954,11 +753,8 @@ describe("AgentChatAppsEditor", () => {
     expect(applyBindingPlan).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(
-      screen.getByRole("checkbox", {
-        name: "MS Teams channel Operations",
-      }),
-    ).toBeChecked();
+    // Cancelling drops the transfer, not the staged claim.
+    expect(channelRow("Operations")).toBeVisible();
     await user.click(
       screen.getByRole("button", { name: "Save channel changes" }),
     );
@@ -989,14 +785,8 @@ describe("AgentChatAppsEditor", () => {
     const user = userEvent.setup();
     render(<AgentChatApps agent={agent} />);
 
-    await user.click(
-      screen.getByRole("checkbox", { name: "Slack channel General" }),
-    );
-    expect(
-      screen.getByRole("checkbox", { name: "Slack channel General" }),
-    ).toHaveAccessibleDescription(
-      "Save removes this channel from Operations Agent.",
-    );
+    await removeChannel(user, "Slack channel General");
+    expect(screen.queryByText("General")).toBeNull();
     await user.click(
       screen.getByRole("button", { name: "Save channel changes" }),
     );
@@ -1043,14 +833,10 @@ describe("AgentChatAppsEditor", () => {
       <AgentChatApps agent={agent} onDirtyChange={onDirtyChange} />,
     );
 
-    await user.click(
-      screen.getByRole("checkbox", { name: "Slack direct message" }),
-    );
+    await addChannel(user, "Direct message", "Slack");
     expect(
-      screen.getByRole("checkbox", { name: "Slack direct message" }),
-    ).toHaveAccessibleDescription(
-      "Save creates a direct message for Operations Agent.",
-    );
+      within(channelRow("Direct message")).getByText("New direct message"),
+    ).toBeVisible();
     await user.click(
       screen.getByRole("button", { name: "Save channel changes" }),
     );
@@ -1080,9 +866,9 @@ describe("AgentChatAppsEditor", () => {
     rerender(<AgentChatApps agent={agent} onDirtyChange={onDirtyChange} />);
 
     await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false));
-    expect(
-      screen.getByRole("checkbox", { name: "Slack direct message" }),
-    ).toBeChecked();
+    // Saved: the same direct message, now a real binding rather than a claim.
+    expect(channelRow("Direct message")).toBeVisible();
+    expect(screen.queryByText("New direct message")).toBeNull();
   });
 
   it("stops a reassignment when the channel owner changes before confirmation", async () => {
@@ -1099,9 +885,7 @@ describe("AgentChatAppsEditor", () => {
     });
     render(<AgentChatApps agent={agent} />);
 
-    await user.click(
-      screen.getByRole("checkbox", { name: "MS Teams channel Operations" }),
-    );
+    await addChannel(user, "Operations", "MS Teams");
     await user.click(
       screen.getByRole("button", { name: "Save channel changes" }),
     );
@@ -1109,8 +893,10 @@ describe("AgentChatAppsEditor", () => {
 
     await waitFor(() =>
       expect(
-        screen.getByRole("checkbox", { name: "MS Teams channel Operations" }),
-      ).not.toBeChecked(),
+        screen.queryByRole("listitem", {
+          name: "MS Teams channel Operations",
+        }),
+      ).toBeNull(),
     );
     expect(applyBindingPlan).not.toHaveBeenCalled();
   });
@@ -1138,20 +924,14 @@ describe("AgentChatAppsEditor", () => {
     );
     render(<AgentChatApps agent={agent} />);
 
-    const checkbox = screen.getByRole("checkbox", {
-      name: "Slack channel Escalations",
-    });
-    await user.click(checkbox);
-    expect(checkbox).toHaveAccessibleDescription(
-      "Save assigns this channel to Operations Agent.",
-    );
+    await addChannel(user, "Escalations", "Slack");
     await user.click(
       screen.getByRole("button", { name: "Save channel changes" }),
     );
 
     expect(applyBindingPlan).toHaveBeenCalled();
     expect(refetchBindings).not.toHaveBeenCalled();
-    expect(checkbox).toBeChecked();
+    expect(channelRow("Escalations")).toBeVisible();
     expect(
       screen.getByRole("button", { name: "Save channel changes" }),
     ).toBeEnabled();
@@ -1165,9 +945,7 @@ describe("AgentChatAppsEditor", () => {
     render(<AgentChatApps agent={agent} />);
 
     await user.click(
-      screen.getByRole("button", {
-        name: "Edit channel for Slack channel General",
-      }),
+      within(channelRow("General")).getByRole("button", { name: "Settings" }),
     );
     await user.type(
       screen.getByLabelText("Channel instructions"),
@@ -1180,9 +958,7 @@ describe("AgentChatAppsEditor", () => {
 
     expect(screen.getByText("Changes pending")).toBeVisible();
     await user.click(
-      screen.getByRole("button", {
-        name: "Edit channel for Slack channel General",
-      }),
+      within(channelRow("General")).getByRole("button", { name: "Settings" }),
     );
     expect(screen.getByLabelText("Channel instructions")).toHaveValue(
       "Keep this draft.",
@@ -1212,11 +988,7 @@ describe("AgentChatAppsEditor", () => {
     render(<AgentChatApps agent={agent} />);
 
     for (let index = 1; index <= 4; index += 1) {
-      await user.click(
-        screen.getByRole("checkbox", {
-          name: `MS Teams channel Operations ${index}`,
-        }),
-      );
+      await addChannel(user, `Operations ${index}`, "MS Teams");
     }
     await user.click(
       screen.getByRole("button", { name: "Save channel changes" }),
@@ -1265,9 +1037,7 @@ describe("AgentChatAppsEditor", () => {
     } as never);
     render(<AgentChatApps agent={agent} />);
 
-    expect(
-      screen.getByRole("checkbox", { name: "Slack channel General" }),
-    ).toBeVisible();
+    expect(channelRow("General")).toBeVisible();
   });
 
   it("keeps unsupported personal-agent channels visible but disabled", () => {
@@ -1284,18 +1054,12 @@ describe("AgentChatAppsEditor", () => {
       />,
     );
 
+    // Still listed, because it is still assigned — but a personal agent
+    // cannot let go of it either, so the row's control is refused.
     expect(
-      screen.getByRole("checkbox", { name: "Slack channel General" }),
+      within(channelRow("General")).getByRole("button", {
+        name: "Remove Slack channel General",
+      }),
     ).toBeDisabled();
-    expect(
-      screen.getByRole("checkbox", { name: "Slack channel General" }),
-    ).toHaveAccessibleDescription(
-      "This personal agent can use only its owner's direct messages.",
-    );
-    expect(
-      screen.getAllByText(
-        "This personal agent can use only its owner's direct messages.",
-      ),
-    ).not.toHaveLength(0);
   });
 });

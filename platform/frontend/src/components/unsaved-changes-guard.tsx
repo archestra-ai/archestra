@@ -146,6 +146,70 @@ export function useBeforeUnloadWhileDirty(isDirty: boolean) {
   }, [isDirty]);
 }
 
+/**
+ * Routes every in-app link click through the caller's guard while the form is
+ * dirty, so a link the page does not own — the sidebar, a breadcrumb, a card
+ * elsewhere on the screen — cannot silently discard unsaved edits.
+ *
+ * `onRequestNavigate` receives the destination and is expected to park it and
+ * raise the confirmation. Capture phase, so it runs before the router's own
+ * handler; a modified click (new tab), an external origin, a download, and a
+ * same-page fragment are all left alone, since none of them lose the form.
+ */
+export function useGuardedInAppNavigation({
+  isDirty,
+  onRequestNavigate,
+}: {
+  isDirty: boolean;
+  onRequestNavigate: (href: string) => void;
+}) {
+  useEffect(() => {
+    if (!isDirty) return;
+
+    const guardNavigation = (event: MouseEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      ) {
+        return;
+      }
+      const target = event.target;
+      const anchor =
+        target instanceof Element
+          ? target.closest<HTMLAnchorElement>("a[href]")
+          : null;
+      if (
+        !anchor ||
+        anchor.target === "_blank" ||
+        anchor.hasAttribute("download")
+      ) {
+        return;
+      }
+      const url = new URL(anchor.href, window.location.href);
+      if (url.origin !== window.location.origin) return;
+      // The page already open, whether the link carries a fragment or not.
+      // Nothing is left, so nothing is lost — and a tab bar whose current tab
+      // links to the current URL must not raise the confirmation.
+      if (
+        url.pathname === window.location.pathname &&
+        url.search === window.location.search
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      onRequestNavigate(`${url.pathname}${url.search}${url.hash}`);
+    };
+
+    document.addEventListener("click", guardNavigation, true);
+    return () => document.removeEventListener("click", guardNavigation, true);
+  }, [isDirty, onRequestNavigate]);
+}
+
 export function UnsavedChangesDialog({
   open,
   onKeepEditing,

@@ -162,9 +162,11 @@ export const handlers: HttpHandler[] = [
     environments: [],
     defaultAssignedCatalogCount: 0,
   }),
-  // Fetched by the agent settings page's messaging-channels section. No
-  // configured providers and no bindings keep the strict unhandled-request
-  // guard satisfied.
+  // Fetched by the agent settings page's messaging-channels section, and by
+  // the record's own Messaging Channels tab. No configured providers and no
+  // bindings keep the strict unhandled-request guard satisfied while the
+  // editor still renders its provider setup links and an empty assignment
+  // table.
   ...getJson("/api/chatops/status", { providers: [] }),
   ...getJson("/api/chatops/bindings", {
     data: [],
@@ -176,6 +178,8 @@ export const handlers: HttpHandler[] = [
       hasNext: false,
       hasPrev: false,
     },
+    // The record's tab reads these counts; the settings page does not.
+    counts: { configured: 0, unassigned: 0 },
   }),
   ...getJson("/api/teams", teamsSeed),
   ...getJson("/api/members", {

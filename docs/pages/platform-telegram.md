@@ -3,7 +3,7 @@ title: Telegram
 category: Agents
 order: 7
 description: Connect Archestra agents to Telegram chats and groups
-lastUpdated: 2026-08-28
+lastUpdated: 2026-08-31
 ---
 
 Archestra connects to Telegram through a bot. Messages sent to the bot — in direct messages or group chats — are routed to the configured agent, and responses appear back in the chat.
@@ -51,11 +51,11 @@ To disable Group Privacy: in BotFather, `/mybots` → your bot → Bot Settings 
 
 In supergroups with Topics enabled, each forum topic is a separate conversation for the agent.
 
-Each chat becomes available for assignment after Archestra discovers it. Groups appear when you add the bot. Direct messages appear when you link the account. To assign a chat, open the agent and select **Edit** → **Configuration** → **Messaging channels**.
+Each chat becomes available for assignment after Archestra discovers it. Groups appear when you add the bot. Direct messages appear when you link the account. To assign a chat, open the agent, select the **Messaging Channels** tab, then select **Add channel**.
 
 ### Channel Instructions
 
-Each chat can carry its own instructions for the agent. Open the agent, then select **Edit** → **Configuration** → **Messaging channels**. Archestra sends these instructions with every message in that chat. Chat instructions take priority over the agent's system prompt.
+Each chat can carry its own instructions for the agent. Set them from **Settings → Messaging Channels**, or open the agent and select **Settings** on that chat in its **Messaging Channels** tab. Archestra sends these instructions with every message in that chat. Chat instructions take priority over the agent's system prompt.
 
 Chat instructions add to what the agent does. They never take an ability away. Anything they don't mention, the agent handles as usual.
 

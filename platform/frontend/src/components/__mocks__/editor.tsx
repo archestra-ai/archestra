@@ -8,8 +8,9 @@
  *
  * `onMount` is called once with a stand-in for the editor instance that
  * answers only what the app's own editors ask of it: a content height of
- * {@link MOCK_EDITOR_LINE_HEIGHT_PX} per line of the value (plus padding), a
- * no-op content-size subscription, and focus.
+ * {@link MOCK_EDITOR_LINE_HEIGHT_PX} per line of the value (plus padding),
+ * focus, and a content-size subscription that fires when the value changes —
+ * which is what an editor sized by its content is listening for.
  */
 import type { EditorProps } from "@monaco-editor/react";
 import { useEffect, useRef } from "react";
@@ -39,17 +40,29 @@ export function Editor({
   valueRef.current = value ?? "";
   const onMountRef = useRef(onMount);
   onMountRef.current = onMount;
+  const contentSizeListeners = useRef(new Set<() => void>());
   useEffect(() => {
     const editor = {
       getContentHeight: () =>
         valueRef.current.split("\n").length * MOCK_EDITOR_LINE_HEIGHT_PX +
         MOCK_EDITOR_PADDING_PX,
-      onDidContentSizeChange: () => ({ dispose: () => {} }),
+      onDidContentSizeChange: (listener: () => void) => {
+        contentSizeListeners.current.add(listener);
+        return { dispose: () => contentSizeListeners.current.delete(listener) };
+      },
       focus: () => {},
       getValue: () => valueRef.current,
     } as unknown as Parameters<NonNullable<EditorProps["onMount"]>>[0];
     onMountRef.current?.(editor, {} as never);
   }, []);
+  // Monaco reports a new content size as the text grows; a host that sizes
+  // itself from it sees nothing at all without this. `value` is the content
+  // size here, so it is the dependency even though the effect only reads a
+  // ref — hence the explicit read.
+  useEffect(() => {
+    void value;
+    for (const listener of contentSizeListeners.current) listener();
+  }, [value]);
   return (
     <textarea
       data-testid="editor"

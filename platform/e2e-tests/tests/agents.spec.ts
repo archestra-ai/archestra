@@ -92,7 +92,7 @@ async function createViaWizard(
   await createResponsePromise;
 
   // 5. The create lands on the new record's Connect section.
-  const connectUrl = new RegExp(`${listPath}/([^/?#]+)#connect`);
+  const connectUrl = new RegExp(`${listPath}/([^/?#]+)\\?section=connect`);
   await page.waitForURL(connectUrl, { timeout: 30_000 });
   await page.waitForLoadState("domcontentloaded");
   const id = page.url().match(connectUrl)?.[1];
@@ -124,27 +124,30 @@ test("can create and delete an agent", {
   await expect(
     page.getByRole("heading", { level: 1, name: new RegExp(AGENT_NAME) }),
   ).toBeVisible({ timeout: 15_000 });
-  const detailHeader = await page.locator("[data-page-header]").boundingBox();
 
-  // The wizard's steps are the edit page's: Tools & Knowledge is there.
-  await page.getByRole("link", { name: "Edit" }).click();
-  await page.waitForURL(new RegExp(`/agents/${agentId}/edit`), {
-    timeout: 15_000,
-  });
-  await expect(
-    page.getByRole("heading", {
-      level: 1,
-      name: new RegExp(`Edit ${AGENT_NAME}`),
-    }),
-  ).toBeVisible({ timeout: 15_000 });
-  const wizardHeader = await page.locator("[data-page-header]").boundingBox();
-  expect(wizardHeader?.width).toBe(detailHeader?.width);
-  expect(wizardHeader?.height).toBe(detailHeader?.height);
+  // Configuration is not a second route any more: the wizard's steps are the
+  // detail page's own sections, edited in place.
   await page.getByTestId(`${E2eTestId.AgentSetupStep}-tools`).click();
-  await expect(page).toHaveURL(/step=tools/);
+  await expect(page).toHaveURL(
+    new RegExp(`/agents/${agentId}\\?section=tools`),
+    {
+      timeout: 15_000,
+    },
+  );
   await expect(page.getByTestId(E2eTestId.AgentToolsSection)).toBeVisible({
     timeout: 15_000,
   });
+  await expect(
+    page.getByRole("heading", { level: 1, name: new RegExp(AGENT_NAME) }),
+  ).toBeVisible();
+
+  // The old wizard route still resolves, so links already out there land on
+  // the section their `?step=` asked for.
+  await goToPage(page, `/agents/${agentId}/edit?step=advanced`);
+  await expect(page).toHaveURL(
+    new RegExp(`/agents/${agentId}\\?section=advanced`),
+    { timeout: 15_000 },
+  );
 
   await goToPage(page, "/agents");
   await selectAgentTableView(page);

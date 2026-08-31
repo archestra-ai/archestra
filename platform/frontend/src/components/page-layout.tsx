@@ -346,11 +346,11 @@ export function PageLayout({
           {!tabs.length && <div className="mb-6" />}
         </div>
       </div>
+      {/* `flex-1`, not `min-h-full`: a full viewport *below* a header that is
+          already on screen made every page scroll by the header's height, so
+          the bottom of even a short one had a band of nothing under it. */}
       <div
-        className={cn(
-          "min-h-full w-full",
-          minWidth && "min-w-0 overflow-x-auto",
-        )}
+        className={cn("w-full flex-1", minWidth && "min-w-0 overflow-x-auto")}
       >
         <div
           className={cn(

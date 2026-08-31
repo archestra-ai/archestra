@@ -10,7 +10,7 @@ describe("getAgentActionModel", () => {
 
     expect(agentAction(model, "connect")).toMatchObject({
       label: "Connect",
-      href: "/mcp/gateways/legacy#connect",
+      href: "/mcp/gateways/legacy?section=connect",
       permissions: { agent: ["read"] },
       visible: true,
     });
@@ -29,7 +29,7 @@ describe("getAgentActionModel", () => {
     );
 
     expect(connect.visible).toBe(true);
-    expect(connect.href).toBe("/agents/agent-1#connect");
+    expect(connect.href).toBe("/agents/agent-1?section=connect");
   });
 
   it("removes Connect from built-in list and detail surfaces", () => {

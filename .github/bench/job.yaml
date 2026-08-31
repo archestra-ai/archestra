@@ -31,6 +31,10 @@ spec:
         cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
     spec:
       restartPolicy: Never
+      # A pre-publication failure sends a small Slack alert from the shell's EXIT trap. Leave enough
+      # time for that network call after Kubernetes sends SIGTERM (the default 30s is too tight when
+      # the benchmark child is still draining).
+      terminationGracePeriodSeconds: 120
       serviceAccountName: ${PLATFORM_SA}
       initContainers:
         - name: postgres

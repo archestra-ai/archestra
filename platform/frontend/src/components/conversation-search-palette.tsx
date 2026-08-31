@@ -496,8 +496,8 @@ export function ConversationSearchPalette({
       >
         <div className="flex items-start gap-2 w-full min-w-0">
           {/* One leading icon per row: the lock replaces the chat/pin glyph
-              for locked chats (same size and color, so the column of icons
-              stays aligned). */}
+              for locked chats, at the same size and color, so the icon
+              column stays aligned. */}
           {conv.lockedChat ? (
             <TooltipProvider>
               <Tooltip>
@@ -689,21 +689,13 @@ export function ConversationSearchPalette({
             </CommandGroup>
 
             {/* Only when there is something under it. A reader who has never
-                started a chat was shown the heading over empty space, between
-                the New chat row and Pages. */}
+                started a chat was shown a separator over empty space, between
+                the New chat row and Pages. The groups below carry their own
+                headings (Pinned / Recent), so no standalone label here — a
+                "Chats" label stacked on "Pinned" read as a double heading. */}
             {!recentChatsView &&
               (conversations.length > 0 || executionSessions.length > 0) && (
-                <>
-                  <CommandSeparator className="my-2" />
-
-                  <div className="px-2 pb-1.5">
-                    <div className="flex items-center justify-between px-1">
-                      <span className="text-xs font-medium text-muted-foreground">
-                        Chats
-                      </span>
-                    </div>
-                  </div>
-                </>
+                <CommandSeparator className="my-2" />
               )}
 
             {browseItems ? (
@@ -719,7 +711,7 @@ export function ConversationSearchPalette({
                   </CommandGroup>
                 )}
                 {browseItems.recent.length > 0 && (
-                  <CommandGroup>
+                  <CommandGroup heading="Recent">
                     {browseItems.recent.map((entry) =>
                       entry.kind === "conversation"
                         ? renderConversationItem(entry.item, {

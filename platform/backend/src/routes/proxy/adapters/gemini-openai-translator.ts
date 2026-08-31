@@ -73,12 +73,16 @@ export function openaiToGemini(req: OpenAiRequest): {
       }
       for (const toolCall of message.tool_calls ?? []) {
         if (toolCall.type !== "function") continue;
+        const signed = decodeSignedToolCallId(toolCall.id);
         parts.push({
           functionCall: {
-            id: toolCall.id,
+            id: signed.id,
             name: toolCall.function.name,
             args: parseJsonObject(toolCall.function.arguments),
           },
+          ...(signed.thoughtSignature
+            ? { thoughtSignature: signed.thoughtSignature }
+            : {}),
         });
       }
       if (parts.length > 0) {
@@ -97,7 +101,7 @@ export function openaiToGemini(req: OpenAiRequest): {
         parts: [
           {
             functionResponse: {
-              id: message.tool_call_id,
+              id: decodeSignedToolCallId(message.tool_call_id).id,
               // OpenAI tool result messages only include tool_call_id, not the
               // original function name. Use a stable synthetic name for Gemini.
               name: "tool_result",
@@ -256,9 +260,12 @@ export function geminiResponseToOpenai(
     }
     if ("functionCall" in part && part.functionCall) {
       toolCalls.push({
-        id:
-          part.functionCall.id ??
-          `gemini-call-${part.functionCall.name}-${Date.now()}`,
+        id: encodeSignedToolCallId({
+          id: part.functionCall.id,
+          name: part.functionCall.name,
+          thoughtSignature:
+            "thoughtSignature" in part ? part.thoughtSignature : undefined,
+        }),
         type: "function",
         function: {
           name: part.functionCall.name,
@@ -321,6 +328,54 @@ export function mapGeminiFinishReason(
   if (reason && reason !== "STOP") return "content_filter";
   return "stop";
 }
+
+/**
+ * Gemini 3 rejects conversation history whose functionCall parts lack the
+ * thoughtSignature they were produced with. The OpenAI chat wire format has
+ * no field to carry one, but clients echo tool-call ids verbatim — so the
+ * signature rides inside the id on the way to the client and is unpacked
+ * (and stripped) on the way back upstream.
+ */
+export function encodeSignedToolCallId(params: {
+  id: string | undefined;
+  name: string | undefined;
+  thoughtSignature: string | undefined;
+}): string {
+  const base = params.id ?? `gemini-call-${params.name ?? "fn"}-${Date.now()}`;
+  if (!params.thoughtSignature) {
+    return base;
+  }
+  const encoded = Buffer.from(params.thoughtSignature, "utf8").toString(
+    "base64url",
+  );
+  return `${SIGNED_TOOL_CALL_ID_PREFIX}${encoded}.${base}`;
+}
+
+export function decodeSignedToolCallId(id: string | undefined): {
+  id: string | undefined;
+  thoughtSignature: string | undefined;
+} {
+  if (!id?.startsWith(SIGNED_TOOL_CALL_ID_PREFIX)) {
+    return { id, thoughtSignature: undefined };
+  }
+  const rest = id.slice(SIGNED_TOOL_CALL_ID_PREFIX.length);
+  const dot = rest.indexOf(".");
+  if (dot < 0) {
+    return { id, thoughtSignature: undefined };
+  }
+  try {
+    return {
+      id: rest.slice(dot + 1),
+      thoughtSignature: Buffer.from(rest.slice(0, dot), "base64url").toString(
+        "utf8",
+      ),
+    };
+  } catch {
+    return { id, thoughtSignature: undefined };
+  }
+}
+
+const SIGNED_TOOL_CALL_ID_PREFIX = "gemsig-";
 
 function toGeminiToolChoice(
   toolChoice: OpenAiRequest["tool_choice"],

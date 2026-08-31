@@ -61,10 +61,8 @@ export async function saveOpenProfileDialog(page: Page): Promise<void> {
   await expect(submitButton).toBeVisible({ timeout: 15_000 });
   await submitButton.click();
 
-  // A successful Save returns to the record's own page (its Overview).
-  await page.waitForURL((url) => !url.pathname.endsWith("/edit"), {
-    timeout: 30_000,
-  });
+  // Saving stays on the tab it was done from, so there is no navigation to
+  // wait for — only the write itself, which the toast below reports.
   await page.waitForLoadState("domcontentloaded");
 }
 
@@ -182,33 +180,26 @@ async function openCatalogToolAssignment({
   await goToPage(page, `${pagePath}?name=${encodeURIComponent(targetName)}`);
   await page.waitForLoadState("domcontentloaded");
 
-  // The row's Edit opens the setup wizard page on its Configuration step;
-  // the tools live on the Tools & Knowledge step.
+  // The row's Edit opens the record's own page, where the configuration is
+  // edited in place; the tools live on its Tools & Knowledge tab.
   const editButton = page.getByTestId(
     `${E2eTestId.EditAgentButton}-${targetName}`,
   );
   await expect(editButton).toBeVisible({ timeout: 30_000 });
   await editButton.click();
-  await page.waitForURL(new RegExp(`${pagePath}/[^/?]+/edit`), {
-    timeout: 30_000,
-  });
-  // Retry the step click until the URL says so: like the row's Edit above,
-  // the stepper can render before hydration wires its handler.
+  await page.waitForURL(new RegExp(`${pagePath}/[^/?]+`), { timeout: 30_000 });
+  // Retry the tab click until the URL says so: like the row's Edit above, the
+  // tab can render before hydration wires its handler.
   await expect(async () => {
-    if (!/[?&]step=tools/.test(page.url())) {
+    if (!/[?&]section=tools/.test(page.url())) {
       await page.getByTestId(`${E2eTestId.AgentSetupStep}-tools`).click();
     }
-    await page.waitForURL(/[?&]step=tools/, { timeout: 3_000 });
+    await page.waitForURL(/[?&]section=tools/, { timeout: 3_000 });
   }).toPass({ timeout: 30_000 });
 
   const toolsSectionAnchor = page.getByTestId(E2eTestId.AgentToolsSection);
   await expect(toolsSectionAnchor).toBeVisible({ timeout: 15_000 });
   await toolsSectionAnchor.scrollIntoViewIfNeeded();
-
-  const toolsSectionHeading = page.getByRole("heading", {
-    name: "Tools & Knowledge Sources",
-  });
-  await expect(toolsSectionHeading).toBeVisible({ timeout: 10_000 });
 
   const addButton = page.getByTestId(E2eTestId.AgentToolsAddButton);
   await expect(addButton).toBeVisible({ timeout: 10_000 });
@@ -300,7 +291,9 @@ async function openCatalogToolAssignment({
       .then(() => true)
       .catch(() => false);
     if (!modalAppeared && (await searchInput.isVisible().catch(() => false))) {
-      await toolsSectionHeading.click();
+      // The section itself is the neutral target now that it carries no
+      // heading of its own — the tab above names it.
+      await page.getByTestId(E2eTestId.AgentToolsSection).click();
     }
   }
 

@@ -10,6 +10,7 @@ import {
   isNavItemPermitted,
 } from "@/app/_parts/studio-nav";
 import { AgentIcon } from "@/components/agent-icon";
+import { ExecutionStateIcon } from "@/components/chat/execution-state-icon";
 import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -36,6 +37,7 @@ import {
   SHORTCUT_SEARCH,
   SHORTCUT_SIDEBAR,
 } from "@/consts";
+import { useMyAgentExecutions } from "@/lib/agent-background-execution.query";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
 import {
@@ -190,6 +192,18 @@ export function ConversationSearchPalette({
     search: debouncedSearch,
   });
 
+  // Background execution sessions live in the same sidebar timeline as chats,
+  // so the palette lists them too (searched client-side by title — they have
+  // no message bodies for the backend conversation search to match).
+  const backgroundExecutionEnabled =
+    useFeature("agentBackgroundExecution") === true;
+  const { data: executionSessions = [] } = useMyAgentExecutions(
+    open &&
+      isAuthenticated &&
+      canReadConversation === true &&
+      backgroundExecutionEnabled,
+  );
+
   const navigationDestinations = useNavigationDestinations();
 
   // Show skeleton during typing or initial fetch
@@ -210,15 +224,44 @@ export function ConversationSearchPalette({
     );
   }, [recentChatsView, searchQuery, navigationDestinations]);
 
-  const browseConversations = useMemo(() => {
+  // The conversation search runs on the backend; execution sessions carry no
+  // message bodies, so their titles are matched here instead.
+  const matchingExecutions = useMemo(() => {
+    const normalizedQuery = debouncedSearch.trim().toLocaleLowerCase();
+    if (!normalizedQuery) return [];
+    return executionSessions.filter((execution) =>
+      execution.title.toLocaleLowerCase().includes(normalizedQuery),
+    );
+  }, [executionSessions, debouncedSearch]);
+
+  const browseItems = useMemo(() => {
     if (debouncedSearch.trim()) {
       return null;
     }
     return {
       pinned: conversations.filter((c) => c.pinnedAt),
-      unpinned: conversations.filter((c) => !c.pinnedAt),
+      // Executions sort into the same timeline as chats, mirroring the
+      // sidebar's merged recents list.
+      recent: [
+        ...conversations
+          .filter((c) => !c.pinnedAt)
+          .map((item) => ({
+            kind: "conversation" as const,
+            item,
+            timestamp: item.lastMessageAt,
+          })),
+        ...executionSessions.map((item) => ({
+          kind: "execution" as const,
+          item,
+          timestamp: item.stateChangedAt ?? item.startedAt,
+        })),
+      ].sort(
+        (left, right) =>
+          new Date(right.timestamp).getTime() -
+          new Date(left.timestamp).getTime(),
+      ),
     };
-  }, [conversations, debouncedSearch]);
+  }, [conversations, executionSessions, debouncedSearch]);
 
   // Reset state on every open/close transition.
   // Clearing on open handles stale chars from macOS dead keys (e.g. Option+N inserts ˜
@@ -452,16 +495,20 @@ export function ConversationSearchPalette({
         className="flex flex-col items-start gap-1.5 px-3 py-2.5 cursor-pointer aria-selected:bg-accent rounded-sm w-full relative"
       >
         <div className="flex items-start gap-2 w-full min-w-0">
-          <IconComponent className="h-4 w-4 shrink-0 text-muted-foreground" />
-          {conv.lockedChat && (
+          {/* One leading icon per row: the lock replaces the chat/pin glyph
+              for locked chats (same size and color, so the column of icons
+              stays aligned). */}
+          {conv.lockedChat ? (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <LockedChatIcon className="mt-0.5 h-3.5 w-3.5" />
+                  <LockedChatIcon className="h-4 w-4 text-muted-foreground" />
                 </TooltipTrigger>
                 <TooltipContent side="top">Locked chat</TooltipContent>
               </Tooltip>
             </TooltipProvider>
+          ) : (
+            <IconComponent className="h-4 w-4 shrink-0 text-muted-foreground" />
           )}
           {conv.share && (
             <TooltipProvider>
@@ -514,6 +561,31 @@ export function ConversationSearchPalette({
       </CommandItem>
     );
   };
+
+  const renderExecutionItem = (
+    execution: (typeof executionSessions)[number],
+    opts?: { dateLabel?: string },
+  ) => (
+    <CommandItem
+      key={`exec-${execution.taskId}`}
+      value={`exec-${execution.taskId}`}
+      onSelect={() => {
+        router.push(`/chat/executions/${execution.taskId}`);
+        onOpenChange(false);
+      }}
+      className="flex items-center gap-2 px-3 py-2.5 cursor-pointer aria-selected:bg-accent rounded-sm w-full"
+    >
+      <ExecutionStateIcon state={execution.state} className="h-4 w-4" />
+      <span className="text-sm flex-1 min-w-0 truncate leading-snug">
+        {execution.title}
+      </span>
+      {opts?.dateLabel && (
+        <span className="shrink-0 text-xs text-muted-foreground">
+          {opts.dateLabel}
+        </span>
+      )}
+    </CommandItem>
+  );
 
   const renderNavigationItems = () =>
     matchingNavigationItems.map((item) => {
@@ -578,9 +650,12 @@ export function ConversationSearchPalette({
               <CommandGroup heading="Chats">
                 <SearchSkeleton />
               </CommandGroup>
-            ) : conversations.length > 0 ? (
+            ) : conversations.length > 0 || matchingExecutions.length > 0 ? (
               <CommandGroup heading="Chats">
                 {conversations.map((conv) => renderConversationItem(conv))}
+                {matchingExecutions.map((execution) =>
+                  renderExecutionItem(execution),
+                )}
               </CommandGroup>
             ) : matchingNavigationItems.length === 0 ? (
               <CommandEmpty>
@@ -616,25 +691,26 @@ export function ConversationSearchPalette({
             {/* Only when there is something under it. A reader who has never
                 started a chat was shown the heading over empty space, between
                 the New chat row and Pages. */}
-            {!recentChatsView && conversations.length > 0 && (
-              <>
-                <CommandSeparator className="my-2" />
+            {!recentChatsView &&
+              (conversations.length > 0 || executionSessions.length > 0) && (
+                <>
+                  <CommandSeparator className="my-2" />
 
-                <div className="px-2 pb-1.5">
-                  <div className="flex items-center justify-between px-1">
-                    <span className="text-xs font-medium text-muted-foreground">
-                      Chats
-                    </span>
+                  <div className="px-2 pb-1.5">
+                    <div className="flex items-center justify-between px-1">
+                      <span className="text-xs font-medium text-muted-foreground">
+                        Chats
+                      </span>
+                    </div>
                   </div>
-                </div>
-              </>
-            )}
+                </>
+              )}
 
-            {browseConversations ? (
+            {browseItems ? (
               <>
-                {browseConversations.pinned.length > 0 && (
+                {browseItems.pinned.length > 0 && (
                   <CommandGroup heading="Pinned">
-                    {browseConversations.pinned.map((conv) =>
+                    {browseItems.pinned.map((conv) =>
                       renderConversationItem(conv, {
                         showPinIcon: true,
                         dateLabel: getDateBucketLabel(conv.lastMessageAt),
@@ -642,20 +718,26 @@ export function ConversationSearchPalette({
                     )}
                   </CommandGroup>
                 )}
-                {browseConversations.unpinned.length > 0 && (
+                {browseItems.recent.length > 0 && (
                   <CommandGroup>
-                    {browseConversations.unpinned.map((conv) =>
-                      renderConversationItem(conv, {
-                        dateLabel: getDateBucketLabel(conv.lastMessageAt),
-                      }),
+                    {browseItems.recent.map((entry) =>
+                      entry.kind === "conversation"
+                        ? renderConversationItem(entry.item, {
+                            dateLabel: getDateBucketLabel(entry.timestamp),
+                          })
+                        : renderExecutionItem(entry.item, {
+                            dateLabel: getDateBucketLabel(entry.timestamp),
+                          }),
                     )}
                   </CommandGroup>
                 )}
-                {recentChatsView && conversations.length === 0 && (
-                  <div className="py-4 text-center text-sm text-muted-foreground">
-                    No recent chats
-                  </div>
-                )}
+                {recentChatsView &&
+                  conversations.length === 0 &&
+                  executionSessions.length === 0 && (
+                    <div className="py-4 text-center text-sm text-muted-foreground">
+                      No recent chats
+                    </div>
+                  )}
               </>
             ) : null}
 

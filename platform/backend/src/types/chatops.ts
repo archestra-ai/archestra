@@ -360,6 +360,19 @@ export interface ChatOpsProvider {
   sendReply(options: ChatReplyOptions): Promise<string>;
 
   /**
+   * Upload a file into a channel thread so it renders natively (a playable
+   * video, a viewable image). Optional: providers without a file API omit it
+   * and callers surface a clear "unsupported" error instead.
+   */
+  uploadFileToThread?(options: {
+    channelId: string;
+    threadId: string;
+    filename: string;
+    data: Buffer;
+    comment?: string;
+  }): Promise<void>;
+
+  /**
    * Send a message with Approve/Decline buttons for a single approval request
    */
   addApprovalRequestForm(options: AddApprovalRequestFormOptions): Promise<void>;

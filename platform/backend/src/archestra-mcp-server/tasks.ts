@@ -2,6 +2,7 @@ import {
   TOOL_CANCEL_TASK_SHORT_NAME,
   TOOL_GET_TASK_SHORT_NAME,
   TOOL_LIST_TASKS_SHORT_NAME,
+  TOOL_POST_TASK_FILE_SHORT_NAME,
   TOOL_START_TASK_SHORT_NAME,
   TOOL_STEER_TASK_SHORT_NAME,
 } from "@archestra/shared";
@@ -418,7 +419,88 @@ const registry = defineArchestraTools([
       }
     },
   }),
+
+  defineArchestraTool({
+    shortName: TOOL_POST_TASK_FILE_SHORT_NAME,
+    title: "Post Task File",
+    description:
+      "Upload a file into the messaging-channel thread a task reports to — a demo recording, " +
+      "for example — so it renders natively there (Slack plays video uploads inline). Only " +
+      "tasks delegated from a bound messaging channel have such a thread.",
+    schema: z.object({
+      task_id: z.string().uuid(),
+      filename: z
+        .string()
+        .trim()
+        .min(1)
+        .max(120)
+        .regex(
+          /^[A-Za-z0-9][A-Za-z0-9._ -]*$/,
+          "filename must be a plain file name (letters, digits, dot, dash, underscore, space).",
+        ),
+      content_base64: z.string().min(1),
+      comment: z.string().trim().max(2_000).optional(),
+    }),
+    handler: async ({ args, context }) => {
+      try {
+        const actor = requireActor(context);
+        const task = await requireAccessibleTask(args.task_id, actor);
+        if ("error" in task) return errorResult(task.error);
+
+        const session = await AgentRunModel.findByTaskId(task.row.id);
+        if (!session) {
+          return errorResult(
+            "This task has no container session, so there is no thread to post to.",
+          );
+        }
+        // Same narrowing as steering: the upload appears in the thread as the
+        // task's own delivery, acting for the person the execution runs as.
+        if (session.actorUserId !== actor.id) {
+          return errorResult(
+            "Only the person the execution acts as can post files for it.",
+          );
+        }
+        const target = session.completionTarget;
+        if (!target || target.type !== "chatops") {
+          return errorResult(
+            "This task does not report to a messaging-channel thread.",
+          );
+        }
+
+        const data = Buffer.from(args.content_base64, "base64");
+        if (data.length === 0) {
+          return errorResult("content_base64 decoded to an empty file.");
+        }
+        if (data.length > MAX_TASK_FILE_BYTES) {
+          return errorResult(
+            `The file is ${Math.round(data.length / 1024 / 1024)}MB; keep task files under ${Math.round(MAX_TASK_FILE_BYTES / 1024 / 1024)}MB.`,
+          );
+        }
+
+        const { chatOpsManager } = await import(
+          "@/agents/chatops/chatops-manager"
+        );
+        await chatOpsManager.uploadFileToBindingThread({
+          bindingId: target.bindingId,
+          threadId: target.threadId,
+          filename: args.filename,
+          data,
+          comment: args.comment,
+        });
+        return structuredSuccessResult(
+          { success: true, task_id: task.row.id },
+          "File posted to the task's thread.",
+        );
+      } catch (error) {
+        return catchError(error, "posting the task file");
+      }
+    },
+  }),
 ]);
+
+// Bounded by the API body limit (the base64 payload plus JSON-RPC envelope
+// must fit in one request) and by what a channel thread can reasonably hold.
+const MAX_TASK_FILE_BYTES = 40 * 1024 * 1024;
 
 export const toolEntries = registry.toolEntries;
 export const tools = registry.tools;

@@ -30,7 +30,7 @@ import { secretManager } from "@/secrets-manager";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
-import type { User } from "@/types";
+import type { ConnectorConfig, User } from "@/types";
 
 describe("knowledge base routes", () => {
   let app: FastifyInstanceWithZod;
@@ -770,6 +770,30 @@ describe("knowledge base routes", () => {
       expect(body.name).toBe("Get Connector");
       expect(body.connectorType).toBe("jira");
       expect(body).toHaveProperty("totalDocsIngested");
+    });
+
+    test("returns a connector whose persisted config predates the current schema", async () => {
+      const persistedConfig = {
+        type: "retired_connector",
+        endpoint: "https://connector.example.test",
+      } as unknown as ConnectorConfig;
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Connector with legacy config",
+        connectorType: "jira",
+        config: persistedConfig,
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${connector.id}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        id: connector.id,
+        config: persistedConfig,
+      });
     });
 
     test("returns 404 for non-existent connector", async () => {

@@ -154,6 +154,7 @@ describe("service account routes", () => {
       organizationId,
       name: "Token limit automation",
       role: ADMIN_ROLE_NAME,
+      createdBy: null,
     });
 
     for (
@@ -213,6 +214,7 @@ describe("service account API authentication", () => {
       organizationId: organization.id,
       name: "Read-only automation",
       role: role.role,
+      createdBy: null,
     });
     const serviceToken = await ServiceAccountModel.createToken({
       serviceAccountId: serviceAccount.id,
@@ -249,6 +251,7 @@ describe("service account API authentication", () => {
       organizationId: organization.id,
       name: "Cached token automation",
       role: role.role,
+      createdBy: null,
     });
     const serviceToken = await ServiceAccountModel.createToken({
       serviceAccountId: serviceAccount.id,
@@ -281,6 +284,7 @@ describe("service account API authentication", () => {
       organizationId: organization.id,
       name: "Limited automation",
       role: role.role,
+      createdBy: null,
     });
     const serviceToken = await ServiceAccountModel.createToken({
       serviceAccountId: serviceAccount.id,
@@ -311,6 +315,7 @@ describe("service account API authentication", () => {
       organizationId: organization.id,
       name: "Disabled token automation",
       role: role.role,
+      createdBy: null,
     });
     const serviceToken = await ServiceAccountModel.createToken({
       serviceAccountId: serviceAccount.id,
@@ -347,6 +352,7 @@ describe("service account API authentication", () => {
       organizationId: organization.id,
       name: "Disabled automation",
       role: role.role,
+      createdBy: null,
     });
     const serviceToken = await ServiceAccountModel.createToken({
       serviceAccountId: serviceAccount.id,
@@ -391,6 +397,7 @@ describe("service account API authentication", () => {
       organizationId: organization.id,
       name: "Chat automation",
       role: role.role,
+      createdBy: null,
     });
     const serviceToken = await ServiceAccountModel.createToken({
       serviceAccountId: serviceAccount.id,

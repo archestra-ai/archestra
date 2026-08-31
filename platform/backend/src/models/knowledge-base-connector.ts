@@ -236,6 +236,7 @@ class KnowledgeBaseConnectorModel {
         checkpoint: schema.knowledgeBaseConnectorsTable.checkpoint,
         permissionSyncState:
           schema.knowledgeBaseConnectorsTable.permissionSyncState,
+        createdBy: schema.knowledgeBaseConnectorsTable.createdBy,
         createdAt: schema.knowledgeBaseConnectorsTable.createdAt,
         updatedAt: schema.knowledgeBaseConnectorsTable.updatedAt,
         deletedAt: schema.knowledgeBaseConnectorsTable.deletedAt,
@@ -305,6 +306,7 @@ class KnowledgeBaseConnectorModel {
         checkpoint: schema.knowledgeBaseConnectorsTable.checkpoint,
         permissionSyncState:
           schema.knowledgeBaseConnectorsTable.permissionSyncState,
+        createdBy: schema.knowledgeBaseConnectorsTable.createdBy,
         createdAt: schema.knowledgeBaseConnectorsTable.createdAt,
         updatedAt: schema.knowledgeBaseConnectorsTable.updatedAt,
         deletedAt: schema.knowledgeBaseConnectorsTable.deletedAt,

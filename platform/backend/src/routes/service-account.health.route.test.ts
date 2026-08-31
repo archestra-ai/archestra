@@ -256,6 +256,7 @@ describe("service account key health", () => {
         organizationId: otherOrg.id,
         name: "bulk-theirs",
         role: MEMBER_ROLE_NAME,
+        createdBy: null,
       });
 
       const response = await bulkSetDisabled([mine.id, theirs.id], true);

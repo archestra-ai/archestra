@@ -5,6 +5,7 @@ import type {
   KbDirectoryWithTeams,
   KnowledgeFileVisibility,
 } from "@/types/knowledge-file";
+import CreatedByModel, { lookupCreator } from "./created-by";
 
 class KbDirectoryModel {
   static async findAll(
@@ -46,8 +47,13 @@ class KbDirectoryModel {
       fileCounts.map((row) => [row.directoryId, row.total]),
     );
 
+    const creators = await CreatedByModel.resolve(
+      directories.map((directory) => directory.createdBy),
+    );
+
     return directories.map((directory) => ({
       ...directory,
+      createdBy: lookupCreator(creators, directory.createdBy),
       teamIds: teamsByDirectory.get(directory.id) ?? [],
       fileCount: countByDirectory.get(directory.id) ?? 0,
     }));

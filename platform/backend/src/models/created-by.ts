@@ -48,6 +48,13 @@ class CreatedByModel {
       ]),
     );
   }
+
+  /** The single-row case, for create/update/detail routes. */
+  static async resolveOne(
+    userId: string | null | undefined,
+  ): Promise<CreatedBy | null> {
+    return lookupCreator(await CreatedByModel.resolve([userId]), userId);
+  }
 }
 
 export default CreatedByModel;

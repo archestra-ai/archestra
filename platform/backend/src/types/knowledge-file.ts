@@ -1,3 +1,4 @@
+import { CreatedByNullableSchema } from "@archestra/shared";
 import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
@@ -24,11 +25,22 @@ export const SelectKbDirectorySchema = createSelectSchema(
 );
 export type KbDirectory = z.infer<typeof SelectKbDirectorySchema>;
 
+/**
+ * Directories and files both replace their raw creator column with the resolved
+ * identity the shared "Created by" cell renders. `createdBy.id` still answers
+ * "is this mine", so nothing needed the bare id that used to sit here.
+ */
+const DirectoryResponseCreatorSchema = SelectKbDirectorySchema.omit({
+  createdBy: true,
+}).extend({ createdBy: CreatedByNullableSchema });
+
 /** A directory plus the teams it is shared with, as the API returns it. */
-export const KbDirectoryWithTeamsSchema = SelectKbDirectorySchema.extend({
-  teamIds: z.array(z.string()),
-  fileCount: z.number(),
-});
+export const KbDirectoryWithTeamsSchema = DirectoryResponseCreatorSchema.extend(
+  {
+    teamIds: z.array(z.string()),
+    fileCount: z.number(),
+  },
+);
 export type KbDirectoryWithTeams = z.infer<typeof KbDirectoryWithTeamsSchema>;
 
 /**
@@ -36,8 +48,15 @@ export type KbDirectoryWithTeams = z.infer<typeof KbDirectoryWithTeamsSchema>;
  * served only by the content route.
  */
 export const KbFileSchema = createSelectSchema(schema.kbFilesTable)
-  .omit({ data: true, objectKey: true, storageProvider: true })
+  .omit({
+    data: true,
+    objectKey: true,
+    storageProvider: true,
+    uploadedBy: true,
+  })
   .extend({
+    /** The uploader, resolved: for a file, creating it *is* uploading it. */
+    createdBy: CreatedByNullableSchema,
     /** Knowledge bases this file is currently indexed into. */
     knowledgeBases: z.array(z.object({ id: z.string(), name: z.string() })),
     /** Teams a `team-scoped` file is shared with, so the UI can name them. */

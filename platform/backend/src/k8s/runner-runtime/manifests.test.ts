@@ -272,6 +272,13 @@ describe("the container bootstrap", () => {
     expect(script()).not.toContain("sleep 10");
   });
 
+  it("drains the stdout mirror before the pane exits", () => {
+    // A one-shot agent writes its whole answer in its final instant; without
+    // the drain the pane exit tears down pipe-pane first and the transcript
+    // ends up empty.
+    expect(script()).toContain('agent session exited"; sleep 2; exit');
+  });
+
   it("lets terminal wheel events scroll tmux history", () => {
     expect(script()).toContain("tmux set-option -t agent mouse on");
     expect(script().indexOf("mouse on")).toBeLessThan(

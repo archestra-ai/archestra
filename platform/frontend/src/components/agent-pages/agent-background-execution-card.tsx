@@ -10,6 +10,7 @@ import {
   Trash2,
   Unplug,
 } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -54,9 +55,13 @@ type CredentialDeclaration = {
 export function AgentBackgroundExecutionCard({
   agentId,
   credentials,
+  readOnly = false,
+  editHref,
 }: {
   agentId: string;
   credentials: CredentialDeclaration[];
+  readOnly?: boolean;
+  editHref?: string;
 }) {
   const { data: preflight, refetch: refetchPreflight } =
     useAgentBackgroundExecutionPreflight(agentId);
@@ -81,11 +86,20 @@ export function AgentBackgroundExecutionCard({
       id="background-execution-credentials"
       className="scroll-mt-24 overflow-hidden rounded-lg border bg-card"
     >
-      <div className="space-y-1 p-4">
-        <h2 className="text-sm font-semibold">Execution credentials</h2>
-        <p className="text-sm text-muted-foreground">
-          Manage the credentials this Agent can use during background tasks.
-        </p>
+      <div className="flex items-start justify-between gap-3 p-4">
+        <div className="space-y-1">
+          <h2 className="text-sm font-semibold">Execution credentials</h2>
+          <p className="text-sm text-muted-foreground">
+            {readOnly
+              ? "Credential requirements and setup status for this agent's background tasks."
+              : "Manage the credentials this agent can use during background tasks."}
+          </p>
+        </div>
+        {readOnly && editHref && (
+          <Button asChild type="button" variant="outline" size="sm">
+            <Link href={editHref}>Edit credentials</Link>
+          </Button>
+        )}
       </div>
       <div className="divide-y border-t">
         {credentials.map((credential) => {
@@ -117,71 +131,73 @@ export function AgentBackgroundExecutionCard({
                   />
                 </div>
               </div>
-              <div className="shrink-0 self-end sm:self-auto">
-                <TableRowActions
-                  itemName={credential.label}
-                  actions={[
-                    {
-                      icon: configured ? (
-                        <RefreshCw className="size-4" />
-                      ) : (
-                        <Plug className="size-4" />
-                      ),
-                      label: configured
-                        ? "Replace"
-                        : definition
-                          ? "Connect"
-                          : "Set secret",
-                      permissions:
-                        definition && credential.scope === "shared"
-                          ? { agentSettings: ["update"] }
-                          : { agent: ["read"] },
-                      disabled: !definition && setCredential.isPending,
-                      disabledTooltip:
-                        "A credential update is already in progress.",
-                      onClick: () => {
-                        if (definition) {
-                          setConnectionDialog({ credential, definition });
-                        } else {
-                          setManualCredential(credential);
-                        }
+              {!readOnly && (
+                <div className="shrink-0 self-end sm:self-auto">
+                  <TableRowActions
+                    itemName={credential.label}
+                    actions={[
+                      {
+                        icon: configured ? (
+                          <RefreshCw className="size-4" />
+                        ) : (
+                          <Plug className="size-4" />
+                        ),
+                        label: configured
+                          ? "Replace"
+                          : definition
+                            ? "Connect"
+                            : "Set secret",
+                        permissions:
+                          definition && credential.scope === "shared"
+                            ? { agentSettings: ["update"] }
+                            : { agent: ["read"] },
+                        disabled: !definition && setCredential.isPending,
+                        disabledTooltip:
+                          "A credential update is already in progress.",
+                        onClick: () => {
+                          if (definition) {
+                            setConnectionDialog({ credential, definition });
+                          } else {
+                            setManualCredential(credential);
+                          }
+                        },
                       },
-                    },
-                  ]}
-                  dropdownActions={
-                    configured
-                      ? [
-                          {
-                            icon: credential.credentialId ? (
-                              <Unplug className="size-4" />
-                            ) : (
-                              <Trash2 className="size-4" />
-                            ),
-                            label: credential.credentialId
-                              ? "Disconnect"
-                              : "Delete secret",
-                            permissions:
-                              definition && credential.scope === "shared"
-                                ? { agentSettings: ["update"] }
-                                : { agent: ["read"] },
-                            disabled:
-                              deleteCredential.isPending ||
-                              deleteConnection.isPending,
-                            disabledTooltip:
-                              "A credential update is already in progress.",
-                            variant: "destructive",
-                            onClick: () => setCredentialToDelete(credential),
-                          },
-                        ]
-                      : []
-                  }
-                />
-              </div>
+                    ]}
+                    dropdownActions={
+                      configured
+                        ? [
+                            {
+                              icon: credential.credentialId ? (
+                                <Unplug className="size-4" />
+                              ) : (
+                                <Trash2 className="size-4" />
+                              ),
+                              label: credential.credentialId
+                                ? "Disconnect"
+                                : "Delete secret",
+                              permissions:
+                                definition && credential.scope === "shared"
+                                  ? { agentSettings: ["update"] }
+                                  : { agent: ["read"] },
+                              disabled:
+                                deleteCredential.isPending ||
+                                deleteConnection.isPending,
+                              disabledTooltip:
+                                "A credential update is already in progress.",
+                              variant: "destructive",
+                              onClick: () => setCredentialToDelete(credential),
+                            },
+                          ]
+                        : []
+                    }
+                  />
+                </div>
+              )}
             </div>
           );
         })}
       </div>
-      {manualCredential && (
+      {!readOnly && manualCredential && (
         <AgentCredentialValueDialog
           credential={manualCredential}
           useExternalSecretsManager={byosEnabled === true}
@@ -201,7 +217,7 @@ export function AgentBackgroundExecutionCard({
           }
         />
       )}
-      {connectionDialog && (
+      {!readOnly && connectionDialog && (
         <ExecutionCredentialConnectionDialog
           definition={connectionDialog.definition}
           scope={
@@ -214,59 +230,63 @@ export function AgentBackgroundExecutionCard({
           onClose={() => setConnectionDialog(null)}
         />
       )}
-      <DeleteConfirmDialog
-        open={credentialToDelete !== null}
-        onOpenChange={(open) => {
-          if (!open) setCredentialToDelete(null);
-        }}
-        title={
-          credentialToDelete?.credentialId
-            ? "Disconnect credential?"
-            : "Delete saved secret?"
-        }
-        description={
-          credentialToDelete?.credentialId
-            ? credentialToDelete.scope === "shared"
-              ? `This disconnects ${credentialToDelete.label} for the organization. Every Agent that uses it will lose access.`
-              : `This disconnects ${credentialToDelete.label} from your account. Every Agent that uses it will lose access.`
-            : `The saved value for ${credentialToDelete?.label ?? "this credential"} will be deleted.`
-        }
-        isPending={deleteCredential.isPending || deleteConnection.isPending}
-        confirmLabel={
-          credentialToDelete?.credentialId ? "Disconnect" : "Delete"
-        }
-        pendingLabel={
-          credentialToDelete?.credentialId ? "Disconnecting..." : "Deleting..."
-        }
-        onConfirm={() => {
-          if (!credentialToDelete) return;
-          const label = credentialToDelete.label;
-          const finish = () => {
-            setCredentialToDelete(null);
-            void refetchPreflight();
-          };
-          if (credentialToDelete.credentialId) {
-            deleteConnection.mutate(
-              {
-                key: credentialToDelete.credentialId,
-                name: label,
-                scope:
-                  credentialToDelete.scope === "per_user"
-                    ? "personal"
-                    : "organization",
-              },
-              { onSuccess: finish },
-            );
-            return;
+      {!readOnly && (
+        <DeleteConfirmDialog
+          open={credentialToDelete !== null}
+          onOpenChange={(open) => {
+            if (!open) setCredentialToDelete(null);
+          }}
+          title={
+            credentialToDelete?.credentialId
+              ? "Disconnect credential?"
+              : "Delete saved secret?"
           }
-          deleteCredential.mutate(credentialToDelete.key, {
-            onSuccess: () => {
-              toast.success(`${label} deleted`);
-              finish();
-            },
-          });
-        }}
-      />
+          description={
+            credentialToDelete?.credentialId
+              ? credentialToDelete.scope === "shared"
+                ? `This disconnects ${credentialToDelete.label} for the organization. Every Agent that uses it will lose access.`
+                : `This disconnects ${credentialToDelete.label} from your account. Every Agent that uses it will lose access.`
+              : `The saved value for ${credentialToDelete?.label ?? "this credential"} will be deleted.`
+          }
+          isPending={deleteCredential.isPending || deleteConnection.isPending}
+          confirmLabel={
+            credentialToDelete?.credentialId ? "Disconnect" : "Delete"
+          }
+          pendingLabel={
+            credentialToDelete?.credentialId
+              ? "Disconnecting..."
+              : "Deleting..."
+          }
+          onConfirm={() => {
+            if (!credentialToDelete) return;
+            const label = credentialToDelete.label;
+            const finish = () => {
+              setCredentialToDelete(null);
+              void refetchPreflight();
+            };
+            if (credentialToDelete.credentialId) {
+              deleteConnection.mutate(
+                {
+                  key: credentialToDelete.credentialId,
+                  name: label,
+                  scope:
+                    credentialToDelete.scope === "per_user"
+                      ? "personal"
+                      : "organization",
+                },
+                { onSuccess: finish },
+              );
+              return;
+            }
+            deleteCredential.mutate(credentialToDelete.key, {
+              onSuccess: () => {
+                toast.success(`${label} deleted`);
+                finish();
+              },
+            });
+          }}
+        />
+      )}
     </section>
   );
 }

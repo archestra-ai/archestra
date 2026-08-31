@@ -22,6 +22,7 @@ import {
 import { CurlExampleSection } from "@/components/curl-example-section";
 import { McpOauthManagement } from "@/components/mcp-oauth-management";
 import { getManageTokenLink } from "@/components/tokens/manage-token-link";
+import { Button } from "@/components/ui/button";
 import {
   Collapsible,
   CollapsibleContent,

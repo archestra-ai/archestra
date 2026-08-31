@@ -5,6 +5,7 @@ import {
   type AgentType,
   type archestraApiTypes,
   BLOCKED_PASSTHROUGH_HEADERS,
+  BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS,
   BUILT_IN_AGENT_IDS,
   DEFAULT_AGENT_SYSTEM_PROMPT,
   DocsPage,
@@ -33,6 +34,7 @@ import {
   InfoIcon,
   PackageSearch,
   Plus,
+  RotateCcw,
   Settings2,
   Unplug,
   User,
@@ -97,6 +99,10 @@ import {
   PermissionRequirementHint,
 } from "@/components/permission-requirement-hint";
 import { SettingIcon } from "@/components/setting-icon";
+import {
+  SettingsSection,
+  SettingsSectionGroup,
+} from "@/components/settings-section";
 import { SystemPromptEditor } from "@/components/system-prompt-editor";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -1304,6 +1310,12 @@ export function AgentForm({
   const seedDefaultExclusions =
     autoToolsMode && (agent ? !savedAccessAllTools : true);
   const builtInAgentName = agent?.builtInAgentConfig?.name;
+  // A built-in agent ships with a prompt, so its editor can offer the way
+  // back to it. Everything else has no default to reset to, and the control
+  // is absent rather than disabled.
+  const defaultSystemPrompt = builtInAgentName
+    ? (BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS[builtInAgentName] ?? "")
+    : undefined;
   const isPolicyConfigBuiltIn =
     builtInAgentName === BUILT_IN_AGENT_IDS.POLICY_CONFIG;
   const isDualLlmMainBuiltIn =
@@ -1362,18 +1374,6 @@ export function AgentForm({
   // The tools panel is mounted only when it has a section to show: an empty
   // bordered panel would read as broken.
   const toolsPanelHasContent = showTools || showSkills || showsHooks;
-  // What the Advanced step holds for this record, named in its description.
-  const advancedSettingsSummary = formatSettingsList([
-    agentType === "agent" && agentBackgroundExecutionEnabled
-      ? "background execution"
-      : null,
-    showSecurity ? "security" : null,
-    agentType === "mcp_gateway" ? "header passthrough" : null,
-    supportsIdentityProvider && identityProviders.length > 0
-      ? "the identity provider to trust"
-      : null,
-    "labels",
-  ]);
   // The environment comes from the form rather than the stored agent: the
   // agent update lands before the skills PUT, so a pending environment change
   // is what the API will judge the assignment against.
@@ -2054,6 +2054,7 @@ export function AgentForm({
                 description: normalizedDescription,
               }),
               ...(isInternalAgent && {
+                systemPrompt: trimmedSystemPrompt || null,
                 suggestedPrompts: validSuggestedPrompts,
                 ...(llmSelectionChanged && {
                   llmApiKeyId: llmApiKeyId || null,
@@ -2575,15 +2576,15 @@ export function AgentForm({
               that is not the active one is hidden, not unmounted: the create
               wizard walks every panel on this one form. */}
           {showConfigurationSections && (
-            <div
-              className={cn(
-                "divide-y rounded-lg border bg-card",
-                !isActiveSection("configuration") && "hidden",
-              )}
+            <SettingsSectionGroup
+              className={cn(!isActiveSection("configuration") && "hidden")}
             >
               {/* Section 1: what it is, where it runs, who can use it. */}
               {showPrimarySettingsCard && (
-                <div className="space-y-4 p-4">
+                <SettingsSection
+                  title="General"
+                  description={`What this ${agentTypeDisplayName[agentType] || "agent"} is, and who can reach it.`}
+                >
                   {/* Name + Icon (hidden for built-in agents, shown in dialog title) */}
                   {!isBuiltIn && (
                     <IdentityFields
@@ -2731,214 +2732,222 @@ export function AgentForm({
                       />
                     </div>
                   )}
-                </div>
+                </SettingsSection>
               )}
 
               {agentType === "agent" && agent && canReadAgentTriggers && (
-                <div className="p-4">
+                <SettingsSection
+                  title="Messaging channels"
+                  description="Set instructions and reply behavior for each assigned channel."
+                >
                   <AgentChatAppsEditor
                     agent={agent}
                     readOnly={readOnly}
+                    showHeading={false}
                     onDirtyChange={setChannelAssignmentsDirty}
                     standaloneSave={false}
                     onSaveHandlerChange={registerChannelAssignmentsSave}
                   />
-                </div>
+                </SettingsSection>
               )}
 
-              {/* Instructions are configured while creating an Agent, then
-                  intentionally saved in isolation from its detail page. */}
-              {isInternalAgent && !agent && (
-                <div className="p-4">
+              {/* Instructions: what the agent is told to do. Saved with the
+                  rest of this panel, so one Save covers the whole tab. */}
+              {isInternalAgent && (
+                <SettingsSection
+                  title="Instructions"
+                  description="The system prompt this agent runs with."
+                >
                   <SystemPromptEditor
                     value={systemPrompt}
                     onChange={setSystemPrompt}
+                    readOnly={readOnly}
                     variant="section"
                     builtInAgentId={builtInAgentName}
+                    headerExtra={
+                      defaultSystemPrompt !== undefined && !readOnly ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="shrink-0"
+                          disabled={systemPrompt === defaultSystemPrompt}
+                          onClick={() => setSystemPrompt(defaultSystemPrompt)}
+                        >
+                          <RotateCcw className="size-4" />
+                          <span>Reset to default</span>
+                        </Button>
+                      ) : undefined
+                    }
                   />
-                </div>
+                </SettingsSection>
               )}
 
               {/* Suggested Prompts (Agent only, not built-in, collapsible) */}
               {isInternalAgent && !isBuiltIn && (
-                <Collapsible
-                  open={suggestedPromptsOpen}
-                  onOpenChange={setSuggestedPromptsOpen}
-                  className="group"
+                <SettingsSection
+                  title="Suggested prompts"
+                  description={`Shown to users when starting a new chat. Max ${MAX_SUGGESTED_PROMPTS} prompts, title max ${MAX_SUGGESTED_PROMPT_TITLE_LENGTH} chars, prompt max ${MAX_SUGGESTED_PROMPT_TEXT_LENGTH} chars.`}
                 >
-                  <div>
-                    {suggestedPrompts.length > 0 ? (
-                      <CollapsibleTrigger className="flex w-full items-center justify-between p-4 transition-colors [&:hover:not(:has(button:hover))]:bg-muted/50 [&[data-state=open]>div>svg]:rotate-90">
-                        <div className="text-left">
-                          <h3 className="text-base font-semibold">
-                            Suggested Prompts
-                            <span className="ml-1.5 text-xs font-normal text-muted-foreground">
-                              ({suggestedPrompts.length})
-                            </span>
-                          </h3>
-                          <p className="text-xs text-muted-foreground">
-                            Shown to users when starting a new chat. Max{" "}
-                            {MAX_SUGGESTED_PROMPTS} prompts, title max{" "}
-                            {MAX_SUGGESTED_PROMPT_TITLE_LENGTH} chars, prompt
-                            max {MAX_SUGGESTED_PROMPT_TEXT_LENGTH} chars.
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          {suggestedPromptsOpen && (
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span>
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      disabled={
-                                        suggestedPrompts.length >=
-                                        MAX_SUGGESTED_PROMPTS
-                                      }
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setSuggestedPrompts((prev) => [
-                                          ...prev,
-                                          { summaryTitle: "", prompt: "" },
-                                        ]);
-                                      }}
-                                    >
-                                      <Plus className="h-4 w-4 mr-1" />
-                                      Add
-                                    </Button>
-                                  </span>
-                                </TooltipTrigger>
-                                {suggestedPrompts.length >=
-                                  MAX_SUGGESTED_PROMPTS && (
-                                  <TooltipContent>
-                                    Maximum of {MAX_SUGGESTED_PROMPTS} suggested
-                                    prompts reached
-                                  </TooltipContent>
-                                )}
-                              </Tooltip>
-                            </TooltipProvider>
-                          )}
-                          <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform" />
-                        </div>
-                      </CollapsibleTrigger>
-                    ) : (
-                      <div className="flex flex-col items-stretch gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="min-w-0">
-                          <h3 className="text-base font-semibold">
-                            Suggested Prompts
-                          </h3>
-                          <p className="text-xs text-muted-foreground">
-                            Shown to users when starting a new chat. Max{" "}
-                            {MAX_SUGGESTED_PROMPTS} prompts, title max{" "}
-                            {MAX_SUGGESTED_PROMPT_TITLE_LENGTH} chars, prompt
-                            max {MAX_SUGGESTED_PROMPT_TEXT_LENGTH} chars.
-                          </p>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="self-start"
-                          size="sm"
-                          onClick={() => {
-                            setSuggestedPrompts([
-                              { summaryTitle: "", prompt: "" },
-                            ]);
-                            setSuggestedPromptsOpen(true);
-                          }}
-                        >
-                          <Plus className="h-4 w-4 mr-1" />
-                          Add
-                        </Button>
-                      </div>
-                    )}
-                    <CollapsibleContent>
-                      <div className="border-t p-4 space-y-4">
-                        {suggestedPrompts.map((sp, index) => (
-                          <div
-                            // biome-ignore lint/suspicious/noArrayIndexKey: items have no stable ID
-                            key={`sp-${index}`}
-                            className="space-y-2 rounded-md border p-3 relative"
-                          >
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="absolute top-2 right-2 h-6 w-6"
-                              aria-label="Remove suggested prompt"
-                              onClick={() => {
-                                setSuggestedPrompts((prev) => {
-                                  const next = prev.filter(
-                                    (_, i) => i !== index,
-                                  );
-                                  if (next.length === 0)
-                                    setSuggestedPromptsOpen(false);
-                                  return next;
-                                });
-                              }}
-                            >
-                              <X className="h-3 w-3" />
-                            </Button>
-                            <div className="space-y-1 pr-8">
-                              <Label className="text-xs">Button Label</Label>
-                              <Input
-                                value={sp.summaryTitle}
-                                onChange={(e) =>
-                                  setSuggestedPrompts((prev) =>
-                                    prev.map((p, i) =>
-                                      i === index
-                                        ? {
-                                            ...p,
-                                            summaryTitle: e.target.value,
-                                          }
-                                        : p,
-                                    ),
-                                  )
-                                }
-                                placeholder="e.g. Summarize recent changes"
-                                maxLength={MAX_SUGGESTED_PROMPT_TITLE_LENGTH}
-                                aria-label="Button Label"
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <Label className="text-xs">Prompt</Label>
-                              <Textarea
-                                value={sp.prompt}
-                                onChange={(e) =>
-                                  setSuggestedPrompts((prev) =>
-                                    prev.map((p, i) =>
-                                      i === index
-                                        ? { ...p, prompt: e.target.value }
-                                        : p,
-                                    ),
-                                  )
-                                }
-                                placeholder="The full prompt sent when clicked"
-                                className="min-h-[60px]"
-                                maxLength={MAX_SUGGESTED_PROMPT_TEXT_LENGTH}
-                                aria-label="Suggested prompt"
-                              />
-                            </div>
+                  <Collapsible
+                    open={suggestedPromptsOpen}
+                    onOpenChange={setSuggestedPromptsOpen}
+                    className="group"
+                  >
+                    <div className="overflow-hidden rounded-md border">
+                      {suggestedPrompts.length > 0 ? (
+                        <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 p-3 transition-colors [&:hover:not(:has(button:hover))]:bg-muted/50 [&[data-state=open]>div>svg]:rotate-90">
+                          <span className="text-sm font-medium">
+                            {suggestedPrompts.length} prompt
+                            {suggestedPrompts.length === 1 ? null : (
+                              <span>s</span>
+                            )}
+                          </span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {suggestedPromptsOpen && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span>
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={
+                                          suggestedPrompts.length >=
+                                          MAX_SUGGESTED_PROMPTS
+                                        }
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSuggestedPrompts((prev) => [
+                                            ...prev,
+                                            { summaryTitle: "", prompt: "" },
+                                          ]);
+                                        }}
+                                      >
+                                        <Plus className="h-4 w-4 mr-1" />
+                                        Add
+                                      </Button>
+                                    </span>
+                                  </TooltipTrigger>
+                                  {suggestedPrompts.length >=
+                                    MAX_SUGGESTED_PROMPTS && (
+                                    <TooltipContent>
+                                      Maximum of {MAX_SUGGESTED_PROMPTS}{" "}
+                                      suggested prompts reached
+                                    </TooltipContent>
+                                  )}
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
+                            <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform" />
                           </div>
-                        ))}
-                      </div>
-                    </CollapsibleContent>
-                  </div>
-                </Collapsible>
+                        </CollapsibleTrigger>
+                      ) : (
+                        <div className="flex items-center justify-between gap-3 p-3">
+                          <span className="text-sm text-muted-foreground">
+                            None yet
+                          </span>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="self-start"
+                            size="sm"
+                            onClick={() => {
+                              setSuggestedPrompts([
+                                { summaryTitle: "", prompt: "" },
+                              ]);
+                              setSuggestedPromptsOpen(true);
+                            }}
+                          >
+                            <Plus className="h-4 w-4 mr-1" />
+                            Add
+                          </Button>
+                        </div>
+                      )}
+                      <CollapsibleContent>
+                        <div className="border-t p-3 space-y-4">
+                          {suggestedPrompts.map((sp, index) => (
+                            <div
+                              // biome-ignore lint/suspicious/noArrayIndexKey: items have no stable ID
+                              key={`sp-${index}`}
+                              className="space-y-2 rounded-md border p-3 relative"
+                            >
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="absolute top-2 right-2 h-6 w-6"
+                                aria-label="Remove suggested prompt"
+                                onClick={() => {
+                                  setSuggestedPrompts((prev) => {
+                                    const next = prev.filter(
+                                      (_, i) => i !== index,
+                                    );
+                                    if (next.length === 0)
+                                      setSuggestedPromptsOpen(false);
+                                    return next;
+                                  });
+                                }}
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                              <div className="space-y-1 pr-8">
+                                <Label className="text-xs">Button Label</Label>
+                                <Input
+                                  value={sp.summaryTitle}
+                                  onChange={(e) =>
+                                    setSuggestedPrompts((prev) =>
+                                      prev.map((p, i) =>
+                                        i === index
+                                          ? {
+                                              ...p,
+                                              summaryTitle: e.target.value,
+                                            }
+                                          : p,
+                                      ),
+                                    )
+                                  }
+                                  placeholder="e.g. Summarize recent changes"
+                                  maxLength={MAX_SUGGESTED_PROMPT_TITLE_LENGTH}
+                                  aria-label="Button Label"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs">Prompt</Label>
+                                <Textarea
+                                  value={sp.prompt}
+                                  onChange={(e) =>
+                                    setSuggestedPrompts((prev) =>
+                                      prev.map((p, i) =>
+                                        i === index
+                                          ? { ...p, prompt: e.target.value }
+                                          : p,
+                                      ),
+                                    )
+                                  }
+                                  placeholder="The full prompt sent when clicked"
+                                  className="min-h-[60px]"
+                                  maxLength={MAX_SUGGESTED_PROMPT_TEXT_LENGTH}
+                                  aria-label="Suggested prompt"
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </CollapsibleContent>
+                    </div>
+                  </Collapsible>
+                </SettingsSection>
               )}
 
               {/* Model (Agent and Built-in) — the provider key and the
                 model that answers, once the agent has been told what to do. */}
               {showsModelControl && (
-                <div className="space-y-4 p-4">
-                  <div className="space-y-1">
-                    <h3 className="text-base font-semibold">Model</h3>
-                    <p className="text-sm text-muted-foreground">
-                      The provider key and model this{" "}
-                      {agentTypeDisplayName[agentType] || "agent"} answers with.
-                    </p>
-                  </div>
+                <SettingsSection
+                  title="Model"
+                  description={`The provider key and model this ${agentTypeDisplayName[agentType] || "agent"} answers with.`}
+                >
                   {cannotReadLlmConfiguration ? (
                     <Alert>
                       <AlertDescription className="text-sm text-muted-foreground">
@@ -3082,47 +3091,38 @@ export function AgentForm({
                       )}
                     </>
                   )}
-                </div>
+                </SettingsSection>
               )}
 
               {/* Labels for built-in agents (the Advanced step that holds
                 them for everyone else does not exist for a built-in). */}
               {isBuiltIn && (
-                <div className="space-y-4 p-4">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <Label>Labels</Label>
-                      </div>
-                    </div>
-                    <ProfileLabels
-                      ref={agentLabelsRef}
-                      labels={labels}
-                      onLabelsChange={setLabels}
-                      showLabel={false}
-                    />
-                  </div>
-                </div>
+                <SettingsSection
+                  title="Labels"
+                  description="Key/value pairs for grouping and filtering this agent."
+                >
+                  <ProfileLabels
+                    ref={agentLabelsRef}
+                    labels={labels}
+                    onLabelsChange={setLabels}
+                    showLabel={false}
+                  />
+                </SettingsSection>
               )}
-            </div>
+            </SettingsSectionGroup>
           )}
 
           {showToolsSections && toolsPanelHasContent && (
-            <div
-              className={cn(
-                "divide-y rounded-lg border bg-card",
-                !isActiveSection("tools") && "hidden",
-              )}
+            <SettingsSectionGroup
+              className={cn(!isActiveSection("tools") && "hidden")}
             >
               {/* Section 3: Tools & Knowledge Sources */}
               {showTools && (
-                <div
-                  className="space-y-4 p-4"
+                <SettingsSection
+                  title="Tools &amp; knowledge"
+                  description="What this agent may reach while it runs."
                   data-testid={E2eTestId.AgentToolsSection}
                 >
-                  <h3 className="text-base font-semibold">
-                    Tools &amp; Knowledge Sources
-                  </h3>
                   <div className="space-y-2">
                     <Tabs
                       value={autoToolsMode ? "auto" : "custom"}
@@ -3418,13 +3418,15 @@ export function AgentForm({
                       </Select>
                     </div>
                   )}
-                </div>
+                </SettingsSection>
               )}
 
               {/* Section 4: Subagents */}
               {showSubagents && (
-                <div className="space-y-4 p-4">
-                  <h3 className="text-base font-semibold">Subagents</h3>
+                <SettingsSection
+                  title="Subagents"
+                  description="Other agents this one may hand a task to."
+                >
                   {!subagentSetsLoaded ? (
                     <p className="text-sm text-muted-foreground">
                       <span>Loading subagents…</span>
@@ -3557,19 +3559,22 @@ export function AgentForm({
                       )}
                     </div>
                   )}
-                </div>
+                </SettingsSection>
               )}
 
               {/* Section 5: Skills published over MCP (SEP-2640). Gateways
                   only, behind the draft-extension feature flag. */}
               {showSkills && (
-                <div className="space-y-4 p-4">
-                  <h3 className="text-base font-semibold">Published skills</h3>
-                  <p className="text-xs text-muted-foreground">
-                    Skills this {agentTypeDisplayName[agentType] || "agent"}{" "}
-                    serves to MCP clients as <code>skill://</code> resources,
-                    alongside the client's own.
-                  </p>
+                <SettingsSection
+                  title="Published skills"
+                  description={
+                    <>
+                      Skills this {agentTypeDisplayName[agentType] || "agent"}{" "}
+                      serves to MCP clients as <code>skill://</code> resources,
+                      alongside the client&apos;s own.
+                    </>
+                  }
+                >
                   {/* Nothing editable until the reads behind it succeed. The
                       controls below are seeded from those reads and saved back
                       as a full replace, so rendering their defaults early would
@@ -3658,7 +3663,7 @@ export function AgentForm({
                       )}
                     </div>
                   )}
-                </div>
+                </SettingsSection>
               )}
 
               {/* Hooks (internal agents only; shown when the agent runtime is
@@ -3666,34 +3671,31 @@ export function AgentForm({
                   a record that does not exist yet are written right after the
                   create. */}
               {showsHooks && (
-                <div className="p-4">
+                <SettingsSection
+                  title="Hooks"
+                  description="Commands this agent runs around its own tool calls, inside its sandbox."
+                >
                   <AgentHooksEditor
                     ref={agentHooksEditorRef}
                     agentId={agent?.id}
                   />
-                </div>
+                </SettingsSection>
               )}
-            </div>
+            </SettingsSectionGroup>
           )}
 
           {/* The Advanced step: background execution, security, passthrough
               headers, the identity provider, and labels. A built-in agent has
               none. */}
           {showAdvancedSections && !isBuiltIn && (
-            <div
-              className={cn(
-                "divide-y rounded-lg border bg-card",
-                !isActiveSection("advanced") && "hidden",
-              )}
+            <SettingsSectionGroup
+              className={cn(!isActiveSection("advanced") && "hidden")}
             >
-              <div className="space-y-4 p-4">
-                <div className="space-y-1">
-                  <h3 className="text-base font-semibold">Advanced</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Optional settings for {advancedSettingsSummary}.
-                  </p>
-                </div>
-                {agentType === "agent" && agentBackgroundExecutionEnabled && (
+              {agentType === "agent" && agentBackgroundExecutionEnabled && (
+                <SettingsSection
+                  title="Background execution"
+                  description="Whether this agent may run on its own, and the credentials it runs with."
+                >
                   <>
                     <AgentBackgroundExecutionFields
                       value={backgroundExecution}
@@ -3706,12 +3708,16 @@ export function AgentForm({
                       />
                     )}
                   </>
-                )}
+                </SettingsSection>
+              )}
 
-                {/* Security (LLM Proxy and Agent only) */}
-                {showSecurity && (
+              {/* Security (LLM Proxy and Agent only) */}
+              {showSecurity && (
+                <SettingsSection
+                  title="Security"
+                  description="How this agent treats the content its tools hand back."
+                >
                   <div className="space-y-2">
-                    <Label>Security</Label>
                     <div className="flex items-center justify-between">
                       <div className="space-y-0.5">
                         <Label
@@ -3733,10 +3739,15 @@ export function AgentForm({
                       />
                     </div>
                   </div>
-                )}
+                </SettingsSection>
+              )}
 
-                {/* Custom Header Passthrough (MCP Gateway only) */}
-                {agentType === "mcp_gateway" && (
+              {/* Custom Header Passthrough (MCP Gateway only) */}
+              {agentType === "mcp_gateway" && (
+                <SettingsSection
+                  title="Header passthrough"
+                  description="Request headers forwarded verbatim to the MCP servers behind this gateway."
+                >
                   <div className="space-y-2">
                     <Label>Custom Header Passthrough</Label>
                     <p className="text-sm text-muted-foreground">
@@ -3799,10 +3810,15 @@ export function AgentForm({
                       />
                     )}
                   </div>
-                )}
+                </SettingsSection>
+              )}
 
-                {/* Identity Provider for JWKS auth */}
-                {supportsIdentityProvider && identityProviders.length > 0 && (
+              {/* Identity Provider for JWKS auth */}
+              {supportsIdentityProvider && identityProviders.length > 0 && (
+                <SettingsSection
+                  title="Identity provider"
+                  description="The issuer whose JWTs incoming requests may authenticate with."
+                >
                   <div className="space-y-2">
                     <Label>
                       {agentType === "agent"
@@ -3847,25 +3863,23 @@ export function AgentForm({
                       </SelectContent>
                     </Select>
                   </div>
-                )}
+                </SettingsSection>
+              )}
 
-                {/* Labels classify the finished configuration, so they stay at
-                    the bottom of the Advanced step. */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex min-w-0 flex-1 items-center gap-2">
-                      <Label>Labels</Label>
-                    </div>
-                  </div>
-                  <ProfileLabels
-                    ref={agentLabelsRef}
-                    labels={labels}
-                    onLabelsChange={setLabels}
-                    showLabel={false}
-                  />
-                </div>
-              </div>
-            </div>
+              {/* Labels classify the finished configuration, so they stay at
+                    the end of the panel. */}
+              <SettingsSection
+                title="Labels"
+                description={`Key/value pairs for grouping and filtering this ${agentTypeDisplayName[agentType] || "agent"}.`}
+              >
+                <ProfileLabels
+                  ref={agentLabelsRef}
+                  labels={labels}
+                  onLabelsChange={setLabels}
+                  showLabel={false}
+                />
+              </SettingsSection>
+            </SettingsSectionGroup>
           )}
         </div>
       </fieldset>
@@ -3957,13 +3971,6 @@ export function AgentForm({
       )}
     </form>
   );
-}
-
-function formatSettingsList(parts: Array<string | null>) {
-  const values = parts.filter((part): part is string => part !== null);
-  if (values.length <= 1) return values[0] ?? "";
-  if (values.length === 2) return values.join(" and ");
-  return `${values.slice(0, -1).join(", ")}, and ${values.at(-1)}`;
 }
 
 type AgentFormFields = {

@@ -64,12 +64,19 @@ type AgentReferenceData = {
 export function AgentChatAppsEditor({
   agent,
   readOnly = false,
+  showHeading = true,
   onDirtyChange,
   standaloneSave = true,
   onSaveHandlerChange,
 }: {
   agent: Agent;
   readOnly?: boolean;
+  /**
+   * Off where the host already names the section — a settings surface puts
+   * the title in its own label column, and a second one inside the editor
+   * would say it twice.
+   */
+  showHeading?: boolean;
   onDirtyChange?: (isDirty: boolean) => void;
   standaloneSave?: boolean;
   onSaveHandlerChange?: (handler: (() => Promise<boolean>) | null) => void;
@@ -524,18 +531,24 @@ export function AgentChatAppsEditor({
   }
 
   return (
-    <section aria-labelledby="chat-apps-heading" className="space-y-4">
-      <div className="space-y-1.5">
-        <div className="flex items-center gap-2">
-          <MessagesSquare className="size-4 text-muted-foreground" />
-          <h3 id="chat-apps-heading" className="text-base font-semibold">
-            Messaging channels
-          </h3>
+    <section
+      aria-labelledby={showHeading ? "chat-apps-heading" : undefined}
+      aria-label={showHeading ? undefined : "Messaging channels"}
+      className="space-y-4"
+    >
+      {showHeading && (
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2">
+            <MessagesSquare className="size-4 text-muted-foreground" />
+            <h3 id="chat-apps-heading" className="text-base font-semibold">
+              Messaging channels
+            </h3>
+          </div>
+          <p className="max-w-2xl text-sm text-muted-foreground">
+            Set instructions and reply behavior for each assigned channel.
+          </p>
         </div>
-        <p className="max-w-2xl text-sm text-muted-foreground">
-          Set instructions and reply behavior for each assigned channel.
-        </p>
-      </div>
+      )}
 
       <ProviderSetupLinks
         visibleProviders={

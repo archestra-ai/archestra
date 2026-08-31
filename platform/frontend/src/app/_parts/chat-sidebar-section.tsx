@@ -15,7 +15,6 @@ import {
   PinOff,
   Sparkles,
   Square,
-  TerminalSquare,
   Trash2,
   UsersRound,
 } from "lucide-react";
@@ -26,6 +25,7 @@ import { ConversationProjectActions } from "@/app/_parts/conversation-project-ac
 import { CreateProjectFromChatDialog } from "@/app/_parts/create-project-from-chat-dialog";
 import { isScheduledRunConversation } from "@/app/_parts/scheduled-run-sidebar.utils";
 import { AgentIcon } from "@/components/agent-icon";
+import { ExecutionStateIcon } from "@/components/chat/execution-state-icon";
 import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
@@ -685,7 +685,6 @@ export function ChatSidebarSection({
     execution: (typeof executionSessions)[number],
   ) => {
     const active = currentExecutionTaskId === execution.taskId;
-    const terminalState = executionStateIcon(execution.state);
     const menuKey = `execution:${execution.taskId}`;
     const isMenuOpen = openMenuId === menuKey;
     const isEditing = editingExecutionId === execution.taskId;
@@ -720,20 +719,10 @@ export function ChatSidebarSection({
               className="cursor-pointer flex-1"
             >
               <span className="flex min-w-0 flex-1 items-center gap-2">
-                {terminalState.spinning ? (
-                  <Loader2
-                    aria-label={terminalState.label}
-                    className={cn(
-                      "size-3.5 shrink-0 animate-spin",
-                      terminalState.className,
-                    )}
-                  />
-                ) : (
-                  <TerminalSquare
-                    aria-label={terminalState.label}
-                    className={cn("size-3.5 shrink-0", terminalState.className)}
-                  />
-                )}
+                <ExecutionStateIcon
+                  state={execution.state}
+                  className="size-3.5"
+                />
                 <TruncatedText
                   message={execution.title}
                   maxLength={MAX_TITLE_LENGTH}
@@ -962,9 +951,9 @@ export function ChatSidebarSection({
     (left, right) =>
       new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime(),
   );
-  // Executions are operational sessions, so do not hide them behind the
-  // conversation-only search palette. Keep the usual number of chat rows and
-  // add every execution row, still sorted as one timeline.
+  // Executions are operational sessions, so keep every one of them visible
+  // instead of counting them against the chat slots — the rows still sort
+  // into the same timeline.
   const visibleSlots = slots + executionSessions.length;
   const showMore = recentUnpinnedChats.length > slots;
 
@@ -1096,39 +1085,4 @@ export function ChatSidebarSection({
       />
     </>
   );
-}
-
-function executionStateIcon(state: string): {
-  label: string;
-  className: string;
-  spinning: boolean;
-} {
-  switch (state) {
-    case "TASK_STATE_SUBMITTED":
-      return {
-        label: "Execution starting",
-        className: "text-amber-500",
-        spinning: true,
-      };
-    case "TASK_STATE_WORKING":
-    case "TASK_STATE_INPUT_REQUIRED":
-      return {
-        label: "Execution running",
-        className: "text-emerald-500",
-        spinning: false,
-      };
-    case "TASK_STATE_FAILED":
-    case "TASK_STATE_REJECTED":
-      return {
-        label: "Execution failed",
-        className: "text-destructive",
-        spinning: false,
-      };
-    default:
-      return {
-        label: "Execution finished",
-        className: "text-muted-foreground",
-        spinning: false,
-      };
-  }
 }

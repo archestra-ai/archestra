@@ -40,6 +40,7 @@ import { computeCanModifyAgent } from "@/components/agent-pages/use-agent-access
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
 import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
+import { createCreatedByColumn } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
@@ -609,6 +610,9 @@ function McpGateways({
         </RowClickShield>
       ),
     },
+    createCreatedByColumn<GatewayData>({
+      accessor: (gateway) => gateway.createdBy,
+    }),
     {
       id: "actions",
       header: "Actions",

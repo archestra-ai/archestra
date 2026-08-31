@@ -30,6 +30,9 @@ vi.mock("@/lib/app.query", () => ({
 
 vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => ({ data: true }),
+  // The cards carry a "Created by" line, which resolves "is this me" against
+  // the session rather than against a display name.
+  useSession: () => ({ data: { user: { id: "user-1" } } }),
 }));
 
 vi.mock("@/lib/config/config.query", () => ({
@@ -72,6 +75,7 @@ type AppListItem = archestraApiTypes.GetAppsResponses["200"]["data"][number];
 
 const ownedApp: Extract<AppListItem, { source: "owned" }> = {
   source: "owned",
+  createdBy: null,
   id: "owned-1",
   slug: "my-owned-app",
   name: "My Owned App",
@@ -94,6 +98,7 @@ const ownedApp: Extract<AppListItem, { source: "owned" }> = {
 
 const externalApp: Extract<AppListItem, { source: "external" }> = {
   source: "external",
+  createdBy: null,
   catalogId: "cat-1",
   mcpServerId: "srv-1",
   scope: "org",

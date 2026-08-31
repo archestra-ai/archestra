@@ -49,6 +49,26 @@ class CreatedByModel {
     );
   }
 
+  /**
+   * Resolve the creators referenced by `rows` and hand each row back with a
+   * `createdBy` field holding the resolved identity.
+   *
+   * `creatorIdOf` names the column that stores it, which differs per entity
+   * (`author_id`, `user_id`, `uploaded_by`, `created_by`). Where that column is
+   * already called `createdBy`, the resolved object replaces the bare id in
+   * place, so nothing has to strip the id afterwards.
+   */
+  static async attach<T>(
+    rows: T[],
+    creatorIdOf: (row: T) => string | null | undefined,
+  ): Promise<(Omit<T, "createdBy"> & { createdBy: CreatedBy | null })[]> {
+    const creators = await CreatedByModel.resolve(rows.map(creatorIdOf));
+    return rows.map((row) => ({
+      ...row,
+      createdBy: lookupCreator(creators, creatorIdOf(row)),
+    }));
+  }
+
   /** The single-row case, for create/update/detail routes. */
   static async resolveOne(
     userId: string | null | undefined,

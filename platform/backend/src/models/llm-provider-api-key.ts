@@ -29,6 +29,7 @@ import type {
 import { decryptSecretValue, isEncryptedSecret } from "@/utils/crypto";
 import { escapeLikePattern } from "@/utils/sql-search";
 import ConversationModel from "./conversation";
+import CreatedByModel from "./created-by";
 
 class LlmProviderApiKeyModel {
   /**
@@ -280,10 +281,13 @@ class LlmProviderApiKeyModel {
       .where(and(...conditions))
       .orderBy(schema.llmProviderApiKeysTable.createdAt);
 
-    return await Promise.all(
-      apiKeys.map((key) =>
-        toApiKeyWithScopeInfo(key, options?.includeSubscriptionInfo === true),
+    return CreatedByModel.attach(
+      await Promise.all(
+        apiKeys.map((key) =>
+          toApiKeyWithScopeInfo(key, options?.includeSubscriptionInfo === true),
+        ),
       ),
+      (key) => key.createdBy,
     );
   }
 
@@ -390,10 +394,13 @@ class LlmProviderApiKeyModel {
       .where(and(...conditions))
       .orderBy(schema.llmProviderApiKeysTable.createdAt);
 
-    return await Promise.all(
-      apiKeys.map((key) =>
-        toApiKeyWithScopeInfo(key, options?.includeSubscriptionInfo === true),
+    return CreatedByModel.attach(
+      await Promise.all(
+        apiKeys.map((key) =>
+          toApiKeyWithScopeInfo(key, options?.includeSubscriptionInfo === true),
+        ),
       ),
+      (key) => key.createdBy,
     );
   }
 

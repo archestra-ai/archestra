@@ -24,6 +24,8 @@ import {
   AppRenderScreenshotModel,
   AppToolModel,
   AppVersionModel,
+  CreatedByModel,
+  lookupCreator,
   McpCatalogLabelModel,
   McpServerModel,
   UserModel,
@@ -237,26 +239,36 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .map((app) => app.authorId as string),
         ),
       ];
-      const [usersByApp, teamsByApp, authorNames, ownedPins, externalPins] =
-        await Promise.all([
-          AppAccessModel.getUserDetailsForApps(owned.map((app) => app.id)),
-          AppAccessModel.getTeamDetailsForApps(owned.map((app) => app.id)),
-          UserModel.getNamesByIds(personalAuthorIds),
-          // Per-user pins (mirrors the projects list): surfaced as `pinnedAt` so
-          // the client can group pinned-first, like the Projects page.
-          AppPinModel.getPinnedAtForApps({
-            userId: user.id,
-            appIds: owned.map((app) => app.id),
-          }),
-          AppPinModel.getPinnedAtForExternalApps({
-            userId: user.id,
-            refs: external.map((catalogApp) => ({
-              mcpServerId: catalogApp.mcpServerId,
-              resourceUri: catalogApp.resourceUri,
-              toolName: catalogApp.toolName,
-            })),
-          }),
-        ]);
+      const [
+        usersByApp,
+        teamsByApp,
+        authorNames,
+        creators,
+        ownedPins,
+        externalPins,
+      ] = await Promise.all([
+        AppAccessModel.getUserDetailsForApps(owned.map((app) => app.id)),
+        AppAccessModel.getTeamDetailsForApps(owned.map((app) => app.id)),
+        UserModel.getNamesByIds(personalAuthorIds),
+        // Every owned app's author, not just the personal-scoped ones
+        // `authorNames` covers: an org-scoped app still has somebody to ask
+        // about it, and that is the whole point of the column.
+        CreatedByModel.resolve(owned.map((app) => app.authorId)),
+        // Per-user pins (mirrors the projects list): surfaced as `pinnedAt` so
+        // the client can group pinned-first, like the Projects page.
+        AppPinModel.getPinnedAtForApps({
+          userId: user.id,
+          appIds: owned.map((app) => app.id),
+        }),
+        AppPinModel.getPinnedAtForExternalApps({
+          userId: user.id,
+          refs: external.map((catalogApp) => ({
+            mcpServerId: catalogApp.mcpServerId,
+            resourceUri: catalogApp.resourceUri,
+            toolName: catalogApp.toolName,
+          })),
+        }),
+      ]);
 
       // An external item's labels are its backing catalog's (edited in the MCP
       // registry), so the one `?labels=` filter spans both halves of the mixed
@@ -303,6 +315,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
             app.authorId !== null
               ? (authorNames.get(app.authorId) ?? null)
               : null,
+          createdBy: lookupCreator(creators, app.authorId),
           viewerRole: viewerRoleOf(app),
           latestVersion: app.latestVersion,
           enabled: app.enabled,
@@ -342,6 +355,9 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const externalItems = external
         .map((catalogApp) => ({
           source: "external" as const,
+          // An external app is somebody else's catalog entry; nobody here
+          // created it, so there is no one to name.
+          createdBy: null,
           catalogId: catalogApp.catalogId,
           mcpServerId: catalogApp.mcpServerId,
           scope: catalogApp.scope,

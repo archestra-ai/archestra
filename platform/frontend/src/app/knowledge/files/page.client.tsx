@@ -17,6 +17,7 @@ import { DirectoryDialog } from "@/app/knowledge/files/_parts/directory-dialog";
 import { EditFileDialog } from "@/app/knowledge/files/_parts/edit-file-dialog";
 import { UploadFileDialog } from "@/app/knowledge/files/_parts/upload-file-dialog";
 import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
+import { createCreatedByColumn } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
   FilePreviewDialog,
@@ -67,6 +68,13 @@ import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 type Row =
   | { kind: "directory"; id: string; directory: KnowledgeDirectory }
   | { kind: "file"; id: string; file: KnowledgeFile };
+
+/** Who added this row, whichever half of the mixed listing it came from. */
+function rowCreatedBy(row: Row) {
+  return row.kind === "directory"
+    ? row.directory.createdBy
+    : row.file.createdBy;
+}
 
 /**
  * The repository's three audiences map onto the app-wide scope vocabulary, so a
@@ -375,11 +383,7 @@ export default function KnowledgeFilesPage() {
                 ? row.original.directory.teamIds
                 : row.original.file.teamIds
             }
-            authorId={
-              row.original.kind === "directory"
-                ? row.original.directory.createdBy
-                : row.original.file.uploadedBy
-            }
+            authorId={rowCreatedBy(row.original)?.id ?? null}
           />
         ),
       },
@@ -422,6 +426,14 @@ export default function KnowledgeFilesPage() {
           </span>
         ),
       },
+      // "Added by" rather than "Created by": a directory is created, but a file
+      // is uploaded, and one header has to be true of both rows in this mixed
+      // listing.
+      createCreatedByColumn<Row>({
+        accessor: rowCreatedBy,
+        header: "Added by",
+        size: 20,
+      }),
       {
         id: "actions",
         header: "Actions",

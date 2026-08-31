@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { AgentIcon } from "@/components/agent-icon";
+import { createCreatedByColumn } from "@/components/created-by-cell";
 import { permanentDeleteRowAction } from "@/components/permanent-delete";
 import { projectVisibilityToScope } from "@/components/projects/project-visibility";
 import { ScopeBadge } from "@/components/scope-badge";
@@ -124,6 +125,9 @@ export function ProjectsTable({
         );
       },
     },
+    createCreatedByColumn<ProjectListItem>({
+      accessor: (project) => project.createdBy,
+    }),
     {
       id: "actions",
       size: 140,
@@ -260,6 +264,9 @@ export function DeletedProjectsTable({
         </span>
       ),
     },
+    createCreatedByColumn<ProjectListItem>({
+      accessor: (project) => project.createdBy,
+    }),
     {
       id: "actions",
       size: 140,

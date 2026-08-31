@@ -22,6 +22,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { createCreatedByColumn } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import {
@@ -747,6 +748,13 @@ function SkillsList() {
         </div>
       ),
     },
+    // Only a standalone skill is authored here; an MCP- or plugin-provided one
+    // comes from its server or marketplace, so there is nobody in this
+    // organization to name for it.
+    createCreatedByColumn<ListedSkill>({
+      accessor: (listed) =>
+        listed.source === "standalone" ? listed.skill.createdBy : null,
+    }),
     {
       id: "actions",
       size: 200,

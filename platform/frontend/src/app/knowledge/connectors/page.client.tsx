@@ -19,6 +19,7 @@ import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connec
 import { ConnectorStatusCell } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { CreateConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/create-connector-dialog";
 import { EditConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/edit-connector-dialog";
+import { createCreatedByColumn } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
   CollectionFilters,
@@ -343,6 +344,9 @@ function ConnectorsList() {
         );
       },
     },
+    createCreatedByColumn<ConnectorItem>({
+      accessor: (connector) => connector.createdBy,
+    }),
     {
       id: "actions",
       header: "Actions",

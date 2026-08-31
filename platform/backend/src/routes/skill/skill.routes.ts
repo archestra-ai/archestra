@@ -1,4 +1,5 @@
 import {
+  CreatedByNullableSchema,
   calculatePaginationMeta,
   createPaginatedResponseSchema,
   MAX_BULK_IDS,
@@ -24,6 +25,8 @@ import { withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {
   AgentModel,
+  CreatedByModel,
+  lookupCreator,
   MemberModel,
   OrganizationModel,
   SkillEnvironmentModel,
@@ -151,6 +154,8 @@ const SkillEnvironmentSchema = z.object({ id: z.string(), name: z.string() });
 
 /** A skill row plus its resource-file count, team assignments, and author. */
 const SkillListItemSchema = SkillResponseSchema.extend({
+  /** The author, in the shape shared by every major object. */
+  createdBy: CreatedByNullableSchema,
   fileCount: z.number(),
   teams: z.array(SkillTeamSchema),
   users: z.array(SkillUserSchema),
@@ -476,6 +481,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         usersBySkill,
         environmentsBySkill,
         authorNames,
+        creators,
         usageUserCounts,
       ] = await Promise.all([
         SkillFileModel.countBySkillIds(skillIds),
@@ -483,6 +489,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         SkillUserModel.getUserDetailsForSkills(skillIds),
         SkillEnvironmentModel.getEnvironmentDetailsForSkills(skillIds),
         UserModel.getNamesByIds(skillAuthorIds),
+        CreatedByModel.resolve(skillAuthorIds),
         SkillUsageEventModel.countDistinctUsersBySkillIds(skillIds),
       ]);
 
@@ -498,6 +505,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           authorName: skill.authorId
             ? (authorNames.get(skill.authorId) ?? null)
             : null,
+          createdBy: lookupCreator(creators, skill.authorId),
           usageUserCount: usageUserCounts.get(skill.id) ?? 0,
         })),
         pagination: calculatePaginationMeta(total, { limit, offset }),

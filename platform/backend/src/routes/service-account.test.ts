@@ -36,6 +36,48 @@ describe("service account routes", () => {
     await app.close();
   });
 
+  test("stamps the acting user as creator and returns them resolved", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/service-accounts",
+      payload: { name: "nightly-sync", role: ADMIN_ROLE_NAME },
+    });
+    expect(created.statusCode).toBe(200);
+    // Name and email both, not just an id: the column exists so somebody can be
+    // contacted, and the caller cannot resolve an id it has no roster for.
+    expect(created.json().createdBy).toEqual({
+      id: user.id,
+      name: user.name || null,
+      email: user.email || null,
+    });
+
+    const listed = await app.inject({
+      method: "GET",
+      url: "/api/service-accounts",
+    });
+    expect(
+      listed.json().find((a: { name: string }) => a.name === "nightly-sync")
+        .createdBy.email,
+    ).toBe(user.email);
+  });
+
+  test("reports no creator for a row that predates creator tracking", async () => {
+    const orphan = await ServiceAccountModel.create({
+      organizationId,
+      name: "legacy-etl",
+      role: ADMIN_ROLE_NAME,
+      createdBy: null,
+    });
+
+    const listed = await app.inject({
+      method: "GET",
+      url: "/api/service-accounts",
+    });
+    expect(
+      listed.json().find((a: { id: string }) => a.id === orphan.id).createdBy,
+    ).toBeNull();
+  });
+
   test("creates, lists, updates, creates a token, and deletes a service account", async () => {
     const createResponse = await app.inject({
       method: "POST",

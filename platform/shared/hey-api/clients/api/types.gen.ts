@@ -13054,6 +13054,11 @@ export type GetAgentsResponses = {
             }>;
             authorName?: string | null;
             authorEmail?: string | null;
+            createdBy?: {
+                id: string;
+                name: string | null;
+                email: string | null;
+            } | null;
             knowledgeBaseIds: Array<string>;
             connectorIds: Array<string>;
             suggestedPrompts: Array<{
@@ -13347,6 +13352,11 @@ export type CreateAgentResponses = {
         }>;
         authorName?: string | null;
         authorEmail?: string | null;
+        createdBy?: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         knowledgeBaseIds: Array<string>;
         connectorIds: Array<string>;
         suggestedPrompts: Array<{
@@ -13579,6 +13589,11 @@ export type GetAllAgentsResponses = {
         }>;
         authorName?: string | null;
         authorEmail?: string | null;
+        createdBy?: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         knowledgeBaseIds: Array<string>;
         connectorIds: Array<string>;
         suggestedPrompts: Array<{
@@ -13866,6 +13881,11 @@ export type GetDefaultMcpGatewayResponses = {
         }>;
         authorName?: string | null;
         authorEmail?: string | null;
+        createdBy?: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         knowledgeBaseIds: Array<string>;
         connectorIds: Array<string>;
         suggestedPrompts: Array<{
@@ -14145,6 +14165,11 @@ export type ImportAgentResponses = {
             }>;
             authorName?: string | null;
             authorEmail?: string | null;
+            createdBy?: {
+                id: string;
+                name: string | null;
+                email: string | null;
+            } | null;
             knowledgeBaseIds: Array<string>;
             connectorIds: Array<string>;
             suggestedPrompts: Array<{
@@ -14437,6 +14462,11 @@ export type GetAgentResponses = {
         }>;
         authorName?: string | null;
         authorEmail?: string | null;
+        createdBy?: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         knowledgeBaseIds: Array<string>;
         connectorIds: Array<string>;
         suggestedPrompts: Array<{
@@ -14723,6 +14753,11 @@ export type UpdateAgentResponses = {
         }>;
         authorName?: string | null;
         authorEmail?: string | null;
+        createdBy?: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         knowledgeBaseIds: Array<string>;
         connectorIds: Array<string>;
         suggestedPrompts: Array<{
@@ -15184,6 +15219,11 @@ export type RestoreAgentVersionResponses = {
         }>;
         authorName?: string | null;
         authorEmail?: string | null;
+        createdBy?: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         knowledgeBaseIds: Array<string>;
         connectorIds: Array<string>;
         suggestedPrompts: Array<{
@@ -15394,6 +15434,11 @@ export type CloneAgentResponses = {
         }>;
         authorName?: string | null;
         authorEmail?: string | null;
+        createdBy?: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         knowledgeBaseIds: Array<string>;
         connectorIds: Array<string>;
         suggestedPrompts: Array<{
@@ -16931,6 +16976,11 @@ export type RestoreAgentResponses = {
         }>;
         authorName?: string | null;
         authorEmail?: string | null;
+        createdBy?: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         knowledgeBaseIds: Array<string>;
         connectorIds: Array<string>;
         suggestedPrompts: Array<{
@@ -20333,6 +20383,11 @@ export type GetAppsResponses = {
                 valueId?: string;
             }>;
             icon: string | null;
+            createdBy: {
+                id: string;
+                name: string | null;
+                email: string | null;
+            } | null;
             source: 'owned';
             id: string;
             slug: string | null;
@@ -20364,6 +20419,11 @@ export type GetAppsResponses = {
                 valueId?: string;
             }>;
             icon: string | null;
+            createdBy: {
+                id: string;
+                name: string | null;
+                email: string | null;
+            } | null;
             source: 'external';
             catalogId: string;
             mcpServerId: string;
@@ -59202,6 +59262,11 @@ export type GetKnowledgeBasesResponses = {
             createdAt: string;
             updatedAt: string;
             deletedAt: string | null;
+            createdBy: {
+                id: string;
+                name: string | null;
+                email: string | null;
+            } | null;
             connectors: Array<{
                 id: string;
                 name: string;
@@ -59315,6 +59380,11 @@ export type CreateKnowledgeBaseResponses = {
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
     };
 };
 
@@ -59492,6 +59562,11 @@ export type GetKnowledgeBaseResponses = {
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
     };
 };
 
@@ -59587,6 +59662,11 @@ export type UpdateKnowledgeBaseResponses = {
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
     };
 };
 
@@ -60222,6 +60302,11 @@ export type GetConnectorsResponses = {
             createdAt: string;
             updatedAt: string;
             deletedAt: string | null;
+            createdBy: {
+                id: string;
+                name: string | null;
+                email: string | null;
+            } | null;
             assignedAgents: Array<{
                 id: string;
                 name: string;
@@ -60694,6 +60779,11 @@ export type CreateConnectorResponses = {
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
     };
 };
 
@@ -61052,6 +61142,11 @@ export type GetConnectorResponses = {
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         totalDocsIngested: number;
     };
 };
@@ -61511,6 +61606,11 @@ export type UpdateConnectorResponses = {
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
     };
 };
 
@@ -63207,6 +63307,7 @@ export type GetConnectorKnowledgeBasesResponses = {
             name: string;
             description: string | null;
             status: string;
+            createdBy: string | null;
             createdAt: string;
             updatedAt: string;
             deletedAt: string | null;
@@ -63833,8 +63934,12 @@ export type GetKnowledgeFilesResponses = {
             mimeType: string;
             sizeBytes: number;
             contentHash: string;
-            uploadedBy: string | null;
             createdAt: string;
+            createdBy: {
+                id: string;
+                name: string | null;
+                email: string | null;
+            } | null;
             knowledgeBases: Array<{
                 id: string;
                 name: string;
@@ -63946,8 +64051,12 @@ export type UploadKnowledgeFileResponses = {
         mimeType: string;
         sizeBytes: number;
         contentHash: string;
-        uploadedBy: string | null;
         createdAt: string;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         knowledgeBases: Array<{
             id: string;
             name: string;
@@ -64050,8 +64159,12 @@ export type PromoteAttachmentToKnowledgeFileResponses = {
         mimeType: string;
         sizeBytes: number;
         contentHash: string;
-        uploadedBy: string | null;
         createdAt: string;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         knowledgeBases: Array<{
             id: string;
             name: string;
@@ -64255,8 +64368,12 @@ export type UpdateKnowledgeFileResponses = {
         mimeType: string;
         sizeBytes: number;
         contentHash: string;
-        uploadedBy: string | null;
         createdAt: string;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         knowledgeBases: Array<{
             id: string;
             name: string;
@@ -64643,9 +64760,13 @@ export type GetKnowledgeDirectoriesResponses = {
         organizationId: string;
         name: string;
         visibility: string;
-        createdBy: string | null;
         createdAt: string;
         updatedAt: string;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         teamIds: Array<string>;
         fileCount: number;
     }>;
@@ -64738,9 +64859,13 @@ export type CreateKnowledgeDirectoryResponses = {
         organizationId: string;
         name: string;
         visibility: string;
-        createdBy: string | null;
         createdAt: string;
         updatedAt: string;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         teamIds: Array<string>;
         fileCount: number;
     };
@@ -64920,9 +65045,13 @@ export type UpdateKnowledgeDirectoryResponses = {
         organizationId: string;
         name: string;
         visibility: string;
-        createdBy: string | null;
         createdAt: string;
         updatedAt: string;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         teamIds: Array<string>;
         fileCount: number;
     };
@@ -66427,6 +66556,11 @@ export type GetLlmOauthClientsResponses = {
             scope: 'personal' | 'team' | 'org';
             authorId: string | null;
             authorName: string | null;
+            createdBy: {
+                id: string;
+                name: string | null;
+                email: string | null;
+            } | null;
             teams: Array<{
                 id: string;
                 name: string;
@@ -66549,6 +66683,11 @@ export type CreateLlmOauthClientResponses = {
         scope: 'personal' | 'team' | 'org';
         authorId: string | null;
         authorName: string | null;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         teams: Array<{
             id: string;
             name: string;
@@ -66750,6 +66889,11 @@ export type UpdateLlmOauthClientResponses = {
         scope: 'personal' | 'team' | 'org';
         authorId: string | null;
         authorName: string | null;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         teams: Array<{
             id: string;
             name: string;
@@ -66855,6 +66999,11 @@ export type RotateLlmOauthClientSecretResponses = {
         scope: 'personal' | 'team' | 'org';
         authorId: string | null;
         authorName: string | null;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         teams: Array<{
             id: string;
             name: string;
@@ -67061,6 +67210,11 @@ export type GetLlmProviderApiKeysResponses = {
         isPrimary: boolean;
         createdAt: string;
         updatedAt: string;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         teamName?: string | null;
         userName?: string | null;
         vaultSecretPath?: string | null;
@@ -67176,6 +67330,7 @@ export type CreateLlmProviderApiKeyResponses = {
         scope: 'personal' | 'team' | 'org';
         userId: string | null;
         teamId: string | null;
+        createdBy: string | null;
         baseUrl: string | null;
         inferenceBaseUrl: string | null;
         extraHeaders: {
@@ -67287,6 +67442,11 @@ export type GetAvailableLlmProviderApiKeysResponses = {
         isPrimary: boolean;
         createdAt: string;
         updatedAt: string;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         teamName?: string | null;
         userName?: string | null;
         vaultSecretPath?: string | null;
@@ -67481,6 +67641,11 @@ export type GetLlmProviderApiKeyResponses = {
         isPrimary: boolean;
         createdAt: string;
         updatedAt: string;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         teamName?: string | null;
         userName?: string | null;
         vaultSecretPath?: string | null;
@@ -67597,6 +67762,7 @@ export type UpdateLlmProviderApiKeyResponses = {
         scope: 'personal' | 'team' | 'org';
         userId: string | null;
         teamId: string | null;
+        createdBy: string | null;
         baseUrl: string | null;
         inferenceBaseUrl: string | null;
         extraHeaders: {
@@ -67700,6 +67866,7 @@ export type ReconnectLlmProviderApiKeyResponses = {
         scope: 'personal' | 'team' | 'org';
         userId: string | null;
         teamId: string | null;
+        createdBy: string | null;
         baseUrl: string | null;
         inferenceBaseUrl: string | null;
         extraHeaders: {
@@ -68150,6 +68317,11 @@ export type GetMcpOauthClientsResponses = {
         scope: 'personal' | 'team' | 'org';
         authorId: string | null;
         authorName: string | null;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         teams: Array<{
             id: string;
             name: string;
@@ -68256,6 +68428,11 @@ export type CreateMcpOauthClientResponses = {
         scope: 'personal' | 'team' | 'org';
         authorId: string | null;
         authorName: string | null;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         teams: Array<{
             id: string;
             name: string;
@@ -68450,6 +68627,11 @@ export type UpdateMcpOauthClientResponses = {
         scope: 'personal' | 'team' | 'org';
         authorId: string | null;
         authorName: string | null;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         teams: Array<{
             id: string;
             name: string;
@@ -68551,6 +68733,11 @@ export type RotateMcpOauthClientSecretResponses = {
         scope: 'personal' | 'team' | 'org';
         authorId: string | null;
         authorName: string | null;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         teams: Array<{
             id: string;
             name: string;
@@ -83096,6 +83283,11 @@ export type GetProjectsResponses = {
         icon: string | null;
         viewerRole: 'owner' | 'shared' | 'admin';
         ownerName: string | null;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         conversationCount: number;
         visibility: 'organization' | 'team' | 'user';
         shareTeamNames: Array<string> | null;
@@ -83196,6 +83388,11 @@ export type CreateProjectResponses = {
         icon: string | null;
         viewerRole: 'owner' | 'shared' | 'admin';
         ownerName: string | null;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         conversationCount: number;
         visibility: 'organization' | 'team' | 'user';
         shareTeamNames: Array<string> | null;
@@ -83296,6 +83493,11 @@ export type CreateProjectFromConversationResponses = {
         icon: string | null;
         viewerRole: 'owner' | 'shared' | 'admin';
         ownerName: string | null;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         conversationCount: number;
         visibility: 'organization' | 'team' | 'user';
         shareTeamNames: Array<string> | null;
@@ -83478,6 +83680,11 @@ export type GetProjectResponses = {
         icon: string | null;
         viewerRole: 'owner' | 'shared' | 'admin';
         ownerName: string | null;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         conversationCount: number;
         visibility: 'organization' | 'team' | 'user';
         shareTeamNames: Array<string> | null;
@@ -83962,6 +84169,11 @@ export type RestoreProjectResponses = {
         icon: string | null;
         viewerRole: 'owner' | 'shared' | 'admin';
         ownerName: string | null;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         conversationCount: number;
         visibility: 'organization' | 'team' | 'user';
         shareTeamNames: Array<string> | null;
@@ -88014,6 +88226,11 @@ export type GetServiceAccountsResponses = {
      */
     200: Array<{
         id: string;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         organizationId: string;
         name: string;
         role: string;
@@ -88110,6 +88327,11 @@ export type CreateServiceAccountResponses = {
      */
     200: {
         id: string;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         organizationId: string;
         name: string;
         role: string;
@@ -88299,6 +88521,11 @@ export type GetServiceAccountResponses = {
      */
     200: {
         id: string;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         organizationId: string;
         name: string;
         role: string;
@@ -88407,6 +88634,11 @@ export type UpdateServiceAccountResponses = {
      */
     200: {
         id: string;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         organizationId: string;
         name: string;
         role: string;
@@ -89671,6 +89903,11 @@ export type GetSkillsResponses = {
             createdAt: string;
             updatedAt: string;
             deletedAt: string | null;
+            createdBy: {
+                id: string;
+                name: string | null;
+                email: string | null;
+            } | null;
             fileCount: number;
             teams: Array<{
                 id: string;
@@ -96729,6 +96966,11 @@ export type GetAllVirtualApiKeysResponses = {
                 name: string;
             }>;
             authorName: string | null;
+            createdBy: {
+                id: string;
+                name: string | null;
+                email: string | null;
+            } | null;
             providerApiKeys: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
                 providerApiKeyId: string;
@@ -96853,6 +97095,11 @@ export type CreateVirtualApiKeyResponses = {
             name: string;
         }>;
         authorName: string | null;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         providerApiKeys: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             providerApiKeyId: string;
@@ -97043,6 +97290,11 @@ export type GetVirtualApiKeyResponses = {
             name: string;
         }>;
         authorName: string | null;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         providerApiKeys: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             providerApiKeyId: string;
@@ -97158,6 +97410,11 @@ export type UpdateVirtualApiKeyResponses = {
             name: string;
         }>;
         authorName: string | null;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         providerApiKeys: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             providerApiKeyId: string;

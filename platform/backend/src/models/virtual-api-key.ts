@@ -28,6 +28,7 @@ import type {
   VirtualApiKeyWithParentInfo,
 } from "@/types";
 import { escapeLikePattern } from "@/utils/sql-search";
+import CreatedByModel from "./created-by";
 
 /** Length of random part (32 bytes = 64 hex chars = 256 bits of entropy) */
 const TOKEN_RANDOM_LENGTH = 32;
@@ -486,6 +487,7 @@ class VirtualApiKeyModel {
       ...virtualKey,
       teams: metadata.teams.get(id) ?? [],
       authorName: metadata.authorName.get(id) ?? null,
+      createdBy: await CreatedByModel.resolveOne(virtualKey.authorId),
       providerApiKeys: mappings,
     };
   }
@@ -820,12 +822,15 @@ class VirtualApiKeyModel {
       VirtualApiKeyModel.getProviderApiKeysForVirtualKeys(rowIds),
     ]);
 
-    const data = rows.map((row) => ({
-      ...row,
-      teams: metadata.teams.get(row.id) ?? [],
-      authorName: metadata.authorName.get(row.id) ?? null,
-      providerApiKeys: mappings.get(row.id) ?? [],
-    }));
+    const data = await CreatedByModel.attach(
+      rows.map((row) => ({
+        ...row,
+        teams: metadata.teams.get(row.id) ?? [],
+        authorName: metadata.authorName.get(row.id) ?? null,
+        providerApiKeys: mappings.get(row.id) ?? [],
+      })),
+      (row) => row.authorId,
+    );
 
     return createPaginatedResult(data, Number(total), pagination);
   }

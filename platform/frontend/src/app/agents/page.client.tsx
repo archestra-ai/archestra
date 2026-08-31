@@ -41,6 +41,7 @@ import { computeCanModifyAgent } from "@/components/agent-pages/use-agent-access
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
 import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
+import { createCreatedByColumn } from "@/components/created-by-cell";
 import {
   DefaultAgentTag,
   offersDefaultPin,
@@ -531,6 +532,9 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         </RowClickShield>
       ),
     },
+    createCreatedByColumn<AgentData>({
+      accessor: (agent) => agent.createdBy,
+    }),
     ...(showEnvironmentColumn
       ? [
           {

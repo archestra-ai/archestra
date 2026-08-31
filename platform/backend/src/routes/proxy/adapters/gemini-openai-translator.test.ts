@@ -314,6 +314,56 @@ describe("Gemini 3 thought signature round-trip", () => {
     ).toBe("run_command");
   });
 
+  test("parallel tool results fold into one Gemini user turn", () => {
+    const { geminiBody } = openaiToGemini({
+      model: "gemini-3.7-flash",
+      messages: [
+        { role: "user", content: "weather in Toronto and Ottawa" },
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              id: "call-1",
+              type: "function",
+              function: {
+                name: "get_weather",
+                arguments: '{"city":"Toronto"}',
+              },
+            },
+            {
+              id: "call-2",
+              type: "function",
+              function: { name: "get_weather", arguments: '{"city":"Ottawa"}' },
+            },
+          ],
+        },
+        { role: "tool", tool_call_id: "call-1", content: "Sunny 22C" },
+        { role: "tool", tool_call_id: "call-2", content: "Rainy 18C" },
+        { role: "assistant", content: "It differs." },
+        { role: "user", content: "thanks" },
+      ],
+    } as unknown as Parameters<typeof openaiToGemini>[0]);
+
+    // Gemini rejects the history when the response-part count does not match
+    // the call turn: both results must land in ONE user turn.
+    expect(geminiBody.contents.map((entry) => entry.role)).toEqual([
+      "user",
+      "model",
+      "user",
+      "model",
+      "user",
+    ]);
+    const responseTurn = geminiBody.contents[2];
+    expect(responseTurn.parts).toHaveLength(2);
+    expect(
+      responseTurn.parts.map(
+        (part) =>
+          (part as { functionResponse: { id: string } }).functionResponse.id,
+      ),
+    ).toEqual(["call-1", "call-2"]);
+  });
+
   test("unsigned tool calls keep plain ids in both directions", () => {
     const response = geminiResponseToOpenai(
       {

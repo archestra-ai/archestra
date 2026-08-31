@@ -150,6 +150,23 @@ export function buildRunnerJob(spec: KubernetesRunnerLaunchSpec): k8s.V1Job {
         metadata: { labels },
         spec: {
           restartPolicy: "Never",
+          // A dedicated runner pool keeps heavy privileged sessions from
+          // pressuring the platform's own nodes. The selector's pairs double
+          // as tolerations so a pool tainted with the same key=value admits
+          // exactly these pods.
+          ...(Object.keys(spec.nodeSelector).length > 0
+            ? {
+                nodeSelector: spec.nodeSelector,
+                tolerations: Object.entries(spec.nodeSelector).map(
+                  ([key, value]) => ({
+                    key,
+                    operator: "Equal",
+                    value,
+                    effect: "NoSchedule",
+                  }),
+                ),
+              }
+            : {}),
           ...(spec.imagePullSecrets.length > 0
             ? {
                 imagePullSecrets: spec.imagePullSecrets.map((name) => ({
@@ -165,6 +182,19 @@ export function buildRunnerJob(spec: KubernetesRunnerLaunchSpec): k8s.V1Job {
               name: "archestra-run",
               emptyDir: { sizeLimit: spec.ephemeralStorageLimit },
             },
+            // A privileged runner is expected to run its own dockerd (kind,
+            // tilt, testcontainers). Docker's overlay2 storage driver cannot
+            // stack on the container's own overlayfs root, and its silent
+            // fallback is vfs — full copies per layer, unusably slow. An
+            // emptyDir gives /var/lib/docker a real (non-overlay) filesystem.
+            ...(spec.privileged
+              ? [
+                  {
+                    name: "docker-lib",
+                    emptyDir: { sizeLimit: spec.ephemeralStorageLimit },
+                  },
+                ]
+              : []),
           ],
           containers: [
             {
@@ -212,6 +242,9 @@ export function buildRunnerJob(spec: KubernetesRunnerLaunchSpec): k8s.V1Job {
               resources: buildResourceRequirements(spec.resources),
               volumeMounts: [
                 { name: "archestra-run", mountPath: RUNNER_RUNTIME_DIR },
+                ...(spec.privileged
+                  ? [{ name: "docker-lib", mountPath: "/var/lib/docker" }]
+                  : []),
               ],
               ...(spec.privileged
                 ? { securityContext: { privileged: true } }

@@ -162,14 +162,23 @@ export const handlers: HttpHandler[] = [
     environments: [],
     defaultAssignedCatalogCount: 0,
   }),
-  // The agent detail page's Configuration tab mounts the messaging-channel
-  // editor inline, so every test that opens an agent reaches these. Nothing
-  // configured and nothing bound: the editor renders its provider setup links
-  // and an empty assignment table without any test having to say so.
+  // Fetched by the agent settings page's messaging-channels section, and by
+  // the record's own Messaging Channels tab. No configured providers and no
+  // bindings keep the strict unhandled-request guard satisfied while the
+  // editor still renders its provider setup links and an empty assignment
+  // table.
   ...getJson("/api/chatops/status", { providers: [] }),
   ...getJson("/api/chatops/bindings", {
     data: [],
-    pagination: { currentPage: 1, limit: 100, total: 0, totalPages: 0 },
+    pagination: {
+      currentPage: 1,
+      limit: 100,
+      total: 0,
+      totalPages: 0,
+      hasNext: false,
+      hasPrev: false,
+    },
+    // The record's tab reads these counts; the settings page does not.
     counts: { configured: 0, unassigned: 0 },
   }),
   ...getJson("/api/teams", teamsSeed),

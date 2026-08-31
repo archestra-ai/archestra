@@ -239,3 +239,105 @@ describe("geminiResponseToOpenai — blocked replies", () => {
     expect(result.choices[0].message.content).toBe("hi");
   });
 });
+
+describe("Gemini 3 thought signature round-trip", () => {
+  const ctx = {
+    chatcmplId: "chatcmpl-test",
+    createdUnix: 1,
+    requestedModel: "gemini-3.7-flash",
+  };
+
+  test("a functionCall's thoughtSignature survives the OpenAI wire format", () => {
+    const response = geminiResponseToOpenai(
+      {
+        candidates: [
+          {
+            finishReason: "STOP",
+            content: {
+              role: "model",
+              parts: [
+                {
+                  functionCall: { name: "run_command", args: { cmd: "ls" } },
+                  thoughtSignature: "sig-abc/123==",
+                },
+              ],
+            },
+          },
+        ],
+      } as Gemini.Types.GenerateContentResponse,
+      ctx,
+    );
+
+    const toolCall = firstToolCall(response);
+    // The wire id carries the signature; the client just echoes it.
+    expect(toolCall.id).toMatch(/^gemsig-/);
+
+    const { geminiBody } = openaiToGemini({
+      model: "gemini-3.7-flash",
+      messages: [
+        { role: "user", content: "list files" },
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [toolCall],
+        },
+        {
+          role: "tool",
+          tool_call_id: toolCall.id,
+          content: "ok",
+        },
+      ],
+    } as unknown as Parameters<typeof openaiToGemini>[0]);
+
+    const modelTurn = geminiBody.contents[1];
+    expect(modelTurn.role).toBe("model");
+    expect(modelTurn.parts[0]).toMatchObject({
+      functionCall: { name: "run_command", args: { cmd: "ls" } },
+      thoughtSignature: "sig-abc/123==",
+    });
+    // The marker never reaches Gemini: functionCall/functionResponse ids match
+    // and are free of the encoding.
+    const functionCallId = (
+      modelTurn.parts[0] as { functionCall: { id?: string } }
+    ).functionCall.id;
+    const toolTurn = geminiBody.contents[2];
+    const functionResponseId = (
+      toolTurn.parts[0] as { functionResponse: { id?: string } }
+    ).functionResponse.id;
+    expect(functionCallId).not.toMatch(/gemsig-/);
+    expect(functionResponseId).toBe(functionCallId);
+  });
+
+  test("unsigned tool calls keep plain ids in both directions", () => {
+    const response = geminiResponseToOpenai(
+      {
+        candidates: [
+          {
+            finishReason: "STOP",
+            content: {
+              role: "model",
+              parts: [{ functionCall: { id: "call-1", name: "fn", args: {} } }],
+            },
+          },
+        ],
+      } as Gemini.Types.GenerateContentResponse,
+      ctx,
+    );
+    const toolCall = firstToolCall(response);
+    expect(toolCall.id).toBe("call-1");
+
+    const { geminiBody } = openaiToGemini({
+      model: "gemini-3.7-flash",
+      messages: [{ role: "assistant", content: null, tool_calls: [toolCall] }],
+    } as unknown as Parameters<typeof openaiToGemini>[0]);
+    expect(geminiBody.contents[0].parts[0]).toEqual({
+      functionCall: { id: "call-1", name: "fn", args: {} },
+    });
+  });
+});
+
+function firstToolCall(response: ReturnType<typeof geminiResponseToOpenai>) {
+  const toolCall = response.choices[0].message.tool_calls?.[0];
+  if (!toolCall) throw new Error("expected a tool call");
+  return toolCall;
+}

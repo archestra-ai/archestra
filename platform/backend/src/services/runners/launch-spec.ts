@@ -329,6 +329,7 @@ export async function buildRunnerLaunchSpec(params: {
         60,
       ephemeralStorageLimit:
         config.agentBackgroundExecution.ephemeralStorageLimit,
+      nodeSelector: config.agentBackgroundExecution.nodeSelector,
       imagePullSecrets: params.imagePullSecrets ?? [],
       effectiveNetworkPolicy: params.effectiveNetworkPolicy,
       inputFileCount: params.inputFiles?.length ?? 0,

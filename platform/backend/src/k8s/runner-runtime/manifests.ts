@@ -95,7 +95,13 @@ function buildRunnerBootstrapScript(): string {
     `  exit ${RUNNER_UNUSABLE_IMAGE_EXIT_CODE}`,
     "fi",
     `printf '%s\\n' "$ARCHESTRA_AGENT_BACKGROUND_EXECUTION_ENTRYPOINT" > ${RUNNER_RUNTIME_DIR}/entry.sh`,
-    `printf '%s\n' '/bin/sh ${RUNNER_RUNTIME_DIR}/entry.sh; status=$?; printf "%s\\n" "$status" > ${exitCodeFile}; echo; echo "[runner] agent session exited"; exit "$status"' > ${RUNNER_RUNTIME_DIR}/session.sh`,
+    // The sleep before the pane exits is the drain for the pipe-pane mirror
+    // below: a one-shot CLI writes its entire result in its final instant, and
+    // a pane that exits with that burst still in the pty buffer takes the
+    // mirror down before it is copied out — the durable transcript (and the
+    // completion message built from it) arrives empty while the pane showed a
+    // full answer.
+    `printf '%s\n' '/bin/sh ${RUNNER_RUNTIME_DIR}/entry.sh; status=$?; printf "%s\\n" "$status" > ${exitCodeFile}; echo; echo "[runner] agent session exited"; sleep 2; exit "$status"' > ${RUNNER_RUNTIME_DIR}/session.sh`,
     // Create the pane before starting the Agent so its output cannot race the
     // pipe setup. A fast one-shot client used to finish before pipe-pane was
     // attached, leaving its durable transcript empty.

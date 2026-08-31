@@ -7,7 +7,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { handleApiError, throwOnApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
 
 export function useChatOpsStatus() {
   return useQuery({
@@ -116,12 +116,45 @@ export function useUpdateChatOpsBinding() {
   });
 }
 
+export function useApplyChatOpsBindingPlan() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      body: archestraApiTypes.ApplyChatOpsBindingPlanData["body"],
+    ) => {
+      const { data, error } = await archestraApiSdk.applyChatOpsBindingPlan({
+        body,
+      });
+      if (error) {
+        handleApiError(error);
+        throw toApiError(error);
+      }
+      return data;
+    },
+    onSuccess: () => {
+      toast.success("Channel changes saved");
+      queryClient.invalidateQueries({ queryKey: ["chatops", "bindings"] });
+    },
+  });
+}
+
 export function useBulkUpdateChatOpsBindings() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (params: { ids: string[]; agentId: string | null }) => {
+    mutationFn: async (params: {
+      ids: string[];
+      agentId: string | null;
+      expectedAgentAssignments?: Array<{
+        id: string;
+        agentId: string | null;
+      }>;
+    }) => {
       const { data, error } = await archestraApiSdk.bulkUpdateChatOpsBindings({
-        body: { ids: params.ids, agentId: params.agentId },
+        body: {
+          ids: params.ids,
+          agentId: params.agentId,
+          expectedAgentAssignments: params.expectedAgentAssignments,
+        },
       });
       if (error) {
         handleApiError(error);
@@ -145,6 +178,7 @@ export function useCreateChatOpsDmBinding() {
     mutationFn: async (params: {
       provider: "ms-teams" | "slack" | "telegram";
       agentId: string | null;
+      requireNoExistingBinding?: true;
     }) => {
       const { data, error } = await archestraApiSdk.createChatOpsDmBinding({
         body: params,

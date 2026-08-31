@@ -38,6 +38,8 @@ export type FormDialogProps = {
   className?: string;
   /** Extra classes for the header block, e.g. `border-b-0` to drop its rule. */
   headerClassName?: string;
+  /** Receives focus when the dialog opens instead of the first body control. */
+  initialFocusRef?: React.RefObject<HTMLElement | null>;
 };
 
 // Flex column + overflow-hidden come from the base DialogContent.
@@ -59,6 +61,7 @@ export function FormDialog({
   isDirty = false,
   className,
   headerClassName,
+  initialFocusRef,
 }: FormDialogProps) {
   const guard = useUnsavedChangesGuard({ isDirty, onOpenChange });
 
@@ -74,6 +77,14 @@ export function FormDialog({
           }
           onEscapeKeyDown={
             preventCloseOnEscape ? (e) => e.preventDefault() : undefined
+          }
+          onOpenAutoFocus={
+            initialFocusRef
+              ? (event) => {
+                  event.preventDefault();
+                  initialFocusRef.current?.focus();
+                }
+              : undefined
           }
         >
           <DialogDismissProvider requestClose={guard.requestClose}>

@@ -5,7 +5,7 @@ import {
   DocsPage,
   getDocsUrl,
 } from "@archestra/shared";
-import { ChevronDown, KeyRound, Mail, MessageCircle } from "lucide-react";
+import { ChevronDown, KeyRound, MessageCircle } from "lucide-react";
 import Link from "next/link";
 import { useId, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -14,18 +14,14 @@ import {
   resolveCandidateBaseUrls,
 } from "@/app/connection/connection-flow.utils";
 import { ConnectionUrlStep } from "@/app/connection/connection-url-step";
-import { AgentEmailSettingsDialog } from "@/app/settings/messaging-channels/email/agent-email-settings-dialog";
 import { AgentChatApps } from "@/components/agent-chat-apps";
 import {
   CodeBlock,
   CodeBlockCopyButton,
 } from "@/components/ai-elements/code-block";
-import { CodeText } from "@/components/code-text";
-import { CopyableCode } from "@/components/copyable-code";
 import { CurlExampleSection } from "@/components/curl-example-section";
 import { McpOauthManagement } from "@/components/mcp-oauth-management";
 import { getManageTokenLink } from "@/components/tokens/manage-token-link";
-import { Button } from "@/components/ui/button";
 import {
   Collapsible,
   CollapsibleContent,
@@ -41,9 +37,7 @@ import {
 } from "@/components/ui/select";
 import { WizardStep } from "@/components/wizard-step";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useAgentEmailAddress } from "@/lib/chatops/incoming-email.query";
 import config from "@/lib/config/config";
-import { useFeature } from "@/lib/config/config.query";
 import { useOrganization } from "@/lib/organization.query";
 import {
   useFetchTeamTokenValue,
@@ -51,10 +45,6 @@ import {
 } from "@/lib/teams/team-token.query";
 import { useFetchUserTokenValue, useUserToken } from "@/lib/user-token.query";
 import { generateUuid } from "@/lib/uuid";
-import {
-  AgentEmailDisabledMessage,
-  EmailNotConfiguredMessage,
-} from "./email-not-configured-message";
 
 type InternalAgent = archestraApiTypes.GetAllAgentsResponses["200"][number];
 
@@ -81,8 +71,6 @@ export function A2AConnectionInstructions({
   const { data: canReadAgentTriggers } = useHasPermissions({
     agentTrigger: ["read"],
   });
-  const incomingEmail = useFeature("incomingEmail");
-  const [emailSettingsOpen, setEmailSettingsOpen] = useState(false);
 
   const tokens = tokensData?.tokens;
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
@@ -126,17 +114,6 @@ export function A2AConnectionInstructions({
   // Mutations for fetching token values
   const fetchUserTokenMutation = useFetchUserTokenValue();
   const fetchTeamTokenMutation = useFetchTeamTokenValue();
-
-  // Email invocation - check both global feature AND agent-level setting
-  const globalEmailEnabled = incomingEmail?.enabled ?? false;
-  const agentEmailEnabled = agent.incomingEmailEnabled ?? false;
-  const emailEnabled = globalEmailEnabled && agentEmailEnabled;
-
-  // Fetch the email address from the backend (uses correct mailbox local part)
-  const { data: emailAddressData } = useAgentEmailAddress(
-    emailEnabled ? agent.id : null,
-  );
-  const agentEmailAddress = emailAddressData?.emailAddress ?? null;
 
   // The A2A protocol surface (SendMessage / SendStreamingMessage / the
   // agent-card.json card) lives under /v2.
@@ -426,92 +403,6 @@ curl -X POST "${a2aEndpoint}" \\
     <div className="space-y-6">
       {/* Chat app assignments live with the agent; provider credentials live in Settings. */}
       {canReadAgentTriggers && <AgentChatApps agent={agent} />}
-
-      {/*
-        Email Invocation - always show, with configuration guidance when not
-        enabled. Laid out like the channels above it: icon + label, then one
-        muted `text-xs` line of prose, then whatever that channel hands the
-        reader to copy. Its guidance used to sit in a `bg-muted/50` panel at
-        `text-sm`, which made the channel that most often has nothing to copy
-        the loudest of the three.
-      */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Mail className="h-4 w-4 text-muted-foreground" />
-            <Label className="text-sm font-medium">Email Invocation</Label>
-          </div>
-          {globalEmailEnabled && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setEmailSettingsOpen(true)}
-            >
-              {agentEmailEnabled ? "Edit settings" : "Enable email"}
-            </Button>
-          )}
-        </div>
-
-        {!globalEmailEnabled ? (
-          <EmailNotConfiguredMessage className={CHANNEL_PROSE_CLASS} />
-        ) : agentEmailEnabled ? (
-          <>
-            <p className={CHANNEL_PROSE_CLASS}>
-              Send an email to invoke this agent. The email body will be used as
-              the first message.
-            </p>
-            {/* Security mode description */}
-            {agent.incomingEmailSecurityMode === "private" && (
-              <p className={CHANNEL_PROSE_CLASS}>
-                <strong className="font-medium">Private mode:</strong> Only
-                emails from registered users with access to this agent will be
-                processed.
-              </p>
-            )}
-            {agent.incomingEmailSecurityMode === "internal" && (
-              <p className={CHANNEL_PROSE_CLASS}>
-                <strong className="font-medium">Internal mode:</strong> Only
-                emails from{" "}
-                <span className="font-mono">
-                  @{agent.incomingEmailAllowedDomain || "your-domain.com"}
-                </span>{" "}
-                will be processed.
-              </p>
-            )}
-            {agent.incomingEmailSecurityMode === "public" && (
-              <p className={CHANNEL_PROSE_CLASS}>
-                <strong className="font-medium">Public mode:</strong> Any email
-                will be processed. Use with caution.
-              </p>
-            )}
-
-            {/* Email address */}
-            {agentEmailAddress && (
-              <CopyableCode
-                value={agentEmailAddress}
-                toastMessage="Email address copied"
-                variant="primary"
-              >
-                <div className="flex items-center gap-2">
-                  <Mail className="h-3 w-3 text-muted-foreground shrink-0" />
-                  <CodeText className="text-xs text-primary break-all">
-                    {agentEmailAddress}
-                  </CodeText>
-                </div>
-              </CopyableCode>
-            )}
-          </>
-        ) : (
-          <AgentEmailDisabledMessage className={CHANNEL_PROSE_CLASS} />
-        )}
-      </div>
-      <AgentEmailSettingsDialog
-        agent={agent}
-        open={emailSettingsOpen}
-        onOpenChange={setEmailSettingsOpen}
-        providerEnabled={globalEmailEnabled}
-      />
     </div>
   );
 

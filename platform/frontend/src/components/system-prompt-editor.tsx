@@ -133,7 +133,7 @@ export function SystemPromptEditor({
           beforeMount={(monaco) => {
             registerSystemPromptCompletions(monaco, templateExpressions);
           }}
-          options={{ ...SHARED_EDITOR_OPTIONS, readOnly }}
+          options={{ ...SHARED_EDITOR_OPTIONS, readOnly, ariaLabel: title }}
         />
       </div>
       <UnparseableExpressionsWarning expressions={unparseableExpressions} />
@@ -267,6 +267,7 @@ function SystemPromptFullScreenDialog({
             options={{
               ...SHARED_EDITOR_OPTIONS,
               readOnly,
+              ariaLabel: title,
               // Room to read it like a document: a minimap to move around a
               // long prompt, folding for its sections, a slightly larger face.
               minimap: { enabled: true },

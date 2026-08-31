@@ -15,7 +15,7 @@ import {
   it,
   vi,
 } from "vitest";
-import { useSession } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { ChannelsSection } from "./channels-section";
 import type { ProviderConfig } from "./types";
 
@@ -23,6 +23,7 @@ const API_ORIGIN = "http://localhost:9000";
 
 vi.mock("next/navigation");
 vi.mock("sonner");
+vi.mock("@/components/editor");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/hooks/use-app-name");
 
@@ -80,6 +81,9 @@ beforeEach(() => {
   vi.mocked(useSession).mockReturnValue({
     data: { user: { id: "user-1", email: "admin@example.com" } },
   } as unknown as ReturnType<typeof useSession>);
+  vi.mocked(useHasPermissions).mockReturnValue({
+    data: true,
+  } as ReturnType<typeof useHasPermissions>);
   patched = [];
   archestraApiClient.setConfig({ baseUrl: API_ORIGIN });
   const bindings = [
@@ -107,7 +111,7 @@ beforeEach(() => {
         providers: [{ id: "slack", displayName: "Slack", configured: true }],
       }),
     ),
-    http.get(`${API_ORIGIN}/api/agents`, () =>
+    http.get(`${API_ORIGIN}/api/agents/all`, () =>
       HttpResponse.json([
         { id: AGENT_ID, name: "Support Bot", scope: "org", authorId: null },
       ]),
@@ -216,11 +220,16 @@ describe("channels table — per-channel instructions", () => {
     expect(textarea).toHaveValue(INSTRUCTIONS);
     await user.clear(textarea);
     await user.type(textarea, "Reply with the deploy status only.");
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(
+      screen.getByRole("button", { name: "Save channel details" }),
+    );
 
     await waitFor(() =>
       expect(patched).toEqual([
-        { channelInstructions: "Reply with the deploy status only." },
+        {
+          answerAllMessages: false,
+          channelInstructions: "Reply with the deploy status only.",
+        },
       ]),
     );
     expect(row).toBeInTheDocument();
@@ -232,10 +241,14 @@ describe("channels table — per-channel instructions", () => {
 
     await user.click(await screen.findByRole("button", { name: "Edit" }));
     await user.clear(await screen.findByLabelText("Channel instructions"));
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(
+      screen.getByRole("button", { name: "Save channel details" }),
+    );
 
     await waitFor(() =>
-      expect(patched).toEqual([{ channelInstructions: null }]),
+      expect(patched).toEqual([
+        { answerAllMessages: false, channelInstructions: null },
+      ]),
     );
   });
 
@@ -284,7 +297,9 @@ describe("channels table — per-channel instructions", () => {
     await user.click(textarea);
     await user.paste("x".repeat(4001));
 
-    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Save channel details" }),
+    ).toBeDisabled();
     expect(patched).toEqual([]);
   });
 });

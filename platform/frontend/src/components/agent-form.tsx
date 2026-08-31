@@ -5,7 +5,6 @@ import {
   type AgentType,
   type archestraApiTypes,
   BLOCKED_PASSTHROUGH_HEADERS,
-  BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS,
   BUILT_IN_AGENT_IDS,
   DEFAULT_AGENT_SYSTEM_PROMPT,
   DocsPage,
@@ -34,7 +33,6 @@ import {
   InfoIcon,
   PackageSearch,
   Plus,
-  RotateCcw,
   Settings2,
   Unplug,
   User,
@@ -55,6 +53,7 @@ import {
   AgentBackgroundExecutionFields,
   type BackgroundExecutionConfig,
 } from "@/components/agent-background-execution-fields";
+import { AgentChatAppsEditor } from "@/components/agent-chat-apps";
 import {
   AgentHooksEditor,
   type AgentHooksEditorRef,
@@ -215,6 +214,7 @@ import {
   shouldShowDescriptionField,
   TOOL_CONNECTION_PROMPTING,
 } from "./agent-form.utils";
+import { AgentBackgroundExecutionCard } from "./agent-pages/agent-background-execution-card";
 
 type Agent = archestraApiTypes.GetAllAgentsResponses["200"][number];
 type ToolExposureMode = Agent["toolExposureMode"];
@@ -895,6 +895,9 @@ export function AgentForm({
   const shouldLoadKnowledgeSources = true;
   const shouldLoadLlmConfiguration = agentType === "agent";
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
+  const { data: canReadAgentTriggers } = useHasPermissions({
+    agentTrigger: ["read"],
+  });
   const { data: allInternalAgents = [] } = useDelegationTargetAgents({
     enabled: supportsSubagents && !!canReadAgents,
   });
@@ -1155,6 +1158,16 @@ export function AgentForm({
   const [passthroughHeaders, setPassthroughHeaders] = useState<string[]>([]);
   const [backgroundExecution, setBackgroundExecution] =
     useState<BackgroundExecutionConfig | null>(null);
+  const [channelAssignmentsDirty, setChannelAssignmentsDirty] = useState(false);
+  const channelAssignmentsSaveRef = useRef<(() => Promise<boolean>) | null>(
+    null,
+  );
+  const registerChannelAssignmentsSave = useCallback(
+    (handler: (() => Promise<boolean>) | null) => {
+      channelAssignmentsSaveRef.current = handler;
+    },
+    [],
+  );
   const [toolExposureMode, setToolExposureMode] =
     useState<ToolExposureMode>("full");
   const [missingCredentialBehavior, setMissingCredentialBehavior] =
@@ -2017,7 +2030,6 @@ export function AgentForm({
           id: agent.id,
           data: {
             builtInAgentConfig,
-            systemPrompt: trimmedSystemPrompt || null,
             ...(llmSelectionChanged && {
               llmApiKeyId: llmApiKeyId || null,
               modelId: llmModel || null,
@@ -2042,7 +2054,6 @@ export function AgentForm({
                 description: normalizedDescription,
               }),
               ...(isInternalAgent && {
-                systemPrompt: trimmedSystemPrompt || null,
                 suggestedPrompts: validSuggestedPrompts,
                 ...(llmSelectionChanged && {
                   llmApiKeyId: llmApiKeyId || null,
@@ -2388,8 +2399,29 @@ export function AgentForm({
       toast.error("Please select at least one team");
       return;
     }
+    if (channelAssignmentsDirty) {
+      const saveChannelAssignments = channelAssignmentsSaveRef.current;
+      if (!saveChannelAssignments) {
+        toast.error(
+          "Messaging channels are not ready. Wait for the channel list to load. Then save again.",
+        );
+        return;
+      }
+      setIsSaving(true);
+      if (!(await saveChannelAssignments())) {
+        setIsSaving(false);
+        return;
+      }
+    }
     await performSave();
-  }, [name, isAdmin, scope, assignedTeamIds, performSave]);
+  }, [
+    name,
+    isAdmin,
+    scope,
+    assignedTeamIds,
+    channelAssignmentsDirty,
+    performSave,
+  ]);
 
   const conflictingToolCount = environmentConflicts.conflictingToolIds.length;
   const removeConflictingToolsLabel = `Remove ${conflictingToolCount} incompatible tool${
@@ -2444,6 +2476,7 @@ export function AgentForm({
     !readOnly &&
     initialSnapshotRef.current !== null &&
     (hasUnsavedChanges(initialSnapshotRef.current, currentSnapshot) ||
+      channelAssignmentsDirty ||
       personalDefaultChanged ||
       hasPendingToolChanges ||
       hasUnsavedChanges(
@@ -2701,40 +2734,27 @@ export function AgentForm({
                 </div>
               )}
 
-              {/* Section 2: Instruction (Agent only) */}
-              {isInternalAgent && (
+              {agentType === "agent" && agent && canReadAgentTriggers && (
+                <div className="p-4">
+                  <AgentChatAppsEditor
+                    agent={agent}
+                    readOnly={readOnly}
+                    onDirtyChange={setChannelAssignmentsDirty}
+                    standaloneSave={false}
+                    onSaveHandlerChange={registerChannelAssignmentsSave}
+                  />
+                </div>
+              )}
+
+              {/* Instructions are configured while creating an Agent, then
+                  intentionally saved in isolation from its detail page. */}
+              {isInternalAgent && !agent && (
                 <div className="p-4">
                   <SystemPromptEditor
                     value={systemPrompt}
                     onChange={setSystemPrompt}
                     variant="section"
                     builtInAgentId={builtInAgentName}
-                    headerExtra={
-                      isBuiltIn && builtInAgentName ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="shrink-0"
-                          disabled={
-                            systemPrompt ===
-                            (BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS[
-                              builtInAgentName
-                            ] ?? "")
-                          }
-                          onClick={() =>
-                            setSystemPrompt(
-                              BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS[
-                                builtInAgentName
-                              ] ?? "",
-                            )
-                          }
-                        >
-                          <RotateCcw className="size-4" />
-                          Reset to Default
-                        </Button>
-                      ) : undefined
-                    }
                   />
                 </div>
               )}
@@ -2804,8 +2824,8 @@ export function AgentForm({
                         </div>
                       </CollapsibleTrigger>
                     ) : (
-                      <div className="flex items-center justify-between p-4">
-                        <div>
+                      <div className="flex flex-col items-stretch gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
                           <h3 className="text-base font-semibold">
                             Suggested Prompts
                           </h3>
@@ -2819,6 +2839,7 @@ export function AgentForm({
                         <Button
                           type="button"
                           variant="outline"
+                          className="self-start"
                           size="sm"
                           onClick={() => {
                             setSuggestedPrompts([
@@ -3673,10 +3694,18 @@ export function AgentForm({
                   </p>
                 </div>
                 {agentType === "agent" && agentBackgroundExecutionEnabled && (
-                  <AgentBackgroundExecutionFields
-                    value={backgroundExecution}
-                    onChange={setBackgroundExecution}
-                  />
+                  <>
+                    <AgentBackgroundExecutionFields
+                      value={backgroundExecution}
+                      onChange={setBackgroundExecution}
+                    />
+                    {agent?.backgroundExecution?.credentials && (
+                      <AgentBackgroundExecutionCard
+                        agentId={agent.id}
+                        credentials={agent.backgroundExecution.credentials}
+                      />
+                    )}
+                  </>
                 )}
 
                 {/* Security (LLM Proxy and Agent only) */}

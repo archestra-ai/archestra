@@ -51,11 +51,11 @@ To disable Group Privacy: in BotFather, `/mybots` → your bot → Bot Settings 
 
 In supergroups with Topics enabled, each forum topic is a separate conversation for the agent.
 
-Each chat becomes available for assignment after Archestra discovers it. Groups appear when the bot is added; DMs appear when the account is linked. To assign a chat, open the agent that should answer it and use **Chat Apps** → **Manage channels**.
+Each chat becomes available for assignment after Archestra discovers it. Groups appear when you add the bot. Direct messages appear when you link the account. To assign a chat, open the agent and select **Edit** → **Configuration** → **Messaging channels**.
 
 ### Channel Instructions
 
-Each chat can carry its own instructions for the agent — free text you write from **Chat Apps** on the assigned agent's page. Archestra sends them to the agent with every message in that chat, alongside the agent's own instructions. Where the two disagree, the chat's instructions win, so one agent can behave differently in each chat it answers in.
+Each chat can carry its own instructions for the agent. Open the agent, then select **Edit** → **Configuration** → **Messaging channels**. Archestra sends these instructions with every message in that chat. Chat instructions take priority over the agent's system prompt.
 
 Chat instructions add to what the agent does. They never take an ability away. Anything they don't mention, the agent handles as usual.
 

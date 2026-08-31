@@ -146,7 +146,7 @@ export function AgentEmailSettingsDialog({
                     </div>
                     <p className="text-sm text-muted-foreground">
                       When enabled, this agent can be triggered from its unique
-                      email alias.
+                      email address.
                     </p>
                   </div>
                   <FormField
@@ -245,7 +245,7 @@ export function AgentEmailSettingsDialog({
               <div className="rounded-lg border bg-background p-4">
                 <div className="flex items-center gap-2 text-sm font-medium">
                   <ShieldCheck className="h-4 w-4" />
-                  Agent email alias
+                  Agent email address
                 </div>
                 {providerEnabled ? (
                   incomingEmailEnabled ? (
@@ -267,7 +267,7 @@ export function AgentEmailSettingsDialog({
                 ) : (
                   <p className="mt-2 text-sm text-muted-foreground">
                     Configure the incoming email provider first to generate
-                    agent aliases.
+                    agent email addresses.
                   </p>
                 )}
               </div>
@@ -279,7 +279,9 @@ export function AgentEmailSettingsDialog({
                 </div>
                 <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
                   <li>The email body becomes the agent's first message.</li>
-                  <li>The alias routes the request to this specific agent.</li>
+                  <li>
+                    The email address routes the request to this specific agent.
+                  </li>
                   <li>Replies continue the same conversation thread.</li>
                 </ul>
               </div>

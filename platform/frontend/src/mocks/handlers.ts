@@ -243,6 +243,31 @@ export const handlers: HttpHandler[] = [
   ...patchJson("/api/agents/:id", makeAgent()),
   ...deleteJson("/api/agents/:id"),
 
+  // Messaging channels are mounted in the agent configuration step. Keep
+  // clone/edit integration tests at the HTTP boundary with a quiet default.
+  ...getJson("/api/chatops/status", {
+    providers: [
+      { id: "slack", configured: false },
+      { id: "ms-teams", configured: false },
+      { id: "telegram", configured: false },
+    ],
+  }),
+  ...getJson("/api/chatops/bindings", {
+    data: [],
+    pagination: {
+      currentPage: 1,
+      limit: 100,
+      total: 0,
+      totalPages: 0,
+      hasNext: false,
+      hasPrev: false,
+    },
+    counts: { configured: 0, unassigned: 0 },
+    workspaces: [],
+    hasDmBinding: false,
+    workspacesWithUnmentionedTraffic: [],
+  }),
+
   // Chat / role list / model availability — fired by the agent dialog +
   // sidebar. Default empty so dialog open doesn't blow up the leak guard.
   ...getJson("/api/chat/conversations", []),

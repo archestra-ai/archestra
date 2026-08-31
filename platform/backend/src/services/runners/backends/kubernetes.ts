@@ -56,7 +56,9 @@ class KubernetesRunnerBackend implements RunnerBackend {
     session: AgentRun;
     abortSignal?: AbortSignal;
   }): Promise<void> {
-    const deadline = Date.now() + POD_START_TIMEOUT_MS;
+    const deadline =
+      Date.now() +
+      config.agentBackgroundExecution.podStartTimeoutSeconds * 1000;
 
     while (!params.abortSignal?.aborted) {
       const pod = await runnerRuntimeManager.findPodPhase(params.session);
@@ -145,7 +147,6 @@ export const kubernetesRunnerBackend = new KubernetesRunnerBackend();
 
 const POD_START_POLL_MS = 1_000;
 /** An image pull on a cold node is the slow case this has to tolerate. */
-const POD_START_TIMEOUT_MS = 5 * 60_000;
 /** From the start of the session: a task's own output is the whole transcript. */
 const RUNNER_LOG_TAIL_LINES = Number.MAX_SAFE_INTEGER;
 

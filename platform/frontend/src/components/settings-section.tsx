@@ -62,7 +62,9 @@ export function SettingsSection({
   return (
     <section
       className={cn(
-        "grid gap-x-8 gap-y-4 py-8 first:pt-0 last:pb-0",
+        // No `last:pb-0`: the save row that follows a panel draws its own top
+        // border, and zeroing the padding left the last field sitting on it.
+        "grid gap-x-8 gap-y-4 py-8 first:pt-0",
         hasLabel && "md:grid-cols-[12rem_minmax(0,1fr)]",
         className,
       )}

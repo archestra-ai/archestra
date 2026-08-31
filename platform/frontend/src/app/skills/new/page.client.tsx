@@ -381,7 +381,14 @@ function NewSkillWizard() {
                   <div className="rounded-lg border p-6">
                     <SkillAccessFields draft={draft} onChange={patchDraft} />
                   </div>
-                  <WizardFooter>
+                  {/*
+                   * No top rule here. The footer's separator earns its keep on
+                   * the content step, where the tall editor scrolls underneath
+                   * it; this step is a couple of short fields that always fit,
+                   * so the rule never separates anything and just reads as a
+                   * second line stacked under the card's own bottom border.
+                   */}
+                  <WizardFooter className="border-t-0">
                     <Button
                       variant="outline"
                       onClick={() => setStep("content")}

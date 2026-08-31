@@ -12,6 +12,7 @@ import { AgentEditPage } from "./agent-edit-page";
 
 vi.mock("next/navigation");
 vi.mock("@/lib/agent.query", () => ({ useProfile: vi.fn() }));
+vi.mock("@/lib/hooks/use-app-name");
 
 let access = {
   canModify: true,
@@ -289,6 +290,10 @@ describe("AgentEditPage", () => {
       isPending: false,
     } as unknown as ReturnType<typeof useProfile>);
     mount("agent");
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Edit Agent" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Agents" })).toBeInTheDocument();
     expect(screen.getByText("Agent not found")).toBeInTheDocument();
   });
 
@@ -303,9 +308,32 @@ describe("AgentEditPage", () => {
     } as unknown as ReturnType<typeof useProfile>);
     mount("agent");
 
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Edit Agent" }),
+    ).toBeInTheDocument();
     expect(screen.queryByText("Agent not found")).toBeNull();
     await user.click(screen.getByRole("button", { name: /retry/i }));
     expect(refetch).toHaveBeenCalled();
+  });
+
+  it("keeps the edit header while the record is loading", () => {
+    vi.mocked(useProfile).mockReturnValue({
+      data: undefined,
+      isPending: true,
+    } as unknown as ReturnType<typeof useProfile>);
+    mount("mcp_gateway");
+
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Edit MCP Gateway" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Configure the gateway, choose the tools it exposes, and set its advanced options.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "MCP Gateways" }),
+    ).toBeInTheDocument();
   });
 
   it("keeps the wizard and its unsaved edits when the record is deleted mid-edit", async () => {

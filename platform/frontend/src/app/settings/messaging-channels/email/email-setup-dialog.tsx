@@ -120,8 +120,8 @@ export function EmailSetupDialog({
                     1
                   </span>
                   <span className="pt-0.5">
-                    {appName} watches a shared mailbox and maps each alias to a
-                    specific agent.
+                    {appName} watches a shared mailbox and maps each agent email
+                    address to a specific agent.
                   </span>
                 </li>
                 <li className="flex gap-3 text-sm leading-relaxed">
@@ -138,8 +138,8 @@ export function EmailSetupDialog({
                     3
                   </span>
                   <span className="pt-0.5">
-                    {appName} extracts the agent alias, runs the agent, and can
-                    optionally reply by email.
+                    {appName} reads the agent email address, runs the agent, and
+                    can optionally reply by email.
                   </span>
                 </li>
               </ol>

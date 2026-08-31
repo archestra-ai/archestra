@@ -92,6 +92,7 @@ export default function PluginDetailPage({ id }: { id: string }) {
       <PageLayout
         title="Plugins"
         description="Plugins are disabled for this deployment."
+        maxWidth="wizard"
       >
         <div />
       </PageLayout>

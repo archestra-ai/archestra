@@ -58,6 +58,7 @@ describe("SystemPromptEditor", () => {
 
     render(<SystemPromptEditor value="" onChange={vi.fn()} height="120px" />);
 
+    expect(screen.getByRole("textbox", { name: "Instruction" })).toBeVisible();
     expect(screen.getByTestId("editor")).toHaveAttribute(
       "data-height",
       "120px",

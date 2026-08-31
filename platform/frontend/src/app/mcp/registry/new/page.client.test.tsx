@@ -5,6 +5,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("next/navigation");
 vi.mock("@/lib/organization.query");
 vi.mock("@/lib/mcp/internal-mcp-catalog.query");
+vi.mock("@/lib/hooks/use-app-name", () => ({
+  useAppName: () => "Archestra",
+}));
 
 vi.mock("../_parts/catalog-setup-wizard", () => ({
   SetupStepper: () => <div data-testid="setup-stepper" />,
@@ -24,7 +27,7 @@ vi.mock("../_parts/mcp-catalog-form", () => ({
   ),
 }));
 
-import { useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   useCreateInternalMcpCatalogItem,
   useInternalMcpCatalog,
@@ -44,6 +47,7 @@ beforeEach(() => {
   vi.mocked(useSearchParams).mockReturnValue(
     new URLSearchParams() as ReturnType<typeof useSearchParams>,
   );
+  vi.mocked(usePathname).mockReturnValue("/mcp/registry/new");
   vi.mocked(useInternalMcpCatalog).mockReturnValue({
     data: [],
   } as unknown as ReturnType<typeof useInternalMcpCatalog>);
@@ -65,6 +69,26 @@ function renderPage() {
 }
 
 describe("NewMcpCatalogItemPage", () => {
+  it("renders the shared wizard header and registry return link", () => {
+    mockOrganization(true);
+    renderPage();
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Add MCP Server to the Private Registry",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Once you add an MCP server here, it will be available for installation.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "MCP Registry" })).toHaveAttribute(
+      "href",
+      "/mcp/registry",
+    );
+  });
+
   it("shows the source chooser when the online catalog is enabled", () => {
     mockOrganization(true);
     renderPage();

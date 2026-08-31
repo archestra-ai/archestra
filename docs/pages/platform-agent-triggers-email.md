@@ -95,7 +95,7 @@ will invoke that specific agent. You can copy the exact alias from the enabled a
 
 ## Security Modes
 
-Incoming email is disabled by default for all agents. When enabled, you must choose a security mode to control who can invoke the agent via email.
+Incoming email is disabled by default for all agents. Open an agent, then select **Edit** → **Configuration** to enable it. Choose a security mode to control who can invoke the agent by email.
 
 | Mode | Description |
 |------|-------------|

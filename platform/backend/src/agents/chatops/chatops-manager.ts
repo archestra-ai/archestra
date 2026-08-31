@@ -550,6 +550,8 @@ export class ChatOpsManager {
       }).catch(() => {});
     }
 
+    const organizationId = await getDefaultOrganizationId();
+
     // Check for existing binding
     let binding = await ChatOpsChannelBindingModel.findByChannel({
       provider: provider.providerId,
@@ -561,16 +563,18 @@ export class ChatOpsManager {
     // (pre-assigned from the UI before the first real DM interaction)
     const isDm = message.metadata?.channelType === "im";
     if (!binding && isDm && message.senderEmail) {
-      const pending = await ChatOpsChannelBindingModel.findPendingDmBinding(
-        provider.providerId,
-        message.senderEmail,
-      );
+      const pending = await ChatOpsChannelBindingModel.findPendingDmBinding({
+        organizationId,
+        provider: provider.providerId,
+        dmOwnerEmail: message.senderEmail,
+      });
       if (pending) {
-        binding = await ChatOpsChannelBindingModel.fulfillDmBinding(
-          pending.id,
-          message.channelId,
-          message.workspaceId,
-        );
+        binding = await ChatOpsChannelBindingModel.fulfillDmBinding({
+          id: pending.id,
+          organizationId,
+          realChannelId: message.channelId,
+          workspaceId: message.workspaceId,
+        });
         logger.info(
           { bindingId: pending.id, channelId: message.channelId },
           "[ChatOps] Fulfilled pending DM binding with real channel ID",
@@ -582,16 +586,19 @@ export class ChatOpsManager {
     // the pending lookup above misses. Try to find an existing DM binding by
     // email and update its channelId to the new one, preserving the agentId.
     if (!binding && isDm && message.senderEmail) {
-      const existingDm = await ChatOpsChannelBindingModel.findDmBindingByEmail(
-        provider.providerId,
-        message.senderEmail,
-      );
+      const existingDm =
+        await ChatOpsChannelBindingModel.findDmBindingByEmailInOrganization({
+          organizationId,
+          provider: provider.providerId,
+          dmOwnerEmail: message.senderEmail,
+        });
       if (existingDm) {
-        binding = await ChatOpsChannelBindingModel.fulfillDmBinding(
-          existingDm.id,
-          message.channelId,
-          message.workspaceId,
-        );
+        binding = await ChatOpsChannelBindingModel.fulfillDmBinding({
+          id: existingDm.id,
+          organizationId,
+          realChannelId: message.channelId,
+          workspaceId: message.workspaceId,
+        });
         logger.info(
           { bindingId: existingDm.id, channelId: message.channelId },
           "[ChatOps] Updated existing DM binding with new channel ID",
@@ -605,7 +612,6 @@ export class ChatOpsManager {
         const channelName = isDm
           ? `Direct Message - ${message.senderEmail}`
           : await provider.getChannelName(message.channelId);
-        const organizationId = await getDefaultOrganizationId();
         binding = await ChatOpsChannelBindingModel.upsertByChannel({
           organizationId,
           provider: provider.providerId,

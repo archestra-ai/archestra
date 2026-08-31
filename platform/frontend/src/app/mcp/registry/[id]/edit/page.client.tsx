@@ -1,10 +1,11 @@
 "use client";
 
 import { ArrowLeft, ArrowRight, PackageX } from "lucide-react";
-import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useRef } from "react";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { PageBackLink } from "@/components/page-back-link";
+import { PageLayout } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,21 +37,45 @@ import type { CatalogItem } from "../../_parts/mcp-server-card";
 export function McpCatalogItemEditPage({ id }: { id: string }) {
   const { data: catalogItems, isPending } = useInternalMcpCatalog({});
   const item = catalogItems?.find((catalogItem) => catalogItem.id === id);
+  const navigation = useSetupNavigation();
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
-      <Button
-        variant="ghost"
-        size="sm"
-        className="-ml-2 text-muted-foreground"
-        asChild
-      >
-        <Link href={`/mcp/registry/${id}`}>
-          <ArrowLeft className="h-4 w-4" />
-          Back to server
-        </Link>
-      </Button>
-
+    <PageLayout
+      maxWidth="wizard"
+      title={
+        item ? (
+          <span className="flex min-w-0 items-center gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-muted/40">
+              <McpCatalogIcon icon={item.icon} catalogId={item.id} size={24} />
+            </span>
+            <span className="min-w-0 truncate">Edit {item.name}</span>
+            <Badge variant="secondary" className="capitalize font-normal">
+              {item.serverType}
+            </Badge>
+          </span>
+        ) : (
+          <span>Edit MCP Server</span>
+        )
+      }
+      documentTitle={item ? `Edit ${item.name}` : "Edit MCP Server"}
+      description={
+        item
+          ? "Configure the server, test the connection, review its tools, and set guardrails."
+          : undefined
+      }
+      backLink={
+        <PageBackLink href={`/mcp/registry/${id}`}>Back to server</PageBackLink>
+      }
+      actionButton={
+        item ? (
+          <SetupStepper
+            compact
+            activeStep={navigation.step}
+            onStepClick={navigation.goToStep}
+          />
+        ) : undefined
+      }
+    >
       {isPending ? (
         <div className="space-y-4">
           <Skeleton className="h-8 w-64" />
@@ -69,33 +94,21 @@ export function McpCatalogItemEditPage({ id }: { id: string }) {
           </EmptyHeader>
         </Empty>
       ) : (
-        <SetupWizard item={item} />
+        <SetupWizard item={item} navigation={navigation} />
       )}
-    </div>
+    </PageLayout>
   );
 }
 
-function SetupWizard({ item }: { item: CatalogItem }) {
+function SetupWizard({
+  item,
+  navigation,
+}: {
+  item: CatalogItem;
+  navigation: ReturnType<typeof useSetupNavigation>;
+}) {
   const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-
-  const stepParam = searchParams.get("step");
-  const step: SetupStepId = SETUP_STEPS.some((s) => s.id === stepParam)
-    ? (stepParam as SetupStepId)
-    : // "guardrails" merged into "tools"; keep old deep links working.
-      stepParam === "guardrails"
-      ? "tools"
-      : "configuration";
-  const stepIndex = SETUP_STEPS.findIndex((s) => s.id === step);
-  const nextStep = SETUP_STEPS[stepIndex + 1];
-  const prevStep = SETUP_STEPS[stepIndex - 1];
-
-  const goToStep = (target: SetupStepId) => {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("step", target);
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-  };
+  const { step, nextStep, prevStep, goToStep } = navigation;
 
   // Without a connection the test step's own Install button is the step's
   // single CTA — hide the Next button so the two don't compete.
@@ -112,24 +125,6 @@ function SetupWizard({ item }: { item: CatalogItem }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <McpCatalogIcon icon={item.icon} catalogId={item.id} size={32} />
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-            Edit {item.name}
-            <Badge variant="secondary" className="capitalize">
-              {item.serverType}
-            </Badge>
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Configure the server, test the connection, review its tools, and set
-            guardrails.
-          </p>
-        </div>
-      </div>
-
-      <SetupStepper activeStep={step} onStepClick={goToStep} />
-
       {step === "configuration" && (
         <div className="flex flex-col gap-4">
           {/* SPDX-SnippetBegin */}
@@ -234,7 +229,7 @@ function SetupWizard({ item }: { item: CatalogItem }) {
 
       {/* The configuration step carries its CTA inside the form footer. */}
       {step !== "configuration" && (
-        <div className="flex items-center justify-between">
+        <WizardFooter>
           <div>
             {prevStep && (
               <Button variant="outline" onClick={() => goToStep(prevStep.id)}>
@@ -253,8 +248,34 @@ function SetupWizard({ item }: { item: CatalogItem }) {
           ) : (
             <Button onClick={() => router.push(detailHref)}>Finish</Button>
           )}
-        </div>
+        </WizardFooter>
       )}
     </div>
   );
+}
+
+function useSetupNavigation() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const stepParam = searchParams.get("step");
+  const step: SetupStepId = SETUP_STEPS.some(
+    (candidate) => candidate.id === stepParam,
+  )
+    ? (stepParam as SetupStepId)
+    : stepParam === "guardrails"
+      ? "tools"
+      : "configuration";
+  const stepIndex = SETUP_STEPS.findIndex((candidate) => candidate.id === step);
+
+  return {
+    step,
+    nextStep: SETUP_STEPS[stepIndex + 1],
+    prevStep: SETUP_STEPS[stepIndex - 1],
+    goToStep: (target: SetupStepId) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("step", target);
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+  };
 }

@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { usePathname, useSearchParams } from "next/navigation";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { McpRegistryServerDetailPage } from "./page.client";
 
 const mockUseMcpRegistryServer = vi.fn();
@@ -11,8 +12,21 @@ vi.mock("@/lib/mcp/external-mcp-catalog.query", () => ({
 vi.mock("./readme-markdown", () => ({
   ReadmeMarkdown: ({ content }: { content: string }) => <pre>{content}</pre>,
 }));
+vi.mock("next/navigation");
+vi.mock("@/lib/hooks/use-app-name", () => ({
+  useAppName: () => "Archestra",
+}));
 
 describe("McpRegistryServerDetailPage", () => {
+  beforeEach(() => {
+    vi.mocked(usePathname).mockReturnValue(
+      "/mcp/registry/catalog/mongodb-js__mongodb-mcp-server",
+    );
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams() as ReturnType<typeof useSearchParams>,
+    );
+  });
+
   it("renders server details with tools, configuration, and sidebar sections", () => {
     mockUseMcpRegistryServer.mockReturnValue({
       isPending: false,
@@ -56,7 +70,12 @@ describe("McpRegistryServerDetailPage", () => {
     expect(mockUseMcpRegistryServer).toHaveBeenCalledWith(
       "mongodb-js__mongodb-mcp-server",
     );
-    expect(screen.getByText("MongoDB MCP Server")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "MongoDB MCP Server" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Interact with MongoDB databases."),
+    ).toBeInTheDocument();
     expect(
       screen.getByText("mongodb-js__mongodb-mcp-server"),
     ).toBeInTheDocument();
@@ -76,6 +95,10 @@ describe("McpRegistryServerDetailPage", () => {
     expect(
       screen.getByRole("link", { name: /back to mcp registry/i }),
     ).toHaveAttribute("href", "/mcp/registry");
+    expect(screen.getByRole("link", { name: "GitHub" })).toHaveAttribute(
+      "href",
+      "https://github.com/mongodb-js/mongodb-mcp-server",
+    );
   });
 
   it("shows a not-found state when the server is not in the catalog", () => {

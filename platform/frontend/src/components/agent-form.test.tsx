@@ -54,6 +54,7 @@ const {
   useAgentToolsMock,
   useBulkUpdateAgentToolsMock,
   useInternalMcpCatalogMock,
+  saveChannelChangesMock,
 } = vi.hoisted(() => ({
   /** Stands in for what the agent write hooks reject with once they toasted. */
   ReportedApiError: class ReportedApiError extends Error {
@@ -62,6 +63,7 @@ const {
   pendingSaveChanges: vi.fn(
     () => new Promise<void>((resolve) => setTimeout(resolve, 50)),
   ),
+  saveChannelChangesMock: vi.fn(async () => true),
   useDelegationTargetAgentsMock: vi.fn((): { data: unknown[] } => ({
     data: [],
   })),
@@ -359,6 +361,37 @@ vi.mock("@/components/system-prompt-editor", () => ({
   SystemPromptEditor: () => <div>Mock Instruction Editor</div>,
 }));
 
+vi.mock("@/components/agent-chat-apps", () => ({
+  AgentChatAppsEditor: ({
+    onDirtyChange,
+    onSaveHandlerChange,
+  }: {
+    onDirtyChange?: (dirty: boolean) => void;
+    onSaveHandlerChange?: (handler: (() => Promise<boolean>) | null) => void;
+  }) => {
+    onSaveHandlerChange?.(saveChannelChangesMock);
+    return (
+      <div>
+        Mock Chat Apps Editor
+        <button type="button" onClick={() => onDirtyChange?.(true)}>
+          Mark channel changes dirty
+        </button>
+      </div>
+    );
+  },
+}));
+
+vi.mock("./agent-pages/agent-background-execution-card", () => ({
+  AgentBackgroundExecutionCard: () => <div>Mock Background Credentials</div>,
+}));
+
+vi.mock(
+  "@/app/settings/messaging-channels/email/agent-email-settings-dialog",
+  () => ({
+    AgentEmailSettingsDialog: () => null,
+  }),
+);
+
 vi.mock("@/components/llm-provider-api-key-dropdown", () => ({
   LlmProviderApiKeyDropdown: ({
     onSelectKey,
@@ -620,6 +653,7 @@ vi.mock("@/components/ui/tooltip", () => ({
 }));
 
 beforeEach(() => {
+  saveChannelChangesMock.mockResolvedValue(true);
   vi.mocked(useConnectors).mockReturnValue({
     data: [],
   } as unknown as ReturnType<typeof useConnectors>);
@@ -742,6 +776,18 @@ describe("AgentForm delegation state", () => {
 
     expect(screen.queryByRole("heading", { name: "Subagents" })).toBeNull();
     expect(useAgentDelegationsMock).toHaveBeenCalledWith(undefined);
+  });
+
+  it("hides messaging-channel configuration without trigger read permission", () => {
+    vi.mocked(useHasPermissions).mockImplementation(((
+      permissions: unknown,
+    ) => ({
+      data: !(permissions && "agentTrigger" in (permissions as object)),
+    })) as typeof useHasPermissions);
+
+    render(<AgentForm agentType="agent" agent={baseAgent} />);
+
+    expect(screen.queryByText("Mock Chat Apps Editor")).toBeNull();
   });
 
   it("turns the advisor on in Custom mode by adding it as a subagent", async () => {
@@ -2057,6 +2103,37 @@ describe("AgentForm save payload and failure handling", () => {
     });
   });
 
+  it("saves messaging channel changes before the agent update", async () => {
+    const user = userEvent.setup();
+    renderConfiguration();
+
+    await user.click(
+      screen.getByRole("button", { name: "Mark channel changes dirty" }),
+    );
+    await user.click(screen.getByRole("button", { name: /update/i }));
+
+    await waitFor(() => expect(updateAgent).toHaveBeenCalled());
+    expect(saveChannelChangesMock).toHaveBeenCalledTimes(1);
+    expect(saveChannelChangesMock.mock.invocationCallOrder[0]).toBeLessThan(
+      updateAgent.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("stops the agent update when messaging channel changes fail", async () => {
+    const user = userEvent.setup();
+    saveChannelChangesMock.mockResolvedValueOnce(false);
+    renderConfiguration();
+
+    await user.click(
+      screen.getByRole("button", { name: "Mark channel changes dirty" }),
+    );
+    await user.click(screen.getByRole("button", { name: /update/i }));
+
+    await waitFor(() => expect(saveChannelChangesMock).toHaveBeenCalled());
+    expect(updateAgent).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /update/i })).toBeEnabled();
+  });
+
   it("sends the configuration step's own fields, and nothing the step does not show", async () => {
     // The PUT is partial, so a step writes back only what it renders. Sending
     // a field the step never showed writes this mount's copy of it — and even
@@ -2081,7 +2158,6 @@ describe("AgentForm save payload and failure handling", () => {
       "name",
       "scope",
       "suggestedPrompts",
-      "systemPrompt",
       "teams",
       "users",
     ]);

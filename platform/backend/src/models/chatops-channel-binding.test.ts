@@ -2,6 +2,92 @@ import { describe, expect, test } from "@/test";
 import ChatOpsChannelBindingModel from "./chatops-channel-binding";
 
 describe("ChatOpsChannelBindingModel", () => {
+  test("uses the newest pending direct-message assignment", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const firstAgent = await makeAgent({ organizationId: organization.id });
+    const secondAgent = await makeAgent({ organizationId: organization.id });
+    await ChatOpsChannelBindingModel.create({
+      organizationId: organization.id,
+      provider: "slack",
+      channelId: "dm:pending:user@example.com",
+      workspaceId: null,
+      agentId: firstAgent.id,
+      isDm: true,
+      dmOwnerEmail: "user@example.com",
+    });
+    const newest = await ChatOpsChannelBindingModel.create({
+      organizationId: organization.id,
+      provider: "slack",
+      channelId: "dm:pending:user@example.com",
+      workspaceId: "dm:pending",
+      agentId: secondAgent.id,
+      isDm: true,
+      dmOwnerEmail: "user@example.com",
+    });
+    await ChatOpsChannelBindingModel.updateByIdAndOrganization({
+      id: newest.id,
+      organizationId: organization.id,
+      input: { agentId: secondAgent.id },
+    });
+
+    const pending = await ChatOpsChannelBindingModel.findPendingDmBinding({
+      organizationId: organization.id,
+      provider: "slack",
+      dmOwnerEmail: "user@example.com",
+    });
+
+    expect(pending?.id).toBe(newest.id);
+    expect(pending?.agentId).toBe(secondAgent.id);
+  });
+
+  test("resolves and fulfills pending direct messages only inside their organization", async ({
+    makeOrganization,
+  }) => {
+    const [firstOrganization, secondOrganization] = await Promise.all([
+      makeOrganization(),
+      makeOrganization(),
+    ]);
+    const first = await ChatOpsChannelBindingModel.create({
+      organizationId: firstOrganization.id,
+      provider: "slack",
+      channelId: `dm:pending:${firstOrganization.id}:user@example.com`,
+      workspaceId: "dm:pending",
+      isDm: true,
+      dmOwnerEmail: "user@example.com",
+    });
+    const second = await ChatOpsChannelBindingModel.create({
+      organizationId: secondOrganization.id,
+      provider: "slack",
+      channelId: `dm:pending:${secondOrganization.id}:user@example.com`,
+      workspaceId: "dm:pending",
+      isDm: true,
+      dmOwnerEmail: "user@example.com",
+    });
+
+    const resolved = await ChatOpsChannelBindingModel.findPendingDmBinding({
+      organizationId: firstOrganization.id,
+      provider: "slack",
+      dmOwnerEmail: "user@example.com",
+    });
+    const foreignFulfillment =
+      await ChatOpsChannelBindingModel.fulfillDmBinding({
+        id: second.id,
+        organizationId: firstOrganization.id,
+        realChannelId: "D-foreign",
+        workspaceId: "T-foreign",
+      });
+
+    expect(resolved?.id).toBe(first.id);
+    expect(foreignFulfillment).toBeNull();
+    expect(await ChatOpsChannelBindingModel.findById(second.id)).toMatchObject({
+      channelId: second.channelId,
+      workspaceId: "dm:pending",
+    });
+  });
+
   describe("create", () => {
     test("creates a channel binding with required fields", async ({
       makeAgent,
@@ -25,6 +111,30 @@ describe("ChatOpsChannelBindingModel", () => {
       expect(binding.channelId).toBe("channel-123");
       expect(binding.workspaceId).toBe("workspace-456");
       expect(binding.agentId).toBe(agent.id);
+    });
+
+    test("creates only one pending DM for the same provider and user", async ({
+      makeAgent,
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const agent = await makeAgent({ agentType: "agent" });
+      const input = {
+        organizationId: org.id,
+        provider: "slack" as const,
+        channelId: "dm:pending:user@example.com",
+        workspaceId: "dm:pending",
+        agentId: agent.id,
+        isDm: true,
+        dmOwnerEmail: "user@example.com",
+      };
+
+      const [first, second] = await Promise.all([
+        ChatOpsChannelBindingModel.createPendingDmIfAbsent(input),
+        ChatOpsChannelBindingModel.createPendingDmIfAbsent(input),
+      ]);
+
+      expect([first, second].filter(Boolean)).toHaveLength(1);
     });
   });
 
@@ -263,7 +373,7 @@ describe("ChatOpsChannelBindingModel", () => {
     });
   });
 
-  describe("findDmBindingByEmail", () => {
+  describe("findDmBindingByEmailInOrganization", () => {
     test("finds DM binding by provider and email", async ({
       makeAgent,
       makeOrganization,
@@ -281,21 +391,28 @@ describe("ChatOpsChannelBindingModel", () => {
         dmOwnerEmail: "user@example.com",
       });
 
-      const found = await ChatOpsChannelBindingModel.findDmBindingByEmail(
-        "slack",
-        "user@example.com",
-      );
+      const found =
+        await ChatOpsChannelBindingModel.findDmBindingByEmailInOrganization({
+          organizationId: org.id,
+          provider: "slack",
+          dmOwnerEmail: "user@example.com",
+        });
 
       expect(found).toBeDefined();
       expect(found?.agentId).toBe(agent.id);
       expect(found?.dmOwnerEmail).toBe("user@example.com");
     });
 
-    test("returns null when no DM binding exists", async () => {
-      const found = await ChatOpsChannelBindingModel.findDmBindingByEmail(
-        "slack",
-        "nobody@example.com",
-      );
+    test("returns null when no DM binding exists", async ({
+      makeOrganization,
+    }) => {
+      const organization = await makeOrganization();
+      const found =
+        await ChatOpsChannelBindingModel.findDmBindingByEmailInOrganization({
+          organizationId: organization.id,
+          provider: "slack",
+          dmOwnerEmail: "nobody@example.com",
+        });
 
       expect(found).toBeNull();
     });
@@ -330,14 +447,68 @@ describe("ChatOpsChannelBindingModel", () => {
         dmOwnerEmail: "user@example.com",
       });
 
-      const found = await ChatOpsChannelBindingModel.findDmBindingByEmail(
-        "slack",
-        "user@example.com",
-      );
+      const found =
+        await ChatOpsChannelBindingModel.findDmBindingByEmailInOrganization({
+          organizationId: org.id,
+          provider: "slack",
+          dmOwnerEmail: "user@example.com",
+        });
 
       expect(found).toBeDefined();
       expect(found?.agentId).toBe(agent2.id);
       expect(found?.channelId).toBe("D-new");
+    });
+  });
+
+  describe("findDmBindingByEmailInOrganization", () => {
+    test("does not return a DM binding from another organization", async ({
+      makeAgent,
+      makeOrganization,
+    }) => {
+      const [firstOrganization, secondOrganization] = await Promise.all([
+        makeOrganization(),
+        makeOrganization(),
+      ]);
+      const [firstAgent, secondAgent] = await Promise.all([
+        makeAgent({
+          organizationId: firstOrganization.id,
+          agentType: "agent",
+        }),
+        makeAgent({
+          organizationId: secondOrganization.id,
+          agentType: "agent",
+        }),
+      ]);
+
+      await ChatOpsChannelBindingModel.create({
+        organizationId: firstOrganization.id,
+        provider: "slack",
+        channelId: "D-first",
+        workspaceId: "T-first",
+        agentId: firstAgent.id,
+        isDm: true,
+        dmOwnerEmail: "user@example.com",
+      });
+      await ChatOpsChannelBindingModel.create({
+        organizationId: secondOrganization.id,
+        provider: "slack",
+        channelId: "D-second",
+        workspaceId: "T-second",
+        agentId: secondAgent.id,
+        isDm: true,
+        dmOwnerEmail: "user@example.com",
+      });
+
+      const found =
+        await ChatOpsChannelBindingModel.findDmBindingByEmailInOrganization({
+          organizationId: secondOrganization.id,
+          provider: "slack",
+          dmOwnerEmail: "user@example.com",
+        });
+
+      expect(found?.id).not.toBeUndefined();
+      expect(found?.organizationId).toBe(secondOrganization.id);
+      expect(found?.agentId).toBe(secondAgent.id);
     });
   });
 

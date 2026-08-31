@@ -76,7 +76,7 @@ export default function EmailPage() {
               <p>
                 Incoming email is configured at deployment time. Add the mailbox
                 and provider credentials first, then return here to activate the
-                webhook subscription and agent aliases.
+                webhook subscription and agent email addresses.
               </p>
               <ExternalDocsLink href={docsUrl}>
                 Review the email setup guide

@@ -42,7 +42,6 @@ import { ConnectorStatusPill } from "@/app/knowledge/knowledge-bases/_parts/conn
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { EditConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/edit-connector-dialog";
-import { BackLink } from "@/components/agent-pages/agent-page-shell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { type DetailFact, DetailFacts } from "@/components/detail-facts";
 import {
@@ -52,6 +51,7 @@ import {
 } from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
 import { LoadingState, LoadingWrapper } from "@/components/loading";
+import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RelativeTime } from "@/components/relative-time";
@@ -572,7 +572,7 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
           lastSyncStatus={connector.lastSyncStatus}
         />
       }
-      backLink={<BackLink href={backHref}>{backLabel}</BackLink>}
+      backLink={<PageBackLink href={backHref}>{backLabel}</PageBackLink>}
       description={
         connector.description ? (
           <span className="line-clamp-2 max-w-2xl">

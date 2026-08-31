@@ -7,7 +7,6 @@ import {
   parseFullToolName,
 } from "@archestra/shared";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { BackLink } from "@/components/agent-pages/agent-page-shell";
 import { type DetailFact, DetailFacts } from "@/components/detail-facts";
 import { ExecutedAsBadge } from "@/components/executed-as-badge";
 import { JsonCodeBlock } from "@/components/json-code-block";
@@ -16,6 +15,7 @@ import {
   LockedChatContentUnavailable,
   LockedChatContentUnavailableLabel,
 } from "@/components/locked-chat-content-unavailable";
+import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import {
@@ -234,7 +234,9 @@ function McpToolCallDetail({
           </span>
         }
         documentTitle={toolName ?? method}
-        backLink={<BackLink href="/mcp/logs">Back to MCP Logs</BackLink>}
+        backLink={
+          <PageBackLink href="/mcp/logs">Back to MCP Logs</PageBackLink>
+        }
         // Whether the call succeeded is the one live fact about this record,
         // which is exactly what the header's status slot is for.
         status={
@@ -311,7 +313,7 @@ function ToolCallShell({ children }: { children: React.ReactNode }) {
   return (
     <PageLayout
       title="Tool call"
-      backLink={<BackLink href="/mcp/logs">Back to MCP Logs</BackLink>}
+      backLink={<PageBackLink href="/mcp/logs">Back to MCP Logs</PageBackLink>}
     >
       {children}
     </PageLayout>

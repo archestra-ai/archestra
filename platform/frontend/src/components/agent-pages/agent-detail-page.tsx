@@ -23,6 +23,7 @@ import { AgentVersionHistoryDialog } from "@/components/agent-version-history-di
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { OverviewSummary } from "@/components/overview-summary";
+import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Badge } from "@/components/ui/badge";
@@ -75,7 +76,6 @@ import {
   agentPageKindForType,
   isAgentTypeAllowedOnPage,
 } from "./agent-page-config";
-import { BackLink } from "./agent-page-shell";
 import { AgentSystemPromptCard } from "./agent-system-prompt-card";
 import { useAgentAccess } from "./use-agent-access";
 
@@ -114,7 +114,9 @@ export function AgentDetailPage({
   }, [agent, kind, id, router]);
 
   const backLink = (
-    <BackLink href={agentListHref(kind)}>{backToListLabel(kind)}</BackLink>
+    <PageBackLink href={agentListHref(kind)}>
+      {backToListLabel(kind)}
+    </PageBackLink>
   );
 
   if (isPending || (isLeavingAfterDelete && !agent)) {
@@ -124,6 +126,7 @@ export function AgentDetailPage({
         description=""
         backLink={backLink}
         maxWidth="wizard"
+        minWidth="phone"
       >
         <DetailPageSkeleton />
       </PageLayout>
@@ -140,6 +143,7 @@ export function AgentDetailPage({
         description=""
         backLink={backLink}
         maxWidth="wizard"
+        minWidth="phone"
       >
         <QueryLoadError
           className="border"
@@ -157,6 +161,7 @@ export function AgentDetailPage({
         description=""
         backLink={backLink}
         maxWidth="wizard"
+        minWidth="phone"
       >
         <Empty className="border">
           <EmptyHeader>
@@ -330,6 +335,7 @@ function AgentDetails({
     <PageLayout
       // The wizard's column, so Edit opens in the same one this page reads in.
       maxWidth="wizard"
+      minWidth="phone"
       title={
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-muted/40">
@@ -494,6 +500,10 @@ function AgentDetails({
             <AgentBackgroundExecutionCard
               agentId={agent.id}
               credentials={agent.backgroundExecution?.credentials ?? []}
+              readOnly
+              editHref={
+                canEdit ? agentEditHref(kind, agent.id, "advanced") : undefined
+              }
             />
           )}
 

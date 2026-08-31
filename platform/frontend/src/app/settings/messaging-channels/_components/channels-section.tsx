@@ -17,6 +17,7 @@ import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type MouseEvent, useCallback, useMemo, useRef, useState } from "react";
 import { AgentBadge } from "@/components/agent-badge";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import Divider from "@/components/divider";
 import { EmptyState } from "@/components/empty-state";
 import {
@@ -72,7 +73,7 @@ import {
 } from "@/lib/chatops/chatops.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { cn } from "@/lib/utils";
-import { ChannelInstructionsDialog } from "./channel-instructions-dialog";
+import { ChannelDetailsDialog } from "./channel-details-dialog";
 import { ChannelsEmptyState } from "./channels-empty-state";
 import type { ProviderConfig } from "./types";
 
@@ -144,10 +145,12 @@ export function ChannelsSection({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const rangeSelection = useRef(new BulkRangeSelectionController());
   const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
-  /** Binding whose instructions are open in the editor, if any. */
+  /** Binding whose editable details are open, if any. */
   const [instructionsBindingId, setInstructionsBindingId] = useState<
     string | null
   >(null);
+  const [pendingReassignment, setPendingReassignment] =
+    useState<PendingReassignment | null>(null);
 
   const toggleAll = useCallback((ids: string[], checked: boolean) => {
     setSelectedIds((prev) => {
@@ -191,23 +194,6 @@ export function ChannelsSection({
         authorId: a.authorId,
       })),
     [agents],
-  );
-
-  // For channel rows: exclude personal agents
-  const channelAgentList = useMemo(
-    () => agentList.filter((a) => a.scope !== "personal"),
-    [agentList],
-  );
-
-  // For DM rows: include only the current user's personal agents + non-personal
-  const dmAgentList = useMemo(
-    () =>
-      agentList.filter(
-        (a) =>
-          a.scope !== "personal" ||
-          (a.scope === "personal" && a.authorId === currentUserId),
-      ),
-    [agentList, currentUserId],
   );
 
   // Virtual DM row logic
@@ -292,20 +278,98 @@ export function ChannelsSection({
     [updateUrlParams, clearSelection],
   );
 
-  const handleAssignAgent = (bindingId: string, agentId: string | null) => {
-    updateMutation.mutate({ id: bindingId, agentId });
+  const applyAssignment = async ({
+    ids,
+    agentId,
+    expectedAgentAssignments,
+    includesVirtualDm,
+    clearAfterSuccess,
+  }: AssignmentRequest) => {
+    const mutations: Promise<unknown>[] = [];
+    if (ids.length > 0) {
+      mutations.push(
+        bulkMutation.mutateAsync({ ids, agentId, expectedAgentAssignments }),
+      );
+    }
+    if (includesVirtualDm) {
+      mutations.push(
+        dmMutation.mutateAsync({
+          provider: providerConfig.provider,
+          agentId,
+          requireNoExistingBinding: true,
+        }),
+      );
+    }
+
+    const results = await Promise.all(mutations);
+    const succeeded = results.every(Boolean);
+    if (succeeded && clearAfterSuccess) clearSelection();
+    if (!succeeded) await refetchBindings();
+    return succeeded;
+  };
+
+  const requestAssignment = (request: AssignmentRequest) => {
+    const movedAssignments = request.expectedAgentAssignments.filter(
+      (assignment) =>
+        request.agentId !== null &&
+        assignment.agentId !== null &&
+        assignment.agentId !== request.agentId,
+    );
+    if (movedAssignments.length > 0) {
+      const targetAgent = agentList.find(
+        (agent) => agent.id === request.agentId,
+      );
+      setPendingReassignment({
+        ...request,
+        currentAgentNames: movedAssignments.map(
+          (assignment) =>
+            agentList.find((agent) => agent.id === assignment.agentId)?.name ??
+            "Unknown agent",
+        ),
+        targetAgentName: targetAgent?.name ?? "Unknown agent",
+      });
+      return;
+    }
+    void applyAssignment(request);
+  };
+
+  const handleAssignAgent = ({
+    bindingId,
+    currentAgentId,
+    agentId,
+  }: {
+    bindingId: string;
+    currentAgentId: string | null;
+    agentId: string | null;
+  }) => {
+    requestAssignment({
+      ids: [bindingId],
+      agentId,
+      expectedAgentAssignments: [{ id: bindingId, agentId: currentAgentId }],
+      includesVirtualDm: false,
+      clearAfterSuccess: false,
+    });
   };
 
   const handleToggleAnswerAll = (bindingId: string, answerAll: boolean) => {
     updateMutation.mutate({ id: bindingId, answerAllMessages: answerAll });
   };
 
-  const handleSaveInstructions = (
-    bindingId: string,
-    channelInstructions: string | null,
-  ) => {
+  const handleSaveDetails = (params: {
+    bindingId: string;
+    channelInstructions: string | null;
+    answerAllMessages: boolean;
+  }) => {
+    const binding = bindings.find((item) => item.id === params.bindingId);
     updateMutation.mutate(
-      { id: bindingId, channelInstructions },
+      {
+        id: params.bindingId,
+        channelInstructions: params.channelInstructions,
+        ...(!binding?.isDm &&
+          binding?.provider !== "telegram" && {
+            answerAllMessages: params.answerAllMessages,
+          }),
+      },
       { onSuccess: () => setInstructionsBindingId(null) },
     );
   };
@@ -314,24 +378,21 @@ export function ChannelsSection({
     dmMutation.mutate({ provider: providerConfig.provider, agentId });
   };
 
-  const handleBulkAssign = async (agentId: string | null) => {
+  const handleBulkAssign = (agentId: string | null) => {
     if (selectedIds.size === 0) return;
-    const hasVirtualDm = selectedIds.has(VIRTUAL_DM_ID);
-    const realIds = Array.from(selectedIds).filter(
-      (id) => id !== VIRTUAL_DM_ID,
+    const selectedBindings = bindings.filter((binding) =>
+      selectedIds.has(binding.id),
     );
-
-    const promises: Promise<unknown>[] = [];
-    if (realIds.length > 0) {
-      promises.push(bulkMutation.mutateAsync({ ids: realIds, agentId }));
-    }
-    if (hasVirtualDm) {
-      promises.push(
-        dmMutation.mutateAsync({ provider: providerConfig.provider, agentId }),
-      );
-    }
-    await Promise.all(promises);
-    clearSelection();
+    requestAssignment({
+      ids: selectedBindings.map((binding) => binding.id),
+      agentId,
+      expectedAgentAssignments: selectedBindings.map((binding) => ({
+        id: binding.id,
+        agentId: binding.agentId ?? null,
+      })),
+      includesVirtualDm: selectedIds.has(VIRTUAL_DM_ID),
+      clearAfterSuccess: true,
+    });
   };
 
   const hasActiveFilters =
@@ -351,6 +412,20 @@ export function ChannelsSection({
     selectableIds.every((id) => selectedIds.has(id));
   const someChecked =
     !allChecked && selectableIds.some((id) => selectedIds.has(id));
+  const selectedBindings = bindings.filter((binding) =>
+    selectedIds.has(binding.id),
+  );
+  const selectedDmsOnly =
+    selectedIds.size > 0 &&
+    selectedBindings.every((binding) => binding.isDm) &&
+    selectedBindings.length + Number(selectedIds.has(VIRTUAL_DM_ID)) ===
+      selectedIds.size;
+  const selectedDmsOwnedByCurrentUser = selectedBindings.every(
+    (binding) =>
+      !binding.isDm ||
+      binding.dmOwnerEmail?.toLowerCase() ===
+        session?.user?.email?.toLowerCase(),
+  );
   const handleSelectionClick = useCallback(
     (id: string, event: MouseEvent<HTMLButtonElement>) => {
       event.stopPropagation();
@@ -438,9 +513,12 @@ export function ChannelsSection({
               onClearFilters={hasActiveFilters ? clearFilters : undefined}
               actions={
                 <BulkAssignButton
-                  agents={channelAgentList}
+                  agents={agentList}
+                  currentUserId={currentUserId}
                   selectedCount={selectedIds.size}
-                  isUpdating={bulkMutation.isPending}
+                  selectedDmsOnly={selectedDmsOnly}
+                  selectedDmsOwnedByCurrentUser={selectedDmsOwnedByCurrentUser}
+                  isUpdating={bulkMutation.isPending || dmMutation.isPending}
                   onAssign={handleBulkAssign}
                 />
               }
@@ -529,7 +607,7 @@ export function ChannelsSection({
           </CollectionFilters>
 
           {/* Table */}
-          <div className="overflow-hidden rounded-md border">
+          <div className="max-w-full overflow-x-auto rounded-md border">
             <Table className={CHANNEL_TABLE_MIN_WIDTH}>
               <TableHeader className="bg-muted border-b-2 border-border">
                 <TableRow>
@@ -596,8 +674,8 @@ export function ChannelsSection({
                 <TableBody>
                   <ChannelRows
                     bindings={bindings}
-                    channelAgentList={channelAgentList}
-                    dmAgentList={dmAgentList}
+                    agents={agentList}
+                    currentUserId={currentUserId}
                     providerConfig={providerConfig}
                     providerStatus={providerStatus}
                     onAssignAgent={handleAssignAgent}
@@ -606,7 +684,9 @@ export function ChannelsSection({
                     workspacesWithUnmentionedTraffic={
                       workspacesWithUnmentionedTraffic
                     }
-                    isUpdating={updateMutation.isPending}
+                    isUpdating={
+                      updateMutation.isPending || bulkMutation.isPending
+                    }
                     selectedIds={selectedIds}
                     onSelectionClick={handleSelectionClick}
                     showVirtualDmRow={showVirtualDmRow}
@@ -645,27 +725,57 @@ export function ChannelsSection({
       )}
 
       {instructionsBinding && (
-        <ChannelInstructionsDialog
+        <ChannelDetailsDialog
+          binding={instructionsBinding}
+          assignedAgent={
+            agentList.find(
+              (agent) => agent.id === instructionsBinding.agentId,
+            ) ?? null
+          }
           open
+          readOnly={false}
           onOpenChange={(next) => {
             if (!next) setInstructionsBindingId(null);
           }}
-          channelLabel={
-            instructionsBinding.isDm
-              ? "your direct messages"
-              : `#${instructionsBinding.channelName ?? instructionsBinding.channelId}`
-          }
-          agentName={
-            agentList.find((a) => a.id === instructionsBinding.agentId)?.name ??
-            null
-          }
-          instructions={instructionsBinding.channelInstructions ?? null}
           isSaving={updateMutation.isPending}
-          onSave={(instructions) =>
-            handleSaveInstructions(instructionsBinding.id, instructions)
+          onSave={({ channelInstructions, answerAllMessages }) =>
+            handleSaveDetails({
+              bindingId: instructionsBinding.id,
+              channelInstructions,
+              answerAllMessages,
+            })
           }
         />
       )}
+
+      <DeleteConfirmDialog
+        open={!!pendingReassignment}
+        onOpenChange={(open) => {
+          if (!open && !bulkMutation.isPending && !dmMutation.isPending) {
+            setPendingReassignment(null);
+          }
+        }}
+        title={
+          pendingReassignment?.currentAgentNames.length === 1
+            ? `Move channel to ${pendingReassignment.targetAgentName}?`
+            : `Move ${pendingReassignment?.currentAgentNames.length ?? 0} channels to ${pendingReassignment?.targetAgentName ?? "this agent"}?`
+        }
+        description={reassignmentDescription(pendingReassignment)}
+        isPending={bulkMutation.isPending || dmMutation.isPending}
+        onConfirm={() => {
+          if (!pendingReassignment) return;
+          void applyAssignment(pendingReassignment).then(() => {
+            setPendingReassignment(null);
+          });
+        }}
+        confirmLabel={
+          pendingReassignment?.currentAgentNames.length === 1
+            ? "Move channel"
+            : "Move channels"
+        }
+        pendingLabel="Moving..."
+        confirmVariant="default"
+      />
     </section>
   );
 }
@@ -676,8 +786,8 @@ export function ChannelsSection({
 
 function ChannelRows({
   bindings,
-  channelAgentList,
-  dmAgentList,
+  agents,
+  currentUserId,
   providerConfig,
   providerStatus,
   onAssignAgent,
@@ -702,14 +812,19 @@ function ChannelRows({
     agentId?: string | null;
     answerAllMessages?: boolean;
     channelInstructions?: string | null;
+    dmOwnerEmail?: string | null;
   }>;
-  channelAgentList: Agent[];
-  dmAgentList: Agent[];
+  agents: Agent[];
+  currentUserId: string | undefined;
   providerConfig: ProviderConfig;
   providerStatus: {
     dmInfo?: { botUserId?: string; teamId?: string; appId?: string } | null;
   } | null;
-  onAssignAgent: (bindingId: string, agentId: string | null) => void;
+  onAssignAgent: (assignment: {
+    bindingId: string;
+    currentAgentId: string | null;
+    agentId: string | null;
+  }) => void;
   onToggleAnswerAll: (bindingId: string, answerAll: boolean) => void;
   onEditInstructions: (bindingId: string) => void;
   workspacesWithUnmentionedTraffic: Set<string>;
@@ -743,11 +858,12 @@ function ChannelRows({
           </TableCell>
           <TableCell>
             <AgentPicker
-              agents={dmAgentList}
+              agents={agents}
               assignedAgent={undefined}
               isUpdating={isDmUpdating}
               onAssign={onDmAssignAgent}
               isDm
+              currentUserId={currentUserId}
             />
           </TableCell>
           <TableCell>
@@ -799,15 +915,18 @@ function ChannelRows({
         </TableRow>
       )}
       {bindings.map((binding) => {
-        const pickerAgents = binding.isDm ? dmAgentList : channelAgentList;
         const assignedAgent = binding.agentId
-          ? pickerAgents.find((a) => a.id === binding.agentId)
+          ? agents.find((a) => a.id === binding.agentId)
           : undefined;
-        const deepLink = binding.isDm
-          ? providerStatus
-            ? providerConfig.getDmDeepLink?.(providerStatus, binding)
-            : null
-          : providerConfig.buildDeepLink(binding);
+        const pendingDm =
+          binding.isDm && binding.channelId.startsWith("dm:pending:");
+        const deepLink = pendingDm
+          ? null
+          : binding.isDm
+            ? providerStatus
+              ? providerConfig.getDmDeepLink?.(providerStatus, binding)
+              : null
+            : providerConfig.buildDeepLink(binding);
 
         return (
           <TableRow key={binding.id}>
@@ -822,7 +941,7 @@ function ChannelRows({
               <div className="flex items-center gap-1.5">
                 {binding.isDm ? (
                   <span className="text-sm font-medium">
-                    Direct Message ({user?.email})
+                    Direct Message ({binding.dmOwnerEmail ?? "Unknown owner"})
                   </span>
                 ) : (
                   <>
@@ -836,11 +955,23 @@ function ChannelRows({
             </TableCell>
             <TableCell>
               <AgentPicker
-                agents={pickerAgents}
+                agents={agents}
                 assignedAgent={assignedAgent}
                 isUpdating={isUpdating}
-                onAssign={(agentId) => onAssignAgent(binding.id, agentId)}
+                onAssign={(agentId) =>
+                  onAssignAgent({
+                    bindingId: binding.id,
+                    currentAgentId: binding.agentId ?? null,
+                    agentId,
+                  })
+                }
                 isDm={binding.isDm}
+                currentUserId={currentUserId}
+                dmOwnedByCurrentUser={
+                  !binding.isDm ||
+                  binding.dmOwnerEmail?.toLowerCase() ===
+                    user?.email?.toLowerCase()
+                }
               />
             </TableCell>
             <TableCell>
@@ -923,12 +1054,18 @@ function SortIcon({ isSorted }: { isSorted: false | "asc" | "desc" }) {
 
 function BulkAssignButton({
   agents,
+  currentUserId,
   selectedCount,
+  selectedDmsOnly,
+  selectedDmsOwnedByCurrentUser,
   isUpdating,
   onAssign,
 }: {
   agents: Agent[];
+  currentUserId: string | undefined;
   selectedCount: number;
+  selectedDmsOnly: boolean;
+  selectedDmsOwnedByCurrentUser: boolean;
   isUpdating: boolean;
   onAssign: (agentId: string | null) => void;
 }) {
@@ -978,20 +1115,35 @@ function BulkAssignButton({
                   <span className="text-muted-foreground">Unassign</span>
                 </CommandItem>
                 <Divider className="my-1" />
-                {agents.map((agent) => (
-                  <CommandItem
-                    key={agent.id}
-                    value={agent.name}
-                    onSelect={() => {
-                      onAssign(agent.id);
-                      setOpen(false);
-                    }}
-                  >
-                    <Bot className="mr-2 h-4 w-4" />
-                    <span className="truncate">{agent.name}</span>
-                    <AgentBadge type={agent.scope} />
-                  </CommandItem>
-                ))}
+                {agents.map((agent) => {
+                  const disabledReason = agentDisabledReason({
+                    agent,
+                    isDm: selectedDmsOnly,
+                    currentUserId,
+                    dmOwnedByCurrentUser: selectedDmsOwnedByCurrentUser,
+                  });
+                  return (
+                    <CommandItem
+                      key={agent.id}
+                      value={agent.name}
+                      disabled={!!disabledReason}
+                      onSelect={() => {
+                        if (disabledReason) return;
+                        onAssign(agent.id);
+                        setOpen(false);
+                      }}
+                    >
+                      <Bot className="mr-2 h-4 w-4" />
+                      <span className="truncate">{agent.name}</span>
+                      <AgentBadge type={agent.scope} />
+                      {disabledReason && (
+                        <span className="ml-auto text-xs text-muted-foreground">
+                          {disabledReason}
+                        </span>
+                      )}
+                    </CommandItem>
+                  );
+                })}
               </CommandGroup>
             </CommandList>
           </Command>
@@ -1149,12 +1301,16 @@ function AgentPicker({
   isUpdating,
   onAssign,
   isDm = false,
+  currentUserId,
+  dmOwnedByCurrentUser = true,
 }: {
   agents: Agent[];
   assignedAgent: Agent | undefined;
   isUpdating: boolean;
   onAssign: (agentId: string | null) => void;
   isDm?: boolean;
+  currentUserId: string | undefined;
+  dmOwnedByCurrentUser?: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -1223,23 +1379,38 @@ function AgentPicker({
                   <Divider className="my-1" />
                 </>
               )}
-              {agents.map((agent) => (
-                <CommandItem
-                  key={agent.id}
-                  value={agent.name}
-                  onSelect={() => {
-                    onAssign(agent.id);
-                    setOpen(false);
-                  }}
-                >
-                  <Bot className="mr-2 h-4 w-4" />
-                  <span className="truncate">{agent.name}</span>
-                  <AgentBadge type={agent.scope} className="ml-auto" />
-                  {assignedAgent?.id === agent.id && (
-                    <CheckIcon className="h-4 w-4" />
-                  )}
-                </CommandItem>
-              ))}
+              {agents.map((agent) => {
+                const disabledReason = agentDisabledReason({
+                  agent,
+                  isDm,
+                  currentUserId,
+                  dmOwnedByCurrentUser,
+                });
+                return (
+                  <CommandItem
+                    key={agent.id}
+                    value={agent.name}
+                    disabled={!!disabledReason}
+                    onSelect={() => {
+                      if (disabledReason) return;
+                      onAssign(agent.id);
+                      setOpen(false);
+                    }}
+                  >
+                    <Bot className="mr-2 h-4 w-4" />
+                    <span className="truncate">{agent.name}</span>
+                    <AgentBadge type={agent.scope} className="ml-auto" />
+                    {assignedAgent?.id === agent.id && (
+                      <CheckIcon className="h-4 w-4" />
+                    )}
+                    {disabledReason && (
+                      <span className="text-xs text-muted-foreground">
+                        {disabledReason}
+                      </span>
+                    )}
+                  </CommandItem>
+                );
+              })}
             </CommandGroup>
           </CommandList>
         </Command>
@@ -1258,7 +1429,7 @@ function AgentPicker({
  */
 function ChannelTableSkeleton() {
   return (
-    <div className="overflow-hidden rounded-md border">
+    <div className="max-w-full overflow-x-auto rounded-md border">
       <Table className={CHANNEL_TABLE_MIN_WIDTH}>
         <TableHeader className="bg-muted border-b-2 border-border">
           <TableRow>
@@ -1308,3 +1479,49 @@ function ChannelTableSkeleton() {
  * column. A floor lets the table's own horizontal scroll take over instead.
  */
 const CHANNEL_TABLE_MIN_WIDTH = "min-w-[70rem]";
+
+type AssignmentRequest = {
+  ids: string[];
+  agentId: string | null;
+  expectedAgentAssignments: Array<{ id: string; agentId: string | null }>;
+  includesVirtualDm: boolean;
+  clearAfterSuccess: boolean;
+};
+
+type PendingReassignment = AssignmentRequest & {
+  currentAgentNames: string[];
+  targetAgentName: string;
+};
+
+function agentDisabledReason({
+  agent,
+  isDm,
+  currentUserId,
+  dmOwnedByCurrentUser = true,
+}: {
+  agent: Agent;
+  isDm: boolean;
+  currentUserId: string | undefined;
+  dmOwnedByCurrentUser?: boolean;
+}) {
+  if (!isDm && agent.scope === "personal") {
+    return "Personal agents can only receive direct messages.";
+  }
+  if (isDm && agent.scope === "personal" && agent.authorId !== currentUserId) {
+    return "Only your personal agents can receive direct messages.";
+  }
+  if (isDm && agent.scope === "personal" && !dmOwnedByCurrentUser) {
+    return "Personal agents can only be assigned to your own direct messages.";
+  }
+  return null;
+}
+
+function reassignmentDescription(reassignment: PendingReassignment | null) {
+  if (!reassignment) return "";
+  const currentAgents = [...new Set(reassignment.currentAgentNames)].join(", ");
+  const channels =
+    reassignment.currentAgentNames.length === 1
+      ? "this channel"
+      : "these channels";
+  return `Each messaging channel can be assigned to only one agent at a time. New messages will go to ${reassignment.targetAgentName}. ${currentAgents} will stop receiving messages from ${channels}.`;
+}

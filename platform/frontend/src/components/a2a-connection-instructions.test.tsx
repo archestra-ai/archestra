@@ -7,8 +7,6 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useAgentEmailAddress } from "@/lib/chatops/incoming-email.query";
-import { useFeature } from "@/lib/config/config.query";
 import { useOrganization } from "@/lib/organization.query";
 import {
   useFetchTeamTokenValue,
@@ -19,10 +17,6 @@ import { A2AConnectionInstructions } from "./a2a-connection-instructions";
 
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/organization.query");
-vi.mock("@/lib/config/config.query", () => ({ useFeature: vi.fn() }));
-vi.mock("@/lib/chatops/incoming-email.query", () => ({
-  useAgentEmailAddress: vi.fn(),
-}));
 vi.mock("@/lib/teams/team-token.query", () => ({
   useTokens: vi.fn(),
   useFetchTeamTokenValue: vi.fn(),
@@ -40,17 +34,11 @@ vi.mock("@/components/mcp-oauth-management", () => ({
 vi.mock("@/components/agent-chat-apps", () => ({
   AgentChatApps: () => (
     <div className="space-y-2">
-      <h4>Chat Apps</h4>
-      <p className="text-xs text-muted-foreground">Assigned chat channels</p>
+      <h4>Messaging channels</h4>
+      <p className="text-xs text-muted-foreground">Assigned channels</p>
     </div>
   ),
 }));
-vi.mock(
-  "@/app/settings/messaging-channels/email/agent-email-settings-dialog",
-  () => ({
-    AgentEmailSettingsDialog: () => null,
-  }),
-);
 
 type Agent = archestraApiTypes.GetAllAgentsResponses["200"][number];
 
@@ -67,11 +55,7 @@ const baseAgent = {
   identityProviderId: null,
 } as unknown as Agent;
 
-function renderChannels(
-  overrides: Partial<Agent> = {},
-  { globalEmail = true }: { globalEmail?: boolean } = {},
-) {
-  vi.mocked(useFeature).mockReturnValue(stubQuery({ enabled: globalEmail }));
+function renderChannels(overrides: Partial<Agent> = {}) {
   render(
     <A2AConnectionInstructions
       agent={{ ...baseAgent, ...overrides }}
@@ -92,9 +76,6 @@ beforeEach(() => {
   vi.mocked(useUserToken).mockReturnValue(stubQuery({ data: null }));
   vi.mocked(useFetchUserTokenValue).mockReturnValue(stubQuery({}));
   vi.mocked(useFetchTeamTokenValue).mockReturnValue(stubQuery({}));
-  vi.mocked(useAgentEmailAddress).mockReturnValue(
-    stubQuery({ data: { emailAddress: "support@agents.example.test" } }),
-  );
 });
 
 describe("A2AConnectionInstructions — detail layout", () => {
@@ -162,32 +143,11 @@ describe("A2AConnectionInstructions — detail layout", () => {
     expect(screen.getByText("Continue the conversation")).toBeVisible();
   });
 
-  it("keeps the email address copyable when email invocation is on", () => {
+  it("does not duplicate Email outside the messaging collection", () => {
     const section = renderChannels({
       incomingEmailEnabled: true,
     } as Partial<Agent>);
 
-    expect(
-      within(section).getByText("support@agents.example.test"),
-    ).toBeInTheDocument();
-  });
-
-  it.each([
-    [false, "Enable email"],
-    [true, "Edit settings"],
-  ])("offers agent-level email settings when invocation enabled is %s", (incomingEmailEnabled, buttonLabel) => {
-    const section = renderChannels({ incomingEmailEnabled } as Partial<Agent>);
-
-    expect(
-      within(section).getByRole("button", { name: buttonLabel }),
-    ).toBeInTheDocument();
-  });
-
-  it("does not offer agent-level email settings until the provider is configured", () => {
-    const section = renderChannels({}, { globalEmail: false });
-
-    expect(
-      within(section).queryByRole("button", { name: "Enable email" }),
-    ).not.toBeInTheDocument();
+    expect(within(section).queryByText("Email Invocation")).toBeNull();
   });
 });

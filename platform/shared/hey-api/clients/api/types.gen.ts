@@ -33606,6 +33606,10 @@ export type BulkUpdateChatOpsBindingsData = {
     body: {
         ids: Array<string>;
         agentId: string | null;
+        expectedAgentAssignments?: Array<{
+            id: string;
+            agentId: string | null;
+        }>;
     };
     path?: never;
     query?: never;
@@ -33892,6 +33896,7 @@ export type CreateChatOpsDmBindingData = {
     body: {
         provider: 'ms-teams' | 'slack' | 'telegram';
         agentId: string | null;
+        requireNoExistingBinding?: true;
     };
     path?: never;
     query?: never;
@@ -33986,6 +33991,114 @@ export type CreateChatOpsDmBindingResponses = {
 };
 
 export type CreateChatOpsDmBindingResponse = CreateChatOpsDmBindingResponses[keyof CreateChatOpsDmBindingResponses];
+
+export type ApplyChatOpsBindingPlanData = {
+    body: {
+        targetAgentId: string;
+        updates: Array<{
+            answerAllMessages?: boolean;
+            channelInstructions?: string | null;
+            bindingId: string;
+            expectedAgentId: string | null;
+            nextAgentId: string | null;
+        }>;
+        directMessages: Array<{
+            provider: 'ms-teams' | 'slack' | 'telegram';
+        }>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/chatops/bindings/assignment-plan';
+};
+
+export type ApplyChatOpsBindingPlanErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ApplyChatOpsBindingPlanError = ApplyChatOpsBindingPlanErrors[keyof ApplyChatOpsBindingPlanErrors];
+
+export type ApplyChatOpsBindingPlanResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        organizationId: string;
+        provider: 'ms-teams' | 'slack' | 'telegram';
+        channelId: string;
+        workspaceId: string | null;
+        channelName: string | null;
+        workspaceName: string | null;
+        isDm: boolean;
+        answerAllMessages: boolean;
+        channelInstructions: string | null;
+        dmOwnerEmail: string | null;
+        agentId: string | null;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type ApplyChatOpsBindingPlanResponse = ApplyChatOpsBindingPlanResponses[keyof ApplyChatOpsBindingPlanResponses];
 
 export type UpdateChatOpsConfigInQuickstartData = {
     body: {

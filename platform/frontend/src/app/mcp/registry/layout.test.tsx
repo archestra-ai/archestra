@@ -60,4 +60,23 @@ describe("McpCatalogLayout", () => {
       { scroll: false },
     );
   });
+
+  it("leaves nested registry pages to render their own shared header", () => {
+    vi.mocked(usePathname).mockReturnValue("/mcp/registry/new");
+
+    render(
+      <McpCatalogLayout>
+        <h1>Add MCP Server to the Private Registry</h1>
+      </McpCatalogLayout>,
+    );
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Add MCP Server to the Private Registry",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "MCP Registry" }),
+    ).not.toBeInTheDocument();
+  });
 });

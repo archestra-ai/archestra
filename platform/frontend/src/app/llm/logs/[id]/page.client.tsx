@@ -7,13 +7,13 @@ import {
 } from "@archestra/shared";
 import { Database, Layers } from "lucide-react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { BackLink } from "@/components/agent-pages/agent-page-shell";
 import { BilledCost } from "@/components/billed-cost";
 import { type DetailFact, DetailFacts } from "@/components/detail-facts";
 import { JsonCodeBlock } from "@/components/json-code-block";
 import { LoadingState } from "@/components/loading";
 import { LockedChatContentUnavailable } from "@/components/locked-chat-content-unavailable";
 import MessageThread from "@/components/message-thread";
+import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SourceBadge } from "@/components/source-badge";
@@ -316,7 +316,7 @@ function LogDetail({
     <PageLayout
       title={<span className="font-mono">{interaction.modelName}</span>}
       documentTitle={interaction.modelName}
-      backLink={<BackLink href={backHref}>{backLabel}</BackLink>}
+      backLink={<PageBackLink href={backHref}>{backLabel}</PageBackLink>}
       description={
         <div className="flex flex-wrap items-center gap-2">
           <SourceBadge source={dynamicInteraction.source} />
@@ -471,7 +471,7 @@ function InteractionShell({ children }: { children: React.ReactNode }) {
   return (
     <PageLayout
       title="Request"
-      backLink={<BackLink href="/llm/logs">Back to Sessions</BackLink>}
+      backLink={<PageBackLink href="/llm/logs">Back to Sessions</PageBackLink>}
     >
       {children}
     </PageLayout>

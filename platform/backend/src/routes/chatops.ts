@@ -40,6 +40,7 @@ import {
 } from "@/agents/chatops/utils";
 import { isRateLimited } from "@/agents/utils";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import { hasPermission } from "@/auth";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
@@ -98,6 +99,67 @@ const captureSlackRawBody = async (
  * inside SlackProvider. See EventDedupMap for details.
  */
 const slackWebhookDedup = new EventDedupMap();
+
+const ChatOpsAssignmentPlanUpdateSchema =
+  UpdateChatOpsChannelBindingSchema.pick({
+    answerAllMessages: true,
+    channelInstructions: true,
+  }).extend({
+    bindingId: z.string().uuid(),
+    expectedAgentId: z.string().uuid().nullable(),
+    nextAgentId: z.string().uuid().nullable(),
+  });
+
+const ChatOpsAssignmentPlanSchema = z
+  .object({
+    targetAgentId: z.string().uuid(),
+    updates: z.array(ChatOpsAssignmentPlanUpdateSchema).max(500),
+    directMessages: z
+      .array(
+        z.object({
+          provider: ChatOpsProviderTypeSchema,
+        }),
+      )
+      .max(100),
+  })
+  .superRefine(({ targetAgentId, updates, directMessages }, ctx) => {
+    if (updates.length === 0 && directMessages.length === 0) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Provide at least one binding update or direct message",
+      });
+    }
+
+    const bindingIds = new Set(updates.map((update) => update.bindingId));
+    if (bindingIds.size !== updates.length) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["updates"],
+        message: "Each binding can only be updated once",
+      });
+    }
+
+    updates.forEach((update, index) => {
+      if (update.nextAgentId !== null && update.nextAgentId !== targetAgentId) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["updates", index, "nextAgentId"],
+          message: "Each next agent must be the target agent or null",
+        });
+      }
+    });
+
+    const directMessageKeys = new Set(
+      directMessages.map((directMessage) => directMessage.provider),
+    );
+    if (directMessageKeys.size !== directMessages.length) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["directMessages"],
+        message: "Each direct message provider must be unique",
+      });
+    }
+  });
 
 /**
  * MS Teams incoming webhook, split out into its own plugin so the optional
@@ -1180,10 +1242,18 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId: request.body.agentId,
           isDm: existing.isDm,
           userId: request.user.id,
+          userEmail: request.user.email,
+          dmOwnerEmails: [existing.dmOwnerEmail],
+          organizationId: request.organizationId,
         });
       }
 
-      const updated = await ChatOpsChannelBindingModel.update(id, request.body);
+      const updated =
+        await ChatOpsChannelBindingModel.updateByIdAndOrganization({
+          id,
+          organizationId: request.organizationId,
+          input: request.body,
+        });
 
       if (!updated) {
         throw new ApiError(500, "Failed to update binding");
@@ -1222,12 +1292,17 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: z.object({
           provider: ChatOpsProviderTypeSchema,
           agentId: z.string().uuid().nullable(),
+          requireNoExistingBinding: z.literal(true).optional(),
         }),
         response: constructResponseSchema(ChatOpsChannelBindingResponseSchema),
       },
     },
     async (request, reply) => {
-      const { provider, agentId } = request.body;
+      const { provider, agentId, requireNoExistingBinding } = request.body;
+      await assertMessagingChannelAllowed({
+        organizationId: request.organizationId,
+        channel: provider,
+      });
       const userEmail = request.user.email;
 
       // Validate personal agent assignment for DM
@@ -1236,20 +1311,34 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId,
           isDm: true,
           userId: request.user.id,
+          userEmail,
+          dmOwnerEmails: [userEmail],
+          organizationId: request.organizationId,
         });
       }
 
       // Check if user already has a DM binding (real or pending) for this provider
-      const existingDm = await ChatOpsChannelBindingModel.findDmBindingByEmail(
-        provider,
-        userEmail,
-      );
+      const existingDm =
+        await ChatOpsChannelBindingModel.findDmBindingByEmailInOrganization({
+          organizationId: request.organizationId,
+          provider,
+          dmOwnerEmail: userEmail,
+        });
 
       if (existingDm) {
+        if (requireNoExistingBinding) {
+          throw new ApiError(
+            409,
+            "The direct message assignment already exists. Reload the channels and try again.",
+          );
+        }
         // Update the existing binding's agent
-        const updated = await ChatOpsChannelBindingModel.update(existingDm.id, {
-          agentId,
-        });
+        const updated =
+          await ChatOpsChannelBindingModel.updateByIdAndOrganization({
+            id: existingDm.id,
+            organizationId: request.organizationId,
+            input: { agentId },
+          });
         if (!updated) {
           throw new ApiError(500, "Failed to update DM binding");
         }
@@ -1261,22 +1350,136 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Create a new pending DM binding with placeholder channelId
-      const pendingChannelId = `dm:pending:${userEmail}`;
-      const binding = await ChatOpsChannelBindingModel.create({
+      const pendingChannelId = ChatOpsChannelBindingModel.pendingDmChannelId({
+        organizationId: request.organizationId,
+        dmOwnerEmail: userEmail,
+      });
+      const binding = await ChatOpsChannelBindingModel.createPendingDmIfAbsent({
         organizationId: request.organizationId,
         provider,
         channelId: pendingChannelId,
+        workspaceId: "dm:pending",
         isDm: true,
         dmOwnerEmail: userEmail,
         channelName: `Direct Message - ${userEmail}`,
         agentId,
       });
+      if (!binding) {
+        if (requireNoExistingBinding) {
+          throw new ApiError(
+            409,
+            "The direct message assignment already exists. Reload the channels and try again.",
+          );
+        }
+        const concurrentDm =
+          await ChatOpsChannelBindingModel.findDmBindingByEmailInOrganization({
+            organizationId: request.organizationId,
+            provider,
+            dmOwnerEmail: userEmail,
+          });
+        if (!concurrentDm) {
+          throw new ApiError(
+            409,
+            "Cannot connect this direct message because the provider identity has another pending connection. Remove that connection, then try again.",
+          );
+        }
+        const updated =
+          await ChatOpsChannelBindingModel.updateByIdAndOrganization({
+            id: concurrentDm.id,
+            organizationId: request.organizationId,
+            input: { agentId },
+          });
+        if (!updated) {
+          throw new ApiError(500, "Failed to update DM binding");
+        }
+        return reply.send({
+          ...updated,
+          createdAt: updated.createdAt.toISOString(),
+          updatedAt: updated.updatedAt.toISOString(),
+        });
+      }
 
       return reply.send({
         ...binding,
         createdAt: binding.createdAt.toISOString(),
         updatedAt: binding.updatedAt.toISOString(),
       });
+    },
+  );
+
+  /**
+   * Apply every assignment, channel setting, and pending DM selected for one
+   * agent. The model locks and commits the complete plan as one transaction.
+   */
+  fastify.post(
+    "/api/chatops/bindings/assignment-plan",
+    {
+      schema: {
+        operationId: RouteId.ApplyChatOpsBindingPlan,
+        description:
+          "Atomically apply ChatOps assignments, channel settings, and pending direct-message bindings for an agent",
+        tags: ["ChatOps"],
+        body: ChatOpsAssignmentPlanSchema,
+        response: constructResponseSchema(
+          z.array(ChatOpsChannelBindingResponseSchema),
+        ),
+      },
+    },
+    async (request, reply) => {
+      const { success: isAgentAdmin } = await hasPermission(
+        { agent: ["admin"] },
+        request.headers,
+      );
+      const targetAgent = await AgentModel.findById(
+        request.body.targetAgentId,
+        request.user.id,
+        isAgentAdmin,
+      );
+      if (
+        !targetAgent ||
+        targetAgent.organizationId !== request.organizationId
+      ) {
+        throw new ApiError(404, "Agent not found");
+      }
+      for (const { provider } of request.body.directMessages) {
+        await assertMessagingChannelAllowed({
+          organizationId: request.organizationId,
+          channel: provider,
+        });
+      }
+      if (request.body.directMessages.length > 0) {
+        const { success: canCreateAgentTrigger } = await hasPermission(
+          { agentTrigger: ["create"] },
+          request.headers,
+        );
+        if (!canCreateAgentTrigger) {
+          throw new ApiError(403, "Forbidden");
+        }
+      }
+      const bindings = await ChatOpsChannelBindingModel.applyAssignmentPlan({
+        organizationId: request.organizationId,
+        userId: request.user.id,
+        dmOwnerEmail: request.user.email,
+        ...request.body,
+      });
+
+      await Promise.all(
+        bindings.map((binding) =>
+          invalidateChannelAnswerAll({
+            provider: binding.provider,
+            channelId: binding.channelId,
+            workspaceId: binding.workspaceId,
+          }),
+        ),
+      );
+
+      return reply.send(
+        bindings.map((binding) => ({
+          ...binding,
+          createdAt: binding.createdAt.toISOString(),
+          updatedAt: binding.updatedAt.toISOString(),
+        })),
+      );
     },
   );
 
@@ -1291,17 +1494,44 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Bulk-update agent assignment for multiple channel bindings",
         tags: ["ChatOps"],
-        body: z.object({
-          ids: z.array(z.string().uuid()).min(1).max(500),
-          agentId: z.string().uuid().nullable(),
-        }),
+        body: z
+          .object({
+            ids: z.array(z.string().uuid()).min(1).max(500),
+            agentId: z.string().uuid().nullable(),
+            expectedAgentAssignments: z
+              .array(
+                z.object({
+                  id: z.string().uuid(),
+                  agentId: z.string().uuid().nullable(),
+                }),
+              )
+              .min(1)
+              .max(500)
+              .optional(),
+          })
+          .superRefine(({ ids, expectedAgentAssignments }, ctx) => {
+            if (!expectedAgentAssignments) return;
+            const expectedIds = new Set(
+              expectedAgentAssignments.map((assignment) => assignment.id),
+            );
+            if (
+              expectedIds.size !== ids.length ||
+              ids.some((id) => !expectedIds.has(id))
+            ) {
+              ctx.addIssue({
+                code: "custom",
+                path: ["expectedAgentAssignments"],
+                message: "Expected assignments must cover each binding ID once",
+              });
+            }
+          }),
         response: constructResponseSchema(
           z.array(ChatOpsChannelBindingResponseSchema),
         ),
       },
     },
     async (request, reply) => {
-      const { ids, agentId } = request.body;
+      const { ids, agentId, expectedAgentAssignments } = request.body;
 
       // Validate personal agent cannot be assigned to channel bindings
       if (agentId) {
@@ -1316,6 +1546,8 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             agentId,
             isDm: false,
             userId: request.user.id,
+            userEmail: request.user.email,
+            organizationId: request.organizationId,
           });
         }
         // For DM bindings, validate the user owns them
@@ -1325,15 +1557,25 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             agentId,
             isDm: true,
             userId: request.user.id,
+            userEmail: request.user.email,
+            dmOwnerEmails: dmBindings.map((binding) => binding.dmOwnerEmail),
+            organizationId: request.organizationId,
           });
         }
       }
 
-      const updated = await ChatOpsChannelBindingModel.bulkUpdateAgent(
+      const updated = await ChatOpsChannelBindingModel.bulkUpdateAgent({
         ids,
-        request.organizationId,
+        organizationId: request.organizationId,
         agentId,
-      );
+        expectedAgentAssignments,
+      });
+      if (!updated) {
+        throw new ApiError(
+          409,
+          "Channel assignments changed. Reload the channels and try again.",
+        );
+      }
 
       return reply.send(
         updated.map((b) => ({
@@ -1746,16 +1988,18 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Reuse the user's pending/stale DM binding when one exists so an
         // agent assignment made in the UI survives the link.
         const existingDm =
-          await ChatOpsChannelBindingModel.findDmBindingByEmail(
-            "telegram",
-            email,
-          );
+          await ChatOpsChannelBindingModel.findDmBindingByEmailInOrganization({
+            organizationId: request.organizationId,
+            provider: "telegram",
+            dmOwnerEmail: email,
+          });
         if (existingDm) {
-          await ChatOpsChannelBindingModel.fulfillDmBinding(
-            existingDm.id,
-            payload.chatId,
-            null,
-          );
+          await ChatOpsChannelBindingModel.fulfillDmBinding({
+            id: existingDm.id,
+            organizationId: request.organizationId,
+            realChannelId: payload.chatId,
+            workspaceId: null,
+          });
         } else {
           await ChatOpsChannelBindingModel.create({
             organizationId: request.organizationId,
@@ -1947,9 +2191,25 @@ async function validateAgentChannelAssignment(params: {
   agentId: string;
   isDm: boolean;
   userId: string;
+  userEmail: string;
+  dmOwnerEmails?: Array<string | null>;
+  organizationId: string;
 }): Promise<void> {
-  const agent = await AgentModel.findById(params.agentId);
-  if (!agent || agent.scope !== "personal") return;
+  const agent = (
+    await AgentModel.findByIdsForPermissionCheck(
+      [params.agentId],
+      params.organizationId,
+    )
+  ).get(params.agentId);
+  if (!agent) {
+    throw new ApiError(404, "Agent not found");
+  }
+
+  if (agent.agentType !== "agent") {
+    throw new ApiError(400, "Only internal agents can be assigned to ChatOps.");
+  }
+
+  if (agent.scope !== "personal") return;
 
   if (!params.isDm) {
     throw new ApiError(
@@ -1963,6 +2223,17 @@ async function validateAgentChannelAssignment(params: {
     throw new ApiError(
       403,
       "You can only assign your own personal agents to your DM.",
+    );
+  }
+  if (
+    params.dmOwnerEmails?.some(
+      (ownerEmail) =>
+        ownerEmail?.toLowerCase() !== params.userEmail.toLowerCase(),
+    )
+  ) {
+    throw new ApiError(
+      403,
+      "Personal agents can only be assigned to your own direct messages.",
     );
   }
 }

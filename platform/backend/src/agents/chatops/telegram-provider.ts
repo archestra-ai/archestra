@@ -696,20 +696,23 @@ class TelegramProvider implements ChatOpsProvider {
       return "That linking code is invalid or expired. Send /start without a code to get a sign-in link.";
     }
 
-    const existingDm = await ChatOpsChannelBindingModel.findDmBindingByEmail(
-      this.providerId,
-      entry.email,
-    );
+    const org = await OrganizationModel.getFirst();
+    if (!org)
+      return "No organization is set up yet — contact your administrator.";
+    const existingDm =
+      await ChatOpsChannelBindingModel.findDmBindingByEmailInOrganization({
+        organizationId: org.id,
+        provider: this.providerId,
+        dmOwnerEmail: entry.email,
+      });
     if (existingDm) {
-      await ChatOpsChannelBindingModel.fulfillDmBinding(
-        existingDm.id,
-        chatId,
-        null,
-      );
+      await ChatOpsChannelBindingModel.fulfillDmBinding({
+        id: existingDm.id,
+        organizationId: org.id,
+        realChannelId: chatId,
+        workspaceId: null,
+      });
     } else {
-      const org = await OrganizationModel.getFirst();
-      if (!org)
-        return "No organization is set up yet — contact your administrator.";
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
         provider: this.providerId,

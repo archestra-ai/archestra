@@ -135,7 +135,9 @@ export function PageLayout({
     ? `${pathname}?${searchParams.toString()}`
     : pathname;
   const maxWidth = MAX_WIDTH_CLASSES[maxWidthKey];
-  const minWidth = MIN_WIDTH_CLASSES[minWidthKey];
+  const resolvedMinWidthKey =
+    minWidthKey === "none" && maxWidthKey === "wizard" ? "phone" : minWidthKey;
+  const minWidth = MIN_WIDTH_CLASSES[resolvedMinWidthKey];
   const [overflowOpen, setOverflowOpen] = useState(false);
 
   // Split tabs for mobile: visible vs overflow
@@ -155,19 +157,28 @@ export function PageLayout({
       : undefined;
 
   return (
-    <div
-      className={cn(
-        "flex h-full w-full flex-col",
-        minWidth && "min-w-0 overflow-x-auto",
-      )}
-    >
-      <div className="border-b border-border bg-card/30">
+    <div className="flex min-h-full w-full min-w-0 flex-col">
+      <div
+        data-page-header
+        className="border-b border-border bg-background md:sticky md:top-0 md:z-20"
+      >
         <div className={cn("mx-auto", minWidth, maxWidth, "px-6 pt-6 md:px-6")}>
           {backLink && <div className="mb-2">{backLink}</div>}
           {/* Below sm the action buttons drop under the title/description
               instead of squeezing them into a sliver beside the buttons. */}
-          <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
-            <div className="min-w-0 sm:flex-1">
+          <div
+            className={cn(
+              "mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6",
+              maxWidthKey === "wizard" && "min-h-[5.75rem] sm:min-h-[3.75rem]",
+            )}
+          >
+            <div
+              className={cn(
+                "min-w-0 sm:flex-1",
+                maxWidthKey === "wizard" &&
+                  "min-h-10 sm:relative sm:h-[3.75rem] sm:min-h-0",
+              )}
+            >
               {/* Sibling pages of a tabbed section render PageLayout at the
                   same tree position, so React reconciles it across
                   client-side navigations instead of remounting. A rich
@@ -182,14 +193,34 @@ export function PageLayout({
                   inside `title`, and folding a live state into the accessible
                   heading name would make the heading change every time the
                   probe does. */}
-              <div className="mb-2 flex min-w-0 flex-wrap items-center gap-2">
-                <h1 className="min-w-0 text-2xl font-semibold tracking-tight">
+              <div
+                className={cn(
+                  "flex min-w-0 items-center gap-2",
+                  maxWidthKey === "wizard"
+                    ? "flex-nowrap overflow-hidden"
+                    : "flex-wrap",
+                  description && maxWidthKey !== "wizard" && "mb-2",
+                )}
+              >
+                <h1
+                  className={cn(
+                    "min-w-0 text-2xl font-semibold tracking-tight",
+                    maxWidthKey === "wizard" && "max-h-10 overflow-hidden",
+                  )}
+                >
                   <span key={pathname}>{title}</span>
                 </h1>
                 {status && <div className="shrink-0">{status}</div>}
               </div>
               {description && (
-                <div className="text-sm text-muted-foreground">
+                <div
+                  data-page-description
+                  className={cn(
+                    "text-sm text-muted-foreground",
+                    maxWidthKey === "wizard" &&
+                      "hidden sm:absolute sm:inset-x-0 sm:bottom-0 sm:line-clamp-1",
+                  )}
+                >
                   <span key={pathname}>{description}</span>
                 </div>
               )}
@@ -315,7 +346,12 @@ export function PageLayout({
           {!tabs.length && <div className="mb-6" />}
         </div>
       </div>
-      <div className="w-full h-full">
+      <div
+        className={cn(
+          "min-h-full w-full",
+          minWidth && "min-w-0 overflow-x-auto",
+        )}
+      >
         <div
           className={cn(
             "mx-auto w-full",
@@ -338,9 +374,7 @@ const MIN_WIDTH_CLASSES = {
 
 const MAX_WIDTH_CLASSES = {
   wide: "max-w-[1680px]",
-  // The wizards (`AgentPageShell`, the MCP server wizard pages) put their
-  // `max-w-5xl` column inside a `px-6` band; this band pads inside its
-  // max-width, so the two paddings are added back for the content edges to
-  // meet.
+  // Wizard and detail pages share this exact header/content column. Padding
+  // lives inside the band, so add it back for 5xl content-edge alignment.
   wizard: "max-w-[calc(var(--container-5xl)+3rem)]",
 } as const;

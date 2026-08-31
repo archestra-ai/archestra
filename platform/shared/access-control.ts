@@ -1683,6 +1683,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.BulkUpdateChatOpsBindings]: {
     agentTrigger: ["update"],
   },
+  [RouteId.ApplyChatOpsBindingPlan]: {
+    agent: ["read"],
+    agentTrigger: ["update"],
+  },
   [RouteId.CreateChatOpsDmBinding]: {
     agentTrigger: ["create"],
   },

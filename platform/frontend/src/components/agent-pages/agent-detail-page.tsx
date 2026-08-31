@@ -49,6 +49,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   UnsavedChangesDialog,
   useBeforeUnloadWhileDirty,
+  useGuardedInAppNavigation,
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
 import { WizardFooter } from "@/components/wizard-footer";
@@ -141,7 +142,8 @@ export function AgentDetailPage({
         kind={kind}
         agent={heldAgent}
         isGone={isGone}
-        backLink={backLink}
+        backHref={agentListHref(kind)}
+        backLabel={backToListLabel(kind)}
         onDeleted={() => {
           setIsLeavingAfterDelete(true);
           router.push(agentListHref(kind));
@@ -201,14 +203,21 @@ function AgentDetails({
   kind,
   agent,
   isGone,
-  backLink,
+  backHref,
+  backLabel,
   onDeleted,
 }: {
   kind: AgentPageKind;
   agent: Agent;
   /** The record has since been deleted; this is the last copy we hold. */
   isGone: boolean;
-  backLink: React.ReactNode;
+  /**
+   * Where "back" goes. Rendered here rather than passed in, so the link can be
+   * routed through this page's unsaved-changes guard — leaving for the list
+   * with edits in the form must ask first, exactly as a tab change does.
+   */
+  backHref: string;
+  backLabel: string;
   /** Owned by the page so it can suppress its not-found state on the way out. */
   onDeleted: () => void;
 }) {
@@ -311,6 +320,10 @@ function AgentDetails({
     },
     [guard],
   );
+  // Every in-app link, not only the ones this page renders: the configuration
+  // is the page now, so the sidebar and anything else on screen would
+  // otherwise discard unsaved edits without asking.
+  useGuardedInAppNavigation({ isDirty, onRequestNavigate: requestNavigate });
 
   // `?openTools=true` (from "add tools to this gateway" links) pops the tools
   // picker open on the tools tab. "All" gateways hide the tool editor (there
@@ -416,7 +429,7 @@ function AgentDetails({
         </div>
       }
       documentTitle={agent.name}
-      backLink={backLink}
+      backLink={<PageBackLink href={backHref}>{backLabel}</PageBackLink>}
       description={
         isBuiltIn && agent.description ? (
           <>
@@ -445,11 +458,6 @@ function AgentDetails({
             }))
           : []
       }
-      onTabNavigate={(href, event) => {
-        if (!isDirty) return;
-        event.preventDefault();
-        requestNavigate(href);
-      }}
       actionButton={
         // Configuration is the page itself now, so the header carries only
         // what the page cannot: chatting with the record, and the actions

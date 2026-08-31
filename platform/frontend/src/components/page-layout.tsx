@@ -49,7 +49,6 @@ export function PageLayout({
   children,
   tabs = [],
   actionButton,
-  onTabNavigate,
   mobileVisibleCount = 3,
   maxWidth: maxWidthKey = "wide",
   minWidth: minWidthKey = "none",
@@ -106,12 +105,6 @@ export function PageLayout({
    */
   status?: React.ReactNode;
   actionButton?: React.ReactNode;
-  /**
-   * Runs before a tab link navigates, for a page that must ask first — one
-   * hosting an editable form guards the tab change the way it guards its back
-   * link. Call `event.preventDefault()` to take the navigation over.
-   */
-  onTabNavigate?: (href: string, event: React.MouseEvent) => void;
   mobileVisibleCount?: number;
   /**
    * The column the header row and the content share. `wide` is the band list
@@ -245,7 +238,6 @@ export function PageLayout({
                       key={tab.href}
                       href={tab.href}
                       aria-current={isSelected ? "page" : undefined}
-                      onClick={(event) => onTabNavigate?.(tab.href, event)}
                       // Only this copy carries the test id — see the `tabs` prop.
                       data-testid={tab.testId}
                       className={cn(
@@ -273,7 +265,6 @@ export function PageLayout({
                       key={tab.href}
                       href={tab.href}
                       aria-current={isSelected ? "page" : undefined}
-                      onClick={(event) => onTabNavigate?.(tab.href, event)}
                       className={cn(
                         "relative cursor-pointer pb-1 text-sm font-medium transition-colors hover:text-foreground",
                         isSelected
@@ -333,10 +324,7 @@ export function PageLayout({
                               key={tab.href}
                               href={tab.href}
                               aria-current={isSelected ? "page" : undefined}
-                              onClick={(event) => {
-                                setOverflowOpen(false);
-                                onTabNavigate?.(tab.href, event);
-                              }}
+                              onClick={() => setOverflowOpen(false)}
                               className={cn(
                                 "cursor-pointer rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted",
                                 isSelected

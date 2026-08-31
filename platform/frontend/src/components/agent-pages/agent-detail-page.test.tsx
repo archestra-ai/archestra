@@ -109,8 +109,14 @@ function mockAgent(agent: unknown) {
 }
 
 function mockTab(tab?: string) {
+  const search = tab ? `tab=${tab}` : "";
+  window.history.replaceState(
+    {},
+    "",
+    `/agents/a1${search ? `?${search}` : ""}`,
+  );
   vi.mocked(useSearchParams).mockReturnValue(
-    new URLSearchParams(tab ? `tab=${tab}` : "") as unknown as ReturnType<
+    new URLSearchParams(search) as unknown as ReturnType<
       typeof useSearchParams
     >,
   );
@@ -140,6 +146,10 @@ describe("AgentDetailPage", () => {
       replace,
     } as unknown as ReturnType<typeof useRouter>);
     vi.mocked(usePathname).mockReturnValue("/agents/a1");
+    // The in-app navigation guard compares a link's destination against the
+    // real document location, so jsdom has to be on the page being rendered
+    // or the current tab's own link reads as somewhere else.
+    window.history.replaceState({}, "", "/agents/a1");
     mockTab();
     vi.mocked(useDeleteProfile).mockReturnValue({
       mutate: vi.fn(),
@@ -266,6 +276,34 @@ describe("AgentDetailPage", () => {
     expect(screen.getByText(/discard unsaved changes\?/i)).toBeInTheDocument();
     // Nothing has navigated yet: the answer decides.
     expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("guards every in-app link while the configuration is dirty, not only its tabs", async () => {
+    // The form is the page, so a link the page does not own — the sidebar,
+    // anything else on screen — must not discard edits silently either.
+    const user = userEvent.setup();
+    render(
+      <>
+        {/* eslint-disable-next-line jsx-a11y/anchor-is-valid */}
+        <a href="/skills">Somewhere else</a>
+        <AgentDetailPage kind="agent" id="a1" />
+      </>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "make dirty" }));
+    await user.click(screen.getByRole("link", { name: "Somewhere else" }));
+
+    expect(screen.getByText(/discard unsaved changes\?/i)).toBeInTheDocument();
+  });
+
+  it("does not ask about leaving the tab already on screen", async () => {
+    const user = userEvent.setup();
+    render(<AgentDetailPage kind="agent" id="a1" />);
+
+    await user.click(screen.getByRole("button", { name: "make dirty" }));
+    await user.click(screen.getAllByRole("link", { name: "Configuration" })[0]);
+
+    expect(screen.queryByText(/discard unsaved changes\?/i)).toBeNull();
   });
 
   it("refuses the configuration in place for a reader who cannot change it", () => {

@@ -20,6 +20,7 @@ import {
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import mcpClient from "@/clients/mcp-client";
+import config from "@/config";
 import db, { schema, type Transaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { hardDelete, restore, softDelete } from "@/database/soft-delete";
@@ -72,7 +73,8 @@ const scopeRank = (scope: ResourceVisibilityScope): number =>
  *
  * @public — consumed by the idle-hibernation sweeper and tests
  */
-export const MCP_SERVER_LAST_USED_REFRESH_INTERVAL_MS = 30_000;
+export const MCP_SERVER_LAST_USED_REFRESH_INTERVAL_MS =
+  config.orchestrator.mcpIdleHibernation.lastUsedRefreshIntervalMs;
 
 /**
  * How often a server with a call in flight has `lastUsedAt` re-stamped, so a
@@ -91,7 +93,7 @@ export const MCP_SERVER_LAST_USED_REFRESH_INTERVAL_MS = 30_000;
  * @public — consumed by the idle-hibernation sweeper, the demand tracker, and tests
  */
 export const MCP_DEMAND_HEARTBEAT_INTERVAL_MS =
-  MCP_SERVER_LAST_USED_REFRESH_INTERVAL_MS / 2;
+  config.orchestrator.mcpIdleHibernation.demandHeartbeatIntervalMs;
 // SPDX-SnippetEnd
 
 /**

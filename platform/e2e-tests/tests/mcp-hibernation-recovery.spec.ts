@@ -17,6 +17,7 @@ import {
   waitForServerInstallation,
 } from "../utils";
 import { expect, test } from "./api-fixtures";
+import { assertHibernationTimingProfile } from "./hibernation-timing";
 
 /**
  * Deployment annotations written by `K8sDeployment.hibernate()` and removed by
@@ -407,6 +408,7 @@ test.describe("MCP hibernation - administrator recovery", () => {
       // per-test budget. Only this hook needs the extra room.
       test.setTimeout(420_000);
       specStartedAtMs = Date.now();
+      await assertHibernationTimingProfile({ request, makeApiRequest });
 
       const kc = new k8s.KubeConfig();
       kc.loadFromDefault();

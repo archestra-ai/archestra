@@ -1106,12 +1106,14 @@ export const parseClampedFloat = (
  *  - anything else configures the idle WINDOW. Unset or unparseable falls
  *    back to 30 minutes; a parsed value is floored at 120 seconds, because a
  *    lower threshold could hibernate a server in the gap between normal
- *    consecutive tool calls of one conversation and thrash pods.
+ *    consecutive tool calls of one conversation and thrash pods. The optional
+ *    lower minimum is used only by the E2E-gated config builder below.
  *
  * @public — exported for testability
  */
 export const parseMcpIdleHibernationSeconds = (
   envValue: string | undefined,
+  minimumSeconds = 120,
 ): { windowSeconds: number; hardDisabled: boolean } => {
   // Parse BEFORE testing for zero: "00", "0.0" and "+0" are all an operator
   // writing zero, and a numerically-zero spelling that silently ARMED
@@ -1128,13 +1130,33 @@ export const parseMcpIdleHibernationSeconds = (
     windowSeconds:
       parsed === 0
         ? DEFAULT_MCP_IDLE_HIBERNATION_SECONDS
-        : Math.max(120, parsed),
+        : Math.max(minimumSeconds, parsed),
     hardDisabled: false,
   };
 };
 
 /** 30 minutes — the idle window when the operator configures none. */
 const DEFAULT_MCP_IDLE_HIBERNATION_SECONDS = 1800;
+
+function getMcpIdleHibernationConfig() {
+  const e2eTestEndpointsEnabled =
+    process.env.ENABLE_E2E_TEST_ENDPOINTS === "true";
+  const parsed = parseMcpIdleHibernationSeconds(
+    process.env.ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS,
+    e2eTestEndpointsEnabled ? 8 : 120,
+  );
+  const acceleratedE2eTiming =
+    e2eTestEndpointsEnabled && parsed.windowSeconds < 120;
+
+  return {
+    ...parsed,
+    betaEnabled: betaFeatureEnabled(
+      process.env.ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED,
+    ),
+    lastUsedRefreshIntervalMs: acceleratedE2eTiming ? 1_000 : 30_000,
+    demandHeartbeatIntervalMs: acceleratedE2eTiming ? 500 : 15_000,
+  };
+}
 // SPDX-SnippetEnd
 
 /** @public — exported for testability */
@@ -3006,14 +3028,7 @@ const config = {
      * licence and the organization's own toggle — see
      * `k8s/mcp-server-runtime/hibernation.ee`.
      */
-    mcpIdleHibernation: {
-      ...parseMcpIdleHibernationSeconds(
-        process.env.ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS,
-      ),
-      betaEnabled: betaFeatureEnabled(
-        process.env.ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED,
-      ),
-    },
+    mcpIdleHibernation: getMcpIdleHibernationConfig(),
     /**
      * The pre-pull DaemonSet's kill switch, priority class and footprint — see
      * {@link getMcpImagePrepullConfig}. The reconciler that acts on it lives in

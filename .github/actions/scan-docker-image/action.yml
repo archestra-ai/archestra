@@ -7,6 +7,14 @@ inputs:
   image:
     description: "Docker image to scan (e.g., ghcr.io/org/repo:tag)"
     required: true
+  additional-images:
+    description: "Additional image references to scan, one per line"
+    required: false
+    default: ""
+  concurrent:
+    description: "Scan images concurrently. Disable for local:// byte indexing because Scout shares an indexing cache."
+    required: false
+    default: "true"
   dockerhub-user:
     description: "Docker Hub username for Scout authentication"
     required: true
@@ -61,22 +69,84 @@ runs:
         DOCKER_SCOUT_HUB_USER: ${{ inputs.dockerhub-user }}
         DOCKER_SCOUT_HUB_PASSWORD: ${{ inputs.dockerhub-password }}
         SCOUT_IMAGE: ${{ inputs.image }}
+        SCOUT_ADDITIONAL_IMAGES: ${{ inputs.additional-images }}
+        SCOUT_CONCURRENT: ${{ inputs.concurrent }}
         SCOUT_ONLY_SEVERITIES: ${{ inputs.only-severities }}
         SCOUT_ONLY_FIXED: ${{ inputs.only-fixed }}
         SCOUT_EXIT_CODE: ${{ inputs.exit-code }}
       run: |
         set -euo pipefail
 
-        scout_args=(
-          cves
-          "${SCOUT_IMAGE}"
-          --only-severity "${SCOUT_ONLY_SEVERITIES}"
-        )
-        if [[ "${SCOUT_ONLY_FIXED}" == "true" ]]; then
-          scout_args+=(--only-fixed)
-        fi
-        if [[ "${SCOUT_EXIT_CODE}" == "true" ]]; then
-          scout_args+=(--exit-code)
-        fi
+        images=("${SCOUT_IMAGE}")
+        while IFS= read -r image; do
+          [ -n "$image" ] && images+=("$image")
+        done <<< "${SCOUT_ADDITIONAL_IMAGES}"
 
-        "${RUNNER_TEMP}/docker-scout-1.24.0/docker-scout" "${scout_args[@]}"
+        pids=()
+        statuses=()
+        logs=()
+        for index in "${!images[@]}"; do
+          image="${images[$index]}"
+          scan_dir="${RUNNER_TEMP}/docker-scout-scan-${index}"
+          docker_config="${scan_dir}/docker"
+          log="${scan_dir}/scan.log"
+          mkdir -p "$docker_config"
+
+          # Scout keeps an indexing cache under Docker's config directory.
+          # Give concurrent scans isolated caches while retaining registry auth.
+          source_config="${DOCKER_CONFIG:-${HOME}/.docker}/config.json"
+          if [ -f "$source_config" ]; then
+            cp "$source_config" "${docker_config}/config.json"
+          fi
+
+          scan_image() {
+            scout_args=(
+              cves
+              "$image"
+              --only-severity "${SCOUT_ONLY_SEVERITIES}"
+            )
+            if [[ "${SCOUT_ONLY_FIXED}" == "true" ]]; then
+              scout_args+=(--only-fixed)
+            fi
+            if [[ "${SCOUT_EXIT_CODE}" == "true" ]]; then
+              scout_args+=(--exit-code)
+            fi
+
+            DOCKER_CONFIG="$docker_config" \
+              "${RUNNER_TEMP}/docker-scout-1.24.0/docker-scout" "${scout_args[@]}"
+          }
+
+          if [ "$SCOUT_CONCURRENT" = "true" ]; then
+            scan_image >"$log" 2>&1 &
+            pids+=("$!")
+            statuses+=("")
+          elif scan_image >"$log" 2>&1; then
+            pids+=("")
+            statuses+=("0")
+          else
+            pids+=("")
+            statuses+=("$?")
+          fi
+          logs+=("$log")
+        done
+
+        result=0
+        for index in "${!images[@]}"; do
+          if [ "$SCOUT_CONCURRENT" != "true" ]; then
+            status=${statuses[$index]}
+          elif wait "${pids[$index]}"; then
+            status=0
+          else
+            status=$?
+            if [ "$status" -gt "$result" ]; then
+              result=$status
+            fi
+          fi
+          echo "::group::Docker Scout CVEs: ${images[$index]}"
+          cat "${logs[$index]}"
+          echo "::endgroup::"
+          if [ "$status" -ne 0 ]; then
+            echo "::error::Docker Scout failed for ${images[$index]} (exit ${status})."
+          fi
+        done
+        exit "$result"

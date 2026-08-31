@@ -32,6 +32,10 @@ inputs:
     description: "Whether to wait for the Vault pod in the e2e dependency chart"
     required: false
     default: "false"
+  e2e-dependencies-minimal:
+    description: "Deploy only WireMock and Vault; skip unrelated auth fixture images and health checks"
+    required: false
+    default: "false"
   helm-chart-ref:
     description: "Helm chart reference - either a local path or OCI registry URL (e.g., oci://europe-west1-docker.pkg.dev/.../archestra-platform)"
     required: false
@@ -137,7 +141,7 @@ runs:
         turbo-token: ${{ inputs.turbo-token }}
 
     - name: Cache MCP example OAuth server image
-      if: ${{ inputs.deploy-e2e-dependencies == 'true' }}
+      if: ${{ inputs.deploy-e2e-dependencies == 'true' && inputs.e2e-dependencies-minimal != 'true' }}
       id: cache-oauth-image
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
@@ -145,7 +149,7 @@ runs:
         key: mcp-oauth-server-0.0.1-${{ runner.arch }}
 
     - name: Cache MCP JWKS server image
-      if: ${{ inputs.deploy-e2e-dependencies == 'true' }}
+      if: ${{ inputs.deploy-e2e-dependencies == 'true' && inputs.e2e-dependencies-minimal != 'true' }}
       id: cache-jwks-image
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
@@ -153,7 +157,7 @@ runs:
         key: mcp-jwks-server-0.0.3-${{ runner.arch }}
 
     - name: Cache MCP ID-JAG server image
-      if: ${{ inputs.deploy-e2e-dependencies == 'true' }}
+      if: ${{ inputs.deploy-e2e-dependencies == 'true' && inputs.e2e-dependencies-minimal != 'true' }}
       id: cache-id-jag-image
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
@@ -166,7 +170,7 @@ runs:
     # three serial steps (~45s wall-clock on a cold cache); doing them in parallel
     # collapses that to the slowest single image (~25s).
     - name: Fetch MCP dependency images (parallel)
-      if: ${{ inputs.deploy-e2e-dependencies == 'true' }}
+      if: ${{ inputs.deploy-e2e-dependencies == 'true' && inputs.e2e-dependencies-minimal != 'true' }}
       shell: bash
       env:
         OAUTH_CACHE_HIT: ${{ steps.cache-oauth-image.outputs.cache-hit }}
@@ -335,6 +339,7 @@ runs:
         MCP_SERVER_BASE_IMAGE_TAG: ${{ inputs.mcp-server-base-image-tag }}
         KIND_CLUSTER_NAME: ${{ inputs.kind-cluster-name }}
         DEPLOY_E2E_DEPS: ${{ inputs.deploy-e2e-dependencies }}
+        E2E_DEPS_MINIMAL: ${{ inputs.e2e-dependencies-minimal }}
         IN_CLUSTER_PULL: ${{ inputs.platform-image-in-cluster-pull }}
       run: |
         PIDS=()
@@ -358,7 +363,7 @@ runs:
 
         # The fixture pods are already deployed and retry their image pulls
         # until these loads land.
-        if [ "${DEPLOY_E2E_DEPS}" == "true" ]; then
+        if [ "${DEPLOY_E2E_DEPS}" == "true" ] && [ "${E2E_DEPS_MINIMAL}" != "true" ]; then
           MCP_OAUTH_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-example-oauth-server:0.0.1"
           MCP_JWKS_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak:0.0.3"
           MCP_ID_JAG_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-id-jag:0.0.4"
@@ -510,6 +515,7 @@ runs:
       env:
         DEPLOY_E2E_DEPS: ${{ inputs.deploy-e2e-dependencies }}
         E2E_DEPS_WAIT_FOR_VAULT: ${{ inputs.e2e-dependencies-wait-for-vault }}
+        E2E_DEPS_MINIMAL: ${{ inputs.e2e-dependencies-minimal }}
       run: |
         # Redefined here: shell functions from the "Deploy with Helm" step do
         # not survive into this step (each composite run block is its own shell).
@@ -562,26 +568,34 @@ runs:
               exit 1
             fi
           fi
-          kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=keycloak --timeout=180s
           kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=wiremock --timeout=60s
-          if ! kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=mcp-server-id-jag --timeout=60s; then
-            echo "=== MCP Server ID-JAG Pod Describe ==="
-            kubectl describe pod -l app.kubernetes.io/name=mcp-server-id-jag || true
-            echo "=== MCP Server ID-JAG Logs ==="
-            kubectl logs -l app.kubernetes.io/name=mcp-server-id-jag --tail=200 || true
-            echo "=== MCP Server ID-JAG Previous Logs ==="
-            kubectl logs -l app.kubernetes.io/name=mcp-server-id-jag --previous --tail=200 || true
-            exit 1
+          if [ "${E2E_DEPS_MINIMAL}" != "true" ]; then
+            kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=keycloak --timeout=180s
+            if ! kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=mcp-server-id-jag --timeout=60s; then
+              echo "=== MCP Server ID-JAG Pod Describe ==="
+              kubectl describe pod -l app.kubernetes.io/name=mcp-server-id-jag || true
+              echo "=== MCP Server ID-JAG Logs ==="
+              kubectl logs -l app.kubernetes.io/name=mcp-server-id-jag --tail=200 || true
+              echo "=== MCP Server ID-JAG Previous Logs ==="
+              kubectl logs -l app.kubernetes.io/name=mcp-server-id-jag --previous --tail=200 || true
+              exit 1
+            fi
           fi
 
           echo "Starting local port-forwards for dependency health checks..."
           kubectl port-forward service/e2e-tests-wiremock 30080:8080 >/tmp/wiremock-port-forward.log 2>&1 &
           WIREMOCK_PORT_FORWARD_PID=$!
-          kubectl port-forward service/e2e-tests-keycloak 30081:8080 >/tmp/keycloak-port-forward.log 2>&1 &
-          KEYCLOAK_PORT_FORWARD_PID=$!
+          KEYCLOAK_PORT_FORWARD_PID=""
+          if [ "${E2E_DEPS_MINIMAL}" != "true" ]; then
+            kubectl port-forward service/e2e-tests-keycloak 30081:8080 >/tmp/keycloak-port-forward.log 2>&1 &
+            KEYCLOAK_PORT_FORWARD_PID=$!
+          fi
 
           cleanup_port_forwards() {
-            kill "${WIREMOCK_PORT_FORWARD_PID}" "${KEYCLOAK_PORT_FORWARD_PID}" 2>/dev/null || true
+            kill "${WIREMOCK_PORT_FORWARD_PID}" 2>/dev/null || true
+            if [ -n "${KEYCLOAK_PORT_FORWARD_PID}" ]; then
+              kill "${KEYCLOAK_PORT_FORWARD_PID}" 2>/dev/null || true
+            fi
           }
           trap cleanup_port_forwards EXIT
 
@@ -603,25 +617,25 @@ runs:
             exit 1
           fi
 
-          echo "Verifying Keycloak is accessible..."
-          # kubectl wait already confirmed the pod is Ready, so Keycloak should respond quickly.
-          # Keycloak's /health/ready is on the management port (9000), NOT the main HTTP port (8080).
-          # The NodePort service routes to 8080, so we check the OIDC discovery endpoint instead.
-          for i in $(seq 1 10); do
-            HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:30081/realms/archestra/.well-known/openid-configuration || true)
-            if [ "$HTTP_CODE" = "200" ]; then
-              echo "Keycloak is accessible (HTTP $HTTP_CODE)"
-              break
+          if [ "${E2E_DEPS_MINIMAL}" != "true" ]; then
+            echo "Verifying Keycloak is accessible..."
+            # The NodePort routes to 8080, so check OIDC discovery rather than the management port.
+            for i in $(seq 1 10); do
+              HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:30081/realms/archestra/.well-known/openid-configuration || true)
+              if [ "$HTTP_CODE" = "200" ]; then
+                echo "Keycloak is accessible (HTTP $HTTP_CODE)"
+                break
+              fi
+              echo "Keycloak returned HTTP $HTTP_CODE, retrying... ($i/10)"
+              sleep 2
+            done
+            if [ "$HTTP_CODE" != "200" ]; then
+              echo "ERROR: Keycloak not accessible after 10 attempts (last HTTP $HTTP_CODE)"
+              kubectl get pods -l app.kubernetes.io/name=keycloak -o wide
+              kubectl logs -l app.kubernetes.io/name=keycloak --tail=30 2>/dev/null || true
+              cat /tmp/keycloak-port-forward.log 2>/dev/null || true
+              exit 1
             fi
-            echo "Keycloak returned HTTP $HTTP_CODE, retrying... ($i/10)"
-            sleep 2
-          done
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "ERROR: Keycloak not accessible after 10 attempts (last HTTP $HTTP_CODE)"
-            kubectl get pods -l app.kubernetes.io/name=keycloak -o wide
-            kubectl logs -l app.kubernetes.io/name=keycloak --tail=30 2>/dev/null || true
-            cat /tmp/keycloak-port-forward.log 2>/dev/null || true
-            exit 1
           fi
           echo "E2e dependency services are ready"
         fi

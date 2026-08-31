@@ -212,20 +212,21 @@ jobs:
           # Dagger engine tar) while the quickstart job pulls the full one, so a tree
           # cached before the slim variant existed cannot be reused.
           REUSE=false
-          if docker buildx imagetools inspect "${TREE_TAG}" >/dev/null 2>&1 \
-            && docker buildx imagetools inspect "${SLIM_TREE_TAG}" >/dev/null 2>&1; then
+          if FULL_TREE_REF=$(bash .github/scripts/resolve-attested-image.sh "${TREE_TAG}") \
+            && SLIM_TREE_REF=$(bash .github/scripts/resolve-attested-image.sh "${SLIM_TREE_TAG}"); then
             echo "Found cached platform images for tree ${TREE_HASH}; copying to ${SHA_TAG} (+ -slim)"
             # Registry-side manifest copy (no layer pull/push) onto the SHA tags
             # the test jobs pull. Seconds, versus the ~85-226s build it
-            # replaces.
-            if docker buildx imagetools create --tag "${SHA_TAG}" "${TREE_TAG}" \
-              && docker buildx imagetools create --tag "${SLIM_SHA_TAG}" "${SLIM_TREE_TAG}"; then
+            # replaces. Copy the already validated immutable digests, not the
+            # mutable tree tags, so the checked and retagged objects are equal.
+            if docker buildx imagetools create --tag "${SHA_TAG}" "${FULL_TREE_REF}" \
+              && docker buildx imagetools create --tag "${SLIM_SHA_TAG}" "${SLIM_TREE_REF}"; then
               REUSE=true
             else
               echo "::warning::reuse retag failed (tree tag may have just been pruned); building instead"
             fi
           else
-            echo "No cached image pair for platform tree ${TREE_HASH}; building."
+            echo "No cached attested image pair for platform tree ${TREE_HASH}; building."
           fi
           echo "reuse=${REUSE}" >> "${GITHUB_OUTPUT}"
 
@@ -248,10 +249,14 @@ jobs:
           tags: |
             ${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:${{ github.sha }}-e2e
             ${{ steps.platform-reuse.outputs.tree_tag }}
-          # E2E image consumed only by CI e2e jobs — skip SLSA provenance attestation to
-          # trim export time and keep a plain single-manifest image. (Published release
-          # images keep provenance via build-native-multi-arch-image.yml's default.)
+          # E2E image consumed only by CI e2e jobs — skip SLSA provenance to
+          # trim export time. The SBOM below intentionally makes this an OCI
+          # index with an attestation manifest. Published release images keep
+          # provenance via build-native-multi-arch-image.yml's default.
           provenance: "false"
+          # Docker Scout reads this attached SBOM directly instead of spending
+          # ~3m35s storing and indexing the image again during every scan.
+          sbom: generator=docker/scout-sbom-indexer:1.24.0@sha256:4b67f29eb0d1244ab0f62de867ac5dafd7262fcd7ebbdefa6ec8aacd6b15252d
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
           # Import both the E2E cache and the amd64 cache populated by staging
@@ -281,6 +286,7 @@ jobs:
             ${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:${{ github.sha }}-e2e-slim
             ${{ steps.platform-reuse.outputs.slim_tree_tag }}
           provenance: "false"
+          sbom: generator=docker/scout-sbom-indexer:1.24.0@sha256:4b67f29eb0d1244ab0f62de867ac5dafd7262fcd7ebbdefa6ec8aacd6b15252d
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
           # Reuse the full build's live BuildKit cache instead of creating a
@@ -380,8 +386,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
-      contents: read # Required for the local auth and scan actions.
-      id-token: write # Required for Workload Identity Federation when pulling images.
+      contents: read # Required for checkout and local scan actions.
     strategy:
       fail-fast: false
       matrix:
@@ -391,11 +396,13 @@ jobs:
             tag-suffix: -e2e
             slim-image-repository: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform
             slim-tag-suffix: -e2e-slim
+            remote-sbom: true
           - name: MCP Server Base
             image-repository: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base
             tag-suffix: ""
             slim-image-repository: ""
             slim-tag-suffix: ""
+            remote-sbom: false
     steps:
       - name: Reclaim disk space (background)
         run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
@@ -406,36 +413,42 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
-      - name: Authenticate to Google Artifact Registry
-        uses: ./.github/actions/auth-to-gar
-        with:
-          service_account: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
-          workload_identity_provider: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+      - name: Resolve attested Platform image digests
+        id: scan-refs
+        if: ${{ matrix.remote-sbom }}
+        env:
+          FULL_TAG: ${{ format('{0}:{1}{2}', matrix.image-repository, github.sha, matrix.tag-suffix) }}
+          SLIM_TAG: ${{ format('{0}:{1}{2}', matrix.slim-image-repository, github.sha, matrix.slim-tag-suffix) }}
+          GIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if full_ref=$(bash .github/scripts/resolve-attested-image.sh "$FULL_TAG") \
+            && slim_ref=$(bash .github/scripts/resolve-attested-image.sh "$SLIM_TAG"); then
+            primary=$full_ref
+            additional=$slim_ref
+          else
+            echo "::warning::Attestation validation failed; falling back to the stronger byte-derived scan."
+            docker pull "$FULL_TAG"
+            docker pull "$SLIM_TAG"
+            docker tag "$FULL_TAG" "archestra-platform:${GIT_SHA}"
+            docker tag "$SLIM_TAG" "archestra-platform-slim:${GIT_SHA}"
+            primary="local://archestra-platform:${GIT_SHA}"
+            additional="local://archestra-platform-slim:${GIT_SHA}"
+          fi
+          echo "primary=${primary}" >> "$GITHUB_OUTPUT"
+          echo "additional=${additional}" >> "$GITHUB_OUTPUT"
 
       - name: Pull E2E image
+        if: ${{ !matrix.remote-sbom }}
         env:
           SCAN_IMAGE: ${{ format('{0}:{1}{2}', matrix.image-repository, github.sha, matrix.tag-suffix) }}
         run: docker pull "${SCAN_IMAGE}"
 
-      - name: Scan image for CVEs
+      - name: Scan exact E2E image digest(s) for CVEs
         uses: ./.github/actions/scan-docker-image
         with:
-          image: ${{ format('{0}:{1}{2}', matrix.image-repository, github.sha, matrix.tag-suffix) }}
-          dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
-          dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
-          exit-code: "true"
-
-      - name: Pull slim E2E image
-        if: ${{ matrix.slim-image-repository != '' }}
-        env:
-          SCAN_IMAGE: ${{ format('{0}:{1}{2}', matrix.slim-image-repository, github.sha, matrix.slim-tag-suffix) }}
-        run: docker pull "$SCAN_IMAGE"
-
-      - name: Scan slim image for CVEs
-        if: ${{ matrix.slim-image-repository != '' }}
-        uses: ./.github/actions/scan-docker-image
-        with:
-          image: ${{ format('{0}:{1}{2}', matrix.slim-image-repository, github.sha, matrix.slim-tag-suffix) }}
+          image: ${{ steps.scan-refs.outputs.primary || format('{0}:{1}{2}', matrix.image-repository, github.sha, matrix.tag-suffix) }}
+          additional-images: ${{ steps.scan-refs.outputs.additional }}
           dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
           dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
           exit-code: "true"
@@ -489,10 +502,10 @@ jobs:
     # path. Trade-off: if the build fails, this job burns the poll deadline
     # instead of being skipped — the merge is still blocked either way by the
     # required "Build ... Image" checks.
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' || github.event.label.name == 'run-e2e-hibernation' }}
-    # 8-vcpu Blacksmith, as before the runner migration. See the setup-time
-    # measurements in the job comment above.
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
+    # The 4m15s baseline spent 171s in Kind/Helm setup and only 51s in tests.
+    # More CPU targets that setup bottleneck without duplicating the cluster.
+    runs-on: blacksmith-16vcpu-ubuntu-2404
     timeout-minutes: 60
     permissions:
       contents: read # Required to checkout the repository and read test assets.
@@ -665,9 +678,9 @@ jobs:
   # remains intact while all independent groups overlap.
   platform-e2e-hibernation-tests:
     name: Platform E2E Tests (Hibernation ${{ matrix.name }})
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event.label.name == 'run-e2e-hibernation' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
-    timeout-minutes: 90
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-e2e-hibernation' }}
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -724,14 +737,18 @@ jobs:
           helm-values-path: .github/values-ci.yaml
           deploy-e2e-dependencies: "true"
           e2e-dependencies-install-mode: "foreground"
-          e2e-dependencies-extra-helm-set: "vault.k8sAuth.enabled=true,vault.k8sAuth.boundServiceAccountName=archestra-platform,vault.k8sAuth.boundServiceAccountNamespace=default"
+          e2e-dependencies-extra-helm-set: "keycloak.enabled=false,mcpServerJwks.enabled=false,mcpExampleOAuth.enabled=false,mcpServerIdJag.enabled=false,vault.k8sAuth.enabled=true,vault.k8sAuth.boundServiceAccountName=archestra-platform,vault.k8sAuth.boundServiceAccountNamespace=default"
           e2e-dependencies-wait-for-vault: "true"
+          e2e-dependencies-minimal: "true"
           build-platform-image: "false"
           platform-image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
           platform-context: ./platform
           platform-image-in-cluster-pull: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'false' || 'true' }}
           mcp-server-base-image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('mcp-server-base:{0}', github.sha) || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
           image-pull-timeout-seconds: "1500"
+          # Production retains its 120s safety floor. ENABLE_E2E_TEST_ENDPOINTS
+          # gates this isolated cluster's accelerated 8s timing profile.
+          extra-helm-set: archestra.orchestrator.mcpIdleHibernationSeconds=8
 
       - name: Run hibernation E2E tests
         id: e2e
@@ -739,8 +756,9 @@ jobs:
         uses: ./.github/actions/run-e2e-tests
         with:
           projects: api-k8s-hibernation
-          extra_args: "${{ matrix.spec }} --workers=1"
-          timeout: "60"
+          extra_args: ${{ format('--workers=1 {0}', matrix.spec) }}
+          timeout: "30"
+          env_file: .github/e2e-hibernation.env
           blob_report_dir: blob-report-hibernation-${{ matrix.name }}
 
       - name: Upload hibernation blob report
@@ -784,7 +802,7 @@ jobs:
   platform-e2e-lite-tests:
     name: Platform E2E Tests (Lite ${{ matrix.name }})
     needs: [platform-e2e-build]
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' || github.event.label.name == 'run-e2e-hibernation' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
     # 8-vcpu Blacksmith, as before the runner migration. Each leg boots the
     # full lite stack and then runs Playwright next to it: the pre-migration
     # single lite job ran 6.9 min on 8 vcpu where the 4-vcpu legs ran 8-9
@@ -814,19 +832,23 @@ jobs:
             projects_nightly: api --project=identity-providers --project=identity-providers-saml --project=firefox --project=webkit
             shard: ""
             workers_arg: ""
-          # Keep two shards. A three-way experiment preserved all 67 selected
-          # tests but repeatedly exposed an agents.spec.ts cleanup failure that
-          # the proven two-way shape did not, while four-way sharding omitted a
-          # dependency-partitioned test entirely.
-          - name: chromium-1of2
+          # Three shards preserve all selected tests. PR #7574's API-driven
+          # gateway cleanup removed the list-UI failure that blocked this width
+          # in its earlier experiment.
+          - name: chromium-1of3
             projects_default: chromium
             projects_nightly: chromium
-            shard: "--shard=1/2"
+            shard: "--shard=1/3"
             workers_arg: "--workers=2"
-          - name: chromium-2of2
+          - name: chromium-2of3
             projects_default: chromium
             projects_nightly: chromium
-            shard: "--shard=2/2"
+            shard: "--shard=2/3"
+            workers_arg: "--workers=2"
+          - name: chromium-3of3
+            projects_default: chromium
+            projects_nightly: chromium
+            shard: "--shard=3/3"
             workers_arg: "--workers=2"
     permissions:
       contents: read # Required to checkout the repository and read test assets.
@@ -841,6 +863,20 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 1
+
+      # Both foreground consumers below remain authoritative. Start their
+      # independent pulls before pnpm setup so registry and browser-image I/O
+      # overlap instead of extending every Lite shard's critical path.
+      - name: Pre-pull Lite images (background)
+        env:
+          TRUSTED_PLATFORM_IMAGE: ${{ format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
+          IS_FORK: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true }}
+        run: |
+          if [ "$IS_FORK" != "true" ]; then
+            docker pull "$TRUSTED_PLATFORM_IMAGE" >"${RUNNER_TEMP}/lite-platform-pull.log" 2>&1 &
+          fi
+          version=$(jq -r '.devDependencies["@playwright/test"]' platform/e2e-tests/package.json | sed 's/^[\^~]//')
+          docker pull "mcr.microsoft.com/playwright:v${version}-noble" >"${RUNNER_TEMP}/lite-playwright-pull.log" 2>&1 &
 
       - name: Setup environment
         uses: ./.github/actions/setup-env
@@ -933,7 +969,7 @@ jobs:
   platform-quickstart-e2e-tests:
     name: Platform E2E Tests (Quickstart)
     needs: [platform-e2e-build]
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' || github.event.label.name == 'run-e2e-hibernation' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
     # The test step is only ~1m40s; image load and platform startup dominate
     # this 5-6 minute job. Match the other E2E legs' 8-vCPU runner so image
     # extraction and first-run initialization are not CPU-bound.
@@ -1440,7 +1476,7 @@ jobs:
         platform-e2e-lite-tests,
         platform-quickstart-e2e-tests,
       ]
-    if: ${{ always() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' || github.event.label.name == 'run-e2e-hibernation') }}
+    if: ${{ always() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

@@ -16,6 +16,7 @@ import {
   waitForServerInstallation,
 } from "../utils";
 import { expect, test } from "./api-fixtures";
+import { assertHibernationTimingProfile } from "./hibernation-timing";
 
 /**
  * Deployment annotations written by `K8sDeployment.hibernate()` and removed by
@@ -278,6 +279,7 @@ test.describe("MCP idle hibernation - capacity and registry failure modes", () =
       // A cold install pulls the MCP base image and runs `npm install` in the
       // pod before the first tool call can be served.
       test.setTimeout(300_000);
+      await assertHibernationTimingProfile({ request, makeApiRequest });
 
       const kc = new k8s.KubeConfig();
       kc.loadFromDefault();

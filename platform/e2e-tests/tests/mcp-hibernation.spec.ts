@@ -16,6 +16,11 @@ import {
   waitForServerInstallation,
 } from "../utils";
 import { expect, type TestFixtures, test } from "./api-fixtures";
+import {
+  assertHibernationTimingProfile,
+  earliestLegalHibernationMs,
+  hibernationTiming,
+} from "./hibernation-timing";
 
 /**
  * Deployment annotations written by `K8sDeployment.hibernate()` and removed by
@@ -71,24 +76,8 @@ const BURST_SERVING_RETRY_TIMEOUT_MS = 300_000;
 const SERVING_RETRY_INTERVALS = [2_000, 5_000, 10_000];
 
 /** Pods and deployment status are polled on this cadence throughout. */
-const CLUSTER_POLL_INTERVALS = [1_000, 2_000, 5_000];
+const CLUSTER_POLL_INTERVALS = hibernationTiming.clusterPollIntervals;
 const POD_SETTLE_TIMEOUT_MS = 90_000;
-
-/**
- * The idle window the e2e cluster runs
- * (`ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS` in
- * .github/values-ci.yaml — the shortest the platform accepts; the product
- * default is 1800 s).
- */
-const IDLE_WINDOW_MS = 120_000;
-
-/**
- * The sweeper extends the window by a full last-used refresh interval
- * (`MCP_SERVER_LAST_USED_REFRESH_INTERVAL_MS`, 30 s) because the persisted
- * stamp is throttled by exactly that much — usage on another replica can be
- * that much fresher than the row shows.
- */
-const LAST_USED_STAMP_GRACE_MS = 30_000;
 
 /**
  * Quiet period before the tool call that starts the idle clock. Both guards on
@@ -99,14 +88,14 @@ const LAST_USED_STAMP_GRACE_MS = 30_000;
  * quiet for longer than the interval is what makes the next call's stamp
  * certain to reach the database.
  */
-const LAST_USED_QUIET_PERIOD_MS = LAST_USED_STAMP_GRACE_MS + 5_000;
+const LAST_USED_QUIET_PERIOD_MS = hibernationTiming.quietPeriodMs;
 
 /**
  * Earliest moment the platform is ALLOWED to hibernate an install after its
  * last tool call. Nothing may sleep before this; the sweep tick that notices
  * comes later still.
  */
-const EARLIEST_LEGAL_HIBERNATION_MS = IDLE_WINDOW_MS + LAST_USED_STAMP_GRACE_MS;
+const EARLIEST_LEGAL_HIBERNATION_MS = earliestLegalHibernationMs;
 
 /**
  * When the awake-during-the-window check is taken: half the window, i.e. a
@@ -115,7 +104,7 @@ const EARLIEST_LEGAL_HIBERNATION_MS = IDLE_WINDOW_MS + LAST_USED_STAMP_GRACE_MS;
  * platform into a red test, tight enough that a sweeper ignoring the window
  * (or subtracting instead of adding the grace) is already caught here.
  */
-const EARLY_AWAKE_CHECK_MS = IDLE_WINDOW_MS / 2;
+const EARLY_AWAKE_CHECK_MS = hibernationTiming.earlyAwakeCheckMs;
 
 /**
  * Budget for watching the platform put an idle install to sleep, measured
@@ -124,7 +113,7 @@ const EARLY_AWAKE_CHECK_MS = IDLE_WINDOW_MS / 2;
  * min(window / 2, 60 s) = 60 s), plus a second tick in case the first is
  * skipped while a previous sweep is still in flight.
  */
-const PLATFORM_HIBERNATION_TIMEOUT_MS = 360_000;
+const PLATFORM_HIBERNATION_TIMEOUT_MS = hibernationTiming.hibernationDeadlineMs;
 
 /**
  * A Kubernetes merge patch, which deletes a key by sending null — something
@@ -521,6 +510,7 @@ test.describe("MCP idle hibernation - on-demand wake", () => {
       // A cold install pulls the MCP base image and runs `npm install` in the
       // pod before the first tool call can be served.
       test.setTimeout(300_000);
+      await assertHibernationTimingProfile({ request, makeApiRequest });
 
       const kc = new k8s.KubeConfig();
       kc.loadFromDefault();
@@ -1077,11 +1067,10 @@ test.describe("MCP idle hibernation - on-demand wake", () => {
     getOrganization,
   }) => {
     // The one test that waits out a REAL idle window instead of injecting the
-    // sleeping state, so it pays for the whole timeline: a 35 s quiet period
-    // and a 30 s read-back to put a fresh, provable last-used stamp on the
-    // install, 60 s of guaranteed-awake window, then the window's remainder
-    // plus a sweep tick before the platform acts, a pod teardown, a full wake
-    // and a cold pod's start-up.
+    // sleeping state, so it pays for the configured quiet period, a fresh
+    // provable last-used stamp, an early guaranteed-awake check, then the
+    // window's remainder plus a sweep tick before the platform acts, a pod
+    // teardown, a full wake and a cold pod's start-up.
     test.setTimeout(1_140_000);
     requireRecordedBaseline();
 
@@ -1151,10 +1140,9 @@ test.describe("MCP idle hibernation - on-demand wake", () => {
       const replicasBeforeSleep = awake.replicas ?? 0;
       expect(replicasBeforeSleep).toBeGreaterThan(0);
 
-      // Well inside the window: the platform may not hibernate before
-      // last-use + 120 s + 30 s of stamp grace, and this read lands 90 s short
-      // of that. A deployment already asleep here means the idle arithmetic
-      // ignored the window, or subtracted the grace instead of adding it.
+      // Well inside the configured window. A deployment already asleep here
+      // means the idle arithmetic ignored the window or its demand-signal
+      // staleness grace.
       await sleepUntil(idleSince + EARLY_AWAKE_CHECK_MS);
       const stillAwake = await readDeploymentFacts();
       expect(

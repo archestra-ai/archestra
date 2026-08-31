@@ -165,6 +165,24 @@ describe("buildRunnerJob", () => {
     ).toBe("10Gi");
   });
 
+  it("gives a privileged runner a real filesystem for /var/lib/docker", () => {
+    const unprivileged = buildRunnerJob(SPEC).spec?.template.spec;
+    expect(unprivileged?.volumes?.map((volume) => volume.name)).toEqual([
+      "archestra-run",
+    ]);
+
+    const privileged = buildRunnerJob({ ...SPEC, privileged: true }).spec
+      ?.template.spec;
+    expect(privileged?.volumes).toContainEqual({
+      name: "docker-lib",
+      emptyDir: { sizeLimit: "10Gi" },
+    });
+    expect(privileged?.containers[0]?.volumeMounts).toContainEqual({
+      name: "docker-lib",
+      mountPath: "/var/lib/docker",
+    });
+  });
+
   it("quotes a configured command so arguments cannot break out", () => {
     const job = buildRunnerJob({
       ...SPEC,

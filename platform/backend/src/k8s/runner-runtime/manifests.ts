@@ -165,6 +165,19 @@ export function buildRunnerJob(spec: KubernetesRunnerLaunchSpec): k8s.V1Job {
               name: "archestra-run",
               emptyDir: { sizeLimit: spec.ephemeralStorageLimit },
             },
+            // A privileged runner is expected to run its own dockerd (kind,
+            // tilt, testcontainers). Docker's overlay2 storage driver cannot
+            // stack on the container's own overlayfs root, and its silent
+            // fallback is vfs — full copies per layer, unusably slow. An
+            // emptyDir gives /var/lib/docker a real (non-overlay) filesystem.
+            ...(spec.privileged
+              ? [
+                  {
+                    name: "docker-lib",
+                    emptyDir: { sizeLimit: spec.ephemeralStorageLimit },
+                  },
+                ]
+              : []),
           ],
           containers: [
             {
@@ -212,6 +225,9 @@ export function buildRunnerJob(spec: KubernetesRunnerLaunchSpec): k8s.V1Job {
               resources: buildResourceRequirements(spec.resources),
               volumeMounts: [
                 { name: "archestra-run", mountPath: RUNNER_RUNTIME_DIR },
+                ...(spec.privileged
+                  ? [{ name: "docker-lib", mountPath: "/var/lib/docker" }]
+                  : []),
               ],
               ...(spec.privileged
                 ? { securityContext: { privileged: true } }

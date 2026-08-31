@@ -108,8 +108,8 @@ function mockAgent(agent: unknown) {
   } as unknown as ReturnType<typeof useProfile>);
 }
 
-function mockTab(tab?: string) {
-  const search = tab ? `tab=${tab}` : "";
+function mockSection(section?: string) {
+  const search = section ? `section=${section}` : "";
   window.history.replaceState(
     {},
     "",
@@ -150,7 +150,7 @@ describe("AgentDetailPage", () => {
     // real document location, so jsdom has to be on the page being rendered
     // or the current tab's own link reads as somewhere else.
     window.history.replaceState({}, "", "/agents/a1");
-    mockTab();
+    mockSection();
     vi.mocked(useDeleteProfile).mockReturnValue({
       mutate: vi.fn(),
       isPending: false,
@@ -220,34 +220,40 @@ describe("AgentDetailPage", () => {
     expect(screen.queryByRole("link", { name: "Edit" })).toBeNull();
   });
 
-  it("puts every configuration step and every view on a tab of the same page", () => {
+  it("puts every section of the record on a tab of the same page", () => {
     render(<AgentDetailPage kind="agent" id="a1" />);
 
-    const tabHrefs = ["Configuration", "Tools & Knowledge", "Advanced"].map(
-      (name) =>
-        screen.getAllByRole("link", { name })[0]?.getAttribute("href") ?? null,
-    );
-    expect(tabHrefs).toEqual([
+    expect(
+      [
+        "General",
+        "Tools & Knowledge",
+        "Messaging Channels",
+        "Advanced",
+        "Connect",
+      ].map(
+        (name) =>
+          screen.getAllByRole("link", { name })[0]?.getAttribute("href") ??
+          null,
+      ),
+    ).toEqual([
       "/agents/a1",
-      "/agents/a1?tab=tools",
-      "/agents/a1?tab=advanced",
+      "/agents/a1?section=tools",
+      "/agents/a1?section=messaging",
+      "/agents/a1?section=advanced",
+      "/agents/a1?section=connect",
     ]);
-    expect(screen.getAllByRole("link", { name: "Connect" })[0]).toHaveAttribute(
-      "href",
-      "/agents/a1?tab=connect",
-    );
   });
 
-  it("mounts only the section the current tab names", () => {
-    mockTab("tools");
+  it("mounts only the form group the current section names", () => {
+    mockSection("tools");
     render(<AgentDetailPage kind="agent" id="a1" />);
 
     expect(screen.getByText("form section: tools")).toBeVisible();
     expect(screen.queryByText("connect content")).toBeNull();
   });
 
-  it("shows the connection instructions on their own tab, with no form", () => {
-    mockTab("connect");
+  it("shows the connection instructions in their own section, with no form", () => {
+    mockSection("connect");
     render(<AgentDetailPage kind="agent" id="a1" />);
 
     expect(screen.getByText("connect content")).toBeVisible();
@@ -255,11 +261,11 @@ describe("AgentDetailPage", () => {
     expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
   });
 
-  it("corrects a ?tab= this record has no tab for", () => {
+  it("corrects a ?section= this record has none of", () => {
     // Executions is an agent-with-background-execution tab; asking for it on a
     // record without one renders Configuration, and the URL is put right so a
     // reload does not keep asking.
-    mockTab("executions");
+    mockSection("executions");
     render(<AgentDetailPage kind="agent" id="a1" />);
 
     expect(screen.getByText("form section: configuration")).toBeVisible();
@@ -296,12 +302,12 @@ describe("AgentDetailPage", () => {
     expect(screen.getByText(/discard unsaved changes\?/i)).toBeInTheDocument();
   });
 
-  it("does not ask about leaving the tab already on screen", async () => {
+  it("does not ask about leaving the section already on screen", async () => {
     const user = userEvent.setup();
     render(<AgentDetailPage kind="agent" id="a1" />);
 
     await user.click(screen.getByRole("button", { name: "make dirty" }));
-    await user.click(screen.getAllByRole("link", { name: "Configuration" })[0]);
+    await user.click(screen.getAllByRole("link", { name: "General" })[0]);
 
     expect(screen.queryByText(/discard unsaved changes\?/i)).toBeNull();
   });
@@ -331,7 +337,7 @@ describe("AgentDetailPage", () => {
     expect(screen.getByText("Production")).toBeVisible();
   });
 
-  it("renders no tab bar for a built-in record, which has one tab", () => {
+  it("renders no tab bar for a built-in record, which has one section", () => {
     access = { ...access, isBuiltIn: true };
     mockAgent({ ...baseAgent, builtIn: true });
     render(<AgentDetailPage kind="agent" id="a1" />);
@@ -343,7 +349,7 @@ describe("AgentDetailPage", () => {
     expect(screen.queryByText("connect content")).toBeNull();
   });
 
-  it("names delegated task history Executions and opens it from a tab", () => {
+  it("names delegated task history Executions and gives it a section", () => {
     vi.mocked(useFeature).mockReturnValue(true);
     mockAgent({ ...baseAgent, backgroundExecution: {} });
     render(<AgentDetailPage kind="agent" id="a1" />);
@@ -352,7 +358,8 @@ describe("AgentDetailPage", () => {
       screen
         .getAllByRole("link", { name: "Executions" })
         .every(
-          (link) => link.getAttribute("href") === "/agents/a1?tab=executions",
+          (link) =>
+            link.getAttribute("href") === "/agents/a1?section=executions",
         ),
     ).toBe(true);
     expect(screen.queryByRole("link", { name: "Runs" })).toBeNull();

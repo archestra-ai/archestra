@@ -33,7 +33,7 @@ test.describe("Agents", () => {
     await page.getByTestId(E2eTestId.AgentSetupNextButton).click();
     await page.getByTestId(E2eTestId.AgentSetupNextButton).click();
     await page.getByTestId(E2eTestId.AgentSetupSubmitButton).click();
-    await page.waitForURL(/\/agents\/agent-created\?tab=connect$/);
+    await page.waitForURL(/\/agents\/agent-created\?section=connect$/);
 
     await agentsPage.goto();
 
@@ -157,10 +157,10 @@ test.describe("Agents", () => {
     // Saving stays put: the record's page is where it was being edited.
     await expect(page).toHaveURL(/\/agents\/agent-cloned$/);
 
-    // The remaining configuration is a tab of the same page, not a step of a
-    // separate wizard.
+    // The remaining configuration is a section of the same page, not a step
+    // of a separate wizard.
     await page.getByTestId(`${E2eTestId.AgentSetupStep}-tools`).click();
-    await page.waitForURL(/\/agents\/agent-cloned\?tab=tools$/);
+    await page.waitForURL(/\/agents\/agent-cloned\?section=tools$/);
     await expect(page.getByTestId(E2eTestId.AgentToolsSection)).toBeVisible();
   });
 });

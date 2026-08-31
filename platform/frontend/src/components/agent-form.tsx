@@ -66,11 +66,7 @@ import {
   ProfileLabels,
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
-import {
-  agentDetailHref,
-  agentListHref,
-  agentPageKindForType,
-} from "@/components/agent-pages/agent-page-config";
+import { agentDetailHref } from "@/components/agent-pages/agent-page-config";
 import {
   AgentSkillsEditor,
   type EditableSkill,
@@ -151,7 +147,6 @@ import {
   VisibilitySelector as SharedVisibilitySelector,
   type VisibilityOption,
 } from "@/components/visibility-selector";
-import { WizardFooter } from "@/components/wizard-footer";
 
 /**
  * What the agent visibility control offers. Wider than the stored scope: an
@@ -780,11 +775,22 @@ export function AccessLevelSelector({
  * - `advanced`: background execution, security, passthrough headers, identity
  *   provider, and labels.
  */
-export type AgentFormSection = "configuration" | "tools" | "advanced";
+/**
+ * The groups a host can mount independently. `messaging` is a section of its
+ * own rather than part of `configuration`: channel assignments save through
+ * their own endpoint, so a surface showing only them must not also re-send the
+ * configuration fields it never displayed.
+ */
+export type AgentFormSection =
+  | "configuration"
+  | "messaging"
+  | "tools"
+  | "advanced";
 
 /** The default render: the whole form. */
 const AGENT_FORM_SECTIONS: readonly AgentFormSection[] = [
   "configuration",
+  "messaging",
   "tools",
   "advanced",
 ];
@@ -897,8 +903,14 @@ export function AgentForm({
   const appName = useAppName();
   const mountedSections = new Set<AgentFormSection>(sections);
   const showConfigurationSections = mountedSections.has("configuration");
+  const showMessagingSection = mountedSections.has("messaging");
   const showToolsSections = mountedSections.has("tools");
   const showAdvancedSections = mountedSections.has("advanced");
+  // Whether anything on screen contributes a field to the agent record's own
+  // PUT. Messaging channels alone do not — they write through their own
+  // endpoint.
+  const mountsAgentFields =
+    showConfigurationSections || showToolsSections || showAdvancedSections;
   const isActiveSection = (group: AgentFormSection) =>
     activeSection === undefined || activeSection === group;
   const supportsSubagents = agentType === "agent";
@@ -1355,11 +1367,20 @@ export function AgentForm({
   const organizationDefaultModel = useOrganizationDefaultModel({
     enabled: showsModelControl,
   });
+  // General now holds the four fields the reader came for — name, model,
+  // description and instructions — so it is shown whenever any of them
+  // applies, not only when the name and description do.
   const showPrimarySettingsCard =
     !isBuiltIn ||
     shouldShowDescriptionField({ agentType, isBuiltIn }) ||
+    showsModelControl ||
+    isInternalAgent ||
     isPolicyConfigBuiltIn ||
     isDualLlmMainBuiltIn;
+  // Who may reach it — the scope picker, plus the caller's own default-agent
+  // toggle. A built-in belongs to the organization and offers neither, so the
+  // section would be empty.
+  const showsAccessSection = !isBuiltIn;
   const showTools =
     !isBuiltIn &&
     (agentType === "mcp_gateway" ||
@@ -2046,6 +2067,14 @@ export function AgentForm({
         if (updated?.id) {
           toast.success("Built-in agent updated successfully");
         }
+      } else if (agent && !mountsAgentFields) {
+        // A surface showing only the messaging channels has no field of the
+        // agent record on it. Their assignments have already been written by
+        // `handleSave`; a PUT here would carry an empty body, and an empty
+        // body still forks a config version and writes an audit record for an
+        // edit nobody made.
+        savedAgentId = agent.id;
+        updateConfirmed = true;
       } else if (agent) {
         // Update existing agent
         const updated = await updateAgent.mutateAsync({
@@ -2061,16 +2090,11 @@ export function AgentForm({
               }),
               ...(isInternalAgent && {
                 systemPrompt: trimmedSystemPrompt || null,
-                suggestedPrompts: validSuggestedPrompts,
                 ...(llmSelectionChanged && {
                   llmApiKeyId: llmApiKeyId || null,
                   modelId: llmModel || null,
                 }),
               }),
-              ...(supportsEnvironment &&
-                environmentChanged && {
-                  environmentId: environmentId ?? null,
-                }),
               teams: assignedTeamIds,
               users: assignedUserIds,
               scope,
@@ -2079,6 +2103,16 @@ export function AgentForm({
             // header passthrough.
             ...(showAdvancedSections && {
               labels: updatedLabels,
+              // The environment and the suggested prompts are edited on this
+              // group's surface, so they are written with it — a group only
+              // ever sends the fields it showed.
+              ...(isInternalAgent && {
+                suggestedPrompts: validSuggestedPrompts,
+              }),
+              ...(supportsEnvironment &&
+                environmentChanged && {
+                  environmentId: environmentId ?? null,
+                }),
               ...(supportsIdentityProvider && {
                 identityProviderId: identityProviderId || null,
               }),
@@ -2357,6 +2391,7 @@ export function AgentForm({
     showConfigurationSections,
     showToolsSections,
     showAdvancedSections,
+    mountsAgentFields,
     advisorAgentId,
     deleteAgent,
     delegationTargetIdsToSave,
@@ -2580,12 +2615,12 @@ export function AgentForm({
             <SettingsSectionGroup
               className={cn(!isActiveSection("configuration") && "hidden")}
             >
-              {/* Section 1: what it is, where it runs, who can use it. */}
+              {/* Section 1: what the record is and how it is prompted — the
+                  four fields someone opens this page to change. It carries no
+                  title of its own: the page's side nav already names this
+                  section, and saying it twice reads as a mistake. */}
               {showPrimarySettingsCard && (
-                <SettingsSection
-                  title="General"
-                  description={`What this ${agentTypeDisplayName[agentType] || "agent"} is, and who can reach it.`}
-                >
+                <SettingsSection>
                   {/* Name + Icon (hidden for built-in agents, shown in dialog title) */}
                   {!isBuiltIn && (
                     <IdentityFields
@@ -2607,6 +2642,167 @@ export function AgentForm({
                     </IdentityFields>
                   )}
 
+                  {/* Model, beside the name: which model answers is part of
+                      what an agent is, not an afterthought below its prompt.
+                      It carried its own section title until it moved here, so
+                      it needs the field label the others have. */}
+                  {showsModelControl && (
+                    <div className="space-y-2">
+                      <Label>Model</Label>
+                      {cannotReadLlmConfiguration ? (
+                        <Alert>
+                          <AlertDescription className="text-sm text-muted-foreground">
+                            You do not have permission to view LLM API keys or
+                            models. This agent will use the organization&apos;s
+                            default model configuration.
+                          </AlertDescription>
+                        </Alert>
+                      ) : (
+                        <>
+                          {requiredSubscription &&
+                            !requiredSubscriptionSatisfied && (
+                              <Alert>
+                                <InfoIcon className="h-4 w-4" />
+                                <AlertTitle>
+                                  {requiredSubscription.label} required
+                                </AlertTitle>
+                                <AlertDescription className="space-y-2">
+                                  <p>
+                                    This maintained runtime uses your existing
+                                    subscription and does not fall back to
+                                    usage-based API billing.
+                                  </p>
+                                  {!requiredSubscriptionKey && (
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      asChild
+                                    >
+                                      <Link
+                                        href={`/llm/model-providers?connect=${requiredSubscriptionKind}`}
+                                        target="_blank"
+                                      >
+                                        {
+                                          requiredSubscription.connect
+                                            .signInTitle
+                                        }
+                                      </Link>
+                                    </Button>
+                                  )}
+                                </AlertDescription>
+                              </Alert>
+                            )}
+                          {selectedApiKeyIsSubscription ? (
+                            <Alert>
+                              <InfoIcon className="h-4 w-4" />
+                              <AlertDescription>
+                                Each person using this agent must connect their
+                                own subscription account. No credential is
+                                shared.
+                              </AlertDescription>
+                            </Alert>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">
+                              {selectedApiKey &&
+                              selectedApiKey.scope !== "org" ? (
+                                <span>
+                                  Selected key will be available to everyone who
+                                  has access to this agent.
+                                </span>
+                              ) : null}
+                            </p>
+                          )}
+                          <div className="flex flex-wrap items-center gap-2">
+                            <LlmProviderApiKeyDropdown
+                              availableKeys={availableApiKeys}
+                              selectedApiKeyId={llmApiKeyId}
+                              open={apiKeySelectorOpen}
+                              onOpenChange={setApiKeySelectorOpen}
+                              onSelectKey={(keyId) => {
+                                handleLlmApiKeyChange(keyId);
+                                setApiKeySelectorOpen(false);
+                              }}
+                              currentProvider={currentLlmProvider ?? undefined}
+                              triggerVariant="button"
+                              triggerClassName="h-8 max-w-[250px] text-xs"
+                              popoverClassName="w-96"
+                              popoverPortal={false}
+                              searchPlaceholder="Search API keys..."
+                              allowOrganizationDefault
+                              organizationDefaultSelected={!llmApiKeyId}
+                              onSelectOrganizationDefault={() => {
+                                setLlmApiKeyId(null);
+                                setLlmModel(null);
+                                lastAutoSelectedProviderRef.current = null;
+                                setApiKeySelectorOpen(false);
+                              }}
+                            />
+                            {!llmApiKeyId ? (
+                              <TooltipProvider delayDuration={300}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div>
+                                      <ModelSelector
+                                        selectedModel=""
+                                        onModelChange={() => {}}
+                                        disabled
+                                        variant="outline"
+                                        enabled={false}
+                                        // The model the organization default
+                                        // resolves to today; the runtime's own
+                                        // fallback when no default is set.
+                                        placeholder={
+                                          organizationDefaultModel.label ??
+                                          undefined
+                                        }
+                                      />
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent
+                                    side="bottom"
+                                    className="text-xs"
+                                  >
+                                    Select a provider API key first
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            ) : (
+                              <ModelSelector
+                                selectedModel={llmModel || ""}
+                                onModelChange={(modelId) =>
+                                  handleLlmModelChange(modelId)
+                                }
+                                onClear={() => {
+                                  setLlmModel(null);
+                                  setLlmApiKeyId(null);
+                                  lastAutoSelectedProviderRef.current = null;
+                                }}
+                                variant="outline"
+                                apiKeyId={llmApiKeyId}
+                                enabled={!!canReadLlmModels}
+                              />
+                            )}
+                          </div>
+                          {showNoToolsModelNotice && (
+                            <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                              <InfoIcon
+                                className="mt-0.5 size-3 shrink-0"
+                                aria-hidden="true"
+                              />
+                              <span>
+                                This model doesn&apos;t support tools, so this{" "}
+                                {agentTypeDisplayName[agentType] || "agent"}
+                                &apos;s tools won&apos;t be used in its chats.
+                                Pick a different model to use tools.
+                              </span>
+                            </p>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+
                   {/* Description (hidden for built-in agents) */}
                   {shouldShowDescriptionField({ agentType, isBuiltIn }) && (
                     <div className="space-y-2">
@@ -2621,24 +2817,36 @@ export function AgentForm({
                     </div>
                   )}
 
-                  {/* Environment assignment (below the description).
-                      - Agent: binds the agent's code sandbox to a per-environment
-                        Dagger engine + egress policy.
-                      - LLM proxy / MCP gateway: assigns the deployment environment
-                        so its usage falls under environment-scoped cost limits.
-                      The advisor renders no selector: it is configured once for
-                      the organization and reachable from every environment.
-                      Shown on create as well as on edit — where a new record
-                      runs is part of what is being created, and an org with
-                      only the Default environment gets the same disabled
-                      control the edit form shows rather than a silent field. */}
-                  {showsEnvironmentSelector && (
-                    <EnvironmentSelector
-                      value={environmentId ?? null}
-                      onChange={setEnvironmentId}
-                      resource={getResourceForAgentType(agentType)}
-                      helpText={environmentHelpText}
-                    />
+                  {/* Instructions: what the agent is told to do. Saved with the
+                      rest of this panel, so one Save covers the whole tab. */}
+                  {isInternalAgent && (
+                    <div className="space-y-2">
+                      <SystemPromptEditor
+                        title="Instructions"
+                        value={systemPrompt}
+                        onChange={setSystemPrompt}
+                        readOnly={readOnly}
+                        variant="default"
+                        builtInAgentId={builtInAgentName}
+                        headerExtra={
+                          defaultSystemPrompt !== undefined && !readOnly ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="shrink-0"
+                              disabled={systemPrompt === defaultSystemPrompt}
+                              onClick={() =>
+                                setSystemPrompt(defaultSystemPrompt)
+                              }
+                            >
+                              <RotateCcw className="size-4" />
+                              <span>Reset to default</span>
+                            </Button>
+                          ) : undefined
+                        }
+                      />
+                    </div>
                   )}
 
                   {/* Built-in agent config */}
@@ -2679,7 +2887,18 @@ export function AgentForm({
                       />
                     </div>
                   )}
+                </SettingsSection>
+              )}
 
+              {showsAccessSection && (
+                <SettingsSection
+                  title="Access"
+                  description={
+                    canTogglePersonalDefault
+                      ? "Who this agent is shared with, and whether new chats start on it."
+                      : `Who this ${agentTypeDisplayName[agentType] || "agent"} is shared with.`
+                  }
+                >
                   {/* Visibility / Scope: who can use it, once it has a name and a
                     place to run. */}
                   {!isBuiltIn && (
@@ -2707,7 +2926,6 @@ export function AgentForm({
                       />
                     </div>
                   )}
-
                   {/* Personal default (the caller's own personal chat agent) */}
                   {canTogglePersonalDefault && (
                     <div className="flex items-center justify-between gap-4">
@@ -2736,366 +2954,6 @@ export function AgentForm({
                 </SettingsSection>
               )}
 
-              {agentType === "agent" && agent && canReadAgentTriggers && (
-                <SettingsSection
-                  title="Messaging channels"
-                  description="Set instructions and reply behavior for each assigned channel."
-                >
-                  <AgentChatAppsEditor
-                    agent={agent}
-                    readOnly={readOnly}
-                    showHeading={false}
-                    onDirtyChange={setChannelAssignmentsDirty}
-                    standaloneSave={false}
-                    onSaveHandlerChange={registerChannelAssignmentsSave}
-                  />
-                </SettingsSection>
-              )}
-
-              {/* Instructions: what the agent is told to do. Saved with the
-                  rest of this panel, so one Save covers the whole tab. */}
-              {isInternalAgent && (
-                <SettingsSection
-                  title="Instructions"
-                  description="The system prompt this agent runs with."
-                >
-                  <SystemPromptEditor
-                    value={systemPrompt}
-                    onChange={setSystemPrompt}
-                    readOnly={readOnly}
-                    variant="section"
-                    showTitle={false}
-                    builtInAgentId={builtInAgentName}
-                    headerExtra={
-                      defaultSystemPrompt !== undefined && !readOnly ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="shrink-0"
-                          disabled={systemPrompt === defaultSystemPrompt}
-                          onClick={() => setSystemPrompt(defaultSystemPrompt)}
-                        >
-                          <RotateCcw className="size-4" />
-                          <span>Reset to default</span>
-                        </Button>
-                      ) : undefined
-                    }
-                  />
-                </SettingsSection>
-              )}
-
-              {/* Suggested Prompts (Agent only, not built-in, collapsible) */}
-              {isInternalAgent && !isBuiltIn && (
-                <SettingsSection
-                  title="Suggested prompts"
-                  description={`Shown to users when starting a new chat. Max ${MAX_SUGGESTED_PROMPTS} prompts, title max ${MAX_SUGGESTED_PROMPT_TITLE_LENGTH} chars, prompt max ${MAX_SUGGESTED_PROMPT_TEXT_LENGTH} chars.`}
-                >
-                  <Collapsible
-                    open={suggestedPromptsOpen}
-                    onOpenChange={setSuggestedPromptsOpen}
-                    className="group"
-                  >
-                    <div className="overflow-hidden rounded-md border">
-                      {suggestedPrompts.length > 0 ? (
-                        <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 p-3 transition-colors [&:hover:not(:has(button:hover))]:bg-muted/50 [&[data-state=open]>div>svg]:rotate-90">
-                          <span className="text-sm font-medium">
-                            {suggestedPrompts.length} prompt
-                            {suggestedPrompts.length === 1 ? null : (
-                              <span>s</span>
-                            )}
-                          </span>
-                          <div className="flex items-center gap-2 shrink-0">
-                            {suggestedPromptsOpen && (
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <span>
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        disabled={
-                                          suggestedPrompts.length >=
-                                          MAX_SUGGESTED_PROMPTS
-                                        }
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setSuggestedPrompts((prev) => [
-                                            ...prev,
-                                            { summaryTitle: "", prompt: "" },
-                                          ]);
-                                        }}
-                                      >
-                                        <Plus className="h-4 w-4 mr-1" />
-                                        Add
-                                      </Button>
-                                    </span>
-                                  </TooltipTrigger>
-                                  {suggestedPrompts.length >=
-                                    MAX_SUGGESTED_PROMPTS && (
-                                    <TooltipContent>
-                                      Maximum of {MAX_SUGGESTED_PROMPTS}{" "}
-                                      suggested prompts reached
-                                    </TooltipContent>
-                                  )}
-                                </Tooltip>
-                              </TooltipProvider>
-                            )}
-                            <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform" />
-                          </div>
-                        </CollapsibleTrigger>
-                      ) : (
-                        <div className="flex items-center justify-between gap-3 p-3">
-                          <span className="text-sm text-muted-foreground">
-                            None yet
-                          </span>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="self-start"
-                            size="sm"
-                            onClick={() => {
-                              setSuggestedPrompts([
-                                { summaryTitle: "", prompt: "" },
-                              ]);
-                              setSuggestedPromptsOpen(true);
-                            }}
-                          >
-                            <Plus className="h-4 w-4 mr-1" />
-                            Add
-                          </Button>
-                        </div>
-                      )}
-                      <CollapsibleContent>
-                        <div className="border-t p-3 space-y-4">
-                          {suggestedPrompts.map((sp, index) => (
-                            <div
-                              // biome-ignore lint/suspicious/noArrayIndexKey: items have no stable ID
-                              key={`sp-${index}`}
-                              className="space-y-2 rounded-md border p-3 relative"
-                            >
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="absolute top-2 right-2 h-6 w-6"
-                                aria-label="Remove suggested prompt"
-                                onClick={() => {
-                                  setSuggestedPrompts((prev) => {
-                                    const next = prev.filter(
-                                      (_, i) => i !== index,
-                                    );
-                                    if (next.length === 0)
-                                      setSuggestedPromptsOpen(false);
-                                    return next;
-                                  });
-                                }}
-                              >
-                                <X className="h-3 w-3" />
-                              </Button>
-                              <div className="space-y-1 pr-8">
-                                <Label className="text-xs">Button Label</Label>
-                                <Input
-                                  value={sp.summaryTitle}
-                                  onChange={(e) =>
-                                    setSuggestedPrompts((prev) =>
-                                      prev.map((p, i) =>
-                                        i === index
-                                          ? {
-                                              ...p,
-                                              summaryTitle: e.target.value,
-                                            }
-                                          : p,
-                                      ),
-                                    )
-                                  }
-                                  placeholder="e.g. Summarize recent changes"
-                                  maxLength={MAX_SUGGESTED_PROMPT_TITLE_LENGTH}
-                                  aria-label="Button Label"
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <Label className="text-xs">Prompt</Label>
-                                <Textarea
-                                  value={sp.prompt}
-                                  onChange={(e) =>
-                                    setSuggestedPrompts((prev) =>
-                                      prev.map((p, i) =>
-                                        i === index
-                                          ? { ...p, prompt: e.target.value }
-                                          : p,
-                                      ),
-                                    )
-                                  }
-                                  placeholder="The full prompt sent when clicked"
-                                  className="min-h-[60px]"
-                                  maxLength={MAX_SUGGESTED_PROMPT_TEXT_LENGTH}
-                                  aria-label="Suggested prompt"
-                                />
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </CollapsibleContent>
-                    </div>
-                  </Collapsible>
-                </SettingsSection>
-              )}
-
-              {/* Model (Agent and Built-in) — the provider key and the
-                model that answers, once the agent has been told what to do. */}
-              {showsModelControl && (
-                <SettingsSection
-                  title="Model"
-                  description={`The provider key and model this ${agentTypeDisplayName[agentType] || "agent"} answers with.`}
-                >
-                  {cannotReadLlmConfiguration ? (
-                    <Alert>
-                      <AlertDescription className="text-sm text-muted-foreground">
-                        You do not have permission to view LLM API keys or
-                        models. This agent will use the organization&apos;s
-                        default model configuration.
-                      </AlertDescription>
-                    </Alert>
-                  ) : (
-                    <>
-                      {requiredSubscription &&
-                        !requiredSubscriptionSatisfied && (
-                          <Alert>
-                            <InfoIcon className="h-4 w-4" />
-                            <AlertTitle>
-                              {requiredSubscription.label} required
-                            </AlertTitle>
-                            <AlertDescription className="space-y-2">
-                              <p>
-                                This maintained runtime uses your existing
-                                subscription and does not fall back to
-                                usage-based API billing.
-                              </p>
-                              {!requiredSubscriptionKey && (
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  asChild
-                                >
-                                  <Link
-                                    href={`/llm/model-providers?connect=${requiredSubscriptionKind}`}
-                                    target="_blank"
-                                  >
-                                    {requiredSubscription.connect.signInTitle}
-                                  </Link>
-                                </Button>
-                              )}
-                            </AlertDescription>
-                          </Alert>
-                        )}
-                      {selectedApiKeyIsSubscription ? (
-                        <Alert>
-                          <InfoIcon className="h-4 w-4" />
-                          <AlertDescription>
-                            Each person using this agent must connect their own
-                            subscription account. No credential is shared.
-                          </AlertDescription>
-                        </Alert>
-                      ) : (
-                        <p className="text-sm text-muted-foreground">
-                          {selectedApiKey && selectedApiKey.scope !== "org" ? (
-                            <span>
-                              Selected key will be available to everyone who has
-                              access to this agent.
-                            </span>
-                          ) : null}
-                        </p>
-                      )}
-                      <div className="flex flex-wrap items-center gap-2">
-                        <LlmProviderApiKeyDropdown
-                          availableKeys={availableApiKeys}
-                          selectedApiKeyId={llmApiKeyId}
-                          open={apiKeySelectorOpen}
-                          onOpenChange={setApiKeySelectorOpen}
-                          onSelectKey={(keyId) => {
-                            handleLlmApiKeyChange(keyId);
-                            setApiKeySelectorOpen(false);
-                          }}
-                          currentProvider={currentLlmProvider ?? undefined}
-                          triggerVariant="button"
-                          triggerClassName="h-8 max-w-[250px] text-xs"
-                          popoverClassName="w-96"
-                          popoverPortal={false}
-                          searchPlaceholder="Search API keys..."
-                          allowOrganizationDefault
-                          organizationDefaultSelected={!llmApiKeyId}
-                          onSelectOrganizationDefault={() => {
-                            setLlmApiKeyId(null);
-                            setLlmModel(null);
-                            lastAutoSelectedProviderRef.current = null;
-                            setApiKeySelectorOpen(false);
-                          }}
-                        />
-                        {!llmApiKeyId ? (
-                          <TooltipProvider delayDuration={300}>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <div>
-                                  <ModelSelector
-                                    selectedModel=""
-                                    onModelChange={() => {}}
-                                    disabled
-                                    variant="outline"
-                                    enabled={false}
-                                    // The model the organization default
-                                    // resolves to today; the runtime's own
-                                    // fallback when no default is set.
-                                    placeholder={
-                                      organizationDefaultModel.label ??
-                                      undefined
-                                    }
-                                  />
-                                </div>
-                              </TooltipTrigger>
-                              <TooltipContent side="bottom" className="text-xs">
-                                Select a provider API key first
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        ) : (
-                          <ModelSelector
-                            selectedModel={llmModel || ""}
-                            onModelChange={(modelId) =>
-                              handleLlmModelChange(modelId)
-                            }
-                            onClear={() => {
-                              setLlmModel(null);
-                              setLlmApiKeyId(null);
-                              lastAutoSelectedProviderRef.current = null;
-                            }}
-                            variant="outline"
-                            apiKeyId={llmApiKeyId}
-                            enabled={!!canReadLlmModels}
-                          />
-                        )}
-                      </div>
-                      {showNoToolsModelNotice && (
-                        <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
-                          <InfoIcon
-                            className="mt-0.5 size-3 shrink-0"
-                            aria-hidden="true"
-                          />
-                          <span>
-                            This model doesn&apos;t support tools, so this{" "}
-                            {agentTypeDisplayName[agentType] || "agent"}
-                            &apos;s tools won&apos;t be used in its chats. Pick
-                            a different model to use tools.
-                          </span>
-                        </p>
-                      )}
-                    </>
-                  )}
-                </SettingsSection>
-              )}
-
               {/* Labels for built-in agents (the Advanced step that holds
                 them for everyone else does not exist for a built-in). */}
               {isBuiltIn && (
@@ -3114,17 +2972,37 @@ export function AgentForm({
             </SettingsSectionGroup>
           )}
 
+          {/* Messaging channels: a surface of its own, because the
+              assignments save through their own endpoint rather than with the
+              agent record's fields. */}
+          {showMessagingSection &&
+            agentType === "agent" &&
+            !isBuiltIn &&
+            agent &&
+            canReadAgentTriggers && (
+              <SettingsSectionGroup
+                className={cn(!isActiveSection("messaging") && "hidden")}
+              >
+                <SettingsSection>
+                  <AgentChatAppsEditor
+                    agent={agent}
+                    readOnly={readOnly}
+                    showHeading={false}
+                    onDirtyChange={setChannelAssignmentsDirty}
+                    standaloneSave={false}
+                    onSaveHandlerChange={registerChannelAssignmentsSave}
+                  />
+                </SettingsSection>
+              </SettingsSectionGroup>
+            )}
+
           {showToolsSections && toolsPanelHasContent && (
             <SettingsSectionGroup
               className={cn(!isActiveSection("tools") && "hidden")}
             >
               {/* Section 3: Tools & Knowledge Sources */}
               {showTools && (
-                <SettingsSection
-                  title="Tools &amp; knowledge"
-                  description="What this agent may reach while it runs."
-                  data-testid={E2eTestId.AgentToolsSection}
-                >
+                <SettingsSection data-testid={E2eTestId.AgentToolsSection}>
                   <div className="space-y-2">
                     <Tabs
                       value={autoToolsMode ? "auto" : "custom"}
@@ -3693,23 +3571,193 @@ export function AgentForm({
             <SettingsSectionGroup
               className={cn(!isActiveSection("advanced") && "hidden")}
             >
+              {showsEnvironmentSelector && (
+                <SettingsSection
+                  title="Environment"
+                  description={environmentHelpText}
+                >
+                  <EnvironmentSelector
+                    value={environmentId ?? null}
+                    onChange={setEnvironmentId}
+                    resource={getResourceForAgentType(agentType)}
+                    showLabel={false}
+                  />
+                </SettingsSection>
+              )}
+
+              {/* Suggested Prompts (Agent only, not built-in, collapsible) */}
+              {isInternalAgent && !isBuiltIn && (
+                <SettingsSection
+                  title="Suggested prompts"
+                  description={`Shown to users when starting a new chat. Max ${MAX_SUGGESTED_PROMPTS} prompts, title max ${MAX_SUGGESTED_PROMPT_TITLE_LENGTH} chars, prompt max ${MAX_SUGGESTED_PROMPT_TEXT_LENGTH} chars.`}
+                >
+                  <Collapsible
+                    open={suggestedPromptsOpen}
+                    onOpenChange={setSuggestedPromptsOpen}
+                    className="group"
+                  >
+                    <div className="overflow-hidden rounded-md border">
+                      {suggestedPrompts.length > 0 ? (
+                        <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 p-3 transition-colors [&:hover:not(:has(button:hover))]:bg-muted/50 [&[data-state=open]>div>svg]:rotate-90">
+                          <span className="text-sm font-medium">
+                            {suggestedPrompts.length} prompt
+                            {suggestedPrompts.length === 1 ? null : (
+                              <span>s</span>
+                            )}
+                          </span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {suggestedPromptsOpen && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span>
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={
+                                          suggestedPrompts.length >=
+                                          MAX_SUGGESTED_PROMPTS
+                                        }
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSuggestedPrompts((prev) => [
+                                            ...prev,
+                                            { summaryTitle: "", prompt: "" },
+                                          ]);
+                                        }}
+                                      >
+                                        <Plus className="h-4 w-4 mr-1" />
+                                        Add
+                                      </Button>
+                                    </span>
+                                  </TooltipTrigger>
+                                  {suggestedPrompts.length >=
+                                    MAX_SUGGESTED_PROMPTS && (
+                                    <TooltipContent>
+                                      Maximum of {MAX_SUGGESTED_PROMPTS}{" "}
+                                      suggested prompts reached
+                                    </TooltipContent>
+                                  )}
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
+                            <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform" />
+                          </div>
+                        </CollapsibleTrigger>
+                      ) : (
+                        <div className="flex items-center justify-between gap-3 p-3">
+                          <span className="text-sm text-muted-foreground">
+                            None yet
+                          </span>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="self-start"
+                            size="sm"
+                            onClick={() => {
+                              setSuggestedPrompts([
+                                { summaryTitle: "", prompt: "" },
+                              ]);
+                              setSuggestedPromptsOpen(true);
+                            }}
+                          >
+                            <Plus className="h-4 w-4 mr-1" />
+                            Add
+                          </Button>
+                        </div>
+                      )}
+                      <CollapsibleContent>
+                        <div className="border-t p-3 space-y-4">
+                          {suggestedPrompts.map((sp, index) => (
+                            <div
+                              // biome-ignore lint/suspicious/noArrayIndexKey: items have no stable ID
+                              key={`sp-${index}`}
+                              className="space-y-2 rounded-md border p-3 relative"
+                            >
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="absolute top-2 right-2 h-6 w-6"
+                                aria-label="Remove suggested prompt"
+                                onClick={() => {
+                                  setSuggestedPrompts((prev) => {
+                                    const next = prev.filter(
+                                      (_, i) => i !== index,
+                                    );
+                                    if (next.length === 0)
+                                      setSuggestedPromptsOpen(false);
+                                    return next;
+                                  });
+                                }}
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                              <div className="space-y-1 pr-8">
+                                <Label className="text-xs">Button Label</Label>
+                                <Input
+                                  value={sp.summaryTitle}
+                                  onChange={(e) =>
+                                    setSuggestedPrompts((prev) =>
+                                      prev.map((p, i) =>
+                                        i === index
+                                          ? {
+                                              ...p,
+                                              summaryTitle: e.target.value,
+                                            }
+                                          : p,
+                                      ),
+                                    )
+                                  }
+                                  placeholder="e.g. Summarize recent changes"
+                                  maxLength={MAX_SUGGESTED_PROMPT_TITLE_LENGTH}
+                                  aria-label="Button Label"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs">Prompt</Label>
+                                <Textarea
+                                  value={sp.prompt}
+                                  onChange={(e) =>
+                                    setSuggestedPrompts((prev) =>
+                                      prev.map((p, i) =>
+                                        i === index
+                                          ? { ...p, prompt: e.target.value }
+                                          : p,
+                                      ),
+                                    )
+                                  }
+                                  placeholder="The full prompt sent when clicked"
+                                  className="min-h-[60px]"
+                                  maxLength={MAX_SUGGESTED_PROMPT_TEXT_LENGTH}
+                                  aria-label="Suggested prompt"
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </CollapsibleContent>
+                    </div>
+                  </Collapsible>
+                </SettingsSection>
+              )}
+
               {agentType === "agent" && agentBackgroundExecutionEnabled && (
                 <SettingsSection
                   title="Background execution"
                   description="Whether this agent may run on its own, and the credentials it runs with."
                 >
-                  <>
-                    <AgentBackgroundExecutionFields
-                      value={backgroundExecution}
-                      onChange={setBackgroundExecution}
+                  <AgentBackgroundExecutionFields
+                    value={backgroundExecution}
+                    onChange={setBackgroundExecution}
+                  />
+                  {agent?.backgroundExecution?.credentials && (
+                    <AgentBackgroundExecutionCard
+                      agentId={agent.id}
+                      credentials={agent.backgroundExecution.credentials}
                     />
-                    {agent?.backgroundExecution?.credentials && (
-                      <AgentBackgroundExecutionCard
-                        agentId={agent.id}
-                        credentials={agent.backgroundExecution.credentials}
-                      />
-                    )}
-                  </>
+                  )}
                 </SettingsSection>
               )}
 

@@ -39,7 +39,13 @@ export function SettingsSection({
   contentClassName,
   ...rest
 }: {
-  title: ReactNode;
+  /**
+   * Omitted where the surface already names the section — a page whose side
+   * nav says "Messaging Channels" does not need the pane to say it again. The
+   * label column is still laid out, so the fields stay on the same line as
+   * every other section's.
+   */
+  title?: ReactNode;
   /** One line on what the section decides. Omit when the title says it all. */
   description?: ReactNode;
   /** Controls that belong to the section as a whole, under its description. */
@@ -48,23 +54,33 @@ export function SettingsSection({
   className?: string;
   contentClassName?: string;
 } & Omit<React.HTMLAttributes<HTMLElement>, "title" | "children">) {
+  // Nothing to put in the label column — the surface names this section
+  // elsewhere — so the controls take the whole width rather than sitting
+  // beside an empty gutter.
+  const hasLabel = !!title || !!description || !!headerExtra;
+
   return (
     <section
       className={cn(
-        "grid gap-x-10 gap-y-4 py-8 first:pt-0 last:pb-0 md:grid-cols-[13rem_minmax(0,1fr)]",
+        "grid gap-x-8 gap-y-4 py-8 first:pt-0 last:pb-0",
+        hasLabel && "md:grid-cols-[12rem_minmax(0,1fr)]",
         className,
       )}
       {...rest}
     >
-      <div className="space-y-1.5">
-        {/* `h3` throughout: these sit under the page's `h1` and the tab bar,
-            and every section of a panel is a peer of every other. */}
-        <h3 className="text-base font-semibold leading-none">{title}</h3>
-        {description && (
-          <p className="text-sm text-muted-foreground">{description}</p>
-        )}
-        {headerExtra}
-      </div>
+      {hasLabel && (
+        <div className="space-y-1.5">
+          {/* `h3` throughout: these sit under the page's `h1`, and every
+              section of a panel is a peer of every other. */}
+          {title && (
+            <h3 className="text-base font-semibold leading-none">{title}</h3>
+          )}
+          {description && (
+            <p className="text-sm text-muted-foreground">{description}</p>
+          )}
+          {headerExtra}
+        </div>
+      )}
       <div className={cn("min-w-0 space-y-4", contentClassName)}>
         {children}
       </div>

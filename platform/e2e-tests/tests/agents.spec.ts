@@ -91,8 +91,8 @@ async function createViaWizard(
   }).toPass({ timeout: 20_000 });
   await createResponsePromise;
 
-  // 5. The create lands on the new record's Connect tab.
-  const connectUrl = new RegExp(`${listPath}/([^/?#]+)\\?tab=connect`);
+  // 5. The create lands on the new record's Connect section.
+  const connectUrl = new RegExp(`${listPath}/([^/?#]+)\\?section=connect`);
   await page.waitForURL(connectUrl, { timeout: 30_000 });
   await page.waitForLoadState("domcontentloaded");
   const id = page.url().match(connectUrl)?.[1];
@@ -126,11 +126,14 @@ test("can create and delete an agent", {
   ).toBeVisible({ timeout: 15_000 });
 
   // Configuration is not a second route any more: the wizard's steps are the
-  // detail page's own tabs, edited in place.
+  // detail page's own sections, edited in place.
   await page.getByTestId(`${E2eTestId.AgentSetupStep}-tools`).click();
-  await expect(page).toHaveURL(new RegExp(`/agents/${agentId}\\?tab=tools`), {
-    timeout: 15_000,
-  });
+  await expect(page).toHaveURL(
+    new RegExp(`/agents/${agentId}\\?section=tools`),
+    {
+      timeout: 15_000,
+    },
+  );
   await expect(page.getByTestId(E2eTestId.AgentToolsSection)).toBeVisible({
     timeout: 15_000,
   });
@@ -139,10 +142,10 @@ test("can create and delete an agent", {
   ).toBeVisible();
 
   // The old wizard route still resolves, so links already out there land on
-  // the tab their `?step=` asked for.
+  // the section their `?step=` asked for.
   await goToPage(page, `/agents/${agentId}/edit?step=advanced`);
   await expect(page).toHaveURL(
-    new RegExp(`/agents/${agentId}\\?tab=advanced`),
+    new RegExp(`/agents/${agentId}\\?section=advanced`),
     { timeout: 15_000 },
   );
 

@@ -5,7 +5,7 @@ import {
   agentPageKindForType,
   getAgentSetupSteps,
   isAgentTypeAllowedOnPage,
-  resolveAgentDetailTab,
+  resolveAgentDetailSection,
   resolveLegacyAgentDialogRedirect,
 } from "./agent-page-config";
 
@@ -53,36 +53,36 @@ describe("route families", () => {
     expect(isAgentTypeAllowedOnPage("agent", "agent")).toBe(true);
   });
 
-  it("builds every detail tab off the family's list route", () => {
+  it("builds every detail section off the family's list route", () => {
     expect(agentDetailHref("mcp_gateway", "g1")).toBe("/mcp/gateways/g1");
     expect(agentDetailHref("mcp_gateway", "g1", "connect")).toBe(
-      "/mcp/gateways/g1?tab=connect",
+      "/mcp/gateways/g1?section=connect",
     );
-    // The default tab is the bare route: a record's own URL is not
-    // `?tab=configuration`.
-    expect(agentDetailHref("agent", "a1", "configuration")).toBe("/agents/a1");
+    // The first section is the bare route: a record's own URL is not
+    // `?section=general`.
+    expect(agentDetailHref("agent", "a1", "general")).toBe("/agents/a1");
   });
 
-  it("points every edit deep link at the detail page's own tabs", () => {
+  it("points every edit deep link at the detail page's own sections", () => {
     expect(agentConfigureHref("mcp_gateway", "g1")).toBe("/mcp/gateways/g1");
     expect(agentConfigureHref("agent", "a 1", "tools")).toBe(
-      "/agents/a%201?tab=tools",
+      "/agents/a%201?section=tools",
     );
   });
 });
 
-describe("resolveAgentDetailTab", () => {
-  const tabs = ["configuration", "tools", "connect"] as const;
+describe("resolveAgentDetailSection", () => {
+  const sections = ["general", "tools", "connect"] as const;
 
-  it("takes the tab the param names", () => {
-    expect(resolveAgentDetailTab(tabs, "connect")).toBe("connect");
+  it("takes the section the param names", () => {
+    expect(resolveAgentDetailSection(sections, "connect")).toBe("connect");
   });
 
-  it("falls back to the first tab for a tab this record does not have", () => {
-    // A gateway sent to `?tab=executions`, or a typo: the page corrects the
-    // URL to what it actually rendered rather than showing a blank tab.
-    expect(resolveAgentDetailTab(tabs, "executions")).toBe("configuration");
-    expect(resolveAgentDetailTab(tabs, null)).toBe("configuration");
+  it("falls back to the first section for one this record does not have", () => {
+    // A gateway sent to `?section=executions`, or a typo: the page corrects
+    // the URL to what it actually rendered rather than showing a blank pane.
+    expect(resolveAgentDetailSection(sections, "executions")).toBe("general");
+    expect(resolveAgentDetailSection(sections, null)).toBe("general");
   });
 });
 
@@ -108,7 +108,7 @@ describe("resolveLegacyAgentDialogRedirect", () => {
         "mcp_gateway",
         new URLSearchParams("edit=g1&openTools=true"),
       ),
-    ).toBe("/mcp/gateways/g1?tab=tools&openTools=true");
+    ).toBe("/mcp/gateways/g1?section=tools&openTools=true");
   });
 
   it("forwards ?view=<id> to the detail page", () => {
@@ -129,7 +129,7 @@ describe("resolveLegacyAgentDialogRedirect", () => {
         "agent",
         new URLSearchParams("edit=x&openTools=true&name=foo"),
       ),
-    ).toBe("/agents/x?tab=tools&openTools=true&name=foo");
+    ).toBe("/agents/x?section=tools&openTools=true&name=foo");
     expect(
       resolveLegacyAgentDialogRedirect(
         "mcp_gateway",

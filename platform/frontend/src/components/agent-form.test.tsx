@@ -2010,6 +2010,25 @@ describe("AgentForm save payload and failure handling", () => {
       />,
     );
 
+  // The environment and the suggested prompts live on the Advanced step, so
+  // the tests that drive them mount that one.
+  const renderAdvanced = () =>
+    render(
+      <AgentForm agentType="agent" agent={baseAgent} sections={["advanced"]} />,
+    );
+
+  // Messaging channels are a section of their own, so a surface that saves
+  // both — the create wizard, and anything mounting every group — has to
+  // mount both.
+  const renderConfigurationWithChannels = () =>
+    render(
+      <AgentForm
+        agentType="agent"
+        agent={baseAgent}
+        sections={["configuration", "messaging"]}
+      />,
+    );
+
   const renderTools = () =>
     render(
       <AgentForm agentType="agent" agent={baseAgent} sections={["tools"]} />,
@@ -2113,7 +2132,7 @@ describe("AgentForm save payload and failure handling", () => {
 
   it("saves messaging channel changes before the agent update", async () => {
     const user = userEvent.setup();
-    renderConfiguration();
+    renderConfigurationWithChannels();
 
     await user.click(
       screen.getByRole("button", { name: "Mark channel changes dirty" }),
@@ -2130,7 +2149,7 @@ describe("AgentForm save payload and failure handling", () => {
   it("stops the agent update when messaging channel changes fail", async () => {
     const user = userEvent.setup();
     saveChannelChangesMock.mockResolvedValueOnce(false);
-    renderConfiguration();
+    renderConfigurationWithChannels();
 
     await user.click(
       screen.getByRole("button", { name: "Mark channel changes dirty" }),
@@ -2165,12 +2184,34 @@ describe("AgentForm save payload and failure handling", () => {
       "icon",
       "name",
       "scope",
-      "suggestedPrompts",
       // The instructions are part of this panel now, so one save covers them.
       "systemPrompt",
       "teams",
       "users",
     ]);
+  });
+
+  it("writes only the channel assignments from a messaging-only surface", async () => {
+    // Channel assignments save through their own endpoint. A surface showing
+    // just them displays no field of the agent record, so the record's PUT
+    // would carry an empty body — which still forks a config version and
+    // writes an audit record for an edit nobody made.
+    const user = userEvent.setup();
+    render(
+      <AgentForm
+        agentType="agent"
+        agent={baseAgent}
+        sections={["messaging"]}
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Mark channel changes dirty" }),
+    );
+    await user.click(screen.getByRole("button", { name: /update/i }));
+
+    await waitFor(() => expect(saveChannelChangesMock).toHaveBeenCalled());
+    expect(updateAgent).not.toHaveBeenCalled();
   });
 
   it("sends the advanced step's own fields, and nothing the step does not show", async () => {
@@ -2195,6 +2236,9 @@ describe("AgentForm save payload and failure handling", () => {
       "considerContextUntrusted",
       "identityProviderId",
       "labels",
+      // The environment and the suggested prompts are edited on this step, so
+      // they are written with it. `environmentId` only travels when it moved.
+      "suggestedPrompts",
     ]);
   });
 
@@ -2220,7 +2264,7 @@ describe("AgentForm save payload and failure handling", () => {
 
   it("sends the environment once it actually changes", async () => {
     const user = userEvent.setup();
-    renderConfiguration();
+    renderAdvanced();
 
     await user.click(
       await screen.findByRole("button", { name: /move to other environment/i }),
@@ -2398,7 +2442,7 @@ describe("AgentForm save payload and failure handling", () => {
       isError: false,
       refetch: refetchAgentTools,
     });
-    renderConfiguration();
+    renderAdvanced();
 
     await user.click(
       await screen.findByRole("button", { name: /move to other environment/i }),
@@ -2446,7 +2490,7 @@ describe("AgentForm save payload and failure handling", () => {
       isError: false,
       refetch: refetchAgentTools,
     });
-    renderConfiguration();
+    renderAdvanced();
 
     await user.click(
       await screen.findByRole("button", { name: /move to other environment/i }),
@@ -2487,7 +2531,7 @@ describe("AgentForm save payload and failure handling", () => {
       isError: false,
       refetch: refetchAgentTools,
     });
-    renderConfiguration();
+    renderAdvanced();
 
     await user.click(
       await screen.findByRole("button", { name: /move to other environment/i }),

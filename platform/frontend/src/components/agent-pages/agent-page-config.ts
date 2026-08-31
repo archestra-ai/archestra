@@ -1,4 +1,5 @@
 import type { AgentType } from "@archestra/shared";
+import type { AgentFormSection } from "@/components/agent-form";
 import type { AgentIconVariant } from "@/components/agent-icon";
 import type { WizardStepDefinition } from "@/components/wizard-stepper";
 
@@ -97,42 +98,68 @@ export type AgentSetupStepId = "configuration" | "tools" | "advanced";
 export type AgentSetupStep = WizardStepDefinition<AgentSetupStepId>;
 
 /**
- * The detail page's tabs. The setup steps are the record's configuration,
- * edited in place; `connect` and `executions` are the two read-only views of
- * it. `configuration` is the page's default and carries no `?tab=`.
+ * The sections of a record's own page, listed down its side the way the
+ * settings surface lists its own. The first four are edited in place;
+ * `connect` and `executions` are the two views onto a configured record.
+ * `general` is the page's default and carries no `?section=`.
  */
-export type AgentDetailTab = AgentSetupStepId | "connect" | "executions";
+export type AgentDetailSection =
+  | "general"
+  | "tools"
+  | "messaging"
+  | "advanced"
+  | "connect"
+  | "executions";
+
+/**
+ * The form group a page section mounts, for the four that edit the record.
+ * `general` is the form's `configuration` group under the name the sidebar
+ * gives it.
+ */
+export const AGENT_SECTION_FORM_GROUP = {
+  general: "configuration",
+  tools: "tools",
+  messaging: "messaging",
+  advanced: "advanced",
+} as const satisfies Partial<Record<AgentDetailSection, AgentFormSection>>;
 
 export function agentDetailHref(
   kind: AgentPageKind,
   id: string,
-  tab?: AgentDetailTab,
+  section?: AgentDetailSection,
 ): string {
   const base = `${AGENT_PAGE_CONFIGS[kind].basePath}/${encodeURIComponent(id)}`;
-  return tab && tab !== "configuration" ? `${base}?tab=${tab}` : base;
+  return section && section !== "general" ? `${base}?section=${section}` : base;
 }
 
 /**
  * Where "edit this record" lands. Configuration is not a page of its own any
- * more: it is the detail page's own tabs, so every edit deep link in the app
- * resolves to one of them.
+ * more: it is the detail page's own sections, so every edit deep link in the
+ * app resolves to one of them. The wizard's step ids are what those links
+ * carry, so they are translated here.
  */
 export function agentConfigureHref(
   kind: AgentPageKind,
   id: string,
   step?: AgentSetupStepId,
 ): string {
-  return agentDetailHref(kind, id, step);
+  return agentDetailHref(kind, id, step && SECTION_FOR_SETUP_STEP[step]);
 }
 
-/** The tab a `?tab=` value names, or `configuration` when it names none. */
-export function resolveAgentDetailTab(
-  tabs: readonly AgentDetailTab[],
-  tabParam: string | null | undefined,
-): AgentDetailTab {
-  const match = tabs.find((tab) => tab === tabParam);
-  return match ?? tabs[0] ?? "configuration";
+/** The section a `?section=` value names, or the first when it names none. */
+export function resolveAgentDetailSection(
+  sections: readonly AgentDetailSection[],
+  sectionParam: string | null | undefined,
+): AgentDetailSection {
+  const match = sections.find((section) => section === sectionParam);
+  return match ?? sections[0] ?? "general";
 }
+
+const SECTION_FOR_SETUP_STEP = {
+  configuration: "general",
+  tools: "tools",
+  advanced: "advanced",
+} as const satisfies Record<AgentSetupStepId, AgentDetailSection>;
 
 const CONFIGURATION_STEP: AgentSetupStep = {
   id: "configuration",

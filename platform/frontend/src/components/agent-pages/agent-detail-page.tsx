@@ -72,7 +72,8 @@ import { AgentConnectContent } from "./agent-connect-content";
 import { AgentExecutions } from "./agent-executions";
 import {
   AGENT_PAGE_CONFIGS,
-  type AgentDetailTab,
+  AGENT_SECTION_FORM_GROUP,
+  type AgentDetailSection,
   type AgentPageKind,
   agentConfigureHref,
   agentDetailHref,
@@ -80,7 +81,7 @@ import {
   agentPageKindForType,
   getAgentSetupSteps,
   isAgentTypeAllowedOnPage,
-  resolveAgentDetailTab,
+  resolveAgentDetailSection,
 } from "./agent-page-config";
 import { useAgentAccess } from "./use-agent-access";
 
@@ -256,6 +257,12 @@ function AgentDetails({
     [resource]: ["read"],
   });
   const { data: canCreateSkill } = useHasPermissions({ skill: ["create"] });
+  // The messaging-channel editor reads the org's channel bindings, so the
+  // section only exists for a reader who may see them — the same check the
+  // editor's own host used to make inline.
+  const { data: canReadAgentTriggers } = useHasPermissions({
+    agentTrigger: ["read"],
+  });
 
   const showConnect = connectAction.visible;
   const backgroundExecutionEnabled =
@@ -265,33 +272,47 @@ function AgentDetails({
     kind === "agent" &&
     agent.backgroundExecution != null;
 
-  // The record's configuration is this page's tabs, in the order the setup
-  // wizard walks them; Connect and Executions are the two views onto a
-  // configured record and follow them.
+  // The record's own sections, listed down the side of its page. The setup
+  // wizard's steps supply the editable ones, in the order it walks them, with
+  // the messaging channels between Tools and Advanced; Connect and Executions
+  // are the two views onto a configured record and follow them.
   const steps = getAgentSetupSteps({
     agentType: agent.agentType,
     builtIn: isBuiltIn,
   });
-  const tabs: AgentDetailTab[] = [
-    ...steps.map((step) => step.id),
+  // A built-in subagent is reached by the agents that delegate to it, never by
+  // a person in a channel, so it has no assignments to make.
+  const hasMessagingChannels =
+    kind === "agent" && !isBuiltIn && !!canReadAgentTriggers;
+  const sections: AgentDetailSection[] = [
+    "general",
+    ...(steps.some((step) => step.id === "tools") ? (["tools"] as const) : []),
+    ...(hasMessagingChannels ? (["messaging"] as const) : []),
+    ...(steps.some((step) => step.id === "advanced")
+      ? (["advanced"] as const)
+      : []),
     ...(showConnect ? (["connect"] as const) : []),
     ...(hasBackgroundExecution ? (["executions"] as const) : []),
   ];
-  const tabParam = searchParams.get("tab");
-  const tab = resolveAgentDetailTab(tabs, tabParam);
-  // Which configuration section is on screen, if any. Connect and Executions
-  // are not sections of the form, so they answer undefined and the form is
-  // not mounted at all.
-  const activeStep = steps.find((step) => step.id === tab)?.id;
+  const sectionParam = searchParams.get("section");
+  const section = resolveAgentDetailSection(sections, sectionParam);
+  // Which form group is on screen, if any. Connect and Executions are not the
+  // form's, so they answer undefined and it is not mounted at all.
+  const activeFormGroup =
+    section in AGENT_SECTION_FORM_GROUP
+      ? AGENT_SECTION_FORM_GROUP[
+          section as keyof typeof AGENT_SECTION_FORM_GROUP
+        ]
+      : undefined;
 
-  // A `?tab=` this record has no tab for (a gateway sent to `?tab=executions`,
-  // or a typo) silently resolves to the first one. Correct the URL to match,
-  // so a reload, a copied link or the back button does not keep asking for a
-  // tab that is not on this page.
+  // A `?section=` this record has none of (a gateway sent to
+  // `?section=executions`, or a typo) silently resolves to the first one.
+  // Correct the URL to match, so a reload, a copied link or the back button
+  // does not keep asking for a section that is not on this page.
   useEffect(() => {
-    if (!tabParam || tabParam === tab) return;
-    router.replace(agentDetailHref(kind, agent.id, tab), { scroll: false });
-  }, [tabParam, tab, kind, agent.id, router]);
+    if (!sectionParam || sectionParam === section) return;
+    router.replace(agentDetailHref(kind, agent.id, section), { scroll: false });
+  }, [sectionParam, section, kind, agent.id, router]);
 
   // Unsaved edits guard every way off the current tab that is not a save:
   // another tab, the back link, the header's own links. The pending
@@ -329,7 +350,7 @@ function AgentDetails({
   // picker open on the tools tab. "All" gateways hide the tool editor (there
   // is nothing to pick), so only Custom ones get the auto-open.
   const openToolsCombobox =
-    tab === "tools" &&
+    section === "tools" &&
     searchParams.get("openTools") === "true" &&
     !agent.accessAllTools;
 
@@ -447,17 +468,20 @@ function AgentDetails({
         )
       }
       tabs={
-        // A single-tab page is not a tabbed one: a built-in record has only
-        // its Configuration, so it renders no bar naming it.
-        tabs.length > 1
-          ? tabs.map((entry) => ({
-              label: AGENT_DETAIL_TAB_LABELS[entry],
+        // A single-section page is not a tabbed one: a built-in record has
+        // only its General, so it renders no bar naming it.
+        sections.length > 1
+          ? sections.map((entry) => ({
+              label: AGENT_SECTION_LABELS[entry],
               href: agentDetailHref(kind, agent.id, entry),
               testId: `${E2eTestId.AgentSetupStep}-${entry}`,
-              selected: entry === tab,
+              selected: entry === section,
             }))
           : []
       }
+      // Every section is a tab, so the mobile row keeps them all rather than
+      // folding the last two into an overflow popover.
+      mobileVisibleCount={sections.length}
       actionButton={
         // Configuration is the page itself now, so the header carries only
         // what the page cannot: chatting with the record, and the actions
@@ -525,78 +549,82 @@ function AgentDetails({
         </div>
       }
     >
-      {tab === "executions" ? (
-        <AgentExecutions agentId={agent.id} />
-      ) : tab === "connect" ? (
-        <AgentConnectContent kind={kind} agent={agent} origin="table" />
-      ) : (
-        <div className="space-y-4">
-          {isGone ? (
-            <Alert variant="destructive">
-              <AlertDescription>
-                This {config.singularInSentence} is no longer available — it was
-                deleted while you were editing it. Your unsaved changes cannot
-                be saved; copy anything you need before leaving.
-              </AlertDescription>
-            </Alert>
-          ) : (
-            !canEdit &&
-            !isAccessPending && (
-              <Alert>
-                <Info className="h-4 w-4" />
+      <div className="min-w-0">
+        {section === "executions" ? (
+          <AgentExecutions agentId={agent.id} />
+        ) : section === "connect" ? (
+          <AgentConnectContent kind={kind} agent={agent} origin="table" />
+        ) : (
+          <div className="space-y-4">
+            {isGone ? (
+              <Alert variant="destructive">
                 <AlertDescription>
-                  You can view this {config.singularInSentence}&apos;s
-                  configuration but not change it. {refusalReason}.
+                  This {config.singularInSentence} is no longer available — it
+                  was deleted while you were editing it. Your unsaved changes
+                  cannot be saved; copy anything you need before leaving.
                 </AlertDescription>
               </Alert>
-            )
-          )}
+            ) : (
+              !canEdit &&
+              !isAccessPending && (
+                <Alert>
+                  <Info className="h-4 w-4" />
+                  <AlertDescription>
+                    You can view this {config.singularInSentence}&apos;s
+                    configuration but not change it. {refusalReason}.
+                  </AlertDescription>
+                </Alert>
+              )
+            )}
 
-          {activeStep && (
-            <AgentForm
-              // A fresh mount per agent and per tab: the form seeds several
-              // sets from per-agent reads and would otherwise carry one tab's
-              // pending state into the next.
-              key={`${agent.id}:${activeStep}`}
-              agent={agent}
-              agentType={formAgentType}
-              defaultIconType={config.defaultIconType}
-              sections={[activeStep]}
-              readOnly={!canEdit}
-              openToolsCombobox={openToolsCombobox}
-              onDirtyChange={setIsDirty}
-              footer={({
-                isSaving,
-                isDirty: formDirty,
-                canSubmit,
-                readOnly,
-              }) =>
-                // Nothing to save onto once the record is gone; the PUT would
-                // only come back 404. A reader who cannot change it has no
-                // save row at all — the alert above already says why.
-                readOnly ? null : (
-                  <WizardFooter className="sm:justify-end">
-                    <Button
-                      type="submit"
-                      disabled={!canSubmit || isGone || isSaving || !formDirty}
-                      data-testid={E2eTestId.AgentSetupSubmitButton}
-                    >
-                      {isSaving ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          <span>Saving...</span>
-                        </>
-                      ) : (
-                        <span>Save changes</span>
-                      )}
-                    </Button>
-                  </WizardFooter>
-                )
-              }
-            />
-          )}
-        </div>
-      )}
+            {activeFormGroup && (
+              <AgentForm
+                // A fresh mount per agent and per section: the form seeds
+                // several sets from per-agent reads and would otherwise carry
+                // one section's pending state into the next.
+                key={`${agent.id}:${activeFormGroup}`}
+                agent={agent}
+                agentType={formAgentType}
+                defaultIconType={config.defaultIconType}
+                sections={[activeFormGroup]}
+                readOnly={!canEdit}
+                openToolsCombobox={openToolsCombobox}
+                onDirtyChange={setIsDirty}
+                footer={({
+                  isSaving,
+                  isDirty: formDirty,
+                  canSubmit,
+                  readOnly,
+                }) =>
+                  // Nothing to save onto once the record is gone; the PUT would
+                  // only come back 404. A reader who cannot change it has no
+                  // save row at all — the alert above already says why.
+                  readOnly ? null : (
+                    <WizardFooter className="sm:justify-end">
+                      <Button
+                        type="submit"
+                        disabled={
+                          !canSubmit || isGone || isSaving || !formDirty
+                        }
+                        data-testid={E2eTestId.AgentSetupSubmitButton}
+                      >
+                        {isSaving ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span>Saving...</span>
+                          </>
+                        ) : (
+                          <span>Save changes</span>
+                        )}
+                      </Button>
+                    </WizardFooter>
+                  )
+                }
+              />
+            )}
+          </div>
+        )}
+      </div>
 
       <UnsavedChangesDialog
         open={guard.confirmOpen}
@@ -722,9 +750,10 @@ function KebabItem({
   );
 }
 
-const AGENT_DETAIL_TAB_LABELS: Record<AgentDetailTab, string> = {
-  configuration: "Configuration",
+const AGENT_SECTION_LABELS: Record<AgentDetailSection, string> = {
+  general: "General",
   tools: "Tools & Knowledge",
+  messaging: "Messaging Channels",
   advanced: "Advanced",
   connect: "Connect",
   executions: "Executions",

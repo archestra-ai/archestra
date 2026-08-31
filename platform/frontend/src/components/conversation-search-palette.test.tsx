@@ -8,13 +8,17 @@ global.ResizeObserver = vi.fn().mockImplementation(() => ({
   disconnect: vi.fn(),
 }));
 
-const { mockRouterPush, mockDeleteMutate, mockUseConversations } = vi.hoisted(
-  () => ({
-    mockRouterPush: vi.fn(),
-    mockDeleteMutate: vi.fn(),
-    mockUseConversations: vi.fn(),
-  }),
-);
+const {
+  mockRouterPush,
+  mockDeleteMutate,
+  mockUseConversations,
+  mockUseMyAgentExecutions,
+} = vi.hoisted(() => ({
+  mockRouterPush: vi.fn(),
+  mockDeleteMutate: vi.fn(),
+  mockUseConversations: vi.fn(),
+  mockUseMyAgentExecutions: vi.fn(),
+}));
 
 vi.mock("next/navigation");
 
@@ -47,6 +51,10 @@ vi.mock("@/lib/chat/chat.query", () => ({
   usePinConversation: () => ({
     mutate: vi.fn(),
   }),
+}));
+
+vi.mock("@/lib/agent-background-execution.query", () => ({
+  useMyAgentExecutions: mockUseMyAgentExecutions,
 }));
 
 // Store the onValueChange callback so tests can control selectedValue
@@ -176,6 +184,10 @@ describe("ConversationSearchPalette", () => {
       isLoading: false,
       isFetching: false,
     });
+    mockUseMyAgentExecutions.mockReturnValue({
+      data: [],
+      isLoading: false,
+    });
     capturedOnValueChange = null;
   });
 
@@ -263,6 +275,89 @@ describe("ConversationSearchPalette", () => {
     expect(screen.getByText("Pinned conversation")).toBeInTheDocument();
     // Pinned rows show their date bucket too.
     expect(screen.getByText("Today")).toBeInTheDocument();
+  });
+
+  it("shows the lock as the only leading icon on locked chat rows", () => {
+    mockUseConversations.mockReturnValue({
+      data: [
+        {
+          id: "conv-locked",
+          title: "Locked conversation",
+          updatedAt: new Date().toISOString(),
+          lastMessageAt: new Date().toISOString(),
+          lockedChat: true,
+          messages: [],
+        },
+      ],
+      isLoading: false,
+      isFetching: false,
+    });
+
+    render(<ConversationSearchPalette {...defaultProps} />);
+
+    const row = screen.getByTestId("cmd-item-conv-conv-locked");
+    expect(screen.getByLabelText("Locked chat")).toBeInTheDocument();
+    // The lock replaces the chat-bubble glyph rather than sitting next to it.
+    expect(row.querySelector(".lucide-message-circle")).toBeNull();
+  });
+
+  it("lists background execution sessions in the browse view and opens one", () => {
+    mockUseMyAgentExecutions.mockReturnValue({
+      data: [
+        {
+          taskId: "task-1",
+          title: "Nightly report run",
+          state: "TASK_STATE_WORKING",
+          startedAt: new Date().toISOString(),
+          stateChangedAt: new Date().toISOString(),
+          endedAt: null,
+        },
+      ],
+      isLoading: false,
+    });
+
+    render(<ConversationSearchPalette {...defaultProps} />);
+
+    expect(screen.getByText("Nightly report run")).toBeInTheDocument();
+    // The row carries the same state-colored execution mark as the sidebar.
+    expect(screen.getByLabelText("Execution running")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("cmd-item-exec-task-1"));
+    expect(mockRouterPush).toHaveBeenCalledWith("/chat/executions/task-1");
+  });
+
+  it("matches execution sessions by title during search", () => {
+    mockUseConversations.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isFetching: false,
+    });
+    mockUseMyAgentExecutions.mockReturnValue({
+      data: [
+        {
+          taskId: "task-1",
+          title: "Nightly report run",
+          state: "TASK_STATE_COMPLETED",
+          startedAt: new Date().toISOString(),
+          stateChangedAt: new Date().toISOString(),
+          endedAt: new Date().toISOString(),
+        },
+      ],
+      isLoading: false,
+    });
+
+    render(<ConversationSearchPalette {...defaultProps} />);
+
+    fireEvent.change(screen.getByTestId("command-input"), {
+      target: { value: "nightly" },
+    });
+    expect(screen.getByText("Nightly report run")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByTestId("command-input"), {
+      target: { value: "does-not-match" },
+    });
+    expect(screen.queryByText("Nightly report run")).not.toBeInTheDocument();
+    expect(screen.getByText("No chats or pages found.")).toBeInTheDocument();
   });
 
   it("routes Connect to the connection page", () => {

@@ -710,7 +710,7 @@ export function AccessLevelSelector({
 
   return (
     <SharedVisibilitySelector
-      label={`Who can use this ${agentTypeDisplayName[agentType] || "agent"}`}
+      label="Visibility"
       value={choice}
       options={options}
       onValueChange={selectChoice}
@@ -1368,7 +1368,6 @@ export function AgentForm({
   // Who may reach it — the scope picker, plus the caller's own default-agent
   // toggle. A built-in belongs to the organization and offers neither, so the
   // section would be empty.
-  const showsAccessSection = !isBuiltIn;
   const showTools =
     !isBuiltIn &&
     (agentType === "mcp_gateway" ||
@@ -2801,6 +2800,35 @@ export function AgentForm({
                     </div>
                   )}
 
+                  {/* Visibility: an ordinary field of the record, not a
+                      section of its own — who may use it is as much a part of
+                      what it is as its name. */}
+                  {!isBuiltIn && (
+                    <div>
+                      <AccessLevelSelector
+                        scope={scope}
+                        onScopeChange={(newScope) => {
+                          setScope(newScope);
+                          if (newScope === "org") {
+                            setAssignedTeamIds([]);
+                          }
+                        }}
+                        isAdmin={!!isAdmin}
+                        isTeamAdmin={!!isTeamAdmin}
+                        initialScope={agent?.scope}
+                        agentType={agentType}
+                        teams={teams}
+                        canReadTeams={!!canReadTeams}
+                        assignedTeamIds={assignedTeamIds}
+                        onTeamIdsChange={setAssignedTeamIds}
+                        assignedUserIds={assignedUserIds}
+                        onUserIdsChange={setAssignedUserIds}
+                        hasNoAvailableTeams={hasNoAvailableTeams}
+                        showTeamRequired={true}
+                      />
+                    </div>
+                  )}
+
                   {/* Built-in agent config */}
                   {isPolicyConfigBuiltIn && (
                     <div className="space-y-4">
@@ -2836,41 +2864,6 @@ export function AgentForm({
                         max={20}
                         value={dualLlmMaxRounds}
                         onChange={(e) => setDualLlmMaxRounds(e.target.value)}
-                      />
-                    </div>
-                  )}
-                </SettingsSection>
-              )}
-
-              {showsAccessSection && (
-                <SettingsSection
-                  title="Access"
-                  description={`Who this ${agentTypeDisplayName[agentType] || "agent"} is shared with.`}
-                >
-                  {/* Visibility / Scope: who can use it, once it has a name and a
-                    place to run. */}
-                  {!isBuiltIn && (
-                    <div>
-                      <AccessLevelSelector
-                        scope={scope}
-                        onScopeChange={(newScope) => {
-                          setScope(newScope);
-                          if (newScope === "org") {
-                            setAssignedTeamIds([]);
-                          }
-                        }}
-                        isAdmin={!!isAdmin}
-                        isTeamAdmin={!!isTeamAdmin}
-                        initialScope={agent?.scope}
-                        agentType={agentType}
-                        teams={teams}
-                        canReadTeams={!!canReadTeams}
-                        assignedTeamIds={assignedTeamIds}
-                        onTeamIdsChange={setAssignedTeamIds}
-                        assignedUserIds={assignedUserIds}
-                        onUserIdsChange={setAssignedUserIds}
-                        hasNoAvailableTeams={hasNoAvailableTeams}
-                        showTeamRequired={true}
                       />
                     </div>
                   )}

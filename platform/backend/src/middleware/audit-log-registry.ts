@@ -831,6 +831,13 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (_id, orgId) =>
       ChatOpsChannelBindingModel.findBindingsFingerprintForOrganization(orgId),
   },
+  "/api/chatops/bindings/assignment-plan": {
+    resourceType: "chatOpsBinding",
+    action: "chatOpsBinding.updated",
+    resourceIdSource: "organizationContext",
+    fetchById: (_id, orgId) =>
+      ChatOpsChannelBindingModel.findBindingsFingerprintForOrganization(orgId),
+  },
   "/api/chatops/bindings/dm": {
     resourceType: "chatOpsBinding",
     fetchById: (id, orgId) =>

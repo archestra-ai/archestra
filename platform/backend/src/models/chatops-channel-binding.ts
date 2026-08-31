@@ -14,16 +14,17 @@ import {
   or,
   sql,
 } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import {
   createPaginatedResult,
   type PaginatedResult,
 } from "@/database/utils/pagination";
 import logger from "@/logging";
-import type {
-  ChatOpsProviderType,
-  ChatOpsStatus,
-  SortingQueryFor,
+import {
+  ApiError,
+  type ChatOpsProviderType,
+  type ChatOpsStatus,
+  type SortingQueryFor,
 } from "@/types";
 import type {
   ChatOpsChannelBinding,
@@ -58,6 +59,283 @@ class ChatOpsChannelBindingModel {
       .returning();
 
     return binding as ChatOpsChannelBinding;
+  }
+
+  /**
+   * Create one pending DM binding without replacing a binding created by a
+   * concurrent request. Pending rows use a non-null workspace sentinel so the
+   * channel unique index can arbitrate the insert.
+   */
+  static async createPendingDmIfAbsent(
+    input: InsertChatOpsChannelBinding,
+  ): Promise<ChatOpsChannelBinding | null> {
+    const [binding] = await db
+      .insert(schema.chatopsChannelBindingsTable)
+      .values({
+        organizationId: input.organizationId,
+        provider: input.provider,
+        channelId: input.channelId,
+        workspaceId: input.workspaceId,
+        channelName: input.channelName ?? null,
+        workspaceName: input.workspaceName ?? null,
+        agentId: input.agentId,
+        isDm: true,
+        dmOwnerEmail: input.dmOwnerEmail ?? null,
+      })
+      .onConflictDoNothing()
+      .returning();
+
+    return (binding as ChatOpsChannelBinding) || null;
+  }
+
+  /**
+   * Applies an agent's complete ChatOps assignment plan in one transaction.
+   * Binding ids and the target agent are fenced to the caller's organization
+   * before any write, and the rows stay locked through the compare-and-set.
+   */
+  static async applyAssignmentPlan(params: {
+    organizationId: string;
+    userId: string;
+    dmOwnerEmail: string;
+    targetAgentId: string;
+    updates: Array<{
+      bindingId: string;
+      expectedAgentId: string | null;
+      nextAgentId: string | null;
+      channelInstructions?: string | null;
+      answerAllMessages?: boolean;
+    }>;
+    directMessages: Array<{
+      provider: ChatOpsProviderType;
+    }>;
+  }): Promise<ChatOpsChannelBinding[]> {
+    return withDbTransaction(async (tx) => {
+      const [targetAgent] = await tx
+        .select({
+          id: schema.agentsTable.id,
+          agentType: schema.agentsTable.agentType,
+          scope: schema.agentsTable.scope,
+          authorId: schema.agentsTable.authorId,
+        })
+        .from(schema.agentsTable)
+        .where(
+          and(
+            eq(schema.agentsTable.id, params.targetAgentId),
+            eq(schema.agentsTable.organizationId, params.organizationId),
+            isNull(schema.agentsTable.deletedAt),
+          ),
+        )
+        .for("update");
+
+      // Organization fencing intentionally makes foreign agents indistinguishable
+      // from missing agents, so this endpoint cannot disclose another tenant's ids.
+      if (!targetAgent) {
+        throw new ApiError(404, "Agent not found");
+      }
+      if (targetAgent.agentType !== "agent") {
+        throw new ApiError(
+          400,
+          "Only internal agents can be assigned to ChatOps.",
+        );
+      }
+
+      const bindingIds = params.updates.map((update) => update.bindingId);
+      if (new Set(bindingIds).size !== bindingIds.length) {
+        throw new ApiError(400, "Each binding can only be updated once");
+      }
+      if (
+        params.updates.some(
+          (update) =>
+            update.nextAgentId !== null &&
+            update.nextAgentId !== params.targetAgentId,
+        )
+      ) {
+        throw new ApiError(
+          400,
+          "Each next agent must be the target agent or null",
+        );
+      }
+
+      const bindings = bindingIds.length
+        ? await tx
+            .select()
+            .from(schema.chatopsChannelBindingsTable)
+            .where(
+              and(
+                inArray(schema.chatopsChannelBindingsTable.id, bindingIds),
+                eq(
+                  schema.chatopsChannelBindingsTable.organizationId,
+                  params.organizationId,
+                ),
+              ),
+            )
+            .for("update")
+        : [];
+      const bindingsById = new Map(
+        bindings.map((binding) => [binding.id, binding]),
+      );
+
+      if (bindings.length !== bindingIds.length) {
+        // As with agents, never reveal whether a binding id exists elsewhere.
+        throw new ApiError(404, "Binding not found");
+      }
+      if (
+        params.updates.some(
+          (update) =>
+            bindingsById.get(update.bindingId)?.agentId !==
+            update.expectedAgentId,
+        )
+      ) {
+        throw new ApiError(
+          409,
+          "Channel assignments changed. Reload the channels and try again.",
+        );
+      }
+
+      for (const update of params.updates) {
+        const binding = bindingsById.get(update.bindingId);
+        if (
+          update.answerAllMessages !== undefined &&
+          (binding?.isDm || binding?.provider === "telegram")
+        ) {
+          throw new ApiError(
+            400,
+            "Reply behavior cannot be changed for this channel",
+          );
+        }
+      }
+
+      if (targetAgent.scope === "personal") {
+        const assignedBindings = params.updates.flatMap((update) => {
+          if (update.nextAgentId !== params.targetAgentId) return [];
+          const binding = bindingsById.get(update.bindingId);
+          return binding ? [binding] : [];
+        });
+        if (assignedBindings.some((binding) => !binding.isDm)) {
+          throw new ApiError(
+            400,
+            "Personal agents cannot be assigned to channels. Use an org-scoped or team-scoped agent instead.",
+          );
+        }
+        if (
+          (assignedBindings.length > 0 || params.directMessages.length > 0) &&
+          targetAgent.authorId !== params.userId
+        ) {
+          throw new ApiError(
+            403,
+            "You can only assign your own personal agents to your DM.",
+          );
+        }
+        if (
+          assignedBindings.some(
+            (binding) =>
+              binding.dmOwnerEmail?.toLowerCase() !==
+              params.dmOwnerEmail.toLowerCase(),
+          )
+        ) {
+          throw new ApiError(
+            403,
+            "Personal agents can only be assigned to your own direct messages.",
+          );
+        }
+      }
+
+      const updatedBindings: ChatOpsChannelBinding[] = [];
+      for (const update of params.updates) {
+        const [updated] = await tx
+          .update(schema.chatopsChannelBindingsTable)
+          .set({
+            agentId: update.nextAgentId,
+            ...(update.answerAllMessages !== undefined && {
+              answerAllMessages: update.answerAllMessages,
+            }),
+            ...(update.channelInstructions !== undefined && {
+              channelInstructions: update.channelInstructions,
+            }),
+          })
+          .where(
+            and(
+              eq(schema.chatopsChannelBindingsTable.id, update.bindingId),
+              eq(
+                schema.chatopsChannelBindingsTable.organizationId,
+                params.organizationId,
+              ),
+            ),
+          )
+          .returning();
+        if (!updated) {
+          throw new ApiError(500, "Failed to update binding");
+        }
+        updatedBindings.push(updated as ChatOpsChannelBinding);
+      }
+
+      const createdDmBindings: ChatOpsChannelBinding[] = [];
+      for (const directMessage of params.directMessages) {
+        const existing = await tx
+          .select({ id: schema.chatopsChannelBindingsTable.id })
+          .from(schema.chatopsChannelBindingsTable)
+          .where(
+            and(
+              eq(
+                schema.chatopsChannelBindingsTable.organizationId,
+                params.organizationId,
+              ),
+              eq(
+                schema.chatopsChannelBindingsTable.provider,
+                directMessage.provider,
+              ),
+              eq(schema.chatopsChannelBindingsTable.isDm, true),
+              eq(
+                schema.chatopsChannelBindingsTable.dmOwnerEmail,
+                params.dmOwnerEmail,
+              ),
+            ),
+          )
+          .for("update")
+          .limit(1);
+        if (existing.length > 0) {
+          throw new ApiError(
+            409,
+            "The direct message assignment already exists. Reload the channels and try again.",
+          );
+        }
+
+        const [created] = await tx
+          .insert(schema.chatopsChannelBindingsTable)
+          .values({
+            organizationId: params.organizationId,
+            provider: directMessage.provider,
+            channelId: ChatOpsChannelBindingModel.pendingDmChannelId({
+              organizationId: params.organizationId,
+              dmOwnerEmail: params.dmOwnerEmail,
+            }),
+            workspaceId: "dm:pending",
+            channelName: `Direct Message - ${params.dmOwnerEmail}`,
+            isDm: true,
+            dmOwnerEmail: params.dmOwnerEmail,
+            agentId: params.targetAgentId,
+          })
+          .onConflictDoNothing()
+          .returning();
+        if (!created) {
+          throw new ApiError(
+            409,
+            "The direct message assignment already exists. Reload the channels and try again.",
+          );
+        }
+        createdDmBindings.push(created as ChatOpsChannelBinding);
+      }
+
+      return [...updatedBindings, ...createdDmBindings];
+    });
+  }
+
+  /** Builds the tenant-scoped identity used by pending DM rows. */
+  static pendingDmChannelId(params: {
+    organizationId: string;
+    dmOwnerEmail: string;
+  }): string {
+    return `dm:pending:${params.organizationId}:${params.dmOwnerEmail}`;
   }
 
   /**
@@ -303,23 +581,70 @@ class ChatOpsChannelBindingModel {
   }
 
   /**
+   * Update a channel binding only when it belongs to the specified organization.
+   */
+  static async updateByIdAndOrganization(params: {
+    id: string;
+    organizationId: string;
+    input: UpdateChatOpsChannelBinding;
+  }): Promise<ChatOpsChannelBinding | null> {
+    const [binding] = await db
+      .update(schema.chatopsChannelBindingsTable)
+      .set({
+        ...(params.input.agentId !== undefined && {
+          agentId: params.input.agentId,
+        }),
+        ...(params.input.answerAllMessages !== undefined && {
+          answerAllMessages: params.input.answerAllMessages,
+        }),
+        ...(params.input.channelInstructions !== undefined && {
+          channelInstructions: params.input.channelInstructions,
+        }),
+      })
+      .where(
+        and(
+          eq(schema.chatopsChannelBindingsTable.id, params.id),
+          eq(
+            schema.chatopsChannelBindingsTable.organizationId,
+            params.organizationId,
+          ),
+        ),
+      )
+      .returning();
+
+    return (binding as ChatOpsChannelBinding) || null;
+  }
+
+  /**
    * Find a pending DM binding (one created from the UI before actual DM interaction).
    * Pending DM bindings have a channelId starting with "dm:pending:".
    */
-  static async findPendingDmBinding(
-    provider: ChatOpsProviderType,
-    dmOwnerEmail: string,
-  ): Promise<ChatOpsChannelBinding | null> {
+  static async findPendingDmBinding(params: {
+    organizationId: string;
+    provider: ChatOpsProviderType;
+    dmOwnerEmail: string;
+  }): Promise<ChatOpsChannelBinding | null> {
     const [binding] = await db
       .select()
       .from(schema.chatopsChannelBindingsTable)
       .where(
         and(
-          eq(schema.chatopsChannelBindingsTable.provider, provider),
+          eq(
+            schema.chatopsChannelBindingsTable.organizationId,
+            params.organizationId,
+          ),
+          eq(schema.chatopsChannelBindingsTable.provider, params.provider),
           eq(schema.chatopsChannelBindingsTable.isDm, true),
-          eq(schema.chatopsChannelBindingsTable.dmOwnerEmail, dmOwnerEmail),
+          eq(
+            schema.chatopsChannelBindingsTable.dmOwnerEmail,
+            params.dmOwnerEmail,
+          ),
           sql`${schema.chatopsChannelBindingsTable.channelId} LIKE 'dm:pending:%'`,
         ),
+      )
+      .orderBy(
+        desc(schema.chatopsChannelBindingsTable.updatedAt),
+        desc(schema.chatopsChannelBindingsTable.createdAt),
       )
       .limit(1);
 
@@ -327,22 +652,28 @@ class ChatOpsChannelBindingModel {
   }
 
   /**
-   * Find any existing DM binding for a provider + email, regardless of
-   * channelId or pending status. Used as a fallback when the DM channel ID
-   * changes (e.g., after bot reinstallation) and the pending lookup misses.
+   * Find a DM binding for an organization, provider, and owner email.
    */
-  static async findDmBindingByEmail(
-    provider: ChatOpsProviderType,
-    dmOwnerEmail: string,
-  ): Promise<ChatOpsChannelBinding | null> {
+  static async findDmBindingByEmailInOrganization(params: {
+    organizationId: string;
+    provider: ChatOpsProviderType;
+    dmOwnerEmail: string;
+  }): Promise<ChatOpsChannelBinding | null> {
     const [binding] = await db
       .select()
       .from(schema.chatopsChannelBindingsTable)
       .where(
         and(
-          eq(schema.chatopsChannelBindingsTable.provider, provider),
+          eq(
+            schema.chatopsChannelBindingsTable.organizationId,
+            params.organizationId,
+          ),
+          eq(schema.chatopsChannelBindingsTable.provider, params.provider),
           eq(schema.chatopsChannelBindingsTable.isDm, true),
-          eq(schema.chatopsChannelBindingsTable.dmOwnerEmail, dmOwnerEmail),
+          eq(
+            schema.chatopsChannelBindingsTable.dmOwnerEmail,
+            params.dmOwnerEmail,
+          ),
         ),
       )
       .orderBy(desc(schema.chatopsChannelBindingsTable.updatedAt))
@@ -355,18 +686,27 @@ class ChatOpsChannelBindingModel {
    * Fulfill a pending DM binding by replacing the placeholder channelId
    * with the real one from the first DM interaction.
    */
-  static async fulfillDmBinding(
-    id: string,
-    realChannelId: string,
-    workspaceId: string | null,
-  ): Promise<ChatOpsChannelBinding | null> {
+  static async fulfillDmBinding(params: {
+    id: string;
+    organizationId: string;
+    realChannelId: string;
+    workspaceId: string | null;
+  }): Promise<ChatOpsChannelBinding | null> {
     const [binding] = await db
       .update(schema.chatopsChannelBindingsTable)
       .set({
-        channelId: realChannelId,
-        workspaceId,
+        channelId: params.realChannelId,
+        workspaceId: params.workspaceId,
       })
-      .where(eq(schema.chatopsChannelBindingsTable.id, id))
+      .where(
+        and(
+          eq(schema.chatopsChannelBindingsTable.id, params.id),
+          eq(
+            schema.chatopsChannelBindingsTable.organizationId,
+            params.organizationId,
+          ),
+        ),
+      )
       .returning();
 
     return (binding as ChatOpsChannelBinding) || null;
@@ -376,25 +716,74 @@ class ChatOpsChannelBindingModel {
    * Bulk-update the agentId for multiple bindings belonging to the same organization.
    * Returns the updated bindings.
    */
-  static async bulkUpdateAgent(
-    ids: string[],
-    organizationId: string,
-    agentId: string | null,
-  ): Promise<ChatOpsChannelBinding[]> {
+  static async bulkUpdateAgent(params: {
+    ids: string[];
+    organizationId: string;
+    agentId: string | null;
+    expectedAgentAssignments?: Array<{
+      id: string;
+      agentId: string | null;
+    }>;
+  }): Promise<ChatOpsChannelBinding[] | null> {
+    const { ids, organizationId, agentId, expectedAgentAssignments } = params;
     if (ids.length === 0) return [];
 
-    const updated = await db
-      .update(schema.chatopsChannelBindingsTable)
-      .set({ agentId })
-      .where(
-        and(
-          inArray(schema.chatopsChannelBindingsTable.id, ids),
-          eq(schema.chatopsChannelBindingsTable.organizationId, organizationId),
-        ),
-      )
-      .returning();
+    return withDbTransaction(async (tx) => {
+      const current = await tx
+        .select({
+          id: schema.chatopsChannelBindingsTable.id,
+          agentId: schema.chatopsChannelBindingsTable.agentId,
+        })
+        .from(schema.chatopsChannelBindingsTable)
+        .where(
+          and(
+            inArray(schema.chatopsChannelBindingsTable.id, ids),
+            eq(
+              schema.chatopsChannelBindingsTable.organizationId,
+              organizationId,
+            ),
+          ),
+        )
+        .for("update");
 
-    return updated as ChatOpsChannelBinding[];
+      // Keep cross-organization bindings indistinguishable from nonexistent
+      // ids. A conflict is reserved for rows that exist but changed owner.
+      if (current.length !== ids.length) {
+        throw new ApiError(404, "Binding not found");
+      }
+
+      if (expectedAgentAssignments) {
+        const expectedById = new Map(
+          expectedAgentAssignments.map((assignment) => [
+            assignment.id,
+            assignment.agentId,
+          ]),
+        );
+        if (
+          current.some(
+            (binding) => expectedById.get(binding.id) !== binding.agentId,
+          )
+        ) {
+          return null;
+        }
+      }
+
+      const updated = await tx
+        .update(schema.chatopsChannelBindingsTable)
+        .set({ agentId })
+        .where(
+          and(
+            inArray(schema.chatopsChannelBindingsTable.id, ids),
+            eq(
+              schema.chatopsChannelBindingsTable.organizationId,
+              organizationId,
+            ),
+          ),
+        )
+        .returning();
+
+      return updated as ChatOpsChannelBinding[];
+    });
   }
 
   /**
@@ -829,6 +1218,10 @@ class ChatOpsChannelBindingModel {
         provider: schema.chatopsChannelBindingsTable.provider,
         channelId: schema.chatopsChannelBindingsTable.channelId,
         agentId: schema.chatopsChannelBindingsTable.agentId,
+        answerAllMessages: schema.chatopsChannelBindingsTable.answerAllMessages,
+        channelInstructions:
+          schema.chatopsChannelBindingsTable.channelInstructions,
+        dmOwnerEmail: schema.chatopsChannelBindingsTable.dmOwnerEmail,
       })
       .from(schema.chatopsChannelBindingsTable)
       .where(
@@ -836,7 +1229,10 @@ class ChatOpsChannelBindingModel {
       );
 
     const bindings = rows
-      .map((r) => `${r.id}:${r.provider}:${r.channelId}:${r.agentId ?? ""}`)
+      .map(
+        (r) =>
+          `${r.id}:${r.provider}:${r.channelId}:${r.agentId ?? ""}:${r.answerAllMessages}:${r.channelInstructions ?? ""}:${r.dmOwnerEmail ?? ""}`,
+      )
       .sort((a, b) => a.localeCompare(b));
     return { bindings };
   }

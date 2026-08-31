@@ -26,8 +26,10 @@ export function CreatedByCell({
   createdBy: CreatedBy | null | undefined;
   className?: string;
 }) {
-  const { data: session } = useSession();
-  const currentUserId = session?.user?.id;
+  // Optional-chained rather than destructured: this cell now renders in a
+  // dozen-plus tables, and "no session" is a real state (it just means nothing
+  // can be labelled "You") rather than something worth throwing over.
+  const currentUserId = useSession()?.data?.user?.id;
 
   if (!createdBy) {
     return (

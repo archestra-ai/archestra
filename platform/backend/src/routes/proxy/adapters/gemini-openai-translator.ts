@@ -48,6 +48,18 @@ export function openaiToGemini(req: OpenAiRequest): {
   const systemParts: Array<{ text: string }> = [];
   const contents: GeminiRequest["contents"] = [];
 
+  // Gemini 3 validates that a functionResponse's name matches the function
+  // that was called; OpenAI tool messages carry only tool_call_id, so the
+  // names are resolved from the assistant messages' tool_calls.
+  const toolCallNames = new Map<string, string>();
+  for (const message of req.messages as LooseMessage[]) {
+    for (const toolCall of message.tool_calls ?? []) {
+      if (toolCall.type === "function" && toolCall.id) {
+        toolCallNames.set(toolCall.id, toolCall.function.name);
+      }
+    }
+  }
+
   for (const message of req.messages as LooseMessage[]) {
     if (message.role === "system" || message.role === "developer") {
       systemParts.push({ text: stringifyTextContent(message.content) });
@@ -102,9 +114,13 @@ export function openaiToGemini(req: OpenAiRequest): {
           {
             functionResponse: {
               id: decodeSignedToolCallId(message.tool_call_id).id,
-              // OpenAI tool result messages only include tool_call_id, not the
-              // original function name. Use a stable synthetic name for Gemini.
-              name: "tool_result",
+              // Resolved from the assistant turn that made the call; Gemini 3
+              // rejects a functionResponse whose name does not match it. The
+              // synthetic fallback only covers a result with no visible call.
+              name:
+                (message.tool_call_id
+                  ? toolCallNames.get(message.tool_call_id)
+                  : undefined) ?? "tool_result",
               response: { content: stringifyTextContent(message.content) },
             },
           },

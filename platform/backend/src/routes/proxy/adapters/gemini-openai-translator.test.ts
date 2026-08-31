@@ -306,6 +306,12 @@ describe("Gemini 3 thought signature round-trip", () => {
     ).functionResponse.id;
     expect(functionCallId).not.toMatch(/gemsig-/);
     expect(functionResponseId).toBe(functionCallId);
+    // Gemini 3 also rejects a functionResponse whose name does not match the
+    // function that was called; the name is resolved from the assistant turn.
+    expect(
+      (toolTurn.parts[0] as { functionResponse: { name: string } })
+        .functionResponse.name,
+    ).toBe("run_command");
   });
 
   test("unsigned tool calls keep plain ids in both directions", () => {

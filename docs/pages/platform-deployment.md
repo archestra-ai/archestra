@@ -857,6 +857,9 @@ Background execution runs delegated Agent tasks in dedicated Kubernetes pods. Yo
 - **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_EPHEMERAL_STORAGE_LIMIT`** - Maximum writable scratch space for one execution. Kubernetes enforces the limit on the run's `emptyDir` volume.
   - Default: `10Gi`
 
+- **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_POD_START_TIMEOUT_SECONDS`** - How long a launched run may stay pending before it is declared failed. Raise it when runs land on an autoscaled node pool — node creation plus a large image pull can pass the default.
+  - Default: `600`
+
 - **`ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NODE_SELECTOR`** - Steers background pods onto a dedicated node pool, written as `key=value` pairs. The pairs become each pod's node selector, with a matching `NoSchedule` toleration per pair. Empty schedules background pods like any other workload. Use it when heavy runs should not share nodes with the platform.
   - Default: unset
 

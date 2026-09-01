@@ -60,6 +60,17 @@ const TOOL_CALL_TIMEOUT_MS = 120_000;
 const NOT_RUNNING_ERROR_PATTERN = /not running yet|not ready/i;
 const HIBERNATION_WORDING_PATTERN = /hibernat|waking/i;
 
+/**
+ * Internal wake races (a completeWake superseded by a concurrent transition,
+ * a transition gate another replica held). The demand funnel re-enters the
+ * wake within its reply budget when an attempt loses one of these, so no
+ * caller-facing answer may ever carry this wording — a caller can act on
+ * "still starting, retry" and on a terminal failure, but not on a race it
+ * cannot see.
+ */
+const WAKE_RACE_WORDING_PATTERN =
+  /superseded|concurrent transition|did not finish the deployment's lifecycle transition/i;
+
 /** Callers fired simultaneously at one sleeping deployment. */
 const CONCURRENT_WAKE_CALLERS = 4;
 
@@ -116,6 +127,14 @@ const EARLY_AWAKE_CHECK_MS = hibernationTiming.earlyAwakeCheckMs;
 const PLATFORM_HIBERNATION_TIMEOUT_MS = hibernationTiming.hibernationDeadlineMs;
 
 /**
+ * Cadence of the tight loop that watches for the sweeper's hibernation patch
+ * to land, in the one test that races the transition itself. Small enough
+ * that the first observation is well inside the pod teardown that follows the
+ * patch; large enough not to lean on the API server.
+ */
+const TRANSITION_POLL_MS = 200;
+
+/**
  * A Kubernetes merge patch, which deletes a key by sending null — something
  * the generated `V1Deployment` type cannot express.
  */
@@ -143,15 +162,18 @@ type InstallRow = {
  * being switched on: a deployment that is already asleep must always be
  * wakeable.
  *
- * The last test is the exception, and the reason the rest can take that
- * shortcut safely: with the organization toggle on for the whole file, it
- * lifts this install's own hibernation veto, leaves it genuinely idle, and
- * watches the PLATFORM write the sleeping state itself — the sweep, the window
- * arithmetic and the annotation writing that every injected state above stands
- * in for. Until then the veto is what keeps the armed sweeper out of the other
- * tests' way, which makes it load-bearing rather than decorative. Paying for
- * an idle window in wall-clock time is also why that one test carries
- * `@slow-window`, and why it is last: nothing here may depend on it.
+ * The last three tests are the exception, and the reason the rest can take
+ * that shortcut safely: with the organization toggle on for the whole file,
+ * each lifts this install's own hibernation veto, leaves it genuinely idle,
+ * and watches the PLATFORM write the sleeping state itself — the sweep, the
+ * window arithmetic and the annotation writing that every injected state
+ * above stands in for (the first waits for the sleeping shape to settle
+ * before knocking; the second knocks DURING the transition; the third keeps
+ * knocking throughout it). Until then the veto is what keeps the armed
+ * sweeper out of the other tests' way, which makes it load-bearing rather
+ * than decorative. Paying for an idle window in wall-clock time is also why
+ * those tests carry `@slow-window`, and why they are last: nothing here may
+ * depend on them.
  *
  * What runs end to end against a real API server and kubelet:
  *   sweepIdleDeployments -> hibernate (replicas 0 + both annotations)
@@ -1204,6 +1226,261 @@ test.describe("MCP idle hibernation - on-demand wake", () => {
     } finally {
       // Pin it awake again the moment this test is done with it, whatever
       // happened: the organization toggle stays on until afterAll runs.
+      await makeApiRequest({
+        request,
+        method: "put",
+        urlSuffix: `/api/internal_mcp_catalog/${catalogItemId}`,
+        data: { hibernationMode: "disabled" },
+      }).catch(() => {});
+    }
+  });
+
+  test("a tool call that lands while the platform is still hibernating the deployment wakes it back @slow-window", async ({
+    request,
+    makeApiRequest,
+  }) => {
+    // The previous test races nothing: it waits for the sleeping shape to
+    // settle and only then knocks. This one is about the transition itself —
+    // the sweeper has written its patch, the pod is being torn down, the
+    // post-hibernate cleanup still holds the transition gate — and a caller
+    // shows up NOW. The demand path must queue behind the in-flight
+    // transition and wake the deployment, never disown it ("not running
+    // yet"), and never wedge: the platform put it to sleep, so the platform
+    // owns bringing it back.
+    test.setTimeout(1_140_000);
+    requireRecordedBaseline();
+
+    try {
+      // Same idle arrangement as the sweeper test above: quiet period, a
+      // provable last-used stamp, then hands off.
+      await sleepUntil(Date.now() + LAST_USED_QUIET_PERIOD_MS);
+      const lastUsedBefore = Date.parse(
+        (await readInstall({ request, makeApiRequest })).lastUsedAt ?? "",
+      );
+      expect(await callTestTool(request)).toBe(baselineToolText);
+      const idleSince = Date.now();
+      await expect
+        .poll(
+          async () =>
+            Date.parse(
+              (await readInstall({ request, makeApiRequest })).lastUsedAt ?? "",
+            ),
+          { timeout: 30_000, intervals: CLUSTER_POLL_INTERVALS },
+        )
+        .toBeGreaterThan(lastUsedBefore);
+
+      const awake = await readDeploymentFacts();
+      expect(awake.hibernated).toBeUndefined();
+      const replicasBeforeSleep = awake.replicas ?? 0;
+      expect(replicasBeforeSleep).toBeGreaterThan(0);
+
+      await setHibernationMode({ request, makeApiRequest, mode: "enabled" });
+
+      // Catch the transition the moment it lands. hibernate() writes replicas
+      // 0 and both annotations in one patch, so the first read that sees the
+      // marker is at most one poll interval behind the write — while the
+      // kubelet is still tearing the pod down and the sweeper is still inside
+      // its post-hibernate cleanup. A tight manual loop rather than
+      // expect.poll, because the poll's report formatting would spend the
+      // very window this test exists to hit.
+      const transitionDeadlineMs =
+        idleSince +
+        EARLIEST_LEGAL_HIBERNATION_MS +
+        PLATFORM_HIBERNATION_TIMEOUT_MS;
+      let slept: Awaited<ReturnType<typeof readDeploymentFacts>> | undefined;
+      while (Date.now() < transitionDeadlineMs) {
+        const facts = await readDeploymentFacts();
+        if (facts.hibernated === "true") {
+          slept = facts;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, TRANSITION_POLL_MS));
+      }
+      expect(
+        slept,
+        "the sweeper never hibernated the idle install, so there was no transition to race",
+      ).toBeDefined();
+      const observedAtMs = Date.now();
+      expect(slept?.replicas).toBe(0);
+      expect(slept?.preHibernationReplicas).toBe(String(replicasBeforeSleep));
+
+      // Knock immediately — the call is in flight before anything else runs.
+      // The pod snapshot rides alongside it as evidence of how deep into the
+      // teardown the call landed; it is recorded, not asserted, because the
+      // kubelet's pace is not this platform's contract.
+      const firstCall = callToolOutcome(request);
+      const callFiredAtMs = Date.now();
+      const podsAtCall = await listDeploymentPods().catch(() => []);
+      test.info().annotations.push({
+        type: "mid-transition evidence",
+        description:
+          `call fired ${callFiredAtMs - observedAtMs}ms after the hibernation patch was observed; ` +
+          `pods still present: ${
+            podsAtCall
+              .map(
+                (pod) =>
+                  `${pod.metadata?.name}(${pod.metadata?.deletionTimestamp ? "terminating" : pod.status?.phase})`,
+              )
+              .join(", ") || "none"
+          }`,
+      });
+      // Both timestamps are this process's own clock: the knock verifiably
+      // happened at the transition, not after the dust settled.
+      expect(callFiredAtMs - observedAtMs).toBeLessThan(1_000);
+
+      // The demand path may answer the first knock either way — with the
+      // server's real output (the wake finished inside the reply budget) or,
+      // when a cold pod genuinely outlives the budget, with the retryable
+      // still-starting answer. What it may NEVER say: that the deployment is
+      // not the platform's problem ("not running yet" here means the gateway
+      // lost track of a deployment the sweeper itself just put to sleep), or
+      // that the wake lost an internal race ("superseded by a concurrent
+      // transition") — the demand funnel re-enters the wake within its reply
+      // budget precisely so a mid-transition caller never sees those races.
+      const firstOutcome = await firstCall;
+      expect(firstOutcome.text).not.toMatch(NOT_RUNNING_ERROR_PATTERN);
+      expect(firstOutcome.text).not.toMatch(WAKE_RACE_WORDING_PATTERN);
+      if (firstOutcome.isError) {
+        expect(firstOutcome.text).toMatch(HIBERNATION_WORDING_PATTERN);
+      } else {
+        expect(firstOutcome.text).toBe(baselineToolText);
+      }
+
+      // Demand alone completes the round trip: the server answers with its
+      // real output, and the deployment ends awake, unmarked, at the replica
+      // count it slept with.
+      await callUntilServing(request);
+      await expect
+        .poll(readHibernationShape, {
+          timeout: 90_000,
+          intervals: CLUSTER_POLL_INTERVALS,
+        })
+        .toEqual({
+          replicas: replicasBeforeSleep,
+          hibernated: undefined,
+          preHibernationReplicas: undefined,
+        });
+      await waitForDeploymentAvailable();
+    } finally {
+      // Pin it awake again whatever happened, exactly like the test above.
+      await makeApiRequest({
+        request,
+        method: "put",
+        urlSuffix: `/api/internal_mcp_catalog/${catalogItemId}`,
+        data: { hibernationMode: "disabled" },
+      }).catch(() => {});
+    }
+  });
+
+  test("demand arriving throughout an in-progress hibernation converges on one wake, and every caller is answered actionably @slow-window", async ({
+    request,
+    makeApiRequest,
+  }) => {
+    // The test above knocks once, at the instant the transition lands. This
+    // one keeps knocking THROUGH it — at the patch, mid pod-teardown, and
+    // into the wake the first caller started — because that is what a busy
+    // gateway does to a server the sweeper picked a bad moment for. Every
+    // answer must be actionable (the real output, or the still-starting
+    // retry), no caller may see an internal race or a disowning error, and
+    // the whole storm must cost exactly one wake.
+    test.setTimeout(1_140_000);
+    requireRecordedBaseline();
+
+    try {
+      await sleepUntil(Date.now() + LAST_USED_QUIET_PERIOD_MS);
+      const lastUsedBefore = Date.parse(
+        (await readInstall({ request, makeApiRequest })).lastUsedAt ?? "",
+      );
+      expect(await callTestTool(request)).toBe(baselineToolText);
+      const idleSince = Date.now();
+      await expect
+        .poll(
+          async () =>
+            Date.parse(
+              (await readInstall({ request, makeApiRequest })).lastUsedAt ?? "",
+            ),
+          { timeout: 30_000, intervals: CLUSTER_POLL_INTERVALS },
+        )
+        .toBeGreaterThan(lastUsedBefore);
+
+      const awake = await readDeploymentFacts();
+      expect(awake.hibernated).toBeUndefined();
+      const replicasBeforeSleep = awake.replicas ?? 0;
+      expect(replicasBeforeSleep).toBeGreaterThan(0);
+
+      await setHibernationMode({ request, makeApiRequest, mode: "enabled" });
+
+      const transitionDeadlineMs =
+        idleSince +
+        EARLIEST_LEGAL_HIBERNATION_MS +
+        PLATFORM_HIBERNATION_TIMEOUT_MS;
+      let slept: Awaited<ReturnType<typeof readDeploymentFacts>> | undefined;
+      while (Date.now() < transitionDeadlineMs) {
+        const facts = await readDeploymentFacts();
+        if (facts.hibernated === "true") {
+          slept = facts;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, TRANSITION_POLL_MS));
+      }
+      expect(
+        slept,
+        "the sweeper never hibernated the idle install, so there was no transition to storm",
+      ).toBeDefined();
+
+      const podCreationsBefore = await podCreationEventUids();
+
+      // Three callers spread across the transition's phases. Answers are
+      // collected, never thrown: a failed MCP call is an ordinary JSON-RPC
+      // result, and what it SAYS is the contract under test.
+      const callerDelaysMs = [0, 1_000, 2_500];
+      const firstOutcomes = await Promise.all(
+        callerDelaysMs.map(async (delayMs) => {
+          if (delayMs > 0) {
+            await new Promise((resolve) => setTimeout(resolve, delayMs));
+          }
+          return callToolOutcome(request);
+        }),
+      );
+      for (const [index, outcome] of firstOutcomes.entries()) {
+        expect
+          .soft(outcome.text, `caller ${index} was disowned`)
+          .not.toMatch(NOT_RUNNING_ERROR_PATTERN);
+        expect
+          .soft(outcome.text, `caller ${index} saw an internal wake race`)
+          .not.toMatch(WAKE_RACE_WORDING_PATTERN);
+        if (outcome.isError) {
+          expect(outcome.text).toMatch(HIBERNATION_WORDING_PATTERN);
+        } else {
+          expect(outcome.text).toBe(baselineToolText);
+        }
+      }
+
+      // Demand converges: the server answers with its real output, on the
+      // burst budget (three callers share one serialized stdio pod).
+      await callUntilServing(request, BURST_SERVING_RETRY_TIMEOUT_MS);
+
+      // The whole storm cost at most one pod creation. 0 is the platform at
+      // its best — the wake reverted the scale-down before the ReplicaSet
+      // ever acted, so the original pod simply kept serving; 1 is a single
+      // replacement pod. More than one is a doubled wake, the thing this
+      // storm exists to rule out.
+      expect(
+        await newPodCreationsSince(podCreationsBefore),
+      ).toBeLessThanOrEqual(1);
+
+      await expect
+        .poll(readHibernationShape, {
+          timeout: 90_000,
+          intervals: CLUSTER_POLL_INTERVALS,
+        })
+        .toEqual({
+          replicas: replicasBeforeSleep,
+          hibernated: undefined,
+          preHibernationReplicas: undefined,
+        });
+      await waitForDeploymentAvailable();
+    } finally {
       await makeApiRequest({
         request,
         method: "put",

@@ -37,13 +37,13 @@ export function JiraConfigFields({
           render={({ field }) => (
             <FormItem>
               <FormLabel>Base URL</FormLabel>
+              <FormDescription>Your Jira instance URL.</FormDescription>
               <FormControl>
                 <Input
                   placeholder="https://your-domain.atlassian.net"
                   {...field}
                 />
               </FormControl>
-              <FormDescription>Your Jira instance URL.</FormDescription>
               <FormMessage />
             </FormItem>
           )}
@@ -79,12 +79,12 @@ export function JiraConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Project Keys (optional)</FormLabel>
-            <FormControl>
-              <Input placeholder="ENG, OPS" {...field} />
-            </FormControl>
             <FormDescription>
               Comma-separated project keys to include.
             </FormDescription>
+            <FormControl>
+              <Input placeholder="ENG, OPS" {...field} />
+            </FormControl>
             <FormMessage />
           </FormItem>
         )}
@@ -96,6 +96,7 @@ export function JiraConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>JQL Query (optional)</FormLabel>
+            <FormDescription>Custom JQL to filter issues.</FormDescription>
             <FormControl>
               <Textarea
                 placeholder='project = PROJ AND status = "Done"'
@@ -103,7 +104,6 @@ export function JiraConfigFields({
                 {...field}
               />
             </FormControl>
-            <FormDescription>Custom JQL to filter issues.</FormDescription>
             <FormMessage />
           </FormItem>
         )}
@@ -115,16 +115,16 @@ export function JiraConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Comment Email Blacklist (optional)</FormLabel>
+            <FormDescription>
+              Comma-separated list of email addresses whose comments should be
+              excluded.
+            </FormDescription>
             <FormControl>
               <Input
                 placeholder="bot@example.com, noreply@example.com"
                 {...field}
               />
             </FormControl>
-            <FormDescription>
-              Comma-separated list of email addresses whose comments should be
-              excluded.
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}
@@ -136,12 +136,12 @@ export function JiraConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Labels to Skip (optional)</FormLabel>
-            <FormControl>
-              <Input placeholder="internal, draft" {...field} />
-            </FormControl>
             <FormDescription>
               Comma-separated list of labels to exclude.
             </FormDescription>
+            <FormControl>
+              <Input placeholder="internal, draft" {...field} />
+            </FormControl>
             <FormMessage />
           </FormItem>
         )}

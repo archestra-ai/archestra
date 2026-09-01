@@ -1,11 +1,15 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const terminalHarness = vi.hoisted(() => {
   return {
+    dataHandler: null as ((data: string) => void) | null,
     resizeHandler: null as
       | ((dimensions: { cols: number; rows: number }) => void)
       | null,
+    emitData(data: string) {
+      this.dataHandler?.(data);
+    },
     emitResize(cols: number, rows: number) {
       this.resizeHandler?.({ cols, rows });
     },
@@ -19,7 +23,9 @@ vi.mock("@xterm/xterm", () => ({
     open() {}
     dispose() {}
     write() {}
-    onData() {}
+    onData(handler: (data: string) => void) {
+      terminalHarness.dataHandler = handler;
+    }
     onResize(handler: (dimensions: { cols: number; rows: number }) => void) {
       terminalHarness.resizeHandler = handler;
     }
@@ -50,6 +56,7 @@ global.ResizeObserver = class ResizeObserver {
 describe("ExecTerminal", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    terminalHarness.dataHandler = null;
     terminalHarness.resizeHandler = null;
   });
 
@@ -199,5 +206,88 @@ describe("ExecTerminal", () => {
     expect(
       screen.queryByText("Opening the terminal stream"),
     ).not.toBeInTheDocument();
+  });
+
+  it("drops no-button mouse motion without swallowing terminal input", async () => {
+    const transport: ExecSessionTransport = {
+      open: (handlers) => {
+        handlers.onStarted(null);
+        return vi.fn();
+      },
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+    };
+
+    render(<ExecTerminal sessionKey="task-1" transport={transport} isActive />);
+
+    await screen.findByText("Connected");
+
+    terminalHarness.emitData("\x1b[<35;3;18M\x1b[<39;4;18M\x1b[<63;5;18M");
+    terminalHarness.emitData("git status\r");
+    terminalHarness.emitData("\x1b[<0;8;12M\x1b[<32;9;12M");
+
+    expect(transport.sendInput).toHaveBeenNthCalledWith(1, "git status\r");
+    expect(transport.sendInput).toHaveBeenNthCalledWith(
+      2,
+      "\x1b[<0;8;12M\x1b[<32;9;12M",
+    );
+    expect(transport.sendInput).toHaveBeenCalledTimes(2);
+  });
+
+  it("can retain the terminal frame without adding a disconnected banner", async () => {
+    const session: { handlers: ExecSessionHandlers | null } = {
+      handlers: null,
+    };
+    const transport: ExecSessionTransport = {
+      open: (handlers) => {
+        session.handlers = handlers;
+        handlers.onStarted(null);
+        return vi.fn();
+      },
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+    };
+
+    render(
+      <ExecTerminal
+        sessionKey="task-1"
+        transport={transport}
+        isActive
+        disconnectedLabel="Execution finishing…"
+        showDisconnectedStatus={false}
+      />,
+    );
+    await screen.findByText("Connected");
+
+    act(() => session.handlers?.onClosed(null));
+
+    expect(screen.queryByText("Execution finishing…")).not.toBeInTheDocument();
+  });
+
+  it("can expose the manual command without rendering it inline", async () => {
+    const onCommandChange = vi.fn();
+    const transport: ExecSessionTransport = {
+      open: (handlers) => {
+        handlers.onStarted("kubectl exec example");
+        return vi.fn();
+      },
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+    };
+
+    render(
+      <ExecTerminal
+        sessionKey="task-1"
+        transport={transport}
+        isActive
+        showManualCommand={false}
+        onCommandChange={onCommandChange}
+      />,
+    );
+
+    await screen.findByText("Connected");
+    expect(onCommandChange).toHaveBeenCalledWith("kubectl exec example");
+    expect(screen.queryByText("Manual Command")).not.toBeInTheDocument();
+    expect(screen.queryByText("kubectl exec example")).not.toBeInTheDocument();
   });
 });

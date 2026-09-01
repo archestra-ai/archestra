@@ -44,6 +44,7 @@ import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -968,7 +969,7 @@ function EnvironmentEditorDialog({
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1">
             <Label htmlFor="environment-restricted">Restricted</Label>
-            <p className="text-xs text-muted-foreground">
+            <FieldDescription>
               Deploying to this environment requires the{" "}
               <code className="rounded bg-muted px-1 py-0.5 font-mono">
                 deploy-to-restricted
@@ -982,7 +983,7 @@ function EnvironmentEditorDialog({
                 agent
               </code>{" "}
               for agents).
-            </p>
+            </FieldDescription>
           </div>
           <Switch
             id="environment-restricted"
@@ -1039,7 +1040,7 @@ function EnvironmentEditorDialog({
                 <Label htmlFor="environment-validation-regex">
                   Validation rule
                 </Label>
-                <p className="text-xs text-muted-foreground">
+                <FieldDescription>
                   Allowlist regular expression: config values entered when
                   installing into this environment are accepted only if they
                   match. Leave empty to disable. To block a substring (e.g.{" "}
@@ -1048,7 +1049,7 @@ function EnvironmentEditorDialog({
                     ^(?!.*(prod|production)).*$
                   </code>
                   .
-                </p>
+                </FieldDescription>
                 <Input
                   id="environment-validation-regex"
                   value={validationRegex}
@@ -1069,11 +1070,11 @@ function EnvironmentEditorDialog({
                   <Label htmlFor="environment-trusted-registries">
                     Trusted image registries
                   </Label>
-                  <p className="text-xs text-muted-foreground">
+                  <FieldDescription>
                     List of trusted Docker image registries. Any MCP server
                     whose image isn't on this list is held for admin approval
                     before it can be installed. Leave empty to allow any image.
-                  </p>
+                  </FieldDescription>
                   <div className="flex gap-2">
                     <Input
                       id="environment-trusted-registries"
@@ -1270,7 +1271,7 @@ export function NetworkPolicyFields({
       <div className="space-y-2">
         <div className="space-y-1">
           <Label htmlFor="network-policy-egress">Egress</Label>
-          <p className="text-xs text-muted-foreground">
+          <FieldDescription>
             Choose whether workloads can reach nothing, only approved
             destinations, or the public internet. Public internet keeps private
             and reserved ranges blocked.{" "}
@@ -1281,7 +1282,7 @@ export function NetworkPolicyFields({
             >
               View blocked ranges
             </ExternalDocsLink>
-          </p>
+          </FieldDescription>
         </div>
         <Select
           value={egressMode}

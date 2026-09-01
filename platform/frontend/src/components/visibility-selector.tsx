@@ -3,6 +3,7 @@
 import type { LucideIcon } from "lucide-react";
 import { CheckIcon, ChevronDown } from "lucide-react";
 import { useState } from "react";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Label } from "@/components/ui/label";
 
 export type VisibilityOption<Value extends string> = {
@@ -28,7 +29,7 @@ export function VisibilitySelector<Value extends string>({
   children,
 }: {
   label?: string;
-  description?: string;
+  description?: React.ReactNode;
   heading?: string;
   value: Value;
   options: VisibilityOption<Value>[];
@@ -44,16 +45,16 @@ export function VisibilitySelector<Value extends string>({
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        {heading ? (
-          <h3 className="text-sm font-semibold">{heading}</h3>
-        ) : (
-          <div className="space-y-1">
+        <div className="space-y-1">
+          {heading ? (
+            <h3 className="text-sm font-semibold">{heading}</h3>
+          ) : (
             <Label>{label}</Label>
-            {description ? (
-              <p className="text-xs text-muted-foreground">{description}</p>
-            ) : null}
-          </div>
-        )}
+          )}
+          {description ? (
+            <FieldDescription>{description}</FieldDescription>
+          ) : null}
+        </div>
 
         {isStatic ? (
           <div className="w-full rounded-lg border p-3">

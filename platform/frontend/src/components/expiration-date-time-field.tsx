@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Label } from "@/components/ui/label";
 
 export function ExpirationDateTimeField({
@@ -48,9 +49,9 @@ export function ExpirationDateTimeField({
           </Button>
         )}
       </div>
-      <p className="text-xs text-muted-foreground">
+      <FieldDescription>
         {value ? `Expires ${formatExpiration(value)}` : noExpirationText}
-      </p>
+      </FieldDescription>
     </div>
   );
 }

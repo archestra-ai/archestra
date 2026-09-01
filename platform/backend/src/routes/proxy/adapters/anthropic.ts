@@ -1166,7 +1166,7 @@ export async function convertToolResultsToToon(
       const updatedContent = message.content.map((contentBlock) => {
         if (contentBlock.type === "tool_result" && !contentBlock.is_error) {
           toolResultCount++;
-          logger.info(
+          logger.debug(
             {
               toolCallId: contentBlock.tool_use_id,
               contentType: typeof contentBlock.content,
@@ -1199,7 +1199,7 @@ export async function convertToolResultsToToon(
               if (tokensAfter < tokensBefore) {
                 totalTokensAfter += tokensAfter;
 
-                logger.info(
+                logger.debug(
                   {
                     toolCallId: contentBlock.tool_use_id,
                     beforeLength: noncompressed.length,
@@ -1241,7 +1241,7 @@ export async function convertToolResultsToToon(
               );
               return contentBlock;
             } catch {
-              logger.info(
+              logger.debug(
                 {
                   toolCallId: contentBlock.tool_use_id,
                   contentPreview:
@@ -1282,7 +1282,7 @@ export async function convertToolResultsToToon(
                   if (tokensAfter < tokensBefore) {
                     totalTokensAfter += tokensAfter;
 
-                    logger.info(
+                    logger.debug(
                       {
                         toolCallId: contentBlock.tool_use_id,
                         beforeLength: noncompressed.length,
@@ -1324,7 +1324,7 @@ export async function convertToolResultsToToon(
                   return block;
                 } catch {
                   // Not JSON, keep as-is
-                  logger.info(
+                  logger.debug(
                     {
                       toolCallId: contentBlock.tool_use_id,
                       blockType: block.type,

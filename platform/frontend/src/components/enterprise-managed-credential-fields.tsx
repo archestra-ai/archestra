@@ -1,5 +1,6 @@
 "use client";
 
+import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -120,6 +121,11 @@ export function EnterpriseManagedCredentialFields({
 
       <div className="space-y-1.5">
         <Label className="text-xs">External Provider Alias</Label>
+        <FieldDescription>
+          Optional. Use this when the identity provider brokers a token from an
+          external provider, for example a Keycloak identity provider alias such
+          as <code>github</code>.
+        </FieldDescription>
         <Input
           aria-label="External provider alias"
           value={config.requestedIssuer ?? ""}
@@ -131,15 +137,14 @@ export function EnterpriseManagedCredentialFields({
           }
           placeholder="github"
         />
-        <p className="text-[11px] text-muted-foreground">
-          Optional. Use this when the identity provider brokers a token from an
-          external provider, for example a Keycloak identity provider alias such
-          as <code>github</code>.
-        </p>
       </div>
 
       <div className="space-y-1.5">
         <Label className="text-xs">Response Field Path</Label>
+        <FieldDescription>
+          Required when the provider returns a structured secret and {appName}
+          needs to extract one field, for example <code>token</code>.
+        </FieldDescription>
         <Input
           aria-label="Response field path"
           value={config.responseFieldPath ?? ""}
@@ -151,10 +156,6 @@ export function EnterpriseManagedCredentialFields({
           }
           placeholder="token"
         />
-        <p className="text-[11px] text-muted-foreground">
-          Required when the provider returns a structured secret and {appName}
-          needs to extract one field, for example <code>token</code>.
-        </p>
       </div>
 
       {config.tokenInjectionMode === "header" && (

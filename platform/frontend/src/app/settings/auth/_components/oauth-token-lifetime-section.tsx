@@ -131,6 +131,10 @@ export function OAuthTokenLifetimeSection({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Custom lifetime in seconds</FormLabel>
+                  <FormDescription>
+                    This value is returned in OAuth token responses as{" "}
+                    <code>expires_in</code>.
+                  </FormDescription>
                   <FormControl>
                     <Input
                       {...field}
@@ -144,10 +148,6 @@ export function OAuthTokenLifetimeSection({
                       }
                     />
                   </FormControl>
-                  <FormDescription>
-                    This value is returned in OAuth token responses as{" "}
-                    <code>expires_in</code>.
-                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

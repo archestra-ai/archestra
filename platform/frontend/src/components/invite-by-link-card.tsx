@@ -12,6 +12,7 @@ import { ErrorBoundary } from "react-error-boundary";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { DialogForm, DialogStickyFooter } from "@/components/ui/dialog";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -79,6 +80,9 @@ function InviteByLinkCardContent({
           <>
             <div className="space-y-2">
               <Label htmlFor="email">Email Address</Label>
+              <FieldDescription>
+                The email of the person you want to invite
+              </FieldDescription>
               <Input
                 id="email"
                 type="email"
@@ -88,13 +92,9 @@ function InviteByLinkCardContent({
                 disabled={createMutation.isPending}
                 data-testid={E2eTestId.InviteEmailInput}
               />
-              {email && !isValidEmail ? (
+              {email && !isValidEmail && (
                 <p className="text-xs text-destructive">
                   Please enter a valid email address
-                </p>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  The email of the person you want to invite
                 </p>
               )}
             </div>
@@ -110,9 +110,9 @@ function InviteByLinkCardContent({
                 data-testid={E2eTestId.InviteRoleSelect}
                 className="w-full"
               />
-              <p className="text-xs text-muted-foreground">
+              <FieldDescription>
                 The role this person will have in your organization
-              </p>
+              </FieldDescription>
             </div>
           </>
         ) : (
@@ -141,10 +141,10 @@ function InviteByLinkCardContent({
                 )}
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground">
+            <FieldDescription>
               Share this link with <span className="font-medium">{email}</span>{" "}
               to invite them as a <span className="font-medium">{role}</span>
-            </p>
+            </FieldDescription>
           </div>
         )}
       </div>

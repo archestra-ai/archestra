@@ -13,6 +13,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -622,6 +623,9 @@ function HookEditorPanel({
       {language === "python" && (
         <div className="space-y-2">
           <Label htmlFor={`${fieldId}-requirements`}>Requirements</Label>
+          <FieldDescription>
+            Python dependencies installed before the hook runs.
+          </FieldDescription>
           <Textarea
             id={`${fieldId}-requirements`}
             value={requirements}
@@ -629,9 +633,6 @@ function HookEditorPanel({
             placeholder="One per line or comma-separated, e.g. requests, httpx"
             className="min-h-[60px] font-mono text-xs"
           />
-          <p className="text-xs text-muted-foreground">
-            Python dependencies installed before the hook runs.
-          </p>
         </div>
       )}
 

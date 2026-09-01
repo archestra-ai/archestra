@@ -18,6 +18,7 @@ import {
   type AssignmentComboboxItem,
 } from "@/components/ui/assignment-combobox";
 import { Button } from "@/components/ui/button";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Label } from "@/components/ui/label";
 import {
   Popover,
@@ -688,11 +689,11 @@ function ProfileAssignmentPill({
         {showCredentialSelector && (
           <div className="p-4 border-b space-y-2 shrink-0">
             <Label className="text-sm font-medium">Connect on behalf of</Label>
-            <p className="text-xs text-muted-foreground">
+            <FieldDescription>
               By default, credentials resolve at call time per the server's
               default credential setting. Pin a specific connection to always
               use it for these tools instead.
-            </p>
+            </FieldDescription>
             <TokenSelect
               catalogId={catalogId}
               value={credentialId}

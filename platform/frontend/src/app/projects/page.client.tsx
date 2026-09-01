@@ -50,6 +50,7 @@ import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -847,9 +848,9 @@ function CreateProjectDialog({
             }}
             className="w-full"
           />
-          <p className="text-xs text-muted-foreground">
+          <FieldDescription>
             Preselected for new chats and scheduled tasks in this project.
-          </p>
+          </FieldDescription>
         </div>
       )}
     </StandardFormDialog>

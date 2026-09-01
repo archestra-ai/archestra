@@ -21,6 +21,9 @@ export function DropboxConfigFields({ control }: { control: Control<any> }) {
         render={({ field }) => (
           <FormItem>
             <FormLabel>Folder Path</FormLabel>
+            <FormDescription>
+              The folder to sync. Leave empty to sync the entire account.
+            </FormDescription>
             <FormControl>
               <Input
                 placeholder="/optional/folder/path"
@@ -28,9 +31,6 @@ export function DropboxConfigFields({ control }: { control: Control<any> }) {
                 value={(field.value as string) ?? ""}
               />
             </FormControl>
-            <FormDescription>
-              The folder to sync. Leave empty to sync the entire account.
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}
@@ -41,6 +41,10 @@ export function DropboxConfigFields({ control }: { control: Control<any> }) {
         render={({ field }) => (
           <FormItem>
             <FormLabel>File Types (optional)</FormLabel>
+            <FormDescription>
+              Comma-separated file extensions to include. Leave empty to sync
+              all supported types.
+            </FormDescription>
             <FormControl>
               <Input
                 placeholder=".md, .txt, .json"
@@ -48,10 +52,6 @@ export function DropboxConfigFields({ control }: { control: Control<any> }) {
                 value={(field.value as string) ?? ""}
               />
             </FormControl>
-            <FormDescription>
-              Comma-separated file extensions to include. Leave empty to sync
-              all supported types.
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}

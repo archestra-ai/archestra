@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Label } from "@/components/ui/label";
 import { UserSearchableSelect } from "@/components/user-searchable-select";
 import type { UserSelectOption } from "@/components/user-select-option";
@@ -50,10 +51,10 @@ export function OwnerSelectField({
     <div className="space-y-2">
       <div className="space-y-1">
         <Label>Key owner</Label>
-        <p className="text-xs text-muted-foreground">
+        <FieldDescription>
           Create this key on behalf of another member — it becomes their
           personal key to view and manage.
-        </p>
+        </FieldDescription>
       </div>
       <UserSearchableSelect
         className="w-full"

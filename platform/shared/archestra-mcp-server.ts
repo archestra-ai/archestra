@@ -159,6 +159,7 @@ export const TOOL_RUN_COMMAND_SHORT_NAME = "run_command";
 export const TOOL_START_TASK_SHORT_NAME = "start_task";
 export const TOOL_GET_TASK_SHORT_NAME = "get_task";
 export const TOOL_LIST_TASKS_SHORT_NAME = "list_tasks";
+export const TOOL_LIST_AGENT_EXECUTIONS_SHORT_NAME = "list_agent_executions";
 export const TOOL_STEER_TASK_SHORT_NAME = "steer_task";
 export const TOOL_CANCEL_TASK_SHORT_NAME = "cancel_task";
 export const TOOL_POST_TASK_FILE_SHORT_NAME = "post_task_file";
@@ -294,6 +295,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_START_TASK_SHORT_NAME,
   TOOL_GET_TASK_SHORT_NAME,
   TOOL_LIST_TASKS_SHORT_NAME,
+  TOOL_LIST_AGENT_EXECUTIONS_SHORT_NAME,
   TOOL_STEER_TASK_SHORT_NAME,
   TOOL_CANCEL_TASK_SHORT_NAME,
   TOOL_POST_TASK_FILE_SHORT_NAME,
@@ -485,6 +487,7 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   start_task: "tasks",
   get_task: "tasks",
   list_tasks: "tasks",
+  list_agent_executions: "tasks",
   steer_task: "tasks",
   cancel_task: "tasks",
   post_task_file: "tasks",
@@ -687,6 +690,8 @@ export const TOOL_GET_TASK_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_GET_TASK_SHORT_NAME}` as const;
 export const TOOL_LIST_TASKS_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_LIST_TASKS_SHORT_NAME}` as const;
+export const TOOL_LIST_AGENT_EXECUTIONS_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_LIST_AGENT_EXECUTIONS_SHORT_NAME}` as const;
 export const TOOL_STEER_TASK_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_STEER_TASK_SHORT_NAME}` as const;
 export const TOOL_CANCEL_TASK_FULL_NAME =

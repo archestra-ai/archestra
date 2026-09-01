@@ -34,6 +34,7 @@ export function LogConsole({
   className,
   contentTestId,
   errorTestId,
+  contentRenderer,
 }: {
   /** The log text. Empty or absent renders `placeholder`, else `emptyMessage`. */
   content: string | null | undefined;
@@ -61,6 +62,8 @@ export function LogConsole({
   className?: string;
   contentTestId?: string;
   errorTestId?: string;
+  /** Optional terminal-aware renderer for content that is a captured PTY. */
+  contentRenderer?: (content: string) => React.ReactNode;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -83,7 +86,9 @@ export function LogConsole({
         className,
       )}
     >
-      {error || content ? (
+      {content && !error && contentRenderer ? (
+        contentRenderer(content)
+      ) : error || content ? (
         <ScrollArea
           ref={scrollAreaRef}
           onScroll={onScroll}

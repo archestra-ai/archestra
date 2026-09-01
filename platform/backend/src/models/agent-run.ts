@@ -8,6 +8,7 @@ import {
   isNull,
   lt,
   or,
+  sql,
 } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
@@ -97,6 +98,81 @@ class AgentRunModel {
         ),
       )
       .orderBy(desc(schema.agentRunsTable.startedAt));
+  }
+
+  /** Read-only fleet rows for execution dashboards, newest first. */
+  static async listDashboard(params: {
+    agentIds: string[];
+    organizationId: string;
+    limit: number;
+  }) {
+    if (params.agentIds.length === 0) return [];
+
+    const rows = await db
+      .select({
+        taskId: schema.agentRunsTable.taskId,
+        title: schema.agentRunsTable.title,
+        actorKind: schema.agentRunsTable.actorKind,
+        actorId: schema.agentRunsTable.actorId,
+        actorName: schema.usersTable.name,
+        startedAt: schema.agentRunsTable.startedAt,
+        endedAt: schema.agentRunsTable.endedAt,
+        state: schema.a2aTasksTable.state,
+        statusReason: schema.a2aTasksTable.statusReason,
+        stateChangedAt: schema.a2aTasksTable.stateChangedAt,
+        agentId: schema.agentsTable.id,
+        agentName: schema.agentsTable.name,
+        agentIcon: schema.agentsTable.icon,
+        threadId: sql<
+          string | null
+        >`${schema.agentRunsTable.completionTarget}->>'threadId'`,
+        threadProvider: schema.chatopsChannelBindingsTable.provider,
+        threadWorkspaceId: schema.chatopsChannelBindingsTable.workspaceId,
+        threadChannelId: schema.chatopsChannelBindingsTable.channelId,
+        threadChannelName: schema.chatopsChannelBindingsTable.channelName,
+      })
+      .from(schema.agentRunsTable)
+      .innerJoin(
+        schema.a2aTasksTable,
+        eq(schema.agentRunsTable.taskId, schema.a2aTasksTable.id),
+      )
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentRunsTable.agentId, schema.agentsTable.id),
+      )
+      .leftJoin(
+        schema.usersTable,
+        eq(schema.agentRunsTable.actorUserId, schema.usersTable.id),
+      )
+      .leftJoin(
+        schema.chatopsChannelBindingsTable,
+        and(
+          eq(
+            schema.chatopsChannelBindingsTable.id,
+            sql`(${schema.agentRunsTable.completionTarget}->>'bindingId')::uuid`,
+          ),
+          eq(
+            schema.chatopsChannelBindingsTable.organizationId,
+            params.organizationId,
+          ),
+        ),
+      )
+      .where(
+        and(
+          inArray(schema.agentRunsTable.agentId, params.agentIds),
+          eq(schema.agentRunsTable.organizationId, params.organizationId),
+        ),
+      )
+      .orderBy(desc(schema.agentRunsTable.startedAt))
+      .limit(params.limit);
+
+    const messages = await A2AMessageModel.findByTaskIds(
+      rows.map((row) => row.taskId),
+    );
+    return rows.map((row) => ({
+      ...row,
+      prompt: extractPrompt(messages.get(row.taskId) ?? []),
+    }));
   }
 
   /** Chat execution sessions started by one user, newest first. */

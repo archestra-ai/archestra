@@ -4,6 +4,7 @@ import { Loader2, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -61,7 +62,7 @@ export function PluginGithubUpdatesDialog({
       open={open}
       onOpenChange={close}
       title="GitHub updates"
-      description="Check the tracked source and approve new plugin bytes before they are delivered."
+      description="Review GitHub changes before they install."
       size="large"
       bodyClassName="space-y-5 overflow-y-auto"
       footer={
@@ -86,6 +87,9 @@ export function PluginGithubUpdatesDialog({
       <section className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
         <div className="space-y-2">
           <Label htmlFor="plugin-github-cadence">Check cadence</Label>
+          <FieldDescription>
+            Last checked {formatRelativeTimeFromNow(plugin.lastSyncedAt)}
+          </FieldDescription>
           <Select
             value={plugin.githubSyncInterval ?? "off"}
             disabled={updateCadence.isPending}
@@ -106,9 +110,6 @@ export function PluginGithubUpdatesDialog({
               ))}
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground">
-            Last checked {formatRelativeTimeFromNow(plugin.lastSyncedAt)}
-          </p>
         </div>
         <Button
           variant="outline"

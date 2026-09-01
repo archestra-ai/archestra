@@ -946,7 +946,7 @@ async function convertToolResultsToToon(
 
   const result = messages.map((message) => {
     if (message.role === "tool") {
-      logger.info(
+      logger.debug(
         {
           toolCallId: message.tool_call_id,
           contentType: typeof message.content,
@@ -978,7 +978,7 @@ async function convertToolResultsToToon(
           if (tokensAfter < tokensBefore) {
             totalTokensAfter += tokensAfter;
 
-            logger.info(
+            logger.debug(
               {
                 toolCallId: message.tool_call_id,
                 beforeLength: noncompressed.length,
@@ -1019,7 +1019,7 @@ async function convertToolResultsToToon(
             "Skipping TOON compression - compressed output has more tokens",
           );
         } catch {
-          logger.info(
+          logger.debug(
             {
               toolCallId: message.tool_call_id,
               contentPreview:

@@ -3,6 +3,7 @@
 import { Plus, X } from "lucide-react";
 import { useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type {
@@ -71,10 +72,10 @@ export function ChatLinksEditor({
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
           <Label>Chat Links</Label>
-          <p className="text-xs text-muted-foreground">
+          <FieldDescription>
             Add up to 3 optional buttons shown on the new chat page. Labels are
             required and limited to 25 characters.
-          </p>
+          </FieldDescription>
         </div>
         {links.length < 3 && (
           <Button

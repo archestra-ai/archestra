@@ -24,6 +24,7 @@ import {
 import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -695,9 +696,9 @@ function MembersSection({
           </div>
         )}
         {hasStagedChanges && (
-          <p className="text-xs text-muted-foreground">
+          <FieldDescription>
             Member changes are applied when you save.
-          </p>
+          </FieldDescription>
         )}
       </div>
     </div>

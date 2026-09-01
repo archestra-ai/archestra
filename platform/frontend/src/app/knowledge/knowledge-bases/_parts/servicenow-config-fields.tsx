@@ -43,13 +43,13 @@ export function ServiceNowConfigFields({
           render={({ field }) => (
             <FormItem>
               <FormLabel>Instance URL</FormLabel>
+              <FormDescription>Your ServiceNow instance URL.</FormDescription>
               <FormControl>
                 <Input
                   placeholder="https://your-instance.service-now.com"
                   {...field}
                 />
               </FormControl>
-              <FormDescription>Your ServiceNow instance URL.</FormDescription>
               <FormMessage />
             </FormItem>
           )}
@@ -223,14 +223,14 @@ export function ServiceNowConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>States (optional)</FormLabel>
-            <FormControl>
-              <Input placeholder="1, 2, 3" {...field} />
-            </FormControl>
             <FormDescription>
               Comma-separated list of state values to filter by (e.g. 1 = New, 2
               = In Progress). Applies to incidents, changes, change tasks, and
               problems.
             </FormDescription>
+            <FormControl>
+              <Input placeholder="1, 2, 3" {...field} />
+            </FormControl>
             <FormMessage />
           </FormItem>
         )}
@@ -242,12 +242,12 @@ export function ServiceNowConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Assignment Groups (optional)</FormLabel>
-            <FormControl>
-              <Input placeholder="sys_id_1, sys_id_2" {...field} />
-            </FormControl>
             <FormDescription>
               Comma-separated list of assignment group sys_ids to filter by.
             </FormDescription>
+            <FormControl>
+              <Input placeholder="sys_id_1, sys_id_2" {...field} />
+            </FormControl>
             <FormMessage />
           </FormItem>
         )}
@@ -269,6 +269,9 @@ export function ServiceNowConfigFields({
                   <span className="text-muted-foreground text-sm">months</span>
                 </span>
               </div>
+              <FormDescription>
+                Historical data loaded on first sync
+              </FormDescription>
               <FormControl>
                 <Slider
                   min={1}
@@ -282,9 +285,6 @@ export function ServiceNowConfigFields({
                 <span>1 mo</span>
                 <span>12 mo</span>
               </div>
-              <FormDescription>
-                Historical data loaded on first sync
-              </FormDescription>
             </FormItem>
           );
         }}
@@ -296,6 +296,9 @@ export function ServiceNowConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Batch Size</FormLabel>
+            <FormDescription>
+              Number of records to process per batch (default: 50).
+            </FormDescription>
             <FormControl>
               <Input
                 type="number"
@@ -304,9 +307,6 @@ export function ServiceNowConfigFields({
                 onChange={(e) => field.onChange(Number(e.target.value) || 50)}
               />
             </FormControl>
-            <FormDescription>
-              Number of records to process per batch (default: 50).
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}

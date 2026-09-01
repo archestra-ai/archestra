@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Button } from "@/components/ui/button";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -172,6 +173,10 @@ export function TeamManagementExternalSyncSection({
       <div className="grid max-w-3xl gap-4">
         <div className="space-y-2">
           <Label>Identity Provider</Label>
+          <FieldDescription>
+            Choose which identity provider claims to inspect while finding the
+            external group identifier for this team.
+          </FieldDescription>
           <Select
             value={selectedIdentityProvider?.id}
             onValueChange={setSelectedIdentityProviderId}
@@ -187,10 +192,6 @@ export function TeamManagementExternalSyncSection({
               ))}
             </SelectContent>
           </Select>
-          <p className="text-sm text-muted-foreground">
-            Choose which identity provider claims to inspect while finding the
-            external group identifier for this team.
-          </p>
         </div>
 
         {selectedIdentityProvider && (
@@ -201,19 +202,7 @@ export function TeamManagementExternalSyncSection({
                   ? "Group Extraction Template"
                   : "Group Extraction Source"}
               </Label>
-              <Input
-                aria-label={
-                  selectedGroupsExpression
-                    ? "Group Extraction Template"
-                    : "Group Extraction Source"
-                }
-                readOnly
-                className="font-mono text-sm"
-                value={
-                  selectedGroupsExpression ?? "Built-in group claim detection"
-                }
-              />
-              <p className="text-sm text-muted-foreground">
+              <FieldDescription>
                 {selectedGroupsExpression ? (
                   <span key="configured">
                     Configured on the selected identity provider. Use the
@@ -242,7 +231,19 @@ export function TeamManagementExternalSyncSection({
                     </span>
                   </span>
                 )}
-              </p>
+              </FieldDescription>
+              <Input
+                aria-label={
+                  selectedGroupsExpression
+                    ? "Group Extraction Template"
+                    : "Group Extraction Source"
+                }
+                readOnly
+                className="font-mono text-sm"
+                value={
+                  selectedGroupsExpression ?? "Built-in group claim detection"
+                }
+              />
             </div>
             <LatestIdTokenClaimsPanel
               identityProviderId={selectedIdentityProvider.id}
@@ -340,10 +341,10 @@ function LatestIdTokenClaimsPanel({
   return (
     <div className="space-y-2">
       <Label>Latest ID Token Claims</Label>
-      <p className="text-sm text-muted-foreground">
+      <FieldDescription>
         Decoded claims from your latest sign-in with this identity provider. Raw
         signed tokens are never shown.
-      </p>
+      </FieldDescription>
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading claims...</p>
       ) : formattedClaims ? (

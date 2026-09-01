@@ -19,11 +19,17 @@ export function AgentExecutionTerminal({
   taskId,
   active,
   title,
+  showManualCommand,
+  showDisconnectedStatus,
+  onCommandChange,
   onClosed,
 }: {
   taskId: string;
   active: boolean;
   title?: string;
+  showManualCommand?: boolean;
+  showDisconnectedStatus?: boolean;
+  onCommandChange?: (command: string | null) => void;
   onClosed?: () => void;
 }) {
   const transport = useMemo<ExecSessionTransport>(
@@ -38,6 +44,9 @@ export function AgentExecutionTerminal({
       isActive={active}
       title={title}
       disconnectedLabel="Execution finishing…"
+      showManualCommand={showManualCommand}
+      showDisconnectedStatus={showDisconnectedStatus}
+      onCommandChange={onCommandChange}
       onClosed={onClosed}
     />
   );

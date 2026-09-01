@@ -30,12 +30,12 @@ export function LinearConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Team IDs (optional)</FormLabel>
-            <FormControl>
-              <Input placeholder="team_123, team_456" {...field} />
-            </FormControl>
             <FormDescription>
               Comma-separated Linear team IDs to include.
             </FormDescription>
+            <FormControl>
+              <Input placeholder="team_123, team_456" {...field} />
+            </FormControl>
             <FormMessage />
           </FormItem>
         )}
@@ -47,12 +47,12 @@ export function LinearConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Project IDs (optional)</FormLabel>
-            <FormControl>
-              <Input placeholder="project_123, project_456" {...field} />
-            </FormControl>
             <FormDescription>
               Comma-separated Linear project IDs to include.
             </FormDescription>
+            <FormControl>
+              <Input placeholder="project_123, project_456" {...field} />
+            </FormControl>
             <FormMessage />
           </FormItem>
         )}
@@ -64,12 +64,12 @@ export function LinearConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Issue States (optional)</FormLabel>
-            <FormControl>
-              <Input placeholder="Todo, In Progress, Done" {...field} />
-            </FormControl>
             <FormDescription>
               Comma-separated issue state names to sync.
             </FormDescription>
+            <FormControl>
+              <Input placeholder="Todo, In Progress, Done" {...field} />
+            </FormControl>
             <FormMessage />
           </FormItem>
         )}
@@ -144,12 +144,12 @@ export function LinearConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Batch Size (optional)</FormLabel>
-            <FormControl>
-              <Input placeholder="50" {...field} />
-            </FormControl>
             <FormDescription>
               Max items fetched per request. Leave empty for default.
             </FormDescription>
+            <FormControl>
+              <Input placeholder="50" {...field} />
+            </FormControl>
             <FormMessage />
           </FormItem>
         )}

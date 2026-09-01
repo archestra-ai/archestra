@@ -1769,7 +1769,7 @@ export async function convertToolResultsToToon(
                 totalTokensBefore += tokensBefore;
                 totalTokensAfter += tokensAfter;
 
-                logger.info(
+                logger.debug(
                   {
                     toolUseId: toolResult.toolUseId,
                     beforeLength: noncompressed.length,
@@ -1788,7 +1788,7 @@ export async function convertToolResultsToToon(
                   },
                 };
               } catch {
-                logger.info(
+                logger.debug(
                   {
                     toolUseId: toolResult.toolUseId,
                   },

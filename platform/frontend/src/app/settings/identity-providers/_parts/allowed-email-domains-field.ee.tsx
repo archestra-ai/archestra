@@ -27,13 +27,13 @@ export function AllowedEmailDomainsField({
       render={({ field }) => (
         <FormItem>
           <FormLabel>Allowed Email Domains</FormLabel>
-          <FormControl>
-            <Input placeholder="company.com, subsidiary.com" {...field} />
-          </FormControl>
           <FormDescription>
             Users can sign in with this provider only when their returned email
             matches one of these domains. Separate multiple domains with commas.
           </FormDescription>
+          <FormControl>
+            <Input placeholder="company.com, subsidiary.com" {...field} />
+          </FormControl>
           <FormMessage />
         </FormItem>
       )}

@@ -3,6 +3,7 @@
 import type { Resource } from "@archestra/shared";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -73,6 +74,16 @@ export function EnvironmentMultiSelector({
   return (
     <div className={cn("space-y-2", className)}>
       <Label>Environments</Label>
+      {canManageEnvironments ? (
+        <FieldDescription>
+          <Link
+            href="/settings/environments"
+            className="underline underline-offset-2"
+          >
+            Manage environments
+          </Link>
+        </FieldDescription>
+      ) : null}
       {helpText ? (
         <p className="text-xs text-muted-foreground">{helpText}</p>
       ) : null}
@@ -86,16 +97,6 @@ export function EnvironmentMultiSelector({
         placeholder="All environments"
         emptyMessage="No environments found."
       />
-      {canManageEnvironments ? (
-        <p className="text-xs text-muted-foreground">
-          <Link
-            href="/settings/environments"
-            className="underline underline-offset-2"
-          >
-            Manage environments
-          </Link>
-        </p>
-      ) : null}
     </div>
   );
 }

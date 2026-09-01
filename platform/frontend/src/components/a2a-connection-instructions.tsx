@@ -32,6 +32,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -540,9 +541,9 @@ curl -X POST "${a2aEndpoint}" \\
                   <Label htmlFor={exampleTokenSelectId}>
                     Token for examples
                   </Label>
-                  <p className="text-xs text-muted-foreground">
+                  <FieldDescription>
                     Which token the requests below are written with.
-                  </p>
+                  </FieldDescription>
                 </div>
                 <Select
                   value={effectiveTokenId}

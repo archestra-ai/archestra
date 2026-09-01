@@ -17,6 +17,7 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { createdByFact } from "@/components/created-by-cell";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import {
+  type MaybeOverviewFact,
   type OverviewFact,
   OverviewSummary,
 } from "@/components/overview-summary";
@@ -668,14 +669,14 @@ function CatalogItemDetails({
  * arguments — is behind the same link the header's Edit uses, rather than
  * mirrored here a second time read-only.
  */
-function useMcpServerOverviewFacts(item: CatalogItem): OverviewFact[] {
+function useMcpServerOverviewFacts(item: CatalogItem): MaybeOverviewFact[] {
   const values = useMemo(() => transformCatalogItemToFormValues(item), [item]);
   const _hibernation = useIdleHibernationFact(item);
   // Only the derivation comes from the form shape (the auth method): its
   // `localConfig` is textarea-shaped — `arguments` is one newline-joined
   // string there — so everything factual reads the API's own object.
   const local = item.localConfig;
-  const facts: OverviewFact[] = [];
+  const facts: MaybeOverviewFact[] = [];
 
   if (item.serverType === "remote" && item.serverUrl) {
     facts.push({

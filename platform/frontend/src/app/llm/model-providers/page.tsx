@@ -16,6 +16,7 @@ import {
   Pencil,
   Plus,
   Server,
+  Tags,
   Trash2,
 } from "lucide-react";
 import Image from "next/image";
@@ -46,7 +47,14 @@ import { PageLayout } from "@/components/page-layout";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { platformOwnedStyles } from "@/components/scope-vocabulary";
 import { SearchInput } from "@/components/search-input";
+import { EntityLabelFilter } from "@/components/entity-label-filter";
+import { EntityLabelsDialog } from "@/components/entity-labels-dialog";
 import { TableRowActions } from "@/components/table-row-actions";
+import {
+  useLlmProviderApiKeyLabelKeys,
+  useLlmProviderApiKeyLabelValues,
+  useSaveLlmProviderApiKeyLabels,
+} from "@/lib/entity-labels.query";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
@@ -129,6 +137,12 @@ export default function ApiKeysPage() {
   const { searchParams, updateQueryParams } = useDataTableQueryParams();
   const search = searchParams.get("search") || "";
   const providerFilter = searchParams.get("provider") || "all";
+  // Label filtering is server-side, so the value rides the list query.
+  const labelsFilter = searchParams.get("labels") || undefined;
+  const [labelingCredential, setLabelingCredential] = useState<
+    LlmProviderApiKeyResponse | null
+  >(null);
+  const saveProviderKeyLabels = useSaveLlmProviderApiKeyLabels();
   const { data: canReadLlmProviderApiKeys, isPending: permissionsPending } =
     useHasPermissions({ llmProviderApiKey: ["read"] });
   const apiKeyQueriesEnabled =
@@ -139,6 +153,7 @@ export default function ApiKeysPage() {
     });
   const { data: queriedApiKeys = [], isFetching } = useLlmProviderApiKeys({
     search: search || undefined,
+    labels: labelsFilter,
     provider:
       providerFilter === "all"
         ? undefined
@@ -650,6 +665,16 @@ export default function ApiKeysPage() {
                   testId: `${E2eTestId.EditChatApiKeyButton}-${credential.name}`,
                 },
                 {
+                  icon: <Tags className="h-4 w-4" />,
+                  label: "Edit labels",
+                  permissions: {
+                    llmProviderApiKey: ["update"],
+                  },
+                  disabled: isSystem,
+                  disabledTooltip: "System keys cannot be edited",
+                  onClick: () => setLabelingCredential(credential),
+                },
+                {
                   icon: <Trash2 className="h-4 w-4" />,
                   label: "Delete",
                   variant: "destructive",
@@ -747,6 +772,13 @@ export default function ApiKeysPage() {
                   <LlmProviderSelectItems options={providerOptions} />
                 </SelectContent>
               </Select>
+              <EntityLabelFilter
+                useLabelKeys={useLlmProviderApiKeyLabelKeys}
+                useLabelValues={useLlmProviderApiKeyLabelValues}
+                className={filterControlClass({
+                  active: Boolean(labelsFilter),
+                })}
+              />
             </FilterBar>
           </CollectionFilters>
 
@@ -875,6 +907,20 @@ export default function ApiKeysPage() {
         </FormDialog>
 
         {/* Delete Confirmation Dialog */}
+        {labelingCredential && (
+          <EntityLabelsDialog
+            open={!!labelingCredential}
+            onOpenChange={(open) => !open && setLabelingCredential(null)}
+            entityName={labelingCredential.name}
+            labels={labelingCredential.labels ?? []}
+            onSave={(labels) =>
+              saveProviderKeyLabels.mutateAsync({
+                id: labelingCredential.id,
+                labels,
+              })
+            }
+          />
+        )}
         <DeleteConfirmDialog
           open={isDeleteDialogOpen}
           onOpenChange={setIsDeleteDialogOpen}

@@ -16,6 +16,12 @@ archestra-rs/sandbox-rs/index.js
 **/playwright-report
 **/tsconfig.tsbuildinfo
 
+# Local dotnet build outputs of the M-Files VAF Add On — the image build
+# compiles the add-on from source in its own stage and must never pick up a
+# stale locally-built package.
+integrations/m-files-vaf-add-on/bin
+integrations/m-files-vaf-add-on/obj
+
 # Development
 .tilt
 .env.local

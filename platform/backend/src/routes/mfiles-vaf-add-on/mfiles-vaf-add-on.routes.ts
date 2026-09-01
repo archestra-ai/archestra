@@ -2,8 +2,11 @@
 // SPDX-FileCopyrightText: 2026 Archestra Inc.
 
 import { execFile } from "node:child_process";
+import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import { RouteId } from "@archestra/shared";
+import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import JSZip from "jszip";
 import { z } from "zod";
@@ -28,8 +31,9 @@ import {
  * The bootstrap and the form's download link install the same package,
  * decided server-side by `resolveVafAddOnDistribution`: the development
  * source-ref override first (branch CI build proxied by the package route,
- * or a source build), then the newest release that actually carries the
- * package — never a URL that is known to 404.
+ * or a source build), then the package compiled into this platform image,
+ * then the newest release that actually carries the package — never a URL
+ * that is known to 404.
  */
 const mfilesVafAddOnRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -72,16 +76,18 @@ const mfilesVafAddOnRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetMfilesVafAddOnDistribution,
         description:
           "Resolve how the M-Files connector's VAF Add On is distributed to this " +
-          "installation: a verified direct package download URL (release " +
-          "asset or the dev source-ref CI build proxied by the backend), or " +
-          "null when the install script compiles from source instead. The " +
-          "connector form probes this for its download link.",
+          "installation: a verified direct package download URL (the dev " +
+          "source-ref CI build or the package compiled into this platform " +
+          "image — both served by the backend's package route — or a release " +
+          "asset), or null when the install script compiles from source " +
+          "instead. The connector form probes this for its download link.",
         tags: ["Knowledge Bases"],
         response: constructResponseSchema(
           z.object({
             /**
              * Verified package URL — absolute for release assets, relative
-             * (this backend's package route) for dev CI builds. Null when no
+             * (this backend's package route) for dev CI builds and the
+             * package compiled into the platform image. Null when no
              * pre-built package exists for this installation.
              */
             packageDownloadUrl: z.string().nullable(),
@@ -102,10 +108,11 @@ const mfilesVafAddOnRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetMfilesVafAddOnPackage,
         description:
-          "Serve the M-Files connector's VAF Add On package built by CI for the " +
-          "configured development source ref " +
-          "(ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_SOURCE_REF). 404 when " +
-          "the override is unset or no CI build exists for it.",
+          "Serve the M-Files connector's VAF Add On package: the CI build of the " +
+          "development source-ref override " +
+          "(ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_SOURCE_REF) when one " +
+          "resolves, else the package compiled into this platform image. 404 " +
+          "when neither exists.",
         tags: ["Knowledge Bases"],
         // no `response` schema: streams the binary `.mfappx`.
       },
@@ -118,21 +125,23 @@ const mfilesVafAddOnRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
       if (limited) throw new ApiError(429, "Too many requests");
 
-      const bytes = await fetchCiPackageBytes();
-      if (!bytes) {
-        throw new ApiError(
-          404,
-          "No CI-built add-on package for the configured source ref.",
-        );
+      const ciBytes = await fetchCiPackageBytes();
+      if (ciBytes) {
+        return sendPackage(reply, VAF_ADD_ON_ASSET_NAME, ciBytes);
       }
-      return reply
-        .header("Content-Type", "application/octet-stream")
-        .header(
-          "Content-Disposition",
-          `attachment; filename="${VAF_ADD_ON_ASSET_NAME}"`,
-        )
-        .header("Cache-Control", "no-store")
-        .send(bytes);
+
+      const packed = await resolvePackedPackage();
+      if (packed) {
+        // Read per request rather than pinning the bytes in memory: the file
+        // is local, ~1MB, and the route is rate-limited. The versioned
+        // filename means a file a person keeps says which version it is.
+        return sendPackage(reply, packed.filename, await readFile(packed.path));
+      }
+
+      throw new ApiError(
+        404,
+        "No add-on package: neither a CI build for the configured source ref nor a package compiled into this image.",
+      );
     },
   );
 };
@@ -153,6 +162,19 @@ function assertMfilesConnectorEnabled(): void {
   if (!config.kb.mfilesConnectorEnabled) {
     throw new ApiError(404, "Not found");
   }
+}
+
+/** The package response shape shared by the CI-proxy and packed sources. */
+function sendPackage(
+  reply: FastifyReply,
+  filename: string,
+  bytes: Buffer,
+): FastifyReply {
+  return reply
+    .header("Content-Type", "application/octet-stream")
+    .header("Content-Disposition", `attachment; filename="${filename}"`)
+    .header("Cache-Control", "no-store")
+    .send(bytes);
 }
 
 /** Single-quote a value for PowerShell (embedded quotes double). */
@@ -239,16 +261,20 @@ function githubHeaders(): Record<string, string> {
  *    With a CI build of that ref available (and the GitHub token needed to
  *    fetch it), both the command and the link go through the backend package
  *    proxy; otherwise the command compiles from the ref's source.
- * 2. The newest release that carries the package. The add-on publishes on
- *    its own `m-files-vaf-add-on-v*` release track: this repository's
- *    releases are immutable, so the package can never be attached to the
- *    platform release, which publishes before the add-on build runs.
- *    Compatibility is negotiated by the extension protocol's schema version,
- *    not by pairing release versions. The install command fetches the
- *    stable-named asset (a temp file — the name never surfaces), while the
- *    download link prefers the versioned twin so a file a person keeps says
- *    which version it is.
- * 3. Installer defaults, no download link.
+ * 2. The package compiled into this platform image (the Dockerfile's
+ *    vaf-add-on-builder stage): built from the exact source this platform
+ *    ships with and served by the package route — no GitHub involved.
+ * 3. The newest release that carries the package — for deployments running
+ *    outside the image (dev stacks), where the packed directory does not
+ *    exist. The add-on publishes on its own `m-files-vaf-add-on-v*` release
+ *    track: this repository's releases are immutable, so the package can
+ *    never be attached to the platform release, which publishes before the
+ *    add-on build runs. Compatibility is negotiated by the extension
+ *    protocol's schema version, not by pairing release versions. The
+ *    install command fetches the stable-named asset (a temp file — the name
+ *    never surfaces), while the download link prefers the versioned twin so
+ *    a file a person keeps says which version it is.
+ * 4. Installer defaults, no download link.
  */
 async function resolveVafAddOnDistribution(): Promise<VafAddOnDistribution> {
   const override = config.kb.mfilesVafAddOnSourceRef;
@@ -262,6 +288,15 @@ async function resolveVafAddOnDistribution(): Promise<VafAddOnDistribution> {
       }
       return { install: { buildFromSource: true, ref }, downloadUrl: null };
     }
+  }
+
+  const packed = await resolvePackedPackage();
+  if (packed) {
+    const packageUrl = MFILES_VAF_ADD_ON_PACKAGE_PATH;
+    return {
+      install: { packageUrl, ref: packed.ref },
+      downloadUrl: packageUrl,
+    };
   }
 
   const release = await resolveNewestReleaseAsset();
@@ -291,6 +326,65 @@ function localCheckoutCommit(): Promise<string | null> {
     () => null,
   );
   return cachedLocalCheckoutCommit;
+}
+
+interface PackedVafAddOnPackage {
+  /** Absolute path of the versioned `.mfappx` on disk. */
+  path: string;
+  /** Its versioned filename — what a downloaded file is called. */
+  filename: string;
+  /**
+   * The version's release tag, `m-files-vaf-add-on-v<version>` — the
+   * installer's build-from-source fallback ref.
+   */
+  ref: string;
+}
+
+/**
+ * The add-on package compiled into this platform image, or null where the
+ * configured directory holds no versioned package — deployments running
+ * outside the image (dev stacks). The versioned file is required (the
+ * stable-named copy alone carries no version to derive the ref from); the
+ * image always writes both. Resolved once per directory — image contents
+ * don't change under a running backend.
+ */
+const packedPackageCache = new Map<
+  string,
+  Promise<PackedVafAddOnPackage | null>
+>();
+function resolvePackedPackage(): Promise<PackedVafAddOnPackage | null> {
+  const dir = config.kb.mfilesVafAddOnPackageDir;
+  let resolved = packedPackageCache.get(dir);
+  if (!resolved) {
+    resolved = readPackedPackage(dir);
+    packedPackageCache.set(dir, resolved);
+  }
+  return resolved;
+}
+
+async function readPackedPackage(
+  dir: string,
+): Promise<PackedVafAddOnPackage | null> {
+  try {
+    const versioned = (await readdir(dir))
+      .filter(isVersionedVafAddOnAssetName)
+      // Newest when several are present (never the case in the image);
+      // numeric compare so 1.10.0 sorts above 1.9.0.
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+      .pop();
+    if (!versioned) return null;
+    const version = versioned.slice(
+      VAF_ADD_ON_ASSET_NAME.length - ".mfappx".length + 1,
+      -".mfappx".length,
+    );
+    return {
+      path: join(dir, versioned),
+      filename: versioned,
+      ref: `m-files-vaf-add-on-v${version}`,
+    };
+  } catch {
+    return null;
+  }
 }
 
 interface CiArtifactRef {

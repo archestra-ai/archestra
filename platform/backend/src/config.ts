@@ -3662,6 +3662,19 @@ const config = {
       process.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_SOURCE_REF?.trim() ||
       null,
     /**
+     * Directory holding the VAF Add On package compiled into the platform
+     * image (a versioned `archestra-m-files-vaf-add-on-<version>.mfappx`
+     * plus a stable-named copy — see the vaf-add-on-builder stage in
+     * platform/Dockerfile). The backend serves the install script and the
+     * connector form's download from it, with no GitHub dependency. The
+     * default matches where the image puts it; deployments running outside
+     * the image (dev stacks) simply have no such directory and fall back to
+     * the source-ref override or the newest add-on release.
+     */
+    mfilesVafAddOnPackageDir:
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_PACKAGE_DIR?.trim() ||
+      "/app/mfiles-vaf-add-on",
+    /**
      * GitHub token used to download the source ref's CI-built add-on package
      * (GitHub requires authentication for Actions artifact downloads even on
      * public repositories). Only read when the source-ref override above is

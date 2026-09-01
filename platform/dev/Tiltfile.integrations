@@ -92,6 +92,7 @@ if os.name != 'nt':
       'shared',
       'docker-banner.sh',
       'prev-static-assets',
+      'integrations',
     ],
     ignore=[
       '**/node_modules',

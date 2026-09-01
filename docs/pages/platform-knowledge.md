@@ -1077,7 +1077,7 @@ Install it once per connected vault, from the connector form:
 - **Installation script** — copy the one-line command and run it in PowerShell on the M-Files server as a system administrator. It downloads the add-on, installs it into the vault you choose, and restarts the vault.
 - **Manual installation** — download the `.mfappx` package and install it in M-Files Admin: right-click the vault, then Applications, then Install.
 
-Pre-built packages are published as `m-files-vaf-add-on-v<version>` [releases on GitHub](https://github.com/archestra-ai/archestra/releases). The source lives in [`integrations/m-files-vaf-add-on`](https://github.com/archestra-ai/archestra/tree/main/integrations/m-files-vaf-add-on); its README covers building from source and the add-on contract. For development deployments, two variables override where the install script gets the package — see [Deployment](/docs/platform-deployment).
+The platform image ships the add-on package, compiled from the same source as the platform itself. The install script and the download serve it directly — no external download involved. Packages are also published as `m-files-vaf-add-on-v<version>` [releases on GitHub](https://github.com/archestra-ai/archestra/releases), the fallback for deployments running outside the image. The source lives in [`platform/integrations/m-files-vaf-add-on`](https://github.com/archestra-ai/archestra/tree/main/platform/integrations/m-files-vaf-add-on); its README covers building from source and the add-on contract. For development deployments, variables override where the install script gets the package — see [Deployment](/docs/platform-deployment).
 
 ## Environments
 

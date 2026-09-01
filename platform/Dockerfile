@@ -12,6 +12,7 @@ ARG DAGGER_VERSION=v0.21.8
 ARG DAGGER_COMMIT=7902e644beeba4468f1ea786015b4be1d6d5bbcd
 ARG KUBECTL_VERSION=v1.35.0
 ARG KUBECTL_COMMIT=66452049f3d692768c39c797b21b793dce80314e
+ARG DOTNET_SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:8.0-alpine@sha256:8a80a27ddac789b4cb6d09d244f9c8d840da599c5ad22f7233c04be470e55261
 
 FROM ${GOLANG_IMAGE} AS go-builder-base
 ARG TARGETARCH
@@ -167,6 +168,29 @@ RUN apk add --no-cache skopeo
 RUN skopeo copy --override-os linux --override-arch "${TARGETARCH}" \
         "docker://registry.dagger.io/engine:${DAGGER_VERSION}" \
         "docker-archive:/dagger-engine.tar:registry.dagger.io/engine:${DAGGER_VERSION}"
+
+# <----- M-Files VAF Add On ----->
+# Compile the add-on from this checkout's source so every platform image
+# carries the exact package matching its code, served by the backend's
+# mfiles-vaf-add-on routes with no runtime GitHub dependency. The output is
+# framework-neutral IL (net472 assemblies zipped into a .mfappx), so the
+# stage always runs on the build platform — never under target-arch
+# emulation — and the same bytes land in every target arch.
+FROM --platform=$BUILDPLATFORM ${DOTNET_SDK_IMAGE} AS vaf-add-on-builder
+WORKDIR /src
+COPY integrations/m-files-vaf-add-on/ ./
+# The csproj's packaging target writes exactly one versioned
+# archestra-m-files-vaf-add-on-<version>.mfappx (it deletes older ones
+# first); ship it alongside a stable-named copy — the name the installer and
+# the docs reference.
+RUN --mount=type=cache,id=nuget,target=/root/.nuget/packages \
+    set -eux; \
+    dotnet build Archestra.MFiles.VAFAddOn.csproj -c Release; \
+    mkdir /out; \
+    versioned="$(find bin/Release -name 'archestra-m-files-vaf-add-on-*.mfappx')"; \
+    [ "$(printf '%s\n' "${versioned}" | wc -l)" -eq 1 ]; \
+    cp "${versioned}" /out/; \
+    cp "${versioned}" /out/archestra-m-files-vaf-add-on.mfappx
 
 FROM ${NODE_IMAGE} AS base
 
@@ -570,6 +594,13 @@ RUN rm -rf /root/.cache/node/corepack /usr/local/bin/pnpm /usr/local/bin/pnpx
 # the runtime `pnpm install`.
 COPY --from=builder /prod/backend ./backend
 RUN chmod +x /app/backend/scripts/start-production.sh
+
+# The M-Files VAF Add On package built from this checkout's source (versioned
+# file + stable-named copy). The backend's mfiles-vaf-add-on routes serve it
+# from here (ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_PACKAGE_DIR), keeping
+# the connector-beta gating and rate limits — which is why it lives outside
+# the ungated static frontend/public tree.
+COPY --from=vaf-add-on-builder /out/ ./mfiles-vaf-add-on/
 
 # Copy built frontend
 COPY --from=builder /app/frontend/public ./frontend/public

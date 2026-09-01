@@ -514,7 +514,7 @@ export function OidcConfigForm({
                     during sign-out.{" "}
                     <ExternalDocsLink
                       href="https://openid.net/specs/openid-connect-rpinitiated-1_0.html"
-                      className="inline-flex items-center gap-1 underline underline-offset-4"
+                      className="underline underline-offset-4"
                     >
                       Learn more
                     </ExternalDocsLink>
@@ -620,7 +620,7 @@ function EnterpriseManagedCredentialsForm(props: {
             {" "}
             <ExternalDocsLink
               href={identityProvidersDocsUrl}
-              className="inline-flex items-center gap-1 underline underline-offset-4"
+              className="underline underline-offset-4"
             >
               Learn more
             </ExternalDocsLink>

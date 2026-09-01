@@ -582,10 +582,7 @@ export default function ApiKeysPage() {
             <span className="text-sm text-muted-foreground">
               Env Vars{" "}
               {docsUrl && (
-                <ExternalDocsLink
-                  href={`${docsUrl}#using-vertex-ai`}
-                  className="inline-flex items-center gap-1 text-primary hover:underline"
-                >
+                <ExternalDocsLink href={`${docsUrl}#using-vertex-ai`}>
                   Docs
                 </ExternalDocsLink>
               )}

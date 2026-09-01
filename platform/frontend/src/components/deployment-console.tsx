@@ -188,6 +188,7 @@ export function DeploymentLogPanel({
   className,
   contentTestId,
   errorTestId,
+  contentRenderer,
 }: {
   title?: string;
   detail?: string | null;
@@ -205,6 +206,7 @@ export function DeploymentLogPanel({
   className?: string;
   contentTestId?: string;
   errorTestId?: string;
+  contentRenderer?: (content: string) => ReactNode;
 }) {
   return (
     <div className={cn("flex min-h-0 flex-1 flex-col gap-2", className)}>
@@ -250,6 +252,7 @@ export function DeploymentLogPanel({
         status={status}
         contentTestId={contentTestId}
         errorTestId={errorTestId}
+        contentRenderer={contentRenderer}
       />
     </div>
   );

@@ -1,5 +1,6 @@
 import {
   TOOL_GET_TASK_FULL_NAME,
+  TOOL_LIST_AGENT_EXECUTIONS_FULL_NAME,
   TOOL_POST_TASK_FILE_FULL_NAME,
   TOOL_START_TASK_FULL_NAME,
 } from "@archestra/shared";
@@ -9,9 +10,11 @@ import * as a2aExecutor from "@/agents/a2a-executor";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import {
   A2AContextModel,
+  A2AMessageModel,
   A2ATaskModel,
   AgentRunModel,
   AgentTeamModel,
+  ChatOpsChannelBindingModel,
 } from "@/models";
 import { RouteCategory } from "@/observability/tracing";
 import { beforeEach, describe, expect, test } from "@/test";
@@ -163,6 +166,8 @@ describe("task tools", () => {
   async function seedChatopsTask(params: {
     actorUserId: string;
     withTarget: boolean;
+    bindingId?: string;
+    prompt?: string;
   }) {
     const a2aContext = await A2AContextModel.create({
       actorKind: "user",
@@ -173,6 +178,19 @@ describe("task tools", () => {
       agentId: callingAgent.id,
       state: "TASK_STATE_WORKING",
     });
+    if (params.prompt) {
+      await A2AMessageModel.create({
+        contextId: a2aContext.id,
+        taskId: task.id,
+        role: "ROLE_USER",
+        parts: [{ text: params.prompt }],
+        content: {
+          id: crypto.randomUUID(),
+          role: "user",
+          parts: [{ type: "text", text: params.prompt }],
+        },
+      });
+    }
     await AgentRunModel.create({
       organizationId,
       taskId: task.id,
@@ -186,13 +204,88 @@ describe("task tools", () => {
       completionTarget: params.withTarget
         ? {
             type: "chatops",
-            bindingId: "9c2b1f60-0000-4000-8000-000000000001",
+            bindingId:
+              params.bindingId ?? "9c2b1f60-0000-4000-8000-000000000001",
             threadId: "1788208728.803109",
           }
         : null,
     });
     return task;
   }
+
+  test("lists accessible Agent executions with live and thread links", async () => {
+    const binding = await ChatOpsChannelBindingModel.create({
+      organizationId,
+      provider: "slack",
+      channelId: "C01234567",
+      workspaceId: "T01234567",
+      channelName: "engineering",
+      workspaceName: "Workspace",
+      agentId: callingAgent.id,
+    });
+    const task = await seedChatopsTask({
+      actorUserId: actorId,
+      withTarget: true,
+      bindingId: binding.id,
+      prompt: "Add a character counter.",
+    });
+
+    const result = await executeArchestraTool(
+      TOOL_LIST_AGENT_EXECUTIONS_FULL_NAME,
+      { agent_ids: [callingAgent.id], limit: 20 },
+      context,
+    );
+
+    expect(result.isError).toBeFalsy();
+    expect(result.structuredContent).toMatchObject({
+      summary: { total: 1, active: 1, by_state: { TASK_STATE_WORKING: 1 } },
+      executions: [
+        {
+          task_id: task.id,
+          prompt: "Add a character counter.",
+          state: "TASK_STATE_WORKING",
+          agent: { id: callingAgent.id, name: callingAgent.name },
+          requester: { kind: "user", id: actorId },
+          thread: {
+            provider: "slack",
+            channel_id: "C01234567",
+            channel_name: "engineering",
+            thread_id: "1788208728.803109",
+            url: "https://app.slack.com/client/T01234567/C01234567/thread/C01234567-1788208728.803109",
+          },
+        },
+      ],
+    });
+    expect(
+      (
+        result.structuredContent as {
+          executions: Array<{ execution_url: string }>;
+        }
+      ).executions[0]?.execution_url,
+    ).toMatch(new RegExp(`/chat/executions/${task.id}$`));
+  });
+
+  test("does not reveal executions for an inaccessible Agent", async ({
+    makeAgent,
+    makeUser,
+  }) => {
+    const otherUser = await makeUser();
+    const privateAgent = await makeAgent({
+      organizationId,
+      authorId: otherUser.id,
+      agentType: "agent",
+      scope: "personal",
+    });
+
+    const result = await executeArchestraTool(
+      TOOL_LIST_AGENT_EXECUTIONS_FULL_NAME,
+      { agent_ids: [privateAgent.id] },
+      context,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain("Agent not found");
+  });
 
   test("post_task_file uploads into the task's chatops thread", async () => {
     const task = await seedChatopsTask({

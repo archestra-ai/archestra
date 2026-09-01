@@ -10,6 +10,7 @@ import {
   KeyRound,
   Pencil,
   Plus,
+  Tags,
   Trash2,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -22,10 +23,18 @@ import {
 } from "@/components/create-virtual-key-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EditVirtualKeyDialog } from "@/components/edit-virtual-key-dialog";
+import { EntityLabelFilter } from "@/components/entity-label-filter";
+import { EntityLabelsDialog } from "@/components/entity-labels-dialog";
+import {
+  useSaveVirtualApiKeyLabels,
+  useVirtualApiKeyLabelKeys,
+  useVirtualApiKeyLabelValues,
+} from "@/lib/entity-labels.query";
 import {
   CollectionFilters,
   FilterBar,
   FilterSelect,
+  filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
 import {
@@ -106,6 +115,8 @@ function VirtualKeysTable() {
   const keyTypeFromUrl = searchParams.get("keyType");
   const scopeFromUrl = searchParams.get("scope");
   const providerApiKeyIdFromUrl = searchParams.get("providerApiKeyId");
+  // Label filtering is server-side, so the value rides the list query.
+  const labelsFilter = searchParams.get("labels") || undefined;
   const keyTypeFilter = isKeyType(keyTypeFromUrl) ? keyTypeFromUrl : undefined;
   const scopeFilter = isScope(scopeFromUrl) ? scopeFromUrl : undefined;
   const providerApiKeyIdFilter = isProviderApiKeyId(providerApiKeyIdFromUrl)
@@ -124,6 +135,7 @@ function VirtualKeysTable() {
     keyType: keyTypeFilter,
     scope: scopeFilter,
     providerApiKeyId: providerApiKeyIdFilter,
+    labels: labelsFilter,
     toastOnError: false,
   });
 
@@ -133,6 +145,8 @@ function VirtualKeysTable() {
   );
   const [editingKey, setEditingKey] = useState<VirtualKeyRow | null>(null);
   const [deletingKey, setDeletingKey] = useState<VirtualKeyRow | null>(null);
+  const [labelingKey, setLabelingKey] = useState<VirtualKeyRow | null>(null);
+  const saveVirtualKeyLabels = useSaveVirtualApiKeyLabels();
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const deleteMutation = useDeleteVirtualApiKey();
   const bulkDelete = useBulkDeleteVirtualApiKeys();
@@ -318,6 +332,12 @@ function VirtualKeysTable() {
               onClick: () => setEditingKey(row.original),
             },
             {
+              icon: <Tags className="h-4 w-4" />,
+              label: "Edit labels",
+              permissions: { llmVirtualKey: ["update"] },
+              onClick: () => setLabelingKey(row.original),
+            },
+            {
               icon: <Trash2 className="h-4 w-4" />,
               label: "Delete",
               permissions: { llmVirtualKey: ["delete"] },
@@ -387,6 +407,13 @@ function VirtualKeysTable() {
               onValueChange={(providerApiKeyId) =>
                 updateQueryParams({ providerApiKeyId, page: "1" })
               }
+            />
+            <EntityLabelFilter
+              useLabelKeys={useVirtualApiKeyLabelKeys}
+              useLabelValues={useVirtualApiKeyLabelValues}
+              className={filterControlClass({
+                active: Boolean(labelsFilter),
+              })}
             />
           </FilterBar>
         </CollectionFilters>
@@ -543,6 +570,17 @@ function VirtualKeysTable() {
             if (!open) setEditingKey(null);
           }}
         />
+        {labelingKey && (
+          <EntityLabelsDialog
+            open={!!labelingKey}
+            onOpenChange={(open) => !open && setLabelingKey(null)}
+            entityName={labelingKey.name}
+            labels={labelingKey.labels}
+            onSave={(labels) =>
+              saveVirtualKeyLabels.mutateAsync({ id: labelingKey.id, labels })
+            }
+          />
+        )}
         <DeleteConfirmDialog
           open={!!deletingKey}
           onOpenChange={(open) => {

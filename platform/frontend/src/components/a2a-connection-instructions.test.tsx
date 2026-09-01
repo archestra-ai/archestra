@@ -109,7 +109,11 @@ describe("A2AConnectionInstructions — detail layout", () => {
     expect(screen.queryByLabelText("Token for examples")).toBeNull();
     expect(screen.queryByText("Chat Deep Link")).toBeNull();
 
-    await user.click(screen.getByRole("button", { name: /Show examples/ }));
+    // The disclosure names its contents rather than restating the section's
+    // own "Examples" heading.
+    await user.click(
+      screen.getByRole("button", { name: /curl requests and the chat link/ }),
+    );
     expect(screen.getByLabelText("Token for examples")).toBeVisible();
     expect(screen.getByText("Continue the conversation")).toBeVisible();
     expect(screen.getByText("Chat Deep Link")).toBeVisible();

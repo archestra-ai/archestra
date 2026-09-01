@@ -528,10 +528,16 @@ curl -X POST "${a2aEndpoint}" \\
           }
         >
           {/* Collapsed by default: this is reference material, and open it
-              pushed everything else off the screen. */}
+              pushed everything else off the screen.
+
+              The trigger names what is inside rather than restating the
+              section's own heading: "Examples" over a box whose only visible
+              content was the words "Show examples" said the same thing twice,
+              and told the reader nothing about what opening it would give
+              them. */}
           <Collapsible className="overflow-hidden rounded-md border">
             <CollapsibleTrigger className="group flex w-full items-center justify-between gap-4 px-4 py-3 text-left text-sm font-medium transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
-              Show examples
+              curl requests and the chat link
               <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-4 border-t p-4">

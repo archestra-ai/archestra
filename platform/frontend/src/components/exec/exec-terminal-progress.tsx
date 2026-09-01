@@ -56,12 +56,16 @@ export function ExecTerminalProgress({
     <div className="flex flex-1 items-center justify-center p-6">
       <div className="w-full max-w-sm space-y-4">
         <div className="flex items-baseline justify-between gap-3">
-          <p className="text-sm font-medium text-slate-100">
+          {/* Live region: a screen reader user gets the phase change spoken
+              rather than watching a spinner they cannot see. */}
+          <output className="text-sm font-medium text-slate-100">
             {progress.message}
-          </p>
+          </output>
+          {/* `role="timer"` is implicitly aria-live="off", so a counter that
+              ticks every second never interrupts the region above. */}
           <span
             role="timer"
-            className="shrink-0 font-mono text-xs tabular-nums text-slate-500"
+            className="shrink-0 font-mono text-xs tabular-nums text-slate-400"
             aria-label="Time spent starting"
           >
             {formatElapsed(elapsed)}
@@ -76,9 +80,11 @@ export function ExecTerminalProgress({
           aria-valuenow={activeStep + 1}
           aria-valuetext={progress.message}
         >
+          {/* Scale, not width: animating width relayouts the panel every
+              frame, while a transform stays on the compositor. */}
           <div
-            className="h-full rounded-full bg-emerald-500 transition-[width] duration-500 ease-out"
-            style={{ width: `${percent}%` }}
+            className="h-full w-full origin-left rounded-full bg-emerald-500 transition-transform duration-500 ease-out motion-reduce:transition-none"
+            style={{ transform: `scaleX(${percent / 100})` }}
           />
         </div>
 
@@ -98,11 +104,12 @@ export function ExecTerminalProgress({
                       : "pending"
                 }
               />
+              {/* Only two text tiers: slate-500/600 measure 4.2:1 and 2.7:1 on
+                  this panel, both under WCAG AA. The icon carries done vs
+                  pending, so the label does not have to dim below legibility. */}
               <span
                 className={cn(
-                  index < activeStep && "text-slate-500",
-                  index === activeStep && "text-slate-200",
-                  index > activeStep && "text-slate-600",
+                  index === activeStep ? "text-slate-100" : "text-slate-400",
                 )}
               >
                 {step.label}
@@ -121,7 +128,7 @@ export function ExecTerminalProgress({
         ) : null}
 
         {progress.resourceName ? (
-          <p className="truncate font-mono text-[11px] text-slate-600">
+          <p className="truncate font-mono text-[11px] text-slate-400">
             {progress.resourceName}
           </p>
         ) : null}
@@ -137,8 +144,10 @@ function StepIcon({ state }: { state: "done" | "active" | "pending" }) {
     return <Check className="size-3.5 shrink-0 text-emerald-500" />;
   }
   if (state === "active") {
+    // The one animation on this panel, so it is also the one that has to stop
+    // for readers who ask motion to stop (WCAG 2.3.3).
     return (
-      <Loader2 className="size-3.5 shrink-0 animate-spin text-emerald-400" />
+      <Loader2 className="size-3.5 shrink-0 animate-spin text-emerald-400 motion-reduce:animate-none" />
     );
   }
   return (
@@ -147,7 +156,7 @@ function StepIcon({ state }: { state: "done" | "active" | "pending" }) {
       // A dot rather than an outline circle: four ringed placeholders read as
       // checkboxes waiting to be ticked by the reader.
     >
-      <span className="mt-[5px] ml-[3px] block size-1.5 rounded-full bg-slate-700" />
+      <span className="mt-[5px] ml-[3px] block size-1.5 rounded-full bg-slate-500" />
     </span>
   );
 }

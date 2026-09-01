@@ -104,6 +104,61 @@ describe("ExecTerminal", () => {
     expect(screen.queryByText("Connecting...")).not.toBeInTheDocument();
   });
 
+  /**
+   * The startup phase is conveyed by a spinner moving down a list, which a
+   * screen reader user cannot see. The phase text has to be announced instead.
+   */
+  it("announces the current wait to assistive technology", async () => {
+    const transport: ExecSessionTransport = {
+      open: (handlers) => {
+        handlers.onProgress?.({
+          phase: "pulling",
+          message: "Pulling the agent image",
+          detail: null,
+          resourceName: null,
+        });
+        return vi.fn();
+      },
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+    };
+
+    render(<ExecTerminal sessionKey="task-5" transport={transport} isActive />);
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Pulling the agent image",
+    );
+  });
+
+  /**
+   * The step spinner is the only animation on the panel, so it is the one that
+   * has to hold still for readers who ask motion to stop (WCAG 2.3.3).
+   */
+  it("keeps the step spinner still under prefers-reduced-motion", async () => {
+    const transport: ExecSessionTransport = {
+      open: (handlers) => {
+        handlers.onProgress?.({
+          phase: "starting",
+          message: "Waiting for the agent session",
+          detail: null,
+          resourceName: null,
+        });
+        return vi.fn();
+      },
+      sendInput: vi.fn(),
+      sendResize: vi.fn(),
+    };
+
+    const { container } = render(
+      <ExecTerminal sessionKey="task-6" transport={transport} isActive />,
+    );
+    await screen.findByText("Waiting for the agent session");
+
+    expect(
+      container.querySelector(".animate-spin.motion-reduce\\:animate-none"),
+    ).toBeInTheDocument();
+  });
+
   it("falls back to the plain connecting state for a transport that reports no progress", async () => {
     const transport: ExecSessionTransport = {
       open: () => vi.fn(),

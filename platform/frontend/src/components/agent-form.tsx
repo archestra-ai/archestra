@@ -1211,6 +1211,10 @@ export function AgentForm({
   );
   const [toolExposureMode, setToolExposureMode] =
     useState<ToolExposureMode>("full");
+  // What the record will actually do. `isEnforcing` in
+  // agent-credential-readiness refuses to enforce on an `accessAllTools`
+  // record, so an Auto agent asks when a tool needs one whatever is stored —
+  // the same shape as progressive tool loading, which Auto also pins.
   const [missingCredentialBehavior, setMissingCredentialBehavior] =
     useState<MissingCredentialBehavior>("allow");
   // New agents default to Auto mode (implicit access to all tools); editing an
@@ -1377,6 +1381,16 @@ export function AgentForm({
     agentType === "mcp_gateway" || agentType === "agent";
   const mcpAuthDocsUrl = getFrontendDocsUrl(DocsPage.McpAuthentication);
   // The agents page documents this setting for gateways too.
+  // Auto pins the behaviour, so the row reports what will happen rather than
+  // the stored value the backend will ignore.
+  const effectiveMissingCredentialBehavior: MissingCredentialBehavior =
+    autoToolsMode ? "allow" : missingCredentialBehavior;
+  // `selectedToolsCount` counts only tools touched since load — it is summed
+  // from the editor's pending-changes map, which is empty for a record just
+  // opened. `pendingSelectedToolIds` is the editor's effective selection:
+  // pending edits unioned with the saved assignments of every catalog left
+  // alone. That is what "assigned" means here.
+  const assignedToolCount = pendingSelectedToolIds.size;
   const toolConnectionsDocsUrl = getDocsUrl(
     DocsPage.PlatformAgents,
     "missing-connections",
@@ -1426,7 +1440,9 @@ export function AgentForm({
   const showsHooks = agentHooksEnabled && isInternalAgent && !isBuiltIn;
   // The tools panel is mounted only when it has a section to show: an empty
   // bordered panel would read as broken.
-  const toolsPanelHasContent = showTools || showSkills || showsHooks;
+  // Skills moved to Advanced, so they no longer keep this panel alive: a record
+  // with only skills would otherwise mount an empty Tools & Knowledge tab.
+  const toolsPanelHasContent = showTools || showsHooks;
   // The environment comes from the form rather than the stored agent: the
   // agent update lands before the skills PUT, so a pending environment change
   // is what the API will judge the assignment against.
@@ -3002,12 +3018,12 @@ export function AgentForm({
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <p className="text-sm text-muted-foreground">
                         {autoToolsMode
-                          ? exclusionsState
-                            ? excludedToolsSummary(
-                                exclusionsState.current.excludedToolIds.length,
-                              )
-                            : "Every tool."
-                          : assignedToolsSummary(selectedToolsCount)}
+                          ? excludedToolsSummary(
+                              exclusionsState
+                                ? exclusionsState.current.excludedToolIds.length
+                                : null,
+                            )
+                          : assignedToolsSummary(assignedToolCount)}
                       </p>
                       <Tabs
                         value={autoToolsMode ? "auto" : "custom"}
@@ -3022,8 +3038,8 @@ export function AgentForm({
                         }}
                       >
                         <TabsList>
-                          <TabsTrigger value="auto">Auto</TabsTrigger>
-                          <TabsTrigger value="custom">Custom</TabsTrigger>
+                          <TabsTrigger value="auto">All</TabsTrigger>
+                          <TabsTrigger value="custom">Manual</TabsTrigger>
                         </TabsList>
                       </Tabs>
                     </div>
@@ -3175,23 +3191,33 @@ export function AgentForm({
                       )}
                     </div>
                   </div>
-                </SettingsSection>
-              )}
 
-              {/* Section 3b: how tools reach the model. Their own section
-                  rather than a tail on the tools list: neither decides which
-                  tools exist, and unlabelled they read as footnotes to the
-                  pill row above them. */}
-              {showTools && (
-                <SettingsSection
-                  title="Loading"
-                  description="When tools reach the model, and how."
-                  data-testid={E2eTestId.AgentToolLoadingSection}
-                >
-                  {/* Ruled apart: two settings rows of different heights read
-                      as one run-on paragraph when they only have whitespace
-                      between them. */}
-                  <div className="divide-y divide-border">
+                  {/* How the tools above reach the model. They were briefly a
+                      section of their own, which gave two switches a heading
+                      and a description of their own and made the tab longer
+                      without making it clearer — and named that section
+                      "Loading" when only one of the two is about loading. They
+                      belong under the tools they qualify, ruled off so they do
+                      not read as a footnote to the pill row. */}
+                  {/* Hidden in Auto alone, where the backend pins both —
+                      progressive loading on, missing connections to asking
+                      when a tool needs one — and the mode's summary says so,
+                      which beats two locked controls.
+
+                      Not hidden merely because nothing is assigned yet: these
+                      are stored per record, so someone may set one before
+                      adding a tool, and a saved value with no way to reach it
+                      is worse than a row with nothing yet to act on. */}
+                  <div
+                    className={cn(
+                      // No `divide-y`: the row below draws its own rule,
+                      // inset past the icon column, and the two together
+                      // stacked one line on another.
+                      "mt-2 border-t pt-2",
+                      autoToolsMode && "hidden",
+                    )}
+                    data-testid={E2eTestId.AgentToolLoadingSection}
+                  >
                     {/* Auto mode is progressive loading — dynamic access only
                         works through the search/run dispatch surface, and the
                         backend coerces the mode to match on every write path. The
@@ -3224,7 +3250,6 @@ export function AgentForm({
                               the first message.
                             </>
                           )}{" "}
-                          {autoToolsMode && <>Auto mode always uses it. </>}
                           <ExternalDocsLink
                             href={toolExposureDocsUrl}
                             className="underline"
@@ -3246,89 +3271,101 @@ export function AgentForm({
                       />
                     </div>
 
-                    {/* Only meaningful for Custom mode: an Auto agent resolves
-                        tools from what each caller can already reach, so no
-                        caller can be missing a connection. */}
-                    {!autoToolsMode && (
-                      <>
-                        {/* Inset past the icon column (size-8 + gap-3) so the
+                    {/* Auto meets missing connections too — its tools come
+                        from the same servers — it just always asks when a tool
+                        needs one: `isEnforcing` in agent-credential-readiness
+                        declines to enforce on an `accessAllTools` record, so
+                        warn and block do nothing there. Hiding the row left
+                        that unsaid and the stored value silently ignored, so it
+                        now shows in both modes, pinned and locked in Auto,
+                        exactly as progressive tool loading above it is.
+
+                        Note the gate is Auto, not progressive loading: a Custom
+                        record with progressive loading on still enforces. */}
+                    <>
+                      {/* Inset past the icon column (size-8 + gap-3) so the
                             rule divides the two settings rather than cutting
                             across the icons that label them. */}
-                        <div className="ml-11 border-t border-border" />
-                        <div className="flex items-center gap-3 pt-4">
-                          <SettingIcon
-                            tone={
-                              MISSING_CREDENTIAL_TONE[missingCredentialBehavior]
-                            }
-                          >
-                            <Unplug className="size-4" />
-                          </SettingIcon>
-                          <div className="min-w-0 flex-1 space-y-0.5">
-                            <Label htmlFor="missing-credential-behavior">
-                              Missing connections
-                            </Label>
-                            {/* The question, not the answer: the select beside
+                      <div className="ml-11 border-t border-border" />
+                      <div className="flex items-center gap-3 pt-4">
+                        <SettingIcon
+                          tone={
+                            MISSING_CREDENTIAL_TONE[
+                              effectiveMissingCredentialBehavior
+                            ]
+                          }
+                        >
+                          <Unplug className="size-4" />
+                        </SettingIcon>
+                        <div className="min-w-0 flex-1 space-y-0.5">
+                          <Label htmlFor="missing-credential-behavior">
+                            Missing connections
+                          </Label>
+                          {/* The question, not the answer: the select beside
                               this already names the choice, and the menu
                               spells out what each one does. Repeating the
                               chosen option's whole sentence here said the same
                               thing three times in one row. */}
-                            <p className="text-xs text-muted-foreground">
-                              When to ask a user to connect credentials.{" "}
-                              <ExternalDocsLink
-                                href={toolConnectionsDocsUrl}
-                                className="underline"
-                                showIcon={false}
-                              >
-                                Learn more
-                              </ExternalDocsLink>
-                            </p>
-                          </div>
-                          <Select
-                            value={missingCredentialBehavior}
-                            onValueChange={(value) =>
-                              setMissingCredentialBehavior(
-                                value as MissingCredentialBehavior,
-                              )
-                            }
-                          >
-                            {/* Fixed width: the trigger is `w-fit` by default, so
-                              the row would reflow by ~33px as the value changes. */}
-                            <SelectTrigger
-                              id="missing-credential-behavior"
-                              className="w-[240px]"
+                          <p className="text-xs text-muted-foreground">
+                            When to ask a user to connect credentials.{" "}
+                            {autoToolsMode && (
+                              <>Auto mode always asks when a tool needs it. </>
+                            )}
+                            <ExternalDocsLink
+                              href={toolConnectionsDocsUrl}
+                              className="underline"
+                              showIcon={false}
                             >
-                              <SelectValue />
-                            </SelectTrigger>
-                            {/* `popper` is what makes `align` bind at all: the
+                              Learn more
+                            </ExternalDocsLink>
+                          </p>
+                        </div>
+                        <Select
+                          value={effectiveMissingCredentialBehavior}
+                          disabled={autoToolsMode}
+                          onValueChange={(value) =>
+                            setMissingCredentialBehavior(
+                              value as MissingCredentialBehavior,
+                            )
+                          }
+                        >
+                          {/* Fixed width: the trigger is `w-fit` by default, so
+                              the row would reflow by ~33px as the value changes. */}
+                          <SelectTrigger
+                            id="missing-credential-behavior"
+                            className="w-[240px]"
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          {/* `popper` is what makes `align` bind at all: the
                               default `item-aligned` positioning clamps only the
                               popover's left edge, so it ended flush with the
                               browser window — over 100px outside the wizard's
                               panel on a wide screen. Anchored to the trigger's
                               right edge it stays in the column, and 28rem keeps
                               every option's explainer at two lines. */}
-                            <SelectContent
-                              position="popper"
-                              align="end"
-                              className="w-[28rem] max-w-[calc(100vw-2rem)]"
-                            >
-                              {MISSING_CREDENTIAL_BEHAVIOR_OPTIONS.map(
-                                (option) => (
-                                  <SelectItem
-                                    key={option.value}
-                                    value={option.value}
-                                    description={
-                                      TOOL_CONNECTION_PROMPTING[option.value]
-                                    }
-                                  >
-                                    {option.label}
-                                  </SelectItem>
-                                ),
-                              )}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </>
-                    )}
+                          <SelectContent
+                            position="popper"
+                            align="end"
+                            className="w-[28rem] max-w-[calc(100vw-2rem)]"
+                          >
+                            {MISSING_CREDENTIAL_BEHAVIOR_OPTIONS.map(
+                              (option) => (
+                                <SelectItem
+                                  key={option.value}
+                                  value={option.value}
+                                  description={
+                                    TOOL_CONNECTION_PROMPTING[option.value]
+                                  }
+                                >
+                                  {option.label}
+                                </SelectItem>
+                              ),
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </>
                   </div>
                 </SettingsSection>
               )}
@@ -3356,8 +3393,8 @@ export function AgentForm({
                           onValueChange={handleSubagentModeChange}
                         >
                           <TabsList>
-                            <TabsTrigger value="auto">Auto</TabsTrigger>
-                            <TabsTrigger value="custom">Custom</TabsTrigger>
+                            <TabsTrigger value="auto">All</TabsTrigger>
+                            <TabsTrigger value="custom">Manual</TabsTrigger>
                           </TabsList>
                         </Tabs>
                       </div>
@@ -3470,11 +3507,38 @@ export function AgentForm({
                 </SettingsSection>
               )}
 
-              {/* Section 5: Skills published over MCP (SEP-2640). Gateways
-                  only, behind the draft-extension feature flag. */}
+              {/* Hooks (internal agents only; shown when the agent runtime is
+                  available, since hooks run in its sandbox). Hooks staged on
+                  a record that does not exist yet are written right after the
+                  create. */}
+              {showsHooks && (
+                <SettingsSection
+                  title="Hooks"
+                  description="Commands this agent runs around its own tool calls, inside its sandbox."
+                >
+                  <AgentHooksEditor
+                    ref={agentHooksEditorRef}
+                    agentId={agent?.id}
+                  />
+                </SettingsSection>
+              )}
+            </SettingsSectionGroup>
+          )}
+
+          {/* The Advanced step: background execution, security, passthrough
+              headers, the identity provider, and labels. A built-in agent has
+              none. */}
+          {showAdvancedSections && !isBuiltIn && (
+            <SettingsSectionGroup
+              className={cn(!isActiveSection("advanced") && "hidden")}
+            >
+              {/* Skills served over MCP (SEP-2640). Gateways only, behind the
+                  draft-extension feature flag. It sits in Advanced rather than
+                  beside Tools & Knowledge: these are resources the gateway
+                  serves out to clients, not things it calls for itself. */}
               {showSkills && (
                 <SettingsSection
-                  title="Published skills"
+                  title="Skills over MCP"
                   description={
                     <>
                       Skills this {agentTypeDisplayName[agentType] || "agent"}{" "}
@@ -3518,8 +3582,8 @@ export function AgentForm({
                           }
                         >
                           <TabsList>
-                            <TabsTrigger value="auto">Auto</TabsTrigger>
-                            <TabsTrigger value="custom">Custom</TabsTrigger>
+                            <TabsTrigger value="auto">All</TabsTrigger>
+                            <TabsTrigger value="custom">Manual</TabsTrigger>
                           </TabsList>
                         </Tabs>
                       </div>
@@ -3577,31 +3641,6 @@ export function AgentForm({
                 </SettingsSection>
               )}
 
-              {/* Hooks (internal agents only; shown when the agent runtime is
-                  available, since hooks run in its sandbox). Hooks staged on
-                  a record that does not exist yet are written right after the
-                  create. */}
-              {showsHooks && (
-                <SettingsSection
-                  title="Hooks"
-                  description="Commands this agent runs around its own tool calls, inside its sandbox."
-                >
-                  <AgentHooksEditor
-                    ref={agentHooksEditorRef}
-                    agentId={agent?.id}
-                  />
-                </SettingsSection>
-              )}
-            </SettingsSectionGroup>
-          )}
-
-          {/* The Advanced step: background execution, security, passthrough
-              headers, the identity provider, and labels. A built-in agent has
-              none. */}
-          {showAdvancedSections && !isBuiltIn && (
-            <SettingsSectionGroup
-              className={cn(!isActiveSection("advanced") && "hidden")}
-            >
               {showsEnvironmentSelector && (
                 <SettingsSection
                   title="Environment"

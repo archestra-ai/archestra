@@ -199,9 +199,10 @@ describe("GatewayServersSummary", () => {
     });
     rerender(<GatewayServersSummary gatewayId="g1" />);
     // just opens the gateway's configuration (no forced tool picker), in the
-    // same tab
+    // same tab. The section is named because a gateway's bare route is its
+    // Connect page, which configures nothing.
     const link = screen.getByRole("link", { name: /Edit on gateway/ });
-    expect(link).toHaveAttribute("href", "/mcp/gateways/g1");
+    expect(link).toHaveAttribute("href", "/mcp/gateways/g1?section=general");
     expect(link).not.toHaveAttribute("target");
   });
 });

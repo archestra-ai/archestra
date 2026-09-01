@@ -284,14 +284,18 @@ function AgentDetails({
   // a person in a channel, so it has no assignments to make.
   const hasMessagingChannels =
     kind === "agent" && !isBuiltIn && !!canReadAgentTriggers;
+  // A gateway exists to be connected to, so that is where it opens and what
+  // its tab bar leads with. An agent opens on its own configuration.
+  const connectFirst = kind === "mcp_gateway" && showConnect;
   const sections: AgentDetailSection[] = [
+    ...(connectFirst ? (["connect"] as const) : []),
     "general",
     ...(steps.some((step) => step.id === "tools") ? (["tools"] as const) : []),
     ...(hasMessagingChannels ? (["messaging"] as const) : []),
     ...(steps.some((step) => step.id === "advanced")
       ? (["advanced"] as const)
       : []),
-    ...(showConnect ? (["connect"] as const) : []),
+    ...(showConnect && !connectFirst ? (["connect"] as const) : []),
     ...(hasBackgroundExecution ? (["executions"] as const) : []),
   ];
   const sectionParam = searchParams.get("section");
@@ -553,7 +557,7 @@ function AgentDetails({
         {section === "executions" ? (
           <AgentExecutions agentId={agent.id} />
         ) : section === "connect" ? (
-          <AgentConnectContent kind={kind} agent={agent} origin="table" />
+          <AgentConnectContent kind={kind} agent={agent} />
         ) : (
           <div className="space-y-4">
             {isGone ? (

@@ -127,13 +127,28 @@ export const AGENT_SECTION_FORM_GROUP = {
   advanced: "advanced",
 } as const satisfies Partial<Record<AgentDetailSection, AgentFormSection>>;
 
+/**
+ * Where a bare detail URL lands, which is the record's first section.
+ *
+ * A gateway exists to be connected to, so it opens on Connect; everything else
+ * opens on its own configuration. The paramless form has to agree with this,
+ * or the tab bar's current tab would link somewhere other than the address it
+ * is rendered at — which is what tells the unsaved-changes guard that clicking
+ * the tab you are on goes nowhere.
+ */
+function defaultDetailSection(kind: AgentPageKind): AgentDetailSection {
+  return kind === "mcp_gateway" ? "connect" : "general";
+}
+
 export function agentDetailHref(
   kind: AgentPageKind,
   id: string,
   section?: AgentDetailSection,
 ): string {
   const base = `${AGENT_PAGE_CONFIGS[kind].basePath}/${encodeURIComponent(id)}`;
-  return section && section !== "general" ? `${base}?section=${section}` : base;
+  return section && section !== defaultDetailSection(kind)
+    ? `${base}?section=${section}`
+    : base;
 }
 
 /**
@@ -147,7 +162,13 @@ export function agentConfigureHref(
   id: string,
   step?: AgentSetupStepId,
 ): string {
-  return agentDetailHref(kind, id, step && SECTION_FOR_SETUP_STEP[step]);
+  // "Edit this record" means its configuration, never wherever the page
+  // happens to open — a gateway opens on Connect, which configures nothing.
+  return agentDetailHref(
+    kind,
+    id,
+    step ? SECTION_FOR_SETUP_STEP[step] : "general",
+  );
 }
 
 /** The section a `?section=` value names, or the first when it names none. */

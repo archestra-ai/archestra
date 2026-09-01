@@ -10,7 +10,8 @@ describe("getAgentActionModel", () => {
 
     expect(agentAction(model, "connect")).toMatchObject({
       label: "Connect",
-      href: "/mcp/gateways/legacy?section=connect",
+      // Connect is where a gateway opens, so its bare route already is it.
+      href: "/mcp/gateways/legacy",
       permissions: { agent: ["read"] },
       visible: true,
     });

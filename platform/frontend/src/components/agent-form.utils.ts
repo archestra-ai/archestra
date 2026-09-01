@@ -119,13 +119,19 @@ type MissingCredentialBehavior =
 /**
  * Auto mode as a sentence rather than a count.
  *
- * "All tools except (0)" reads as a subtotal of something, and a reader has to
- * work out that zero exclusions means everything is allowed. Same register as
- * the field it replaces — "every X, except N" — just finished as a sentence.
+ * Auto pins two settings the reader cannot change — progressive tool loading is
+ * forced on, and missing connections always asks when a tool needs one — so
+ * their rows are not rendered here. What progressive loading buys is the part
+ * worth keeping, and it belongs in the one line the mode does get.
  */
-export function excludedToolsSummary(count: number): string {
-  if (count === 0) return "Every tool, with no exceptions.";
-  return `Every tool, except ${count}.`;
+export function excludedToolsSummary(count: number | null): string {
+  const saves = "Saves context by exposing only search_tools and run_tool";
+  // The exclusions editor opens on a server-side pre-fill, so until it has
+  // loaded the reach is not known — better to say nothing about it than to
+  // claim "every tool" and correct it a moment later.
+  if (count === null) return `${saves}.`;
+  if (count === 0) return `${saves}, with access to every tool.`;
+  return `${saves}, with access to every tool except ${count}.`;
 }
 
 /** The same, for the knowledge half of Auto mode. */

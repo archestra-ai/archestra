@@ -36,6 +36,10 @@ export default function LlmProxyLayout({
   return (
     <LlmProxyLayoutContext.Provider value={contextValue}>
       <PageLayout
+        // The proxy's own page is connection instructions, the same shape as a
+        // gateway's Connect section, so it takes the same column. Its
+        // table-bearing children keep the wide one they need.
+        maxWidth={pathname === "/llm/proxy" ? "wizard" : "wide"}
         title={config.title}
         description={
           pathname === "/llm/proxy" && docsUrl ? (

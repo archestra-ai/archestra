@@ -746,7 +746,7 @@ const panelOf = (node: HTMLElement) =>
 
 // The Tools section carries its own Auto/Custom tabs, so the subagent ones have
 // to be reached through their section.
-const subagentModeTab = (name: "Auto" | "Custom") => {
+const subagentModeTab = (name: "All" | "Manual") => {
   const section = screen
     .getByRole("heading", { name: "Subagents" })
     .closest("section") as HTMLElement;
@@ -944,7 +944,7 @@ describe("AgentForm delegation state", () => {
       expect(screen.getByTestId(E2eTestId.ConsultAdvisorSwitch)).toBeChecked();
     });
 
-    await user.click(subagentModeTab("Custom"));
+    await user.click(subagentModeTab("Manual"));
 
     // The panel assertion is what proves the mode actually moved; the switch
     // reading the same way afterwards is only meaningful once it has. Custom
@@ -974,7 +974,7 @@ describe("AgentForm delegation state", () => {
     const toggle = await screen.findByTestId(E2eTestId.ConsultAdvisorSwitch);
     expect(toggle).not.toBeChecked();
 
-    await user.click(subagentModeTab("Auto"));
+    await user.click(subagentModeTab("All"));
 
     expect(
       screen.getByText(/Every subagent, with no exceptions\./),
@@ -1061,8 +1061,8 @@ describe("AgentForm delegation state", () => {
     await waitFor(() => {
       expect(screen.getByTestId(E2eTestId.ConsultAdvisorSwitch)).toBeChecked();
     });
-    await user.click(subagentModeTab("Custom"));
-    await user.click(subagentModeTab("Auto"));
+    await user.click(subagentModeTab("Manual"));
+    await user.click(subagentModeTab("All"));
     await user.click(screen.getByTestId(E2eTestId.ConsultAdvisorSwitch));
     expect(
       screen.getByTestId(E2eTestId.ConsultAdvisorSwitch),
@@ -1261,9 +1261,9 @@ const orgSkill = (name: string, id: string) => ({
 
 // The Tools and Subagents sections carry their own Auto/Custom tabs, so the
 // skill ones have to be reached through their section.
-const skillsModeTab = (name: "Auto" | "Custom") => {
+const skillsModeTab = (name: "All" | "Manual") => {
   const section = screen
-    .getByRole("heading", { name: "Published skills" })
+    .getByRole("heading", { name: "Skills over MCP" })
     .closest("section") as HTMLElement;
   return within(section).getByRole("tab", { name });
 };
@@ -1570,10 +1570,10 @@ describe("AgentForm progressive tool loading", () => {
   const progressiveSwitch = (section: HTMLElement) =>
     section.querySelector<HTMLInputElement>("#load-tools-when-needed");
 
-  it("shows the setting as on and locked in Auto mode", async () => {
-    // Auto mode requires the search/run dispatch surface, and the backend
-    // coerces the record to match. The row used to be hidden here, which left
-    // the one setting Auto decides for you invisible.
+  it("hides both settings in All mode, where the record decides neither", async () => {
+    // All pins progressive loading on and the connection prompt to asking when
+    // a tool needs one, so there is nothing to decide: the mode's own summary
+    // line says what happens instead of two locked controls saying it twice.
     const autoAgent = {
       ...baseAgent,
       accessAllTools: true,
@@ -1583,13 +1583,15 @@ describe("AgentForm progressive tool loading", () => {
 
     render(<AgentForm agentType="agent" agent={autoAgent} />);
 
+    // `hidden` rather than unmounted: both panels stay mounted so a mode flip
+    // keeps pending edits, so the class is what the assertion has to read.
     const section = await screen.findByTestId(
       E2eTestId.AgentToolLoadingSection,
     );
-    expect(within(section).getByText("Progressive tool loading")).toBeVisible();
-    expect(progressiveSwitch(section)?.checked).toBe(true);
-    expect(progressiveSwitch(section)?.disabled).toBe(true);
-    expect(within(section).getByText(/Auto mode always uses it/)).toBeVisible();
+    expect(section).toHaveClass("hidden");
+    expect(
+      screen.getByText(/Saves context by exposing only search_tools/),
+    ).toBeVisible();
   });
 
   it("reads as on for an Auto agent whose stored mode says otherwise", async () => {
@@ -1841,8 +1843,8 @@ describe("AgentForm published skills", () => {
     await screen.findByText(
       /Every organization skill in this environment, with no exceptions\./,
     );
-    await user.click(skillsModeTab("Custom"));
-    expect(screen.getByText("Published skills")).toBeInTheDocument();
+    await user.click(skillsModeTab("Manual"));
+    expect(screen.getByText("Skills over MCP")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /update/i }));
 
@@ -1873,7 +1875,7 @@ describe("AgentForm published skills", () => {
     await screen.findByText(
       /Every organization skill in this environment, with no exceptions\./,
     );
-    await user.click(skillsModeTab("Custom"));
+    await user.click(skillsModeTab("Manual"));
     await user.click(screen.getByRole("button", { name: /update/i }));
 
     await waitFor(() => expect(syncSkills).toHaveBeenCalled());

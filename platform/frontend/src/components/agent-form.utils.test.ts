@@ -134,15 +134,21 @@ describe("shouldOfferAppCatalogs", () => {
 });
 
 describe("Auto-mode summaries", () => {
-  it("names the absence of exceptions rather than counting to zero", () => {
-    expect(excludedToolsSummary(0)).toBe("Every tool, with no exceptions.");
-    expect(excludedSourcesSummary(0)).toBe(
-      "Every knowledge source, with no exceptions.",
+  // Auto pins progressive loading and the connection prompt, so their rows are
+  // not rendered there and this line is where what Auto does gets said.
+  it("says what Auto buys, not just how many are excluded", () => {
+    expect(excludedToolsSummary(0)).toBe(
+      "Saves context by exposing only search_tools and run_tool, with access to every tool.",
+    );
+    expect(excludedToolsSummary(3)).toBe(
+      "Saves context by exposing only search_tools and run_tool, with access to every tool except 3.",
     );
   });
 
-  it("keeps the field's own register when there are exceptions", () => {
-    expect(excludedToolsSummary(3)).toBe("Every tool, except 3.");
+  it("names the absence of exceptions rather than counting to zero", () => {
+    expect(excludedSourcesSummary(0)).toBe(
+      "Every knowledge source, with no exceptions.",
+    );
     expect(excludedSourcesSummary(1)).toBe("Every knowledge source, except 1.");
   });
 });

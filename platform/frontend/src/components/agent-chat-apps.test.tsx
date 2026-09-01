@@ -1102,6 +1102,13 @@ describe("AgentChatAppsEditor", () => {
         }),
       ).toBeNull();
     }
+
+    // Searching finds them in the group rather than claiming nothing matched.
+    await user.type(screen.getByLabelText("Search channels"), "shared-3");
+    expect(screen.queryByText("No channels match.")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: /1 not available to this agent/ }),
+    ).toBeVisible();
   });
 
   it("titles a direct message's settings by its owner, not its provider id", async () => {

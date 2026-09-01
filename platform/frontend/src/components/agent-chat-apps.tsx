@@ -982,11 +982,11 @@ function AddChannelPicker({
                     {MESSAGING_CHANNEL_LABELS[elsewhere[0].provider]}
                   </button>
                 </>
-              ) : normalized ? (
+              ) : blocked.length >
+                0 ? /* Something did match, so "no channels match" would be a lie —
+                   and the group below already names them and says why. */
+              null : normalized ? (
                 "No channels match."
-              ) : blocked.length > 0 ? (
-                /* The group below already names them and says why. */
-                "Nothing here this agent can take on."
               ) : (
                 "Every channel here is already assigned to this agent."
               )}

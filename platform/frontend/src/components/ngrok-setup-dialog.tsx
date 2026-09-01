@@ -113,10 +113,7 @@ export function NgrokSetupDialog({
             />
             <p className="text-xs text-muted-foreground">
               Get one at{" "}
-              <ExternalDocsLink
-                href="https://dashboard.ngrok.com/get-started/your-authtoken"
-                className="inline-flex text-primary"
-              >
+              <ExternalDocsLink href="https://dashboard.ngrok.com/get-started/your-authtoken">
                 ngrok.com
               </ExternalDocsLink>
             </p>
@@ -136,10 +133,7 @@ export function NgrokSetupDialog({
             />
             <p className="text-xs text-muted-foreground">
               Claim your free static domain at{" "}
-              <ExternalDocsLink
-                href="https://dashboard.ngrok.com/domains"
-                className="inline-flex text-primary"
-              >
+              <ExternalDocsLink href="https://dashboard.ngrok.com/domains">
                 dashboard.ngrok.com
               </ExternalDocsLink>{" "}
               → Universal Gateway → Domains → Create Domain. Without it the

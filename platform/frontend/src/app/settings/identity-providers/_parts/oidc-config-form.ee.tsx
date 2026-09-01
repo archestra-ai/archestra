@@ -123,12 +123,12 @@ export function OidcConfigForm({
         render={({ field }) => (
           <FormItem>
             <FormLabel>User ID Claim</FormLabel>
-            <FormControl>
-              <Input placeholder="sub" {...field} />
-            </FormControl>
             <FormDescription>
               The claim that contains the unique user identifier.
             </FormDescription>
+            <FormControl>
+              <Input placeholder="sub" {...field} />
+            </FormControl>
             <FormMessage />
           </FormItem>
         )}
@@ -140,12 +140,12 @@ export function OidcConfigForm({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Email Claim</FormLabel>
-            <FormControl>
-              <Input placeholder="email" {...field} />
-            </FormControl>
             <FormDescription>
               The claim that contains the user&apos;s email address.
             </FormDescription>
+            <FormControl>
+              <Input placeholder="email" {...field} />
+            </FormControl>
             <FormMessage />
           </FormItem>
         )}
@@ -157,12 +157,12 @@ export function OidcConfigForm({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Name Claim</FormLabel>
-            <FormControl>
-              <Input placeholder="name" {...field} />
-            </FormControl>
             <FormDescription>
               The claim that contains the user&apos;s display name.
             </FormDescription>
+            <FormControl>
+              <Input placeholder="name" {...field} />
+            </FormControl>
             <FormMessage />
           </FormItem>
         )}
@@ -174,12 +174,12 @@ export function OidcConfigForm({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Email Verified Claim (Optional)</FormLabel>
-            <FormControl>
-              <Input placeholder="email_verified" {...field} />
-            </FormControl>
             <FormDescription>
               The claim that indicates if the email is verified.
             </FormDescription>
+            <FormControl>
+              <Input placeholder="email_verified" {...field} />
+            </FormControl>
             <FormMessage />
           </FormItem>
         )}
@@ -191,12 +191,12 @@ export function OidcConfigForm({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Avatar Image Claim (Optional)</FormLabel>
-            <FormControl>
-              <Input placeholder="picture" {...field} />
-            </FormControl>
             <FormDescription>
               The claim that contains the user&apos;s profile picture URL.
             </FormDescription>
+            <FormControl>
+              <Input placeholder="picture" {...field} />
+            </FormControl>
             <FormMessage />
           </FormItem>
         )}
@@ -215,13 +215,13 @@ export function OidcConfigForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Provider ID</FormLabel>
-                  <FormControl>
-                    <Input placeholder="my-company-idp" {...field} />
-                  </FormControl>
                   <FormDescription>
                     Unique identifier for this identity provider. Used in
                     callback URLs.
                   </FormDescription>
+                  <FormControl>
+                    <Input placeholder="my-company-idp" {...field} />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -234,12 +234,12 @@ export function OidcConfigForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Issuer</FormLabel>
-                <FormControl>
-                  <Input placeholder="https://auth.company.com" {...field} />
-                </FormControl>
                 <FormDescription>
                   The issuer URL of your identity provider.
                 </FormDescription>
+                <FormControl>
+                  <Input placeholder="https://auth.company.com" {...field} />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}
@@ -259,12 +259,12 @@ export function OidcConfigForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Client ID</FormLabel>
-                <FormControl>
-                  <Input placeholder="your-client-id" {...field} />
-                </FormControl>
                 <FormDescription>
                   The client ID provided by your OIDC provider.
                 </FormDescription>
+                <FormControl>
+                  <Input placeholder="your-client-id" {...field} />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}
@@ -276,6 +276,12 @@ export function OidcConfigForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Client Secret</FormLabel>
+                <FormDescription>
+                  The client secret provided by your OIDC provider.
+                </FormDescription>
+                <StoredSecretNote
+                  stored={isSecretStored("oidcConfig.clientSecret")}
+                />
                 <FormControl>
                   <SecretInput
                     placeholder={
@@ -286,12 +292,6 @@ export function OidcConfigForm({
                     {...field}
                   />
                 </FormControl>
-                <FormDescription>
-                  The client secret provided by your OIDC provider.
-                </FormDescription>
-                <StoredSecretNote
-                  stored={isSecretStored("oidcConfig.clientSecret")}
-                />
                 <FormMessage />
               </FormItem>
             )}
@@ -304,15 +304,15 @@ export function OidcConfigForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Hosted Domain Hint (Optional)</FormLabel>
-                  <FormControl>
-                    <Input placeholder="example.com" {...field} />
-                  </FormControl>
                   <FormDescription>
                     Passes Google&apos;s `hd` parameter to prefer account
                     selection for a Workspace domain. This is a Google hint, not
                     the security boundary; sign-in is enforced by Allowed Email
                     Domains.
                   </FormDescription>
+                  <FormControl>
+                    <Input placeholder="example.com" {...field} />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -325,18 +325,18 @@ export function OidcConfigForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Discovery Endpoint (Optional)</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder="https://auth.company.com/.well-known/openid-configuration"
-                    {...field}
-                  />
-                </FormControl>
                 <FormDescription>
                   The OIDC discovery endpoint URL
                   (/.well-known/openid-configuration). Defaults to the issuer's
                   well-known URL. Leave blank for providers that publish no
                   discovery document, and set the endpoints below instead.
                 </FormDescription>
+                <FormControl>
+                  <Input
+                    placeholder="https://auth.company.com/.well-known/openid-configuration"
+                    {...field}
+                  />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}
@@ -348,15 +348,15 @@ export function OidcConfigForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Authorization Endpoint (Optional)</FormLabel>
+                <FormDescription>
+                  Override the authorization endpoint if not using discovery.
+                </FormDescription>
                 <FormControl>
                   <Input
                     placeholder="https://auth.company.com/authorize"
                     {...field}
                   />
                 </FormControl>
-                <FormDescription>
-                  Override the authorization endpoint if not using discovery.
-                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -368,15 +368,15 @@ export function OidcConfigForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Token Endpoint (Optional)</FormLabel>
+                <FormDescription>
+                  Override the token endpoint if not using discovery.
+                </FormDescription>
                 <FormControl>
                   <Input
                     placeholder="https://auth.company.com/token"
                     {...field}
                   />
                 </FormControl>
-                <FormDescription>
-                  Override the token endpoint if not using discovery.
-                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -388,15 +388,15 @@ export function OidcConfigForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>UserInfo Endpoint (Optional)</FormLabel>
+                <FormDescription>
+                  Override the userinfo endpoint if not using discovery.
+                </FormDescription>
                 <FormControl>
                   <Input
                     placeholder="https://auth.company.com/userinfo"
                     {...field}
                   />
                 </FormControl>
-                <FormDescription>
-                  Override the userinfo endpoint if not using discovery.
-                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -408,15 +408,15 @@ export function OidcConfigForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>JWKS Endpoint (Optional)</FormLabel>
+                <FormDescription>
+                  Override the JWKS endpoint if not using discovery.
+                </FormDescription>
                 <FormControl>
                   <Input
                     placeholder="https://auth.company.com/.well-known/jwks.json"
                     {...field}
                   />
                 </FormControl>
-                <FormDescription>
-                  Override the JWKS endpoint if not using discovery.
-                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -514,7 +514,7 @@ export function OidcConfigForm({
                     during sign-out.{" "}
                     <ExternalDocsLink
                       href="https://openid.net/specs/openid-connect-rpinitiated-1_0.html"
-                      className="inline-flex items-center gap-1 underline underline-offset-4"
+                      className="underline underline-offset-4"
                     >
                       Learn more
                     </ExternalDocsLink>
@@ -620,7 +620,7 @@ function EnterpriseManagedCredentialsForm(props: {
             {" "}
             <ExternalDocsLink
               href={identityProvidersDocsUrl}
-              className="inline-flex items-center gap-1 underline underline-offset-4"
+              className="underline underline-offset-4"
             >
               Learn more
             </ExternalDocsLink>
@@ -635,16 +635,16 @@ function EnterpriseManagedCredentialsForm(props: {
           render={({ field }) => (
             <FormItem>
               <FormLabel>Exchange Client ID</FormLabel>
+              <FormDescription>
+                Optional override. If empty, {appName} uses the main OIDC client
+                ID above.
+              </FormDescription>
               <FormControl>
                 <Input
                   placeholder="Client ID used for token exchange"
                   {...field}
                 />
               </FormControl>
-              <FormDescription>
-                Optional override. If empty, {appName} uses the main OIDC client
-                ID above.
-              </FormDescription>
               <FormMessage />
             </FormItem>
           )}
@@ -656,6 +656,15 @@ function EnterpriseManagedCredentialsForm(props: {
           render={({ field }) => (
             <FormItem>
               <FormLabel>Exchange Client Secret</FormLabel>
+              <FormDescription>
+                Only used when the exchange endpoint authenticates with a client
+                secret.
+              </FormDescription>
+              <StoredSecretNote
+                stored={isSecretStored(
+                  "oidcConfig.enterpriseManagedCredentials.clientSecret",
+                )}
+              />
               <FormControl>
                 <SecretInput
                   placeholder={
@@ -668,15 +677,6 @@ function EnterpriseManagedCredentialsForm(props: {
                   {...field}
                 />
               </FormControl>
-              <FormDescription>
-                Only used when the exchange endpoint authenticates with a client
-                secret.
-              </FormDescription>
-              <StoredSecretNote
-                stored={isSecretStored(
-                  "oidcConfig.enterpriseManagedCredentials.clientSecret",
-                )}
-              />
               <FormMessage />
             </FormItem>
           )}
@@ -689,16 +689,16 @@ function EnterpriseManagedCredentialsForm(props: {
         render={({ field }) => (
           <FormItem>
             <FormLabel>Exchange Token Endpoint</FormLabel>
+            <FormDescription>
+              Optional override for the token endpoint {appName} should call to
+              exchange the user&apos;s token.
+            </FormDescription>
             <FormControl>
               <Input
                 placeholder="https://your-idp.example.com/oauth2/v1/token"
                 {...field}
               />
             </FormControl>
-            <FormDescription>
-              Optional override for the token endpoint {appName} should call to
-              exchange the user&apos;s token.
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}
@@ -710,6 +710,9 @@ function EnterpriseManagedCredentialsForm(props: {
         render={({ field }) => (
           <FormItem>
             <FormLabel>Exchange Client Authentication</FormLabel>
+            <FormDescription>
+              {getAuthenticationHint(inferredEnterpriseExchangeType)}
+            </FormDescription>
             <Select
               value={field.value ?? authenticationDefault}
               onValueChange={field.onChange}
@@ -729,9 +732,6 @@ function EnterpriseManagedCredentialsForm(props: {
                 </SelectItem>
               </SelectContent>
             </Select>
-            <FormDescription>
-              {getAuthenticationHint(inferredEnterpriseExchangeType)}
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}
@@ -743,12 +743,12 @@ function EnterpriseManagedCredentialsForm(props: {
         render={({ field }) => (
           <FormItem>
             <FormLabel>Signing Key ID</FormLabel>
-            <FormControl>
-              <Input placeholder="kid" {...field} />
-            </FormControl>
             <FormDescription>
               Only used for <code>private_key_jwt</code> authentication.
             </FormDescription>
+            <FormControl>
+              <Input placeholder="kid" {...field} />
+            </FormControl>
             <FormMessage />
           </FormItem>
         )}
@@ -760,16 +760,16 @@ function EnterpriseManagedCredentialsForm(props: {
         render={({ field }) => (
           <FormItem>
             <FormLabel>Client Assertion Audience (Optional)</FormLabel>
+            <FormDescription>
+              Optional override for <code>private_key_jwt</code> client
+              assertions.
+            </FormDescription>
             <FormControl>
               <Input
                 placeholder="Defaults to the exchange token endpoint"
                 {...field}
               />
             </FormControl>
-            <FormDescription>
-              Optional override for <code>private_key_jwt</code> client
-              assertions.
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}
@@ -781,6 +781,9 @@ function EnterpriseManagedCredentialsForm(props: {
         render={({ field }) => (
           <FormItem>
             <FormLabel>User Token To Exchange</FormLabel>
+            <FormDescription>
+              {getSubjectTokenHint(inferredEnterpriseExchangeType)}
+            </FormDescription>
             <Select
               value={field.value ?? subjectTokenTypeDefault}
               onValueChange={field.onChange}
@@ -800,9 +803,6 @@ function EnterpriseManagedCredentialsForm(props: {
                 )}
               </SelectContent>
             </Select>
-            <FormDescription>
-              {getSubjectTokenHint(inferredEnterpriseExchangeType)}
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}
@@ -814,6 +814,14 @@ function EnterpriseManagedCredentialsForm(props: {
         render={({ field }) => (
           <FormItem>
             <FormLabel>Private Key PEM</FormLabel>
+            <FormDescription>
+              Only used for <code>private_key_jwt</code> authentication.
+            </FormDescription>
+            <StoredSecretNote
+              stored={isSecretStored(
+                "oidcConfig.enterpriseManagedCredentials.privateKeyPem",
+              )}
+            />
             <FormControl>
               <SecretTextarea
                 placeholder={
@@ -827,14 +835,6 @@ function EnterpriseManagedCredentialsForm(props: {
                 {...field}
               />
             </FormControl>
-            <FormDescription>
-              Only used for <code>private_key_jwt</code> authentication.
-            </FormDescription>
-            <StoredSecretNote
-              stored={isSecretStored(
-                "oidcConfig.enterpriseManagedCredentials.privateKeyPem",
-              )}
-            />
             <FormMessage />
           </FormItem>
         )}

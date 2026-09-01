@@ -30,6 +30,10 @@ export function OneDriveConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Folder ID (optional)</FormLabel>
+            <FormDescription>
+              Restrict sync to a specific folder by its OneDrive item ID. Leave
+              blank to sync the entire drive root.
+            </FormDescription>
             <FormControl>
               <Input
                 placeholder="01ABCDEF..."
@@ -37,10 +41,6 @@ export function OneDriveConfigFields({
                 value={(field.value as string) ?? ""}
               />
             </FormControl>
-            <FormDescription>
-              Restrict sync to a specific folder by its OneDrive item ID. Leave
-              blank to sync the entire drive root.
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}

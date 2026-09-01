@@ -28,6 +28,11 @@ export function PerforceConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>File Types (optional)</FormLabel>
+            <FormDescription>
+              Comma-separated file extensions to index. Defaults to .md, .yaml,
+              .yml. Binary files are always skipped, so broader lists (e.g.
+              .txt, .json) are safe to add.
+            </FormDescription>
             <FormControl>
               <Input
                 placeholder=".md, .yaml, .yml"
@@ -35,11 +40,6 @@ export function PerforceConfigFields({
                 value={joinIfArray(field.value)}
               />
             </FormControl>
-            <FormDescription>
-              Comma-separated file extensions to index. Defaults to .md, .yaml,
-              .yml. Binary files are always skipped, so broader lists (e.g.
-              .txt, .json) are safe to add.
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}
@@ -50,6 +50,10 @@ export function PerforceConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Exclude Paths (optional)</FormLabel>
+            <FormDescription>
+              Comma-separated depot paths to skip within the synced depot paths.
+              Useful to carve large or irrelevant subtrees out of a broad path.
+            </FormDescription>
             <FormControl>
               <Input
                 placeholder="//depot/docs/generated, //depot/docs/vendor"
@@ -57,10 +61,6 @@ export function PerforceConfigFields({
                 value={joinIfArray(field.value)}
               />
             </FormControl>
-            <FormDescription>
-              Comma-separated depot paths to skip within the synced depot paths.
-              Useful to carve large or irrelevant subtrees out of a broad path.
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}
@@ -109,6 +109,9 @@ export function PerforcePermissionSyncFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Admin Username</FormLabel>
+            <FormDescription>
+              The Perforce user permission sync authenticates as.
+            </FormDescription>
             <FormControl>
               <Input
                 placeholder="p4admin"
@@ -119,9 +122,6 @@ export function PerforcePermissionSyncFields({
                 value={(field.value as string) ?? ""}
               />
             </FormControl>
-            <FormDescription>
-              The Perforce user permission sync authenticates as.
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}
@@ -137,6 +137,14 @@ export function PerforcePermissionSyncFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Admin Password</FormLabel>
+            {(mode === "edit" || adminCredentialDescription) && (
+              <FormDescription>
+                {mode === "edit" ? (
+                  <span>Leave empty to keep the existing password.</span>
+                ) : null}{" "}
+                {adminCredentialDescription}
+              </FormDescription>
+            )}
             <FormControl>
               <SecretInput
                 placeholder={
@@ -153,14 +161,6 @@ export function PerforcePermissionSyncFields({
              * normally left blank, and an admin fixing privileges upstream does
              * not retype the password.
              */}
-            {(mode === "edit" || adminCredentialDescription) && (
-              <FormDescription>
-                {mode === "edit" ? (
-                  <span>Leave empty to keep the existing password.</span>
-                ) : null}{" "}
-                {adminCredentialDescription}
-              </FormDescription>
-            )}
             <FormMessage />
           </FormItem>
         )}
@@ -177,6 +177,10 @@ export function PerforcePermissionSyncFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>P4 Port</FormLabel>
+            <FormDescription>
+              Leave empty unless the Perforce server's wire address is not the
+              host in the Server URL.
+            </FormDescription>
             <FormControl>
               <Input
                 placeholder={p4PortPlaceholder(form.watch("config.serverUrl"))}
@@ -184,10 +188,6 @@ export function PerforcePermissionSyncFields({
                 value={(field.value as string) ?? ""}
               />
             </FormControl>
-            <FormDescription>
-              Leave empty unless the Perforce server's wire address is not the
-              host in the Server URL.
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}

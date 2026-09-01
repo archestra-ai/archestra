@@ -670,6 +670,14 @@ class AgentToolModel {
    * server (`agent_tools.mcp_server_id`), or when it is unpinned (dynamic
    * credential resolution) and the tool belongs to the server's catalog — a
    * dynamic assignment can resolve to any install of the catalog at call time.
+   *
+   * The two rules are fetched as two queries rather than one join with an OR'd
+   * condition. An OR across two different columns gives the planner nothing it
+   * can drive an index from, so it paired every server with every assignment
+   * row and filtered afterwards — on a modest organization that is already a
+   * seven-figure intermediate result, and it grows with servers × assignments.
+   * Each rule on its own is an ordinary equi-join, and the union of the two is
+   * the same set.
    */
   static async getAssignedAgentDetailsForMcpServers(
     mcpServerIds: string[],
@@ -682,49 +690,86 @@ class AgentToolModel {
       return agentsMap;
     }
 
-    const assignments = await db
-      .selectDistinct({
-        mcpServerId: schema.mcpServersTable.id,
-        agentId: schema.agentsTable.id,
-        agentName: schema.agentsTable.name,
-        agentType: schema.agentsTable.agentType,
-        scope: schema.agentsTable.scope,
-        ownerId: schema.agentsTable.authorId,
-        ownerEmail: schema.usersTable.email,
-      })
-      .from(schema.agentToolsTable)
-      .innerJoin(
-        schema.toolsTable,
-        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-      )
-      .innerJoin(
-        schema.agentsTable,
-        eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
-      )
-      // Personal agents share a name across members, so the owner is what
-      // tells them apart in the UI. LEFT JOIN: `author_id` is nullable and
-      // nulls out when the author is deleted.
-      .leftJoin(
-        schema.usersTable,
-        eq(schema.agentsTable.authorId, schema.usersTable.id),
-      )
-      .innerJoin(
-        schema.mcpServersTable,
-        or(
+    const selection = {
+      mcpServerId: schema.mcpServersTable.id,
+      agentId: schema.agentsTable.id,
+      agentName: schema.agentsTable.name,
+      agentType: schema.agentsTable.agentType,
+      scope: schema.agentsTable.scope,
+      ownerId: schema.agentsTable.authorId,
+      ownerEmail: schema.usersTable.email,
+    };
+
+    const [pinned, dynamic] = await Promise.all([
+      // Pinned to one install.
+      db
+        .selectDistinct(selection)
+        .from(schema.agentToolsTable)
+        .innerJoin(
+          schema.agentsTable,
+          eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+        )
+        // Personal agents share a name across members, so the owner is what
+        // tells them apart in the UI. LEFT JOIN: `author_id` is nullable and
+        // nulls out when the author is deleted.
+        .leftJoin(
+          schema.usersTable,
+          eq(schema.agentsTable.authorId, schema.usersTable.id),
+        )
+        .innerJoin(
+          schema.mcpServersTable,
           eq(schema.agentToolsTable.mcpServerId, schema.mcpServersTable.id),
+        )
+        .where(
           and(
-            isNull(schema.agentToolsTable.mcpServerId),
-            eq(schema.toolsTable.catalogId, schema.mcpServersTable.catalogId),
+            inArray(schema.mcpServersTable.id, mcpServerIds),
+            notDeleted(schema.agentsTable),
           ),
         ),
-      )
-      .where(
-        and(
-          inArray(schema.mcpServersTable.id, mcpServerIds),
-          notDeleted(schema.agentsTable),
+      // Unpinned: resolves to any install of the tool's catalog.
+      db
+        .selectDistinct(selection)
+        .from(schema.agentToolsTable)
+        .innerJoin(
+          schema.toolsTable,
+          eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+        )
+        .innerJoin(
+          schema.agentsTable,
+          eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+        )
+        .leftJoin(
+          schema.usersTable,
+          eq(schema.agentsTable.authorId, schema.usersTable.id),
+        )
+        .innerJoin(
+          schema.mcpServersTable,
+          eq(schema.toolsTable.catalogId, schema.mcpServersTable.catalogId),
+        )
+        .where(
+          and(
+            isNull(schema.agentToolsTable.mcpServerId),
+            inArray(schema.mcpServersTable.id, mcpServerIds),
+            notDeleted(schema.agentsTable),
+          ),
         ),
-      )
-      .orderBy(asc(schema.agentsTable.name), asc(schema.agentsTable.id));
+    ]);
+
+    // One agent can match both rules for the same server, so the union is
+    // deduplicated here — the DISTINCT above only applies within each branch.
+    const seen = new Set<string>();
+    const assignments = [...pinned, ...dynamic]
+      .filter((row) => {
+        const key = `${row.mcpServerId} ${row.agentId}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .sort(
+        (a, b) =>
+          a.agentName.localeCompare(b.agentName) ||
+          a.agentId.localeCompare(b.agentId),
+      );
 
     for (const { mcpServerId, agentId, agentName, ...agent } of assignments) {
       agentsMap.get(mcpServerId)?.push({

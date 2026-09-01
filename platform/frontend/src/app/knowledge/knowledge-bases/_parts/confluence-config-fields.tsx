@@ -37,13 +37,13 @@ export function ConfluenceConfigFields({
           render={({ field }) => (
             <FormItem>
               <FormLabel>URL</FormLabel>
+              <FormDescription>Your Confluence instance URL.</FormDescription>
               <FormControl>
                 <Input
                   placeholder="https://your-domain.atlassian.net/wiki"
                   {...field}
                 />
               </FormControl>
-              <FormDescription>Your Confluence instance URL.</FormDescription>
               <FormMessage />
             </FormItem>
           )}
@@ -79,12 +79,12 @@ export function ConfluenceConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Space Keys (optional)</FormLabel>
-            <FormControl>
-              <Input placeholder="ENG, DOCS, TEAM" {...field} />
-            </FormControl>
             <FormDescription>
               Comma-separated list of space keys to sync.
             </FormDescription>
+            <FormControl>
+              <Input placeholder="ENG, DOCS, TEAM" {...field} />
+            </FormControl>
             <FormMessage />
           </FormItem>
         )}
@@ -96,12 +96,12 @@ export function ConfluenceConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Page IDs (optional)</FormLabel>
-            <FormControl>
-              <Input placeholder="12345, 67890" {...field} />
-            </FormControl>
             <FormDescription>
               Comma-separated list of specific page IDs to sync.
             </FormDescription>
+            <FormControl>
+              <Input placeholder="12345, 67890" {...field} />
+            </FormControl>
             <FormMessage />
           </FormItem>
         )}
@@ -113,6 +113,7 @@ export function ConfluenceConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>CQL Query (optional)</FormLabel>
+            <FormDescription>Custom CQL to filter content.</FormDescription>
             <FormControl>
               <Textarea
                 placeholder='space = "ENG" AND type = "page"'
@@ -120,7 +121,6 @@ export function ConfluenceConfigFields({
                 {...field}
               />
             </FormControl>
-            <FormDescription>Custom CQL to filter content.</FormDescription>
             <FormMessage />
           </FormItem>
         )}
@@ -132,12 +132,12 @@ export function ConfluenceConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Labels to Skip (optional)</FormLabel>
-            <FormControl>
-              <Input placeholder="draft, archive" {...field} />
-            </FormControl>
             <FormDescription>
               Comma-separated list of labels to exclude.
             </FormDescription>
+            <FormControl>
+              <Input placeholder="draft, archive" {...field} />
+            </FormControl>
             <FormMessage />
           </FormItem>
         )}
@@ -149,6 +149,9 @@ export function ConfluenceConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Batch Size</FormLabel>
+            <FormDescription>
+              Number of pages to process per batch (default: 50).
+            </FormDescription>
             <FormControl>
               <Input
                 type="number"
@@ -157,9 +160,6 @@ export function ConfluenceConfigFields({
                 onChange={(e) => field.onChange(Number(e.target.value) || 50)}
               />
             </FormControl>
-            <FormDescription>
-              Number of pages to process per batch (default: 50).
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}

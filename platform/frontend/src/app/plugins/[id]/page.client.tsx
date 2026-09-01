@@ -15,7 +15,7 @@ import { AgentBadge } from "@/components/agent-badge";
 import { createdByFact } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
-  type OverviewFact,
+  type MaybeOverviewFact,
   OverviewSummary,
 } from "@/components/overview-summary";
 import { PageLayout } from "@/components/page-layout";
@@ -165,7 +165,7 @@ function PluginDetailView({
   const deleteReasonId = useId();
   // The values a reader scans this page for, in one row. The rest of the
   // record is behind the same link the header's Edit uses.
-  const overviewFacts: OverviewFact[] = [
+  const overviewFacts: MaybeOverviewFact[] = [
     {
       label: "Accessible to",
       value: (
@@ -376,7 +376,7 @@ function PluginDetailView({
         open={deleteRequested}
         onOpenChange={setDeleteRequested}
         title="Delete plugin?"
-        description="It will disappear from future marketplace revisions. This does not uninstall code already present on developer machines; remove that plugin locally through the client or startup guard."
+        description="Installed copies stay on developer machines until you uninstall them."
         isPending={deletePlugin.isPending}
         onConfirm={handleDelete}
       />

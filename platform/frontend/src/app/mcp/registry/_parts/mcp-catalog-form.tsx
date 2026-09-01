@@ -1003,13 +1003,6 @@ export function McpCatalogForm({
                           label="renames tools"
                         />
                       </FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="e.g., GitHub MCP Server"
-                          disabled={isNameLocked}
-                          {...field}
-                        />
-                      </FormControl>
                       {isNameLocked && (
                         <FormDescription>
                           {isAppBacked
@@ -1017,6 +1010,13 @@ export function McpCatalogForm({
                             : "This is a built-in server — its name is system-managed and cannot be changed."}
                         </FormDescription>
                       )}
+                      <FormControl>
+                        <Input
+                          placeholder="e.g., GitHub MCP Server"
+                          disabled={isNameLocked}
+                          {...field}
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -1093,6 +1093,16 @@ export function McpCatalogForm({
 
                             <div className="space-y-2">
                               <Label>Teams ({selectedTeams.length})</Label>
+                              {selectedTeams.length > 0 && (
+                                <FormDescription>
+                                  <strong>Use</strong> — members can find this
+                                  MCP server, install it for themselves, and use
+                                  shared connections. <strong>Manage</strong>{" "}
+                                  additionally lets the team&apos;s admins edit
+                                  it, change its environment, and manage
+                                  sharing.
+                                </FormDescription>
+                              )}
                               {selectedTeams.length === 0 ? (
                                 <div className="rounded-lg border border-dashed p-4 text-center">
                                   <p className="text-sm text-muted-foreground">
@@ -1162,14 +1172,6 @@ export function McpCatalogForm({
                                       </Button>
                                     </div>
                                   ))}
-                                  <FormDescription>
-                                    <strong>Use</strong> — members can find this
-                                    MCP server, install it for themselves, and
-                                    use shared connections.{" "}
-                                    <strong>Manage</strong> additionally lets
-                                    the team&apos;s admins edit it, change its
-                                    environment, and manage sharing.
-                                  </FormDescription>
                                 </div>
                               )}
                             </div>
@@ -1903,6 +1905,12 @@ export function McpCatalogForm({
                                             *
                                           </span>
                                         </FormLabel>
+                                        <FormDescription>
+                                          Base URL used for OAuth discovery. Use
+                                          the issuer or auth server base URL
+                                          here, not the token endpoint. This is
+                                          separate from the K8s-deployed server.
+                                        </FormDescription>
                                         <FormControl>
                                           <Input
                                             placeholder="https://auth.example.com"
@@ -1910,12 +1918,6 @@ export function McpCatalogForm({
                                             {...field}
                                           />
                                         </FormControl>
-                                        <FormDescription>
-                                          Base URL used for OAuth discovery. Use
-                                          the issuer or auth server base URL
-                                          here, not the token endpoint. This is
-                                          separate from the K8s-deployed server.
-                                        </FormDescription>
                                         <FormMessage />
                                       </FormItem>
                                     )}
@@ -1930,6 +1932,10 @@ export function McpCatalogForm({
                                       <FormLabel>
                                         Authorization Server URL
                                       </FormLabel>
+                                      <FormDescription>
+                                        Optional override for discovery when the
+                                        MCP server URL is not the OAuth issuer.
+                                      </FormDescription>
                                       <FormControl>
                                         <Input
                                           placeholder="https://auth.example.com"
@@ -1937,10 +1943,6 @@ export function McpCatalogForm({
                                           {...field}
                                         />
                                       </FormControl>
-                                      <FormDescription>
-                                        Optional override for discovery when the
-                                        MCP server URL is not the OAuth issuer.
-                                      </FormDescription>
                                       <FormMessage />
                                     </FormItem>
                                   )}
@@ -1954,6 +1956,12 @@ export function McpCatalogForm({
                                       <FormLabel>
                                         Authorization Endpoint
                                       </FormLabel>
+                                      <FormDescription>
+                                        Optional direct authorization endpoint
+                                        override. When set, it overrides
+                                        discovery. Set together with Token
+                                        Endpoint.
+                                      </FormDescription>
                                       <FormControl>
                                         <Input
                                           placeholder="https://auth.example.com/oauth/authorize"
@@ -1961,12 +1969,6 @@ export function McpCatalogForm({
                                           {...field}
                                         />
                                       </FormControl>
-                                      <FormDescription>
-                                        Optional direct authorization endpoint
-                                        override. When set, it overrides
-                                        discovery. Set together with Token
-                                        Endpoint.
-                                      </FormDescription>
                                       <FormMessage />
                                     </FormItem>
                                   )}
@@ -1980,6 +1982,11 @@ export function McpCatalogForm({
                                       <FormLabel>
                                         Well-Known Metadata URL
                                       </FormLabel>
+                                      <FormDescription>
+                                        Optional direct metadata endpoint
+                                        override when provider discovery is
+                                        non-standard.
+                                      </FormDescription>
                                       <FormControl>
                                         <Input
                                           placeholder="https://auth.example.com/.well-known/openid-configuration"
@@ -1987,11 +1994,6 @@ export function McpCatalogForm({
                                           {...field}
                                         />
                                       </FormControl>
-                                      <FormDescription>
-                                        Optional direct metadata endpoint
-                                        override when provider discovery is
-                                        non-standard.
-                                      </FormDescription>
                                       <FormMessage />
                                     </FormItem>
                                   )}
@@ -2008,6 +2010,11 @@ export function McpCatalogForm({
                                           *
                                         </span>
                                       </FormLabel>
+                                      <FormDescription>
+                                        Optional direct token endpoint override.
+                                        When set, it overrides discovery. Set
+                                        together with Authorization Endpoint.
+                                      </FormDescription>
                                       <FormControl>
                                         <Input
                                           placeholder="https://auth.example.com/oauth/token"
@@ -2015,11 +2022,6 @@ export function McpCatalogForm({
                                           {...field}
                                         />
                                       </FormControl>
-                                      <FormDescription>
-                                        Optional direct token endpoint override.
-                                        When set, it overrides discovery. Set
-                                        together with Authorization Endpoint.
-                                      </FormDescription>
                                       <FormMessage />
                                     </FormItem>
                                   )}
@@ -2031,6 +2033,10 @@ export function McpCatalogForm({
                                   render={({ field }) => (
                                     <FormItem>
                                       <FormLabel>Client ID</FormLabel>
+                                      <FormDescription>
+                                        Leave empty if the server supports
+                                        dynamic client registration
+                                      </FormDescription>
                                       <FormControl>
                                         <Input
                                           placeholder="your-client-id (optional for dynamic registration)"
@@ -2038,10 +2044,6 @@ export function McpCatalogForm({
                                           {...field}
                                         />
                                       </FormControl>
-                                      <FormDescription>
-                                        Leave empty if the server supports
-                                        dynamic client registration
-                                      </FormDescription>
                                       <FormMessage />
                                     </FormItem>
                                   )}
@@ -2090,13 +2092,6 @@ export function McpCatalogForm({
                                           *
                                         </span>
                                       </FormLabel>
-                                      <FormControl>
-                                        <Input
-                                          placeholder="https://localhost:3000/oauth-callback, https://app.example.com/oauth-callback"
-                                          className="font-mono"
-                                          {...field}
-                                        />
-                                      </FormControl>
                                       <FormDescription>
                                         Use {appName}'s MCP install callback,
                                         usually{" "}
@@ -2108,6 +2103,13 @@ export function McpCatalogForm({
                                         . Do not use the SSO callback URL under{" "}
                                         <code>/api/auth/sso/callback</code>.
                                       </FormDescription>
+                                      <FormControl>
+                                        <Input
+                                          placeholder="https://localhost:3000/oauth-callback, https://app.example.com/oauth-callback"
+                                          className="font-mono"
+                                          {...field}
+                                        />
+                                      </FormControl>
                                       <FormMessage />
                                     </FormItem>
                                   )}
@@ -2119,6 +2121,12 @@ export function McpCatalogForm({
                                   render={({ field }) => (
                                     <FormItem>
                                       <FormLabel>Protected Resource</FormLabel>
+                                      <FormDescription>
+                                        Optional OAuth resource/audience sent in
+                                        the authorization request and token
+                                        exchange. Leave blank to omit the OAuth
+                                        resource parameter.
+                                      </FormDescription>
                                       <FormControl>
                                         <Input
                                           placeholder="https://api.example.com or api://client-id"
@@ -2126,12 +2134,6 @@ export function McpCatalogForm({
                                           {...field}
                                         />
                                       </FormControl>
-                                      <FormDescription>
-                                        Optional OAuth resource/audience sent in
-                                        the authorization request and token
-                                        exchange. Leave blank to omit the OAuth
-                                        resource parameter.
-                                      </FormDescription>
                                       <FormMessage />
                                     </FormItem>
                                   )}
@@ -2143,13 +2145,6 @@ export function McpCatalogForm({
                                   render={({ field }) => (
                                     <FormItem>
                                       <FormLabel>Scopes</FormLabel>
-                                      <FormControl>
-                                        <Input
-                                          placeholder="read, write"
-                                          className="font-mono"
-                                          {...field}
-                                        />
-                                      </FormControl>
                                       <FormDescription>
                                         Comma-separated list of OAuth scopes,
                                         sent as-is instead of the ones the
@@ -2158,6 +2153,13 @@ export function McpCatalogForm({
                                         in its metadata, or none at all if it
                                         publishes none.
                                       </FormDescription>
+                                      <FormControl>
+                                        <Input
+                                          placeholder="read, write"
+                                          className="font-mono"
+                                          {...field}
+                                        />
+                                      </FormControl>
                                       <FormMessage />
                                     </FormItem>
                                   )}
@@ -2169,13 +2171,6 @@ export function McpCatalogForm({
                                   render={({ field }) => (
                                     <FormItem>
                                       <FormLabel>Additional scopes</FormLabel>
-                                      <FormControl>
-                                        <Input
-                                          placeholder="offline_access"
-                                          className="font-mono"
-                                          {...field}
-                                        />
-                                      </FormControl>
                                       <FormDescription>
                                         Appended on top of the requested scopes,
                                         when there are any. offline_access is
@@ -2185,6 +2180,13 @@ export function McpCatalogForm({
                                         that asks for no scopes stays empty
                                         rather than asking for these alone.
                                       </FormDescription>
+                                      <FormControl>
+                                        <Input
+                                          placeholder="offline_access"
+                                          className="font-mono"
+                                          {...field}
+                                        />
+                                      </FormControl>
                                       <FormMessage />
                                     </FormItem>
                                   )}
@@ -2302,6 +2304,11 @@ export function McpCatalogForm({
                                       <FormLabel>
                                         Authorization Server URL
                                       </FormLabel>
+                                      <FormDescription>
+                                        Optional discovery base URL when the
+                                        token endpoint is derived from an auth
+                                        server instead of entered directly.
+                                      </FormDescription>
                                       <FormControl>
                                         <Input
                                           placeholder="https://auth.example.com"
@@ -2309,11 +2316,6 @@ export function McpCatalogForm({
                                           {...field}
                                         />
                                       </FormControl>
-                                      <FormDescription>
-                                        Optional discovery base URL when the
-                                        token endpoint is derived from an auth
-                                        server instead of entered directly.
-                                      </FormDescription>
                                       <FormMessage />
                                     </FormItem>
                                   )}
@@ -2327,6 +2329,10 @@ export function McpCatalogForm({
                                       <FormLabel>
                                         Well-Known Metadata URL
                                       </FormLabel>
+                                      <FormDescription>
+                                        Optional direct metadata endpoint
+                                        override when discovery is non-standard.
+                                      </FormDescription>
                                       <FormControl>
                                         <Input
                                           placeholder="https://auth.example.com/.well-known/openid-configuration"
@@ -2334,10 +2340,6 @@ export function McpCatalogForm({
                                           {...field}
                                         />
                                       </FormControl>
-                                      <FormDescription>
-                                        Optional direct metadata endpoint
-                                        override when discovery is non-standard.
-                                      </FormDescription>
                                       <FormMessage />
                                     </FormItem>
                                   )}
@@ -2354,6 +2356,11 @@ export function McpCatalogForm({
                                           *
                                         </span>
                                       </FormLabel>
+                                      <FormDescription>
+                                        Endpoint used to exchange the stored
+                                        client credentials for a short-lived
+                                        bearer token.
+                                      </FormDescription>
                                       <FormControl>
                                         <Input
                                           placeholder="https://auth.example.com/oauth/token"
@@ -2361,11 +2368,6 @@ export function McpCatalogForm({
                                           {...field}
                                         />
                                       </FormControl>
-                                      <FormDescription>
-                                        Endpoint used to exchange the stored
-                                        client credentials for a short-lived
-                                        bearer token.
-                                      </FormDescription>
                                       <FormMessage />
                                     </FormItem>
                                   )}
@@ -2377,6 +2379,11 @@ export function McpCatalogForm({
                                   render={({ field }) => (
                                     <FormItem>
                                       <FormLabel>Default Audience</FormLabel>
+                                      <FormDescription>
+                                        Optional default audience shown during
+                                        installation. Teams can override it per
+                                        shared connection.
+                                      </FormDescription>
                                       <FormControl>
                                         <Input
                                           placeholder="https://api.example.com"
@@ -2384,11 +2391,6 @@ export function McpCatalogForm({
                                           {...field}
                                         />
                                       </FormControl>
-                                      <FormDescription>
-                                        Optional default audience shown during
-                                        installation. Teams can override it per
-                                        shared connection.
-                                      </FormDescription>
                                       <FormMessage />
                                     </FormItem>
                                   )}
@@ -2400,6 +2402,11 @@ export function McpCatalogForm({
                                   render={({ field }) => (
                                     <FormItem>
                                       <FormLabel>Scopes</FormLabel>
+                                      <FormDescription>
+                                        Optional comma-separated OAuth scopes to
+                                        include in the client credentials token
+                                        request.
+                                      </FormDescription>
                                       <FormControl>
                                         <Input
                                           placeholder="read, write"
@@ -2407,11 +2414,6 @@ export function McpCatalogForm({
                                           {...field}
                                         />
                                       </FormControl>
-                                      <FormDescription>
-                                        Optional comma-separated OAuth scopes to
-                                        include in the client credentials token
-                                        request.
-                                      </FormDescription>
                                       <FormMessage />
                                     </FormItem>
                                   )}
@@ -2427,7 +2429,7 @@ export function McpCatalogForm({
                                     credential for this MCP server.{" "}
                                     <ExternalDocsLink
                                       href={mcpAuthTokenExchangeDocsUrl}
-                                      className="inline-flex items-center gap-1 underline underline-offset-4"
+                                      className="underline underline-offset-4"
                                     >
                                       Learn more
                                     </ExternalDocsLink>
@@ -2471,7 +2473,7 @@ export function McpCatalogForm({
                                     {`${appName} will pass through the caller's IdP JWT to the upstream MCP server. In the current configuration this is sent as an Authorization: Bearer header. Use this when the upstream server validates the same JWT against the IdP's JWKS endpoint directly.`}{" "}
                                     <ExternalDocsLink
                                       href={mcpAuthJwksDocsUrl}
-                                      className="inline-flex items-center gap-1 underline underline-offset-4"
+                                      className="underline underline-offset-4"
                                     >
                                       Learn more
                                     </ExternalDocsLink>

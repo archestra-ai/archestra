@@ -1037,7 +1037,7 @@ async function convertToolResultsToToon(
               if (tokensAfter < tokensBefore) {
                 totalTokensAfter += tokensAfter;
 
-                logger.info(
+                logger.debug(
                   {
                     functionName:
                       "name" in functionResponse
@@ -1095,7 +1095,7 @@ async function convertToolResultsToToon(
               );
               return part;
             } catch {
-              logger.info(
+              logger.debug(
                 {
                   functionName:
                     "name" in functionResponse

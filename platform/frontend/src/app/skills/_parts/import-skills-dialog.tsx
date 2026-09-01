@@ -36,6 +36,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SecretInput } from "@/components/ui/secret-input";
@@ -697,6 +698,10 @@ export function ImportSkillsDialog({
         <div className="space-y-5">
           <div className="space-y-2">
             <Label htmlFor="skill-repo-url">Repository URL</Label>
+            <FieldDescription>
+              Every directory with a <code className="font-mono">SKILL.md</code>{" "}
+              becomes an importable skill.
+            </FieldDescription>
             <Input
               id="skill-repo-url"
               value={repoUrl}
@@ -707,13 +712,13 @@ export function ImportSkillsDialog({
               data-1p-ignore
               data-lpignore="true"
             />
-            <p className="text-sm text-muted-foreground">
-              Every directory with a <code className="font-mono">SKILL.md</code>{" "}
-              becomes an importable skill.
-            </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="skill-sync-interval">Keep in sync</Label>
+            <FieldDescription>
+              Pulled from the repository on this schedule; read-only in{" "}
+              {appName} until disconnected.
+            </FieldDescription>
             <Select
               value={syncInterval}
               onValueChange={(value) =>
@@ -729,10 +734,6 @@ export function ImportSkillsDialog({
                 <SelectItem value="1d">Once a day</SelectItem>
               </SelectContent>
             </Select>
-            <p className="text-sm text-muted-foreground">
-              Pulled from the repository on this schedule; read-only in{" "}
-              {appName} until disconnected.
-            </p>
           </div>
           <SkillScopeSelector
             scope={scope}
@@ -862,6 +863,9 @@ export function ImportSkillsDialog({
                     (optional)
                   </span>
                 </Label>
+                <FieldDescription>
+                  Scan only this directory of a large repository.
+                </FieldDescription>
                 <Input
                   id="skill-subpath"
                   value={path}
@@ -871,9 +875,6 @@ export function ImportSkillsDialog({
                   data-1p-ignore
                   data-lpignore="true"
                 />
-                <p className="text-sm text-muted-foreground">
-                  Scan only this directory of a large repository.
-                </p>
               </div>
             </CollapsibleContent>
           </Collapsible>

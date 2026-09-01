@@ -32,7 +32,14 @@ export function ExternalDocsLink({
       target="_blank"
       rel="noopener noreferrer"
       className={cn(
-        "inline-flex items-center gap-1 text-primary hover:underline",
+        // With the trailing icon the anchor lays text + icon out as one unit,
+        // so it has to be a flex box. Without the icon it must stay a plain
+        // inline box: `inline-flex` makes the anchor an *atomic* inline, which
+        // cannot wrap mid-phrase and leaves a line-break opportunity directly
+        // after it. In prose that strands whatever follows the link — most
+        // visibly a trailing period, which lands alone on the next line.
+        showIcon ? "inline-flex items-center gap-1" : "inline",
+        "text-primary hover:underline",
         className,
       )}
     >

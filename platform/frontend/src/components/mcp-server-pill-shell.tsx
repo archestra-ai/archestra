@@ -116,10 +116,7 @@ export function McpServerPillShell({
                 {docsUrl ? (
                   <>
                     {" "}
-                    <CatalogDocsLink
-                      url={docsUrl}
-                      className="inline-flex items-center gap-1 text-primary hover:underline"
-                    />
+                    <CatalogDocsLink url={docsUrl} />
                   </>
                 ) : null}
               </p>

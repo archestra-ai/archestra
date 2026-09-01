@@ -1,6 +1,7 @@
 "use client";
 
 import { Globe, Lock, Users } from "lucide-react";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import {
@@ -70,6 +71,11 @@ export function FileVisibilitySelector({
       {visibility === "team-scoped" && (
         <div className="space-y-1.5">
           <Label htmlFor="file-visibility-teams">Teams</Label>
+          {teamIds.length === 0 && (
+            <FieldDescription>
+              Pick at least one team, or nobody will be able to see this.
+            </FieldDescription>
+          )}
           <MultiSelectCombobox
             options={(teams ?? []).map((team) => ({
               value: team.id,
@@ -80,11 +86,6 @@ export function FileVisibilitySelector({
             placeholder="Select teams"
             emptyMessage="No teams yet"
           />
-          {teamIds.length === 0 && (
-            <p className="text-muted-foreground text-xs">
-              Pick at least one team, or nobody will be able to see this.
-            </p>
-          )}
         </div>
       )}
     </div>

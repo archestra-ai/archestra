@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -60,6 +61,9 @@ export function GithubAuthConfigFields({
             </span>
           )}
         </Label>
+        {authDescription && (
+          <FieldDescription>{authDescription}</FieldDescription>
+        )}
         <Select value={authMethod} onValueChange={onAuthMethodChange}>
           <SelectTrigger id="github-auth-method" className="w-full">
             <SelectValue />
@@ -69,9 +73,6 @@ export function GithubAuthConfigFields({
             <SelectItem value="github_app">GitHub App</SelectItem>
           </SelectContent>
         </Select>
-        {authDescription && (
-          <p className="text-sm text-muted-foreground">{authDescription}</p>
-        )}
       </div>
 
       {authMethod === "pat" && patFields}
@@ -80,31 +81,34 @@ export function GithubAuthConfigFields({
         <div className="space-y-2">
           <Label htmlFor="github-app-config">GitHub App Configuration</Label>
           {githubAppConfigs.length > 0 ? (
-            <>
-              <Select
-                value={githubAppConfigId}
-                onValueChange={onGithubAppConfigIdChange}
-              >
-                <SelectTrigger id="github-app-config" className="w-full">
-                  <SelectValue placeholder="Select a GitHub App configuration" />
-                </SelectTrigger>
-                <SelectContent>
-                  {githubAppConfigs.map((appConfig) => (
-                    <SelectItem key={appConfig.id} value={appConfig.id}>
-                      {appConfig.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-sm text-muted-foreground">
-                {configuredDescription} <GithubAppSettingsLink />.{" "}
-                {appConfigDescription}
-              </p>
-            </>
+            // Distinct keys: without them React reconciles the two branches as
+            // one element and Chrome page-translate crashes on the bare text
+            // it re-parented (facebook/react#11538).
+            <FieldDescription key="configured">
+              {configuredDescription} <GithubAppSettingsLink />.{" "}
+              {appConfigDescription}
+            </FieldDescription>
           ) : (
-            <p className="text-sm text-muted-foreground">
+            <FieldDescription key="none">
               Create one in <GithubAppSettingsLink />. {appConfigDescription}
-            </p>
+            </FieldDescription>
+          )}
+          {githubAppConfigs.length > 0 && (
+            <Select
+              value={githubAppConfigId}
+              onValueChange={onGithubAppConfigIdChange}
+            >
+              <SelectTrigger id="github-app-config" className="w-full">
+                <SelectValue placeholder="Select a GitHub App configuration" />
+              </SelectTrigger>
+              <SelectContent>
+                {githubAppConfigs.map((appConfig) => (
+                  <SelectItem key={appConfig.id} value={appConfig.id}>
+                    {appConfig.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           )}
           {appConfigError && (
             <p className="text-sm font-medium text-destructive">

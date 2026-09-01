@@ -224,6 +224,9 @@ export function RoleMappingForm({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Default Role</FormLabel>
+            <FormDescription>
+              Role assigned when no mapping rules match.
+            </FormDescription>
             <FormControl>
               <RoleSelect
                 value={field.value || "member"}
@@ -234,9 +237,6 @@ export function RoleMappingForm({
                 restrictToGrantable={false}
               />
             </FormControl>
-            <FormDescription>
-              Role assigned when no mapping rules match.
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}

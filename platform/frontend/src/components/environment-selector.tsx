@@ -3,6 +3,7 @@
 import { E2eTestId, type Resource } from "@archestra/shared";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -106,8 +107,25 @@ export function EnvironmentSelector({
   return (
     <div className={cn("space-y-2", className)}>
       {showLabel && <Label>Environment</Label>}
-      {helpText ? (
-        <p className="text-xs text-muted-foreground">{helpText}</p>
+      {helpText ? <FieldDescription>{helpText}</FieldDescription> : null}
+      {selectedDescription ? (
+        <FieldDescription>{selectedDescription}</FieldDescription>
+      ) : null}
+      {!hasCustomEnvironmentOptions ? (
+        <FieldDescription>
+          Only the default environment is available.
+          {canManageEnvironments ? (
+            <>
+              {" "}
+              <Link
+                href="/settings/environments"
+                className="underline underline-offset-2"
+              >
+                Manage environments
+              </Link>
+            </>
+          ) : null}
+        </FieldDescription>
       ) : null}
       <Select
         value={selectedValue}
@@ -135,25 +153,6 @@ export function EnvironmentSelector({
           ))}
         </SelectContent>
       </Select>
-      {selectedDescription ? (
-        <p className="text-xs text-muted-foreground">{selectedDescription}</p>
-      ) : null}
-      {!hasCustomEnvironmentOptions ? (
-        <p className="text-xs text-muted-foreground">
-          Only the default environment is available.
-          {canManageEnvironments ? (
-            <>
-              {" "}
-              <Link
-                href="/settings/environments"
-                className="underline underline-offset-2"
-              >
-                Manage environments
-              </Link>
-            </>
-          ) : null}
-        </p>
-      ) : null}
     </div>
   );
 }

@@ -761,6 +761,25 @@ archestra:
     # Annotations for the ingress resource
     annotations: {}
 
+    # Route the backend's own API prefixes (/v1, /v2) straight to the backend
+    # port on any host that also serves the UI.
+    #
+    # Neither prefix has a frontend route — the frontend only forwards them to
+    # the backend — and /v1 is the LLM proxy, whose requests carry
+    # multi-megabyte bodies and stay open for the length of a completion.
+    # Forwarding that through the frontend port runs it on the same
+    # single-threaded process that answers the dashboard's API calls, so the UI
+    # gets slow while an agent is working. Routing it at the ingress removes
+    # that contention.
+    #
+    # Applies to hosts declared under `hosts:` below. A host that already
+    # declares its own /v1 or /v2 path is left alone, as is one that never
+    # routes to the frontend port (a backend-only hostname). Set to false to
+    # keep everything on whatever `hosts:` says.
+    #
+    # Ignored when `spec:` is used, since that replaces the generated rules.
+    routeBackendApisDirectly: true
+
     # Complete ingress specification
     # When using ARCHESTRA_MCP_SANDBOX_DOMAIN, add a wildcard rule for sandbox subdomains:
     #   spec:

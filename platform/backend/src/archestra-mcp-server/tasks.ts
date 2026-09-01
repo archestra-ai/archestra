@@ -1,6 +1,7 @@
 import {
   TOOL_CANCEL_TASK_SHORT_NAME,
   TOOL_GET_TASK_SHORT_NAME,
+  TOOL_LIST_AGENT_EXECUTIONS_SHORT_NAME,
   TOOL_LIST_TASKS_SHORT_NAME,
   TOOL_POST_TASK_FILE_SHORT_NAME,
   TOOL_START_TASK_SHORT_NAME,
@@ -208,6 +209,46 @@ const ListTasksOutputSchema = z.object({
   total: z.number().int().nonnegative(),
 });
 
+const ListAgentExecutionsOutputSchema = z.object({
+  executions: z.array(
+    z.object({
+      task_id: z.string().uuid(),
+      title: z.string(),
+      prompt: z.string(),
+      state: z.string(),
+      status_reason: z.string().nullable(),
+      started_at: z.string(),
+      ended_at: z.string().nullable(),
+      state_changed_at: z.string().nullable(),
+      agent: z.object({
+        id: z.string().uuid(),
+        name: z.string(),
+        icon: z.string().nullable(),
+      }),
+      requester: z.object({
+        kind: z.string(),
+        id: z.string(),
+        name: z.string().nullable(),
+      }),
+      execution_url: z.string().url(),
+      thread: z
+        .object({
+          provider: z.string(),
+          channel_id: z.string(),
+          channel_name: z.string().nullable(),
+          thread_id: z.string(),
+          url: z.string().url().nullable(),
+        })
+        .nullable(),
+    }),
+  ),
+  summary: z.object({
+    total: z.number().int().nonnegative(),
+    active: z.number().int().nonnegative(),
+    by_state: z.record(z.string(), z.number().int().nonnegative()),
+  }),
+});
+
 /** How much artifact text get_task inlines; the tail is the useful end. */
 const MAX_INLINED_OUTPUT_CHARS = 20_000;
 const MAX_LISTED_TASKS = 50;
@@ -326,6 +367,96 @@ const registry = defineArchestraTools([
         );
       } catch (error) {
         return catchError(error, "listing tasks");
+      }
+    },
+  }),
+
+  defineArchestraTool({
+    shortName: TOOL_LIST_AGENT_EXECUTIONS_SHORT_NAME,
+    title: "List Agent Executions",
+    description:
+      "List recent executions across one or more accessible Agents for a read-only operations dashboard. " +
+      "Returns status, requester, execution links, and originating messaging threads when present.",
+    schema: z.object({
+      agent_ids: z.array(z.string().uuid()).min(1).max(20),
+      limit: z.number().int().min(1).max(100).default(50),
+    }),
+    outputSchema: ListAgentExecutionsOutputSchema,
+    handler: async ({ args, context }) => {
+      try {
+        const actor = requireActor(context);
+        const requestedAgentIds = [...new Set(args.agent_ids)];
+        const isAgentAdmin = await userHasPermission(
+          actor.id,
+          actor.organizationId,
+          "agent",
+          "admin",
+        );
+        const [agents, accessibleAgentIds] = await Promise.all([
+          AgentModel.findBasicByOrganizationIdAndIds({
+            organizationId: actor.organizationId,
+            agentIds: requestedAgentIds,
+          }),
+          AgentTeamModel.getUserAccessibleAgentIds(actor.id, isAgentAdmin),
+        ]);
+        const accessible = new Set(accessibleAgentIds);
+        if (
+          agents.length !== requestedAgentIds.length ||
+          agents.some((agent) => !accessible.has(agent.id))
+        ) {
+          return errorResult("Agent not found");
+        }
+
+        const rows = await AgentRunModel.listDashboard({
+          agentIds: requestedAgentIds,
+          organizationId: actor.organizationId,
+          limit: args.limit,
+        });
+        const executions = rows.map((row) => ({
+          task_id: row.taskId,
+          title: row.title,
+          prompt: row.prompt,
+          state: row.state,
+          status_reason: row.statusReason,
+          started_at: row.startedAt.toISOString(),
+          ended_at: row.endedAt?.toISOString() ?? null,
+          state_changed_at: row.stateChangedAt?.toISOString() ?? null,
+          agent: {
+            id: row.agentId,
+            name: row.agentName,
+            icon: row.agentIcon,
+          },
+          requester: {
+            kind: row.actorKind,
+            id: row.actorId,
+            name: row.actorName,
+          },
+          execution_url: `${config.frontendBaseUrl}/chat/executions/${row.taskId}`,
+          thread: buildExecutionThread(row),
+        }));
+        const byState = executions.reduce<Record<string, number>>(
+          (counts, execution) => {
+            counts[execution.state] = (counts[execution.state] ?? 0) + 1;
+            return counts;
+          },
+          {},
+        );
+
+        return structuredSuccessResult(
+          {
+            executions,
+            summary: {
+              total: executions.length,
+              active: executions.filter((execution) =>
+                ACTIVE_TASK_STATES.has(execution.state),
+              ).length,
+              by_state: byState,
+            },
+          },
+          `${executions.length} execution(s)`,
+        );
+      } catch (error) {
+        return catchError(error, "listing Agent executions");
       }
     },
   }),
@@ -527,6 +658,30 @@ function credentialsNeededResult(
       )}\n\nAsk the user to add them here, then start the task again: ${url}`,
   );
 }
+
+function buildExecutionThread(
+  row: Awaited<ReturnType<typeof AgentRunModel.listDashboard>>[number],
+) {
+  if (!row.threadProvider || !row.threadChannelId || !row.threadId) return null;
+
+  const url =
+    row.threadProvider === "slack" && row.threadWorkspaceId
+      ? `https://app.slack.com/client/${encodeURIComponent(row.threadWorkspaceId)}/${encodeURIComponent(row.threadChannelId)}/thread/${encodeURIComponent(row.threadChannelId)}-${encodeURIComponent(row.threadId)}`
+      : null;
+  return {
+    provider: row.threadProvider,
+    channel_id: row.threadChannelId,
+    channel_name: row.threadChannelName,
+    thread_id: row.threadId,
+    url,
+  };
+}
+
+const ACTIVE_TASK_STATES = new Set([
+  "TASK_STATE_SUBMITTED",
+  "TASK_STATE_WORKING",
+  "TASK_STATE_INPUT_REQUIRED",
+]);
 
 /** The missing-credential list when the error is that refusal; null otherwise. */
 function missingCredentialsFrom(error: unknown): {

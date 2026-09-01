@@ -1687,10 +1687,7 @@ function ConfigureToolView({
             {catalog.docsUrl ? (
               <>
                 {" "}
-                <CatalogDocsLink
-                  url={catalog.docsUrl}
-                  className="inline-flex items-center gap-1 text-primary hover:underline"
-                />
+                <CatalogDocsLink url={catalog.docsUrl} />
               </>
             ) : null}
           </>

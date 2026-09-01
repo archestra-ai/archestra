@@ -92,14 +92,6 @@ export function TeamSyncConfigForm({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Groups Handlebars Template</FormLabel>
-            <FormControl>
-              <Input
-                placeholder="{{#each roles}}{{this.name}},{{/each}}"
-                className="font-mono text-sm"
-                readOnly={groupsExpressionReadOnly}
-                {...field}
-              />
-            </FormControl>
             <FormDescription>
               {groupsExpressionDescription ?? (
                 <>
@@ -109,6 +101,14 @@ export function TeamSyncConfigForm({
                 </>
               )}
             </FormDescription>
+            <FormControl>
+              <Input
+                placeholder="{{#each roles}}{{this.name}},{{/each}}"
+                className="font-mono text-sm"
+                readOnly={groupsExpressionReadOnly}
+                {...field}
+              />
+            </FormControl>
             <FormMessage />
           </FormItem>
         )}

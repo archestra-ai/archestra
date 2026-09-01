@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LinkifiedText } from "@/components/ui/linkified-text";
@@ -415,9 +416,9 @@ export function RemoteServerInstallDialog({
       {useVaultSecrets && scope !== "team" && (
         <div className="space-y-2">
           <Label>Pull Vault secrets from:</Label>
-          <p className="text-xs text-muted-foreground">
+          <FieldDescription>
             Only folders associated with your teams are shown.
-          </p>
+          </FieldDescription>
           <Select
             value={vaultTeamId ?? ""}
             onValueChange={handleVaultTeamChange}

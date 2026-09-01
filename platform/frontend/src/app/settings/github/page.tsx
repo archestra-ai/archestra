@@ -415,13 +415,13 @@ function GithubAppDialog({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>GitHub API URL</FormLabel>
-                  <FormControl>
-                    <Input placeholder={DEFAULT_GITHUB_URL} {...field} />
-                  </FormControl>
                   <FormDescription>
                     Use {DEFAULT_GITHUB_URL} for GitHub.com, or your GitHub
                     Enterprise API URL.
                   </FormDescription>
+                  <FormControl>
+                    <Input placeholder={DEFAULT_GITHUB_URL} {...field} />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -584,6 +584,10 @@ function GithubPatDialog({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Token</FormLabel>
+                  <FormDescription>
+                    A fine-grained token with read access to repositories used
+                    for skill and plugin imports.
+                  </FormDescription>
                   <FormControl>
                     <SecretInput
                       placeholder={
@@ -594,10 +598,6 @@ function GithubPatDialog({
                       {...field}
                     />
                   </FormControl>
-                  <FormDescription>
-                    A fine-grained token with read access to repositories used
-                    for skill and plugin imports.
-                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

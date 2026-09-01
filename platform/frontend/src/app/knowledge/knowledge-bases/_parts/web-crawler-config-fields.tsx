@@ -32,6 +32,10 @@ export function WebCrawlerConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Include Path Prefixes (optional)</FormLabel>
+            <FormDescription>
+              Comma-separated paths to crawl. Defaults to the start URL&apos;s
+              path.
+            </FormDescription>
             <FormControl>
               <Input
                 placeholder="/docs/, /guides/"
@@ -39,10 +43,6 @@ export function WebCrawlerConfigFields({
                 value={formatArrayValue(field.value)}
               />
             </FormControl>
-            <FormDescription>
-              Comma-separated paths to crawl. Defaults to the start URL&apos;s
-              path.
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}
@@ -54,6 +54,10 @@ export function WebCrawlerConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Exclude Path Patterns (optional)</FormLabel>
+            <FormDescription>
+              Comma-separated regular expressions matched against path and
+              query.
+            </FormDescription>
             <FormControl>
               <Input
                 placeholder="/search, /archive/.*"
@@ -61,10 +65,6 @@ export function WebCrawlerConfigFields({
                 value={formatArrayValue(field.value)}
               />
             </FormControl>
-            <FormDescription>
-              Comma-separated regular expressions matched against path and
-              query.
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}
@@ -76,6 +76,10 @@ export function WebCrawlerConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Content Selector (optional)</FormLabel>
+            <FormDescription>
+              CSS selector for the page content root. Leave empty to use the
+              default document selectors.
+            </FormDescription>
             <FormControl>
               <Input
                 placeholder="main, article, .document"
@@ -83,10 +87,6 @@ export function WebCrawlerConfigFields({
                 value={(field.value as string | undefined) ?? ""}
               />
             </FormControl>
-            <FormDescription>
-              CSS selector for the page content root. Leave empty to use the
-              default document selectors.
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}
@@ -98,6 +98,9 @@ export function WebCrawlerConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Exclude Selectors (optional)</FormLabel>
+            <FormDescription>
+              Comma-separated CSS selectors to remove before extracting text.
+            </FormDescription>
             <FormControl>
               <Input
                 placeholder=".sidebar, .breadcrumb, .toc"
@@ -105,9 +108,6 @@ export function WebCrawlerConfigFields({
                 value={formatArrayValue(field.value)}
               />
             </FormControl>
-            <FormDescription>
-              Comma-separated CSS selectors to remove before extracting text.
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}
@@ -152,6 +152,9 @@ export function WebCrawlerConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>User Agent (optional)</FormLabel>
+            <FormDescription>
+              Custom User-Agent header for crawl requests.
+            </FormDescription>
             <FormControl>
               <Input
                 placeholder={`${appName} Web Crawler`}
@@ -159,9 +162,6 @@ export function WebCrawlerConfigFields({
                 value={(field.value as string | undefined) ?? ""}
               />
             </FormControl>
-            <FormDescription>
-              Custom User-Agent header for crawl requests.
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}
@@ -193,6 +193,7 @@ function NumberField({
       render={({ field }) => (
         <FormItem>
           <FormLabel>{label} (optional)</FormLabel>
+          <FormDescription>{description}</FormDescription>
           <FormControl>
             <Input
               type="number"
@@ -209,7 +210,6 @@ function NumberField({
               }
             />
           </FormControl>
-          <FormDescription>{description}</FormDescription>
           <FormMessage />
         </FormItem>
       )}

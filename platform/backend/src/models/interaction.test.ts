@@ -8,7 +8,7 @@ import {
   CODEX_CLIENT_FILTER,
   CODEX_CLIENT_ID,
 } from "@archestra/shared";
-import { inArray } from "drizzle-orm";
+import { eq, inArray, type SQL } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { InsertInteraction } from "@/types";
@@ -1622,6 +1622,85 @@ describe("InteractionModel", () => {
         { profileId: agent.id },
       );
       expect(allAgain.pagination.total).toBe(3);
+    });
+  });
+
+  // The session page is normally found by walking interactions newest-first and
+  // taking distinct session keys; when a filter matches too few sessions across
+  // too many rows, that walk gives up and groups the whole table instead. Both
+  // paths must return the same page, so pin them against each other rather than
+  // trusting the rarely-taken one.
+  describe("getSessions key-walk and whole-table fallback agree", () => {
+    test("both strategies return the same page in the same order", async () => {
+      const agent = await AgentModel.create({
+        name: "Scan Fallback Agent",
+        teams: [],
+        scope: "org",
+      });
+      const baseTime = new Date("2021-06-01T00:00:00.000Z").getTime();
+      // Two multi-row sessions plus a sessionless row, so the page mixes both
+      // key kinds and ordering is decided by each session's newest row.
+      const rows = [
+        { sessionId: "scan-oldest", seconds: 0 },
+        { sessionId: "scan-oldest", seconds: 1 },
+        { sessionId: "scan-middle", seconds: 2 },
+        { sessionId: "scan-middle", seconds: 3 },
+        { sessionId: null, seconds: 4 },
+      ];
+      for (const row of rows) {
+        await InteractionModel.create({
+          profileId: agent.id,
+          sessionId: row.sessionId,
+          createdAt: new Date(baseTime + row.seconds * 1000),
+          request: { model: "gpt-4", messages: [] },
+          response: {
+            id: `scan-response-${row.seconds}`,
+            object: "chat.completion",
+            created: row.seconds,
+            model: "gpt-4",
+            choices: [],
+          },
+          type: "openai:chatCompletions",
+          inputTokens: 1,
+        });
+      }
+
+      const where = eq(schema.interactionsTable.profileId, agent.id);
+      // Reaching the private helper directly is the only way to pin the two
+      // strategies against each other: which one runs is an internal decision,
+      // and forcing the fallback through the public API would mean seeding
+      // more rows than the production budget allows.
+      const findKeys = (
+        InteractionModel as unknown as {
+          findSessionKeysForPage: (
+            whereClause: SQL | undefined,
+            pagination: { limit: number; offset: number },
+            maxScanRows?: number,
+          ) => Promise<
+            Array<{ sessionId: string | null; interactionId: string | null }>
+          >;
+        }
+      ).findSessionKeysForPage.bind(InteractionModel);
+
+      for (const pagination of [
+        { limit: 2, offset: 0 },
+        { limit: 2, offset: 1 },
+        { limit: 5, offset: 0 },
+      ]) {
+        const walked = await findKeys(where, pagination);
+        // maxScanRows 0 skips the walk entirely and takes the fallback.
+        const grouped = await findKeys(where, pagination, 0);
+        expect(walked).toEqual(grouped);
+      }
+
+      // And the shared answer is the expected newest-first ordering.
+      const firstPage = await findKeys(where, { limit: 3, offset: 0 });
+      expect(firstPage.map((k) => k.sessionId)).toEqual([
+        null,
+        "scan-middle",
+        "scan-oldest",
+      ]);
+      expect(firstPage[0].interactionId).not.toBeNull();
     });
   });
 

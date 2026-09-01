@@ -10,6 +10,21 @@ export interface DetailFact {
 }
 
 /**
+ * A fact a caller may have nothing to say for, dropped by {@link presentFacts}.
+ *
+ * Lets a row list every fact it *can* state and let the ones without a value
+ * fall out, rather than each caller spreading a conditional array into the
+ * literal. A fact with nothing to show is absent, never a label standing over
+ * an empty value.
+ */
+export type MaybeDetailFact = DetailFact | null | undefined;
+
+/** The facts that have something to say, in order. */
+export function presentFacts(facts: MaybeDetailFact[]): DetailFact[] {
+  return facts.filter((fact): fact is DetailFact => !!fact);
+}
+
+/**
  * The facts a detail page states about its record, on one wrapping row.
  *
  * This is the row {@link OverviewSummary} boxes for entity pages; the log and
@@ -33,14 +48,15 @@ export function DetailFacts({
   facts,
   className,
 }: {
-  facts: DetailFact[];
+  facts: MaybeDetailFact[];
   className?: string;
 }) {
-  if (facts.length === 0) return null;
+  const present = presentFacts(facts);
+  if (present.length === 0) return null;
 
   return (
     <dl className={cn("flex flex-wrap gap-x-10 gap-y-4", className)}>
-      {facts.map((fact) => (
+      {present.map((fact) => (
         <div key={fact.label} className="min-w-0 space-y-1">
           <dt className={typeRole({ role: "label" })}>{fact.label}</dt>
           <dd className={cn(typeRole({ role: "body" }), "break-words")}>

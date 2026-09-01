@@ -12,6 +12,7 @@ import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -59,9 +60,8 @@ import type { PluginPlatform } from "../../_parts/plugin-platforms";
 import { PluginScopeSelector } from "../../_parts/plugin-scope-selector";
 
 const STEP_DESCRIPTIONS: Record<PluginEditStepId, string> = {
-  content:
-    "Edit the plugin's metadata and payload files. GitHub-sourced bytes stay read-only.",
-  access: "Choose who can discover and install the plugin.",
+  content: "Edit metadata and files. GitHub files stay read-only.",
+  access: "Choose who can discover this plugin.",
 };
 
 const GITHUB_SYNC_OPTIONS = [
@@ -338,7 +338,7 @@ function PluginEditWizard({ plugin }: { plugin: PluginDetail }) {
       documentTitle={`Edit ${plugin.displayName}`}
       description={
         isGithubPlugin
-          ? "Edit the tracked GitHub source, authentication, update schedule, and discoverability."
+          ? "Edit the GitHub source, schedule, and who can discover this plugin."
           : STEP_DESCRIPTIONS[step]
       }
       backLink={
@@ -416,6 +416,9 @@ function PluginEditWizard({ plugin }: { plugin: PluginDetail }) {
                       <Label htmlFor="plugin-github-repo-url">
                         Repository URL
                       </Label>
+                      <FieldDescription>
+                        The GitHub repository checked for plugin updates.
+                      </FieldDescription>
                       <Input
                         id="plugin-github-repo-url"
                         value={draft.githubRepoUrl}
@@ -427,14 +430,15 @@ function PluginEditWizard({ plugin }: { plugin: PluginDetail }) {
                         data-1p-ignore
                         data-lpignore="true"
                       />
-                      <p className="text-sm text-muted-foreground">
-                        The GitHub repository checked for plugin updates.
-                      </p>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="plugin-github-sync-interval">
                         Keep in sync
                       </Label>
+                      <FieldDescription>
+                        New commits become review candidates and never replace
+                        approved plugin bytes automatically.
+                      </FieldDescription>
                       <Select
                         value={draft.githubSyncInterval ?? "off"}
                         onValueChange={(value) =>
@@ -460,10 +464,6 @@ function PluginEditWizard({ plugin }: { plugin: PluginDetail }) {
                           ))}
                         </SelectContent>
                       </Select>
-                      <p className="text-sm text-muted-foreground">
-                        New commits become review candidates and never replace
-                        approved plugin bytes automatically.
-                      </p>
                     </div>
                     <GithubAuthConfigFields
                       authMethod={draft.githubAuthMethod}
@@ -485,15 +485,7 @@ function PluginEditWizard({ plugin }: { plugin: PluginDetail }) {
                           <Label htmlFor="plugin-github-token">
                             Personal Access Token
                           </Label>
-                          <SecretInput
-                            id="plugin-github-token"
-                            value={draft.githubToken}
-                            onChange={(event) =>
-                              patchDraft({ githubToken: event.target.value })
-                            }
-                            placeholder="Leave empty to keep existing token"
-                          />
-                          <p className="text-sm text-muted-foreground">
+                          <FieldDescription>
                             <span>
                               Leave empty to keep existing credentials
                               unchanged.
@@ -510,12 +502,24 @@ function PluginEditWizard({ plugin }: { plugin: PluginDetail }) {
                               </a>
                               .
                             </span>
-                          </p>
+                          </FieldDescription>
+                          <SecretInput
+                            id="plugin-github-token"
+                            value={draft.githubToken}
+                            onChange={(event) =>
+                              patchDraft({ githubToken: event.target.value })
+                            }
+                            placeholder="Leave empty to keep existing token"
+                          />
                         </div>
                       }
                     />
                     <div className="space-y-2">
                       <Label htmlFor="plugin-github-sync-ref">Ref</Label>
+                      <FieldDescription>
+                        Leave empty to track the repository&apos;s default
+                        branch.
+                      </FieldDescription>
                       <Input
                         id="plugin-github-sync-ref"
                         value={draft.githubSyncRef}
@@ -525,10 +529,6 @@ function PluginEditWizard({ plugin }: { plugin: PluginDetail }) {
                         placeholder="Default branch"
                         autoComplete="off"
                       />
-                      <p className="text-sm text-muted-foreground">
-                        Leave empty to track the repository&apos;s default
-                        branch.
-                      </p>
                     </div>
                   </div>
                 )}

@@ -60,7 +60,7 @@ export const LOCAL_MCP_DISABLED_MESSAGE = (
     orchestrator configuration is correct. Try restarting the backend.{" "}
     <ExternalDocsLink
       href={getDocsUrl(DocsPage.PlatformOrchestrator)}
-      className="text-primary hover:underline inline-flex items-center gap-1"
+      className="text-primary hover:underline"
       showIcon={false}
     >
       Learn more

@@ -66,11 +66,12 @@ tests:
       - equal:
           path: spec.rules[0].host
           value: "frontend.example.com"
+      # paths[0]/[1] are the chart-injected /v1 and /v2 for this UI-serving host.
       - equal:
-          path: spec.rules[0].http.paths[0].path
+          path: spec.rules[0].http.paths[2].path
           value: "/"
       - equal:
-          path: spec.rules[0].http.paths[0].backend.service.port.number
+          path: spec.rules[0].http.paths[2].backend.service.port.number
           value: 3000
       - equal:
           path: spec.rules[1].host
@@ -137,17 +138,19 @@ tests:
               port: 9000
               pathType: "Prefix"
     asserts:
+      # paths[0]/[1] are the chart-injected /v1 and /v2; the declared paths keep
+      # their own order after them.
       - equal:
-          path: spec.rules[0].http.paths[0].path
+          path: spec.rules[0].http.paths[2].path
           value: "/"
       - equal:
-          path: spec.rules[0].http.paths[0].backend.service.port.number
+          path: spec.rules[0].http.paths[2].backend.service.port.number
           value: 3000
       - equal:
-          path: spec.rules[0].http.paths[1].path
+          path: spec.rules[0].http.paths[3].path
           value: "/api"
       - equal:
-          path: spec.rules[0].http.paths[1].backend.service.port.number
+          path: spec.rules[0].http.paths[3].backend.service.port.number
           value: 9000
 
   - it: should use custom spec when provided
@@ -200,3 +203,90 @@ tests:
       - equal:
           path: spec.tls[0].secretName
           value: "my-tls-secret"
+  # /v1 (LLM proxy) and /v2 (A2A) have no frontend route — the frontend only
+  # forwards them — and /v1's traffic is large and long-lived enough to slow the
+  # dashboard when it shares that process. The chart routes them to the backend
+  # port itself, so a deployment gets this by upgrading rather than by editing
+  # its values.
+  - it: routes /v1 and /v2 to the backend on a host that serves the UI
+    set:
+      archestra.ingress.enabled: true
+      archestra.ingress.hosts:
+        - host: frontend.example.com
+          paths:
+            - path: /
+              port: 3000
+    asserts:
+      - equal:
+          path: spec.rules[0].http.paths[0].path
+          value: "/v1"
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.port.number
+          value: 9000
+      - equal:
+          path: spec.rules[0].http.paths[1].path
+          value: "/v2"
+      - equal:
+          path: spec.rules[0].http.paths[1].backend.service.port.number
+          value: 9000
+      # The catch-all stays on the frontend: /api/auth is a real app route.
+      - equal:
+          path: spec.rules[0].http.paths[2].path
+          value: "/"
+      - equal:
+          path: spec.rules[0].http.paths[2].backend.service.port.number
+          value: 3000
+
+  - it: leaves a backend-only host untouched
+    set:
+      archestra.ingress.enabled: true
+      archestra.ingress.hosts:
+        - host: backend.example.com
+          paths:
+            - path: /
+              port: 9000
+    asserts:
+      - lengthEqual:
+          path: spec.rules[0].http.paths
+          count: 1
+      - equal:
+          path: spec.rules[0].http.paths[0].path
+          value: "/"
+
+  - it: does not override a host that routes /v1 itself
+    set:
+      archestra.ingress.enabled: true
+      archestra.ingress.hosts:
+        - host: frontend.example.com
+          paths:
+            - path: /v1
+              port: 3000
+            - path: /
+              port: 3000
+    asserts:
+      - lengthEqual:
+          path: spec.rules[0].http.paths
+          count: 2
+      - equal:
+          path: spec.rules[0].http.paths[0].path
+          value: "/v1"
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.port.number
+          value: 3000
+
+  - it: can be turned off
+    set:
+      archestra.ingress.enabled: true
+      archestra.ingress.routeBackendApisDirectly: false
+      archestra.ingress.hosts:
+        - host: frontend.example.com
+          paths:
+            - path: /
+              port: 3000
+    asserts:
+      - lengthEqual:
+          path: spec.rules[0].http.paths
+          count: 1
+      - equal:
+          path: spec.rules[0].http.paths[0].path
+          value: "/"

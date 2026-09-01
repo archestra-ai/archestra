@@ -7,7 +7,6 @@ import { AgentBadge } from "@/components/agent-badge";
 import { PageLayout } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useAppName } from "@/lib/hooks/use-app-name";
 import { usePluginSkill } from "@/lib/skills/skill.query";
 import { SkillContentEditor } from "../../_parts/skill-content-editor";
 import {
@@ -17,7 +16,6 @@ import {
 } from "../../_parts/skill-page-shell";
 
 export function PluginSkillPage({ pluginId }: { pluginId: string }) {
-  const appName = useAppName();
   const search = useSearchParams();
   const skillPath = search.get("skillPath") ?? "";
   const { data: canManagePlugin } = useHasPermissions({ plugin: ["admin"] });
@@ -41,7 +39,7 @@ export function PluginSkillPage({ pluginId }: { pluginId: string }) {
       <div className="mb-4 flex items-start gap-2 rounded-md border border-blue-500/30 bg-blue-500/5 px-3 py-2.5 text-sm text-muted-foreground">
         <Puzzle className="mt-0.5 size-4 shrink-0 text-blue-600 dark:text-blue-400" />
         <p>
-          <span>This portable skill comes from </span>
+          <span>This skill comes from </span>
           {canManagePlugin ? (
             <Link
               href={`/plugins/${skill.pluginId}`}
@@ -55,9 +53,8 @@ export function PluginSkillPage({ pluginId }: { pluginId: string }) {
             </span>
           )}
           <span>
-            , a plugin for {skill.clientType}. Its source bytes remain managed
-            by the plugin and are not copied or versioned as a standalone{" "}
-            {appName} skill.
+            , a plugin for {skill.clientType}. The plugin still owns these
+            files.
           </span>
         </p>
       </div>

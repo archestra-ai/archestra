@@ -522,6 +522,9 @@ export function CreateConnectorDialog({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>{urlConfig.label}</FormLabel>
+                        <FormDescription>
+                          {urlConfig.description}
+                        </FormDescription>
                         <FormControl>
                           <Input
                             placeholder={urlConfig.placeholder}
@@ -529,9 +532,6 @@ export function CreateConnectorDialog({
                             value={(field.value as string) ?? ""}
                           />
                         </FormControl>
-                        <FormDescription>
-                          {urlConfig.description}
-                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -554,6 +554,14 @@ export function CreateConnectorDialog({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>{apiTokenLabel}</FormLabel>
+                        {(apiTokenHelpText || credentialRequirement) && (
+                          <FormDescription>
+                            {apiTokenHelpText ? (
+                              <span>{apiTokenHelpText}</span>
+                            ) : null}{" "}
+                            {credentialRequirement}
+                          </FormDescription>
+                        )}
                         <FormControl>
                           {apiTokenMultiline ? (
                             <SecretTextarea
@@ -568,14 +576,6 @@ export function CreateConnectorDialog({
                             />
                           )}
                         </FormControl>
-                        {(apiTokenHelpText || credentialRequirement) && (
-                          <FormDescription>
-                            {apiTokenHelpText ? (
-                              <span>{apiTokenHelpText}</span>
-                            ) : null}{" "}
-                            {credentialRequirement}
-                          </FormDescription>
-                        )}
                         <FormMessage />
                       </FormItem>
                     )}
@@ -592,15 +592,15 @@ export function CreateConnectorDialog({
                           <FormLabel>
                             Organization admin API key (optional)
                           </FormLabel>
+                          <FormDescription>
+                            <AdminApiKeyDescription type={connectorType} />
+                          </FormDescription>
                           <FormControl>
                             <SecretInput
                               placeholder="Atlassian organization admin API key"
                               {...field}
                             />
                           </FormControl>
-                          <FormDescription>
-                            <AdminApiKeyDescription type={connectorType} />
-                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}

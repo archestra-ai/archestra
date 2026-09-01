@@ -29,6 +29,10 @@ export function NotionConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Database IDs (optional)</FormLabel>
+            <FormDescription>
+              Comma-separated list of Notion database IDs to sync. Leave blank
+              to sync all pages the integration has access to.
+            </FormDescription>
             <FormControl>
               <Input
                 placeholder="abc123, def456"
@@ -36,10 +40,6 @@ export function NotionConfigFields({
                 value={(field.value as string) ?? ""}
               />
             </FormControl>
-            <FormDescription>
-              Comma-separated list of Notion database IDs to sync. Leave blank
-              to sync all pages the integration has access to.
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}
@@ -51,6 +51,10 @@ export function NotionConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Page IDs (optional)</FormLabel>
+            <FormDescription>
+              Comma-separated list of specific Notion page IDs to sync. Takes
+              precedence over Database IDs when provided.
+            </FormDescription>
             <FormControl>
               <Input
                 placeholder="abc123, def456"
@@ -58,10 +62,6 @@ export function NotionConfigFields({
                 value={(field.value as string) ?? ""}
               />
             </FormControl>
-            <FormDescription>
-              Comma-separated list of specific Notion page IDs to sync. Takes
-              precedence over Database IDs when provided.
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}

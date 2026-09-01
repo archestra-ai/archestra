@@ -4,6 +4,7 @@ import {
   MCP_GATEWAY_OAUTH_SCOPE,
   OAUTH_TOKEN_ID_PREFIX,
   TOOL_APP_LLM_COMPLETE_SHORT_NAME,
+  TOOL_LIST_AGENT_EXECUTIONS_SHORT_NAME,
 } from "@archestra/shared";
 import { RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -482,6 +483,7 @@ async function buildAppToolList(appId: string): Promise<McpListTool[]> {
       const shortName = archestraMcpBranding.getToolShortName(tool.name);
       if (
         shortName === TOOL_APP_LLM_COMPLETE_SHORT_NAME ||
+        shortName === TOOL_LIST_AGENT_EXECUTIONS_SHORT_NAME ||
         (shortName !== null && isAppFileToolShortName(shortName))
       ) {
         return withAppOnlyVisibility(tool);

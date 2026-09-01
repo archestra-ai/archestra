@@ -268,6 +268,10 @@ export const PatchModelBodySchema = createUpdateSchema(
     userIds: z.array(z.string()).optional(),
     // Per-model generation parameters sent on every native Ollama chat turn.
     configuredParameters: ConfiguredParametersSchema.nullable().optional(),
+    // Key/value labels. Omitted leaves existing labels untouched; `[]` clears
+    // them. Deployment-wide like the row itself — see `labels` on the read
+    // schema below.
+    labels: z.array(LabelWithDetailsSchema).optional(),
   })
   .refine(
     (data) => {

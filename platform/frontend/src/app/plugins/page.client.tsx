@@ -9,6 +9,7 @@ import {
   PackagePlus,
   Pencil,
   Plus,
+  Tags,
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
@@ -19,12 +20,15 @@ import { OsLogos } from "@/app/connection/os-logos";
 import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
+import { EntityLabelFilter } from "@/components/entity-label-filter";
+import { EntityLabelsDialog } from "@/components/entity-labels-dialog";
 import {
   CollectionFilters,
   FilterBar,
   filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
+import { LabelTags } from "@/components/label-tags";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RepositoryOwnerIcon } from "@/components/repository-owner-icon";
@@ -66,6 +70,11 @@ import {
 } from "@/components/ui/tooltip";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
+import {
+  usePluginLabelKeys,
+  usePluginLabelValues,
+  useSavePluginLabels,
+} from "@/lib/entity-labels.query";
 import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import {
@@ -148,8 +157,16 @@ function PluginsList() {
   const source = searchParams.get("source") ?? "all";
   const sourceRepo = searchParams.get("sourceRepo") ?? "";
   const scopeFilter = useScopeFilterParams();
+  // Label filtering is server-side, so the value rides the list query rather
+  // than narrowing the already-fetched array below.
+  const labelsFilter = searchParams.get("labels") || undefined;
 
-  const { data: plugins, isFetching, isLoadingError, refetch } = usePlugins();
+  const {
+    data: plugins,
+    isFetching,
+    isLoadingError,
+    refetch,
+  } = usePlugins(true, { labels: labelsFilter });
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
 
@@ -292,6 +309,10 @@ function PluginsList() {
   const [sorting, setSorting] = useState<SortingState>([
     { id: "updatedAt", desc: true },
   ]);
+  const [labelingPlugin, setLabelingPlugin] = useState<PluginListItem | null>(
+    null,
+  );
+  const savePluginLabels = useSavePluginLabels();
   const [deletingPlugin, setDeletingPlugin] = useState<PluginListItem | null>(
     null,
   );
@@ -352,6 +373,12 @@ function PluginsList() {
     ];
     const dropdownActions: TableRowAction[] = [
       {
+        icon: <Tags className="h-4 w-4" />,
+        label: "Edit labels",
+        permissions: editAction.permissions,
+        onClick: () => setLabelingPlugin(plugin),
+      },
+      {
         icon: <Trash2 className="h-4 w-4" />,
         label: deleteAction.label,
         variant: "destructive",
@@ -403,6 +430,7 @@ function PluginsList() {
                 <span className="truncate font-medium">
                   {plugin.displayName}
                 </span>
+                <LabelTags labels={plugin.labels ?? []} />
                 {isArchestraPlugin(plugin) && (
                   <Badge variant="secondary" className="shrink-0">
                     {ARCHESTRA_PLUGIN_AUTHOR_LABEL}
@@ -747,6 +775,13 @@ function PluginsList() {
                       ["cursor", "Cursor", clientFilterIcon("cursor")],
                     ]}
                   />
+                  <EntityLabelFilter
+                    useLabelKeys={usePluginLabelKeys}
+                    useLabelValues={usePluginLabelValues}
+                    className={filterControlClass({
+                      active: Boolean(labelsFilter),
+                    })}
+                  />
                 </FilterBar>
                 <ActiveFilterBadges adminPermission={{ plugin: ["admin"] }} />
               </CollectionFilters>
@@ -900,6 +935,20 @@ function PluginsList() {
         </TableCardView>
       </PageLayout>
 
+      {labelingPlugin && (
+        <EntityLabelsDialog
+          open={!!labelingPlugin}
+          onOpenChange={(open) => !open && setLabelingPlugin(null)}
+          entityName={labelingPlugin.displayName}
+          labels={labelingPlugin.labels}
+          onSave={(labels) =>
+            savePluginLabels.mutateAsync({
+              id: labelingPlugin.id,
+              body: { labels },
+            })
+          }
+        />
+      )}
       {deletingPlugin && (
         <DeletePluginDialog
           plugin={deletingPlugin}

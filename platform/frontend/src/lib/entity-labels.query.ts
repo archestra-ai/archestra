@@ -1,6 +1,7 @@
 import { archestraApiSdk } from "@archestra/shared";
-import { useQuery } from "@tanstack/react-query";
-import { throwOnApiError } from "@/lib/utils";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { handleApiError, throwOnApiError } from "@/lib/utils";
 
 type LabelKeysFn = () => Promise<{
   data?: string[];
@@ -59,6 +60,50 @@ export function createEntityLabelQueries(config: {
   }
 
   return { useLabelKeys, useLabelValues };
+}
+
+/**
+ * Build the mutation that saves one row's labels from a list page.
+ *
+ * The body is supplied by the caller rather than assembled here: most update
+ * endpoints accept a labels-only patch, but some (the OAuth clients) validate
+ * across fields and need the row's current shape resent alongside. Invalidating
+ * the entity's own key refreshes the rows; invalidating its `labels` key
+ * refreshes the filter vocabulary, which a new key/value has just extended.
+ */
+export function createEntityLabelUpdate<TBody, TPath = { id: string }>(config: {
+  /** Cache namespace, matching the entity's `createEntityLabelQueries` key. */
+  queryKey: string;
+  updateFn: (args: {
+    path: TPath;
+    body: TBody;
+  }) => Promise<{ data?: unknown; error?: unknown }>;
+  /** Route param shape, for the endpoints whose id is not called `id`. */
+  pathFor?: (id: string) => TPath;
+}) {
+  const { queryKey, updateFn, pathFor } = config;
+
+  return function useSaveLabels() {
+    const queryClient = useQueryClient();
+    return useMutation({
+      mutationFn: async (vars: { id: string; body: TBody }) => {
+        const { data, error } = await updateFn({
+          path: pathFor ? pathFor(vars.id) : ({ id: vars.id } as TPath),
+          body: vars.body,
+        });
+        if (error) {
+          handleApiError(error);
+          return null;
+        }
+        return data;
+      },
+      onSuccess: (data) => {
+        if (!data) return;
+        queryClient.invalidateQueries({ queryKey: [queryKey] });
+        toast.success("Labels saved");
+      },
+    });
+  };
 }
 
 // =============================================================================
@@ -180,4 +225,74 @@ export const {
   queryKey: "environments",
   keysFn: archestraApiSdk.environmentLabelKeys,
   valuesFn: archestraApiSdk.environmentLabelValues,
+});
+
+// =============================================================================
+// Per-entity label save mutations, for the row-level `EntityLabelsDialog`
+// =============================================================================
+
+export const useSaveSkillLabels = createEntityLabelUpdate({
+  queryKey: "skills",
+  updateFn: archestraApiSdk.updateSkill,
+});
+
+export const useSaveKnowledgeBaseLabels = createEntityLabelUpdate({
+  queryKey: "knowledge-bases",
+  updateFn: archestraApiSdk.updateKnowledgeBase,
+});
+
+export const useSaveKnowledgeFileLabels = createEntityLabelUpdate({
+  queryKey: "knowledge-files",
+  updateFn: archestraApiSdk.updateKnowledgeFile,
+  pathFor: (id) => ({ fileId: id }),
+});
+
+export const useSaveConnectorLabels = createEntityLabelUpdate({
+  queryKey: "knowledge-connectors",
+  updateFn: archestraApiSdk.updateConnector,
+});
+
+export const useSaveLimitLabels = createEntityLabelUpdate({
+  queryKey: "limits",
+  updateFn: archestraApiSdk.updateLimit,
+});
+
+export const useSaveModelLabels = createEntityLabelUpdate({
+  queryKey: "llm-models",
+  updateFn: archestraApiSdk.updateModel,
+});
+
+export const useSaveLlmProviderApiKeyLabels = createEntityLabelUpdate({
+  queryKey: "llm-provider-api-keys",
+  updateFn: archestraApiSdk.updateLlmProviderApiKey,
+});
+
+export const useSaveVirtualApiKeyLabels = createEntityLabelUpdate({
+  queryKey: "llm-virtual-keys",
+  updateFn: archestraApiSdk.updateVirtualApiKey,
+});
+
+export const useSavePluginLabels = createEntityLabelUpdate({
+  queryKey: "plugins",
+  updateFn: archestraApiSdk.updatePlugin,
+});
+
+export const useSaveServiceAccountLabels = createEntityLabelUpdate({
+  queryKey: "service-accounts",
+  updateFn: archestraApiSdk.updateServiceAccount,
+});
+
+export const useSaveLlmOauthClientLabels = createEntityLabelUpdate({
+  queryKey: "llm-oauth-clients",
+  updateFn: archestraApiSdk.updateLlmOauthClient,
+});
+
+export const useSaveMcpOauthClientLabels = createEntityLabelUpdate({
+  queryKey: "mcp-oauth-clients",
+  updateFn: archestraApiSdk.updateMcpOauthClient,
+});
+
+export const useSaveEnvironmentLabels = createEntityLabelUpdate({
+  queryKey: "environments",
+  updateFn: archestraApiSdk.updateEnvironment,
 });

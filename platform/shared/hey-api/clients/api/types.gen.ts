@@ -61123,6 +61123,15 @@ export type CreateConnectorData = {
         enabled?: boolean;
         knowledgeBaseIds?: Array<string>;
         environmentId?: string | null;
+        /**
+         * Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.
+         */
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
     path?: never;
     query?: never;
@@ -61960,6 +61969,15 @@ export type UpdateConnectorData = {
         permissionSyncIntervalSeconds?: number;
         enabled?: boolean;
         environmentId?: string | null;
+        /**
+         * Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.
+         */
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
     path: {
         id: string;
@@ -65096,6 +65114,15 @@ export type UpdateKnowledgeFileData = {
         directoryId?: string | null;
         visibility?: 'org-wide' | 'team-scoped' | 'private';
         teamIds?: Array<string>;
+        /**
+         * Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.
+         */
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
     path: {
         fileId: string;
@@ -67518,6 +67545,12 @@ export type UpdateModelData = {
         } | null;
         teamIds?: Array<string>;
         userIds?: Array<string>;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
     path: {
         id: string;
@@ -67957,6 +67990,15 @@ export type CreateLlmOauthClientData = {
         redirectUris?: Array<string>;
         scope?: 'personal' | 'team' | 'org';
         teams?: Array<string>;
+        /**
+         * Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.
+         */
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
     path?: never;
     query?: never;
@@ -68167,6 +68209,15 @@ export type UpdateLlmOauthClientData = {
         redirectUris?: Array<string>;
         scope?: 'personal' | 'team' | 'org';
         teams?: Array<string>;
+        /**
+         * Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.
+         */
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
     path: {
         id: string;
@@ -68806,6 +68857,15 @@ export type CreateLlmProviderApiKeyData = {
         awsAccessKeyId?: string;
         awsSecretAccessKey?: string;
         awsSessionToken?: string;
+        /**
+         * Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.
+         */
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
     path?: never;
     query?: never;
@@ -69248,6 +69308,15 @@ export type UpdateLlmProviderApiKeyData = {
         awsAccessKeyId?: string;
         awsSecretAccessKey?: string;
         awsSessionToken?: string;
+        /**
+         * Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.
+         */
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
     path: {
         id: string;
@@ -70090,6 +70159,15 @@ export type CreateMcpOauthClientData = {
         redirectUris?: Array<string>;
         scope?: 'personal' | 'team' | 'org';
         teams?: Array<string>;
+        /**
+         * Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.
+         */
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
     path?: never;
     query?: never;
@@ -70293,6 +70371,15 @@ export type UpdateMcpOauthClientData = {
         redirectUris?: Array<string>;
         scope?: 'personal' | 'team' | 'org';
         teams?: Array<string>;
+        /**
+         * Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.
+         */
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
     path: {
         id: string;
@@ -83265,6 +83352,12 @@ export type GetPluginsResponses = {
             id: string;
             name: string;
             email: string;
+        }>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
         }>;
         fileCount: number;
     }>;

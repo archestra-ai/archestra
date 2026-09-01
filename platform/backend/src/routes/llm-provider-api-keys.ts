@@ -54,6 +54,7 @@ import { withLatestRotatedRefreshToken } from "@/services/subscription-credentia
 import {
   ApiError,
   constructResponseSchema,
+  LabelWithDetailsSchema,
   type LlmProviderApiKey,
   LlmProviderApiKeyWithScopeInfoSchema,
   type ResourceVisibilityScope,
@@ -445,6 +446,13 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             awsSecretAccessKey: z.string().min(1).optional(),
             /** Bedrock-only: optional AWS session token for STS/temporary creds */
             awsSessionToken: z.string().min(1).optional(),
+            labels: z
+              .array(LabelWithDetailsSchema)
+              .optional()
+              .describe(
+                "Key/value labels. Omit to leave existing labels untouched; " +
+                  "pass [] to clear them.",
+              ),
           })
           .refine(
             (data) => {
@@ -702,6 +710,13 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw error;
       }
 
+      if (body.labels?.length) {
+        await LlmProviderApiKeyLabelModel.syncLabels(
+          createdApiKey.id,
+          body.labels,
+        );
+      }
+
       // Sync models for the new API key before returning so the frontend
       // can immediately show available models after creation.
       // For optional-key providers (Ollama, vLLM), sync even without an API key value.
@@ -861,6 +876,13 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             awsSecretAccessKey: z.string().min(1).optional(),
             /** Bedrock-only: optional AWS session token for STS/temporary creds */
             awsSessionToken: z.string().min(1).optional(),
+            labels: z
+              .array(LabelWithDetailsSchema)
+              .optional()
+              .describe(
+                "Key/value labels. Omit to leave existing labels untouched; " +
+                  "pass [] to clear them.",
+              ),
           })
           .refine(
             (data) => {
@@ -1198,6 +1220,12 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
           throw error;
         }
+      }
+
+      // Only touch labels when the caller sent them, so an update that omits
+      // the field leaves existing labels alone.
+      if (body.labels !== undefined) {
+        await LlmProviderApiKeyLabelModel.syncLabels(params.id, body.labels);
       }
 
       const updated = await LlmProviderApiKeyModel.findById(params.id);

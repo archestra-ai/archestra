@@ -591,7 +591,7 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      const { teamIds, userIds, ...modelUpdates } = body;
+      const { teamIds, userIds, labels, ...modelUpdates } = body;
       const updated = await ModelModel.update(id, modelUpdates);
       if (!updated) {
         throw new ApiError(500, "Failed to update model");
@@ -603,6 +603,12 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (userIds !== undefined) {
         await ModelUserModel.syncModelUsers(id, userIds);
+      }
+
+      // Only touch labels when the caller sent them, so an update that omits
+      // the field leaves existing labels alone.
+      if (labels !== undefined) {
+        await ModelLabelModel.syncLabels(id, labels);
       }
 
       return reply.send(updated);

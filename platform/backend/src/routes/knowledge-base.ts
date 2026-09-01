@@ -973,6 +973,13 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           enabled: z.boolean().optional(),
           knowledgeBaseIds: z.array(z.string()).optional(),
           environmentId: z.string().uuid().nullable().optional(),
+          labels: z
+            .array(LabelWithDetailsSchema)
+            .optional()
+            .describe(
+              "Key/value labels. Omit to leave existing labels untouched; pass [] " +
+                "to clear them.",
+            ),
         }),
         response: constructResponseSchema(KnowledgeBaseConnectorResponseSchema),
       },
@@ -1144,6 +1151,13 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         permissionSyncIntervalSeconds: body.permissionSyncIntervalSeconds,
         enabled: body.enabled,
       });
+
+      if (body.labels?.length) {
+        await KnowledgeBaseConnectorLabelModel.syncLabels(
+          connector.id,
+          body.labels,
+        );
+      }
 
       // Assign to knowledge bases if provided. The ids were validated above;
       // a false here means one was deleted in between.
@@ -1494,6 +1508,13 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             PermissionSyncIntervalSchema.optional(),
           enabled: z.boolean().optional(),
           environmentId: z.string().uuid().nullable().optional(),
+          labels: z
+            .array(LabelWithDetailsSchema)
+            .optional()
+            .describe(
+              "Key/value labels. Omit to leave existing labels untouched; pass [] " +
+                "to clear them.",
+            ),
         }),
         response: constructResponseSchema(KnowledgeBaseConnectorResponseSchema),
       },
@@ -1536,7 +1557,9 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body.config.githubUrl = appConfigRef.githubUrl;
       }
 
-      const { credentials: _, ...updateData } = body;
+      // `labels` lives in its own junction table, so it must not reach the
+      // connector column update below.
+      const { credentials: _, labels: bodyLabels, ...updateData } = body;
       const nextVisibility = updateData.visibility ?? connector.visibility;
       const nextTeamIds = updateData.teamIds ?? connector.teamIds;
 
@@ -1776,6 +1799,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // along with its token and its reach into the customer's network).
       await reconcileP4ShimForConnector(id);
       // SPDX-SnippetEnd
+
+      // Only touch labels when the caller sent them, so an update that omits
+      // the field leaves existing labels alone.
+      if (bodyLabels !== undefined) {
+        await KnowledgeBaseConnectorLabelModel.syncLabels(id, bodyLabels);
+      }
 
       return reply.send(await withConnectorDetails(updated));
     },

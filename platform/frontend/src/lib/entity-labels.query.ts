@@ -12,6 +12,14 @@ type LabelValuesFn = (args: {
   query: { key?: string };
 }) => Promise<{ data?: string[]; error?: unknown }>;
 
+/** One label as the write endpoints accept it. */
+type LabelInput = {
+  key: string;
+  value: string;
+  keyId?: string;
+  valueId?: string;
+};
+
 /**
  * Build the two hooks a label filter needs for one entity.
  *
@@ -65,31 +73,34 @@ export function createEntityLabelQueries(config: {
 /**
  * Build the mutation that saves one row's labels from a list page.
  *
- * The body is supplied by the caller rather than assembled here: most update
- * endpoints accept a labels-only patch, but some (the OAuth clients) validate
- * across fields and need the row's current shape resent alongside. Invalidating
- * the entity's own key refreshes the rows; invalidating its `labels` key
- * refreshes the filter vocabulary, which a new key/value has just extended.
+ * Every entity writes through its own `PUT <basePath>/:id/labels`, not its
+ * normal update route: a labels-only patch is not expressible on several of
+ * them — skills require `content` (and would fork a version), the OAuth
+ * clients validate across fields, connectors merge credentials — so a shared
+ * editor needs a shared endpoint. Those endpoints re-run each entity's own
+ * modify authorization, so this is not a way around per-row permissions.
+ *
+ * Invalidating the entity's key refreshes both the rows and, because the
+ * vocabulary hooks cache under the same prefix, the filter's key/value lists —
+ * which a newly-typed label has just extended.
  */
-export function createEntityLabelUpdate<TBody, TPath = { id: string }>(config: {
+export function createEntityLabelUpdate(config: {
   /** Cache namespace, matching the entity's `createEntityLabelQueries` key. */
   queryKey: string;
-  updateFn: (args: {
-    path: TPath;
-    body: TBody;
+  setFn: (args: {
+    path: { id: string };
+    body: { labels: LabelInput[] };
   }) => Promise<{ data?: unknown; error?: unknown }>;
-  /** Route param shape, for the endpoints whose id is not called `id`. */
-  pathFor?: (id: string) => TPath;
 }) {
-  const { queryKey, updateFn, pathFor } = config;
+  const { queryKey, setFn } = config;
 
   return function useSaveLabels() {
     const queryClient = useQueryClient();
     return useMutation({
-      mutationFn: async (vars: { id: string; body: TBody }) => {
-        const { data, error } = await updateFn({
-          path: pathFor ? pathFor(vars.id) : ({ id: vars.id } as TPath),
-          body: vars.body,
+      mutationFn: async (vars: { id: string; labels: LabelInput[] }) => {
+        const { data, error } = await setFn({
+          path: { id: vars.id },
+          body: { labels: vars.labels },
         });
         if (error) {
           handleApiError(error);
@@ -233,66 +244,65 @@ export const {
 
 export const useSaveSkillLabels = createEntityLabelUpdate({
   queryKey: "skills",
-  updateFn: archestraApiSdk.updateSkill,
+  setFn: archestraApiSdk.setSkillLabels,
 });
 
 export const useSaveKnowledgeBaseLabels = createEntityLabelUpdate({
   queryKey: "knowledge-bases",
-  updateFn: archestraApiSdk.updateKnowledgeBase,
+  setFn: archestraApiSdk.setKnowledgeBaseLabels,
 });
 
 export const useSaveKnowledgeFileLabels = createEntityLabelUpdate({
   queryKey: "knowledge-files",
-  updateFn: archestraApiSdk.updateKnowledgeFile,
-  pathFor: (id) => ({ fileId: id }),
+  setFn: archestraApiSdk.setKnowledgeFileLabels,
 });
 
 export const useSaveConnectorLabels = createEntityLabelUpdate({
   queryKey: "knowledge-connectors",
-  updateFn: archestraApiSdk.updateConnector,
+  setFn: archestraApiSdk.setConnectorLabels,
 });
 
 export const useSaveLimitLabels = createEntityLabelUpdate({
   queryKey: "limits",
-  updateFn: archestraApiSdk.updateLimit,
+  setFn: archestraApiSdk.setLimitLabels,
 });
 
 export const useSaveModelLabels = createEntityLabelUpdate({
   queryKey: "llm-models",
-  updateFn: archestraApiSdk.updateModel,
+  setFn: archestraApiSdk.setLlmProviderModelLabels,
 });
 
 export const useSaveLlmProviderApiKeyLabels = createEntityLabelUpdate({
   queryKey: "llm-provider-api-keys",
-  updateFn: archestraApiSdk.updateLlmProviderApiKey,
+  setFn: archestraApiSdk.setLlmProviderApiKeyLabels,
 });
 
 export const useSaveVirtualApiKeyLabels = createEntityLabelUpdate({
   queryKey: "llm-virtual-keys",
-  updateFn: archestraApiSdk.updateVirtualApiKey,
+  setFn: archestraApiSdk.setVirtualApiKeyLabels,
 });
 
 export const useSavePluginLabels = createEntityLabelUpdate({
   queryKey: "plugins",
-  updateFn: archestraApiSdk.updatePlugin,
+  setFn: archestraApiSdk.setPluginLabels,
 });
 
 export const useSaveServiceAccountLabels = createEntityLabelUpdate({
   queryKey: "service-accounts",
-  updateFn: archestraApiSdk.updateServiceAccount,
+  setFn: archestraApiSdk.setServiceAccountLabels,
 });
 
 export const useSaveLlmOauthClientLabels = createEntityLabelUpdate({
   queryKey: "llm-oauth-clients",
-  updateFn: archestraApiSdk.updateLlmOauthClient,
+  setFn: archestraApiSdk.setLlmOauthClientLabels,
 });
 
 export const useSaveMcpOauthClientLabels = createEntityLabelUpdate({
   queryKey: "mcp-oauth-clients",
-  updateFn: archestraApiSdk.updateMcpOauthClient,
+  setFn: archestraApiSdk.setMcpOauthClientLabels,
 });
 
 export const useSaveEnvironmentLabels = createEntityLabelUpdate({
   queryKey: "environments",
-  updateFn: archestraApiSdk.updateEnvironment,
+  setFn: archestraApiSdk.setEnvironmentLabels,
 });

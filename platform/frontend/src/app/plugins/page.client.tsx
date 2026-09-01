@@ -942,10 +942,7 @@ function PluginsList() {
           entityName={labelingPlugin.displayName}
           labels={labelingPlugin.labels}
           onSave={(labels) =>
-            savePluginLabels.mutateAsync({
-              id: labelingPlugin.id,
-              body: { labels },
-            })
+            savePluginLabels.mutateAsync({ id: labelingPlugin.id, labels })
           }
         />
       )}

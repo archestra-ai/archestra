@@ -65,6 +65,17 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
     model: KbFileLabelModel,
     keysOperationId: RouteId.GetKnowledgeFileLabelKeys,
     valuesOperationId: RouteId.GetKnowledgeFileLabelValues,
+    setOperationId: RouteId.SetKnowledgeFileLabels,
+    // `findById`'s viewer filter is the per-row visibility check; the update
+    // route reaches the same guarantee through its org-scoped update.
+    assertCanModify: async ({ id, organizationId, userId }) => {
+      const file = await KbFileModel.findById({
+        id,
+        organizationId,
+        viewer: await resolveViewer({ user: { id: userId }, organizationId }),
+      });
+      if (!file) throw new ApiError(404, "File not found");
+    },
   });
 
   // ===== Files =====

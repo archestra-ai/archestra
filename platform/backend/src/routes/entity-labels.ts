@@ -2,7 +2,7 @@ import type { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import type { EntityLabelModel } from "@/models/entity-label";
-import { constructResponseSchema } from "@/types";
+import { constructResponseSchema, LabelWithDetailsSchema } from "@/types";
 
 /** The Zod-typed Fastify instance every route plugin in this codebase gets. */
 type ZodFastifyInstance = Parameters<FastifyPluginAsyncZod>[0];
@@ -30,6 +30,22 @@ export function registerEntityLabelRoutes(
     model: EntityLabelModel;
     keysOperationId: RouteId;
     valuesOperationId: RouteId;
+    setOperationId: RouteId;
+    /**
+     * Per-row authorization for the write endpoint.
+     *
+     * The route gate only checks the caller holds the entity's `update`
+     * permission, which says nothing about *this* row — several labelled
+     * entities are team-scoped or personally owned. Each registration site
+     * passes the same helper its own update route uses, so relabelling is
+     * exactly as restricted as editing, and must throw (404/403) when the
+     * caller may not modify the row.
+     */
+    assertCanModify: (params: {
+      id: string;
+      userId: string;
+      organizationId: string;
+    }) => Promise<unknown>;
   },
 ): void {
   const {
@@ -39,6 +55,8 @@ export function registerEntityLabelRoutes(
     model,
     keysOperationId,
     valuesOperationId,
+    setOperationId,
+    assertCanModify,
   } = options;
 
   fastify.get(
@@ -75,6 +93,33 @@ export function registerEntityLabelRoutes(
           ? await model.getValuesByKey({ organizationId, key })
           : await model.getAllValues(organizationId),
       );
+    },
+  );
+
+  fastify.put(
+    `${basePath}/:id/labels`,
+    {
+      schema: {
+        operationId: setOperationId,
+        description:
+          `Replace the labels on one of the ${entityNamePlural}. ` +
+          "Labels-only, so a row can be relabelled without resending the " +
+          "rest of its update payload — several entities validate across " +
+          "fields, or rewrite versioned content, on their normal update.",
+        tags: [tag],
+        params: z.object({ id: z.string() }),
+        body: z.object({
+          labels: z
+            .array(LabelWithDetailsSchema)
+            .describe("The complete label set. `[]` clears them."),
+        }),
+        response: constructResponseSchema(z.array(LabelWithDetailsSchema)),
+      },
+    },
+    async ({ params: { id }, body, user, organizationId }, reply) => {
+      await assertCanModify({ id, userId: user.id, organizationId });
+      await model.syncLabels(id, body.labels);
+      return reply.send(await model.getLabelsFor(id));
     },
   );
 }

@@ -42,6 +42,16 @@ const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     model: EnvironmentLabelModel,
     keysOperationId: RouteId.GetEnvironmentLabelKeys,
     valuesOperationId: RouteId.GetEnvironmentLabelValues,
+    setOperationId: RouteId.SetEnvironmentLabels,
+    // Environments are organization-wide, so the update route's own guard is
+    // the 404 for a row in another organization.
+    assertCanModify: async ({ id, organizationId }) => {
+      const environment = await EnvironmentModel.findByIdForOrganization(
+        id,
+        organizationId,
+      );
+      if (!environment) throw new ApiError(404, "Environment not found");
+    },
   });
 
   fastify.get(

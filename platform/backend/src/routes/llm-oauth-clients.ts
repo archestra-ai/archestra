@@ -107,6 +107,9 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     model: OauthClientLabelModel,
     keysOperationId: RouteId.GetLlmOauthClientLabelKeys,
     valuesOperationId: RouteId.GetLlmOauthClientLabelValues,
+    setOperationId: RouteId.SetLlmOauthClientLabels,
+    // The same scope/ownership check the update and rotate-secret routes use.
+    assertCanModify: (params) => authorizeLlmOauthClientModify(params),
   });
 
   fastify.get(

@@ -118,6 +118,14 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     model: ModelLabelModel,
     keysOperationId: RouteId.GetLlmProviderModelLabelKeys,
     valuesOperationId: RouteId.GetLlmProviderModelLabelValues,
+    setOperationId: RouteId.SetLlmProviderModelLabels,
+    // The model catalog is deployment-wide with no organization column, so —
+    // exactly as on the update route — the `llmModel:update` gate is the whole
+    // authorization and the only per-row check is that the row exists.
+    assertCanModify: async ({ id }) => {
+      const existing = await ModelModel.findById(id);
+      if (!existing) throw new ApiError(404, "Model not found");
+    },
   });
 
   fastify.get(

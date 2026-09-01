@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import z from "zod";
 import { A2ATaskStateSchema } from "@/types/a2a-task";
 
@@ -95,6 +96,45 @@ export const A2AProtocolMessageSchema = z.object({
   referenceTaskIds: z.array(z.string()).optional(),
 });
 export type A2AProtocolMessage = z.infer<typeof A2AProtocolMessageSchema>;
+
+/**
+ * `messageId` as it arrives from a client, as opposed to the one we hand back.
+ *
+ * `Message.message_id` is a plain proto3 string, so a protobuf-JSON client that
+ * never assigned one omits the field entirely — or serializes it as `""`, since
+ * proto3 JSON drops default values. Both mean "unset", and refusing the whole
+ * request over an identifier the server can perfectly well mint is the same
+ * unhelpful strictness the `parts` field above already forgives. So an absent
+ * or blank id becomes a generated one; a caller-supplied id is passed through
+ * untouched (never trimmed), because callers use it to correlate and to detect
+ * their own replays.
+ *
+ * The UUID check is deliberately at the wire boundary: `messageId` is stored
+ * verbatim as `a2a_message.id`, a `uuid` column, so an id in any other shape
+ * cannot be persisted. Validating here turns that into a pointed
+ * "Invalid Request" naming the offending field instead of a failed INSERT
+ * surfacing as an opaque internal error.
+ */
+const A2AProtocolIncomingMessageIdSchema = z
+  .string()
+  .optional()
+  .transform((messageId) =>
+    messageId && messageId.trim() !== "" ? messageId : randomUUID(),
+  )
+  .pipe(
+    z.uuid(
+      "messageId must be a UUID; omit it to have one generated for this message",
+    ),
+  );
+
+/**
+ * Inbound `Message`: {@link A2AProtocolMessageSchema} with the lenient
+ * `messageId` above. Parsing always yields a `messageId`, so everything
+ * downstream keeps treating it as required.
+ */
+const A2AProtocolIncomingMessageSchema = A2AProtocolMessageSchema.extend({
+  messageId: A2AProtocolIncomingMessageIdSchema,
+});
 
 // --- Archestra Task metadata ---
 
@@ -307,7 +347,7 @@ const A2AProtocolSendMessageConfigurationSchema = z.object({
 
 export const A2AProtocolSendMessageRequestSchema = z.object({
   tenant: z.string().optional(),
-  message: A2AProtocolMessageSchema,
+  message: A2AProtocolIncomingMessageSchema,
   configuration: A2AProtocolSendMessageConfigurationSchema.optional(),
   metadata: z.any().optional(),
 });

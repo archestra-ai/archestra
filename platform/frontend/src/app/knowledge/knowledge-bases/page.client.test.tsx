@@ -107,6 +107,7 @@ vi.mock("@/components/ui/tooltip", () => ({
     <div>{children}</div>
   ),
 }));
+vi.mock("@/lib/entity-labels.query");
 
 function makeConnector(overrides: Record<string, unknown>) {
   return {

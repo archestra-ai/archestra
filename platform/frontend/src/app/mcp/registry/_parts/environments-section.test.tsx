@@ -94,6 +94,7 @@ vi.mock("@/components/filter-bar", () => ({
     </select>
   ),
   filterSearchClass: "",
+  filterControlClass: () => "",
 }));
 
 vi.mock("@/components/ui/data-table", () => ({
@@ -145,6 +146,7 @@ vi.mock("@/components/delete-confirm-dialog", () => ({
 vi.mock("./environment-resource-defaults-dialog", () => ({
   EnvironmentResourceDefaultsDialog: () => null,
 }));
+vi.mock("@/lib/entity-labels.query");
 
 const mutation = { mutate: vi.fn(), isPending: false };
 const publicInternetPolicy = {

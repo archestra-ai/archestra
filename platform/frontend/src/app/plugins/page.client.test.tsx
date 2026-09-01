@@ -51,6 +51,7 @@ vi.mock("@/lib/plugins/plugin.query", () => ({
   }),
   useDeletePlugin: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
+vi.mock("@/lib/entity-labels.query");
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import PluginsPage from "./page.client";

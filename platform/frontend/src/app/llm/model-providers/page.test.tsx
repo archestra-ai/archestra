@@ -265,6 +265,7 @@ vi.mock("@/components/ui/select", () => ({
   ),
   SelectValue: () => null,
 }));
+vi.mock("@/lib/entity-labels.query");
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";

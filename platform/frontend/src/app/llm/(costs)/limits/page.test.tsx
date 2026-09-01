@@ -346,6 +346,7 @@ vi.mock("@/components/searchable-multi-select", () => ({
     </div>
   ),
 }));
+vi.mock("@/lib/entity-labels.query");
 
 describe("LimitsPage", () => {
   beforeEach(() => {

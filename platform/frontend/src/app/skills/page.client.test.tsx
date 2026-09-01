@@ -44,6 +44,7 @@ vi.mock("./_parts/skill-version-history-dialog", () => ({
 vi.mock("./_parts/delete-skill-dialog", () => ({
   DeleteSkillDialog: () => null,
 }));
+vi.mock("@/lib/entity-labels.query");
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -431,8 +432,13 @@ describe("SkillsPage rows", () => {
       "aria-disabled",
       "true",
     );
-    // One description per refused control: the row's Edit and the menu's Delete.
-    expect(screen.getAllByText(/Only this skill's author/)).toHaveLength(2);
+    // Relabelling is an edit, so it is refused for the same reason.
+    expect(
+      screen.getByRole("menuitem", { name: /Edit labels/ }),
+    ).toHaveAttribute("aria-disabled", "true");
+    // One description per refused control: the row's Edit, and the menu's
+    // Edit labels and Delete.
+    expect(screen.getAllByText(/Only this skill's author/)).toHaveLength(3);
   });
 
   it("lets a skill admin edit a skill they do not own", () => {

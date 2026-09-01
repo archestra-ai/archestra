@@ -10,6 +10,8 @@ import {
   type VirtualKeyScope,
   VirtualKeyVisibilityField,
 } from "@/components/create-virtual-key-dialog";
+import { createdByFact } from "@/components/created-by-cell";
+import { DetailFacts } from "@/components/detail-facts";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
 import { FormDialog } from "@/components/form-dialog";
 import {
@@ -165,6 +167,9 @@ export function EditVirtualKeyDialog({
     >
       <DialogForm onSubmit={handleUpdate}>
         <DialogBody className="space-y-4">
+          {/* Provenance before the editable fields: who to ask before you
+              change somebody else's credential. */}
+          <DetailFacts facts={[createdByFact(virtualKey.createdBy)]} />
           <div className="space-y-2">
             <Label htmlFor="edit-virtual-key-name">Name</Label>
             <Input

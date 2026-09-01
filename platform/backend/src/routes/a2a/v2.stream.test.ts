@@ -240,6 +240,36 @@ describe("a2a v2 streaming route", () => {
     expect(mockExecuteA2AMessage).toHaveBeenCalledTimes(1);
   });
 
+  test("SendStreamingMessage without a messageId streams the run instead of failing validation", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: `/v2/a2a/${agentId}`,
+      headers: { authorization: "Bearer test-token" },
+      payload: {
+        jsonrpc: "2.0",
+        id: 12,
+        method: "SendStreamingMessage",
+        // No `messageId`: the streaming path mints one the same way the
+        // buffered path does, so the SSE stream opens and the run happens.
+        params: {
+          message: { role: "ROLE_USER", parts: [{ text: "hi" }] },
+        },
+      },
+    });
+
+    expect(response.headers["content-type"]).toContain("text/event-stream");
+    const events = parseSseEvents(response.body);
+    expect(events.every((event) => event.error === undefined)).toBe(true);
+    const last = events[events.length - 1];
+    expect(last.result?.statusUpdate?.status.state).toBe(
+      "TASK_STATE_COMPLETED",
+    );
+    expect(last.result?.statusUpdate?.status.message?.parts?.[0]?.text).toBe(
+      "Hello world",
+    );
+    expect(mockExecuteA2AMessage).toHaveBeenCalledTimes(1);
+  });
+
   test("returns a buffered JSON-RPC error (not an SSE stream) when the token is unauthorized", async () => {
     mockValidateMCPGatewayToken.mockResolvedValue(null);
 

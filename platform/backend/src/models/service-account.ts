@@ -1,4 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import type { CreatedBy } from "@archestra/shared";
 import {
   ARCHESTRA_TOKEN_PREFIX,
   MEMBER_ROLE_NAME,
@@ -25,6 +26,7 @@ import type {
   ServiceAccountResponse,
   ServiceAccountTokenResponse,
 } from "@/types";
+import CreatedByModel, { lookupCreator } from "./created-by";
 import OrganizationRoleModel from "./organization-role";
 
 class ServiceAccountModel {
@@ -66,6 +68,10 @@ class ServiceAccountModel {
       .groupBy(schema.serviceAccountsTable.id)
       .orderBy(desc(schema.serviceAccountsTable.createdAt));
 
+    const creators = await CreatedByModel.resolve(
+      rows.map(({ serviceAccount }) => serviceAccount.createdBy),
+    );
+
     return rows.map(
       ({
         serviceAccount,
@@ -74,12 +80,16 @@ class ServiceAccountModel {
         lastUsedAt,
         soonestExpiryAt,
       }) =>
-        normalizeServiceAccount(serviceAccount, {
-          tokenCount,
-          activeTokenCount,
-          lastUsedAt: lastUsedAt ? new Date(lastUsedAt) : null,
-          soonestExpiryAt: soonestExpiryAt ?? null,
-        }),
+        normalizeServiceAccount(
+          serviceAccount,
+          {
+            tokenCount,
+            activeTokenCount,
+            lastUsedAt: lastUsedAt ? new Date(lastUsedAt) : null,
+            soonestExpiryAt: soonestExpiryAt ?? null,
+          },
+          creators,
+        ),
     );
   }
 
@@ -107,7 +117,11 @@ class ServiceAccountModel {
       .orderBy(desc(schema.serviceAccountTokensTable.createdAt));
 
     return {
-      ...normalizeServiceAccount(serviceAccount, summarizeTokens(tokens)),
+      ...normalizeServiceAccount(
+        serviceAccount,
+        summarizeTokens(tokens),
+        await CreatedByModel.resolve([serviceAccount.createdBy]),
+      ),
       tokens: tokens.map(normalizeToken),
     };
   }
@@ -163,6 +177,13 @@ class ServiceAccountModel {
     organizationId: string;
     name: string;
     role: string;
+    /**
+     * Required, but nullable: every interactive create knows its user, and
+     * making the parameter mandatory stops a new call path from silently
+     * dropping the creator. Non-interactive callers (seeding, tests) say `null`
+     * rather than being allowed to forget.
+     */
+    createdBy: string | null;
   }): Promise<ServiceAccountDetailResponse> {
     const [serviceAccount] = await db
       .insert(schema.serviceAccountsTable)
@@ -170,11 +191,16 @@ class ServiceAccountModel {
         organizationId: params.organizationId,
         name: params.name,
         role: params.role,
+        createdBy: params.createdBy,
       })
       .returning();
 
     return {
-      ...normalizeServiceAccount(serviceAccount, summarizeTokens([])),
+      ...normalizeServiceAccount(
+        serviceAccount,
+        summarizeTokens([]),
+        await CreatedByModel.resolve([serviceAccount.createdBy]),
+      ),
       tokens: [],
     };
   }
@@ -371,8 +397,10 @@ export default ServiceAccountModel;
 function normalizeServiceAccount(
   serviceAccount: SelectServiceAccount,
   stats: TokenStats,
+  creators: Map<string, CreatedBy>,
 ): ServiceAccountResponse {
   return {
+    createdBy: lookupCreator(creators, serviceAccount.createdBy),
     id: serviceAccount.id,
     organizationId: serviceAccount.organizationId,
     name: serviceAccount.name,

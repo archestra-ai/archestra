@@ -98,6 +98,9 @@ function parseSseEvents(body: string): SseEvent[] {
     .map((chunk) => JSON.parse(chunk.slice("data:".length).trim()) as SseEvent);
 }
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function jsonRpc(id: number, method: string, params: unknown) {
   return { jsonrpc: "2.0" as const, id, method, params };
 }
@@ -323,6 +326,70 @@ describe("a2a v2 task methods", () => {
       }),
     );
     expect(mockExecuteA2AMessage).not.toHaveBeenCalled();
+  });
+
+  test("SendMessage mints a messageId when the client omits or blanks it, keeps a supplied one, and names an unusable one", async () => {
+    mockExecutorText("sure, I can help");
+
+    // The reported case: `Message.message_id` is a plain proto3 string, so a
+    // protobuf-JSON client that never assigned one omits the field entirely.
+    const omitted = await rpc(60, "SendMessage", {
+      message: {
+        role: "ROLE_USER",
+        parts: [{ text: "Hello, can you help me?" }],
+      },
+      configuration: { returnImmediately: true },
+    });
+    expect(omitted.error).toBeUndefined();
+    expect(omitted.result.task.history).toEqual([
+      expect.objectContaining({
+        role: "ROLE_USER",
+        messageId: expect.stringMatching(UUID_PATTERN),
+        parts: [{ text: "Hello, can you help me?" }],
+      }),
+    ]);
+    // The minted id is a real handle: the turn runs and the task settles.
+    await pollTaskUntil(omitted.result.task.id, "TASK_STATE_COMPLETED");
+
+    // proto3 JSON omits default values, so "unset" can also arrive as "".
+    const blank = await rpc(61, "SendMessage", {
+      message: { messageId: "  ", role: "ROLE_USER", parts: [{ text: "hi" }] },
+      configuration: { returnImmediately: true },
+    });
+    expect(blank.error).toBeUndefined();
+    expect(blank.result.task.history[0].messageId).toEqual(
+      expect.stringMatching(UUID_PATTERN),
+    );
+
+    // A supplied id is the caller's correlation handle and is never rewritten.
+    const supplied = crypto.randomUUID();
+    const kept = await rpc(62, "SendMessage", {
+      message: {
+        messageId: supplied,
+        role: "ROLE_USER",
+        parts: [{ text: "hi" }],
+      },
+      configuration: { returnImmediately: true },
+    });
+    expect(kept.result.task.history[0].messageId).toBe(supplied);
+
+    // An id that cannot be stored is a validation error naming the field,
+    // rather than an INSERT failure surfacing as an opaque internal error.
+    const nonUuid = await rpc(63, "SendMessage", {
+      message: {
+        messageId: "msg-1",
+        role: "ROLE_USER",
+        parts: [{ text: "hi" }],
+      },
+    });
+    expect(nonUuid.result).toBeUndefined();
+    expect(nonUuid.error).toMatchObject({
+      code: -32600,
+      message: "Invalid Request",
+    });
+    expect(
+      nonUuid.error.data.properties.message.properties.messageId.errors,
+    ).toEqual([expect.stringContaining("must be a UUID")]);
   });
 
   test("CancelTask: unknown id is -32001, active task cancels to a returned Task, terminal is -32002", async () => {

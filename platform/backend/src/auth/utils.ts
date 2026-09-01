@@ -319,7 +319,10 @@ function getMissingPermissions(
 async function getServiceAccountFromSyntheticUserId(params: {
   userId: string;
   organizationId: string;
-}): Promise<SelectServiceAccount | null> {
+}): Promise<Pick<
+  SelectServiceAccount,
+  "organizationId" | "role" | "disabled"
+> | null> {
   if (!isServiceAccountUserId(params.userId)) return null;
 
   const serviceAccountId = params.userId.slice(

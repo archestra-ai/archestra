@@ -1,4 +1,5 @@
 import {
+  CreatedByNullableSchema,
   calculatePaginationMeta,
   createPaginatedResponseSchema,
   PaginationQuerySchema,
@@ -24,6 +25,8 @@ import {
   AppRenderScreenshotModel,
   AppToolModel,
   AppVersionModel,
+  CreatedByModel,
+  lookupCreator,
   McpCatalogLabelModel,
   McpServerModel,
   UserModel,
@@ -155,6 +158,8 @@ const AppWithTeamsSchema = PublicAppSchema.extend({
   // oversight can be shown "Viewing as administrator · <name>". Null when the
   // author row is gone or nameless.
   authorName: z.string().nullable(),
+  /** The author, in the shape shared by every major object. */
+  createdBy: CreatedByNullableSchema,
 });
 
 const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -237,26 +242,36 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .map((app) => app.authorId as string),
         ),
       ];
-      const [usersByApp, teamsByApp, authorNames, ownedPins, externalPins] =
-        await Promise.all([
-          AppAccessModel.getUserDetailsForApps(owned.map((app) => app.id)),
-          AppAccessModel.getTeamDetailsForApps(owned.map((app) => app.id)),
-          UserModel.getNamesByIds(personalAuthorIds),
-          // Per-user pins (mirrors the projects list): surfaced as `pinnedAt` so
-          // the client can group pinned-first, like the Projects page.
-          AppPinModel.getPinnedAtForApps({
-            userId: user.id,
-            appIds: owned.map((app) => app.id),
-          }),
-          AppPinModel.getPinnedAtForExternalApps({
-            userId: user.id,
-            refs: external.map((catalogApp) => ({
-              mcpServerId: catalogApp.mcpServerId,
-              resourceUri: catalogApp.resourceUri,
-              toolName: catalogApp.toolName,
-            })),
-          }),
-        ]);
+      const [
+        usersByApp,
+        teamsByApp,
+        authorNames,
+        creators,
+        ownedPins,
+        externalPins,
+      ] = await Promise.all([
+        AppAccessModel.getUserDetailsForApps(owned.map((app) => app.id)),
+        AppAccessModel.getTeamDetailsForApps(owned.map((app) => app.id)),
+        UserModel.getNamesByIds(personalAuthorIds),
+        // Every owned app's author, not just the personal-scoped ones
+        // `authorNames` covers: an org-scoped app still has somebody to ask
+        // about it, and that is the whole point of the column.
+        CreatedByModel.resolve(owned.map((app) => app.authorId)),
+        // Per-user pins (mirrors the projects list): surfaced as `pinnedAt` so
+        // the client can group pinned-first, like the Projects page.
+        AppPinModel.getPinnedAtForApps({
+          userId: user.id,
+          appIds: owned.map((app) => app.id),
+        }),
+        AppPinModel.getPinnedAtForExternalApps({
+          userId: user.id,
+          refs: external.map((catalogApp) => ({
+            mcpServerId: catalogApp.mcpServerId,
+            resourceUri: catalogApp.resourceUri,
+            toolName: catalogApp.toolName,
+          })),
+        }),
+      ]);
 
       // An external item's labels are its backing catalog's (edited in the MCP
       // registry), so the one `?labels=` filter spans both halves of the mixed
@@ -303,6 +318,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
             app.authorId !== null
               ? (authorNames.get(app.authorId) ?? null)
               : null,
+          createdBy: lookupCreator(creators, app.authorId),
           viewerRole: viewerRoleOf(app),
           latestVersion: app.latestVersion,
           enabled: app.enabled,
@@ -342,6 +358,9 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const externalItems = external
         .map((catalogApp) => ({
           source: "external" as const,
+          // An external app is somebody else's catalog entry; nobody here
+          // created it, so there is no one to name.
+          createdBy: null,
           catalogId: catalogApp.catalogId,
           mcpServerId: catalogApp.mcpServerId,
           scope: catalogApp.scope,
@@ -1668,17 +1687,16 @@ async function buildAppDetail(params: {
   const usersByApp = await AppAccessModel.getUserDetailsForApps([app.id]);
   const teamsByApp = await AppAccessModel.getTeamDetailsForApps([app.id]);
   const viewerRole = await resolveViewerRole({ app, userId, organizationId });
-  const authorName =
-    app.authorId !== null
-      ? ((await UserModel.getNamesByIds([app.authorId])).get(app.authorId) ??
-        null)
-      : null;
+  const createdBy = await CreatedByModel.resolveOne(app.authorId);
   return {
     ...app,
     teams: teamsByApp.get(app.id) ?? [],
     users: usersByApp.get(app.id) ?? [],
     viewerRole,
-    authorName,
+    // Kept alongside `createdBy` because the settings surface renders it inline
+    // in a "Viewing as administrator · <name>" banner, not as a labelled fact.
+    authorName: createdBy?.name ?? null,
+    createdBy,
   };
 }
 

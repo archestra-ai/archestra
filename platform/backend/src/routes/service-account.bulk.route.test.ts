@@ -79,6 +79,7 @@ describe("DELETE /api/service-accounts/bulk", () => {
       name: "theirs",
       role: MEMBER_ROLE_NAME,
       organizationId: otherOrgId,
+      createdBy: null,
     });
 
     const response = await bulkDelete([mine.id, foreign.id]);

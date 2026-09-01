@@ -29,6 +29,7 @@ import type {
 import { decryptSecretValue, isEncryptedSecret } from "@/utils/crypto";
 import { escapeLikePattern } from "@/utils/sql-search";
 import ConversationModel from "./conversation";
+import CreatedByModel from "./created-by";
 
 class LlmProviderApiKeyModel {
   /**
@@ -253,6 +254,7 @@ class LlmProviderApiKeyModel {
         scope: schema.llmProviderApiKeysTable.scope,
         userId: schema.llmProviderApiKeysTable.userId,
         teamId: schema.llmProviderApiKeysTable.teamId,
+        createdBy: schema.llmProviderApiKeysTable.createdBy,
         isSystem: schema.llmProviderApiKeysTable.isSystem,
         isPrimary: schema.llmProviderApiKeysTable.isPrimary,
         createdAt: schema.llmProviderApiKeysTable.createdAt,
@@ -279,10 +281,13 @@ class LlmProviderApiKeyModel {
       .where(and(...conditions))
       .orderBy(schema.llmProviderApiKeysTable.createdAt);
 
-    return await Promise.all(
-      apiKeys.map((key) =>
-        toApiKeyWithScopeInfo(key, options?.includeSubscriptionInfo === true),
+    return CreatedByModel.attach(
+      await Promise.all(
+        apiKeys.map((key) =>
+          toApiKeyWithScopeInfo(key, options?.includeSubscriptionInfo === true),
+        ),
       ),
+      (key) => key.createdBy,
     );
   }
 
@@ -362,6 +367,7 @@ class LlmProviderApiKeyModel {
         scope: schema.llmProviderApiKeysTable.scope,
         userId: schema.llmProviderApiKeysTable.userId,
         teamId: schema.llmProviderApiKeysTable.teamId,
+        createdBy: schema.llmProviderApiKeysTable.createdBy,
         isSystem: schema.llmProviderApiKeysTable.isSystem,
         isPrimary: schema.llmProviderApiKeysTable.isPrimary,
         createdAt: schema.llmProviderApiKeysTable.createdAt,
@@ -388,10 +394,13 @@ class LlmProviderApiKeyModel {
       .where(and(...conditions))
       .orderBy(schema.llmProviderApiKeysTable.createdAt);
 
-    return await Promise.all(
-      apiKeys.map((key) =>
-        toApiKeyWithScopeInfo(key, options?.includeSubscriptionInfo === true),
+    return CreatedByModel.attach(
+      await Promise.all(
+        apiKeys.map((key) =>
+          toApiKeyWithScopeInfo(key, options?.includeSubscriptionInfo === true),
+        ),
       ),
+      (key) => key.createdBy,
     );
   }
 

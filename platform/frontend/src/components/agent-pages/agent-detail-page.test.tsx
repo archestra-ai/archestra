@@ -350,6 +350,37 @@ describe("AgentDetailPage", () => {
     expect(screen.queryByText("connect content")).toBeNull();
   });
 
+  it("states the creator on the General section and nowhere else", () => {
+    mockAgent({
+      ...baseAgent,
+      createdBy: { id: "u1", name: "Ada Lovelace", email: "ada@example.com" },
+    });
+    render(<AgentDetailPage kind="agent" id="a1" />);
+
+    expect(screen.getByText("Created by")).toBeVisible();
+    expect(screen.getByText("Ada Lovelace")).toBeVisible();
+  });
+
+  it("keeps the creator off the other sections, which repeat the record", () => {
+    mockSection("tools");
+    mockAgent({
+      ...baseAgent,
+      createdBy: { id: "u1", name: "Ada Lovelace", email: "ada@example.com" },
+    });
+    render(<AgentDetailPage kind="agent" id="a1" />);
+
+    expect(screen.queryByText("Created by")).toBeNull();
+  });
+
+  it("omits the creator for a built-in record, which belongs to nobody", () => {
+    // Absent rather than present-but-empty, which would read as missing data.
+    access = { ...access, isBuiltIn: true };
+    mockAgent({ ...baseAgent, builtIn: true });
+    render(<AgentDetailPage kind="agent" id="a1" />);
+
+    expect(screen.queryByText("Created by")).toBeNull();
+  });
+
   it("names delegated task history Executions and gives it a section", () => {
     vi.mocked(useFeature).mockReturnValue(true);
     mockAgent({ ...baseAgent, backgroundExecution: {} });

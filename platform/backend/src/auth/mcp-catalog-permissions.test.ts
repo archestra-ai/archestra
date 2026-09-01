@@ -59,6 +59,7 @@ describe("mcp-catalog-permissions", () => {
         organizationId,
         name: "ci-bot",
         role: EDITOR_ROLE_NAME,
+        createdBy: null,
       });
       const checker = await getMcpCatalogPermissionChecker({
         userId: `service-account:${sa.id}`,

@@ -23,7 +23,9 @@ import { AgentForm } from "@/components/agent-form";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
+import { createdByFact } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { DetailFacts } from "@/components/detail-facts";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
@@ -575,6 +577,13 @@ function AgentDetails({
                   </AlertDescription>
                 </Alert>
               )
+            )}
+
+            {/* Who to ask about this record, stated before its settings. A
+                built-in belongs to nobody, so the fact is absent there rather
+                than present-but-empty, which would read as missing data. */}
+            {section === "general" && !isBuiltIn && (
+              <DetailFacts facts={[createdByFact(agent.createdBy)]} />
             )}
 
             {activeFormGroup && (

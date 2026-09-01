@@ -1,6 +1,7 @@
 import {
   BLOCKED_PASSTHROUGH_HEADERS,
   BUILT_IN_AGENT_IDS,
+  CreatedByNullableSchema,
   DOMAIN_VALIDATION_REGEX,
   HEADER_NAME_REGEX,
   HEADER_NAME_VALIDATION_MESSAGE,
@@ -321,6 +322,12 @@ export const SelectAgentSchema = AgentRowSchema.extend({
   labels: z.array(AgentLabelWithDetailsSchema),
   authorName: z.string().nullable().optional(),
   authorEmail: z.string().nullable().optional(),
+  /**
+   * The author again, in the shape shared by every major object. Optional for
+   * the same reason as `authorName`: only the read paths that hydrate the
+   * author populate it, leaving internal agent assemblies untouched.
+   */
+  createdBy: CreatedByNullableSchema.optional(),
   knowledgeBaseIds: z.array(z.string()),
   connectorIds: z.array(z.string()),
   suggestedPrompts: z

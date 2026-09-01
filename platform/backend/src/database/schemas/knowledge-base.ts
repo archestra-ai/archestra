@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { index, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { softDeletablePgTable } from "./soft-deletable-table";
+import usersTable from "./user";
 
 const knowledgeBasesTable = softDeletablePgTable(
   "knowledge_bases",
@@ -10,6 +11,15 @@ const knowledgeBasesTable = softDeletablePgTable(
     name: text("name").notNull(),
     description: text("description"),
     status: text("status").notNull().default("active"),
+    /**
+     * Who created this. Nullable: rows predating creator tracking have no
+     * answer, and `ON DELETE SET NULL` gives the column back to "unknown" when
+     * the account is deleted rather than taking the knowledge base with it — the
+     * organization owns knowledge bases, not the person who happened to make it.
+     */
+    createdBy: text("created_by").references(() => usersTable.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

@@ -16,9 +16,11 @@ import {
 import {
   ConversationAttachmentModel,
   ConversationModel,
+  CreatedByModel,
   KbDirectoryModel,
   KbFileModel,
   KnowledgeBaseModel,
+  lookupCreator,
   OrganizationModel,
   TeamModel,
 } from "@/models";
@@ -91,9 +93,10 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       const fileIds = items.map((file) => file.id);
-      const [knowledgeBases, teamIds] = await Promise.all([
+      const [knowledgeBases, teamIds, creators] = await Promise.all([
         KbFileModel.findKnowledgeBasesForFiles(fileIds),
         KbFileModel.findTeamIdsForFiles(fileIds),
+        CreatedByModel.resolve(items.map((file) => file.uploadedBy)),
       ]);
 
       return {
@@ -102,9 +105,11 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
             data: _data,
             objectKey: _objectKey,
             storageProvider: _provider,
+            uploadedBy,
             ...file
           }) => ({
             ...file,
+            createdBy: lookupCreator(creators, uploadedBy),
             knowledgeBases: knowledgeBases.get(file.id) ?? [],
             teamIds: teamIds.get(file.id) ?? [],
           }),
@@ -202,9 +207,15 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
         data: _data,
         objectKey: _objectKey,
         storageProvider: _provider,
+        uploadedBy,
         ...rest
       } = file;
-      return { ...rest, knowledgeBases: [], teamIds: body.teamIds };
+      return {
+        ...rest,
+        createdBy: await CreatedByModel.resolveOne(uploadedBy),
+        knowledgeBases: [],
+        teamIds: body.teamIds,
+      };
     },
   );
 
@@ -350,9 +361,15 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
         data: _data,
         objectKey: _objectKey,
         storageProvider: _provider,
+        uploadedBy,
         ...rest
       } = file;
-      return { ...rest, knowledgeBases, teamIds: body.teamIds };
+      return {
+        ...rest,
+        createdBy: await CreatedByModel.resolveOne(uploadedBy),
+        knowledgeBases,
+        teamIds: body.teamIds,
+      };
     },
   );
 
@@ -463,10 +480,12 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
         data: _data,
         objectKey: _objectKey,
         storageProvider: _provider,
+        uploadedBy,
         ...rest
       } = file;
       return {
         ...rest,
+        createdBy: await CreatedByModel.resolveOne(uploadedBy),
         knowledgeBases: knowledgeBases.get(file.id) ?? [],
         teamIds: await KbFileModel.findTeamIds(file.id),
       };
@@ -658,6 +677,7 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ? (
             await KnowledgeBaseModel.create({
               organizationId,
+              createdBy: viewer.userId,
               name: body.newKnowledgeBaseName,
             })
           ).id
@@ -753,7 +773,12 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
         teamIds: body.teamIds,
         createdBy: user.id,
       });
-      return { ...directory, teamIds: body.teamIds, fileCount: 0 };
+      return {
+        ...directory,
+        createdBy: await CreatedByModel.resolveOne(directory.createdBy),
+        teamIds: body.teamIds,
+        fileCount: 0,
+      };
     },
   );
 
@@ -788,7 +813,12 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
         KbDirectoryModel.findTeamIds(directory.id),
         KbDirectoryModel.countFiles(directory.id),
       ]);
-      return { ...directory, teamIds, fileCount };
+      return {
+        ...directory,
+        createdBy: await CreatedByModel.resolveOne(directory.createdBy),
+        teamIds,
+        fileCount,
+      };
     },
   );
 

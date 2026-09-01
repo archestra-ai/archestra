@@ -93,9 +93,10 @@ export const TOOL_CONNECTION_PROMPTING: Record<
   string
 > = {
   allow:
-    "Nothing up front. They find out a connection is missing at the moment a tool tries to use it, mid-answer.",
-  warn: "They are asked for every account they have not connected. They can chat anyway — those tools just will not run.",
-  block: "Nothing can be sent until every account the tools need is connected.",
+    "Nothing up front. A missing credential surfaces mid-answer, the moment a tool needs it.",
+  warn: "The chat opens by naming every credential not yet connected. Tools needing one wait until it is connected.",
+  block:
+    "Nothing can be sent until every credential the tools need is connected.",
 };
 
 /**

@@ -3191,16 +3191,14 @@ export function AgentForm({
                           Progressive tool loading
                         </Label>
                         <p className="text-xs text-muted-foreground">
-                          {/* Word for word the detail page's "Tools loaded"
-                              row, so the setting reads the same where it is
-                              chosen and where it is reported. */}
+                          {/* Says what the setting buys before how it works:
+                              the mechanism was three clauses long and the
+                              reason it exists was in none of them. */}
                           {progressiveToolLoading ? (
                             <>
-                              The model starts with{" "}
+                              Saves context by exposing only two tools:{" "}
                               <code>{TOOL_SEARCH_TOOLS_SHORT_NAME}</code> and{" "}
-                              <code>{TOOL_RUN_TOOL_SHORT_NAME}</code> only, and
-                              reaches the rest by searching for them
-                              mid-conversation.
+                              <code>{TOOL_RUN_TOOL_SHORT_NAME}</code>.
                             </>
                           ) : (
                             <>
@@ -3246,14 +3244,13 @@ export function AgentForm({
                           <Label htmlFor="missing-credential-behavior">
                             Missing connections
                           </Label>
+                          {/* The question, not the answer: the select beside
+                              this already names the choice, and the menu
+                              spells out what each one does. Repeating the
+                              chosen option's whole sentence here said the same
+                              thing three times in one row. */}
                           <p className="text-xs text-muted-foreground">
-                            Some tools run against a server each person connects
-                            themselves.{" "}
-                            {
-                              TOOL_CONNECTION_PROMPTING[
-                                missingCredentialBehavior
-                              ]
-                            }{" "}
+                            When to ask a user to connect credentials.{" "}
                             <ExternalDocsLink
                               href={toolConnectionsDocsUrl}
                               className="underline"

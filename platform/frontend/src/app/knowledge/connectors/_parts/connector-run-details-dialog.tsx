@@ -252,7 +252,8 @@ export function ConnectorRunDetailsDialog({
                 <h4 className="text-sm font-medium">Logs</h4>
                 <LogConsole
                   content={formattedLogs}
-                  emptyMessage="This run recorded no logs."
+                  emptyMessage="No logs recorded"
+                  emptyHint="This sync run finished without writing any log output."
                   className="h-80"
                 />
               </div>

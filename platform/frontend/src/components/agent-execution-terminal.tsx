@@ -4,6 +4,7 @@ import type {
   AgentRunAttachClosedMessage,
   AgentRunAttachErrorMessage,
   AgentRunAttachOutputMessage,
+  AgentRunAttachProgressMessage,
   AgentRunAttachStartedMessage,
 } from "@archestra/shared";
 import { useMemo } from "react";
@@ -53,6 +54,19 @@ export function createAgentExecutionTransport(
           (message: AgentRunAttachStartedMessage) => {
             if (message.payload.runId === taskId) {
               handlers.onStarted(message.payload.command);
+            }
+          },
+        ),
+        websocketService.subscribe(
+          "agent_run_attach_progress",
+          (message: AgentRunAttachProgressMessage) => {
+            if (message.payload.runId === taskId) {
+              handlers.onProgress?.({
+                phase: message.payload.phase,
+                message: message.payload.message,
+                detail: message.payload.detail ?? null,
+                resourceName: message.payload.resourceName ?? null,
+              });
             }
           },
         ),

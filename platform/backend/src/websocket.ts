@@ -569,6 +569,23 @@ class WebSocketService {
         stdin,
         stdout,
         stderr,
+        // Attaching waits on scheduling, the image pull and the agent's own
+        // session — minutes, on a cold node. Relay each wait as it is entered
+        // so the terminal can name what it is waiting for instead of showing
+        // an unqualified "Connecting…" for the whole of it.
+        onProgress: (progress) => {
+          if (ws.readyState !== WS.OPEN) return;
+          this.sendToClient(ws, {
+            type: "agent_run_attach_progress",
+            payload: {
+              runId,
+              phase: progress.phase,
+              message: progress.message,
+              detail: progress.detail ?? null,
+              resourceName: progress.resourceName ?? null,
+            },
+          });
+        },
         onStatus: (status) => {
           if (status.outcome === "failure") {
             this.sendToClient(ws, {

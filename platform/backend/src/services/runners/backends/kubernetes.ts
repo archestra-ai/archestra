@@ -10,6 +10,7 @@ import type {
 import { ApiError } from "@/types";
 import type {
   RunnerAttachment,
+  RunnerAttachProgress,
   RunnerAttachStatus,
   RunnerBackend,
   RunnerCompletion,
@@ -103,12 +104,14 @@ class KubernetesRunnerBackend implements RunnerBackend {
     stdout: Writable;
     stderr: Writable;
     onStatus?: (status: RunnerAttachStatus) => void;
+    onProgress?: (progress: RunnerAttachProgress) => void;
   }): Promise<RunnerAttachment> {
     const attachment = await runnerRuntimeManager.attach({
       session: params.session,
       stdin: params.stdin,
       stdout: params.stdout,
       stderr: params.stderr,
+      onProgress: params.onProgress,
       onStatus: (status) =>
         params.onStatus?.({
           outcome: status.status === "Failure" ? "failure" : "success",

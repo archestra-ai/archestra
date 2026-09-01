@@ -200,8 +200,8 @@ jobs:
           # pulls the dev-versioned image.
           SHA_TAG="${IMAGE_REPO}:${GIT_SHA}-e2e"
           SLIM_SHA_TAG="${SHA_TAG}-slim"
-          echo "tree_tag=${INPUT_TAG}" >> "${GITHUB_OUTPUT}"
-          echo "slim_tree_tag=${SLIM_INPUT_TAG}" >> "${GITHUB_OUTPUT}"
+          echo "input_tag=${INPUT_TAG}" >> "${GITHUB_OUTPUT}"
+          echo "slim_input_tag=${SLIM_INPUT_TAG}" >> "${GITHUB_OUTPUT}"
           # Default to a build; only skip it if we actually land the reused images
           # on the SHA tags. A missing/just-pruned input tag or a transient registry
           # error then falls back to building instead of failing the required gate.
@@ -245,7 +245,7 @@ jobs:
           # inputs reuses this image instead of rebuilding.
           tags: |
             ${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:${{ github.sha }}-e2e
-            ${{ steps.platform-reuse.outputs.tree_tag }}
+            ${{ steps.platform-reuse.outputs.input_tag }}
           # E2E image consumed only by CI e2e jobs — skip SLSA provenance to
           # trim export time. The SBOM below intentionally makes this an OCI
           # index with an attestation manifest. Published release images keep
@@ -281,7 +281,7 @@ jobs:
           # pulls, plus the input-hash tag the reuse step checks.
           tags: |
             ${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:${{ github.sha }}-e2e-slim
-            ${{ steps.platform-reuse.outputs.slim_tree_tag }}
+            ${{ steps.platform-reuse.outputs.slim_input_tag }}
           provenance: "false"
           sbom: generator=docker/scout-sbom-indexer:1.24.0@sha256:4b67f29eb0d1244ab0f62de867ac5dafd7262fcd7ebbdefa6ec8aacd6b15252d
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
@@ -317,7 +317,7 @@ jobs:
           INPUT_HASH=$(bash .github/scripts/e2e-image-input-hash.sh mcp-base)
           INPUT_TAG="${IMAGE_REPO}:input-${INPUT_HASH}"
           SHA_TAG="${IMAGE_REPO}:${GIT_SHA}"
-          echo "tree_tag=${INPUT_TAG}" >> "${GITHUB_OUTPUT}"
+          echo "input_tag=${INPUT_TAG}" >> "${GITHUB_OUTPUT}"
           REUSE=false
           if docker buildx imagetools inspect "${INPUT_TAG}" >/dev/null 2>&1; then
             echo "Found cached MCP server base image for input ${INPUT_HASH}; copying to ${SHA_TAG}"
@@ -342,7 +342,7 @@ jobs:
           load: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'true' || 'false' }}
           # Non-fork pushes tag both the commit SHA (what the jobs pull) and the
           # input-hash tag (what the reuse step above checks next time).
-          tags: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('{0}/{1}:{2},{3}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha, steps.mcp-base-reuse.outputs.tree_tag) || format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
+          tags: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('{0}/{1}:{2},{3}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha, steps.mcp-base-reuse.outputs.input_tag) || format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
           cache-from: type=registry,ref=${{ env.MCP_SERVER_BASE_IMAGE_REGISTRY }}/${{ env.MCP_SERVER_BASE_IMAGE_NAME }}:buildcache
           # Forks have no registry credentials to export the cache back.
           cache-to: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('type=registry,ref={0}/{1}:buildcache,mode=max', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME) || '' }}

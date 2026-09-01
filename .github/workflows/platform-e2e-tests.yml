@@ -1,8 +1,11 @@
 name: Platform E2E Tests
 
 # Runs automatically in merge queue as the required E2E gate.
-# For PRs, add the "run-e2e" label to trigger the full E2E suite on demand.
-# Remove and re-add the label to re-trigger after new commits.
+# Trusted same-repo PR updates prebuild the Platform and MCP images so a
+# later merge-group run can retag them instead of compiling on the queue
+# critical path. Fork PRs keep the placeholder checks. Add the "run-e2e"
+# label to trigger the full E2E suite on demand. Remove and re-add the
+# label to re-trigger after new commits.
 #
 # MCP idle-hibernation coverage stays OFF the merge queue: the leg is ~10
 # minutes of mostly serial waiting, which every queued merge was paying.
@@ -71,15 +74,17 @@ jobs:
     runs-on: ubuntu-latest
     # Excludes EVERY e2e-triggering label: a label event that starts the real
     # build must not also run this placeholder under the same check names (the
-    # duplicate-name masking hazard the NOTE above forbids re-adding).
-    if: ${{ github.event_name == 'pull_request' && (github.event.action != 'labeled' || (github.event.label.name != 'run-e2e' && github.event.label.name != 'run-e2e-hibernation')) }}
+    # duplicate-name masking hazard the NOTE above forbids re-adding). Every
+    # trusted same-repo PR event runs the real builder instead; this placeholder
+    # remains only for ordinary fork events that cannot access the registry.
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true && (github.event.action != 'labeled' || (github.event.label.name != 'run-e2e' && github.event.label.name != 'run-e2e-hibernation')) }}
     strategy:
       fail-fast: false
       matrix:
         name: [Platform, MCP Server Base]
     steps:
       - name: Skip full image build on ordinary PR updates
-        run: echo "Full E2E image builds run on merge queue or when the run-e2e label is added."
+        run: echo "Full E2E image builds run on trusted same-repo PR updates, merge queue, or when the run-e2e label is added."
 
   # Build Docker images for e2e tests (platform and MCP server base).
   # Trusted PRs and merge queue runs push the platform image to Artifact Registry so
@@ -88,7 +93,7 @@ jobs:
   platform-e2e-build:
     name: Build ${{ matrix.name }} Image
     runs-on: ${{ matrix.runner }}
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' || github.event.label.name == 'run-e2e-hibernation' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' || github.event.label.name == 'run-e2e-hibernation' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false) }}
     permissions:
       contents: read # Required to checkout the repository and build images for E2E jobs.
       id-token: write # Required for Workload Identity Federation when pushing trusted images.
@@ -161,16 +166,15 @@ jobs:
           service_account: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
-      # Reuse a platform image already built for this exact ./platform tree — by
-      # this PR's run-e2e build, a prior merge-queue entry, or the scheduled warm
-      # build — instead of rebuilding it on the merge-queue critical path. The
-      # image is a deterministic function of the ./platform build context (base
-      # images are digest-pinned in the Dockerfile and no build arg varies here),
-      # so a matching git tree OID guarantees byte-identical build inputs. On a
-      # hit we do a registry-side manifest copy to the commit-SHA e2e tag, so the
-      # test jobs' existing `:${sha}-e2e` pull contract is unchanged and no rebuild runs.
-      # Registry path only: fork PRs have no OIDC/registry access and fall through
-      # to the artifact build below.
+      # Reuse a platform image already built for this exact image-input hash —
+      # by this PR's trusted prebuild, a labeled run-e2e build, a prior
+      # merge-queue entry, or the scheduled warm build — instead of rebuilding
+      # it on the merge-queue critical path. The hash covers the ./platform
+      # context plus the workflow/action files that define the build command.
+      # On a hit we do a registry-side manifest copy to the commit-SHA e2e
+      # tag, so the test jobs' existing `:${sha}-e2e` pull contract is
+      # unchanged and no rebuild runs. Registry path only: fork PRs have no
+      # OIDC/registry access and fall through to the artifact build below.
       - name: Resolve platform image reuse
         id: platform-reuse
         if: ${{ matrix.use-build-action && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) }}
@@ -180,22 +184,15 @@ jobs:
           GIT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          # Hash of what the image build actually consumes: the ./platform
-          # tree minus e2e-tests (tests run from the checkout, never from the
-          # image; nothing in the Dockerfile references that directory — keep
-          # it that way or remove this exclusion). Merges that only touch e2e
-          # tests then reuse the existing image instead of rebuilding an
-          # identical one. The derived hash is stable: ls-tree output is
-          # sorted and includes each entry's own tree OID.
-          TREE_HASH=$(git ls-tree "HEAD:platform" | grep -v $'\te2e-tests$' | git hash-object --stdin)
-          TREE_TAG="${IMAGE_REPO}:tree-${TREE_HASH}"
-          SLIM_TREE_TAG="${TREE_TAG}-slim"
+          INPUT_HASH=$(bash .github/scripts/e2e-image-input-hash.sh platform)
+          INPUT_TAG="${IMAGE_REPO}:input-${INPUT_HASH}"
+          SLIM_INPUT_TAG="${INPUT_TAG}-slim"
           # `-e2e` suffix, NOT the bare `:${sha}` tag: the staging deploy
           # (on-commits-to-main -> deploy-dev-platform-images) publishes its
           # image — built with `--build-arg VERSION=${sha}`, which bakes
           # ARCHESTRA_VERSION and the Next.js deploymentId — under the bare
           # commit-SHA tag, and the cluster pulls that tag by name. The e2e
-          # build omits the VERSION arg (deliberately, so the tree-hash reuse
+          # build omits the VERSION arg (deliberately, so the input-hash reuse
           # above stays deterministic), so writing it to the bare tag would
           # clobber the deployed image with a `VERSION=dev` variant. The
           # nightly scheduled run does exactly that for main's HEAD — hours
@@ -203,30 +200,30 @@ jobs:
           # pulls the dev-versioned image.
           SHA_TAG="${IMAGE_REPO}:${GIT_SHA}-e2e"
           SLIM_SHA_TAG="${SHA_TAG}-slim"
-          echo "tree_tag=${TREE_TAG}" >> "${GITHUB_OUTPUT}"
-          echo "slim_tree_tag=${SLIM_TREE_TAG}" >> "${GITHUB_OUTPUT}"
+          echo "input_tag=${INPUT_TAG}" >> "${GITHUB_OUTPUT}"
+          echo "slim_input_tag=${SLIM_INPUT_TAG}" >> "${GITHUB_OUTPUT}"
           # Default to a build; only skip it if we actually land the reused images
-          # on the SHA tags. A missing/just-pruned tree tag or a transient registry
+          # on the SHA tags. A missing/just-pruned input tag or a transient registry
           # error then falls back to building instead of failing the required gate.
           # BOTH variants must be present: the K8s job pulls the -slim image (no
-          # Dagger engine tar) while the quickstart job pulls the full one, so a tree
-          # cached before the slim variant existed cannot be reused.
+          # Dagger engine tar) while the quickstart job pulls the full one, so an
+          # input cached before the slim variant existed cannot be reused.
           REUSE=false
-          if FULL_TREE_REF=$(bash .github/scripts/resolve-attested-image.sh "${TREE_TAG}") \
-            && SLIM_TREE_REF=$(bash .github/scripts/resolve-attested-image.sh "${SLIM_TREE_TAG}"); then
-            echo "Found cached platform images for tree ${TREE_HASH}; copying to ${SHA_TAG} (+ -slim)"
+          if FULL_INPUT_REF=$(bash .github/scripts/resolve-attested-image.sh "${INPUT_TAG}") \
+            && SLIM_INPUT_REF=$(bash .github/scripts/resolve-attested-image.sh "${SLIM_INPUT_TAG}"); then
+            echo "Found cached platform images for input ${INPUT_HASH}; copying to ${SHA_TAG} (+ -slim)"
             # Registry-side manifest copy (no layer pull/push) onto the SHA tags
             # the test jobs pull. Seconds, versus the ~85-226s build it
             # replaces. Copy the already validated immutable digests, not the
-            # mutable tree tags, so the checked and retagged objects are equal.
-            if docker buildx imagetools create --tag "${SHA_TAG}" "${FULL_TREE_REF}" \
-              && docker buildx imagetools create --tag "${SLIM_SHA_TAG}" "${SLIM_TREE_REF}"; then
+            # mutable input tags, so the checked and retagged objects are equal.
+            if docker buildx imagetools create --tag "${SHA_TAG}" "${FULL_INPUT_REF}" \
+              && docker buildx imagetools create --tag "${SLIM_SHA_TAG}" "${SLIM_INPUT_REF}"; then
               REUSE=true
             else
-              echo "::warning::reuse retag failed (tree tag may have just been pruned); building instead"
+              echo "::warning::reuse retag failed (input tag may have just been pruned); building instead"
             fi
           else
-            echo "No cached attested image pair for platform tree ${TREE_HASH}; building."
+            echo "No cached attested image pair for platform input ${INPUT_HASH}; building."
           fi
           echo "reuse=${REUSE}" >> "${GITHUB_OUTPUT}"
 
@@ -244,11 +241,11 @@ jobs:
           # Publish under both the commit-SHA e2e tag (what the shards pull;
           # `-e2e` suffixed so it can never clobber the bare `:${sha}` tag the
           # staging deploy publishes and the cluster pulls — see the reuse step
-          # above) and the tree-OID tag, so a later run of the same ./platform
-          # tree reuses this image instead of rebuilding.
+          # above) and the input-hash tag, so a later run of the same image
+          # inputs reuses this image instead of rebuilding.
           tags: |
             ${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:${{ github.sha }}-e2e
-            ${{ steps.platform-reuse.outputs.tree_tag }}
+            ${{ steps.platform-reuse.outputs.input_tag }}
           # E2E image consumed only by CI e2e jobs — skip SLSA provenance to
           # trim export time. The SBOM below intentionally makes this an OCI
           # index with an attestation manifest. Published release images keep
@@ -265,7 +262,7 @@ jobs:
           cache-from: |
             type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache
             type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache-amd64
-          # Exact tree tags handle whole-image reuse; publisher mode=max caches
+          # Exact input-hash tags handle whole-image reuse; publisher mode=max caches
           # supply intermediate layers, so E2E only needs to export final layers.
           cache-to: type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache,mode=min
 
@@ -281,10 +278,10 @@ jobs:
           push: "true"
           target: unified-slim
           # Same dual-tag scheme as the full image: the SHA e2e tag the K8s job
-          # pulls, plus the tree-OID tag the reuse step checks.
+          # pulls, plus the input-hash tag the reuse step checks.
           tags: |
             ${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:${{ github.sha }}-e2e-slim
-            ${{ steps.platform-reuse.outputs.slim_tree_tag }}
+            ${{ steps.platform-reuse.outputs.slim_input_tag }}
           provenance: "false"
           sbom: generator=docker/scout-sbom-indexer:1.24.0@sha256:4b67f29eb0d1244ab0f62de867ac5dafd7262fcd7ebbdefa6ec8aacd6b15252d
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
@@ -305,7 +302,7 @@ jobs:
           service_account: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
-      # Same tree-based reuse as the Platform image above. This image rarely
+      # Same input-hash reuse as the Platform image above. This image rarely
       # changes, and the lite/quickstart jobs wait for this job — so on a match, a
       # seconds-long registry retag replaces the ~100s rebuild.
       - name: Resolve MCP server base image reuse
@@ -317,20 +314,20 @@ jobs:
           GIT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          TREE_HASH=$(git rev-parse "HEAD:platform/mcp_server_docker_image")
-          TREE_TAG="${IMAGE_REPO}:tree-${TREE_HASH}"
+          INPUT_HASH=$(bash .github/scripts/e2e-image-input-hash.sh mcp-base)
+          INPUT_TAG="${IMAGE_REPO}:input-${INPUT_HASH}"
           SHA_TAG="${IMAGE_REPO}:${GIT_SHA}"
-          echo "tree_tag=${TREE_TAG}" >> "${GITHUB_OUTPUT}"
+          echo "input_tag=${INPUT_TAG}" >> "${GITHUB_OUTPUT}"
           REUSE=false
-          if docker buildx imagetools inspect "${TREE_TAG}" >/dev/null 2>&1; then
-            echo "Found cached MCP server base image for tree ${TREE_HASH}; copying to ${SHA_TAG}"
-            if docker buildx imagetools create --tag "${SHA_TAG}" "${TREE_TAG}"; then
+          if docker buildx imagetools inspect "${INPUT_TAG}" >/dev/null 2>&1; then
+            echo "Found cached MCP server base image for input ${INPUT_HASH}; copying to ${SHA_TAG}"
+            if docker buildx imagetools create --tag "${SHA_TAG}" "${INPUT_TAG}"; then
               REUSE=true
             else
-              echo "::warning::mcp base reuse retag failed (tree tag may have just been pruned); building instead"
+              echo "::warning::mcp base reuse retag failed (input tag may have just been pruned); building instead"
             fi
           else
-            echo "No cached MCP server base image for tree ${TREE_HASH}; building."
+            echo "No cached MCP server base image for input ${INPUT_HASH}; building."
           fi
           echo "reuse=${REUSE}" >> "${GITHUB_OUTPUT}"
 
@@ -344,8 +341,8 @@ jobs:
           push: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'true' || 'false' }}
           load: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'true' || 'false' }}
           # Non-fork pushes tag both the commit SHA (what the jobs pull) and the
-          # tree OID (what the reuse step above checks next time).
-          tags: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('{0}/{1}:{2},{3}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha, steps.mcp-base-reuse.outputs.tree_tag) || format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
+          # input-hash tag (what the reuse step above checks next time).
+          tags: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('{0}/{1}:{2},{3}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha, steps.mcp-base-reuse.outputs.input_tag) || format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
           cache-from: type=registry,ref=${{ env.MCP_SERVER_BASE_IMAGE_REGISTRY }}/${{ env.MCP_SERVER_BASE_IMAGE_NAME }}:buildcache
           # Forks have no registry credentials to export the cache back.
           cache-to: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('type=registry,ref={0}/{1}:buildcache,mode=max', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME) || '' }}

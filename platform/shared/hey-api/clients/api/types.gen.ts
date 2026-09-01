@@ -36133,10 +36133,182 @@ export type UpdateDefaultUserLimitResponses = {
 
 export type UpdateDefaultUserLimitResponse = UpdateDefaultUserLimitResponses[keyof UpdateDefaultUserLimitResponses];
 
-export type ListEnvironmentsData = {
+export type EnvironmentLabelKeysData = {
     body?: never;
     path?: never;
     query?: never;
+    url: '/api/environments/labels/keys';
+};
+
+export type EnvironmentLabelKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type EnvironmentLabelKeysError = EnvironmentLabelKeysErrors[keyof EnvironmentLabelKeysErrors];
+
+export type EnvironmentLabelKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type EnvironmentLabelKeysResponse = EnvironmentLabelKeysResponses[keyof EnvironmentLabelKeysResponses];
+
+export type EnvironmentLabelValuesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Filter values by label key
+         */
+        key?: string;
+    };
+    url: '/api/environments/labels/values';
+};
+
+export type EnvironmentLabelValuesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type EnvironmentLabelValuesError = EnvironmentLabelValuesErrors[keyof EnvironmentLabelValuesErrors];
+
+export type EnvironmentLabelValuesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type EnvironmentLabelValuesResponse = EnvironmentLabelValuesResponses[keyof EnvironmentLabelValuesResponses];
+
+export type ListEnvironmentsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
+         */
+        labels?: string;
+    };
     url: '/api/environments';
 };
 
@@ -36229,6 +36401,12 @@ export type ListEnvironmentsResponses = {
             createdAt: string;
             updatedAt: string;
             assignedCatalogCount: number;
+            labels: Array<{
+                key: string;
+                value: string;
+                keyId?: string;
+                valueId?: string;
+            }>;
         }>;
         defaultAssignedCatalogCount: number;
         resourceDefaults: {
@@ -36257,6 +36435,12 @@ export type CreateEnvironmentData = {
         restricted?: boolean;
         validationRegex?: string | null;
         trustedImageRegistries?: Array<string> | null;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
     path?: never;
     query?: never;
@@ -36547,6 +36731,12 @@ export type UpdateEnvironmentData = {
         restricted?: boolean;
         validationRegex?: string | null;
         trustedImageRegistries?: Array<string> | null;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
     path: {
         id: string;
@@ -59108,6 +59298,340 @@ export type KimiChatCompletionsWithAgentResponses = {
 
 export type KimiChatCompletionsWithAgentResponse = KimiChatCompletionsWithAgentResponses[keyof KimiChatCompletionsWithAgentResponses];
 
+export type KnowledgeBaseLabelKeysData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/knowledge-bases/labels/keys';
+};
+
+export type KnowledgeBaseLabelKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type KnowledgeBaseLabelKeysError = KnowledgeBaseLabelKeysErrors[keyof KnowledgeBaseLabelKeysErrors];
+
+export type KnowledgeBaseLabelKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type KnowledgeBaseLabelKeysResponse = KnowledgeBaseLabelKeysResponses[keyof KnowledgeBaseLabelKeysResponses];
+
+export type KnowledgeBaseLabelValuesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Filter values by label key
+         */
+        key?: string;
+    };
+    url: '/api/knowledge-bases/labels/values';
+};
+
+export type KnowledgeBaseLabelValuesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type KnowledgeBaseLabelValuesError = KnowledgeBaseLabelValuesErrors[keyof KnowledgeBaseLabelValuesErrors];
+
+export type KnowledgeBaseLabelValuesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type KnowledgeBaseLabelValuesResponse = KnowledgeBaseLabelValuesResponses[keyof KnowledgeBaseLabelValuesResponses];
+
+export type ConnectorLabelKeysData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/knowledge-base-connectors/labels/keys';
+};
+
+export type ConnectorLabelKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ConnectorLabelKeysError = ConnectorLabelKeysErrors[keyof ConnectorLabelKeysErrors];
+
+export type ConnectorLabelKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type ConnectorLabelKeysResponse = ConnectorLabelKeysResponses[keyof ConnectorLabelKeysResponses];
+
+export type ConnectorLabelValuesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Filter values by label key
+         */
+        key?: string;
+    };
+    url: '/api/knowledge-base-connectors/labels/values';
+};
+
+export type ConnectorLabelValuesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ConnectorLabelValuesError = ConnectorLabelValuesErrors[keyof ConnectorLabelValuesErrors];
+
+export type ConnectorLabelValuesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type ConnectorLabelValuesResponse = ConnectorLabelValuesResponses[keyof ConnectorLabelValuesResponses];
+
 export type GetKnowledgeBasesData = {
     body?: never;
     path?: never;
@@ -59119,6 +59643,10 @@ export type GetKnowledgeBasesData = {
          * Filter by lifecycle status. `deleted` lists soft-deleted knowledge bases and requires `knowledgeSource:delete`.
          */
         status?: 'active' | 'deleted';
+        /**
+         * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
+         */
+        labels?: string;
     };
     url: '/api/knowledge-bases';
 };
@@ -59213,6 +59741,12 @@ export type GetKnowledgeBasesResponses = {
                 name: string;
                 agentType: string;
             }>;
+            labels: Array<{
+                key: string;
+                value: string;
+                keyId?: string;
+                valueId?: string;
+            }>;
         }>;
         pagination: {
             currentPage: number;
@@ -59231,6 +59765,12 @@ export type CreateKnowledgeBaseData = {
     body: {
         name: string;
         description?: string;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
     path?: never;
     query?: never;
@@ -59501,6 +60041,12 @@ export type UpdateKnowledgeBaseData = {
     body: {
         name?: string;
         description?: string | null;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
     path: {
         id: string;
@@ -60222,6 +60768,12 @@ export type GetConnectorsResponses = {
             createdAt: string;
             updatedAt: string;
             deletedAt: string | null;
+            labels: Array<{
+                key: string;
+                value: string;
+                keyId?: string;
+                valueId?: string;
+            }>;
             assignedAgents: Array<{
                 id: string;
                 name: string;
@@ -60694,6 +61246,12 @@ export type CreateConnectorResponses = {
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
@@ -61052,6 +61610,12 @@ export type GetConnectorResponses = {
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
         totalDocsIngested: number;
     };
 };
@@ -61511,6 +62075,12 @@ export type UpdateConnectorResponses = {
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
@@ -63742,6 +64312,173 @@ export type CancelConnectorRunResponses = {
 
 export type CancelConnectorRunResponse = CancelConnectorRunResponses[keyof CancelConnectorRunResponses];
 
+export type KnowledgeFileLabelKeysData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/knowledge-files/labels/keys';
+};
+
+export type KnowledgeFileLabelKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type KnowledgeFileLabelKeysError = KnowledgeFileLabelKeysErrors[keyof KnowledgeFileLabelKeysErrors];
+
+export type KnowledgeFileLabelKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type KnowledgeFileLabelKeysResponse = KnowledgeFileLabelKeysResponses[keyof KnowledgeFileLabelKeysResponses];
+
+export type KnowledgeFileLabelValuesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Filter values by label key
+         */
+        key?: string;
+    };
+    url: '/api/knowledge-files/labels/values';
+};
+
+export type KnowledgeFileLabelValuesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type KnowledgeFileLabelValuesError = KnowledgeFileLabelValuesErrors[keyof KnowledgeFileLabelValuesErrors];
+
+export type KnowledgeFileLabelValuesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type KnowledgeFileLabelValuesResponse = KnowledgeFileLabelValuesResponses[keyof KnowledgeFileLabelValuesResponses];
+
 export type GetKnowledgeFilesData = {
     body?: never;
     path?: never;
@@ -63750,6 +64487,10 @@ export type GetKnowledgeFilesData = {
         offset?: number;
         directoryId?: string;
         search?: string;
+        /**
+         * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
+         */
+        labels?: string;
     };
     url: '/api/knowledge-files';
 };
@@ -63840,6 +64581,12 @@ export type GetKnowledgeFilesResponses = {
                 name: string;
             }>;
             teamIds: Array<string>;
+            labels: Array<{
+                key: string;
+                value: string;
+                keyId?: string;
+                valueId?: string;
+            }>;
         }>;
         pagination: {
             currentPage: number;
@@ -63953,6 +64700,12 @@ export type UploadKnowledgeFileResponses = {
             name: string;
         }>;
         teamIds: Array<string>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
@@ -64057,6 +64810,12 @@ export type PromoteAttachmentToKnowledgeFileResponses = {
             name: string;
         }>;
         teamIds: Array<string>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
@@ -64262,6 +65021,12 @@ export type UpdateKnowledgeFileResponses = {
             name: string;
         }>;
         teamIds: Array<string>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
@@ -65132,6 +65897,173 @@ export type BulkUpdateKnowledgeDirectoriesResponses = {
 
 export type BulkUpdateKnowledgeDirectoriesResponse = BulkUpdateKnowledgeDirectoriesResponses[keyof BulkUpdateKnowledgeDirectoriesResponses];
 
+export type LimitLabelKeysData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/limits/labels/keys';
+};
+
+export type LimitLabelKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type LimitLabelKeysError = LimitLabelKeysErrors[keyof LimitLabelKeysErrors];
+
+export type LimitLabelKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type LimitLabelKeysResponse = LimitLabelKeysResponses[keyof LimitLabelKeysResponses];
+
+export type LimitLabelValuesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Filter values by label key
+         */
+        key?: string;
+    };
+    url: '/api/limits/labels/values';
+};
+
+export type LimitLabelValuesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type LimitLabelValuesError = LimitLabelValuesErrors[keyof LimitLabelValuesErrors];
+
+export type LimitLabelValuesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type LimitLabelValuesResponse = LimitLabelValuesResponses[keyof LimitLabelValuesResponses];
+
 export type GetLimitsData = {
     body?: never;
     path?: never;
@@ -65139,6 +66071,10 @@ export type GetLimitsData = {
         entityType?: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key' | 'environment';
         entityId?: string;
         limitType?: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
+        /**
+         * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
+         */
+        labels?: string;
     };
     url: '/api/limits';
 };
@@ -65225,6 +66161,12 @@ export type GetLimitsResponses = {
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
         modelUsage?: Array<{
             model: string;
             tokensIn: number;
@@ -65247,6 +66189,12 @@ export type CreateLimitData = {
         model?: Array<string> | null;
         cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup?: unknown;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
     path?: never;
     query?: never;
@@ -65516,6 +66464,12 @@ export type GetLimitResponses = {
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
         modelUsage?: Array<{
             model: string;
             tokensIn: number;
@@ -65536,6 +66490,12 @@ export type UpdateLimitData = {
         model?: Array<string> | null;
         cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup?: unknown;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
     path: {
         id: string;
@@ -65727,6 +66687,173 @@ export type BulkDeleteLimitsResponses = {
 };
 
 export type BulkDeleteLimitsResponse = BulkDeleteLimitsResponses[keyof BulkDeleteLimitsResponses];
+
+export type LlmProviderModelLabelKeysData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/llm-provider-models/labels/keys';
+};
+
+export type LlmProviderModelLabelKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type LlmProviderModelLabelKeysError = LlmProviderModelLabelKeysErrors[keyof LlmProviderModelLabelKeysErrors];
+
+export type LlmProviderModelLabelKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type LlmProviderModelLabelKeysResponse = LlmProviderModelLabelKeysResponses[keyof LlmProviderModelLabelKeysResponses];
+
+export type LlmProviderModelLabelValuesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Filter values by label key
+         */
+        key?: string;
+    };
+    url: '/api/llm-provider-models/labels/values';
+};
+
+export type LlmProviderModelLabelValuesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type LlmProviderModelLabelValuesError = LlmProviderModelLabelValuesErrors[keyof LlmProviderModelLabelValuesErrors];
+
+export type LlmProviderModelLabelValuesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type LlmProviderModelLabelValuesResponse = LlmProviderModelLabelValuesResponses[keyof LlmProviderModelLabelValuesResponses];
 
 export type GetLlmModelsData = {
     body?: never;
@@ -66060,6 +67187,12 @@ export type GetModelsWithApiKeysResponses = {
             name: string;
             email: string;
         }>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
         pricePerMillionInput: string | null;
         pricePerMillionOutput: string | null;
         isCustomPrice: boolean;
@@ -66328,6 +67461,173 @@ export type UpdateModelResponses = {
 
 export type UpdateModelResponse = UpdateModelResponses[keyof UpdateModelResponses];
 
+export type LlmOauthClientLabelKeysData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/llm-oauth-clients/labels/keys';
+};
+
+export type LlmOauthClientLabelKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type LlmOauthClientLabelKeysError = LlmOauthClientLabelKeysErrors[keyof LlmOauthClientLabelKeysErrors];
+
+export type LlmOauthClientLabelKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type LlmOauthClientLabelKeysResponse = LlmOauthClientLabelKeysResponses[keyof LlmOauthClientLabelKeysResponses];
+
+export type LlmOauthClientLabelValuesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Filter values by label key
+         */
+        key?: string;
+    };
+    url: '/api/llm-oauth-clients/labels/values';
+};
+
+export type LlmOauthClientLabelValuesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type LlmOauthClientLabelValuesError = LlmOauthClientLabelValuesErrors[keyof LlmOauthClientLabelValuesErrors];
+
+export type LlmOauthClientLabelValuesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type LlmOauthClientLabelValuesResponse = LlmOauthClientLabelValuesResponses[keyof LlmOauthClientLabelValuesResponses];
+
 export type GetLlmOauthClientsData = {
     body?: never;
     path?: never;
@@ -66337,6 +67637,10 @@ export type GetLlmOauthClientsData = {
         search?: string;
         providerApiKeyId?: string;
         grantType?: 'client_credentials' | 'authorization_code';
+        /**
+         * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
+         */
+        labels?: string;
     };
     url: '/api/llm-oauth-clients';
 };
@@ -66430,6 +67734,12 @@ export type GetLlmOauthClientsResponses = {
             teams: Array<{
                 id: string;
                 name: string;
+            }>;
+            labels: Array<{
+                key: string;
+                value: string;
+                keyId?: string;
+                valueId?: string;
             }>;
             createdAt: string;
             updatedAt: string;
@@ -66552,6 +67862,12 @@ export type CreateLlmOauthClientResponses = {
         teams: Array<{
             id: string;
             name: string;
+        }>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
         }>;
         createdAt: string;
         updatedAt: string;
@@ -66754,6 +68070,12 @@ export type UpdateLlmOauthClientResponses = {
             id: string;
             name: string;
         }>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
         createdAt: string;
         updatedAt: string;
     };
@@ -66858,6 +68180,12 @@ export type RotateLlmOauthClientSecretResponses = {
         teams: Array<{
             id: string;
             name: string;
+        }>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
         }>;
         createdAt: string;
         updatedAt: string;
@@ -66964,12 +68292,183 @@ export type BulkDeleteLlmOauthClientsResponses = {
 
 export type BulkDeleteLlmOauthClientsResponse = BulkDeleteLlmOauthClientsResponses[keyof BulkDeleteLlmOauthClientsResponses];
 
+export type LlmProviderApiKeyLabelKeysData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/llm-provider-api-keys/labels/keys';
+};
+
+export type LlmProviderApiKeyLabelKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type LlmProviderApiKeyLabelKeysError = LlmProviderApiKeyLabelKeysErrors[keyof LlmProviderApiKeyLabelKeysErrors];
+
+export type LlmProviderApiKeyLabelKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type LlmProviderApiKeyLabelKeysResponse = LlmProviderApiKeyLabelKeysResponses[keyof LlmProviderApiKeyLabelKeysResponses];
+
+export type LlmProviderApiKeyLabelValuesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Filter values by label key
+         */
+        key?: string;
+    };
+    url: '/api/llm-provider-api-keys/labels/values';
+};
+
+export type LlmProviderApiKeyLabelValuesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type LlmProviderApiKeyLabelValuesError = LlmProviderApiKeyLabelValuesErrors[keyof LlmProviderApiKeyLabelValuesErrors];
+
+export type LlmProviderApiKeyLabelValuesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type LlmProviderApiKeyLabelValuesResponse = LlmProviderApiKeyLabelValuesResponses[keyof LlmProviderApiKeyLabelValuesResponses];
+
 export type GetLlmProviderApiKeysData = {
     body?: never;
     path?: never;
     query?: {
         search?: string;
         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        /**
+         * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
+         */
+        labels?: string;
     };
     url: '/api/llm-provider-api-keys';
 };
@@ -67069,6 +68568,12 @@ export type GetLlmProviderApiKeysResponses = {
         bestModelId?: string | null;
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     }>;
 };
 
@@ -67295,6 +68800,12 @@ export type GetAvailableLlmProviderApiKeysResponses = {
         bestModelId?: string | null;
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     }>;
 };
 
@@ -67489,6 +69000,12 @@ export type GetLlmProviderApiKeyResponses = {
         bestModelId?: string | null;
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
@@ -68060,11 +69577,182 @@ export type McpGatewayPostResponses = {
     200: unknown;
 };
 
+export type McpOauthClientLabelKeysData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/mcp-oauth-clients/labels/keys';
+};
+
+export type McpOauthClientLabelKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type McpOauthClientLabelKeysError = McpOauthClientLabelKeysErrors[keyof McpOauthClientLabelKeysErrors];
+
+export type McpOauthClientLabelKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type McpOauthClientLabelKeysResponse = McpOauthClientLabelKeysResponses[keyof McpOauthClientLabelKeysResponses];
+
+export type McpOauthClientLabelValuesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Filter values by label key
+         */
+        key?: string;
+    };
+    url: '/api/mcp-oauth-clients/labels/values';
+};
+
+export type McpOauthClientLabelValuesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type McpOauthClientLabelValuesError = McpOauthClientLabelValuesErrors[keyof McpOauthClientLabelValuesErrors];
+
+export type McpOauthClientLabelValuesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type McpOauthClientLabelValuesResponse = McpOauthClientLabelValuesResponses[keyof McpOauthClientLabelValuesResponses];
+
 export type GetMcpOauthClientsData = {
     body?: never;
     path?: never;
     query?: {
         search?: string;
+        /**
+         * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
+         */
+        labels?: string;
     };
     url: '/api/mcp-oauth-clients';
 };
@@ -68153,6 +69841,12 @@ export type GetMcpOauthClientsResponses = {
         teams: Array<{
             id: string;
             name: string;
+        }>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
         }>;
         createdAt: string;
         updatedAt: string;
@@ -68259,6 +69953,12 @@ export type CreateMcpOauthClientResponses = {
         teams: Array<{
             id: string;
             name: string;
+        }>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
         }>;
         createdAt: string;
         updatedAt: string;
@@ -68454,6 +70154,12 @@ export type UpdateMcpOauthClientResponses = {
             id: string;
             name: string;
         }>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
         createdAt: string;
         updatedAt: string;
     };
@@ -68554,6 +70260,12 @@ export type RotateMcpOauthClientSecretResponses = {
         teams: Array<{
             id: string;
             name: string;
+        }>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
         }>;
         createdAt: string;
         updatedAt: string;
@@ -81021,10 +82733,182 @@ export type PerplexityResponsesWithAgentResponses = {
 
 export type PerplexityResponsesWithAgentResponse = PerplexityResponsesWithAgentResponses[keyof PerplexityResponsesWithAgentResponses];
 
-export type GetPluginsData = {
+export type PluginLabelKeysData = {
     body?: never;
     path?: never;
     query?: never;
+    url: '/api/plugins/labels/keys';
+};
+
+export type PluginLabelKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type PluginLabelKeysError = PluginLabelKeysErrors[keyof PluginLabelKeysErrors];
+
+export type PluginLabelKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type PluginLabelKeysResponse = PluginLabelKeysResponses[keyof PluginLabelKeysResponses];
+
+export type PluginLabelValuesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Filter values by label key
+         */
+        key?: string;
+    };
+    url: '/api/plugins/labels/values';
+};
+
+export type PluginLabelValuesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type PluginLabelValuesError = PluginLabelValuesErrors[keyof PluginLabelValuesErrors];
+
+export type PluginLabelValuesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type PluginLabelValuesResponse = PluginLabelValuesResponses[keyof PluginLabelValuesResponses];
+
+export type GetPluginsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
+         */
+        labels?: string;
+    };
     url: '/api/plugins';
 };
 
@@ -81161,6 +83045,12 @@ export type CreatePluginData = {
             encoding?: 'utf8' | 'base64';
             mode?: '100644' | '100755';
         }>;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
     path?: never;
     query?: never;
@@ -81281,6 +83171,12 @@ export type CreatePluginResponses = {
             id: string;
             name: string;
             email: string;
+        }>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
         }>;
         files: Array<{
             id: string;
@@ -81554,6 +83450,12 @@ export type ImportGithubPluginMarketplaceResponses = {
                 name: string;
                 email: string;
             }>;
+            labels: Array<{
+                key: string;
+                value: string;
+                keyId?: string;
+                valueId?: string;
+            }>;
             files: Array<{
                 id: string;
                 pluginId: string;
@@ -81814,6 +83716,12 @@ export type ImportGithubPluginResponses = {
             name: string;
             email: string;
         }>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
         files: Array<{
             id: string;
             pluginId: string;
@@ -82057,6 +83965,12 @@ export type ApplyGithubPluginUpdateResponses = {
             name: string;
             email: string;
         }>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
         files: Array<{
             id: string;
             pluginId: string;
@@ -82196,6 +84110,12 @@ export type UpdatePluginGithubSyncResponses = {
             id: string;
             name: string;
             email: string;
+        }>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
         }>;
         files: Array<{
             id: string;
@@ -82505,6 +84425,12 @@ export type GetPluginResponses = {
             name: string;
             email: string;
         }>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
         files: Array<{
             id: string;
             pluginId: string;
@@ -82528,6 +84454,12 @@ export type UpdatePluginData = {
         scope?: 'personal' | 'team' | 'org';
         teamIds?: Array<string>;
         userIds?: Array<string>;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
         githubSource?: {
             repoUrl: string;
             ref: string | null;
@@ -82665,6 +84597,12 @@ export type UpdatePluginResponses = {
             id: string;
             name: string;
             email: string;
+        }>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
         }>;
         files: Array<{
             id: string;
@@ -87936,10 +89874,182 @@ export type CheckSecretsConnectivityResponses = {
 
 export type CheckSecretsConnectivityResponse = CheckSecretsConnectivityResponses[keyof CheckSecretsConnectivityResponses];
 
-export type GetServiceAccountsData = {
+export type ServiceAccountLabelKeysData = {
     body?: never;
     path?: never;
     query?: never;
+    url: '/api/service-accounts/labels/keys';
+};
+
+export type ServiceAccountLabelKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ServiceAccountLabelKeysError = ServiceAccountLabelKeysErrors[keyof ServiceAccountLabelKeysErrors];
+
+export type ServiceAccountLabelKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type ServiceAccountLabelKeysResponse = ServiceAccountLabelKeysResponses[keyof ServiceAccountLabelKeysResponses];
+
+export type ServiceAccountLabelValuesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Filter values by label key
+         */
+        key?: string;
+    };
+    url: '/api/service-accounts/labels/values';
+};
+
+export type ServiceAccountLabelValuesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ServiceAccountLabelValuesError = ServiceAccountLabelValuesErrors[keyof ServiceAccountLabelValuesErrors];
+
+export type ServiceAccountLabelValuesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type ServiceAccountLabelValuesResponse = ServiceAccountLabelValuesResponses[keyof ServiceAccountLabelValuesResponses];
+
+export type GetServiceAccountsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
+         */
+        labels?: string;
+    };
     url: '/api/service-accounts';
 };
 
@@ -88020,6 +90130,12 @@ export type GetServiceAccountsResponses = {
         disabled: boolean;
         createdAt: string;
         updatedAt: string;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
         tokenCount: number;
         activeTokenCount: number;
         lastUsedAt: string | null;
@@ -88033,6 +90149,12 @@ export type CreateServiceAccountData = {
     body: {
         name: string;
         role: string;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
     path?: never;
     query?: never;
@@ -88116,6 +90238,12 @@ export type CreateServiceAccountResponses = {
         disabled: boolean;
         createdAt: string;
         updatedAt: string;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
         tokenCount: number;
         activeTokenCount: number;
         lastUsedAt: string | null;
@@ -88305,6 +90433,12 @@ export type GetServiceAccountResponses = {
         disabled: boolean;
         createdAt: string;
         updatedAt: string;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
         tokenCount: number;
         activeTokenCount: number;
         lastUsedAt: string | null;
@@ -88328,6 +90462,12 @@ export type UpdateServiceAccountData = {
         name?: string;
         role?: string;
         disabled?: boolean;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
     path: {
         id: string;
@@ -88413,6 +90553,12 @@ export type UpdateServiceAccountResponses = {
         disabled: boolean;
         createdAt: string;
         updatedAt: string;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
         tokenCount: number;
         activeTokenCount: number;
         lastUsedAt: string | null;
@@ -89527,6 +91673,173 @@ export type GetSkillMarketplaceResponses = {
 
 export type GetSkillMarketplaceResponse = GetSkillMarketplaceResponses[keyof GetSkillMarketplaceResponses];
 
+export type SkillLabelKeysData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/skills/labels/keys';
+};
+
+export type SkillLabelKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type SkillLabelKeysError = SkillLabelKeysErrors[keyof SkillLabelKeysErrors];
+
+export type SkillLabelKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type SkillLabelKeysResponse = SkillLabelKeysResponses[keyof SkillLabelKeysResponses];
+
+export type SkillLabelValuesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Filter values by label key
+         */
+        key?: string;
+    };
+    url: '/api/skills/labels/values';
+};
+
+export type SkillLabelValuesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type SkillLabelValuesError = SkillLabelValuesErrors[keyof SkillLabelValuesErrors];
+
+export type SkillLabelValuesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type SkillLabelValuesResponse = SkillLabelValuesResponses[keyof SkillLabelValuesResponses];
+
 export type GetSkillsData = {
     body?: never;
     path?: never;
@@ -89563,6 +91876,10 @@ export type GetSkillsData = {
          * Which skills to list: active (default) or the soft-deleted trash. `deleted` is restricted to admins and team-admins.
          */
         status?: 'active' | 'deleted';
+        /**
+         * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
+         */
+        labels?: string;
         sortBy?: 'usageCount' | 'lastUsedAt' | 'name' | 'createdAt';
         sortDirection?: 'asc' | 'desc';
     };
@@ -89687,6 +92004,12 @@ export type GetSkillsResponses = {
             }>;
             authorName: string | null;
             usageUserCount: number;
+            labels: Array<{
+                key: string;
+                value: string;
+                keyId?: string;
+                valueId?: string;
+            }>;
         }>;
         pagination: {
             currentPage: number;
@@ -89859,6 +92182,12 @@ export type CreateSkillResponses = {
             id: string;
             name: string;
         }>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
@@ -90000,6 +92329,12 @@ export type ConvertAgentToSkillResponses = {
             environments: Array<{
                 id: string;
                 name: string;
+            }>;
+            labels: Array<{
+                key: string;
+                value: string;
+                keyId?: string;
+                valueId?: string;
             }>;
         };
         report: {
@@ -90321,6 +92656,12 @@ export type GetSkillResponses = {
             id: string;
             name: string;
         }>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
@@ -90489,6 +92830,12 @@ export type UpdateSkillResponses = {
         environments: Array<{
             id: string;
             name: string;
+        }>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
         }>;
     };
 };
@@ -91212,6 +93559,12 @@ export type RestoreSkillResponses = {
             id: string;
             name: string;
         }>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
@@ -91435,6 +93788,12 @@ export type ResetSkillResponses = {
             id: string;
             name: string;
         }>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
@@ -91585,6 +93944,12 @@ export type UpdateSkillGithubSyncResponses = {
         environments: Array<{
             id: string;
             name: string;
+        }>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
         }>;
     };
 };
@@ -96628,6 +98993,173 @@ export type RotateUserTokenResponses = {
 
 export type RotateUserTokenResponse = RotateUserTokenResponses[keyof RotateUserTokenResponses];
 
+export type VirtualApiKeyLabelKeysData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/llm-virtual-keys/labels/keys';
+};
+
+export type VirtualApiKeyLabelKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type VirtualApiKeyLabelKeysError = VirtualApiKeyLabelKeysErrors[keyof VirtualApiKeyLabelKeysErrors];
+
+export type VirtualApiKeyLabelKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type VirtualApiKeyLabelKeysResponse = VirtualApiKeyLabelKeysResponses[keyof VirtualApiKeyLabelKeysResponses];
+
+export type VirtualApiKeyLabelValuesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Filter values by label key
+         */
+        key?: string;
+    };
+    url: '/api/llm-virtual-keys/labels/values';
+};
+
+export type VirtualApiKeyLabelValuesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type VirtualApiKeyLabelValuesError = VirtualApiKeyLabelValuesErrors[keyof VirtualApiKeyLabelValuesErrors];
+
+export type VirtualApiKeyLabelValuesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type VirtualApiKeyLabelValuesResponse = VirtualApiKeyLabelValuesResponses[keyof VirtualApiKeyLabelValuesResponses];
+
 export type GetAllVirtualApiKeysData = {
     body?: never;
     path?: never;
@@ -96638,6 +99170,10 @@ export type GetAllVirtualApiKeysData = {
         providerApiKeyId?: string;
         keyType?: 'standard' | 'passthrough';
         scope?: 'personal' | 'team' | 'org';
+        /**
+         * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
+         */
+        labels?: string;
     };
     url: '/api/llm-virtual-keys';
 };
@@ -96734,6 +99270,12 @@ export type GetAllVirtualApiKeysResponses = {
                 providerApiKeyId: string;
                 providerApiKeyName: string;
             }>;
+            labels: Array<{
+                key: string;
+                value: string;
+                keyId?: string;
+                valueId?: string;
+            }>;
         }>;
         pagination: {
             currentPage: number;
@@ -96758,6 +99300,12 @@ export type CreateVirtualApiKeyData = {
         providerApiKeys?: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             providerApiKeyId: string;
+        }>;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
         }>;
         ownerId?: string;
     };
@@ -96857,6 +99405,12 @@ export type CreateVirtualApiKeyResponses = {
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             providerApiKeyId: string;
             providerApiKeyName: string;
+        }>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
         }>;
     };
 };
@@ -97048,6 +99602,12 @@ export type GetVirtualApiKeyResponses = {
             providerApiKeyId: string;
             providerApiKeyName: string;
         }>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
@@ -97063,6 +99623,12 @@ export type UpdateVirtualApiKeyData = {
         providerApiKeys?: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             providerApiKeyId: string;
+        }>;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
         }>;
     };
     path: {
@@ -97162,6 +99728,12 @@ export type UpdateVirtualApiKeyResponses = {
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
             providerApiKeyId: string;
             providerApiKeyName: string;
+        }>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
         }>;
     };
 };

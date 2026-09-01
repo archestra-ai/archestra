@@ -14,6 +14,7 @@ function makeOrgSkill(id: string, name: string): OrgSkill {
     authorId: "test-user-admin",
     scope: "org",
     environments: [],
+    labels: [],
     agentName: null,
     name,
     description: `${name} description`,

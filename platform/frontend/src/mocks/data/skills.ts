@@ -104,6 +104,7 @@ function makeSkillListItem(
     organizationId: "test-org",
     authorId: "test-user-admin",
     authorName: "Admin User",
+    labels: [],
     scope: "org",
     description: "",
     content: `---\nname: ${overrides.name}\ndescription: A demo skill.\n---\n\nDo the thing, carefully.`,

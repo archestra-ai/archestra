@@ -24,15 +24,18 @@ const {
   updateServiceAccountToken,
 } = archestraApiSdk;
 
-export function useServiceAccounts() {
+export function useServiceAccounts(params?: { labels?: string }) {
   const { data: canReadServiceAccounts } = useHasPermissions({
     serviceAccount: ["read"],
   });
+  const labels = params?.labels;
 
   return useQuery({
-    queryKey: ["service-accounts"],
+    queryKey: ["service-accounts", { labels }],
     queryFn: async () => {
-      const { data, error } = await getServiceAccounts();
+      const { data, error } = await getServiceAccounts({
+        query: labels ? { labels } : {},
+      });
       // Screen renders its own QueryLoadError panel; don't also toast.
       throwOnApiError(error, { toastOnError: false });
 
@@ -78,6 +81,8 @@ export function useCreateServiceAccount() {
     onSuccess: (data) => {
       if (!data) return;
       toast.success("Service account created successfully");
+      // Also refreshes the label filter's key/value vocabulary, which a new
+      // account's labels may have just extended.
       queryClient.invalidateQueries({ queryKey: ["service-accounts"] });
     },
   });

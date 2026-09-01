@@ -95,6 +95,7 @@ const model = {
   isFree: false,
   effectiveContextLength: 200_000,
   embeddingClientImageCapable: null,
+  labels: [],
 } satisfies archestraApiTypes.GetModelsWithApiKeysResponses["200"][number];
 
 let keyCreated = false;

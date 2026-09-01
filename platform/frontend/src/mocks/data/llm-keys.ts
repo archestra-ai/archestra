@@ -44,6 +44,7 @@ export function makeVirtualKey(
     id: "test-virtual-key",
     organizationId: "test-org",
     name: "test-virtual-key",
+    labels: [],
     keyType: "standard",
     secretId: "test-vk-secret",
     tokenStart: "archestra_test",

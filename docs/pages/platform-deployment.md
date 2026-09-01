@@ -323,6 +323,8 @@ A host that declares its own `/v1` or `/v2` path keeps it. So does a host that n
 
 Everything else stays on the frontend, including `/api/auth` — that one is a real frontend route.
 
+This applies to hosts declared under `hosts:`. If you supply a complete `spec`, manage your own Ingress, or route traffic at a load balancer outside the cluster, apply the same split yourself — see [Routing the LLM Proxy Away From the Frontend](#routing-the-llm-proxy-away-from-the-frontend).
+
 **GKE BackendConfig Settings** (Google Cloud only):
 
 - `archestra.gkeBackendConfig.enabled` - Enable or disable GKE BackendConfig resources (default: false)
@@ -429,6 +431,8 @@ archestra:
       traefik.ingress.kubernetes.io/service.passhostheader: "true"
       # Configure timeout via Traefik IngressRoute or Middleware
 ```
+
+Whichever controller you use, also route `/v1` and `/v2` to the backend port — see [Routing the LLM Proxy Away From the Frontend](#routing-the-llm-proxy-away-from-the-frontend).
 
 #### Scaling & High Availability Configuration
 
@@ -577,6 +581,48 @@ The [Knowledge Base](/docs/platform-knowledge) enterprise feature requires the [
 **Self-managed PostgreSQL:** Install the pgvector package for your distribution (e.g., `apt install postgresql-17-pgvector`) and ensure the database user has `CREATE` privilege on the database, or grant `SUPERUSER` to allow extension creation.
 
 If pgvector is not installed or the database user lacks permissions, the Knowledge Base migration will fail. This does not affect other Archestra features.
+
+#### Routing the LLM Proxy Away From the Frontend
+
+Send `/v1` and `/v2` to the backend port (9000), and everything else to the frontend port (3000).
+
+Both prefixes are backend APIs. Neither has a frontend route — the frontend receives them only to forward them on. `/v1` is the LLM proxy, and its requests carry large bodies and stay open for the length of a completion. Routed through the frontend port, that traffic runs on the same single-threaded process that answers the dashboard's own API calls, so the UI gets slow while an agent is working.
+
+Keep `/` on the frontend. `/api/auth` is a real frontend route and must stay there, so route the two specific prefixes rather than all of `/api`.
+
+If you use the chart's `archestra.ingress.hosts`, this is already done for you — see [Ingress Settings](#service-deployment--ingress-configuration). You need to apply it yourself when you supply a complete `archestra.ingress.spec`, manage your own Ingress, or terminate traffic at a load balancer or gateway outside the cluster.
+
+For an Ingress you manage yourself:
+
+```yaml
+rules:
+  - host: archestra.example.com
+    http:
+      paths:
+        - path: /v1
+          pathType: Prefix
+          backend:
+            service:
+              name: archestra-platform
+              port:
+                number: 9000
+        - path: /v2
+          pathType: Prefix
+          backend:
+            service:
+              name: archestra-platform
+              port:
+                number: 9000
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: archestra-platform
+              port:
+                number: 3000
+```
+
+The same rule applies to any other routing layer — an ALB listener rule, an nginx `location` block, a Traefik router, or a service mesh route. Match `/v1` and `/v2` to port 9000 and leave the default to 3000.
 
 #### SSRF Protection
 

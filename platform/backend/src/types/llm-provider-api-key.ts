@@ -1,4 +1,5 @@
 import {
+  CreatedByNullableSchema,
   SubscriptionCredentialKindSchema,
   SupportedProvidersSchema,
 } from "@archestra/shared";
@@ -68,7 +69,13 @@ export type UpdateLlmProviderApiKey = z.infer<
 >;
 
 export const LlmProviderApiKeyWithScopeInfoSchema =
-  SelectLlmProviderApiKeySchema.extend({
+  SelectLlmProviderApiKeySchema.omit({ createdBy: true }).extend({
+    /**
+     * Who added the key, resolved. Distinct from `userName`, which names the
+     * *audience* of a personal-scoped key and is null on org- and team-scoped
+     * ones — the rows most likely to need an owner tracked down.
+     */
+    createdBy: CreatedByNullableSchema,
     teamName: z.string().nullable().optional(),
     userName: z.string().nullable().optional(),
     vaultSecretPath: z.string().nullable().optional(),

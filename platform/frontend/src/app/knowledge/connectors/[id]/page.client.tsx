@@ -42,6 +42,7 @@ import { ConnectorStatusPill } from "@/app/knowledge/knowledge-bases/_parts/conn
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { EditConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/edit-connector-dialog";
+import { createdByFact } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { type DetailFact, DetailFacts } from "@/components/detail-facts";
 import {
@@ -505,6 +506,7 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
       label: "Knowledge bases",
       value: <KnowledgeBasesValue connectorId={connectorId} />,
     },
+    createdByFact(connector.createdBy),
     ...(isAutoSync
       ? [
           {

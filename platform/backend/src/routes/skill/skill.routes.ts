@@ -1,4 +1,5 @@
 import {
+  CreatedByNullableSchema,
   calculatePaginationMeta,
   createPaginatedResponseSchema,
   MAX_BULK_IDS,
@@ -25,6 +26,8 @@ import { withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {
   AgentModel,
+  CreatedByModel,
+  lookupCreator,
   MemberModel,
   OrganizationModel,
   SkillEnvironmentModel,
@@ -155,6 +158,8 @@ const SkillEnvironmentSchema = z.object({ id: z.string(), name: z.string() });
 
 /** A skill row plus its resource-file count, team assignments, and author. */
 const SkillListItemSchema = SkillResponseSchema.extend({
+  /** The author, in the shape shared by every major object. */
+  createdBy: CreatedByNullableSchema,
   fileCount: z.number(),
   teams: z.array(SkillTeamSchema),
   users: z.array(SkillUserSchema),
@@ -170,6 +175,7 @@ const SkillListItemSchema = SkillResponseSchema.extend({
 
 /** A skill with its resource files, team, and environment assignments. */
 const SkillDetailSchema = SkillWithFilesSchema.extend({
+  createdBy: CreatedByNullableSchema,
   teams: z.array(SkillTeamSchema),
   users: z.array(SkillUserSchema),
   environments: z.array(SkillEnvironmentSchema),
@@ -514,6 +520,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         usersBySkill,
         environmentsBySkill,
         authorNames,
+        creators,
         usageUserCounts,
         labelsBySkill,
       ] = await Promise.all([
@@ -522,6 +529,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         SkillUserModel.getUserDetailsForSkills(skillIds),
         SkillEnvironmentModel.getEnvironmentDetailsForSkills(skillIds),
         UserModel.getNamesByIds(skillAuthorIds),
+        CreatedByModel.resolve(skillAuthorIds),
         SkillUsageEventModel.countDistinctUsersBySkillIds(skillIds),
         SkillLabelModel.getLabelsForMany(skillIds),
       ]);
@@ -538,6 +546,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           authorName: skill.authorId
             ? (authorNames.get(skill.authorId) ?? null)
             : null,
+          createdBy: lookupCreator(creators, skill.authorId),
           usageUserCount: usageUserCounts.get(skill.id) ?? 0,
           labels: labelsBySkill.get(skill.id) ?? [],
         })),
@@ -2156,16 +2165,24 @@ async function requireReadableSkill(params: {
 
 /** A skill with its files, team, and environment assignments, for detail responses. */
 async function loadSkillDetail(skill: Skill) {
-  const [files, teamsBySkill, usersBySkill, environmentsBySkill, labels] =
-    await Promise.all([
-      SkillFileModel.findBySkillId(skill.id),
-      SkillTeamModel.getTeamDetailsForSkills([skill.id]),
-      SkillUserModel.getUserDetailsForSkills([skill.id]),
-      SkillEnvironmentModel.getEnvironmentDetailsForSkills([skill.id]),
-      SkillLabelModel.getLabelsFor(skill.id),
-    ]);
+  const [
+    files,
+    teamsBySkill,
+    usersBySkill,
+    environmentsBySkill,
+    createdBy,
+    labels,
+  ] = await Promise.all([
+    SkillFileModel.findBySkillId(skill.id),
+    SkillTeamModel.getTeamDetailsForSkills([skill.id]),
+    SkillUserModel.getUserDetailsForSkills([skill.id]),
+    SkillEnvironmentModel.getEnvironmentDetailsForSkills([skill.id]),
+    CreatedByModel.resolveOne(skill.authorId),
+    SkillLabelModel.getLabelsFor(skill.id),
+  ]);
   return {
     ...skill,
+    createdBy,
     files,
     teams: teamsBySkill.get(skill.id) ?? [],
     users: usersBySkill.get(skill.id) ?? [],

@@ -1,7 +1,7 @@
 import config from "@/config";
 import { afterEach, describe, expect, test } from "@/test";
 import type { AgentBackgroundExecution } from "@/types";
-import { resolveAgentDeployment } from "./pod-execution";
+import { extractFinalAnswer, resolveAgentDeployment } from "./pod-execution";
 
 const originalEnabled = config.agentBackgroundExecution.enabled;
 
@@ -50,3 +50,35 @@ const agentWithDeployment = {
   backgroundExecution,
   backgroundExecutionSecretId: "secret-1",
 };
+
+describe("extractFinalAnswer", () => {
+  test("returns the whole transcript when no runtime fenced an answer", () => {
+    // Every one-shot runtime, and any image predating the fence.
+    expect(extractFinalAnswer("the whole answer\n")).toBe("the whole answer\n");
+  });
+
+  test("keeps only what the runtime fenced, dropping the TUI recording", () => {
+    const transcript = [
+      "\u001b[2J\u001b[H╭─ Claude Code ─╮",
+      "│ working...    │",
+      "",
+      "===ARCHESTRA-FINAL-ANSWER===",
+      "Fixed the divider and opened PR #7.",
+    ].join("\n");
+    expect(extractFinalAnswer(transcript)).toBe(
+      "Fixed the divider and opened PR #7.",
+    );
+  });
+
+  test("takes the last fence when a TUI scrolled an earlier one back", () => {
+    const transcript =
+      "===ARCHESTRA-FINAL-ANSWER===\nstale redraw\n===ARCHESTRA-FINAL-ANSWER===\nthe real answer";
+    expect(extractFinalAnswer(transcript)).toBe("the real answer");
+  });
+
+  test("falls back to the transcript when the fence has nothing after it", () => {
+    // The runtime died mid-write; a partial recording beats an empty answer.
+    const transcript = "some output\n===ARCHESTRA-FINAL-ANSWER===\n";
+    expect(extractFinalAnswer(transcript)).toBe(transcript);
+  });
+});

@@ -1,4 +1,5 @@
 import {
+  CreatedByNullableSchema,
   ResourceVisibilityScopeSchema,
   type SupportedProvider,
   SupportedProvidersSchema,
@@ -65,6 +66,8 @@ export const LlmOauthClientSchema = z.object({
   scope: ResourceVisibilityScopeSchema,
   authorId: z.string().nullable(),
   authorName: z.string().nullable(),
+  /** The author, in the shape shared by every major object. */
+  createdBy: CreatedByNullableSchema,
   teams: z.array(LlmOauthClientTeamInfoSchema),
   labels: z.array(LabelWithDetailsSchema),
   createdAt: z.date(),

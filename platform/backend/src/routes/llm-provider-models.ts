@@ -635,9 +635,17 @@ export async function syncModelsForVisibleApiKeys(params: {
   );
 }
 
+/**
+ * What model syncing actually needs off a key: its credential and provider
+ * config, never its provenance. Spelled without `createdBy` so both the stored
+ * row and the API response — which differ only in whether that field is a raw
+ * user id or the resolved identity — can be passed here unchanged.
+ */
+type ModelSyncApiKey = Omit<LlmProviderApiKeyWithScopeInfo, "createdBy">;
+
 export async function triggerLazyModelSyncForStaleApiKeys(params: {
   organizationId: string;
-  apiKeys: LlmProviderApiKeyWithScopeInfo[];
+  apiKeys: ModelSyncApiKey[];
   now?: Date;
 }): Promise<Array<Promise<void>>> {
   const staleApiKeys = await getStaleModelSyncApiKeys(params);
@@ -661,10 +669,14 @@ export async function triggerLazyModelSyncForStaleApiKeys(params: {
   return syncs;
 }
 
-export async function getStaleModelSyncApiKeys(params: {
-  apiKeys: LlmProviderApiKeyWithScopeInfo[];
-  now?: Date;
-}): Promise<LlmProviderApiKeyWithScopeInfo[]> {
+/**
+ * Generic over the row: staleness is decided from `id` and `provider` alone, so
+ * this accepts any key-shaped record and hands back the same type it was given
+ * rather than pinning callers to one response shape.
+ */
+export async function getStaleModelSyncApiKeys<
+  T extends { id: string; provider: SupportedProvider },
+>(params: { apiKeys: T[]; now?: Date }): Promise<T[]> {
   const { apiKeys, now = new Date() } = params;
   const syncStates =
     await LlmProviderApiKeyModelLinkModel.getModelSyncStatesForApiKeys(
@@ -711,7 +723,7 @@ export function isModelSyncStateStale(params: {
 }
 
 async function syncVisibleApiKeyModels(params: {
-  apiKey: LlmProviderApiKeyWithScopeInfo;
+  apiKey: ModelSyncApiKey;
   organizationId: string;
 }): Promise<void> {
   const { apiKey, organizationId } = params;
@@ -766,7 +778,7 @@ async function syncVisibleApiKeyModels(params: {
 }
 
 function scheduleLazyModelSyncForApiKey(params: {
-  apiKey: LlmProviderApiKeyWithScopeInfo;
+  apiKey: ModelSyncApiKey;
   organizationId: string;
 }): Promise<void> {
   const { apiKey } = params;

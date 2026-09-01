@@ -1,5 +1,5 @@
 {
-  "id": "cf478969-9ad7-4abb-bba7-a5702779a9ff",
+  "id": "4ca02adf-58af-4d34-9a24-bcf941e9bdfe",
   "prevId": "52f5eb0b-5b9c-475a-8e99-561160cca7bd",
   "version": "7",
   "dialect": "postgresql",
@@ -7325,92 +7325,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.environment_labels": {
-      "name": "environment_labels",
-      "schema": "",
-      "columns": {
-        "environment_id": {
-          "name": "environment_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "key_id": {
-          "name": "key_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "value_id": {
-          "name": "value_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "environment_labels_environment_id_environments_id_fk": {
-          "name": "environment_labels_environment_id_environments_id_fk",
-          "tableFrom": "environment_labels",
-          "tableTo": "environments",
-          "columnsFrom": [
-            "environment_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "environment_labels_key_id_label_keys_id_fk": {
-          "name": "environment_labels_key_id_label_keys_id_fk",
-          "tableFrom": "environment_labels",
-          "tableTo": "label_keys",
-          "columnsFrom": [
-            "key_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "environment_labels_value_id_label_values_id_fk": {
-          "name": "environment_labels_value_id_label_values_id_fk",
-          "tableFrom": "environment_labels",
-          "tableTo": "label_values",
-          "columnsFrom": [
-            "value_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "environment_labels_environment_id_key_id_pk": {
-          "name": "environment_labels_environment_id_key_id_pk",
-          "columns": [
-            "environment_id",
-            "key_id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.environment_resource_defaults": {
       "name": "environment_resource_defaults",
       "schema": "",
@@ -11293,92 +11207,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.kb_file_labels": {
-      "name": "kb_file_labels",
-      "schema": "",
-      "columns": {
-        "file_id": {
-          "name": "file_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "key_id": {
-          "name": "key_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "value_id": {
-          "name": "value_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "kb_file_labels_file_id_kb_files_id_fk": {
-          "name": "kb_file_labels_file_id_kb_files_id_fk",
-          "tableFrom": "kb_file_labels",
-          "tableTo": "kb_files",
-          "columnsFrom": [
-            "file_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "kb_file_labels_key_id_label_keys_id_fk": {
-          "name": "kb_file_labels_key_id_label_keys_id_fk",
-          "tableFrom": "kb_file_labels",
-          "tableTo": "label_keys",
-          "columnsFrom": [
-            "key_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "kb_file_labels_value_id_label_values_id_fk": {
-          "name": "kb_file_labels_value_id_label_values_id_fk",
-          "tableFrom": "kb_file_labels",
-          "tableTo": "label_values",
-          "columnsFrom": [
-            "value_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "kb_file_labels_file_id_key_id_pk": {
-          "name": "kb_file_labels_file_id_key_id_pk",
-          "columns": [
-            "file_id",
-            "key_id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.kb_file_team": {
       "name": "kb_file_team",
       "schema": "",
@@ -11914,92 +11742,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.knowledge_base_connector_labels": {
-      "name": "knowledge_base_connector_labels",
-      "schema": "",
-      "columns": {
-        "connector_id": {
-          "name": "connector_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "key_id": {
-          "name": "key_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "value_id": {
-          "name": "value_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "knowledge_base_connector_labels_connector_id_knowledge_base_connectors_id_fk": {
-          "name": "knowledge_base_connector_labels_connector_id_knowledge_base_connectors_id_fk",
-          "tableFrom": "knowledge_base_connector_labels",
-          "tableTo": "knowledge_base_connectors",
-          "columnsFrom": [
-            "connector_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "knowledge_base_connector_labels_key_id_label_keys_id_fk": {
-          "name": "knowledge_base_connector_labels_key_id_label_keys_id_fk",
-          "tableFrom": "knowledge_base_connector_labels",
-          "tableTo": "label_keys",
-          "columnsFrom": [
-            "key_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "knowledge_base_connector_labels_value_id_label_values_id_fk": {
-          "name": "knowledge_base_connector_labels_value_id_label_values_id_fk",
-          "tableFrom": "knowledge_base_connector_labels",
-          "tableTo": "label_values",
-          "columnsFrom": [
-            "value_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "knowledge_base_connector_labels_connector_id_key_id_pk": {
-          "name": "knowledge_base_connector_labels_connector_id_key_id_pk",
-          "columns": [
-            "connector_id",
-            "key_id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.knowledge_base_connectors": {
       "name": "knowledge_base_connectors",
       "schema": "",
@@ -12144,6 +11886,12 @@
           "notNull": true,
           "default": 0
         },
+        "created_by": {
+          "name": "created_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -12225,95 +11973,22 @@
           ],
           "onDelete": "set null",
           "onUpdate": "no action"
+        },
+        "knowledge_base_connectors_created_by_user_id_fk": {
+          "name": "knowledge_base_connectors_created_by_user_id_fk",
+          "tableFrom": "knowledge_base_connectors",
+          "tableTo": "user",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.knowledge_base_labels": {
-      "name": "knowledge_base_labels",
-      "schema": "",
-      "columns": {
-        "knowledge_base_id": {
-          "name": "knowledge_base_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "key_id": {
-          "name": "key_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "value_id": {
-          "name": "value_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "knowledge_base_labels_knowledge_base_id_knowledge_bases_id_fk": {
-          "name": "knowledge_base_labels_knowledge_base_id_knowledge_bases_id_fk",
-          "tableFrom": "knowledge_base_labels",
-          "tableTo": "knowledge_bases",
-          "columnsFrom": [
-            "knowledge_base_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "knowledge_base_labels_key_id_label_keys_id_fk": {
-          "name": "knowledge_base_labels_key_id_label_keys_id_fk",
-          "tableFrom": "knowledge_base_labels",
-          "tableTo": "label_keys",
-          "columnsFrom": [
-            "key_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "knowledge_base_labels_value_id_label_values_id_fk": {
-          "name": "knowledge_base_labels_value_id_label_values_id_fk",
-          "tableFrom": "knowledge_base_labels",
-          "tableTo": "label_values",
-          "columnsFrom": [
-            "value_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "knowledge_base_labels_knowledge_base_id_key_id_pk": {
-          "name": "knowledge_base_labels_knowledge_base_id_key_id_pk",
-          "columns": [
-            "knowledge_base_id",
-            "key_id"
-          ]
-        }
-      },
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
@@ -12355,6 +12030,12 @@
           "notNull": true,
           "default": "'active'"
         },
+        "created_by": {
+          "name": "created_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -12394,7 +12075,21 @@
           "with": {}
         }
       },
-      "foreignKeys": {},
+      "foreignKeys": {
+        "knowledge_bases_created_by_user_id_fk": {
+          "name": "knowledge_bases_created_by_user_id_fk",
+          "tableFrom": "knowledge_bases",
+          "tableTo": "user",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
@@ -12493,92 +12188,6 @@
           ]
         }
       },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.limit_labels": {
-      "name": "limit_labels",
-      "schema": "",
-      "columns": {
-        "limit_id": {
-          "name": "limit_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "key_id": {
-          "name": "key_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "value_id": {
-          "name": "value_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "limit_labels_limit_id_limits_id_fk": {
-          "name": "limit_labels_limit_id_limits_id_fk",
-          "tableFrom": "limit_labels",
-          "tableTo": "limits",
-          "columnsFrom": [
-            "limit_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "limit_labels_key_id_label_keys_id_fk": {
-          "name": "limit_labels_key_id_label_keys_id_fk",
-          "tableFrom": "limit_labels",
-          "tableTo": "label_keys",
-          "columnsFrom": [
-            "key_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "limit_labels_value_id_label_values_id_fk": {
-          "name": "limit_labels_value_id_label_values_id_fk",
-          "tableFrom": "limit_labels",
-          "tableTo": "label_values",
-          "columnsFrom": [
-            "value_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "limit_labels_limit_id_key_id_pk": {
-          "name": "limit_labels_limit_id_key_id_pk",
-          "columns": [
-            "limit_id",
-            "key_id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -12820,92 +12429,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.llm_provider_api_key_labels": {
-      "name": "llm_provider_api_key_labels",
-      "schema": "",
-      "columns": {
-        "api_key_id": {
-          "name": "api_key_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "key_id": {
-          "name": "key_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "value_id": {
-          "name": "value_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "llm_provider_api_key_labels_api_key_id_chat_api_keys_id_fk": {
-          "name": "llm_provider_api_key_labels_api_key_id_chat_api_keys_id_fk",
-          "tableFrom": "llm_provider_api_key_labels",
-          "tableTo": "chat_api_keys",
-          "columnsFrom": [
-            "api_key_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "llm_provider_api_key_labels_key_id_label_keys_id_fk": {
-          "name": "llm_provider_api_key_labels_key_id_label_keys_id_fk",
-          "tableFrom": "llm_provider_api_key_labels",
-          "tableTo": "label_keys",
-          "columnsFrom": [
-            "key_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "llm_provider_api_key_labels_value_id_label_values_id_fk": {
-          "name": "llm_provider_api_key_labels_value_id_label_values_id_fk",
-          "tableFrom": "llm_provider_api_key_labels",
-          "tableTo": "label_values",
-          "columnsFrom": [
-            "value_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "llm_provider_api_key_labels_api_key_id_key_id_pk": {
-          "name": "llm_provider_api_key_labels_api_key_id_key_id_pk",
-          "columns": [
-            "api_key_id",
-            "key_id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.api_key_models": {
       "name": "api_key_models",
       "schema": "",
@@ -13075,6 +12598,12 @@
         },
         "team_id": {
           "name": "team_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_by": {
+          "name": "created_by",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -13314,6 +12843,19 @@
             "id"
           ],
           "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "chat_api_keys_created_by_user_id_fk": {
+          "name": "chat_api_keys_created_by_user_id_fk",
+          "tableFrom": "chat_api_keys",
+          "tableTo": "user",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
@@ -14956,92 +14498,6 @@
       },
       "isRLSEnabled": false
     },
-    "public.model_labels": {
-      "name": "model_labels",
-      "schema": "",
-      "columns": {
-        "model_id": {
-          "name": "model_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "key_id": {
-          "name": "key_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "value_id": {
-          "name": "value_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "model_labels_model_id_models_id_fk": {
-          "name": "model_labels_model_id_models_id_fk",
-          "tableFrom": "model_labels",
-          "tableTo": "models",
-          "columnsFrom": [
-            "model_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "model_labels_key_id_label_keys_id_fk": {
-          "name": "model_labels_key_id_label_keys_id_fk",
-          "tableFrom": "model_labels",
-          "tableTo": "label_keys",
-          "columnsFrom": [
-            "key_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "model_labels_value_id_label_values_id_fk": {
-          "name": "model_labels_value_id_label_values_id_fk",
-          "tableFrom": "model_labels",
-          "tableTo": "label_values",
-          "columnsFrom": [
-            "value_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "model_labels_model_id_key_id_pk": {
-          "name": "model_labels_model_id_key_id_pk",
-          "columns": [
-            "model_id",
-            "key_id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.model_team": {
       "name": "model_team",
       "schema": "",
@@ -15564,92 +15020,6 @@
           ]
         }
       },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.oauth_client_labels": {
-      "name": "oauth_client_labels",
-      "schema": "",
-      "columns": {
-        "client_id": {
-          "name": "client_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "key_id": {
-          "name": "key_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "value_id": {
-          "name": "value_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "oauth_client_labels_client_id_oauth_client_id_fk": {
-          "name": "oauth_client_labels_client_id_oauth_client_id_fk",
-          "tableFrom": "oauth_client_labels",
-          "tableTo": "oauth_client",
-          "columnsFrom": [
-            "client_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "oauth_client_labels_key_id_label_keys_id_fk": {
-          "name": "oauth_client_labels_key_id_label_keys_id_fk",
-          "tableFrom": "oauth_client_labels",
-          "tableTo": "label_keys",
-          "columnsFrom": [
-            "key_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "oauth_client_labels_value_id_label_values_id_fk": {
-          "name": "oauth_client_labels_value_id_label_values_id_fk",
-          "tableFrom": "oauth_client_labels",
-          "tableTo": "label_values",
-          "columnsFrom": [
-            "value_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "oauth_client_labels_client_id_key_id_pk": {
-          "name": "oauth_client_labels_client_id_key_id_pk",
-          "columns": [
-            "client_id",
-            "key_id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -16918,92 +16288,6 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.plugin_labels": {
-      "name": "plugin_labels",
-      "schema": "",
-      "columns": {
-        "plugin_id": {
-          "name": "plugin_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "key_id": {
-          "name": "key_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "value_id": {
-          "name": "value_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "plugin_labels_plugin_id_plugins_id_fk": {
-          "name": "plugin_labels_plugin_id_plugins_id_fk",
-          "tableFrom": "plugin_labels",
-          "tableTo": "plugins",
-          "columnsFrom": [
-            "plugin_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "plugin_labels_key_id_label_keys_id_fk": {
-          "name": "plugin_labels_key_id_label_keys_id_fk",
-          "tableFrom": "plugin_labels",
-          "tableTo": "label_keys",
-          "columnsFrom": [
-            "key_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "plugin_labels_value_id_label_values_id_fk": {
-          "name": "plugin_labels_value_id_label_values_id_fk",
-          "tableFrom": "plugin_labels",
-          "tableTo": "label_values",
-          "columnsFrom": [
-            "value_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "plugin_labels_plugin_id_key_id_pk": {
-          "name": "plugin_labels_plugin_id_key_id_pk",
-          "columns": [
-            "plugin_id",
-            "key_id"
-          ]
-        }
-      },
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
@@ -18578,92 +17862,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.service_account_labels": {
-      "name": "service_account_labels",
-      "schema": "",
-      "columns": {
-        "service_account_id": {
-          "name": "service_account_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "key_id": {
-          "name": "key_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "value_id": {
-          "name": "value_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "service_account_labels_service_account_id_service_accounts_id_fk": {
-          "name": "service_account_labels_service_account_id_service_accounts_id_fk",
-          "tableFrom": "service_account_labels",
-          "tableTo": "service_accounts",
-          "columnsFrom": [
-            "service_account_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "service_account_labels_key_id_label_keys_id_fk": {
-          "name": "service_account_labels_key_id_label_keys_id_fk",
-          "tableFrom": "service_account_labels",
-          "tableTo": "label_keys",
-          "columnsFrom": [
-            "key_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "service_account_labels_value_id_label_values_id_fk": {
-          "name": "service_account_labels_value_id_label_values_id_fk",
-          "tableFrom": "service_account_labels",
-          "tableTo": "label_values",
-          "columnsFrom": [
-            "value_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "service_account_labels_service_account_id_key_id_pk": {
-          "name": "service_account_labels_service_account_id_key_id_pk",
-          "columns": [
-            "service_account_id",
-            "key_id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.service_account_tokens": {
       "name": "service_account_tokens",
       "schema": "",
@@ -18830,6 +18028,12 @@
           "notNull": true,
           "default": false
         },
+        "created_by": {
+          "name": "created_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -18895,6 +18099,19 @@
             "id"
           ],
           "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "service_accounts_created_by_user_id_fk": {
+          "name": "service_accounts_created_by_user_id_fk",
+          "tableFrom": "service_accounts",
+          "tableTo": "user",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
@@ -19265,92 +18482,6 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.skill_labels": {
-      "name": "skill_labels",
-      "schema": "",
-      "columns": {
-        "skill_id": {
-          "name": "skill_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "key_id": {
-          "name": "key_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "value_id": {
-          "name": "value_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "skill_labels_skill_id_skills_id_fk": {
-          "name": "skill_labels_skill_id_skills_id_fk",
-          "tableFrom": "skill_labels",
-          "tableTo": "skills",
-          "columnsFrom": [
-            "skill_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "skill_labels_key_id_label_keys_id_fk": {
-          "name": "skill_labels_key_id_label_keys_id_fk",
-          "tableFrom": "skill_labels",
-          "tableTo": "label_keys",
-          "columnsFrom": [
-            "key_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "skill_labels_value_id_label_values_id_fk": {
-          "name": "skill_labels_value_id_label_values_id_fk",
-          "tableFrom": "skill_labels",
-          "tableTo": "label_values",
-          "columnsFrom": [
-            "value_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "skill_labels_skill_id_key_id_pk": {
-          "name": "skill_labels_skill_id_key_id_pk",
-          "columns": [
-            "skill_id",
-            "key_id"
-          ]
-        }
-      },
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
@@ -23590,92 +22721,6 @@
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.virtual_api_key_labels": {
-      "name": "virtual_api_key_labels",
-      "schema": "",
-      "columns": {
-        "virtual_api_key_id": {
-          "name": "virtual_api_key_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "key_id": {
-          "name": "key_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "value_id": {
-          "name": "value_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "virtual_api_key_labels_virtual_api_key_id_virtual_api_keys_id_fk": {
-          "name": "virtual_api_key_labels_virtual_api_key_id_virtual_api_keys_id_fk",
-          "tableFrom": "virtual_api_key_labels",
-          "tableTo": "virtual_api_keys",
-          "columnsFrom": [
-            "virtual_api_key_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "virtual_api_key_labels_key_id_label_keys_id_fk": {
-          "name": "virtual_api_key_labels_key_id_label_keys_id_fk",
-          "tableFrom": "virtual_api_key_labels",
-          "tableTo": "label_keys",
-          "columnsFrom": [
-            "key_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "virtual_api_key_labels_value_id_label_values_id_fk": {
-          "name": "virtual_api_key_labels_value_id_label_values_id_fk",
-          "tableFrom": "virtual_api_key_labels",
-          "tableTo": "label_values",
-          "columnsFrom": [
-            "value_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "virtual_api_key_labels_virtual_api_key_id_key_id_pk": {
-          "name": "virtual_api_key_labels_virtual_api_key_id_key_id_pk",
-          "columns": [
-            "virtual_api_key_id",
-            "key_id"
-          ]
-        }
-      },
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},

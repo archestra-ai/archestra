@@ -1,4 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import type { CreatedBy } from "@archestra/shared";
 import {
   ARCHESTRA_TOKEN_PREFIX,
   MEMBER_ROLE_NAME,
@@ -26,6 +27,7 @@ import type {
   ServiceAccountResponse,
   ServiceAccountTokenResponse,
 } from "@/types";
+import CreatedByModel, { lookupCreator } from "./created-by";
 import { ServiceAccountLabelModel } from "./entity-labels";
 import OrganizationRoleModel from "./organization-role";
 
@@ -83,9 +85,14 @@ class ServiceAccountModel {
       .groupBy(schema.serviceAccountsTable.id)
       .orderBy(desc(schema.serviceAccountsTable.createdAt));
 
-    const labelsById = await ServiceAccountLabelModel.getLabelsForMany(
-      rows.map(({ serviceAccount }) => serviceAccount.id),
-    );
+    const [labelsById, creators] = await Promise.all([
+      ServiceAccountLabelModel.getLabelsForMany(
+        rows.map(({ serviceAccount }) => serviceAccount.id),
+      ),
+      CreatedByModel.resolve(
+        rows.map(({ serviceAccount }) => serviceAccount.createdBy),
+      ),
+    ]);
 
     return rows.map(
       ({
@@ -103,6 +110,7 @@ class ServiceAccountModel {
             lastUsedAt: lastUsedAt ? new Date(lastUsedAt) : null,
             soonestExpiryAt: soonestExpiryAt ?? null,
           },
+          creators,
           labelsById.get(serviceAccount.id) ?? [],
         ),
     );
@@ -135,6 +143,7 @@ class ServiceAccountModel {
       ...normalizeServiceAccount(
         serviceAccount,
         summarizeTokens(tokens),
+        await CreatedByModel.resolve([serviceAccount.createdBy]),
         await ServiceAccountLabelModel.getLabelsFor(id),
       ),
       tokens: tokens.map(normalizeToken),
@@ -193,6 +202,13 @@ class ServiceAccountModel {
     name: string;
     role: string;
     labels?: LabelWithDetails[];
+    /**
+     * Required, but nullable: every interactive create knows its user, and
+     * making the parameter mandatory stops a new call path from silently
+     * dropping the creator. Non-interactive callers (seeding, tests) say `null`
+     * rather than being allowed to forget.
+     */
+    createdBy: string | null;
   }): Promise<ServiceAccountDetailResponse> {
     const [serviceAccount] = await db
       .insert(schema.serviceAccountsTable)
@@ -200,6 +216,7 @@ class ServiceAccountModel {
         organizationId: params.organizationId,
         name: params.name,
         role: params.role,
+        createdBy: params.createdBy,
       })
       .returning();
 
@@ -214,6 +231,7 @@ class ServiceAccountModel {
       ...normalizeServiceAccount(
         serviceAccount,
         summarizeTokens([]),
+        await CreatedByModel.resolve([serviceAccount.createdBy]),
         await ServiceAccountLabelModel.getLabelsFor(serviceAccount.id),
       ),
       tokens: [],
@@ -428,9 +446,11 @@ export default ServiceAccountModel;
 function normalizeServiceAccount(
   serviceAccount: SelectServiceAccount,
   stats: TokenStats,
+  creators: Map<string, CreatedBy>,
   labels: LabelWithDetails[] = [],
 ): ServiceAccountResponse {
   return {
+    createdBy: lookupCreator(creators, serviceAccount.createdBy),
     labels,
     id: serviceAccount.id,
     organizationId: serviceAccount.organizationId,

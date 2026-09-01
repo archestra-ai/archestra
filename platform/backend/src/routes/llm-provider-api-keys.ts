@@ -30,6 +30,7 @@ import { getProviderConfiguredBaseUrl } from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import {
+  CreatedByModel,
   LlmOauthClientModel,
   LlmProviderApiKeyLabelModel,
   LlmProviderApiKeyModel,
@@ -391,6 +392,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (agentKey) {
           apiKeys.push({
             ...agentKey,
+            createdBy: await CreatedByModel.resolveOne(agentKey.createdBy),
             teamName: null,
             userName: null,
             isAgentKey: true,
@@ -819,7 +821,10 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "LLM provider API key not found");
       }
 
-      return reply.send(apiKey);
+      return reply.send({
+        ...apiKey,
+        createdBy: await CreatedByModel.resolveOne(apiKey.createdBy),
+      });
     },
   );
 

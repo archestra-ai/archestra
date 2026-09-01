@@ -9,6 +9,7 @@ export function makeLlmProviderApiKey(
   return {
     id: "test-llm-key",
     organizationId: "test-org",
+    createdBy: null,
     name: "test-llm-key",
     provider: "anthropic",
     secretId: "test-secret",
@@ -43,6 +44,7 @@ export function makeVirtualKey(
   return {
     id: "test-virtual-key",
     organizationId: "test-org",
+    createdBy: null,
     name: "test-virtual-key",
     labels: [],
     keyType: "standard",

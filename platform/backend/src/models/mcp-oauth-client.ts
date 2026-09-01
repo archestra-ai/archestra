@@ -15,6 +15,7 @@ import {
 } from "@/types/mcp-oauth-client";
 import type { ResourceVisibilityScope } from "@/types/visibility";
 import { escapeLikePattern } from "@/utils/sql-search";
+import CreatedByModel, { lookupCreator } from "./created-by";
 import { OauthClientLabelModel } from "./entity-labels";
 import OauthClientTeamModel from "./oauth-client-team";
 import UserModel from "./user";
@@ -366,9 +367,10 @@ async function hydrateOauthClients(
       ),
     ),
   ];
-  const [teamsMap, authorNames, labelsByClient] = await Promise.all([
+  const [teamsMap, authorNames, creators, labelsByClient] = await Promise.all([
     OauthClientTeamModel.getTeamDetailsForClients(teamScopedIds),
     UserModel.getNamesByIds(authorIds),
+    CreatedByModel.resolve(authorIds),
     OauthClientLabelModel.getLabelsForMany(clients.map((c) => c.id)),
   ]);
 
@@ -389,6 +391,7 @@ async function hydrateOauthClients(
         authorName: metadata.authorId
           ? (authorNames.get(metadata.authorId) ?? null)
           : null,
+        createdBy: lookupCreator(creators, metadata.authorId),
         teams: teamsMap.get(client.id) ?? [],
         labels: labelsByClient.get(client.id) ?? [],
         createdAt: client.createdAt,

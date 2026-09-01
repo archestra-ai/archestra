@@ -1,3 +1,4 @@
+import { CreatedByNullableSchema } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
@@ -77,6 +78,12 @@ export const ProjectListItemSchema = z.object({
   viewerRole: ProjectViewerRoleSchema,
   /** Display name of the project's owner; null if it can't be resolved. */
   ownerName: z.string().nullable(),
+  /**
+   * The owner again, in the shape shared by every major object. A project's
+   * owner is its creator — `projects.user_id` is stamped at create and
+   * ownership does not transfer — so one field answers both questions.
+   */
+  createdBy: CreatedByNullableSchema,
   conversationCount: z.number().int().nonnegative(),
   /** Share visibility; null = not shared (owner only). */
   visibility: ProjectShareVisibilitySchema.nullable(),

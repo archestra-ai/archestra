@@ -1,5 +1,6 @@
 // This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 import {
+  CreatedByNullableSchema,
   calculatePaginationMeta,
   createPaginatedResponseSchema,
   MAX_PERMISSION_SYNC_INTERVAL_SECONDS,
@@ -79,6 +80,7 @@ import {
   AgentKnowledgeBaseModel,
   AgentModel,
   ConnectorRunModel,
+  CreatedByModel,
   GithubAppConfigModel,
   KbContainerAclModel,
   KbDocumentModel,
@@ -89,6 +91,7 @@ import {
   KnowledgeBaseConnectorModel,
   KnowledgeBaseLabelModel,
   KnowledgeBaseModel,
+  lookupCreator,
   MemberModel,
   TaskModel,
 } from "@/models";
@@ -134,7 +137,18 @@ const AssignedAgentSummarySchema = z.object({
   agentType: z.string(),
 });
 
-const KnowledgeBaseWithConnectorsSchema = SelectKnowledgeBaseSchema.extend({
+/**
+ * The stored row with its raw `created_by` user id swapped for the resolved
+ * identity every "Created by" column renders. The id alone is useless to a
+ * client that cannot see the full member roster — which is most of them, since
+ * `GET /organization/members` narrows to the caller's teammates without
+ * `member:read`.
+ */
+const KnowledgeBaseResponseSchema = SelectKnowledgeBaseSchema.omit({
+  createdBy: true,
+}).extend({ createdBy: CreatedByNullableSchema });
+
+const KnowledgeBaseWithConnectorsSchema = KnowledgeBaseResponseSchema.extend({
   connectors: z.array(
     z.object({
       id: z.string(),
@@ -152,9 +166,16 @@ const KnowledgeBaseWithConnectorsSchema = SelectKnowledgeBaseSchema.extend({
  * sync bookkeeping and never part of the API surface.
  */
 const KnowledgeBaseConnectorResponseSchema =
-  SelectKnowledgeBaseConnectorSchema.omit({ permissionSyncState: true }).extend(
-    { labels: z.array(LabelWithDetailsSchema) },
-  );
+  SelectKnowledgeBaseConnectorSchema.omit({
+    permissionSyncState: true,
+    createdBy: true,
+  })
+    // Same swap as knowledge bases: the raw creator id out, the resolved identity
+    // in, so the connector list can name whom to ask about a sync nobody claims.
+    .extend({
+      createdBy: CreatedByNullableSchema,
+      labels: z.array(LabelWithDetailsSchema),
+    });
 
 /**
  * Connector rows can outlive the config schema that created them. Read
@@ -316,10 +337,17 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // describe links no other surface resolves while the knowledge base sits
       // in the trash. Declared in the endpoint description, not silently
       // narrowed.
+      // Resolved for the trash view too: "who made this" is exactly what you
+      // want when deciding whether a deleted knowledge base should come back.
+      const creators = await CreatedByModel.resolve(
+        knowledgeBases.map((kb) => kb.createdBy),
+      );
+
       if (status === "deleted") {
         return reply.send({
           data: knowledgeBases.map((kb) => ({
             ...kb,
+            createdBy: lookupCreator(creators, kb.createdBy),
             connectors: [],
             totalDocsIndexed: 0,
             assignedAgents: [],
@@ -377,6 +405,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const data = knowledgeBases.map((kb) => ({
         ...kb,
+        createdBy: lookupCreator(creators, kb.createdBy),
         labels: labelsByKbId.get(kb.id) ?? [],
         connectors: connectorsByKbId.get(kb.id) ?? [],
         totalDocsIndexed: docsIndexedByKbId.get(kb.id) ?? 0,
@@ -407,12 +436,13 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           description: z.string().optional(),
           labels: z.array(LabelWithDetailsSchema).optional(),
         }),
-        response: constructResponseSchema(SelectKnowledgeBaseSchema),
+        response: constructResponseSchema(KnowledgeBaseResponseSchema),
       },
     },
-    async ({ body, organizationId }, reply) => {
+    async ({ body, organizationId, user }, reply) => {
       const kg = await KnowledgeBaseModel.create({
         organizationId,
+        createdBy: user.id,
         name: body.name,
         ...(body.description !== undefined && {
           description: body.description,
@@ -423,7 +453,10 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await KnowledgeBaseLabelModel.syncLabels(kg.id, body.labels);
       }
 
-      return reply.send(kg);
+      return reply.send({
+        ...kg,
+        createdBy: await CreatedByModel.resolveOne(kg.createdBy),
+      });
     },
   );
 
@@ -435,7 +468,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get a knowledge base by ID",
         tags: ["Knowledge Bases"],
         params: z.object({ id: z.uuid() }),
-        response: constructResponseSchema(SelectKnowledgeBaseSchema),
+        response: constructResponseSchema(KnowledgeBaseResponseSchema),
       },
     },
     async ({ params: { id }, organizationId, user }, reply) => {
@@ -444,7 +477,10 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         userId: user.id,
       });
-      return reply.send(kg);
+      return reply.send({
+        ...kg,
+        createdBy: await CreatedByModel.resolveOne(kg.createdBy),
+      });
     },
   );
 
@@ -461,7 +497,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           description: z.string().nullable().optional(),
           labels: z.array(LabelWithDetailsSchema).optional(),
         }),
-        response: constructResponseSchema(SelectKnowledgeBaseSchema),
+        response: constructResponseSchema(KnowledgeBaseResponseSchema),
       },
     },
     async ({ params: { id }, body, organizationId, user }, reply) => {
@@ -483,7 +519,10 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await KnowledgeBaseLabelModel.syncLabels(id, labels);
       }
 
-      return reply.send(updated);
+      return reply.send({
+        ...updated,
+        createdBy: await CreatedByModel.resolveOne(updated.createdBy),
+      });
     },
   );
 
@@ -819,9 +858,13 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // the row for good (see KnowledgeBaseConnectorListItemSchema). Declared
       // in the endpoint description, not silently narrowed.
       if (status === "deleted") {
+        const trashCreators = await CreatedByModel.resolve(
+          data.map((connector) => connector.createdBy),
+        );
         return reply.send({
           data: data.map((connector) => ({
             ...connector,
+            createdBy: lookupCreator(trashCreators, connector.createdBy),
             assignedAgents: [],
             labels: [],
           })),
@@ -888,8 +931,19 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return false;
       });
 
+      // Resolved after the schema-drift filter above, never before: that
+      // filter re-parses each row against `SelectKnowledgeBaseConnectorSchema`,
+      // which still declares `createdBy` as the raw user id. Swapping in the
+      // resolved object first would fail every row and empty the list.
+      const creators = await CreatedByModel.resolve(
+        validatedData.map((connector) => connector.createdBy),
+      );
+
       return reply.send({
-        data: validatedData,
+        data: validatedData.map((connector) => ({
+          ...connector,
+          createdBy: lookupCreator(creators, connector.createdBy),
+        })),
         pagination: calculatePaginationMeta(total, { limit, offset }),
       });
     },
@@ -1076,6 +1130,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Create the connector
       const connector = await KnowledgeBaseConnectorModel.create({
         organizationId,
+        createdBy: user.id,
         name: body.name,
         description: body.description ?? null,
         visibility: body.visibility,
@@ -1119,7 +1174,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // failure to explain something the UI already says. The OAuth callback
       // enqueues it the moment there is a token.
       if (awaitsGoogleDriveOAuth) {
-        return reply.send(await withConnectorLabels(connector));
+        return reply.send(await withConnectorDetails(connector));
       }
 
       // Auto-trigger initial sync. "queued" (not "running"): the worker
@@ -1134,7 +1189,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       return reply.send(
-        await withConnectorLabels(updatedConnector ?? connector),
+        await withConnectorDetails(updatedConnector ?? connector),
       );
     },
   );
@@ -1162,7 +1217,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       const totalDocsIngested = await KbDocumentModel.countByConnector(id);
       return reply.send({
-        ...(await withConnectorLabels(connector)),
+        ...(await withConnectorDetails(connector)),
         totalDocsIngested,
       });
     },
@@ -1722,7 +1777,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await reconcileP4ShimForConnector(id);
       // SPDX-SnippetEnd
 
-      return reply.send(await withConnectorLabels(updated));
+      return reply.send(await withConnectorDetails(updated));
     },
   );
 
@@ -3492,12 +3547,16 @@ async function resolveGithubAppConfigReference(params: {
 }
 
 /**
- * Attach a connector's labels to a single-connector response. The list
- * endpoint batches this instead; these are the one-row paths.
+ * Attach a connector's labels and resolved creator to a single-connector
+ * response. The list endpoint batches both instead; these are the one-row
+ * paths.
  */
-async function withConnectorLabels<T extends { id: string }>(connector: T) {
-  return {
-    ...connector,
-    labels: await KnowledgeBaseConnectorLabelModel.getLabelsFor(connector.id),
-  };
+async function withConnectorDetails<
+  T extends { id: string; createdBy?: string | null },
+>(connector: T) {
+  const [labels, createdBy] = await Promise.all([
+    KnowledgeBaseConnectorLabelModel.getLabelsFor(connector.id),
+    CreatedByModel.resolveOne(connector.createdBy),
+  ]);
+  return { ...connector, labels, createdBy };
 }

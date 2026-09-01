@@ -536,11 +536,13 @@ describe("SkillModel.recordUsage", () => {
       organizationId: org.id,
       name: "Nightly sync",
       role: MEMBER_ROLE_NAME,
+      createdBy: null,
     });
     const foreign = await ServiceAccountModel.create({
       organizationId: other.id,
       name: "Someone else's runner",
       role: MEMBER_ROLE_NAME,
+      createdBy: null,
     });
     const skill = await SkillModel.createWithFiles({
       skill: skillInput({ organizationId: org.id, name: "kinds" }),

@@ -50,6 +50,7 @@ const app = {
   labels: [],
   viewerRole: "owner",
   authorName: null,
+  createdBy: null,
 } satisfies archestraApiTypes.GetAppResponses["200"];
 
 const server = setupServer();

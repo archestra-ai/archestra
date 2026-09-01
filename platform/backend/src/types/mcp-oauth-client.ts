@@ -1,4 +1,7 @@
-import { ResourceVisibilityScopeSchema } from "@archestra/shared";
+import {
+  CreatedByNullableSchema,
+  ResourceVisibilityScopeSchema,
+} from "@archestra/shared";
 import { z } from "zod";
 import { LabelWithDetailsSchema } from "./label";
 
@@ -52,6 +55,8 @@ export const McpOauthClientSchema = z.object({
   scope: ResourceVisibilityScopeSchema,
   authorId: z.string().nullable(),
   authorName: z.string().nullable(),
+  /** The author, in the shape shared by every major object. */
+  createdBy: CreatedByNullableSchema,
   teams: z.array(McpOauthClientTeamInfoSchema),
   labels: z.array(LabelWithDetailsSchema),
   createdAt: z.date(),

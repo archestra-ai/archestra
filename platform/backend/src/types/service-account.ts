@@ -1,3 +1,4 @@
+import { CreatedByNullableSchema } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
@@ -25,6 +26,8 @@ export const ServiceAccountTokenResponseSchema = z.object({
 
 export const ServiceAccountResponseSchema = z.object({
   id: z.string().uuid(),
+  /** Who added this account, for "who do I ask about this automation". */
+  createdBy: CreatedByNullableSchema,
   organizationId: z.string(),
   name: z.string(),
   role: z.string(),

@@ -8,6 +8,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import organizationsTable from "./organization";
+import usersTable from "./user";
 
 const serviceAccountsTable = pgTable(
   "service_accounts",
@@ -19,6 +20,15 @@ const serviceAccountsTable = pgTable(
     name: text("name").notNull(),
     role: text("role").notNull(),
     disabled: boolean("disabled").notNull().default(false),
+    /**
+     * Who created this. Nullable: rows predating creator tracking have no
+     * answer, and `ON DELETE SET NULL` gives the column back to "unknown" when
+     * the account is deleted rather than taking the account with it — the
+     * organization owns service accounts, not the person who happened to make it.
+     */
+    createdBy: text("created_by").references(() => usersTable.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

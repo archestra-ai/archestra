@@ -44,6 +44,7 @@ export { default as ConversationChatErrorModel } from "./conversation-chat-error
 export { default as ConversationCompactionModel } from "./conversation-compaction";
 export { default as ConversationEnabledToolModel } from "./conversation-enabled-tool";
 export { default as ConversationShareModel } from "./conversation-share";
+export { default as CreatedByModel, lookupCreator } from "./created-by";
 export {
   EnvironmentLabelModel,
   KbFileLabelModel,

@@ -11,6 +11,7 @@ import {
   Key,
   Network,
   Plus,
+  Tags,
   Trash2,
   User,
   Users,
@@ -40,7 +41,15 @@ import { LlmModelSearchableSelect } from "@/components/llm-model-select";
 import { LoadingState, LoadingWrapper } from "@/components/loading";
 import { QueryLoadError } from "@/components/query-load-error";
 import { WithPermissions } from "@/components/roles/with-permissions";
+import { EntityLabelFilter } from "@/components/entity-label-filter";
+import { EntityLabelsDialog } from "@/components/entity-labels-dialog";
+import { useSelectedLabels } from "@/components/label-select";
 import { TableRowActions } from "@/components/table-row-actions";
+import {
+  useLimitLabelKeys,
+  useLimitLabelValues,
+  useSaveLimitLabels,
+} from "@/lib/entity-labels.query";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
@@ -226,7 +235,10 @@ export default function LimitsPage() {
   const statusFilter = searchParams.get("status") || "all";
   const appliedToFilter = searchParams.get("appliedTo") || "all";
   const modelFilter = searchParams.get("model") || "all";
+  const selectedLabels = useSelectedLabels();
   const [limitToDelete, setLimitToDelete] = useState<LimitData | null>(null);
+  const [labelingLimit, setLabelingLimit] = useState<LimitData | null>(null);
+  const saveLimitLabels = useSaveLimitLabels();
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [formState, setFormState] =
@@ -450,7 +462,19 @@ export default function LimitsPage() {
         (Array.isArray(limit.model) && limit.model.includes(modelFilter)) ||
         isAllModelsLimit;
 
-      return matchesStatus && matchesAppliedTo && matchesModel;
+      // Applied here rather than on the query: this page reads every visible
+      // limit once and narrows it in the browser, as its other filters do.
+      const matchesLabels =
+        !selectedLabels ||
+        Object.entries(selectedLabels).every(([key, values]) =>
+          limit.labels.some(
+            (label) => label.key === key && values.includes(label.value),
+          ),
+        );
+
+      return (
+        matchesStatus && matchesAppliedTo && matchesModel && matchesLabels
+      );
     });
   }, [
     appliedToFilter,
@@ -459,6 +483,7 @@ export default function LimitsPage() {
     statusFilter,
     getUsageStatus,
     llmProxyId,
+    selectedLabels,
   ]);
 
   const {
@@ -646,6 +671,11 @@ export default function LimitsPage() {
                 onClick: () => openEditDialog(row.original),
               },
               {
+                icon: <Tags className="h-4 w-4" />,
+                label: "Edit labels",
+                onClick: () => setLabelingLimit(row.original),
+              },
+              {
                 icon: <Trash2 className="h-4 w-4" />,
                 label: "Delete limit",
                 variant: "destructive",
@@ -821,6 +851,13 @@ export default function LimitsPage() {
               showPricing={false}
               includeAllOption
               allLabel="All models"
+            />
+            <EntityLabelFilter
+              useLabelKeys={useLimitLabelKeys}
+              useLabelValues={useLimitLabelValues}
+              className={filterControlClass({
+                active: Boolean(selectedLabels),
+              })}
             />
           </FilterBar>
         </CollectionFilters>
@@ -1123,6 +1160,17 @@ export default function LimitsPage() {
         </DialogForm>
       </FormDialog>
 
+      {labelingLimit && (
+        <EntityLabelsDialog
+          open={!!labelingLimit}
+          onOpenChange={(open) => !open && setLabelingLimit(null)}
+          entityName={getEntityLabel(labelingLimit)}
+          labels={labelingLimit.labels}
+          onSave={(labels) =>
+            saveLimitLabels.mutateAsync({ id: labelingLimit.id, labels })
+          }
+        />
+      )}
       <DeleteConfirmDialog
         open={!!limitToDelete}
         onOpenChange={(open) => !open && setLimitToDelete(null)}

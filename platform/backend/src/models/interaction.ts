@@ -74,6 +74,30 @@ import VirtualApiKeyModel from "./virtual-api-key";
 const SESSION_TOTAL_CACHE_TTL_MS = 30 * TimeInMs.Second;
 
 /**
+ * What a pruned interaction's request/response read back as. A marker object
+ * rather than an empty one, so an operator looking at an old row in the LLM
+ * logs sees that the payload was aged out rather than that the call was empty.
+ */
+const PRUNED_PAYLOAD_PLACEHOLDER = JSON.stringify({
+  archestraPayloadPruned: true,
+});
+
+/**
+ * Rows read per step of the session-key walk (see findSessionKeysForPage).
+ * Sized so a default page of sessions is normally covered by the first step:
+ * interactions-per-session averages a small single digit, and over-reading a
+ * few hundred indexed rows is far cheaper than a second round trip.
+ */
+const SESSION_SCAN_BATCH_ROWS = 500;
+
+/**
+ * Ceiling on rows the walk will read before giving up and grouping the whole
+ * table instead. Only reached when a filter matches very few sessions spread
+ * over very many rows, where the walk would be the slower of the two.
+ */
+const SESSION_SCAN_MAX_ROWS = 20_000;
+
+/**
  * Session totals keyed by filter set (see getSessions). Per-pod and in-process
  * on purpose: the value is cheap to recompute on a miss, so it is not worth a
  * round-trip to the distributed cache to share it between pods. Bounded well
@@ -1270,19 +1294,7 @@ class InteractionModel {
     // the work. Selecting the page first keeps the expensive phase bounded by
     // the requested page instead of total history size.
     const [sessionPage, [{ total }]] = await Promise.all([
-      db
-        .select({
-          sessionId: max(schema.interactionsTable.sessionId),
-          interactionId: sql<
-            string | null
-          >`CASE WHEN MAX(${schema.interactionsTable.sessionId}) IS NULL THEN MAX(${schema.interactionsTable.id}::text) ELSE NULL END`,
-        })
-        .from(schema.interactionsTable)
-        .where(whereClause)
-        .groupBy(sessionGroupExpr)
-        .orderBy(desc(max(schema.interactionsTable.createdAt)))
-        .limit(pagination.limit)
-        .offset(pagination.offset),
+      InteractionModel.findSessionKeysForPage(whereClause, pagination),
       // Total = distinct sessions + sessionless interactions (each its own
       // "session"). Counted without COUNT(DISTINCT COALESCE(session_id,
       // id::text)) — the per-row uuid cast defeats the session_id index — and
@@ -1536,6 +1548,166 @@ class InteractionModel {
     });
 
     return createPaginatedResult(sessions, Number(total), pagination);
+  }
+
+  /**
+   * Replace the stored request/response payloads of interactions older than
+   * `olderThan` with a placeholder, in one bounded batch. Returns how many
+   * rows were pruned; the caller loops until it returns 0.
+   *
+   * Only the payloads go. The row, and every numeric column behind cost
+   * statistics, usage limits and session summaries, is left untouched — this
+   * reclaims the space those payloads occupy without changing any number the
+   * product reports.
+   *
+   * Delta-encoded rows make this less simple than a date filter. A Claude row
+   * stores only the suffix of `messages` that is new versus its parent and is
+   * rebuilt by walking `parent_id`, so pruning an old ancestor would corrupt
+   * every newer row that still folds through it. Parents are only ever
+   * resolved within one `(session_id, thread_id)` branch, so a branch is safe
+   * to prune exactly when its newest row is itself past the cutoff — which is
+   * what the NOT EXISTS below tests. Rows with no `thread_id` are whole
+   * requests that nothing folds through, so they are pruned on age alone.
+   */
+  static async prunePayloads(params: {
+    olderThan: Date;
+    batchSize: number;
+  }): Promise<number> {
+    const { olderThan, batchSize } = params;
+
+    const result = await db.execute(sql`
+      UPDATE ${schema.interactionsTable} AS target
+      SET
+        request = ${PRUNED_PAYLOAD_PLACEHOLDER}::jsonb,
+        response = ${PRUNED_PAYLOAD_PLACEHOLDER}::jsonb,
+        processed_request = NULL,
+        dual_llm_analyses = NULL,
+        unsafe_context_boundary = NULL,
+        parent_id = NULL,
+        request_shared_prefix = NULL,
+        processed_request_shared_prefix = NULL,
+        payload_pruned_at = now()
+      WHERE target.id IN (
+        SELECT candidate.id
+        FROM ${schema.interactionsTable} AS candidate
+        WHERE candidate.created_at < ${olderThan}
+          AND candidate.payload_pruned_at IS NULL
+          AND (
+            candidate.thread_id IS NULL
+            OR NOT EXISTS (
+              SELECT 1
+              FROM ${schema.interactionsTable} AS newer
+              WHERE newer.session_id IS NOT DISTINCT FROM candidate.session_id
+                AND newer.thread_id = candidate.thread_id
+                AND newer.created_at >= ${olderThan}
+            )
+          )
+        ORDER BY candidate.created_at
+        LIMIT ${batchSize}
+      )
+    `);
+
+    return result.rowCount ?? 0;
+  }
+
+  /**
+   * The session keys for one page, most recently active first.
+   *
+   * Grouping the whole table to produce twenty keys meant every page paid a
+   * sequential scan of `interactions` plus a sort of one row per interaction —
+   * on a table whose row count grows with every proxied call, and large enough
+   * that the sort spilled to disk. Nothing about a page of recent sessions
+   * needs that: walking `interactions_created_at_idx` newest-first and taking
+   * distinct session keys in the order they first appear yields exactly the
+   * same ordering, because the first row seen for a session IS that session's
+   * most recent one. The scan stops as soon as the page is covered, so the
+   * cost tracks the page, not the history.
+   *
+   * Falls back to the whole-table grouping if a page cannot be filled within
+   * SESSION_SCAN_MAX_ROWS — a pathological case (a filter matching very few
+   * sessions spread over very many rows) where the walk would be the slower of
+   * the two. Correctness is identical either way.
+   */
+  private static async findSessionKeysForPage(
+    whereClause: SQL | undefined,
+    pagination: PaginationQuery,
+    /**
+     * Overridable so tests can drive the fallback without seeding twenty
+     * thousand rows. Production always uses the module default.
+     */
+    maxScanRows: number = SESSION_SCAN_MAX_ROWS,
+  ): Promise<
+    Array<{ sessionId: string | null; interactionId: string | null }>
+  > {
+    const needed = pagination.offset + pagination.limit;
+    const keys: Array<{
+      sessionId: string | null;
+      interactionId: string | null;
+    }> = [];
+    const seen = new Set<string>();
+    let scanned = 0;
+
+    while (keys.length < needed && scanned < maxScanRows) {
+      const batch = await db
+        .select({
+          id: schema.interactionsTable.id,
+          sessionId: schema.interactionsTable.sessionId,
+        })
+        .from(schema.interactionsTable)
+        .where(whereClause)
+        // `id` only breaks ties on identical timestamps; without it a row could
+        // be seen twice (or skipped) across two OFFSET windows.
+        //
+        // Rows inserted between two steps land at the newest end and push the
+        // window back over ground already covered, which the `seen` set
+        // absorbs. Nothing is skipped: that would take a deletion above the
+        // cursor, and the only thing that removes interactions is retention,
+        // which works from the oldest end — far below anything this walk
+        // reads.
+        .orderBy(
+          desc(schema.interactionsTable.createdAt),
+          desc(schema.interactionsTable.id),
+        )
+        .limit(SESSION_SCAN_BATCH_ROWS)
+        .offset(scanned);
+
+      for (const row of batch) {
+        const key = row.sessionId ?? row.id;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        keys.push({
+          sessionId: row.sessionId,
+          interactionId: row.sessionId ? null : row.id,
+        });
+      }
+
+      scanned += batch.length;
+      // A short batch means the filtered set is exhausted: every session that
+      // matches has been seen, so the page is as complete as it can be.
+      if (batch.length < SESSION_SCAN_BATCH_ROWS) {
+        return keys.slice(pagination.offset, needed);
+      }
+    }
+
+    if (keys.length >= needed) {
+      return keys.slice(pagination.offset, needed);
+    }
+
+    return db
+      .select({
+        sessionId: max(schema.interactionsTable.sessionId),
+        interactionId: sql<
+          string | null
+        >`CASE WHEN MAX(${schema.interactionsTable.sessionId}) IS NULL THEN MAX(${schema.interactionsTable.id}::text) ELSE NULL END`,
+      })
+      .from(schema.interactionsTable)
+      .where(whereClause)
+      .groupBy(
+        sql`COALESCE(${schema.interactionsTable.sessionId}, ${schema.interactionsTable.id}::text)`,
+      )
+      .orderBy(desc(max(schema.interactionsTable.createdAt)))
+      .limit(pagination.limit)
+      .offset(pagination.offset);
   }
 
   /**

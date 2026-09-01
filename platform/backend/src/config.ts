@@ -3845,6 +3845,19 @@ const config = {
       "ARCHESTRA_LLM_LOGS_RETENTION_DAYS",
       process.env.ARCHESTRA_LLM_LOGS_RETENTION_DAYS,
     ),
+    // Payload-only retention: keeps the interaction row (and every number the
+    // cost statistics, usage limits and session summaries are computed from)
+    // and drops just the stored request/response bodies. Those bodies are
+    // essentially all of the table's size — a Claude Code request runs to
+    // megabytes — so this bounds growth at a window far shorter than
+    // `llmLogsDays` can safely use, since deleting rows inside the longest
+    // cost-limit window would under-count usage but blanking their payloads
+    // cannot. Set both to keep recent bodies, older metadata, and nothing
+    // beyond that.
+    llmPayloadDays: parseRetentionDays(
+      "ARCHESTRA_LLM_LOGS_PAYLOAD_RETENTION_DAYS",
+      process.env.ARCHESTRA_LLM_LOGS_PAYLOAD_RETENTION_DAYS,
+    ),
     mcpLogsDays: parseRetentionDays(
       "ARCHESTRA_MCP_LOGS_RETENTION_DAYS",
       process.env.ARCHESTRA_MCP_LOGS_RETENTION_DAYS,

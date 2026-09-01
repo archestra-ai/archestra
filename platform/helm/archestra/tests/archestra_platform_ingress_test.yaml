@@ -200,3 +200,42 @@ tests:
       - equal:
           path: spec.tls[0].secretName
           value: "my-tls-secret"
+  # The staging frontend host splits backend API prefixes off the Next.js
+  # service so LLM proxy traffic stops sharing that process with UI requests.
+  # The split is expressed purely in values, so pin that the template emits one
+  # rule per path with the port each one asked for.
+  - it: should route backend API prefixes to the backend port on the frontend host
+    set:
+      archestra.ingress.enabled: true
+      archestra.ingress.hosts:
+        - host: frontend.example.com
+          paths:
+            - path: /v1
+              port: 9000
+              pathType: Prefix
+            - path: /v2
+              port: 9000
+              pathType: Prefix
+            - path: /
+              port: 3000
+              pathType: Prefix
+    asserts:
+      - equal:
+          path: spec.rules[0].http.paths[0].path
+          value: "/v1"
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.port.number
+          value: 9000
+      - equal:
+          path: spec.rules[0].http.paths[1].path
+          value: "/v2"
+      - equal:
+          path: spec.rules[0].http.paths[1].backend.service.port.number
+          value: 9000
+      # The catch-all stays on Next.js: /api/auth is a real app route.
+      - equal:
+          path: spec.rules[0].http.paths[2].path
+          value: "/"
+      - equal:
+          path: spec.rules[0].http.paths[2].backend.service.port.number
+          value: 3000

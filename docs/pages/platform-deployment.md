@@ -2,7 +2,7 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-08-31
+lastUpdated: 2026-09-01
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -315,6 +315,25 @@ Practical starting point for worker autoscaling:
 - `archestra.ingress.enabled` - Enable or disable ingress creation (default: false)
 - `archestra.ingress.annotations` - Annotations for ingress controller and load balancer behavior
 - `archestra.ingress.spec` - Complete ingress specification for advanced configurations
+
+Route `/v1` and `/v2` on the frontend host straight to port 9000. Both are backend APIs, and the frontend only forwards them:
+
+```yaml
+hosts:
+  - host: archestra.example.com
+    paths:
+      - path: /v1
+        port: 9000
+        pathType: Prefix
+      - path: /v2
+        port: 9000
+        pathType: Prefix
+      - path: /
+        port: 3000
+        pathType: Prefix
+```
+
+`/v1` carries LLM proxy traffic — large request bodies, held open for the length of a completion. Sending it through port 3000 puts that traffic on the same process that serves the dashboard, which makes the UI slow while an agent is working. Keep `/` on port 3000: `/api/auth` is served by the frontend itself.
 
 **GKE BackendConfig Settings** (Google Cloud only):
 
@@ -1844,6 +1863,13 @@ Automatic deletion of content-bearing records after a configurable number of day
   - Default: `0` (disabled).
   - Rows that newer records still depend on for request reconstruction are retained until those newer records expire too.
   - A window shorter than 32 days logs a startup warning: monthly cost-limit periods aggregate these records, so deleting inside that horizon can under-count usage against limits. All-time cost statistics reflect retained records only.
+- **`ARCHESTRA_LLM_LOGS_PAYLOAD_RETENTION_DAYS`** - Days to keep the request and response bodies of LLM proxy logs. Past this window each body is replaced with a placeholder and the record is kept.
+  - Default: `0` (disabled).
+  - These bodies are most of the table's size — one coding-agent request runs to megabytes. This window is what bounds database growth.
+  - Token counts, costs, and billing mode stay intact. Cost statistics, usage limits, and session summaries are unaffected.
+  - Only the request and response text on the LLM Logs page is lost. So this window can be much shorter than `ARCHESTRA_LLM_LOGS_RETENTION_DAYS`.
+  - Records that newer records rebuild their requests from keep their bodies. They are cleared once the whole branch is past the window.
+  - Clearing a body frees that space for new records. It does not shrink the database file on disk.
 - **`ARCHESTRA_MCP_LOGS_RETENTION_DAYS`** - Days to retain MCP gateway tool-call logs before automatic deletion.
   - Default: `0` (disabled).
 - **`ARCHESTRA_CHAT_CONVERSATIONS_RETENTION_DAYS`** - Days after a conversation's last message activity before the conversation is automatically deleted, together with its messages, attachments, and conversation files.

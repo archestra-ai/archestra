@@ -1,0 +1,1 @@
+ALTER TABLE "interactions" ADD COLUMN "payload_pruned_at" timestamp;

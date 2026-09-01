@@ -450,7 +450,7 @@ export class OpenAIRequestAdapter
           message.tool_call_id,
         )?.name;
 
-        logger.info(
+        logger.debug(
           {
             toolCallId: message.tool_call_id,
             toolName,
@@ -1405,7 +1405,7 @@ export async function convertToolResultsToToon(
 
   const result = messages.map((message) => {
     if (message.role === "tool") {
-      logger.info(
+      logger.debug(
         {
           toolCallId: message.tool_call_id,
           contentType: typeof message.content,
@@ -1437,7 +1437,7 @@ export async function convertToolResultsToToon(
           if (tokensAfter < tokensBefore) {
             totalTokensAfter += tokensAfter;
 
-            logger.info(
+            logger.debug(
               {
                 toolCallId: message.tool_call_id,
                 beforeLength: noncompressed.length,
@@ -1479,7 +1479,7 @@ export async function convertToolResultsToToon(
           );
           return message;
         } catch {
-          logger.info(
+          logger.debug(
             {
               toolCallId: message.tool_call_id,
               contentPreview:

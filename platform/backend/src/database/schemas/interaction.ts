@@ -265,6 +265,19 @@ const interactionsTable = pgTable(
     toonTokensAfter: integer("toon_tokens_after"),
     toonCostSavings: numeric("toon_cost_savings", { precision: 13, scale: 10 }),
     toonSkipReason: varchar("toon_skip_reason").$type<ToonSkipReason>(),
+    /**
+     * When this row's request/response payloads were replaced with a
+     * placeholder by payload retention. NULL means the payloads are intact.
+     *
+     * The row itself is deliberately kept: every numeric column feeding cost
+     * statistics, usage limits and session summaries stays valid, so pruning
+     * changes what an operator can read back from the LLM logs but nothing
+     * that is counted. Nullable with no default, so adding it is a
+     * metadata-only change on a table far too large to rewrite (see the
+     * interactions-migrations skill). No index — the sweep already narrows by
+     * `created_at`, and this is only ever a filter on top of that.
+     */
+    payloadPrunedAt: timestamp("payload_pruned_at", { mode: "date" }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => ({

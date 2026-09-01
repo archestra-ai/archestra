@@ -260,6 +260,13 @@ const SkillManifestFieldsSchema = z.object({
       "Tools the skill expects, overriding the SKILL.md `allowed-tools` " +
         "frontmatter. Omit to use the frontmatter; pass [] to clear.",
     ),
+  labels: z
+    .array(LabelWithDetailsSchema)
+    .optional()
+    .describe(
+      "Key/value labels. Omit to leave existing labels untouched; pass [] " +
+        "to clear them.",
+    ),
 });
 
 const SkillManifestInputSchema = SkillManifestFieldsSchema.superRefine(
@@ -596,6 +603,9 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       if (userIds.length > 0) {
         await SkillUserModel.syncSkillUsers(skill.id, userIds);
+      }
+      if (body.labels?.length) {
+        await SkillLabelModel.syncLabels(skill.id, body.labels);
       }
 
       return reply.send(await loadSkillDetail(skill));
@@ -1028,6 +1038,11 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       if (usersChanged) {
         await SkillUserModel.syncSkillUsers(id, newUserIds);
+      }
+      // Only touch labels when the caller sent them, so an update that omits
+      // the field leaves existing labels alone.
+      if (body.labels !== undefined) {
+        await SkillLabelModel.syncLabels(id, body.labels);
       }
 
       return reply.send(await loadSkillDetail(updated));

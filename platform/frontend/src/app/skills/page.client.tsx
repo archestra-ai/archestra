@@ -24,12 +24,14 @@ import { useCallback, useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
+import { EntityLabelFilter } from "@/components/entity-label-filter";
 import {
   CollectionFilters,
   FilterBar,
   filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
+import { LabelTags } from "@/components/label-tags";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { PageLayout } from "@/components/page-layout";
 import {
@@ -75,6 +77,10 @@ import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { ACTION_LABEL, notYoursToChange } from "@/lib/design/resource-lexicon";
+import {
+  useSkillLabelKeys,
+  useSkillLabelValues,
+} from "@/lib/entity-labels.query";
 import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
 import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
@@ -170,6 +176,8 @@ function SkillsList() {
   const pageSize = Number(searchParams.get("pageSize") || DEFAULT_TABLE_LIMIT);
   const search = searchParams.get("search") || "";
   const sourceRepo = searchParams.get("sourceRepo") || "";
+  // Label filtering is server-side, so the value rides the list query.
+  const labelsFilter = searchParams.get("labels") || undefined;
   const scopeFilter = useScopeFilterParams();
   // The trash view; the backend restricts `status=deleted` to admins/team-admins
   // and the status filter itself is only shown to skill admins.
@@ -214,6 +222,7 @@ function SkillsList() {
   const listFilters = {
     search: search || undefined,
     sourceRepo: sourceRepo || undefined,
+    labels: labelsFilter,
     scope: scopeFilter.scope,
     teamIds: scopeFilter.teamIds,
     authorIds: scopeFilter.authorIds,
@@ -894,6 +903,13 @@ function SkillsList() {
                       </SelectContent>
                     </Select>
                   )}
+                  <EntityLabelFilter
+                    useLabelKeys={useSkillLabelKeys}
+                    useLabelValues={useSkillLabelValues}
+                    className={filterControlClass({
+                      active: Boolean(labelsFilter),
+                    })}
+                  />
                 </FilterBar>
                 <ActiveFilterBadges adminPermission={{ skill: ["admin"] }} />
               </CollectionFilters>
@@ -1217,6 +1233,7 @@ function ListedSkillName({
         <div className="flex items-baseline gap-2">
           <span className="truncate font-medium">{item.skill.name}</span>
           <ListedSkillSourceBadge item={item} appName={appName} />
+          {standalone?.labels ? <LabelTags labels={standalone.labels} /> : null}
           {standalone?.githubSyncInterval && (
             <Tooltip>
               <TooltipTrigger asChild>

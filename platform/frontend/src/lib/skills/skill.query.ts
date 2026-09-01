@@ -99,6 +99,7 @@ type SkillsPaginatedParams = Pick<
   | "status"
   | "sortBy"
   | "sortDirection"
+  | "labels"
 >;
 
 // ===== Query hooks =====

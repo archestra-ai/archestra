@@ -765,12 +765,13 @@ archestra:
     # port on any host that also serves the UI.
     #
     # Neither prefix has a frontend route — the frontend only forwards them to
-    # the backend — and /v1 is the LLM proxy, whose requests carry
-    # multi-megabyte bodies and stay open for the length of a completion.
-    # Forwarding that through the frontend port runs it on the same
-    # single-threaded process that answers the dashboard's API calls, so the UI
-    # gets slow while an agent is working. Routing it at the ingress removes
-    # that contention.
+    # the backend. /v1 is the LLM proxy and the MCP gateway; /v2 is A2A. That is
+    # every request an agent makes: completions whose bodies are multi-megabyte
+    # and stay open for the length of a response, plus tool calls and their
+    # once-a-second poll. Forwarding that through the frontend port runs it on
+    # the same single-threaded process that answers the dashboard's API calls,
+    # so the UI gets slow while an agent is working. Routing it at the ingress
+    # removes that contention.
     #
     # Applies to hosts declared under `hosts:` below. A host that already
     # declares its own /v1 or /v2 path is left alone, as is one that never

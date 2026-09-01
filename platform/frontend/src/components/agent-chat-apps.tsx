@@ -597,6 +597,7 @@ export function AgentChatAppsEditor({
                   agentId={agent.id}
                   agentReferences={agentReferences}
                   disabled={isSaving}
+                  directMessagesOnly={agent.scope === "personal"}
                   onPick={(id) => setOptionChecked(id, true)}
                 />
               )}
@@ -805,6 +806,7 @@ function AddChannelPicker({
   agentId,
   agentReferences,
   disabled,
+  directMessagesOnly,
   onPick,
 }: {
   options: AssignmentOption[];
@@ -814,6 +816,11 @@ function AddChannelPicker({
   agentId: string;
   agentReferences: Map<string, { id: string; name: string }>;
   disabled: boolean;
+  /**
+   * This agent can never hold a shared channel, so the pool it would search is
+   * refused in its entirety. Swaps the whole panel for {@link DirectMessageList}.
+   */
+  directMessagesOnly: boolean;
   onPick: (optionId: string) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -864,6 +871,22 @@ function AddChannelPicker({
         <Plus className="size-4" />
         Add channel
       </Button>
+    );
+  }
+
+  if (directMessagesOnly) {
+    return (
+      <DirectMessageList
+        options={options}
+        selectedIds={selectedIds}
+        agentId={agentId}
+        agentReferences={agentReferences}
+        onPick={(id) => {
+          onPick(id);
+          setOpen(false);
+        }}
+        onClose={() => setOpen(false)}
+      />
     );
   }
 
@@ -1001,6 +1024,117 @@ function AddChannelPicker({
           ))}
         </div>
       </ScrollArea>
+    </div>
+  );
+}
+
+/**
+ * What a personal agent can actually be given.
+ *
+ * A personal agent answers only in its owner's direct messages, so every
+ * shared channel in the organization is refused to it — which made the ordinary
+ * picker theatre: a provider tab bar and a channel search over a pool where
+ * nothing was claimable, and the same refusal restated on each of the three
+ * tabs. There is at most one direct message per provider, so there is nothing
+ * to tab through and nothing to search. The rule is stated once, for the whole
+ * panel, and only the rows that can be picked are drawn.
+ */
+function DirectMessageList({
+  options,
+  selectedIds,
+  agentId,
+  agentReferences,
+  onPick,
+  onClose,
+}: {
+  options: AssignmentOption[];
+  selectedIds: string[];
+  agentId: string;
+  agentReferences: Map<string, { id: string; name: string }>;
+  onPick: (optionId: string) => void;
+  onClose: () => void;
+}) {
+  const offered = options.filter(
+    (option) => option.isDm && !selectedIds.includes(option.id),
+  );
+  return (
+    <div className="rounded-md border">
+      <div className="flex items-start gap-2 border-b p-3">
+        <LockKeyhole className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+        <p className="min-w-0 flex-1 text-xs text-muted-foreground">
+          A personal agent answers only in its owner&apos;s direct messages. The
+          organization&apos;s channels are assigned to shared agents.
+        </p>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="-mr-1 -mt-1 shrink-0"
+          aria-label="Close channel picker"
+          onClick={onClose}
+        >
+          <X className="size-4" />
+        </Button>
+      </div>
+      <div className="p-2">
+        {offered.length === 0 && (
+          <p className="px-2 py-6 text-center text-sm text-muted-foreground">
+            This agent already answers in every direct message it can.
+          </p>
+        )}
+        {offered.map((option) => {
+          const heldBy =
+            option.assignedAgentId && option.assignedAgentId !== agentId
+              ? (agentReferences.get(option.assignedAgentId)?.name ??
+                option.assignedAgentName ??
+                "another agent")
+              : null;
+          return (
+            <button
+              key={option.id}
+              type="button"
+              disabled={!!option.disabledReason}
+              aria-label={assignmentOptionLabel(option)}
+              className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left hover:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={() => onPick(option.id)}
+            >
+              <ChannelIcon
+                channel={option.provider}
+                className="size-4 shrink-0"
+              />
+              <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
+                <span className="min-w-0 max-w-full truncate text-sm">
+                  {option.name}
+                </span>
+                <span className="min-w-0 max-w-full truncate text-xs text-muted-foreground">
+                  {MESSAGING_CHANNEL_LABELS[option.provider]}
+                </span>
+              </span>
+              {/* At most one direct message per provider reaches this list, so
+                  a refusal here is stated on its own row rather than folded —
+                  there is never a column of them. */}
+              {option.disabledReason ? (
+                <span className="max-w-[45%] shrink-0 truncate text-xs text-muted-foreground">
+                  {option.disabledReason}
+                </span>
+              ) : option.virtualDm ? (
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  A private chat with this agent
+                </span>
+              ) : (
+                heldBy && (
+                  <span
+                    className="max-w-[45%] shrink-0 truncate text-xs text-muted-foreground"
+                    title={`Answered by ${heldBy}`}
+                  >
+                    Answered by {heldBy}
+                  </span>
+                )
+              )}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -1055,15 +1055,26 @@ describe("AgentChatAppsEditor", () => {
     expect(channelRow("General")).toBeVisible();
   });
 
-  it("states a personal agent's refusal once instead of once per channel", async () => {
+  it("offers a personal agent only direct messages, and says why once", async () => {
     const user = userEvent.setup();
-    const pool = Array.from({ length: 6 }, (_, index) => ({
-      ...bindings[0],
-      id: `shared-${index}`,
-      channelId: `CS${index}`,
-      channelName: `shared-${index}`,
-      agentId: null,
-    }));
+    const pool = [
+      ...Array.from({ length: 6 }, (_, index) => ({
+        ...bindings[0],
+        id: `shared-${index}`,
+        channelId: `CS${index}`,
+        channelName: `shared-${index}`,
+        agentId: null,
+      })),
+      {
+        ...bindings[0],
+        id: "own-dm",
+        channelId: "D1",
+        channelName: null,
+        isDm: true,
+        dmOwnerEmail: "owner@example.com",
+        agentId: null,
+      },
+    ];
     vi.mocked(useAllChatOpsBindings).mockReturnValue({
       data: { bindings: pool },
       isPending: false,
@@ -1086,28 +1097,24 @@ describe("AgentChatAppsEditor", () => {
       />,
     );
 
-    await openPicker(user, "Slack");
-    const reason =
-      "This personal agent can use only its owner's direct messages.";
-    // One sentence for the whole pool, not one per row — six copies of it was
-    // the loudest thing on the page.
-    expect(screen.getAllByText(reason)).toHaveLength(1);
-    expect(
-      screen.getByRole("button", { name: /6 not available to this agent/ }),
-    ).toBeVisible();
-    for (const binding of pool) {
-      expect(
-        screen.queryByRole("button", {
-          name: new RegExp(`^${binding.channelName}`),
-        }),
-      ).toBeNull();
-    }
+    await user.click(screen.getByRole("button", { name: /add channel/i }));
 
-    // Searching finds them in the group rather than claiming nothing matched.
-    await user.type(screen.getByLabelText("Search channels"), "shared-3");
-    expect(screen.queryByText("No channels match.")).toBeNull();
+    // The rule once, for the whole panel — not once per provider tab, which is
+    // where a personal agent used to meet it three times over.
     expect(
-      screen.getByRole("button", { name: /1 not available to this agent/ }),
+      screen.getAllByText(/answers only in its owner's direct messages/),
+    ).toHaveLength(1);
+    // A pool it can never hold is not a pool: no tabs, no channel search.
+    expect(screen.queryByLabelText("Search channels")).toBeNull();
+    for (const binding of pool) {
+      if (binding.isDm) continue;
+      expect(screen.queryByText(binding.channelName as string)).toBeNull();
+    }
+    // What is left is the thing it can actually be given.
+    expect(
+      screen.getByRole("button", {
+        name: "Slack direct message for owner@example.com",
+      }),
     ).toBeVisible();
   });
 

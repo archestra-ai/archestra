@@ -186,6 +186,7 @@ export const TOOL_PERMISSIONS: Record<
   start_task: { resource: "agent", action: "read" },
   get_task: { resource: "agent", action: "read" },
   list_tasks: { resource: "agent", action: "read" },
+  list_agent_executions: { resource: "agent", action: "read" },
   steer_task: { resource: "agent", action: "read" },
   cancel_task: { resource: "agent", action: "read" },
   post_task_file: { resource: "agent", action: "read" },

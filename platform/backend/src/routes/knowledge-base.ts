@@ -6,6 +6,7 @@ import {
   MIN_PERMISSION_SYNC_INTERVAL_SECONDS,
   PaginationQuerySchema,
   PERMISSION_SYNC_FOLLOW_DOCUMENTS_SCHEDULE,
+  parseLabelsParam,
   RouteId,
   TextSearchLanguageSchema,
 } from "@archestra/shared";
@@ -84,7 +85,9 @@ import {
   KbExternalGroupModel,
   KbExternalUserGroupModel,
   KbMemberOverrideModel,
+  KnowledgeBaseConnectorLabelModel,
   KnowledgeBaseConnectorModel,
+  KnowledgeBaseLabelModel,
   KnowledgeBaseModel,
   MemberModel,
   TaskModel,
@@ -109,6 +112,7 @@ import {
   constructResponseSchema,
   DeleteObjectResponseSchema,
   KnowledgeSourceVisibilitySchema,
+  LabelWithDetailsSchema,
   SelectConnectorRunDetailSchema,
   SelectConnectorRunListSchema,
   SelectKbDocumentSchema,
@@ -122,6 +126,7 @@ import {
   BulkOutcomeSchema,
   runBulk,
 } from "./bulk-route";
+import { registerEntityLabelRoutes } from "./entity-labels";
 
 const AssignedAgentSummarySchema = z.object({
   id: z.string(),
@@ -139,6 +144,7 @@ const KnowledgeBaseWithConnectorsSchema = SelectKnowledgeBaseSchema.extend({
   ),
   totalDocsIndexed: z.number(),
   assignedAgents: z.array(AssignedAgentSummarySchema),
+  labels: z.array(LabelWithDetailsSchema),
 });
 
 /**
@@ -146,7 +152,9 @@ const KnowledgeBaseWithConnectorsSchema = SelectKnowledgeBaseSchema.extend({
  * sync bookkeeping and never part of the API surface.
  */
 const KnowledgeBaseConnectorResponseSchema =
-  SelectKnowledgeBaseConnectorSchema.omit({ permissionSyncState: true });
+  SelectKnowledgeBaseConnectorSchema.omit({ permissionSyncState: true }).extend(
+    { labels: z.array(LabelWithDetailsSchema) },
+  );
 
 /**
  * Connector rows can outlive the config schema that created them. Read
@@ -205,6 +213,24 @@ async function requireTrashAccess(params: {
 }
 
 const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  registerEntityLabelRoutes(fastify, {
+    basePath: "/api/knowledge-bases",
+    tag: "Knowledge Bases",
+    entityNamePlural: "knowledge bases",
+    model: KnowledgeBaseLabelModel,
+    keysOperationId: RouteId.GetKnowledgeBaseLabelKeys,
+    valuesOperationId: RouteId.GetKnowledgeBaseLabelValues,
+  });
+
+  registerEntityLabelRoutes(fastify, {
+    basePath: "/api/knowledge-base-connectors",
+    tag: "Knowledge Bases",
+    entityNamePlural: "knowledge connectors",
+    model: KnowledgeBaseConnectorLabelModel,
+    keysOperationId: RouteId.GetConnectorLabelKeys,
+    valuesOperationId: RouteId.GetConnectorLabelValues,
+  });
+
   // ===== Knowledge Base CRUD =====
 
   fastify.get(
@@ -229,6 +255,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .describe(
               "Filter by lifecycle status. `deleted` lists soft-deleted knowledge bases and requires `knowledgeSource:delete`.",
             ),
+          labels: z
+            .string()
+            .optional()
+            .describe(
+              "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.",
+            ),
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(KnowledgeBaseWithConnectorsSchema),
@@ -236,7 +268,11 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (
-      { query: { limit, offset, search, status }, organizationId, user },
+      {
+        query: { limit, offset, search, status, labels },
+        organizationId,
+        user,
+      },
       reply,
     ) => {
       // Viewing the trash is the delete permission's other half — the same
@@ -251,6 +287,13 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
         });
 
+      // Resolved once so the page query and the count agree, and so a filter
+      // that matches nothing short circuits both.
+      const parsedLabels = parseLabelsParam(labels);
+      const labelFilteredIds = parsedLabels
+        ? await KnowledgeBaseLabelModel.getIdsMatchingLabels(parsedLabels)
+        : undefined;
+
       const [knowledgeBases, total] = await Promise.all([
         KnowledgeBaseModel.findByOrganization({
           organizationId,
@@ -258,11 +301,13 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           offset,
           search,
           status,
+          labelFilteredIds,
         }),
         KnowledgeBaseModel.countByOrganization({
           organizationId,
           search,
           status,
+          labelFilteredIds,
         }),
       ]);
 
@@ -278,13 +323,14 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             connectors: [],
             totalDocsIndexed: 0,
             assignedAgents: [],
+            labels: [],
           })),
           pagination: calculatePaginationMeta(total, { limit, offset }),
         });
       }
 
       const kbIds = knowledgeBases.map((kb) => kb.id);
-      const [allConnectors, docsIndexedByKbId, agentIdsByKbId] =
+      const [allConnectors, docsIndexedByKbId, agentIdsByKbId, labelsByKbId] =
         await Promise.all([
           KnowledgeBaseConnectorModel.findByKnowledgeBaseIds(kbIds, {
             canReadAll: access.canReadAll,
@@ -292,6 +338,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }),
           KbDocumentModel.countByKnowledgeBaseIds(kbIds),
           AgentKnowledgeBaseModel.getAgentIdsForKnowledgeBases(kbIds),
+          KnowledgeBaseLabelModel.getLabelsForMany(kbIds),
         ]);
 
       // Collect all unique agent IDs and batch-fetch their names
@@ -330,6 +377,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const data = knowledgeBases.map((kb) => ({
         ...kb,
+        labels: labelsByKbId.get(kb.id) ?? [],
         connectors: connectorsByKbId.get(kb.id) ?? [],
         totalDocsIndexed: docsIndexedByKbId.get(kb.id) ?? 0,
         assignedAgents: (agentIdsByKbId.get(kb.id) ?? [])
@@ -357,6 +405,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: z.object({
           name: z.string().min(1),
           description: z.string().optional(),
+          labels: z.array(LabelWithDetailsSchema).optional(),
         }),
         response: constructResponseSchema(SelectKnowledgeBaseSchema),
       },
@@ -369,6 +418,10 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           description: body.description,
         }),
       });
+
+      if (body.labels?.length) {
+        await KnowledgeBaseLabelModel.syncLabels(kg.id, body.labels);
+      }
 
       return reply.send(kg);
     },
@@ -406,6 +459,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: z.object({
           name: z.string().min(1).optional(),
           description: z.string().nullable().optional(),
+          labels: z.array(LabelWithDetailsSchema).optional(),
         }),
         response: constructResponseSchema(SelectKnowledgeBaseSchema),
       },
@@ -417,9 +471,16 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
       });
 
-      const updated = await KnowledgeBaseModel.update(id, body);
+      const { labels, ...columns } = body;
+      const updated = await KnowledgeBaseModel.update(id, columns);
       if (!updated) {
         throw new ApiError(404, "Knowledge base not found");
+      }
+
+      // Only touch labels when the caller sent them, so an update that omits
+      // the field leaves existing labels alone.
+      if (labels !== undefined) {
+        await KnowledgeBaseLabelModel.syncLabels(id, labels);
       }
 
       return reply.send(updated);
@@ -762,6 +823,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           data: data.map((connector) => ({
             ...connector,
             assignedAgents: [],
+            labels: [],
           })),
           pagination: calculatePaginationMeta(total, { limit, offset }),
         });
@@ -769,10 +831,10 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Enrich connectors with assigned agents (batch query to avoid N+1)
       const connectorIds = data.map((c) => c.id);
-      const agentIdsByConnector =
-        await AgentConnectorAssignmentModel.getAgentIdsForConnectors(
-          connectorIds,
-        );
+      const [agentIdsByConnector, labelsByConnector] = await Promise.all([
+        AgentConnectorAssignmentModel.getAgentIdsForConnectors(connectorIds),
+        KnowledgeBaseConnectorLabelModel.getLabelsForMany(connectorIds),
+      ]);
 
       const allAgentIdsForConnectors = [
         ...new Set([...agentIdsByConnector.values()].flat()),
@@ -797,6 +859,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const enrichedData = data.map((connector) => ({
         ...connector,
+        labels: labelsByConnector.get(connector.id) ?? [],
         assignedAgents: (agentIdsByConnector.get(connector.id) ?? [])
           .map((id) => connectorAgentDetailsMap.get(id))
           .filter(
@@ -1056,7 +1119,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // failure to explain something the UI already says. The OAuth callback
       // enqueues it the moment there is a token.
       if (awaitsGoogleDriveOAuth) {
-        return reply.send(connector);
+        return reply.send(await withConnectorLabels(connector));
       }
 
       // Auto-trigger initial sync. "queued" (not "running"): the worker
@@ -1070,7 +1133,9 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         { lastSyncStatus: "queued" },
       );
 
-      return reply.send(updatedConnector ?? connector);
+      return reply.send(
+        await withConnectorLabels(updatedConnector ?? connector),
+      );
     },
   );
 
@@ -1096,7 +1161,10 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
       });
       const totalDocsIngested = await KbDocumentModel.countByConnector(id);
-      return reply.send({ ...connector, totalDocsIngested });
+      return reply.send({
+        ...(await withConnectorLabels(connector)),
+        totalDocsIngested,
+      });
     },
   );
 
@@ -1654,7 +1722,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await reconcileP4ShimForConnector(id);
       // SPDX-SnippetEnd
 
-      return reply.send(updated);
+      return reply.send(await withConnectorLabels(updated));
     },
   );
 
@@ -3421,4 +3489,15 @@ async function resolveGithubAppConfigReference(params: {
     );
   }
   return { id: appConfig.id, githubUrl: appConfig.githubUrl };
+}
+
+/**
+ * Attach a connector's labels to a single-connector response. The list
+ * endpoint batches this instead; these are the one-row paths.
+ */
+async function withConnectorLabels<T extends { id: string }>(connector: T) {
+  return {
+    ...connector,
+    labels: await KnowledgeBaseConnectorLabelModel.getLabelsFor(connector.id),
+  };
 }

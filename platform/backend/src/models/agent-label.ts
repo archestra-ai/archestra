@@ -1,14 +1,17 @@
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
-import type { AgentLabelGetResponse, AgentLabelWithDetails } from "@/types";
+import type { LabelGetResponse, LabelWithDetails } from "@/types";
+import {
+  getOrCreateLabelKey,
+  getOrCreateLabelValue,
+  pruneLabelKeysAndValues,
+} from "./entity-label";
 
 class AgentLabelModel {
   /**
    * Get all labels for a specific agent with key and value details
    */
-  static async getLabelsForAgent(
-    agentId: string,
-  ): Promise<AgentLabelGetResponse[]> {
+  static async getLabelsForAgent(agentId: string): Promise<LabelGetResponse[]> {
     const rows = await db
       .select({
         keyId: schema.agentLabelsTable.keyId,
@@ -37,47 +40,22 @@ class AgentLabelModel {
   }
 
   /**
-   * Get or create a label key. Uses INSERT ON CONFLICT DO NOTHING + SELECT
-   * to handle concurrent inserts atomically.
+   * @see getOrCreateLabelKey — kept as a static so existing callers and tests
+   * keep working now that the implementation is shared across every entity.
    */
   static async getOrCreateKey(
     key: string,
     txOrDb: Transaction | typeof db = db,
   ): Promise<string> {
-    await txOrDb
-      .insert(schema.labelKeysTable)
-      .values({ key })
-      .onConflictDoNothing({ target: schema.labelKeysTable.key });
-
-    const [result] = await txOrDb
-      .select({ id: schema.labelKeysTable.id })
-      .from(schema.labelKeysTable)
-      .where(eq(schema.labelKeysTable.key, key))
-      .limit(1);
-
-    return result.id;
+    return getOrCreateLabelKey(key, txOrDb);
   }
 
-  /**
-   * Get or create a label value. Uses INSERT ON CONFLICT DO NOTHING + SELECT
-   * to handle concurrent inserts atomically.
-   */
+  /** @see getOrCreateLabelValue */
   static async getOrCreateValue(
     value: string,
     txOrDb: Transaction | typeof db = db,
   ): Promise<string> {
-    await txOrDb
-      .insert(schema.labelValuesTable)
-      .values({ value })
-      .onConflictDoNothing({ target: schema.labelValuesTable.value });
-
-    const [result] = await txOrDb
-      .select({ id: schema.labelValuesTable.id })
-      .from(schema.labelValuesTable)
-      .where(eq(schema.labelValuesTable.value, value))
-      .limit(1);
-
-    return result.id;
+    return getOrCreateLabelValue(value, txOrDb);
   }
 
   /**
@@ -87,7 +65,7 @@ class AgentLabelModel {
    */
   static async syncAgentLabels(
     agentId: string,
-    labels: AgentLabelWithDetails[],
+    labels: LabelWithDetails[],
   ): Promise<void> {
     await withDbTransaction(async (tx) => {
       // Delete all existing labels for this agent
@@ -121,98 +99,16 @@ class AgentLabelModel {
   }
 
   /**
-   * Prune orphaned label keys and values that are no longer referenced
-   * by any label junction table (agent_labels, mcp_catalog_labels, team_labels,
-   * or app_labels)
+   * Prune orphaned label keys and values.
+   *
+   * @see pruneLabelKeysAndValues — the junction tables it checks come from the
+   * shared registry, so a newly labelled entity is covered automatically.
    */
   static async pruneKeysAndValues(): Promise<{
     deletedKeys: number;
     deletedValues: number;
   }> {
-    return await withDbTransaction(async (tx) => {
-      // Find orphaned keys (not referenced in any label junction table).
-      // EVERY junction must be joined here: a key this query cannot see looks
-      // orphaned, and deleting it cascades away the labels that were using it.
-      const orphanedKeys = await tx
-        .select({ id: schema.labelKeysTable.id })
-        .from(schema.labelKeysTable)
-        .leftJoin(
-          schema.agentLabelsTable,
-          eq(schema.labelKeysTable.id, schema.agentLabelsTable.keyId),
-        )
-        .leftJoin(
-          schema.mcpCatalogLabelsTable,
-          eq(schema.labelKeysTable.id, schema.mcpCatalogLabelsTable.keyId),
-        )
-        .leftJoin(
-          schema.teamLabelsTable,
-          eq(schema.labelKeysTable.id, schema.teamLabelsTable.keyId),
-        )
-        .leftJoin(
-          schema.appLabelsTable,
-          eq(schema.labelKeysTable.id, schema.appLabelsTable.keyId),
-        )
-        .where(
-          and(
-            isNull(schema.agentLabelsTable.keyId),
-            isNull(schema.mcpCatalogLabelsTable.keyId),
-            isNull(schema.teamLabelsTable.keyId),
-            isNull(schema.appLabelsTable.keyId),
-          ),
-        );
-
-      // Find orphaned values (not referenced in any label junction table)
-      const orphanedValues = await tx
-        .select({ id: schema.labelValuesTable.id })
-        .from(schema.labelValuesTable)
-        .leftJoin(
-          schema.agentLabelsTable,
-          eq(schema.labelValuesTable.id, schema.agentLabelsTable.valueId),
-        )
-        .leftJoin(
-          schema.mcpCatalogLabelsTable,
-          eq(schema.labelValuesTable.id, schema.mcpCatalogLabelsTable.valueId),
-        )
-        .leftJoin(
-          schema.teamLabelsTable,
-          eq(schema.labelValuesTable.id, schema.teamLabelsTable.valueId),
-        )
-        .leftJoin(
-          schema.appLabelsTable,
-          eq(schema.labelValuesTable.id, schema.appLabelsTable.valueId),
-        )
-        .where(
-          and(
-            isNull(schema.agentLabelsTable.valueId),
-            isNull(schema.mcpCatalogLabelsTable.valueId),
-            isNull(schema.teamLabelsTable.valueId),
-            isNull(schema.appLabelsTable.valueId),
-          ),
-        );
-
-      let deletedKeys = 0;
-      let deletedValues = 0;
-
-      // Delete orphaned keys
-      if (orphanedKeys.length > 0) {
-        const keyIds = orphanedKeys.map((k) => k.id);
-        const result = await tx
-          .delete(schema.labelKeysTable)
-          .where(inArray(schema.labelKeysTable.id, keyIds));
-        deletedKeys = result.rowCount || 0;
-      }
-
-      // Delete orphaned values
-      if (orphanedValues.length > 0) {
-        const valueIds = orphanedValues.map((v) => v.id);
-        const result = await tx
-          .delete(schema.labelValuesTable)
-          .where(inArray(schema.labelValuesTable.id, valueIds));
-        deletedValues = result.rowCount || 0;
-      }
-
-      return { deletedKeys, deletedValues };
-    });
+    return pruneLabelKeysAndValues();
   }
 
   /**
@@ -236,7 +132,7 @@ class AgentLabelModel {
    */
   static async getLabelsForAgents(
     agentIds: string[],
-  ): Promise<Map<string, AgentLabelWithDetails[]>> {
+  ): Promise<Map<string, LabelWithDetails[]>> {
     if (agentIds.length === 0) {
       return new Map();
     }
@@ -261,7 +157,7 @@ class AgentLabelModel {
       .where(inArray(schema.agentLabelsTable.agentId, agentIds))
       .orderBy(asc(schema.labelKeysTable.key));
 
-    const labelsMap = new Map<string, AgentLabelWithDetails[]>();
+    const labelsMap = new Map<string, LabelWithDetails[]>();
 
     // Initialize all agent IDs with empty arrays
     for (const agentId of agentIds) {

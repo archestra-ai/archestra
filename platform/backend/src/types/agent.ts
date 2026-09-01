@@ -18,7 +18,7 @@ import {
 import { z } from "zod";
 import { schema } from "@/database";
 import { SuggestedPromptInputSchema } from "./agent-suggested-prompt";
-import { AgentLabelWithDetailsSchema } from "./label";
+import { LabelWithDetailsSchema } from "./label";
 import { AgentBackgroundExecutionSchema } from "./runner";
 import { SelectToolSchema } from "./tool";
 import {
@@ -285,7 +285,7 @@ const AgentRowSchema = createSelectSchema(
  * hydration a full `Agent` carries. See `AgentModel.findGatewayAgentById`.
  */
 const GatewayAgentSchema = AgentRowSchema.extend({
-  labels: z.array(AgentLabelWithDetailsSchema),
+  labels: z.array(LabelWithDetailsSchema),
 });
 export type GatewayAgent = z.infer<typeof GatewayAgentSchema>;
 
@@ -318,7 +318,7 @@ export const SelectAgentSchema = AgentRowSchema.extend({
   users: z
     .array(z.object({ id: z.string(), name: z.string(), email: z.string() }))
     .optional(),
-  labels: z.array(AgentLabelWithDetailsSchema),
+  labels: z.array(LabelWithDetailsSchema),
   authorName: z.string().nullable().optional(),
   authorEmail: z.string().nullable().optional(),
   knowledgeBaseIds: z.array(z.string()),
@@ -376,7 +376,7 @@ export const InsertAgentSchemaBase = createInsertSchema(
     // Individuals the agent is shared with by name. Additive to the scope,
     // so a personal agent can reach a colleague without going team-wide.
     users: z.array(z.string()).default([]),
-    labels: z.array(AgentLabelWithDetailsSchema).optional(),
+    labels: z.array(LabelWithDetailsSchema).optional(),
     // Make organizationId optional - model will auto-assign if not provided
     organizationId: z.string().optional(),
     scope: AgentScopeSchema,
@@ -419,7 +419,7 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
   .extend({
     teams: z.array(z.string()).optional(),
     users: z.array(z.string()).optional(),
-    labels: z.array(AgentLabelWithDetailsSchema).optional(),
+    labels: z.array(LabelWithDetailsSchema).optional(),
     scope: AgentScopeSchema.optional(),
     knowledgeBaseIds: z.array(z.string()).optional(),
     connectorIds: z.array(z.string()).optional(),

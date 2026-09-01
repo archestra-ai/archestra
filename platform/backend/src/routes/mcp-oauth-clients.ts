@@ -1,4 +1,8 @@
-import { ResourceVisibilityScopeSchema, RouteId } from "@archestra/shared";
+import {
+  parseLabelsParam,
+  ResourceVisibilityScopeSchema,
+  RouteId,
+} from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {
@@ -10,7 +14,12 @@ import {
   resolveOauthClientScopeUpdate,
   withOauthClientTeamFkErrorMapped,
 } from "@/auth/oauth-client-permissions";
-import { AgentModel, McpOauthClientModel, TeamModel } from "@/models";
+import {
+  AgentModel,
+  McpOauthClientModel,
+  OauthClientLabelModel,
+  TeamModel,
+} from "@/models";
 import {
   ApiError,
   constructResponseSchema,
@@ -19,6 +28,7 @@ import {
   McpOauthClientWithSecretSchema,
 } from "@/types";
 import type { McpOauthClient } from "@/types/mcp-oauth-client";
+import { registerEntityLabelRoutes } from "./entity-labels";
 
 /**
  * Both grant types share one body shape. `grantType` defaults to
@@ -70,6 +80,15 @@ const CreateMcpOauthClientBodySchema = McpOauthClientBodySchema;
 const UpdateMcpOauthClientBodySchema = McpOauthClientBodySchema;
 
 const mcpOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  registerEntityLabelRoutes(fastify, {
+    basePath: "/api/mcp-oauth-clients",
+    tag: "MCP OAuth Clients",
+    entityNamePlural: "MCP OAuth clients",
+    model: OauthClientLabelModel,
+    keysOperationId: RouteId.GetMcpOauthClientLabelKeys,
+    valuesOperationId: RouteId.GetMcpOauthClientLabelValues,
+  });
+
   fastify.get(
     "/api/mcp-oauth-clients",
     {
@@ -79,6 +98,12 @@ const mcpOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["MCP OAuth Clients"],
         querystring: z.object({
           search: z.string().trim().min(1).optional(),
+          labels: z
+            .string()
+            .optional()
+            .describe(
+              "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.",
+            ),
         }),
         response: constructResponseSchema(z.array(McpOauthClientSchema)),
       },
@@ -92,6 +117,7 @@ const mcpOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const oauthClients = await McpOauthClientModel.findAllByOrganization({
         organizationId,
         search: query.search,
+        labels: parseLabelsParam(query.labels),
         viewer: { userId: user.id, isAdmin: checker.isAdmin },
       });
       return reply.send(oauthClients);

@@ -25,6 +25,7 @@ import {
   type PluginWithFiles,
   type UpdatePlugin,
 } from "@/types";
+import { PluginLabelModel } from "./entity-labels";
 import PluginTeamModel from "./plugin-team";
 import PluginUserModel from "./plugin-user";
 
@@ -32,8 +33,15 @@ class PluginModel {
   static async findByOrganization(params: {
     organizationId: string;
     accessiblePluginIds?: string[];
+    labels?: Record<string, string[]>;
   }): Promise<PluginListItem[]> {
     if (params.accessiblePluginIds?.length === 0) return [];
+
+    const labelFilteredIds = params.labels
+      ? await PluginLabelModel.getIdsMatchingLabels(params.labels)
+      : null;
+    if (labelFilteredIds?.length === 0) return [];
+
     const plugins = await db
       .select()
       .from(schema.pluginsTable)
@@ -42,6 +50,9 @@ class PluginModel {
           eq(schema.pluginsTable.organizationId, params.organizationId),
           params.accessiblePluginIds
             ? inArray(schema.pluginsTable.id, params.accessiblePluginIds)
+            : undefined,
+          labelFilteredIds
+            ? inArray(schema.pluginsTable.id, labelFilteredIds)
             : undefined,
           notDeleted(schema.pluginsTable),
         ),
@@ -381,6 +392,11 @@ class PluginModel {
       return { ...plugin, files };
     });
     if (!created) return null;
+
+    if (params.input.labels?.length) {
+      await PluginLabelModel.syncLabels(created.id, params.input.labels);
+    }
+
     return PluginModel.findById({
       id: created.id,
       organizationId: params.organizationId,
@@ -550,6 +566,13 @@ class PluginModel {
       return { ...plugin, files };
     });
     if (!updated) return null;
+
+    // Only touch labels when the caller sent them, so an update that omits the
+    // field leaves existing labels alone.
+    if (params.input.labels !== undefined) {
+      await PluginLabelModel.syncLabels(updated.id, params.input.labels);
+    }
+
     return PluginModel.findById({
       id: updated.id,
       organizationId: params.organizationId,
@@ -971,14 +994,16 @@ async function attachFilesAndVisibilityInIdOrder(
 
 async function attachVisibility(plugins: Plugin[]) {
   const ids = plugins.map((plugin) => plugin.id);
-  const [teamsByPlugin, usersByPlugin] = await Promise.all([
+  const [teamsByPlugin, usersByPlugin, labelsByPlugin] = await Promise.all([
     PluginTeamModel.getTeamDetailsForPlugins(ids),
     PluginUserModel.getUserDetailsForPlugins(ids),
+    PluginLabelModel.getLabelsForMany(ids),
   ]);
   return plugins.map((plugin) => ({
     ...plugin,
     teams: teamsByPlugin.get(plugin.id) ?? [],
     users: usersByPlugin.get(plugin.id) ?? [],
+    labels: labelsByPlugin.get(plugin.id) ?? [],
   }));
 }
 

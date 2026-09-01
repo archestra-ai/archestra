@@ -15,6 +15,7 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { LabelWithDetailsSchema } from "./label";
 
 export type {
   ModelInputModality,
@@ -376,6 +377,12 @@ export const ModelWithApiKeysSchema = SelectModelSchema.extend({
   users: z.array(
     z.object({ id: z.string(), name: z.string(), email: z.string() }),
   ),
+  /**
+   * Labels attached to this model. The model catalog is deployment-wide (it
+   * has no organization column), so its labels are shared for the same reason
+   * its rows are.
+   */
+  labels: z.array(LabelWithDetailsSchema),
   /** Price per million tokens for input (computed from raw/custom pricing) */
   pricePerMillionInput: z.string().nullable(),
   /** Price per million tokens for output (computed from raw/custom pricing) */

@@ -7,6 +7,7 @@ import {
   isProviderApiKeyOptional,
   isSubscriptionCredential,
   MAX_BULK_IDS,
+  parseLabelsParam,
   perUserCredentialLabel,
   providerDisplayNames,
   RouteId,
@@ -30,6 +31,7 @@ import db, { schema } from "@/database";
 import logger from "@/logging";
 import {
   LlmOauthClientModel,
+  LlmProviderApiKeyLabelModel,
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
@@ -64,6 +66,7 @@ import {
   isConnectionFailureMessage,
 } from "@/utils/docker-localhost-hint";
 import { BulkOutcomeSchema, runBulk } from "./bulk-route";
+import { registerEntityLabelRoutes } from "./entity-labels";
 
 const BulkDeleteLlmProviderApiKeysBodySchema = z.object({
   ids: z.array(z.string().uuid()).min(1).max(MAX_BULK_IDS),
@@ -276,6 +279,15 @@ function resolveRuntimeTestBaseUrl(params: {
 }
 
 const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  registerEntityLabelRoutes(fastify, {
+    basePath: "/api/llm-provider-api-keys",
+    tag: "LLM Provider API Keys",
+    entityNamePlural: "model provider API keys",
+    model: LlmProviderApiKeyLabelModel,
+    keysOperationId: RouteId.GetLlmProviderApiKeyLabelKeys,
+    valuesOperationId: RouteId.GetLlmProviderApiKeyLabelValues,
+  });
+
   // List all visible LLM provider API keys for the user
   fastify.get(
     "/api/llm-provider-api-keys",
@@ -288,6 +300,12 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         querystring: z.object({
           search: z.string().trim().min(1).optional(),
           provider: SupportedProvidersSchema.optional(),
+          labels: z
+            .string()
+            .optional()
+            .describe(
+              "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.",
+            ),
         }),
         response: constructResponseSchema(
           z.array(LlmProviderApiKeyWithScopeInfoSchema),
@@ -313,6 +331,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         {
           search: query.search,
           provider: query.provider,
+          labels: parseLabelsParam(query.labels),
         },
         { includeSubscriptionInfo: true },
       );

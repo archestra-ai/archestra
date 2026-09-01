@@ -2,6 +2,7 @@ import {
   calculatePaginationMeta,
   createPaginatedResponseSchema,
   PaginationQuerySchema,
+  parseLabelsParam,
   RouteId,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -17,6 +18,7 @@ import {
   ConversationAttachmentModel,
   ConversationModel,
   KbDirectoryModel,
+  KbFileLabelModel,
   KbFileModel,
   KnowledgeBaseModel,
   OrganizationModel,
@@ -42,6 +44,7 @@ import {
   isSafeInlineMimeType,
   sanitizeAttachmentContentType,
 } from "../chat/attachment-content-type";
+import { registerEntityLabelRoutes } from "../entity-labels";
 
 const FileParamsSchema = z.object({ fileId: z.string().uuid() });
 const DirectoryParamsSchema = z.object({ directoryId: z.string().uuid() });
@@ -52,6 +55,15 @@ const VisibilityBodySchema = z.object({
 });
 
 const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  registerEntityLabelRoutes(fastify, {
+    basePath: "/api/knowledge-files",
+    tag: "Knowledge Files",
+    entityNamePlural: "knowledge files",
+    model: KbFileLabelModel,
+    keysOperationId: RouteId.GetKnowledgeFileLabelKeys,
+    valuesOperationId: RouteId.GetKnowledgeFileLabelValues,
+  });
+
   // ===== Files =====
 
   fastify.get(
@@ -64,6 +76,12 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
         querystring: PaginationQuerySchema.extend({
           directoryId: z.string().optional(),
           search: z.string().optional(),
+          labels: z
+            .string()
+            .optional()
+            .describe(
+              "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.",
+            ),
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(KbFileSchema),
@@ -71,8 +89,13 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request) => {
-      const { limit, offset, directoryId, search } = request.query;
+      const { limit, offset, directoryId, search, labels } = request.query;
       const viewer = await resolveViewer(request);
+
+      const parsedLabels = parseLabelsParam(labels);
+      const labelFilteredIds = parsedLabels
+        ? await KbFileLabelModel.getIdsMatchingLabels(parsedLabels)
+        : undefined;
 
       const { items, total } = await KbFileModel.findPaginated({
         organizationId: request.organizationId,
@@ -86,14 +109,16 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
               ? null
               : directoryId,
         search,
+        labelFilteredIds,
         limit,
         offset,
       });
 
       const fileIds = items.map((file) => file.id);
-      const [knowledgeBases, teamIds] = await Promise.all([
+      const [knowledgeBases, teamIds, labelsByFile] = await Promise.all([
         KbFileModel.findKnowledgeBasesForFiles(fileIds),
         KbFileModel.findTeamIdsForFiles(fileIds),
+        KbFileLabelModel.getLabelsForMany(fileIds),
       ]);
 
       return {
@@ -107,6 +132,7 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ...file,
             knowledgeBases: knowledgeBases.get(file.id) ?? [],
             teamIds: teamIds.get(file.id) ?? [],
+            labels: labelsByFile.get(file.id) ?? [],
           }),
         ),
         pagination: calculatePaginationMeta(total, { limit, offset }),
@@ -204,7 +230,12 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
         storageProvider: _provider,
         ...rest
       } = file;
-      return { ...rest, knowledgeBases: [], teamIds: body.teamIds };
+      return {
+        ...rest,
+        knowledgeBases: [],
+        teamIds: body.teamIds,
+        labels: [],
+      };
     },
   );
 
@@ -352,7 +383,12 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
         storageProvider: _provider,
         ...rest
       } = file;
-      return { ...rest, knowledgeBases, teamIds: body.teamIds };
+      return {
+        ...rest,
+        knowledgeBases,
+        teamIds: body.teamIds,
+        labels: [],
+      };
     },
   );
 
@@ -469,6 +505,7 @@ const knowledgeFileRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ...rest,
         knowledgeBases: knowledgeBases.get(file.id) ?? [],
         teamIds: await KbFileModel.findTeamIds(file.id),
+        labels: await KbFileLabelModel.getLabelsFor(file.id),
       };
     },
   );

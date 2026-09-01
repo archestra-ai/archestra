@@ -1,6 +1,7 @@
 import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { LabelWithDetailsSchema } from "./label";
 
 /**
  * Who an uploaded document is visible to once indexed.
@@ -42,5 +43,6 @@ export const KbFileSchema = createSelectSchema(schema.kbFilesTable)
     knowledgeBases: z.array(z.object({ id: z.string(), name: z.string() })),
     /** Teams a `team-scoped` file is shared with, so the UI can name them. */
     teamIds: z.array(z.string()),
+    labels: z.array(LabelWithDetailsSchema),
   });
 export type KbFile = z.infer<typeof KbFileSchema>;

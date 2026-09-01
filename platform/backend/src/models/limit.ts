@@ -5,6 +5,7 @@ import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import logger from "@/logging";
 import type {
   CreateLimit,
+  LabelWithDetails,
   Limit,
   LimitCleanupInterval,
   LimitEntityType,
@@ -14,6 +15,7 @@ import type {
 } from "@/types";
 import AgentModel from "./agent";
 import AgentTeamModel from "./agent-team";
+import { LimitLabelModel } from "./entity-labels";
 import EnvironmentDefaultUserLimitModel from "./environment-default-user-limit";
 import ModelModel from "./model";
 
@@ -62,6 +64,9 @@ type LimitViolationResponse = [
 
 const DEFAULT_LIMIT_CLEANUP_INTERVAL: LimitCleanupInterval = "calendar_month";
 
+/** A limit row with its labels attached, as the listing endpoint returns it. */
+type LimitWithLabels = Limit & { labels: LabelWithDetails[] };
+
 class LimitModel {
   // rollingCleanupIntervalSqlLiterals exists to compile-time check rolling literals.
   static readonly rollingCleanupIntervalSqlLiterals: Record<
@@ -77,11 +82,12 @@ class LimitModel {
   /**
    * Create a new limit
    */
-  static async create(data: CreateLimit): Promise<Limit> {
+  static async create(data: CreateLimit): Promise<LimitWithLabels> {
+    const { labels, ...columns } = data;
     const [limit] = await db
       .insert(schema.limitsTable)
       .values({
-        ...data,
+        ...columns,
         cleanupInterval: data.cleanupInterval ?? DEFAULT_LIMIT_CLEANUP_INTERVAL,
       })
       .returning();
@@ -95,7 +101,11 @@ class LimitModel {
       await LimitModel.initializeModelUsageRecords(limit.id, limit.model);
     }
 
-    return limit;
+    if (labels?.length) {
+      await LimitLabelModel.syncLabels(limit.id, labels);
+    }
+
+    return { ...limit, labels: await LimitLabelModel.getLabelsFor(limit.id) };
   }
 
   /**
@@ -132,8 +142,20 @@ class LimitModel {
     entityId?: string,
     limitType?: LimitType,
     organizationId?: string,
-  ): Promise<Limit[]> {
+    labels?: Record<string, string[]>,
+  ): Promise<LimitWithLabels[]> {
+    const labelFilteredIds = labels
+      ? await LimitLabelModel.getIdsMatchingLabels(labels)
+      : null;
+    if (labelFilteredIds?.length === 0) {
+      return [];
+    }
+
     const whereConditions: SQL[] = [];
+
+    if (labelFilteredIds) {
+      whereConditions.push(inArray(schema.limitsTable.id, labelFilteredIds));
+    }
 
     if (organizationId) {
       whereConditions.push(
@@ -161,7 +183,14 @@ class LimitModel {
       .from(schema.limitsTable)
       .where(whereClause);
 
-    return limits;
+    const labelsById = await LimitLabelModel.getLabelsForMany(
+      limits.map((limit) => limit.id),
+    );
+
+    return limits.map((limit) => ({
+      ...limit,
+      labels: labelsById.get(limit.id) ?? [],
+    }));
   }
 
   /**
@@ -245,9 +274,10 @@ class LimitModel {
   static async patch(
     id: string,
     data: Partial<UpdateLimit>,
-  ): Promise<Limit | null> {
+  ): Promise<LimitWithLabels | null> {
+    const { labels, ...columns } = data;
     // Normalize empty model array to null for consistent "all models" behavior
-    const patchData = { ...data };
+    const patchData = { ...columns };
     if (
       patchData.model !== undefined &&
       (!patchData.model ||
@@ -293,7 +323,17 @@ class LimitModel {
       return updatedLimits;
     });
 
-    return limit || null;
+    if (!limit) {
+      return null;
+    }
+
+    // Only touch labels when the caller sent them, so a patch that omits the
+    // field leaves existing labels alone.
+    if (labels !== undefined) {
+      await LimitLabelModel.syncLabels(id, labels);
+    }
+
+    return { ...limit, labels: await LimitLabelModel.getLabelsFor(id) };
   }
 
   /**
@@ -715,7 +755,7 @@ class LimitModel {
   static async findByIdInOrganization(
     id: string,
     organizationId: string,
-  ): Promise<Limit | null> {
+  ): Promise<LimitWithLabels | null> {
     const limit = await LimitModel.findById(id);
     if (!limit) return null;
 
@@ -724,7 +764,9 @@ class LimitModel {
       limit.entityId,
       organizationId,
     );
-    return inOrg ? limit : null;
+    if (!inOrg) return null;
+
+    return { ...limit, labels: await LimitLabelModel.getLabelsFor(id) };
   }
 
   /**
@@ -1346,7 +1388,15 @@ const calendarCleanupIntervals = [
 
 type CalendarLimitCleanupInterval = (typeof calendarCleanupIntervals)[number];
 
-function buildOrganizationLimitScopeCondition(organizationId: string): SQL {
+/**
+ * Rows visible to an organization. `limits` has no organization column: a limit
+ * is scoped by the entity it targets, so membership is proven per entity type.
+ *
+ * @public — also used by the limit label model to scope its label vocabulary.
+ */
+export function buildOrganizationLimitScopeCondition(
+  organizationId: string,
+): SQL {
   return or(
     and(
       eq(schema.limitsTable.entityType, "organization"),

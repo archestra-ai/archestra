@@ -19,12 +19,14 @@ import {
 } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
+  LabelWithDetails,
   SelectServiceAccount,
   SelectServiceAccountToken,
   ServiceAccountDetailResponse,
   ServiceAccountResponse,
   ServiceAccountTokenResponse,
 } from "@/types";
+import { ServiceAccountLabelModel } from "./entity-labels";
 import OrganizationRoleModel from "./organization-role";
 
 class ServiceAccountModel {
@@ -32,7 +34,15 @@ class ServiceAccountModel {
 
   static async listByOrganizationId(
     organizationId: string,
+    labels?: Record<string, string[]>,
   ): Promise<ServiceAccountResponse[]> {
+    const labelFilteredIds = labels
+      ? await ServiceAccountLabelModel.getIdsMatchingLabels(labels)
+      : null;
+    if (labelFilteredIds?.length === 0) {
+      return [];
+    }
+
     const now = new Date();
     const tokens = schema.serviceAccountTokensTable;
     const rows = await db
@@ -62,9 +72,20 @@ class ServiceAccountModel {
         tokens,
         eq(tokens.serviceAccountId, schema.serviceAccountsTable.id),
       )
-      .where(eq(schema.serviceAccountsTable.organizationId, organizationId))
+      .where(
+        and(
+          eq(schema.serviceAccountsTable.organizationId, organizationId),
+          ...(labelFilteredIds
+            ? [inArray(schema.serviceAccountsTable.id, labelFilteredIds)]
+            : []),
+        ),
+      )
       .groupBy(schema.serviceAccountsTable.id)
       .orderBy(desc(schema.serviceAccountsTable.createdAt));
+
+    const labelsById = await ServiceAccountLabelModel.getLabelsForMany(
+      rows.map(({ serviceAccount }) => serviceAccount.id),
+    );
 
     return rows.map(
       ({
@@ -74,12 +95,16 @@ class ServiceAccountModel {
         lastUsedAt,
         soonestExpiryAt,
       }) =>
-        normalizeServiceAccount(serviceAccount, {
-          tokenCount,
-          activeTokenCount,
-          lastUsedAt: lastUsedAt ? new Date(lastUsedAt) : null,
-          soonestExpiryAt: soonestExpiryAt ?? null,
-        }),
+        normalizeServiceAccount(
+          serviceAccount,
+          {
+            tokenCount,
+            activeTokenCount,
+            lastUsedAt: lastUsedAt ? new Date(lastUsedAt) : null,
+            soonestExpiryAt: soonestExpiryAt ?? null,
+          },
+          labelsById.get(serviceAccount.id) ?? [],
+        ),
     );
   }
 
@@ -107,7 +132,11 @@ class ServiceAccountModel {
       .orderBy(desc(schema.serviceAccountTokensTable.createdAt));
 
     return {
-      ...normalizeServiceAccount(serviceAccount, summarizeTokens(tokens)),
+      ...normalizeServiceAccount(
+        serviceAccount,
+        summarizeTokens(tokens),
+        await ServiceAccountLabelModel.getLabelsFor(id),
+      ),
       tokens: tokens.map(normalizeToken),
     };
   }
@@ -163,6 +192,7 @@ class ServiceAccountModel {
     organizationId: string;
     name: string;
     role: string;
+    labels?: LabelWithDetails[];
   }): Promise<ServiceAccountDetailResponse> {
     const [serviceAccount] = await db
       .insert(schema.serviceAccountsTable)
@@ -173,8 +203,19 @@ class ServiceAccountModel {
       })
       .returning();
 
+    if (params.labels?.length) {
+      await ServiceAccountLabelModel.syncLabels(
+        serviceAccount.id,
+        params.labels,
+      );
+    }
+
     return {
-      ...normalizeServiceAccount(serviceAccount, summarizeTokens([])),
+      ...normalizeServiceAccount(
+        serviceAccount,
+        summarizeTokens([]),
+        await ServiceAccountLabelModel.getLabelsFor(serviceAccount.id),
+      ),
       tokens: [],
     };
   }
@@ -182,11 +223,20 @@ class ServiceAccountModel {
   static async update(
     id: string,
     organizationId: string,
-    data: Partial<Pick<SelectServiceAccount, "name" | "role" | "disabled">>,
+    data: Partial<Pick<SelectServiceAccount, "name" | "role" | "disabled">> & {
+      labels?: LabelWithDetails[];
+    },
   ): Promise<ServiceAccountDetailResponse | null> {
+    const { labels, ...columns } = data;
     const [serviceAccount] = await db
       .update(schema.serviceAccountsTable)
-      .set(data)
+      // An update with only labels must still resolve the row, so the SET is
+      // given the row's own id rather than being empty.
+      .set(
+        Object.keys(columns).length > 0
+          ? columns
+          : { id: schema.serviceAccountsTable.id },
+      )
       .where(
         and(
           eq(schema.serviceAccountsTable.id, id),
@@ -196,6 +246,13 @@ class ServiceAccountModel {
       .returning();
 
     if (!serviceAccount) return null;
+
+    // Only touch labels when the caller explicitly sent them, so an update that
+    // omits the field leaves existing labels alone.
+    if (labels !== undefined) {
+      await ServiceAccountLabelModel.syncLabels(serviceAccount.id, labels);
+    }
+
     return ServiceAccountModel.findById(serviceAccount.id, organizationId);
   }
 
@@ -371,8 +428,10 @@ export default ServiceAccountModel;
 function normalizeServiceAccount(
   serviceAccount: SelectServiceAccount,
   stats: TokenStats,
+  labels: LabelWithDetails[] = [],
 ): ServiceAccountResponse {
   return {
+    labels,
     id: serviceAccount.id,
     organizationId: serviceAccount.organizationId,
     name: serviceAccount.name,

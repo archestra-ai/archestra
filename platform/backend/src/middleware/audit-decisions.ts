@@ -433,6 +433,56 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "join: team × label; parent (team) audited",
   },
+  environmentLabelsTable: {
+    audited: false,
+    reason: "join: environment × label; parent (environment) audited",
+  },
+  kbFileLabelsTable: {
+    audited: false,
+    reason: "join: knowledge file × label; parent (knowledge file) audited",
+  },
+  knowledgeBaseConnectorLabelsTable: {
+    audited: false,
+    reason:
+      "join: knowledge base connector × label; parent (knowledge base connector) audited",
+  },
+  knowledgeBaseLabelsTable: {
+    audited: false,
+    reason: "join: knowledge base × label; parent (knowledge base) audited",
+  },
+  limitLabelsTable: {
+    audited: false,
+    reason: "join: limit × label; parent (limit) audited",
+  },
+  llmProviderApiKeyLabelsTable: {
+    audited: false,
+    reason:
+      "join: LLM provider API key × label; parent (LLM provider API key) audited",
+  },
+  modelLabelsTable: {
+    audited: false,
+    reason: "join: model × label; parent (model) audited",
+  },
+  oauthClientLabelsTable: {
+    audited: false,
+    reason: "join: OAuth client × label; parent (OAuth client) audited",
+  },
+  pluginLabelsTable: {
+    audited: false,
+    reason: "join: plugin × label; parent (plugin) audited",
+  },
+  serviceAccountLabelsTable: {
+    audited: false,
+    reason: "join: service account × label; parent (service account) audited",
+  },
+  skillLabelsTable: {
+    audited: false,
+    reason: "join: skill × label; parent (skill) audited",
+  },
+  virtualApiKeyLabelsTable: {
+    audited: false,
+    reason: "join: virtual API key × label; parent (virtual API key) audited",
+  },
   mcpCatalogTeamsTable: {
     audited: false,
     reason: "join: catalog × team; parent (catalog) audited",

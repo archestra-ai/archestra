@@ -1,15 +1,13 @@
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
-import type { AgentLabelGetResponse, AgentLabelWithDetails } from "@/types";
+import type { LabelGetResponse, LabelWithDetails } from "@/types";
 import AgentLabelModel from "./agent-label";
 
 class AppLabelModel {
   /**
    * Get all labels for a specific app with key and value details
    */
-  static async getLabelsForApp(
-    appId: string,
-  ): Promise<AgentLabelGetResponse[]> {
+  static async getLabelsForApp(appId: string): Promise<LabelGetResponse[]> {
     const rows = await db
       .select({
         keyId: schema.appLabelsTable.keyId,
@@ -42,8 +40,8 @@ class AppLabelModel {
    */
   static async getLabelsForApps(
     appIds: string[],
-  ): Promise<Map<string, AgentLabelWithDetails[]>> {
-    const labelsMap = new Map<string, AgentLabelWithDetails[]>();
+  ): Promise<Map<string, LabelWithDetails[]>> {
+    const labelsMap = new Map<string, LabelWithDetails[]>();
     for (const appId of appIds) {
       labelsMap.set(appId, []);
     }
@@ -139,7 +137,7 @@ class AppLabelModel {
    */
   static async syncAppLabels(
     appId: string,
-    labels: AgentLabelWithDetails[],
+    labels: LabelWithDetails[],
     tx?: Transaction,
   ): Promise<void> {
     if (tx) {
@@ -252,7 +250,7 @@ class AppLabelModel {
 
   private static async replaceLabels(
     appId: string,
-    labels: AgentLabelWithDetails[],
+    labels: LabelWithDetails[],
     tx: Transaction,
   ): Promise<void> {
     // Delete all existing labels for this app

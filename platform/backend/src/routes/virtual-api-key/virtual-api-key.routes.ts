@@ -2,6 +2,7 @@ import {
   createPaginatedResponseSchema,
   credentialRequiresPerUserScope,
   PaginationQuerySchema,
+  parseLabelsParam,
   perUserCredentialLabel,
   RouteId,
   type SupportedProvider,
@@ -14,6 +15,7 @@ import {
   LlmProviderApiKeyModel,
   MemberModel,
   TeamModel,
+  VirtualApiKeyLabelModel,
   VirtualApiKeyModel,
 } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
@@ -21,6 +23,8 @@ import { readVirtualKeyValue } from "@/services/connection-setup";
 import {
   ApiError,
   constructResponseSchema,
+  type LabelWithDetails,
+  LabelWithDetailsSchema,
   type ResourceVisibilityScope,
   ResourceVisibilityScopeSchema,
   type User,
@@ -33,6 +37,7 @@ import {
   BulkOutcomeSchema,
   runBulk,
 } from "../bulk-route";
+import { registerEntityLabelRoutes } from "../entity-labels";
 
 const UpdateVirtualApiKeyResponseSchema = VirtualApiKeyWithValueSchema.omit({
   value: true,
@@ -52,6 +57,7 @@ const VirtualApiKeyBodyObjectSchema = z.object({
       }),
     )
     .default([]),
+  labels: z.array(LabelWithDetailsSchema).optional(),
 });
 
 /**
@@ -103,6 +109,15 @@ const CreateVirtualApiKeyBodySchema = VirtualApiKeyBodyObjectSchema.extend({
 }).superRefine(refineVirtualApiKeyBody);
 
 const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  registerEntityLabelRoutes(fastify, {
+    basePath: "/api/llm-virtual-keys",
+    tag: "Virtual API Keys",
+    entityNamePlural: "virtual API keys",
+    model: VirtualApiKeyLabelModel,
+    keysOperationId: RouteId.GetVirtualApiKeyLabelKeys,
+    valuesOperationId: RouteId.GetVirtualApiKeyLabelValues,
+  });
+
   fastify.get(
     "/api/llm-virtual-keys",
     {
@@ -116,6 +131,12 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
           providerApiKeyId: z.string().uuid().optional(),
           keyType: VirtualApiKeyTypeSchema.optional(),
           scope: ResourceVisibilityScopeSchema.optional(),
+          labels: z
+            .string()
+            .optional()
+            .describe(
+              "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.",
+            ),
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(VirtualApiKeyWithParentInfoSchema),
@@ -124,7 +145,15 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (
       {
-        query: { limit, offset, search, providerApiKeyId, keyType, scope },
+        query: {
+          limit,
+          offset,
+          search,
+          providerApiKeyId,
+          keyType,
+          scope,
+          labels,
+        },
         organizationId,
         user,
       },
@@ -145,6 +174,7 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         providerApiKeyId,
         keyType,
         scope,
+        labels: parseLabelsParam(labels),
       });
       return reply.send(result);
     },
@@ -410,6 +440,7 @@ async function createVirtualApiKey(params: {
       teams: created.teams,
       authorName: created.authorName,
       providerApiKeys: created.providerApiKeys,
+      labels: await syncAndReadLabels(created.virtualKey.id, body.labels),
     };
   }
 
@@ -446,6 +477,7 @@ async function createVirtualApiKey(params: {
     teams,
     authorName,
     providerApiKeys,
+    labels: await syncAndReadLabels(virtualKey.id, body.labels),
   };
 }
 
@@ -536,7 +568,25 @@ async function updateVirtualApiKey(params: {
     teams: visibilityMetadata.teams.get(id) ?? [],
     authorName: visibilityMetadata.authorName.get(id) ?? null,
     providerApiKeys,
+    labels: await syncAndReadLabels(id, body.labels),
   };
+}
+
+/**
+ * Write the labels a create/update body carried, then read back the key's
+ * labels for the response.
+ *
+ * An omitted `labels` leaves existing labels untouched, so a client that does
+ * not know about labels cannot erase them; an empty array clears them.
+ */
+async function syncAndReadLabels(
+  virtualApiKeyId: string,
+  labels: LabelWithDetails[] | undefined,
+): Promise<LabelWithDetails[]> {
+  if (labels !== undefined) {
+    await VirtualApiKeyLabelModel.syncLabels(virtualApiKeyId, labels);
+  }
+  return VirtualApiKeyLabelModel.getLabelsFor(virtualApiKeyId);
 }
 
 async function deleteVirtualApiKey(params: {

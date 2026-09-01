@@ -9,6 +9,7 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { LabelWithDetailsSchema } from "./label";
 import { SecretStorageTypeSchema } from "./mcp-server";
 import { ResourceVisibilityScopeSchema } from "./visibility";
 
@@ -83,6 +84,7 @@ export const LlmProviderApiKeyWithScopeInfoSchema =
      * subscription with its row.
      */
     subscriptionKind: SubscriptionCredentialKindSchema.nullable().optional(),
+    labels: z.array(LabelWithDetailsSchema).optional(),
   });
 
 export type LlmProviderApiKeyWithScopeInfo = z.infer<

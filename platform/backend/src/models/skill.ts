@@ -262,6 +262,8 @@ class SkillModel {
     excludeOtherPersonalForUserId?: string;
     /** Active rows (default) or the soft-deleted trash. */
     status?: SkillRecordStatus;
+    /** Skill ids matching a `?labels=` filter; omit when not filtering. */
+    labelFilteredIds?: string[];
     sorting?: { sortBy?: SkillSortBy; sortDirection?: SortDirection };
   }): Promise<Skill[]> {
     let query = db
@@ -295,6 +297,8 @@ class SkillModel {
     excludeOtherPersonalForUserId?: string;
     /** Active rows (default) or the soft-deleted trash. */
     status?: SkillRecordStatus;
+    /** Skill ids matching a `?labels=` filter; omit when not filtering. */
+    labelFilteredIds?: string[];
   }): Promise<number> {
     const [result] = await db
       .select({ count: count() })
@@ -1592,6 +1596,11 @@ function buildOrgFilters(params: {
   excludeAuthorIds?: string[];
   excludeOtherPersonalForUserId?: string;
   status?: SkillRecordStatus;
+  /**
+   * Skill ids matching the caller's `?labels=` filter, resolved once by the
+   * route so the list and count queries agree without resolving twice.
+   */
+  labelFilteredIds?: string[];
 }) {
   const normalizedSearch = params.search?.trim();
   const normalizedSourceRepo = params.sourceRepo?.trim();
@@ -1602,6 +1611,9 @@ function buildOrgFilters(params: {
     getSkillStatusCondition(params.status ?? "active"),
     ...(params.accessibleSkillIds !== undefined
       ? [inArray(schema.skillsTable.id, params.accessibleSkillIds)]
+      : []),
+    ...(params.labelFilteredIds !== undefined
+      ? [inArray(schema.skillsTable.id, params.labelFilteredIds)]
       : []),
     ...(params.environmentId !== undefined
       ? [skillInEnvironmentPredicate(params.environmentId)]

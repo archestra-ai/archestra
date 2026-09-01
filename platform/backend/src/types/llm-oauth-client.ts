@@ -4,6 +4,7 @@ import {
   SupportedProvidersSchema,
 } from "@archestra/shared";
 import { z } from "zod";
+import { LabelWithDetailsSchema } from "./label";
 
 export const LLM_OAUTH_CLIENT_METADATA_TYPE = "llm_oauth_client";
 
@@ -65,6 +66,7 @@ export const LlmOauthClientSchema = z.object({
   authorId: z.string().nullable(),
   authorName: z.string().nullable(),
   teams: z.array(LlmOauthClientTeamInfoSchema),
+  labels: z.array(LabelWithDetailsSchema),
   createdAt: z.date(),
   updatedAt: z.date(),
 });

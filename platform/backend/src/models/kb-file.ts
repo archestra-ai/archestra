@@ -32,12 +32,17 @@ class KbFileModel {
     viewer: KbFileViewer;
     directoryId?: string | null;
     search?: string;
+    /** File ids matching a `?labels=` filter; omit when not filtering. */
+    labelFilteredIds?: string[];
     limit: number;
     offset: number;
   }) {
     const where = and(
       eq(schema.kbFilesTable.organizationId, params.organizationId),
       KbFileModel.visibleTo(params.viewer),
+      ...(params.labelFilteredIds !== undefined
+        ? [inArray(schema.kbFilesTable.id, params.labelFilteredIds)]
+        : []),
       ...(params.directoryId === undefined
         ? []
         : [

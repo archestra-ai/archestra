@@ -3,6 +3,7 @@ import {
   createPaginatedResponseSchema,
   MAX_BULK_IDS,
   PaginationQuerySchema,
+  parseLabelsParam,
   type ResourceVisibilityScope,
   ResourceVisibilityScopeSchema,
   RouteId,
@@ -28,6 +29,7 @@ import {
   OrganizationModel,
   SkillEnvironmentModel,
   SkillFileModel,
+  SkillLabelModel,
   SkillModel,
   SkillTeamModel,
   SkillUsageEventModel,
@@ -76,6 +78,7 @@ import {
   constructResponseSchema,
   createSortingQuerySchema,
   DeleteObjectResponseSchema,
+  LabelWithDetailsSchema,
   SelectSkillVersionFileSchema,
   SelectSkillVersionSchema,
   type Skill,
@@ -92,6 +95,7 @@ import {
   isForeignKeyConstraintError,
   isUniqueConstraintError,
 } from "@/utils/db";
+import { registerEntityLabelRoutes } from "../entity-labels";
 
 /**
  * Shared fields identifying a GitHub skill source. Authentication is optional
@@ -161,6 +165,7 @@ const SkillListItemSchema = SkillResponseSchema.extend({
    * recorded uses are unattributed or predate per-event tracking.
    */
   usageUserCount: z.number(),
+  labels: z.array(LabelWithDetailsSchema),
 });
 
 /** A skill with its resource files, team, and environment assignments. */
@@ -168,6 +173,7 @@ const SkillDetailSchema = SkillWithFilesSchema.extend({
   teams: z.array(SkillTeamSchema),
   users: z.array(SkillUserSchema),
   environments: z.array(SkillEnvironmentSchema),
+  labels: z.array(LabelWithDetailsSchema),
 });
 
 /** One immutable version with its resource-file snapshots. */
@@ -327,6 +333,15 @@ const DiscoveredSkillSchema = z.object({
 });
 
 const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  registerEntityLabelRoutes(fastify, {
+    basePath: "/api/skills",
+    tag: "Skills",
+    entityNamePlural: "skills",
+    model: SkillLabelModel,
+    keysOperationId: RouteId.GetSkillLabelKeys,
+    valuesOperationId: RouteId.GetSkillLabelValues,
+  });
+
   fastify.get(
     "/api/skills",
     {
@@ -371,6 +386,12 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "Which skills to list: active (default) or the soft-deleted " +
                 "trash. `deleted` is restricted to admins and team-admins.",
             ),
+          labels: z
+            .string()
+            .optional()
+            .describe(
+              "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.",
+            ),
         }).merge(createSortingQuerySchema(SkillSortBy)),
         response: constructResponseSchema(
           createPaginatedResponseSchema(SkillListItemSchema),
@@ -391,6 +412,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           excludeAuthorIds,
           excludeOtherPersonalSkills,
           status,
+          labels,
           ...sorting
         },
         organizationId,
@@ -440,6 +462,13 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         status,
       };
 
+      // Resolved once so the page query and the count agree, and so a filter
+      // that matches nothing short circuits both.
+      const parsedLabels = parseLabelsParam(labels);
+      const labelFilteredIds = parsedLabels
+        ? await SkillLabelModel.getIdsMatchingLabels(parsedLabels)
+        : undefined;
+
       const [skills, total] = await Promise.all([
         SkillModel.findByOrganization({
           organizationId,
@@ -449,6 +478,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           sourceRepo,
           accessibleSkillIds,
           environmentId,
+          labelFilteredIds,
           ...scopeFilters,
           sorting,
         }),
@@ -458,6 +488,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           sourceRepo,
           accessibleSkillIds,
           environmentId,
+          labelFilteredIds,
           ...scopeFilters,
         }),
       ]);
@@ -477,6 +508,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         environmentsBySkill,
         authorNames,
         usageUserCounts,
+        labelsBySkill,
       ] = await Promise.all([
         SkillFileModel.countBySkillIds(skillIds),
         SkillTeamModel.getTeamDetailsForSkills(skillIds),
@@ -484,6 +516,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         SkillEnvironmentModel.getEnvironmentDetailsForSkills(skillIds),
         UserModel.getNamesByIds(skillAuthorIds),
         SkillUsageEventModel.countDistinctUsersBySkillIds(skillIds),
+        SkillLabelModel.getLabelsForMany(skillIds),
       ]);
 
       return reply.send({
@@ -499,6 +532,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ? (authorNames.get(skill.authorId) ?? null)
             : null,
           usageUserCount: usageUserCounts.get(skill.id) ?? 0,
+          labels: labelsBySkill.get(skill.id) ?? [],
         })),
         pagination: calculatePaginationMeta(total, { limit, offset }),
       });
@@ -2107,12 +2141,13 @@ async function requireReadableSkill(params: {
 
 /** A skill with its files, team, and environment assignments, for detail responses. */
 async function loadSkillDetail(skill: Skill) {
-  const [files, teamsBySkill, usersBySkill, environmentsBySkill] =
+  const [files, teamsBySkill, usersBySkill, environmentsBySkill, labels] =
     await Promise.all([
       SkillFileModel.findBySkillId(skill.id),
       SkillTeamModel.getTeamDetailsForSkills([skill.id]),
       SkillUserModel.getUserDetailsForSkills([skill.id]),
       SkillEnvironmentModel.getEnvironmentDetailsForSkills([skill.id]),
+      SkillLabelModel.getLabelsFor(skill.id),
     ]);
   return {
     ...skill,
@@ -2120,6 +2155,7 @@ async function loadSkillDetail(skill: Skill) {
     teams: teamsBySkill.get(skill.id) ?? [],
     users: usersBySkill.get(skill.id) ?? [],
     environments: environmentsBySkill.get(skill.id) ?? [],
+    labels,
   };
 }
 

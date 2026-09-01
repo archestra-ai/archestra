@@ -1,8 +1,9 @@
-import { RouteId } from "@archestra/shared";
+import { parseLabelsParam, RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import mcpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import {
+  EnvironmentLabelModel,
   EnvironmentModel,
   InternalMcpCatalogModel,
   McpServerModel,
@@ -29,10 +30,20 @@ import {
   UuidIdSchema,
 } from "@/types";
 import { BulkDeleteBodySchema, BulkOutcomeSchema, runBulk } from "./bulk-route";
+import { registerEntityLabelRoutes } from "./entity-labels";
 
 // Routes are thin: parse/validate (Zod), delegate to the service, serialize.
 // All business logic (dup-name 409, not-found 404) lives in the service.
 const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  registerEntityLabelRoutes(fastify, {
+    basePath: "/api/environments",
+    tag: "Organization",
+    entityNamePlural: "environments",
+    model: EnvironmentLabelModel,
+    keysOperationId: RouteId.GetEnvironmentLabelKeys,
+    valuesOperationId: RouteId.GetEnvironmentLabelValues,
+  });
+
   fastify.get(
     "/api/environments",
     {
@@ -41,11 +52,21 @@ const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "List org-level deployment environments with their assigned catalog counts, plus the count of catalog items with no environment (the default environment).",
         tags: ["Organization"],
+        querystring: z.object({
+          labels: z
+            .string()
+            .optional()
+            .describe(
+              "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.",
+            ),
+        }),
         response: constructResponseSchema(EnvironmentListSchema),
       },
     },
-    async ({ organizationId }, reply) => {
-      return reply.send(await listEnvironments(organizationId));
+    async ({ organizationId, query }, reply) => {
+      return reply.send(
+        await listEnvironments(organizationId, parseLabelsParam(query.labels)),
+      );
     },
   );
 

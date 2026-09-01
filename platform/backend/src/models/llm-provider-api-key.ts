@@ -29,6 +29,7 @@ import type {
 import { decryptSecretValue, isEncryptedSecret } from "@/utils/crypto";
 import { escapeLikePattern } from "@/utils/sql-search";
 import ConversationModel from "./conversation";
+import { LlmProviderApiKeyLabelModel } from "./entity-labels";
 
 class LlmProviderApiKeyModel {
   /**
@@ -164,6 +165,7 @@ class LlmProviderApiKeyModel {
       search?: string;
       provider?: SupportedProvider;
       ids?: string[];
+      labels?: Record<string, string[]>;
     },
     options?: { includeSubscriptionInfo?: boolean },
   ): Promise<LlmProviderApiKeyWithScopeInfo[]> {
@@ -237,6 +239,15 @@ class LlmProviderApiKeyModel {
       conditions.push(inArray(schema.llmProviderApiKeysTable.id, filters.ids));
     }
 
+    if (filters?.labels) {
+      const labelFilteredIds =
+        await LlmProviderApiKeyLabelModel.getIdsMatchingLabels(filters.labels);
+      if (labelFilteredIds.length === 0) return [];
+      conditions.push(
+        inArray(schema.llmProviderApiKeysTable.id, labelFilteredIds),
+      );
+    }
+
     // Query with team, user, and secrets table joins.
     // NOTE: secretsTable.secret is encrypted at rest — decrypt via
     // decryptApiKeyValue() before reading the value.
@@ -279,10 +290,18 @@ class LlmProviderApiKeyModel {
       .where(and(...conditions))
       .orderBy(schema.llmProviderApiKeysTable.createdAt);
 
+    const labelsByKey = await LlmProviderApiKeyLabelModel.getLabelsForMany(
+      apiKeys.map((key) => key.id),
+    );
+
     return await Promise.all(
-      apiKeys.map((key) =>
-        toApiKeyWithScopeInfo(key, options?.includeSubscriptionInfo === true),
-      ),
+      apiKeys.map(async (key) => ({
+        ...(await toApiKeyWithScopeInfo(
+          key,
+          options?.includeSubscriptionInfo === true,
+        )),
+        labels: labelsByKey.get(key.id) ?? [],
+      })),
     );
   }
 
@@ -388,10 +407,18 @@ class LlmProviderApiKeyModel {
       .where(and(...conditions))
       .orderBy(schema.llmProviderApiKeysTable.createdAt);
 
+    const labelsByKey = await LlmProviderApiKeyLabelModel.getLabelsForMany(
+      apiKeys.map((key) => key.id),
+    );
+
     return await Promise.all(
-      apiKeys.map((key) =>
-        toApiKeyWithScopeInfo(key, options?.includeSubscriptionInfo === true),
-      ),
+      apiKeys.map(async (key) => ({
+        ...(await toApiKeyWithScopeInfo(
+          key,
+          options?.includeSubscriptionInfo === true,
+        )),
+        labels: labelsByKey.get(key.id) ?? [],
+      })),
     );
   }
 

@@ -1,7 +1,8 @@
-import { RouteId } from "@archestra/shared";
+import { parseLabelsParam, RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getPermissionsForUserContext } from "@/auth/utils";
+import { ServiceAccountLabelModel } from "@/models";
 import OrganizationRoleModel from "@/models/organization-role";
 import ServiceAccountModel from "@/models/service-account";
 import {
@@ -25,8 +26,18 @@ import {
   BulkOutcomeSchema,
   runBulk,
 } from "./bulk-route";
+import { registerEntityLabelRoutes } from "./entity-labels";
 
 const serviceAccountRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  registerEntityLabelRoutes(fastify, {
+    basePath: "/api/service-accounts",
+    tag: "Service Accounts",
+    entityNamePlural: "service accounts",
+    model: ServiceAccountLabelModel,
+    keysOperationId: RouteId.GetServiceAccountLabelKeys,
+    valuesOperationId: RouteId.GetServiceAccountLabelValues,
+  });
+
   fastify.get(
     "/api/service-accounts",
     {
@@ -34,12 +45,21 @@ const serviceAccountRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetServiceAccounts,
         description: "List organization service accounts",
         tags: ["Service Accounts"],
+        querystring: z.object({
+          labels: z
+            .string()
+            .optional()
+            .describe(
+              "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.",
+            ),
+        }),
         response: constructResponseSchema(ServiceAccountResponseSchema.array()),
       },
     },
     async (request, reply) => {
       const serviceAccounts = await ServiceAccountModel.listByOrganizationId(
         request.organizationId,
+        parseLabelsParam(request.query.labels),
       );
       return reply.send(serviceAccounts);
     },
@@ -90,6 +110,7 @@ const serviceAccountRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId: request.organizationId,
         name: request.body.name,
         role: request.body.role,
+        labels: request.body.labels,
       });
 
       return reply.send(serviceAccount);

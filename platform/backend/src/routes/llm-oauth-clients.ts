@@ -2,6 +2,7 @@ import {
   createPaginatedResponseSchema,
   credentialRequiresPerUserScope,
   PaginationQuerySchema,
+  parseLabelsParam,
   perUserCredentialLabel,
   providerRequiresPerUserCredential,
   ResourceVisibilityScopeSchema,
@@ -22,6 +23,7 @@ import {
 import {
   LlmOauthClientModel,
   LlmProviderApiKeyModel,
+  OauthClientLabelModel,
   TeamModel,
 } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
@@ -34,6 +36,7 @@ import {
 } from "@/types";
 import type { LlmOauthClient } from "@/types/llm-oauth-client";
 import { BulkDeleteBodySchema, BulkOutcomeSchema, runBulk } from "./bulk-route";
+import { registerEntityLabelRoutes } from "./entity-labels";
 
 const LlmOauthClientProviderKeyBodySchema = z.object({
   provider: SupportedProvidersSchema,
@@ -89,6 +92,15 @@ const CreateLlmOauthClientBodySchema = LlmOauthClientBodySchema;
 const UpdateLlmOauthClientBodySchema = LlmOauthClientBodySchema;
 
 const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  registerEntityLabelRoutes(fastify, {
+    basePath: "/api/llm-oauth-clients",
+    tag: "LLM OAuth Clients",
+    entityNamePlural: "LLM OAuth clients",
+    model: OauthClientLabelModel,
+    keysOperationId: RouteId.GetLlmOauthClientLabelKeys,
+    valuesOperationId: RouteId.GetLlmOauthClientLabelValues,
+  });
+
   fastify.get(
     "/api/llm-oauth-clients",
     {
@@ -100,6 +112,12 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           search: z.string().trim().min(1).optional(),
           providerApiKeyId: z.string().uuid().optional(),
           grantType: LlmOauthClientGrantTypeSchema.optional(),
+          labels: z
+            .string()
+            .optional()
+            .describe(
+              "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.",
+            ),
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(LlmOauthClientSchema),
@@ -118,6 +136,7 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         search: query.search,
         providerApiKeyId: query.providerApiKeyId,
         grantType: query.grantType,
+        labels: parseLabelsParam(query.labels),
         viewer: { userId: user.id, isAdmin: checker.isAdmin },
       });
       return reply.send(result);

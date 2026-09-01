@@ -6,7 +6,7 @@ import { isUuid } from "@/utils/uuid";
 import { AppRenderDiagnosticEntrySchema } from "./app-diagnostics";
 import { AppSpecSchema } from "./app-spec";
 import { CredentialResolutionModeSchema } from "./enterprise-managed-credentials";
-import { AgentLabelWithDetailsSchema } from "./label";
+import { LabelWithDetailsSchema } from "./label";
 
 /** Apps share the personal/team/org visibility model of agents and skills. */
 export const AppScopeSchema = ResourceVisibilityScopeSchema;
@@ -138,7 +138,7 @@ const AppListItemBaseSchema = z.object({
   // reflects its backing catalog's labels (mcp_catalog_labels), which are
   // edited in the MCP registry rather than here — so one filter spans both
   // halves of the mixed listing instead of silently dropping external apps.
-  labels: z.array(AgentLabelWithDetailsSchema),
+  labels: z.array(LabelWithDetailsSchema),
   // Display icon: an emoji character or a base64 image data URL. For an owned
   // app it is the app's own icon, for an external one its backing server's
   // registry icon — both stored on the same catalog column, so one field spans
@@ -260,7 +260,7 @@ export const SelectAppSchema = createSelectSchema(schema.appsTable, {
   scope: AppScopeSchema,
   environmentId: z.string().uuid().nullable(),
   icon: z.string().nullable(),
-  labels: z.array(AgentLabelWithDetailsSchema),
+  labels: z.array(LabelWithDetailsSchema),
 });
 
 /**
@@ -342,7 +342,7 @@ export const CreateAppSchema = z.object({
   // app glyph. Stored on the app's backing catalog, like its scope.
   icon: AppIconSchema.optional(),
   // Key-value labels for organization/categorization. Omitted = none.
-  labels: z.array(AgentLabelWithDetailsSchema).optional(),
+  labels: z.array(LabelWithDetailsSchema).optional(),
 });
 
 // Input for the `scaffold_app` MCP tool: it always seeds the single default
@@ -369,7 +369,7 @@ export const ScaffoldAppSchema = z.strictObject({
       'Optional display icon for the app, as a single emoji character (e.g. "📊") chosen to suit what the app does. Omitted leaves the app with the generic app glyph.',
     ),
   labels: z
-    .array(AgentLabelWithDetailsSchema.pick({ key: true, value: true }))
+    .array(LabelWithDetailsSchema.pick({ key: true, value: true }))
     .optional()
     .describe("Optional key-value labels for organization and categorization."),
 });
@@ -433,7 +433,7 @@ export const UpdateAppSchema = z.object({
   icon: AppIconSchema.optional(),
   // Replace the app's labels with this set. Omitted leaves them unchanged; an
   // empty array clears them.
-  labels: z.array(AgentLabelWithDetailsSchema).optional(),
+  labels: z.array(LabelWithDetailsSchema).optional(),
   // Seed the app's first render at fullscreen instead of inline. A display
   // default only — the host's fullscreen control still toggles it per view.
   openInFullscreen: z.boolean().optional(),

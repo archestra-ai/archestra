@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray, or } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
-import type { AgentLabelGetResponse, AgentLabelWithDetails } from "@/types";
+import type { LabelGetResponse, LabelWithDetails } from "@/types";
 import AgentLabelModel from "./agent-label";
 
 class McpCatalogLabelModel {
@@ -9,7 +9,7 @@ class McpCatalogLabelModel {
    */
   static async getLabelsForCatalogItem(
     catalogId: string,
-  ): Promise<AgentLabelGetResponse[]> {
+  ): Promise<LabelGetResponse[]> {
     const rows = await db
       .select({
         keyId: schema.mcpCatalogLabelsTable.keyId,
@@ -42,7 +42,7 @@ class McpCatalogLabelModel {
    */
   static async getLabelsForCatalogItems(
     catalogIds: string[],
-  ): Promise<Map<string, AgentLabelWithDetails[]>> {
+  ): Promise<Map<string, LabelWithDetails[]>> {
     if (catalogIds.length === 0) {
       return new Map();
     }
@@ -67,7 +67,7 @@ class McpCatalogLabelModel {
       .where(inArray(schema.mcpCatalogLabelsTable.catalogId, catalogIds))
       .orderBy(asc(schema.labelKeysTable.key));
 
-    const labelsMap = new Map<string, AgentLabelWithDetails[]>();
+    const labelsMap = new Map<string, LabelWithDetails[]>();
 
     for (const catalogId of catalogIds) {
       labelsMap.set(catalogId, []);
@@ -119,7 +119,7 @@ class McpCatalogLabelModel {
    */
   static async syncCatalogLabels(
     catalogId: string,
-    labels: AgentLabelWithDetails[],
+    labels: LabelWithDetails[],
   ): Promise<void> {
     await withDbTransaction(async (tx) => {
       const insertedLabels: {

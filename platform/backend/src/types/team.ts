@@ -5,7 +5,7 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
-import { AgentLabelWithDetailsSchema } from "./label";
+import { LabelWithDetailsSchema } from "./label";
 import { TeamMemberRoleSchema } from "./team-role";
 
 export const SelectTeamMemberSchema = createSelectSchema(
@@ -18,7 +18,7 @@ export const SelectTeamMemberListItemSchema = SelectTeamMemberSchema.extend({
 });
 export const SelectTeamSchema = createSelectSchema(schema.teamsTable).extend({
   members: z.array(SelectTeamMemberSchema).optional(),
-  labels: z.array(AgentLabelWithDetailsSchema).optional(),
+  labels: z.array(LabelWithDetailsSchema).optional(),
   // The requesting user's role in this team. Populated only when the listing is
   // restricted to the caller's own teams; absent when a team manager lists teams
   // they may not belong to.
@@ -37,7 +37,7 @@ export const CreateTeamBodySchema = z.object({
     .max(MAX_TEAM_NAME_LENGTH, "Team name must be at most 256 characters"),
   description: z.string().optional(),
   convertToolResultsToToon: z.boolean().optional(),
-  labels: z.array(AgentLabelWithDetailsSchema).optional(),
+  labels: z.array(LabelWithDetailsSchema).optional(),
 });
 
 export const UpdateTeamBodySchema = z.object({
@@ -48,7 +48,7 @@ export const UpdateTeamBodySchema = z.object({
     .optional(),
   description: z.string().optional(),
   convertToolResultsToToon: z.boolean().optional(),
-  labels: z.array(AgentLabelWithDetailsSchema).optional(),
+  labels: z.array(LabelWithDetailsSchema).optional(),
 });
 
 export const AddTeamMemberBodySchema = z.object({

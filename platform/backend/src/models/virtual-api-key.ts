@@ -28,6 +28,7 @@ import type {
   VirtualApiKeyWithParentInfo,
 } from "@/types";
 import { escapeLikePattern } from "@/utils/sql-search";
+import { VirtualApiKeyLabelModel } from "./entity-labels";
 
 /** Length of random part (32 bytes = 64 hex chars = 256 bits of entropy) */
 const TOKEN_RANDOM_LENGTH = 32;
@@ -477,9 +478,10 @@ class VirtualApiKeyModel {
       return null;
     }
 
-    const [metadata, mappings] = await Promise.all([
+    const [metadata, mappings, labels] = await Promise.all([
       VirtualApiKeyModel.getVisibilityMetadata([id]),
       VirtualApiKeyModel.getProviderApiKeys(id),
+      VirtualApiKeyLabelModel.getLabelsFor(id),
     ]);
 
     return {
@@ -487,6 +489,7 @@ class VirtualApiKeyModel {
       teams: metadata.teams.get(id) ?? [],
       authorName: metadata.authorName.get(id) ?? null,
       providerApiKeys: mappings,
+      labels,
     };
   }
 
@@ -734,6 +737,7 @@ class VirtualApiKeyModel {
     providerApiKeyId?: string;
     keyType?: VirtualApiKeyType;
     scope?: ResourceVisibilityScope;
+    labels?: Record<string, string[]>;
   }): Promise<PaginatedResult<VirtualApiKeyWithParentInfo>> {
     const {
       organizationId,
@@ -745,7 +749,17 @@ class VirtualApiKeyModel {
       providerApiKeyId,
       keyType,
       scope,
+      labels,
     } = params;
+
+    // Resolved before the page query so a filter that matches nothing short
+    // circuits instead of scanning.
+    const labelFilteredIds = labels
+      ? await VirtualApiKeyLabelModel.getIdsMatchingLabels(labels)
+      : null;
+    if (labelFilteredIds?.length === 0) {
+      return createPaginatedResult([], 0, pagination);
+    }
 
     const accessibleIds = await VirtualApiKeyModel.getAccessibleIds({
       organizationId,
@@ -786,6 +800,12 @@ class VirtualApiKeyModel {
       whereConditions.push(eq(schema.virtualApiKeysTable.scope, scope));
     }
 
+    if (labelFilteredIds) {
+      whereConditions.push(
+        inArray(schema.virtualApiKeysTable.id, labelFilteredIds),
+      );
+    }
+
     const whereClause = and(...whereConditions);
 
     const [rows, [{ total }]] = await Promise.all([
@@ -815,9 +835,10 @@ class VirtualApiKeyModel {
     ]);
 
     const rowIds = rows.map((row) => row.id);
-    const [metadata, mappings] = await Promise.all([
+    const [metadata, mappings, labelsByKey] = await Promise.all([
       VirtualApiKeyModel.getVisibilityMetadata(rowIds),
       VirtualApiKeyModel.getProviderApiKeysForVirtualKeys(rowIds),
+      VirtualApiKeyLabelModel.getLabelsForMany(rowIds),
     ]);
 
     const data = rows.map((row) => ({
@@ -825,6 +846,7 @@ class VirtualApiKeyModel {
       teams: metadata.teams.get(row.id) ?? [],
       authorName: metadata.authorName.get(row.id) ?? null,
       providerApiKeys: mappings.get(row.id) ?? [],
+      labels: labelsByKey.get(row.id) ?? [],
     }));
 
     return createPaginatedResult(data, Number(total), pagination);

@@ -2,6 +2,7 @@ import { ResourceVisibilityScopeSchema } from "@archestra/shared";
 import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { LabelWithDetailsSchema } from "./label";
 
 export const PLUGIN_MAX_FILES = 100;
 export const PLUGIN_MAX_FILE_BYTES = 750 * 1024;
@@ -64,6 +65,7 @@ export const PluginFileInputSchema = z.object({
 export const PluginFileSetSchema = z
   .object({
     files: z.array(PluginFileInputSchema).min(1).max(PLUGIN_MAX_FILES),
+    labels: z.array(LabelWithDetailsSchema).optional(),
   })
   .superRefine(validateFileSet);
 
@@ -77,6 +79,7 @@ export const CreatePluginSchema = z
     teamIds: z.array(z.string().min(1)).max(100).optional(),
     userIds: z.array(z.string().min(1)).max(100).optional(),
     files: z.array(PluginFileInputSchema).min(1).max(PLUGIN_MAX_FILES),
+    labels: z.array(LabelWithDetailsSchema).optional(),
   })
   .superRefine(validateFileSet);
 
@@ -89,6 +92,7 @@ export const UpdatePluginSchema = z
     scope: ResourceVisibilityScopeSchema.optional(),
     teamIds: z.array(z.string().min(1)).max(100).optional(),
     userIds: z.array(z.string().min(1)).max(100).optional(),
+    labels: z.array(LabelWithDetailsSchema).optional(),
     githubSource: z
       .object({
         repoUrl: z.string().trim().min(1).max(2_048),
@@ -136,6 +140,7 @@ const PublicPluginSchema = SelectPluginSchema.omit({ syncGeneration: true });
 export const PluginWithVisibilitySchema = PublicPluginSchema.extend({
   teams: z.array(PluginTeamSchema),
   users: z.array(PluginUserSchema),
+  labels: z.array(LabelWithDetailsSchema),
 });
 
 export const PluginWithFilesSchema = PluginWithVisibilitySchema.extend({

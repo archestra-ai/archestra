@@ -3116,6 +3116,13 @@
       "when": 1788093582316,
       "tag": "0444_glorious_korg",
       "breakpoints": true
+    },
+    {
+      "idx": 445,
+      "version": "7",
+      "when": 1788270149453,
+      "tag": "0445_ordinary_firestar",
+      "breakpoints": true
     }
   ]
 }

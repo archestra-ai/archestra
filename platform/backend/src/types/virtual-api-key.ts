@@ -2,6 +2,7 @@ import { SupportedProvidersSchema } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { LabelWithDetailsSchema } from "./label";
 import { ResourceVisibilityScopeSchema } from "./visibility";
 
 /**
@@ -50,6 +51,7 @@ export const VirtualApiKeyWithValueSchema = SelectVirtualApiKeySchema.extend({
   teams: z.array(VirtualApiKeyTeamSchema),
   authorName: z.string().nullable(),
   providerApiKeys: z.array(VirtualApiKeyProviderMappingSchema),
+  labels: z.array(LabelWithDetailsSchema),
 });
 
 /** Schema for virtual key listing responses. */
@@ -58,6 +60,7 @@ export const VirtualApiKeyWithParentInfoSchema =
     teams: z.array(VirtualApiKeyTeamSchema),
     authorName: z.string().nullable(),
     providerApiKeys: z.array(VirtualApiKeyProviderMappingSchema),
+    labels: z.array(LabelWithDetailsSchema),
   });
 
 export type SelectVirtualApiKey = z.infer<typeof SelectVirtualApiKeySchema>;

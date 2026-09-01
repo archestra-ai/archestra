@@ -6,7 +6,7 @@ import {
   type ConnectorType,
 } from "@archestra/shared";
 import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
-import { ArchiveRestore, Database, Pencil, Trash2 } from "lucide-react";
+import { ArchiveRestore, Database, Pencil, Tags, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
@@ -19,6 +19,14 @@ import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connec
 import { ConnectorStatusCell } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { CreateConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/create-connector-dialog";
 import { EditConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/edit-connector-dialog";
+import { EntityLabelFilter } from "@/components/entity-label-filter";
+import { EntityLabelsDialog } from "@/components/entity-labels-dialog";
+import { LabelTags } from "@/components/label-tags";
+import {
+  useConnectorLabelKeys,
+  useConnectorLabelValues,
+  useSaveConnectorLabels,
+} from "@/lib/entity-labels.query";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
   CollectionFilters,
@@ -117,6 +125,8 @@ function ConnectorsList() {
   // The trash view; the backend serves deleted connectors to manage-deleted
   // holders only, and the status filter itself is gated the same way.
   const isDeletedView = searchParams.get("status") === "deleted";
+  // Label filtering is server-side, so the value rides the list query.
+  const labelsFilter = searchParams.get("labels") || undefined;
 
   const pageIndex = Number(pageFromUrl || "1") - 1;
   const pageSize = Number(pageSizeFromUrl || DEFAULT_TABLE_LIMIT);
@@ -132,6 +142,7 @@ function ConnectorsList() {
     limit: pageSize,
     offset,
     search: search || undefined,
+    labels: labelsFilter,
     connectorType:
       connectorTypeFilter === "all"
         ? undefined
@@ -158,6 +169,9 @@ function ConnectorsList() {
   );
   const [permanentlyDeletingConnector, setPermanentlyDeletingConnector] =
     useState<ConnectorItem | null>(null);
+  const [labelingConnector, setLabelingConnector] =
+    useState<ConnectorItem | null>(null);
+  const saveConnectorLabels = useSaveConnectorLabels();
   const restoreConnector = useRestoreConnector();
   const permanentlyDeleteConnector = usePermanentlyDeleteConnector();
   // Resolved once here rather than inside a cell renderer, as the shared
@@ -263,6 +277,12 @@ function ConnectorsList() {
     <TableRowActions
       itemName={connector.name}
       actions={[
+        {
+          icon: <Tags className="h-4 w-4" />,
+          label: "Edit labels",
+          permissions: { knowledgeSource: ["update"] },
+          onClick: () => setLabelingConnector(connector),
+        },
         {
           icon: <Pencil className="h-4 w-4" />,
           label: "Edit connector",
@@ -466,6 +486,13 @@ function ConnectorsList() {
               <ResourceDeletedStatusFilter
                 deletePermission={{ knowledgeSource: ["delete"] }}
               />
+              <EntityLabelFilter
+                useLabelKeys={useConnectorLabelKeys}
+                useLabelValues={useConnectorLabelValues}
+                className={filterControlClass({
+                  active: Boolean(labelsFilter),
+                })}
+              />
             </FilterBar>
           </CollectionFilters>
 
@@ -546,9 +573,14 @@ function ConnectorsList() {
                           />
                         }
                         title={
-                          <Link href={`/knowledge/connectors/${connector.id}`}>
-                            {connector.name}
-                          </Link>
+                          <span className="flex items-center gap-1.5">
+                            <Link
+                              href={`/knowledge/connectors/${connector.id}`}
+                            >
+                              {connector.name}
+                            </Link>
+                            <LabelTags labels={connector.labels} />
+                          </span>
                         }
                         onNavigate={() =>
                           router.push(`/knowledge/connectors/${connector.id}`)
@@ -703,6 +735,21 @@ function ConnectorsList() {
               connector={editingConnector}
               open={!!editingConnector}
               onOpenChange={(open) => !open && closeEditDialog()}
+            />
+          )}
+
+          {labelingConnector && (
+            <EntityLabelsDialog
+              open={!!labelingConnector}
+              onOpenChange={(open) => !open && setLabelingConnector(null)}
+              entityName={labelingConnector.name}
+              labels={labelingConnector.labels}
+              onSave={(labels) =>
+                saveConnectorLabels.mutateAsync({
+                  id: labelingConnector.id,
+                  labels,
+                })
+              }
             />
           )}
 

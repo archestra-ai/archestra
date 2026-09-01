@@ -262,6 +262,11 @@ export function AgentChatAppsEditor({
   );
   const assignmentOptions = buildAssignmentOptions({
     subject,
+    // Same field, two hosts: the record's page calls its first tab General,
+    // the create wizard calls its first step Configuration.
+    visibilityLocation: emailAgent
+      ? "the General tab"
+      : "the Configuration step",
     agentNames,
     bindings,
     configuredDmProviders,
@@ -635,9 +640,27 @@ export function AgentChatAppsEditor({
               {assignedOptions.length === 0 ? (
                 <div className="rounded-md border border-dashed px-4 py-6 text-center">
                   <p className="text-sm font-medium">Not in any channel yet</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Add one and this agent starts answering there.
-                  </p>
+                  {/* Which products those channels can come from. An empty
+                      state that only says "nothing here" leaves the reader to
+                      press Add channel to find out what is even on offer —
+                      and what the agent would do there is already the
+                      section's own description, so it is not repeated. */}
+                  {connectedProviders.length > 0 && (
+                    <ul className="mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
+                      {connectedProviders.map((provider) => (
+                        <li
+                          key={provider}
+                          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"
+                        >
+                          <ChannelIcon
+                            channel={provider}
+                            className="size-4 shrink-0"
+                          />
+                          {MESSAGING_CHANNEL_LABELS[provider]}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
               ) : (
                 <ul className="space-y-2">
@@ -1346,6 +1369,7 @@ function buildAssignmentOptions({
   configuredDmProviders,
   currentUserId,
   canCreateDm,
+  visibilityLocation,
 }: {
   subject: ChannelSubject;
   agentNames: Map<string, string>;
@@ -1353,6 +1377,8 @@ function buildAssignmentOptions({
   configuredDmProviders: ChatProvider[];
   currentUserId: string | undefined;
   canCreateDm: boolean;
+  /** Where this agent's Visibility field is, named as its host names it. */
+  visibilityLocation: string;
 }): AssignmentOption[] {
   const virtualDmOptions = configuredDmProviders.map((provider) => ({
     id: `${VIRTUAL_DM_PREFIX}${provider}`,
@@ -1386,7 +1412,10 @@ function buildAssignmentOptions({
           ? (agentNames.get(binding.agentId) ?? "another agent")
           : null,
       disabledReason: personalAssignmentRefused
-        ? "This personal agent can use only its owner's direct messages."
+        ? // Says what to do about it, not just that it is so: the refusal is
+          // the agent's visibility, which is one field away and the reader's
+          // to change.
+          `A personal agent answers only in its owner's direct messages. Change Visibility from Personal on ${visibilityLocation} to use shared channels.`
         : null,
       virtualDm: false,
       isDm: binding.isDm,

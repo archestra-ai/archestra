@@ -353,6 +353,25 @@ describe("AgentChatAppsEditor", () => {
     ).toBeNull();
   });
 
+  it("names the connected providers in the empty state, and only those", () => {
+    vi.mocked(useAllChatOpsBindings).mockReturnValue({
+      data: { bindings: [] },
+      isPending: false,
+      isLoadingError: false,
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      fetchNextPage: vi.fn(),
+      refetch: refetchBindings,
+    } as never);
+    render(<AgentChatApps agent={agent} />);
+
+    const empty = screen.getByText("Not in any channel yet").closest("div");
+    // Slack is configured; Telegram is not, so it is not somewhere this agent
+    // could be listening and has no business being offered here.
+    expect(within(empty as HTMLElement).getByText("Slack")).toBeVisible();
+    expect(within(empty as HTMLElement).queryByText("Telegram")).toBeNull();
+  });
+
   it("points at the provider holding a channel the search found elsewhere", async () => {
     const user = userEvent.setup();
     vi.mocked(useAllChatOpsBindings).mockReturnValue({
@@ -1104,8 +1123,10 @@ describe("AgentChatAppsEditor", () => {
     );
 
     await openPicker(user, "Slack");
+    // The refusal names the field that lifts it, and where that field is on
+    // this surface — the record's page calls its first tab General.
     const reason =
-      "This personal agent can use only its owner's direct messages.";
+      "A personal agent answers only in its owner's direct messages. Change Visibility from Personal on the General tab to use shared channels.";
     // One sentence for the whole group, not one per row.
     expect(screen.getAllByText(reason)).toHaveLength(1);
     const group = screen.getByRole("button", {

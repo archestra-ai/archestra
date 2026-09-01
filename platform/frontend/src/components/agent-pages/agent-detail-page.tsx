@@ -25,7 +25,7 @@ import { AgentVersionHistoryDialog } from "@/components/agent-version-history-di
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import { createdByFact } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { DetailFacts } from "@/components/detail-facts";
+import { DetailFactsCard } from "@/components/detail-facts";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
@@ -579,11 +579,15 @@ function AgentDetails({
               )
             )}
 
-            {/* Who to ask about this record, stated before its settings. A
-                built-in belongs to nobody, so the fact is absent there rather
-                than present-but-empty, which would read as missing data. */}
+            {/* Who to ask about this record, stated before its settings, in
+                the same card skills and registry items state it in — this page
+                is already the configuration, so it takes the box without the
+                "Overview" heading and the link back into a form the reader is
+                looking at. A built-in belongs to nobody, so the fact is absent
+                there rather than present-but-empty, which would read as
+                missing data. */}
             {section === "general" && !isBuiltIn && (
-              <DetailFacts facts={[createdByFact(agent.createdBy)]} />
+              <DetailFactsCard facts={[createdByFact(agent.createdBy)]} />
             )}
 
             {activeFormGroup && (

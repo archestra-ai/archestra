@@ -318686,6 +318686,29 @@
                         "additionalProperties": false
                       }
                     },
+                    "createdBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
+                    },
                     "files": {
                       "type": "array",
                       "items": {
@@ -318777,6 +318800,7 @@
                     "deletedAt",
                     "teams",
                     "users",
+                    "createdBy",
                     "files"
                   ],
                   "additionalProperties": false
@@ -319879,6 +319903,29 @@
                               "additionalProperties": false
                             }
                           },
+                          "createdBy": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "email": {
+                                "nullable": true,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name",
+                              "email"
+                            ],
+                            "additionalProperties": false
+                          },
                           "files": {
                             "type": "array",
                             "items": {
@@ -319970,6 +320017,7 @@
                           "deletedAt",
                           "teams",
                           "users",
+                          "createdBy",
                           "files"
                         ],
                         "additionalProperties": false
@@ -320982,6 +321030,29 @@
                         "additionalProperties": false
                       }
                     },
+                    "createdBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
+                    },
                     "files": {
                       "type": "array",
                       "items": {
@@ -321073,6 +321144,7 @@
                     "deletedAt",
                     "teams",
                     "users",
+                    "createdBy",
                     "files"
                   ],
                   "additionalProperties": false
@@ -321971,6 +322043,29 @@
                         "additionalProperties": false
                       }
                     },
+                    "createdBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
+                    },
                     "files": {
                       "type": "array",
                       "items": {
@@ -322062,6 +322157,7 @@
                     "deletedAt",
                     "teams",
                     "users",
+                    "createdBy",
                     "files"
                   ],
                   "additionalProperties": false
@@ -322593,6 +322689,29 @@
                         "additionalProperties": false
                       }
                     },
+                    "createdBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
+                    },
                     "files": {
                       "type": "array",
                       "items": {
@@ -322684,6 +322803,7 @@
                     "deletedAt",
                     "teams",
                     "users",
+                    "createdBy",
                     "files"
                   ],
                   "additionalProperties": false
@@ -323458,6 +323578,29 @@
                         "additionalProperties": false
                       }
                     },
+                    "createdBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
+                    },
                     "files": {
                       "type": "array",
                       "items": {
@@ -323549,6 +323692,7 @@
                     "deletedAt",
                     "teams",
                     "users",
+                    "createdBy",
                     "files"
                   ],
                   "additionalProperties": false
@@ -324213,6 +324357,29 @@
                         "additionalProperties": false
                       }
                     },
+                    "createdBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
+                    },
                     "files": {
                       "type": "array",
                       "items": {
@@ -324304,6 +324471,7 @@
                     "deletedAt",
                     "teams",
                     "users",
+                    "createdBy",
                     "files"
                   ],
                   "additionalProperties": false

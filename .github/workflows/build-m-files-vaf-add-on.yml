@@ -118,8 +118,18 @@ jobs:
           VERSION: ${{ steps.build.outputs.version }}
         run: |
           git fetch --depth=1 origin $env:BASE_SHA
-          $changed = git diff --name-only $env:BASE_SHA HEAD -- 'platform/integrations/m-files-vaf-add-on' |
-            Where-Object { $_ -notmatch '\.md$' }
+          # Diffed with rename detection over the whole tree rather than under a
+          # pathspec: git then pairs the add-on's old and new locations, so
+          # moving the directory (R100 — no content change) stays out of
+          # $changed. Such a move builds a package identical to the released
+          # one, which needs no version bump; a rename that also edits the
+          # source scores below R100 and is still guarded.
+          $changed = git diff --name-status -M $env:BASE_SHA HEAD | Where-Object {
+            $fields = $_ -split "`t"
+            $status = $fields[0]
+            $path = $fields[-1]
+            $path -like '*/m-files-vaf-add-on/*' -and $path -notmatch '\.md$' -and $status -ne 'R100'
+          }
           if (-not $changed) {
             Write-Host "No add-on source changes; version guard not applicable."
             exit 0

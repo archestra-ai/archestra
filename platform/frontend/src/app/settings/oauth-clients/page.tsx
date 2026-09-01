@@ -6,7 +6,7 @@ import {
   MCP_GATEWAY_OAUTH_SCOPE,
 } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Copy, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Copy, Pencil, Plus, RefreshCw, Tags, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
@@ -17,6 +17,7 @@ import {
   CollectionFilters,
   FilterBar,
   FilterSelect,
+  filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
 import { EditOAuthClientDialog as EditLlmOAuthClientDialog } from "@/components/llm-oauth-client-dialogs";
@@ -28,7 +29,15 @@ import {
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
+import { EntityLabelFilter } from "@/components/entity-label-filter";
+import { EntityLabelsDialog } from "@/components/entity-labels-dialog";
 import { TableRowActions } from "@/components/table-row-actions";
+import {
+  useLlmOauthClientLabelKeys,
+  useLlmOauthClientLabelValues,
+  useSaveLlmOauthClientLabels,
+  useSaveMcpOauthClientLabels,
+} from "@/lib/entity-labels.query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -93,6 +102,8 @@ function OauthClientsTable() {
   const setActionButton = useSetSettingsAction();
   const { searchParams, updateQueryParams } = useDataTableQueryParams();
   const search = searchParams.get("search") || "";
+  // Label filtering is server-side, so the value rides both list queries.
+  const labelsFilter = searchParams.get("labels") || undefined;
   const typeFilter = isClientType(searchParams.get("type"))
     ? (searchParams.get("type") as "llm" | "mcp")
     : undefined;
@@ -116,6 +127,7 @@ function OauthClientsTable() {
     limit: ALL_CLIENTS_LIMIT,
     search: search || undefined,
     providerApiKeyId,
+    labels: labelsFilter,
     toastOnError: false,
   });
   // Read permission for the two halves is separate, and only the LLM one
@@ -124,6 +136,7 @@ function OauthClientsTable() {
   const { data: canReadMcp } = useHasPermissions({ mcpOauthClient: ["read"] });
   const mcpQuery = useMcpOauthClients({
     search: search || undefined,
+    labels: labelsFilter,
     enabled: canReadMcp === true,
   });
 
@@ -139,6 +152,15 @@ function OauthClientsTable() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editingLlm, setEditingLlm] = useState<LlmClient | null>(null);
   const [editingMcp, setEditingMcp] = useState<McpClient | null>(null);
+  // One row type covers both halves, so the editor keeps the kind alongside
+  // the row and dispatches to that half's save on submit.
+  const [labelingClient, setLabelingClient] = useState<
+    | { kind: "llm"; client: LlmClient }
+    | { kind: "mcp"; client: McpClient }
+    | null
+  >(null);
+  const saveLlmOauthClientLabels = useSaveLlmOauthClientLabels();
+  const saveMcpOauthClientLabels = useSaveMcpOauthClientLabels();
   const [rotating, setRotating] = useState<Row | null>(null);
   const [deleting, setDeleting] = useState<Row | null>(null);
   const [revealed, setRevealed] = useState<{
@@ -319,6 +341,12 @@ function OauthClientsTable() {
                     : setEditingMcp(row.original.client),
               },
               {
+                icon: <Tags className="h-4 w-4" />,
+                label: "Edit labels",
+                permissions: { [resource]: ["update"] },
+                onClick: () => setLabelingClient(row.original),
+              },
+              {
                 icon: <RefreshCw className="h-4 w-4" />,
                 label: "Rotate secret",
                 permissions: { [resource]: ["update"] },
@@ -392,6 +420,13 @@ function OauthClientsTable() {
               { value: "client_credentials", label: "Application" },
               { value: "authorization_code", label: "On behalf of users" },
             ]}
+          />
+          <EntityLabelFilter
+            useLabelKeys={useLlmOauthClientLabelKeys}
+            useLabelValues={useLlmOauthClientLabelValues}
+            className={filterControlClass({
+              active: Boolean(labelsFilter),
+            })}
           />
         </FilterBar>
       </CollectionFilters>
@@ -468,6 +503,25 @@ function OauthClientsTable() {
         isSubmitting={mcpUpdate.isPending}
       />
 
+      {labelingClient && (
+        <EntityLabelsDialog
+          open={!!labelingClient}
+          onOpenChange={(open) => !open && setLabelingClient(null)}
+          entityName={labelingClient.client.name}
+          labels={labelingClient.client.labels}
+          onSave={(labels) =>
+            labelingClient.kind === "llm"
+              ? saveLlmOauthClientLabels.mutateAsync({
+                  id: labelingClient.client.id,
+                  labels,
+                })
+              : saveMcpOauthClientLabels.mutateAsync({
+                  id: labelingClient.client.id,
+                  labels,
+                })
+          }
+        />
+      )}
       <DeleteConfirmDialog
         open={!!rotating}
         onOpenChange={(open) => {

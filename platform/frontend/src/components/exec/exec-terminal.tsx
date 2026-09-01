@@ -74,8 +74,13 @@ interface ExecTerminalProps {
   title?: string;
   /** Heading for the copyable equivalent command, when the session reports one. */
   manualCommandTitle?: string;
+  /** Whether to render the equivalent command below the terminal. */
+  showManualCommand?: boolean;
   /** Copy shown while the owning resource settles after its pty closes. */
   disconnectedLabel?: string;
+  /** Whether a closed PTY should add a status banner above its retained frame. */
+  showDisconnectedStatus?: boolean;
+  onCommandChange?: (command: string | null) => void;
   onClosed?: () => void;
 }
 
@@ -85,7 +90,10 @@ export function ExecTerminal({
   isActive,
   title = "Interactive Shell",
   manualCommandTitle = "Manual Command",
+  showManualCommand = true,
   disconnectedLabel = "Session terminated",
+  showDisconnectedStatus = true,
+  onCommandChange,
   onClosed,
 }: ExecTerminalProps) {
   // Read through a ref so a new transport object on every render cannot
@@ -94,6 +102,8 @@ export function ExecTerminal({
   transportRef.current = transport;
   const onClosedRef = useRef(onClosed);
   onClosedRef.current = onClosed;
+  const onCommandChangeRef = useRef(onCommandChange);
+  onCommandChangeRef.current = onCommandChange;
   const terminalRef = useRef<HTMLDivElement>(null);
   const terminalInstanceRef = useRef<import("@xterm/xterm").Terminal | null>(
     null,
@@ -201,6 +211,7 @@ export function ExecTerminal({
           setStatus("connected");
           setProgress(null);
           setCommand(startedCommand);
+          onCommandChangeRef.current?.(startedCommand);
           const dims = fitAddon.proposeDimensions();
           if (isUsableTerminalDimensions(dims)) {
             transportRef.current.sendResize(dims.cols, dims.rows);
@@ -224,7 +235,8 @@ export function ExecTerminal({
       });
 
       terminal.onData((data) => {
-        transportRef.current.sendInput(data);
+        const input = withoutMouseHoverReports(data);
+        if (input) transportRef.current.sendInput(input);
       });
 
       // Resize observer
@@ -298,7 +310,8 @@ export function ExecTerminal({
                 {statusText}
               </div>
             ))}
-          {(status === "error" || status === "disconnected") && (
+          {(status === "error" ||
+            (status === "disconnected" && showDisconnectedStatus)) && (
             <div
               className={`flex items-center justify-center p-4 text-sm font-mono ${status === "error" ? "text-red-400" : "text-yellow-400"}`}
             >
@@ -326,7 +339,7 @@ export function ExecTerminal({
         </div>
       </div>
 
-      {command && (
+      {showManualCommand && command && (
         <div className="flex flex-col gap-2 flex-shrink-0">
           <h3 className="text-sm font-semibold">{manualCommandTitle}</h3>
           <div className="relative">
@@ -351,3 +364,21 @@ export function ExecTerminal({
     </div>
   );
 }
+
+// A TUI can ask the outer terminal for all mouse motion (DECSET 1003). tmux
+// forwards those SGR reports to the pane, but some Claude Code render states
+// stop consuming no-button hover events and insert them into the prompt as
+// visible `^[[<35;...M` text. Hover has no useful terminal action, so drop only
+// motion reports whose low button bits mean "no button". Clicks, button drags,
+// wheel events, and ordinary keyboard input continue to the remote PTY.
+function withoutMouseHoverReports(data: string): string {
+  return data.replace(SGR_MOUSE_REPORT_PATTERN, (report, encodedButton) => {
+    const button = Number(encodedButton);
+    const isMotion = (button & 32) !== 0;
+    const hasNoButton = (button & 3) === 3;
+    return isMotion && hasNoButton ? "" : report;
+  });
+}
+
+// biome-ignore lint/suspicious/noControlCharactersInRegex: ESC begins every SGR mouse report.
+const SGR_MOUSE_REPORT_PATTERN = /\x1b\[<(\d+);\d+;\d+[Mm]/g;

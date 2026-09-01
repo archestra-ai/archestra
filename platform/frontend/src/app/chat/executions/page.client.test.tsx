@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const queryState = vi.hoisted(() => ({
@@ -16,15 +17,25 @@ const cancelState = vi.hoisted(() => ({
   mutate: vi.fn(),
 }));
 
+const terminalState = vi.hoisted(() => ({
+  props: null as {
+    taskId: string;
+    showManualCommand?: boolean;
+    showDisconnectedStatus?: boolean;
+    onCommandChange?: (command: string | null) => void;
+  } | null,
+}));
+
 vi.mock("@/lib/agent-background-execution.query", () => ({
   useCancelAgentExecution: () => cancelState,
   useMyAgentExecution: () => queryState.value,
 }));
 
 vi.mock("@/components/agent-execution-terminal", () => ({
-  AgentExecutionTerminal: ({ taskId }: { taskId: string }) => (
-    <div>Live terminal {taskId}</div>
-  ),
+  AgentExecutionTerminal: (props: NonNullable<typeof terminalState.props>) => {
+    terminalState.props = props;
+    return <div>Live terminal {props.taskId}</div>;
+  },
 }));
 
 vi.mock("@/components/agent-execution-logs", () => ({
@@ -37,6 +48,7 @@ describe("BackgroundExecutionChatSession", () => {
   beforeEach(() => {
     cancelState.isPending = false;
     cancelState.mutate.mockReset();
+    terminalState.props = null;
     queryState.value = {
       data: undefined,
       isPending: false,
@@ -101,6 +113,41 @@ describe("BackgroundExecutionChatSession", () => {
     expect(screen.getByText("Live terminal task-1")).toBeInTheDocument();
     expect(screen.getByText("Running")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument();
+    expect(terminalState.props).toMatchObject({
+      showManualCommand: false,
+      showDisconnectedStatus: false,
+    });
+  });
+
+  it("moves agent and terminal details into the execution actions menu", async () => {
+    const user = userEvent.setup();
+    queryState.value.data = execution({
+      state: "TASK_STATE_WORKING",
+      endedAt: null,
+    });
+
+    render(<BackgroundExecutionChatSession taskId="task-1" />);
+    act(() => terminalState.props?.onCommandChange?.("kubectl exec example"));
+
+    await user.click(
+      screen.getByRole("button", { name: "More execution actions" }),
+    );
+
+    expect(
+      screen.getByRole("menuitem", { name: "View Agent" }),
+    ).toHaveAttribute(
+      "href",
+      "/agents/00000000-0000-4000-8000-000000000001?section=executions",
+    );
+
+    await user.click(
+      screen.getByRole("menuitem", { name: "View connection details" }),
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Terminal connection details" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("kubectl exec example")).toBeInTheDocument();
   });
 
   it("restores retained output after the execution has ended", () => {

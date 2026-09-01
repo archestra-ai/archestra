@@ -45,6 +45,20 @@ export { default as ConversationCompactionModel } from "./conversation-compactio
 export { default as ConversationEnabledToolModel } from "./conversation-enabled-tool";
 export { default as ConversationShareModel } from "./conversation-share";
 export { default as CreatedByModel, lookupCreator } from "./created-by";
+export {
+  EnvironmentLabelModel,
+  KbFileLabelModel,
+  KnowledgeBaseConnectorLabelModel,
+  KnowledgeBaseLabelModel,
+  LimitLabelModel,
+  LlmProviderApiKeyLabelModel,
+  ModelLabelModel,
+  OauthClientLabelModel,
+  PluginLabelModel,
+  ServiceAccountLabelModel,
+  SkillLabelModel,
+  VirtualApiKeyLabelModel,
+} from "./entity-labels";
 export { default as EnvironmentModel } from "./environment";
 export { default as EnvironmentDefaultUserLimitModel } from "./environment-default-user-limit";
 export { default as EnvironmentResourceDefaultModel } from "./environment-resource-default";

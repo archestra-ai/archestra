@@ -2,6 +2,7 @@ import type { EnvironmentDefaultableResource } from "@archestra/shared";
 import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { LabelWithDetailsSchema } from "./label";
 
 // === Public schemas & types ===
 
@@ -140,6 +141,7 @@ export const SelectEnvironmentSchema = createSelectSchema(
 export const EnvironmentWithAssignedCountSchema =
   SelectEnvironmentSchema.extend({
     assignedCatalogCount: z.number().int().nonnegative(),
+    labels: z.array(LabelWithDetailsSchema),
   });
 
 /**
@@ -195,6 +197,7 @@ export const CreateEnvironmentSchema = z.object({
   restricted: z.boolean().optional(),
   validationRegex: ValidationRegexSchema.nullable().optional(),
   trustedImageRegistries: TrustedImageRegistriesSchema.nullable().optional(),
+  labels: z.array(LabelWithDetailsSchema).optional(),
 });
 
 /**
@@ -209,6 +212,7 @@ export const UpdateEnvironmentSchema = z.object({
   restricted: z.boolean().optional(),
   validationRegex: ValidationRegexSchema.nullable().optional(),
   trustedImageRegistries: TrustedImageRegistriesSchema.nullable().optional(),
+  labels: z.array(LabelWithDetailsSchema).optional(),
 });
 
 export type Environment = z.infer<typeof SelectEnvironmentSchema>;

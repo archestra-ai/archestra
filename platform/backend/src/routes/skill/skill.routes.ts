@@ -4,6 +4,7 @@ import {
   createPaginatedResponseSchema,
   MAX_BULK_IDS,
   PaginationQuerySchema,
+  parseLabelsParam,
   type ResourceVisibilityScope,
   ResourceVisibilityScopeSchema,
   RouteId,
@@ -31,6 +32,7 @@ import {
   OrganizationModel,
   SkillEnvironmentModel,
   SkillFileModel,
+  SkillLabelModel,
   SkillModel,
   SkillTeamModel,
   SkillUsageEventModel,
@@ -79,6 +81,7 @@ import {
   constructResponseSchema,
   createSortingQuerySchema,
   DeleteObjectResponseSchema,
+  LabelWithDetailsSchema,
   SelectSkillVersionFileSchema,
   SelectSkillVersionSchema,
   type Skill,
@@ -95,6 +98,7 @@ import {
   isForeignKeyConstraintError,
   isUniqueConstraintError,
 } from "@/utils/db";
+import { registerEntityLabelRoutes } from "../entity-labels";
 
 /**
  * Shared fields identifying a GitHub skill source. Authentication is optional
@@ -166,6 +170,7 @@ const SkillListItemSchema = SkillResponseSchema.extend({
    * recorded uses are unattributed or predate per-event tracking.
    */
   usageUserCount: z.number(),
+  labels: z.array(LabelWithDetailsSchema),
 });
 
 /** A skill with its resource files, team, and environment assignments. */
@@ -174,6 +179,7 @@ const SkillDetailSchema = SkillWithFilesSchema.extend({
   teams: z.array(SkillTeamSchema),
   users: z.array(SkillUserSchema),
   environments: z.array(SkillEnvironmentSchema),
+  labels: z.array(LabelWithDetailsSchema),
 });
 
 /** One immutable version with its resource-file snapshots. */
@@ -260,6 +266,13 @@ const SkillManifestFieldsSchema = z.object({
       "Tools the skill expects, overriding the SKILL.md `allowed-tools` " +
         "frontmatter. Omit to use the frontmatter; pass [] to clear.",
     ),
+  labels: z
+    .array(LabelWithDetailsSchema)
+    .optional()
+    .describe(
+      "Key/value labels. Omit to leave existing labels untouched; pass [] " +
+        "to clear them.",
+    ),
 });
 
 const SkillManifestInputSchema = SkillManifestFieldsSchema.superRefine(
@@ -333,6 +346,15 @@ const DiscoveredSkillSchema = z.object({
 });
 
 const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  registerEntityLabelRoutes(fastify, {
+    basePath: "/api/skills",
+    tag: "Skills",
+    entityNamePlural: "skills",
+    model: SkillLabelModel,
+    keysOperationId: RouteId.GetSkillLabelKeys,
+    valuesOperationId: RouteId.GetSkillLabelValues,
+  });
+
   fastify.get(
     "/api/skills",
     {
@@ -377,6 +399,12 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "Which skills to list: active (default) or the soft-deleted " +
                 "trash. `deleted` is restricted to admins and team-admins.",
             ),
+          labels: z
+            .string()
+            .optional()
+            .describe(
+              "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.",
+            ),
         }).merge(createSortingQuerySchema(SkillSortBy)),
         response: constructResponseSchema(
           createPaginatedResponseSchema(SkillListItemSchema),
@@ -397,6 +425,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           excludeAuthorIds,
           excludeOtherPersonalSkills,
           status,
+          labels,
           ...sorting
         },
         organizationId,
@@ -446,6 +475,13 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         status,
       };
 
+      // Resolved once so the page query and the count agree, and so a filter
+      // that matches nothing short circuits both.
+      const parsedLabels = parseLabelsParam(labels);
+      const labelFilteredIds = parsedLabels
+        ? await SkillLabelModel.getIdsMatchingLabels(parsedLabels)
+        : undefined;
+
       const [skills, total] = await Promise.all([
         SkillModel.findByOrganization({
           organizationId,
@@ -455,6 +491,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           sourceRepo,
           accessibleSkillIds,
           environmentId,
+          labelFilteredIds,
           ...scopeFilters,
           sorting,
         }),
@@ -464,6 +501,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           sourceRepo,
           accessibleSkillIds,
           environmentId,
+          labelFilteredIds,
           ...scopeFilters,
         }),
       ]);
@@ -484,6 +522,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         authorNames,
         creators,
         usageUserCounts,
+        labelsBySkill,
       ] = await Promise.all([
         SkillFileModel.countBySkillIds(skillIds),
         SkillTeamModel.getTeamDetailsForSkills(skillIds),
@@ -492,6 +531,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         UserModel.getNamesByIds(skillAuthorIds),
         CreatedByModel.resolve(skillAuthorIds),
         SkillUsageEventModel.countDistinctUsersBySkillIds(skillIds),
+        SkillLabelModel.getLabelsForMany(skillIds),
       ]);
 
       return reply.send({
@@ -508,6 +548,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             : null,
           createdBy: lookupCreator(creators, skill.authorId),
           usageUserCount: usageUserCounts.get(skill.id) ?? 0,
+          labels: labelsBySkill.get(skill.id) ?? [],
         })),
         pagination: calculatePaginationMeta(total, { limit, offset }),
       });
@@ -571,6 +612,9 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       if (userIds.length > 0) {
         await SkillUserModel.syncSkillUsers(skill.id, userIds);
+      }
+      if (body.labels?.length) {
+        await SkillLabelModel.syncLabels(skill.id, body.labels);
       }
 
       return reply.send(await loadSkillDetail(skill));
@@ -1003,6 +1047,11 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       if (usersChanged) {
         await SkillUserModel.syncSkillUsers(id, newUserIds);
+      }
+      // Only touch labels when the caller sent them, so an update that omits
+      // the field leaves existing labels alone.
+      if (body.labels !== undefined) {
+        await SkillLabelModel.syncLabels(id, body.labels);
       }
 
       return reply.send(await loadSkillDetail(updated));
@@ -2116,14 +2165,21 @@ async function requireReadableSkill(params: {
 
 /** A skill with its files, team, and environment assignments, for detail responses. */
 async function loadSkillDetail(skill: Skill) {
-  const [files, teamsBySkill, usersBySkill, environmentsBySkill, createdBy] =
-    await Promise.all([
-      SkillFileModel.findBySkillId(skill.id),
-      SkillTeamModel.getTeamDetailsForSkills([skill.id]),
-      SkillUserModel.getUserDetailsForSkills([skill.id]),
-      SkillEnvironmentModel.getEnvironmentDetailsForSkills([skill.id]),
-      CreatedByModel.resolveOne(skill.authorId),
-    ]);
+  const [
+    files,
+    teamsBySkill,
+    usersBySkill,
+    environmentsBySkill,
+    createdBy,
+    labels,
+  ] = await Promise.all([
+    SkillFileModel.findBySkillId(skill.id),
+    SkillTeamModel.getTeamDetailsForSkills([skill.id]),
+    SkillUserModel.getUserDetailsForSkills([skill.id]),
+    SkillEnvironmentModel.getEnvironmentDetailsForSkills([skill.id]),
+    CreatedByModel.resolveOne(skill.authorId),
+    SkillLabelModel.getLabelsFor(skill.id),
+  ]);
   return {
     ...skill,
     createdBy,
@@ -2131,6 +2187,7 @@ async function loadSkillDetail(skill: Skill) {
     teams: teamsBySkill.get(skill.id) ?? [],
     users: usersBySkill.get(skill.id) ?? [],
     environments: environmentsBySkill.get(skill.id) ?? [],
+    labels,
   };
 }
 

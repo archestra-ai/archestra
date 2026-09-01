@@ -1,5 +1,6 @@
 import {
   PLUGIN_MARKETPLACE_IMPORT_LIMIT,
+  parseLabelsParam,
   ResourceVisibilityScopeSchema,
   RouteId,
 } from "@archestra/shared";
@@ -7,7 +8,12 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { userHasPermission } from "@/auth";
 import config from "@/config";
-import { PluginModel, PluginTeamModel, TaskModel } from "@/models";
+import {
+  PluginLabelModel,
+  PluginModel,
+  PluginTeamModel,
+  TaskModel,
+} from "@/models";
 import {
   importPluginFromGithub,
   normalizeGithubPluginRepoUrl,
@@ -41,6 +47,7 @@ import {
   UuidIdSchema,
 } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
+import { registerEntityLabelRoutes } from "../entity-labels";
 
 const PluginParamsSchema = z.object({ id: UuidIdSchema });
 
@@ -164,6 +171,15 @@ const GithubMarketplaceImportSchema = GithubMarketplaceSourceSchema.and(
 );
 
 const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  registerEntityLabelRoutes(fastify, {
+    basePath: "/api/plugins",
+    tag: "Plugins",
+    entityNamePlural: "plugins",
+    model: PluginLabelModel,
+    keysOperationId: RouteId.GetPluginLabelKeys,
+    valuesOperationId: RouteId.GetPluginLabelValues,
+  });
+
   fastify.addHook("onRequest", async () => {
     if (!config.plugins.enabled) {
       throw new ApiError(404, "Plugins are not enabled");
@@ -177,10 +193,18 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetPlugins,
         description: "List plugins for the organization",
         tags: ["Plugins"],
+        querystring: z.object({
+          labels: z
+            .string()
+            .optional()
+            .describe(
+              "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.",
+            ),
+        }),
         response: constructResponseSchema(z.array(PluginListItemSchema)),
       },
     },
-    async ({ organizationId, user }, reply) => {
+    async ({ organizationId, user, query }, reply) => {
       const isAdmin = await userHasPermission(
         user.id,
         organizationId,
@@ -196,6 +220,7 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const plugins = await PluginModel.findByOrganization({
         organizationId,
         accessiblePluginIds,
+        labels: parseLabelsParam(query.labels),
       });
       return reply.send(plugins);
     },

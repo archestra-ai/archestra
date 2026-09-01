@@ -1,11 +1,13 @@
-import { and, asc, count, eq, isNull, ne, or, sql } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type {
   Environment,
+  LabelWithDetails,
   NetworkPolicy,
   TrustedImageRegistries,
 } from "@/types";
+import { EnvironmentLabelModel } from "./entity-labels";
 
 // === Public API ===
 
@@ -23,6 +25,7 @@ interface EnvironmentWithAssignedCount {
   createdAt: Date;
   updatedAt: Date;
   assignedCatalogCount: number;
+  labels: LabelWithDetails[];
 }
 
 class EnvironmentModel {
@@ -33,8 +36,16 @@ class EnvironmentModel {
 
   static async listForOrganization(
     organizationId: string,
+    labels?: Record<string, string[]>,
   ): Promise<EnvironmentWithAssignedCount[]> {
-    return db
+    const labelFilteredIds = labels
+      ? await EnvironmentLabelModel.getIdsMatchingLabels(labels)
+      : null;
+    if (labelFilteredIds?.length === 0) {
+      return [];
+    }
+
+    const rows = await db
       .select({
         id: schema.environmentsTable.id,
         organizationId: schema.environmentsTable.organizationId,
@@ -64,12 +75,28 @@ class EnvironmentModel {
           notDeleted(schema.internalMcpCatalogTable),
         ),
       )
-      .where(eq(schema.environmentsTable.organizationId, organizationId))
+      .where(
+        and(
+          eq(schema.environmentsTable.organizationId, organizationId),
+          ...(labelFilteredIds
+            ? [inArray(schema.environmentsTable.id, labelFilteredIds)]
+            : []),
+        ),
+      )
       .groupBy(schema.environmentsTable.id)
       .orderBy(
         asc(schema.environmentsTable.sortOrder),
         asc(schema.environmentsTable.createdAt),
       );
+
+    const labelsById = await EnvironmentLabelModel.getLabelsForMany(
+      rows.map((row) => row.id),
+    );
+
+    return rows.map((row) => ({
+      ...row,
+      labels: labelsById.get(row.id) ?? [],
+    }));
   }
 
   static async findById(

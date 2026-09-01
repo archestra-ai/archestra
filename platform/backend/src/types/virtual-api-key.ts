@@ -5,6 +5,7 @@ import {
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { LabelWithDetailsSchema } from "./label";
 import { ResourceVisibilityScopeSchema } from "./visibility";
 
 /**
@@ -54,6 +55,7 @@ export const VirtualApiKeyWithValueSchema = SelectVirtualApiKeySchema.extend({
   authorName: z.string().nullable(),
   createdBy: CreatedByNullableSchema,
   providerApiKeys: z.array(VirtualApiKeyProviderMappingSchema),
+  labels: z.array(LabelWithDetailsSchema),
 });
 
 /** Schema for virtual key listing responses. */
@@ -63,6 +65,7 @@ export const VirtualApiKeyWithParentInfoSchema =
     authorName: z.string().nullable(),
     createdBy: CreatedByNullableSchema,
     providerApiKeys: z.array(VirtualApiKeyProviderMappingSchema),
+    labels: z.array(LabelWithDetailsSchema),
   });
 
 export type SelectVirtualApiKey = z.infer<typeof SelectVirtualApiKeySchema>;

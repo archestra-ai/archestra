@@ -422,10 +422,14 @@ export const RouteId = {
   GetChatAttachmentContent: "getChatAttachmentContent",
   DeleteChatAttachment: "deleteChatAttachment",
   GetLlmModels: "getLlmModels",
+  GetLlmProviderModelLabelValues: "llmProviderModelLabelValues",
+  GetLlmProviderModelLabelKeys: "llmProviderModelLabelKeys",
   SyncLlmModels: "syncLlmModels",
 
   // LLM Provider API Key Routes
   GetLlmProviderApiKeys: "getLlmProviderApiKeys",
+  GetLlmProviderApiKeyLabelValues: "llmProviderApiKeyLabelValues",
+  GetLlmProviderApiKeyLabelKeys: "llmProviderApiKeyLabelKeys",
   GetAvailableLlmProviderApiKeys: "getAvailableLlmProviderApiKeys",
   CreateLlmProviderApiKey: "createLlmProviderApiKey",
   GetLlmProviderApiKey: "getLlmProviderApiKey",
@@ -443,6 +447,8 @@ export const RouteId = {
 
   // Service Account Routes
   GetServiceAccounts: "getServiceAccounts",
+  GetServiceAccountLabelValues: "serviceAccountLabelValues",
+  GetServiceAccountLabelKeys: "serviceAccountLabelKeys",
   GetServiceAccount: "getServiceAccount",
   CreateServiceAccount: "createServiceAccount",
   UpdateServiceAccount: "updateServiceAccount",
@@ -482,6 +488,8 @@ export const RouteId = {
 
   // Virtual API Key Routes
   GetAllVirtualApiKeys: "getAllVirtualApiKeys",
+  GetVirtualApiKeyLabelValues: "virtualApiKeyLabelValues",
+  GetVirtualApiKeyLabelKeys: "virtualApiKeyLabelKeys",
   GetVirtualApiKey: "getVirtualApiKey",
   GetVirtualApiKeyValue: "getVirtualApiKeyValue",
   CreateVirtualApiKey: "createVirtualApiKey",
@@ -491,6 +499,8 @@ export const RouteId = {
 
   // LLM OAuth Client Routes
   GetLlmOauthClients: "getLlmOauthClients",
+  GetLlmOauthClientLabelValues: "llmOauthClientLabelValues",
+  GetLlmOauthClientLabelKeys: "llmOauthClientLabelKeys",
   CreateLlmOauthClient: "createLlmOauthClient",
   UpdateLlmOauthClient: "updateLlmOauthClient",
   RotateLlmOauthClientSecret: "rotateLlmOauthClientSecret",
@@ -499,6 +509,8 @@ export const RouteId = {
 
   // MCP OAuth Client Routes
   GetMcpOauthClients: "getMcpOauthClients",
+  GetMcpOauthClientLabelValues: "mcpOauthClientLabelValues",
+  GetMcpOauthClientLabelKeys: "mcpOauthClientLabelKeys",
   CreateMcpOauthClient: "createMcpOauthClient",
   UpdateMcpOauthClient: "updateMcpOauthClient",
   RotateMcpOauthClientSecret: "rotateMcpOauthClientSecret",
@@ -511,6 +523,8 @@ export const RouteId = {
 
   // Limits Routes
   GetLimits: "getLimits",
+  GetLimitLabelValues: "limitLabelValues",
+  GetLimitLabelKeys: "limitLabelKeys",
   CreateLimit: "createLimit",
   GetLimit: "getLimit",
   UpdateLimit: "updateLimit",
@@ -569,6 +583,8 @@ export const RouteId = {
 
   // Org-level deployment environments
   ListEnvironments: "listEnvironments",
+  GetEnvironmentLabelValues: "environmentLabelValues",
+  GetEnvironmentLabelKeys: "environmentLabelKeys",
   CreateEnvironment: "createEnvironment",
   UpdateEnvironment: "updateEnvironment",
   DeleteEnvironment: "deleteEnvironment",
@@ -675,6 +691,8 @@ export const RouteId = {
 
   // Knowledge Base Routes
   GetKnowledgeBases: "getKnowledgeBases",
+  GetKnowledgeBaseLabelValues: "knowledgeBaseLabelValues",
+  GetKnowledgeBaseLabelKeys: "knowledgeBaseLabelKeys",
   CreateKnowledgeBase: "createKnowledgeBase",
   GetKnowledgeBase: "getKnowledgeBase",
   UpdateKnowledgeBase: "updateKnowledgeBase",
@@ -686,6 +704,8 @@ export const RouteId = {
 
   // Knowledge Base Connector Routes
   GetConnectors: "getConnectors",
+  GetConnectorLabelValues: "connectorLabelValues",
+  GetConnectorLabelKeys: "connectorLabelKeys",
   CreateConnector: "createConnector",
   GetConnector: "getConnector",
   GetConnectorDocuments: "getConnectorDocuments",
@@ -721,6 +741,8 @@ export const RouteId = {
 
   // Knowledge File Routes
   GetKnowledgeFiles: "getKnowledgeFiles",
+  GetKnowledgeFileLabelValues: "knowledgeFileLabelValues",
+  GetKnowledgeFileLabelKeys: "knowledgeFileLabelKeys",
   UploadKnowledgeFile: "uploadKnowledgeFile",
   GetKnowledgeFileContent: "getKnowledgeFileContent",
   DeleteKnowledgeFile: "deleteKnowledgeFile",
@@ -748,6 +770,8 @@ export const RouteId = {
 
   // Agent Skill Routes
   GetSkills: "getSkills",
+  GetSkillLabelValues: "skillLabelValues",
+  GetSkillLabelKeys: "skillLabelKeys",
   GetExternalMcpSkills: "getExternalMcpSkills",
   GetExternalMcpSkill: "getExternalMcpSkill",
   GetExternalMcpSkillUsageStatistics: "getExternalMcpSkillUsageStatistics",
@@ -771,6 +795,8 @@ export const RouteId = {
 
   // Plugin Routes
   GetPlugins: "getPlugins",
+  GetPluginLabelValues: "pluginLabelValues",
+  GetPluginLabelKeys: "pluginLabelKeys",
   CreatePlugin: "createPlugin",
   GetPlugin: "getPlugin",
   UpdatePlugin: "updatePlugin",

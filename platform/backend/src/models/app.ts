@@ -22,7 +22,7 @@ import {
   type InsertApp,
   isReservedAppSlug,
 } from "@/types/app";
-import type { AgentLabelWithDetails } from "@/types/label";
+import type { LabelWithDetails } from "@/types/label";
 import { isUniqueConstraintError } from "@/utils/db";
 import { isUuid } from "@/utils/uuid";
 import AppAccessModel from "./app-access";
@@ -128,7 +128,7 @@ function buildOrgFilters(params: {
  */
 async function withLabels<T extends { id: string }>(
   rows: T[],
-): Promise<(T & { labels: AgentLabelWithDetails[] })[]> {
+): Promise<(T & { labels: LabelWithDetails[] })[]> {
   if (rows.length === 0) return [];
   const labelsByApp = await AppLabelModel.getLabelsForApps(
     rows.map((row) => row.id),
@@ -142,7 +142,7 @@ async function withLabels<T extends { id: string }>(
 /** Single-row convenience wrapper around {@link withLabels}. */
 async function withLabelsOne<T extends { id: string }>(
   row: T | undefined,
-): Promise<(T & { labels: AgentLabelWithDetails[] }) | null> {
+): Promise<(T & { labels: LabelWithDetails[] }) | null> {
   if (!row) return null;
   const [hydrated] = await withLabels([row]);
   return hydrated ?? null;

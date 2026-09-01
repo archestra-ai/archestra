@@ -1,7 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
-import type { AgentAccessContext, AgentLabelWithDetails } from "@/types";
+import type { AgentAccessContext, LabelWithDetails } from "@/types";
 import AgentModel from "./agent";
 import { findAgentAccessContextById } from "./agent-access-context";
 import AgentUserModel from "./agent-user";
@@ -167,7 +167,7 @@ class AgentTeamModel {
     Array<{
       id: string;
       name: string;
-      labels: AgentLabelWithDetails[];
+      labels: LabelWithDetails[];
     }>
   > {
     const teams = await AgentTeamModel.getTeamDetailsForAgent(agentId);

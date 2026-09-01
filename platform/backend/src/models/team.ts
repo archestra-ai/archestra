@@ -3,8 +3,8 @@ import { and, count, eq, getTableColumns, ilike, inArray } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import type {
-  AgentLabelWithDetails,
   InsertTeam,
+  LabelWithDetails,
   Team,
   TeamExternalGroup,
   TeamMember,
@@ -23,7 +23,7 @@ class TeamModel {
    */
   static async create(
     input: Omit<InsertTeam, "id" | "createdAt" | "updatedAt"> & {
-      labels?: AgentLabelWithDetails[];
+      labels?: LabelWithDetails[];
     },
   ): Promise<Team> {
     logger.debug(
@@ -266,7 +266,7 @@ class TeamModel {
    */
   static async update(
     id: string,
-    input: UpdateTeam & { labels?: AgentLabelWithDetails[] },
+    input: UpdateTeam & { labels?: LabelWithDetails[] },
   ): Promise<Team | null> {
     logger.debug({ id, input }, "TeamModel.update: updating team");
     const { labels, ...columns } = input;
@@ -561,9 +561,7 @@ class TeamModel {
   static async getTeamLabelInfoForUser(params: {
     userId: string;
     organizationId: string;
-  }): Promise<
-    Array<{ id: string; name: string; labels: AgentLabelWithDetails[] }>
-  > {
+  }): Promise<Array<{ id: string; name: string; labels: LabelWithDetails[] }>> {
     const teams = await TeamModel.getUserTeamsForOrganization(params);
     if (teams.length === 0) {
       return [];

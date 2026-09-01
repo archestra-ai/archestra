@@ -5,7 +5,7 @@ import {
   OFFLINE_ACCESS_OAUTH_SCOPE,
 } from "@archestra/shared";
 import { hashPassword, verifyPassword } from "better-auth/crypto";
-import { and, eq, ilike, sql } from "drizzle-orm";
+import { and, eq, ilike, inArray, sql } from "drizzle-orm";
 import { hashOauthClientSecret } from "@/auth/oauth-client-secret";
 import db, { schema, withDbTransaction } from "@/database";
 import {
@@ -16,6 +16,7 @@ import {
 import type { ResourceVisibilityScope } from "@/types/visibility";
 import { escapeLikePattern } from "@/utils/sql-search";
 import CreatedByModel, { lookupCreator } from "./created-by";
+import { OauthClientLabelModel } from "./entity-labels";
 import OauthClientTeamModel from "./oauth-client-team";
 import UserModel from "./user";
 
@@ -29,7 +30,13 @@ class McpOauthClientModel {
      * everything; admin viewers are unfiltered.
      */
     viewer?: { userId: string; isAdmin: boolean };
+    labels?: Record<string, string[]>;
   }) {
+    const labelFilteredIds = params.labels
+      ? await OauthClientLabelModel.getIdsMatchingLabels(params.labels)
+      : undefined;
+    if (labelFilteredIds?.length === 0) return [];
+
     const rows = await db
       .select()
       .from(schema.oauthClientsTable)
@@ -47,6 +54,9 @@ class McpOauthClientModel {
             ? OauthClientTeamModel.accessibleScopeCondition(
                 params.viewer.userId,
               )
+            : undefined,
+          labelFilteredIds
+            ? inArray(schema.oauthClientsTable.id, labelFilteredIds)
             : undefined,
         ),
       )
@@ -357,10 +367,11 @@ async function hydrateOauthClients(
       ),
     ),
   ];
-  const [teamsMap, authorNames, creators] = await Promise.all([
+  const [teamsMap, authorNames, creators, labelsByClient] = await Promise.all([
     OauthClientTeamModel.getTeamDetailsForClients(teamScopedIds),
     UserModel.getNamesByIds(authorIds),
     CreatedByModel.resolve(authorIds),
+    OauthClientLabelModel.getLabelsForMany(clients.map((c) => c.id)),
   ]);
 
   return parsed.flatMap(({ client, metadata }) => {
@@ -382,6 +393,7 @@ async function hydrateOauthClients(
           : null,
         createdBy: lookupCreator(creators, metadata.authorId),
         teams: teamsMap.get(client.id) ?? [],
+        labels: labelsByClient.get(client.id) ?? [],
         createdAt: client.createdAt,
         updatedAt: client.updatedAt,
       },

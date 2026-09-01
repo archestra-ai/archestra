@@ -18,6 +18,7 @@ import {
 import type { ResourceVisibilityScope } from "@/types/visibility";
 import { escapeLikePattern } from "@/utils/sql-search";
 import CreatedByModel, { lookupCreator } from "./created-by";
+import { OauthClientLabelModel } from "./entity-labels";
 import OauthClientTeamModel from "./oauth-client-team";
 import UserModel from "./user";
 
@@ -54,9 +55,13 @@ class LlmOauthClientModel {
     search?: string;
     providerApiKeyId?: string;
     grantType?: LlmOauthClientGrantType;
+    labels?: Record<string, string[]>;
     viewer?: { userId: string; isAdmin: boolean };
   }) {
-    const whereClause = listWhereClause(params);
+    const labelFilteredIds = params.labels
+      ? await OauthClientLabelModel.getIdsMatchingLabels(params.labels)
+      : undefined;
+    const whereClause = listWhereClause({ ...params, labelFilteredIds });
     const [rows, [{ total }]] = await Promise.all([
       db
         .select()
@@ -417,8 +422,13 @@ function listWhereClause(params: {
   providerApiKeyId?: string;
   grantType?: LlmOauthClientGrantType;
   viewer?: { userId: string; isAdmin: boolean };
+  /** Client ids matching a `?labels=` filter; omit when not filtering. */
+  labelFilteredIds?: string[];
 }) {
   return and(
+    params.labelFilteredIds !== undefined
+      ? inArray(schema.oauthClientsTable.id, params.labelFilteredIds)
+      : undefined,
     sql`${schema.oauthClientsTable.metadata}->>'type' = ${LLM_OAUTH_CLIENT_METADATA_TYPE}`,
     sql`${schema.oauthClientsTable.metadata}->>'organizationId' = ${params.organizationId}`,
     params.search
@@ -482,21 +492,25 @@ async function hydrateOauthClients(
       ),
     ),
   ];
-  const [apiKeyRows, teamsMap, authorNames, creators] = await Promise.all([
-    providerApiKeyIds.length > 0
-      ? db
-          .select({
-            id: schema.llmProviderApiKeysTable.id,
-            name: schema.llmProviderApiKeysTable.name,
-            provider: schema.llmProviderApiKeysTable.provider,
-          })
-          .from(schema.llmProviderApiKeysTable)
-          .where(inArray(schema.llmProviderApiKeysTable.id, providerApiKeyIds))
-      : [],
-    OauthClientTeamModel.getTeamDetailsForClients(teamScopedIds),
-    UserModel.getNamesByIds(authorIds),
-    CreatedByModel.resolve(authorIds),
-  ]);
+  const [apiKeyRows, teamsMap, authorNames, creators, labelsByClient] =
+    await Promise.all([
+      providerApiKeyIds.length > 0
+        ? db
+            .select({
+              id: schema.llmProviderApiKeysTable.id,
+              name: schema.llmProviderApiKeysTable.name,
+              provider: schema.llmProviderApiKeysTable.provider,
+            })
+            .from(schema.llmProviderApiKeysTable)
+            .where(
+              inArray(schema.llmProviderApiKeysTable.id, providerApiKeyIds),
+            )
+        : [],
+      OauthClientTeamModel.getTeamDetailsForClients(teamScopedIds),
+      UserModel.getNamesByIds(authorIds),
+      CreatedByModel.resolve(authorIds),
+      OauthClientLabelModel.getLabelsForMany(clients.map((c) => c.id)),
+    ]);
   const apiKeyNames = new Map(apiKeyRows.map((row) => [row.id, row.name]));
 
   return parsed.flatMap(({ client, metadata }) => {
@@ -523,6 +537,7 @@ async function hydrateOauthClients(
           : null,
         createdBy: lookupCreator(creators, metadata.authorId),
         teams: teamsMap.get(client.id) ?? [],
+        labels: labelsByClient.get(client.id) ?? [],
         createdAt: client.createdAt,
         updatedAt: client.updatedAt,
       },

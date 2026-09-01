@@ -2,6 +2,7 @@ import { CreatedByNullableSchema } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { LabelWithDetailsSchema } from "./label";
 
 export const SelectServiceAccountSchema = createSelectSchema(
   schema.serviceAccountsTable,
@@ -33,6 +34,7 @@ export const ServiceAccountResponseSchema = z.object({
   disabled: z.boolean(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
+  labels: z.array(LabelWithDetailsSchema),
   tokenCount: z.number().int().nonnegative(),
   /**
    * Keys that would actually pass authentication right now: not disabled and
@@ -63,6 +65,7 @@ export const ServiceAccountTokenWithValueResponseSchema =
 export const CreateServiceAccountBodySchema = z.object({
   name: z.string().trim().min(1).max(256),
   role: z.string().trim().min(1).max(256),
+  labels: z.array(LabelWithDetailsSchema).optional(),
 });
 
 export const UpdateServiceAccountBodySchema = z
@@ -70,6 +73,7 @@ export const UpdateServiceAccountBodySchema = z
     name: z.string().trim().min(1).max(256).optional(),
     role: z.string().trim().min(1).max(256).optional(),
     disabled: z.boolean().optional(),
+    labels: z.array(LabelWithDetailsSchema).optional(),
   })
   .strict();
 

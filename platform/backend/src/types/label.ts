@@ -39,15 +39,21 @@ const labelValueSchema = z
     RESERVED_CHARS_MESSAGE,
   );
 
-// Combined label schema for easier frontend consumption
-export const AgentLabelWithDetailsSchema = z.object({
+/**
+ * A key/value label as it travels over the API, for any labelled entity.
+ *
+ * `keyId`/`valueId` are optional because a client writing labels only supplies
+ * the key and value text; the ids come back on reads.
+ */
+export const LabelWithDetailsSchema = z.object({
   key: labelKeySchema,
   value: labelValueSchema,
   keyId: UuidIdSchema.optional(),
   valueId: UuidIdSchema.optional(),
 });
 
-export const AgentLabelGetResponseSchema = z.object({
+/** A label as read back, where both ids are always resolved. */
+export const LabelGetResponseSchema = z.object({
   keyId: UuidIdSchema,
   valueId: UuidIdSchema,
   key: labelKeySchema,
@@ -63,5 +69,5 @@ export type InsertLabelValue = z.infer<typeof InsertLabelValueSchema>;
 export type AgentLabel = z.infer<typeof SelectAgentLabelSchema>;
 export type InsertAgentLabel = z.infer<typeof InsertAgentLabelSchema>;
 
-export type AgentLabelWithDetails = z.infer<typeof AgentLabelWithDetailsSchema>;
-export type AgentLabelGetResponse = z.infer<typeof AgentLabelGetResponseSchema>;
+export type LabelWithDetails = z.infer<typeof LabelWithDetailsSchema>;
+export type LabelGetResponse = z.infer<typeof LabelGetResponseSchema>;

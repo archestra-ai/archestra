@@ -104,6 +104,7 @@ function makeSkillListItem(
     organizationId: "test-org",
     authorId: "test-user-admin",
     authorName: "Admin User",
+    labels: [],
     createdBy: null,
     scope: "org",
     description: "",

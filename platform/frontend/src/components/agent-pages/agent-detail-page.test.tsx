@@ -350,7 +350,7 @@ describe("AgentDetailPage", () => {
     expect(screen.queryByText("connect content")).toBeNull();
   });
 
-  it("states the creator on the General section and nowhere else", () => {
+  it("states the creator in the header", () => {
     mockAgent({
       ...baseAgent,
       createdBy: { id: "u1", name: "Ada Lovelace", email: "ada@example.com" },
@@ -361,7 +361,10 @@ describe("AgentDetailPage", () => {
     expect(screen.getByText("Ada Lovelace")).toBeVisible();
   });
 
-  it("keeps the creator off the other sections, which repeat the record", () => {
+  it("keeps stating the creator on every section, being a fact of the record", () => {
+    // It used to sit inside the General section's body and vanish the moment
+    // you opened Tools & Knowledge, which made who-made-this look like a
+    // property of the section rather than of the record.
     mockSection("tools");
     mockAgent({
       ...baseAgent,
@@ -369,7 +372,8 @@ describe("AgentDetailPage", () => {
     });
     render(<AgentDetailPage kind="agent" id="a1" />);
 
-    expect(screen.queryByText("Created by")).toBeNull();
+    expect(screen.getByText("Created by")).toBeVisible();
+    expect(screen.getByText("Ada Lovelace")).toBeVisible();
   });
 
   it("omits the creator for a built-in record, which belongs to nobody", () => {

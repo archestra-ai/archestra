@@ -14,15 +14,37 @@
  * a fleet awake (a silent cost regression nobody notices) or scales away a
  * server an administrator explicitly pinned up.
  */
+import config from "@/config";
 import { describe, expect, test, vi } from "@/test";
 import type { McpServerHibernationMode } from "@/types";
-import { isGroupHibernationAllowed, withDeadline } from "./hibernation.ee";
+import {
+  isGroupHibernationAllowed,
+  wakeResponseBudgetMs,
+  withDeadline,
+} from "./hibernation.ee";
 
 const ALL_MODES: McpServerHibernationMode[] = [
   "inherit",
   "enabled",
   "disabled",
 ];
+
+describe("wakeResponseBudgetMs", () => {
+  // Config mutations here are restored by the shared per-test setup.
+  test("unconfigured: half the tool-call timeout, capped at 30s", () => {
+    config.mcpGateway.wakeWaitTimeoutMs = 0;
+    config.mcpGateway.toolCallTimeoutMs = 40_000;
+    expect(wakeResponseBudgetMs()).toBe(20_000);
+    config.mcpGateway.toolCallTimeoutMs = 600_000;
+    expect(wakeResponseBudgetMs()).toBe(30_000);
+  });
+
+  test("an explicit wake wait timeout is honored verbatim, even past the derived cap", () => {
+    config.mcpGateway.toolCallTimeoutMs = 60_000;
+    config.mcpGateway.wakeWaitTimeoutMs = 45_000;
+    expect(wakeResponseBudgetMs()).toBe(45_000);
+  });
+});
 
 describe("isGroupHibernationAllowed", () => {
   test("the organization toggle is the master switch: off means nothing sleeps", () => {

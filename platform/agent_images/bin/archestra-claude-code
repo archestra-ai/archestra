@@ -30,6 +30,25 @@ jq -n \
   > "${mcp_config}"
 chmod 0600 "${mcp_config}"
 
+# Pre-accept the workspace trust prompt. Claude Code asks "is this a project
+# you trust?" the first time it opens a directory, and --dangerously-skip-
+# permissions does NOT cover it. Print mode never renders the prompt, so this
+# was invisible until delegated runs started using the TUI — and then the
+# session sat on the dialog with nobody able to answer, burning the whole run.
+# Merged rather than written, because Claude Code rewrites this file as it runs.
+claude_json="${HOME}/.claude.json"
+workspace="$(pwd)"
+trust_patch="$(jq -n --arg dir "${workspace}" \
+  '{hasCompletedOnboarding:true,bypassPermissionsModeAccepted:true,
+    projects:{($dir):{hasTrustDialogAccepted:true}}}')"
+if [[ -s "${claude_json}" ]] && jq -e . "${claude_json}" >/dev/null 2>&1; then
+  merged="$(jq --argjson patch "${trust_patch}" '. * $patch' "${claude_json}")"
+else
+  merged="${trust_patch}"
+fi
+printf '%s\n' "${merged}" > "${claude_json}"
+chmod 0600 "${claude_json}"
+
 args=(
   --model "${ARCHESTRA_AGENT_BACKGROUND_EXECUTION_NATIVE_MODEL:?}"
   --permission-mode bypassPermissions

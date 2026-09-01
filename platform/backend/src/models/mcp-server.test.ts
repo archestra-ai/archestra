@@ -502,6 +502,82 @@ describe("McpServerModel", () => {
     });
   });
 
+  describe("findAll filters", () => {
+    test("catalogId returns only that catalog's installs", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const wanted = await makeInternalMcpCatalog();
+      const other = await makeInternalMcpCatalog();
+      const wantedServer = await makeMcpServer({ catalogId: wanted.id });
+      const otherServer = await makeMcpServer({ catalogId: other.id });
+
+      const servers = await McpServerModel.findAll(
+        undefined,
+        true,
+        undefined,
+        undefined,
+        undefined,
+        { catalogId: wanted.id },
+      );
+
+      const ids = servers.map((s) => s.id);
+      expect(ids).toContain(wantedServer.id);
+      expect(ids).not.toContain(otherServer.id);
+    });
+
+    test("excludeServerTypes drops matching installs", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const appCatalog = await makeInternalMcpCatalog({ serverType: "app" });
+      const appServer = await makeMcpServer({
+        catalogId: appCatalog.id,
+        serverType: "app",
+      });
+      const remoteServer = await makeMcpServer({ serverType: "remote" });
+
+      const servers = await McpServerModel.findAll(
+        undefined,
+        true,
+        undefined,
+        undefined,
+        undefined,
+        { excludeServerTypes: ["app"] },
+      );
+
+      const ids = servers.map((s) => s.id);
+      expect(ids).toContain(remoteServer.id);
+      expect(ids).not.toContain(appServer.id);
+    });
+
+    test("assigned users survive the filtered query", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeUser,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const server = await makeMcpServer({ catalogId: catalog.id });
+      const user = await makeUser();
+      await McpServerUserModel.assignUserToMcpServer(server.id, user.id);
+
+      const [found] = await McpServerModel.findAll(
+        undefined,
+        true,
+        undefined,
+        undefined,
+        undefined,
+        { catalogId: catalog.id },
+      );
+
+      expect(found.id).toBe(server.id);
+      expect(found.users).toEqual([user.id]);
+      expect(found.userDetails).toEqual([
+        expect.objectContaining({ userId: user.id, email: user.email }),
+      ]);
+    });
+  });
+
   describe("findAll with scope filter", () => {
     test("returns the owner's personal installation from a global catalog when organization-scoped", async ({
       makeInternalMcpCatalog,

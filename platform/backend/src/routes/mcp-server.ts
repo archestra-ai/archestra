@@ -198,17 +198,18 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         undefined,
         userIsPredefinedAdmin,
+        {
+          // Narrowed in SQL rather than over the returned array: the chat page
+          // asks for one catalog's installs alongside the full list, and
+          // post-filtering made that request load and decorate every install
+          // in the organization before discarding all but one.
+          catalogId,
+          // serverType:"app" backings are managed on the Apps surface, not
+          // listed as MCP servers — keep them out of the user-facing server
+          // list (and its consumers like the agent tool-assignment picker).
+          excludeServerTypes: ["app"],
+        },
       );
-
-      // serverType:"app" backings are managed on the Apps surface, not listed as
-      // MCP servers — keep them out of the user-facing server list (and its
-      // consumers like the agent tool-assignment picker).
-      allServers = allServers.filter((s) => s.serverType !== "app");
-
-      // Filter by catalogId if provided
-      if (catalogId) {
-        allServers = allServers.filter((s) => s.catalogId === catalogId);
-      }
 
       if (assignmentScope) {
         const target = {

@@ -198,6 +198,33 @@ describe("AgentToolModel.getAssignedAgentDetailsForMcpServers", () => {
     ]);
   });
 
+  // The pinned and unpinned rules are fetched separately, so an agent holding
+  // both kinds of assignment for one server appears in both result sets.
+  test("lists an agent once when it matches both the pinned and unpinned rule", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const catalog = await makeInternalMcpCatalog();
+    const server = await makeMcpServer({ catalogId: catalog.id });
+    const pinnedTool = await makeTool({ catalogId: catalog.id });
+    const unpinnedTool = await makeTool({ catalogId: catalog.id });
+
+    const agent = await makeAgent({ name: "Both Rules Agent" });
+    await makeAgentTool(agent.id, pinnedTool.id, { mcpServerId: server.id });
+    await makeAgentTool(agent.id, unpinnedTool.id);
+
+    const result = await AgentToolModel.getAssignedAgentDetailsForMcpServers([
+      server.id,
+    ]);
+
+    expect(result.get(server.id)).toEqual([
+      expect.objectContaining({ id: agent.id, name: "Both Rules Agent" }),
+    ]);
+  });
+
   test("excludes soft-deleted agents and returns empty arrays for unused servers", async ({
     makeAgent,
     makeTool,

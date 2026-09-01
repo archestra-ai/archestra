@@ -814,7 +814,7 @@ export async function convertToolResultsToToon(
         const unwrapped = unwrapToolContent(toolMsg.content);
         const parsedRes = safeJsonParse(unwrapped);
         if (!parsedRes.ok) {
-          logger.info(
+          logger.debug(
             {
               toolCallId: toolMsg.tool_call_id,
               contentPreview: toolMsg.content.substring(0, 100),
@@ -840,7 +840,7 @@ export async function convertToolResultsToToon(
           totalTokensBefore += tokensBefore;
           totalTokensAfter += tokensAfter;
 
-          logger.info(
+          logger.debug(
             {
               toolCallId: toolMsg.tool_call_id,
               beforeLength: noncompressed.length,
@@ -858,7 +858,7 @@ export async function convertToolResultsToToon(
             content: compressed,
           };
         } else {
-          logger.info(
+          logger.debug(
             {
               toolCallId: toolMsg.tool_call_id,
               beforeLength: noncompressed.length,
@@ -873,7 +873,7 @@ export async function convertToolResultsToToon(
           return message;
         }
       } catch {
-        logger.info(
+        logger.debug(
           {
             toolCallId: toolMsg.tool_call_id,
             contentPreview: toolMsg.content.substring(0, 100),

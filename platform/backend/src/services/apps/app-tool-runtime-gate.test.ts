@@ -9,6 +9,7 @@ import {
   TOOL_APP_LLM_COMPLETE_SHORT_NAME,
   TOOL_COPY_FILE_SHORT_NAME,
   TOOL_EDIT_APP_SHORT_NAME,
+  TOOL_LIST_AGENT_EXECUTIONS_SHORT_NAME,
   TOOL_PUBLISH_APP_SHORT_NAME,
   TOOL_READ_FILE_RAW_SHORT_NAME,
   TOOL_READ_FILE_SHORT_NAME,
@@ -192,6 +193,16 @@ test("refuses a management Archestra tool, allows the reserved app built-ins", a
     ...BASE,
   });
   expect(llm).toEqual({ allowed: true, kind: "app-builtin" });
+
+  const executions = await gateAppToolCall({
+    appId,
+    organizationId,
+    userId,
+    toolName: getArchestraToolFullName(TOOL_LIST_AGENT_EXECUTIONS_SHORT_NAME),
+    toolInput: {},
+    ...BASE,
+  });
+  expect(executions).toEqual({ allowed: true, kind: "app-builtin" });
 
   // The file tools: an app's own per-viewer file store, dispatchable in-process
   // like the data store. They exist only under the sandbox runtime flag.

@@ -16,6 +16,7 @@ import {
   RefreshCw,
   Server,
   Sparkles,
+  Tags,
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
@@ -25,6 +26,7 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
+import { EntityLabelsDialog } from "@/components/entity-labels-dialog";
 import {
   CollectionFilters,
   FilterBar,
@@ -78,6 +80,7 @@ import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { ACTION_LABEL, notYoursToChange } from "@/lib/design/resource-lexicon";
 import {
+  useSaveSkillLabels,
   useSkillLabelKeys,
   useSkillLabelValues,
 } from "@/lib/entity-labels.query";
@@ -354,6 +357,8 @@ function SkillsList() {
   }, [editId, router]);
 
   const [deletingSkill, setDeletingSkill] = useState<SkillItem | null>(null);
+  const [labelingSkill, setLabelingSkill] = useState<SkillItem | null>(null);
+  const saveSkillLabels = useSaveSkillLabels();
   const [bulkVisibilityOpen, setBulkVisibilityOpen] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [permanentlyDeletingSkill, setPermanentlyDeletingSkill] =
@@ -568,6 +573,14 @@ function SkillsList() {
             label: historyAction.label,
             permissions: historyAction.permissions,
             onClick: () => setHistorySkillId(skill.id),
+          },
+          {
+            icon: <Tags className="h-4 w-4" />,
+            label: "Edit labels",
+            permissions: editAction.permissions,
+            disabled: !canModify,
+            disabledTooltip: notYours,
+            onClick: () => setLabelingSkill(skill),
           },
           {
             icon: <Trash2 className="h-4 w-4" />,
@@ -1097,6 +1110,18 @@ function SkillsList() {
           skill={deletingSkill}
           open={!!deletingSkill}
           onOpenChange={(open) => !open && setDeletingSkill(null)}
+        />
+      )}
+
+      {labelingSkill && (
+        <EntityLabelsDialog
+          open={!!labelingSkill}
+          onOpenChange={(open) => !open && setLabelingSkill(null)}
+          entityName={labelingSkill.name}
+          labels={labelingSkill.labels}
+          onSave={(labels) =>
+            saveSkillLabels.mutateAsync({ id: labelingSkill.id, labels })
+          }
         />
       )}
 

@@ -11,6 +11,7 @@ import {
   MessageSquare,
   Pencil,
   Plus,
+  Tags,
   Trash2,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -20,11 +21,15 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
+import { EntityLabelFilter } from "@/components/entity-label-filter";
+import { EntityLabelsDialog } from "@/components/entity-labels-dialog";
 import {
   CollectionFilters,
   FilterBar,
+  filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
+import { LabelTags } from "@/components/label-tags";
 import { LoadingState } from "@/components/loading";
 import {
   PERMANENT_DELETE_LABEL,
@@ -89,6 +94,11 @@ import { EditConnectorDialog } from "./_parts/edit-connector-dialog";
 import { EditKnowledgeBaseDialog } from "./_parts/edit-knowledge-base-dialog";
 import { KnowledgeBaseCard } from "./_parts/knowledge-base-card";
 import { useChatWithKnowledgeBase } from "./_parts/use-chat-with-knowledge-base";
+import {
+  useKnowledgeBaseLabelKeys,
+  useKnowledgeBaseLabelValues,
+  useSaveKnowledgeBaseLabels,
+} from "@/lib/entity-labels.query";
 
 type KnowledgeBaseItem =
   archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"][number];
@@ -117,6 +127,8 @@ function KnowledgeBasesList() {
   // The trash view; the backend gates the deleted slice on
   // `knowledgeSource:delete`, and the status filter itself is gated the same way.
   const isDeletedView = searchParams.get("status") === "deleted";
+  // Label filtering is server-side, so the value rides the list query.
+  const labelsFilter = searchParams.get("labels") || undefined;
   const pageIndex = Number(pageFromUrl || "1") - 1;
   const pageSize = Number(pageSizeFromUrl || DEFAULT_TABLE_LIMIT);
   const offset = pageIndex * pageSize;
@@ -132,8 +144,11 @@ function KnowledgeBasesList() {
     offset,
     search: search || undefined,
     status: isDeletedView ? "deleted" : undefined,
+    labels: labelsFilter,
   });
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [labelingKb, setLabelingKb] = useState<KnowledgeBaseItem | null>(null);
+  const saveKbLabels = useSaveKnowledgeBaseLabels();
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [permanentlyDeletingKb, setPermanentlyDeletingKb] =
     useState<KnowledgeBaseItem | null>(null);
@@ -265,6 +280,12 @@ function KnowledgeBasesList() {
       const hasDocs = kb.totalDocsIndexed > 0;
       return [
         {
+          icon: <Tags className="h-4 w-4" />,
+          label: "Edit labels",
+          permissions: { knowledgeSource: ["update"] },
+          onClick: () => setLabelingKb(kb),
+        },
+        {
           icon: <MessageSquare className="h-4 w-4" />,
           label: "Talk to Knowledge Base",
           onClick: () => startChat(kb),
@@ -311,7 +332,10 @@ function KnowledgeBasesList() {
         const kb = row.original;
         return (
           <div className="min-w-0">
-            <div className="truncate font-medium">{kb.name}</div>
+            <div className="flex min-w-0 items-baseline gap-2">
+              <span className="truncate font-medium">{kb.name}</span>
+              <LabelTags labels={kb.labels} />
+            </div>
             {kb.description && (
               <div className="truncate text-xs text-muted-foreground">
                 {kb.description}
@@ -467,6 +491,13 @@ function KnowledgeBasesList() {
               <ResourceDeletedStatusFilter
                 deletePermission={{ knowledgeSource: ["delete"] }}
               />
+              <EntityLabelFilter
+                useLabelKeys={useKnowledgeBaseLabelKeys}
+                useLabelValues={useKnowledgeBaseLabelValues}
+                className={filterControlClass({
+                  active: Boolean(labelsFilter),
+                })}
+              />
             </FilterBar>
           </CollectionFilters>
 
@@ -609,6 +640,18 @@ function KnowledgeBasesList() {
             open={isCreateDialogOpen}
             onOpenChange={setIsCreateDialogOpen}
           />
+
+          {labelingKb && (
+            <EntityLabelsDialog
+              open={!!labelingKb}
+              onOpenChange={(open) => !open && setLabelingKb(null)}
+              entityName={labelingKb.name}
+              labels={labelingKb.labels}
+              onSave={(labels) =>
+                saveKbLabels.mutateAsync({ id: labelingKb.id, labels })
+              }
+            />
+          )}
 
           {editingItem && (
             <EditKnowledgeBaseDialog

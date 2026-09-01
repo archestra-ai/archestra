@@ -81,12 +81,15 @@ export function GithubAuthConfigFields({
         <div className="space-y-2">
           <Label htmlFor="github-app-config">GitHub App Configuration</Label>
           {githubAppConfigs.length > 0 ? (
-            <FieldDescription>
+            // Distinct keys: without them React reconciles the two branches as
+            // one element and Chrome page-translate crashes on the bare text
+            // it re-parented (facebook/react#11538).
+            <FieldDescription key="configured">
               {configuredDescription} <GithubAppSettingsLink />.{" "}
               {appConfigDescription}
             </FieldDescription>
           ) : (
-            <FieldDescription>
+            <FieldDescription key="none">
               Create one in <GithubAppSettingsLink />. {appConfigDescription}
             </FieldDescription>
           )}

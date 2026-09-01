@@ -1737,12 +1737,16 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
   - Default: `90` (seconds)
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_SOURCE_REF`** - Development override for where the Archestra VAF Add On install script gets the add-on.
-  - Default: unset (the script uses the pre-built package of the newest `m-files-vaf-add-on-v*` release)
+  - Default: unset (the script uses the package compiled into the platform image; outside the image it falls back to the newest `m-files-vaf-add-on-v*` release)
   - Set a git ref of `archestra-ai/archestra` (a pushed commit SHA, branch, or tag) to have the script install that ref's CI-built package, or compile from that ref's source when no CI build exists. The special value `local` uses the backend checkout's HEAD commit. Leave unset in production.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN`** - GitHub token used to fetch the source ref's CI-built add-on package.
   - Default: unset
   - GitHub requires authentication for Actions artifact downloads, even on public repositories. Only read when the source-ref override is set; without a token the install script compiles the add-on from source. The backend proxies the package — the token never reaches clients.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_PACKAGE_DIR`** - Directory with the VAF Add On package compiled into the platform image.
+  - Default: `/app/mfiles-vaf-add-on` (where the image puts it)
+  - The backend serves the install script and the connector form's download from this directory. Deployments running outside the image have no such directory and fall back to the source-ref override or the newest add-on release. There is no reason to change this in a standard deployment.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_STALLED_EMBEDDING_AGE_SECONDS`** - How long a document may sit un-embedded before the recovery sweep re-enqueues it.
   - Default: `900` (15 minutes)

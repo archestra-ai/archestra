@@ -15,7 +15,10 @@ import {
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { ChannelDetailsDialog } from "@/app/settings/messaging-channels/_components/channel-details-dialog";
+import {
+  ChannelDetailsDialog,
+  channelDisplayName,
+} from "@/app/settings/messaging-channels/_components/channel-details-dialog";
 import { AgentEmailSettingsDialog } from "@/app/settings/messaging-channels/email/agent-email-settings-dialog";
 import { AgentIcon } from "@/components/agent-icon";
 import { ChannelIcon } from "@/components/channel-icon";
@@ -1307,7 +1310,7 @@ function buildAssignmentOptions({
     return {
       id: binding.id,
       provider: binding.provider,
-      name: channelName(binding),
+      name: channelDisplayName(binding),
       ownerEmail: binding.isDm ? binding.dmOwnerEmail : null,
       workspaceName: binding.workspaceName,
       assignedAgentId: binding.agentId,
@@ -1385,7 +1388,7 @@ function buildAssignmentPlan({
               bindingId: binding.id,
               expectedAgentId: binding.agentId,
               provider: binding.provider as ChatProvider,
-              channelName: channelName(binding),
+              channelName: channelDisplayName(binding),
               agentName: agentNames.get(binding.agentId) ?? "another agent",
               isDm: binding.isDm,
             },
@@ -1574,17 +1577,4 @@ function PlainChannelIdentity({
       <span className="break-words leading-5">{name}</span>
     </span>
   );
-}
-
-/**
- * Every direct message is called "Direct message", so a pool with more than
- * one of them offered a column of identical rows — and the transfer dialog
- * then asked you to confirm a move of, simply, "Direct message". The owner is
- * the only thing that tells them apart.
- */
-function channelName(binding: Binding) {
-  if (!binding.isDm) return binding.channelName ?? binding.channelId;
-  return binding.dmOwnerEmail
-    ? `Direct message (${binding.dmOwnerEmail})`
-    : "Direct message";
 }

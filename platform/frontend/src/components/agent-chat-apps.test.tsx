@@ -1104,6 +1104,40 @@ describe("AgentChatAppsEditor", () => {
     }
   });
 
+  it("titles a direct message's settings by its owner, not its provider id", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useAllChatOpsBindings).mockReturnValue({
+      data: {
+        bindings: [
+          {
+            ...bindings[0],
+            id: "binding-dm",
+            channelId: "19:dm000001@thread.tacv2",
+            channelName: null,
+            isDm: true,
+            dmOwnerEmail: "admin@example.com",
+            agentId: "agent-1",
+          },
+        ],
+      },
+      isPending: false,
+      isLoadingError: false,
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      fetchNextPage: vi.fn(),
+      refetch: refetchBindings,
+    } as never);
+    render(<AgentChatApps agent={agent} />);
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Direct message (admin@example.com)",
+    });
+    // The raw id belongs in the fact list, not in the heading.
+    expect(within(dialog).getByText("Chat ID")).toBeVisible();
+    expect(dialog).toHaveTextContent("for messages from this direct message.");
+  });
+
   it("names the direct message a transfer is about, and calls it one", async () => {
     const user = userEvent.setup();
     const dmBinding = {

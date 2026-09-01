@@ -31,6 +31,26 @@ import { cn } from "@/lib/utils";
 type Binding =
   archestraApiTypes.ListChatOpsBindingsResponses["200"]["data"][number];
 
+/**
+ * What to call a binding on screen.
+ *
+ * A direct message has no channel name, so falling back to the provider's id
+ * titled this dialog "19:dm000001@thread.tacv2" — and every direct message in
+ * a list "Direct message", with nothing to tell two of them apart. The owner
+ * is the only distinguishing thing either one has.
+ */
+export function channelDisplayName(binding: {
+  isDm?: boolean;
+  channelName?: string | null;
+  channelId: string;
+  dmOwnerEmail?: string | null;
+}) {
+  if (!binding.isDm) return binding.channelName || binding.channelId;
+  return binding.dmOwnerEmail
+    ? `Direct message (${binding.dmOwnerEmail})`
+    : "Direct message";
+}
+
 export function ChannelDetailsDialog({
   binding,
   assignedAgent,
@@ -86,7 +106,10 @@ export function ChannelDetailsDialog({
     onOpenChange,
   });
   if (!binding || !provider) return null;
-  const channelLabel = binding.channelName || binding.channelId;
+  const channelLabel = channelDisplayName(binding);
+  // A direct message is not a channel, and saying so in the one dialog that
+  // configures it saves the reader working out which of the two they have.
+  const noun = binding.isDm ? "direct message" : "channel";
 
   return (
     <>
@@ -112,7 +135,7 @@ export function ChannelDetailsDialog({
 
           <DialogBody className="space-y-5">
             <dl className="grid gap-x-6 gap-y-4 border-y py-4 sm:grid-cols-2">
-              <ChannelFact label="Channel ID">
+              <ChannelFact label={binding.isDm ? "Chat ID" : "Channel ID"}>
                 <code className="break-all text-xs">{binding.channelId}</code>
               </ChannelFact>
               <ChannelFact label="Assigned agent">
@@ -149,7 +172,11 @@ export function ChannelDetailsDialog({
 
             <div className="space-y-2">
               <SystemPromptEditor
-                title="Channel instructions"
+                title={
+                  binding.isDm
+                    ? "Conversation instructions"
+                    : "Channel instructions"
+                }
                 value={instructions}
                 onChange={setInstructions}
                 readOnly={readOnly || isSaving}
@@ -157,7 +184,7 @@ export function ChannelDetailsDialog({
               />
               <p className="text-xs text-muted-foreground">
                 These instructions take priority over the agent system prompt
-                for messages from this channel.
+                for messages from this {noun}.
               </p>
               <p
                 className={cn(

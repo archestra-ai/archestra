@@ -203,11 +203,17 @@ import { useAssignableTeams } from "@/lib/teams/team.query";
 import { cn, isReportedApiError } from "@/lib/utils";
 import { useAgentEnvironmentConflicts } from "./agent-environment-conflicts";
 import {
+  assignedSubagentsSummary,
+  assignedToolsSummary,
+  excludedSourcesSummary,
+  excludedSubagentsSummary,
+  excludedToolsSummary,
   getDescriptionPlaceholder,
   getNamePlaceholder,
   MISSING_CREDENTIAL_BEHAVIOR_OPTIONS,
   MISSING_CREDENTIAL_TONE,
   normalizeSuggestedPrompts,
+  publishedSkillsSummary,
   shouldOfferAppCatalogs,
   shouldShowDescriptionField,
   TOOL_CONNECTION_PROMPTING,
@@ -499,8 +505,26 @@ function SubagentsEditor({
     selectedAgentIds.includes(a.id),
   );
 
+  // Same rule as the knowledge editor: nothing excluded is a complete answer,
+  // nothing delegated is a state worth naming.
+  const isEmpty = tone === "delegate" && selectedAgents.length === 0;
+
   return (
-    <div className="flex flex-wrap gap-2">
+    <div
+      className={cn(
+        "flex flex-wrap gap-2",
+        isEmpty &&
+          "flex-col items-center rounded-md border border-dashed px-4 py-6 text-center",
+      )}
+    >
+      {isEmpty && (
+        <div className="space-y-0.5">
+          <p className="text-sm font-medium">No subagents assigned</p>
+          <p className="text-xs text-muted-foreground">
+            Every task is handled here, with nothing handed on.
+          </p>
+        </div>
+      )}
       {selectedAgents.map((agent) => (
         <SubagentPill
           key={agent.id}
@@ -1251,21 +1275,31 @@ export function AgentForm({
     );
   // Knowledge needs an embedding model before either field can do anything, so
   // both modes say so in the same place and with the same words.
+  /**
+   * Knowledge is set up once for the organization, so this is a step nobody has
+   * taken rather than anything wrong with this record. As a bare grey sentence
+   * under a "(0)" count it read as the latter; framed, it reads as the former,
+   * and carries the way out where the reader can take it.
+   */
   const knowledgeNotConfiguredNotice = (
-    <p className="text-xs text-muted-foreground">
-      Configure an embedding model to use knowledge sources.
+    <div className="rounded-md border bg-muted/40 px-4 py-3">
+      <p className="text-sm font-medium">Knowledge isn&apos;t set up</p>
+      <p className="mt-0.5 text-xs text-muted-foreground">
+        An embedding model is configured once for the organization. Sources can
+        be assigned once it is.
+      </p>
       {canAccessKnowledgeSettings && (
-        <>
-          {" "}
-          <Link
-            href="/settings/knowledge"
-            className="underline underline-offset-2"
-          >
-            Configure knowledge
-          </Link>
-        </>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="mt-3"
+          asChild
+        >
+          <Link href="/settings/knowledge">Configure knowledge</Link>
+        </Button>
       )}
-    </p>
+    </div>
   );
   // Skills published over `skill://`. Auto exposes every org-scoped skill in the
   // agent's environment minus exclusions; Custom publishes exactly the assigned
@@ -2950,25 +2984,46 @@ export function AgentForm({
             >
               {/* Section 3: Tools & Knowledge Sources */}
               {showTools && (
-                <SettingsSection data-testid={E2eTestId.AgentToolsSection}>
-                  <div className="space-y-2">
-                    <Tabs
-                      value={autoToolsMode ? "auto" : "custom"}
-                      onValueChange={(value) => {
-                        const auto = value === "auto";
-                        setAccessAllTools(auto);
-                        // Dynamic access only works through the search/run
-                        // dispatch surface, so picking it enables that mode.
-                        if (auto) {
-                          setToolExposureMode("search_and_run_only");
-                        }
-                      }}
-                    >
-                      <TabsList className="grid w-full grid-cols-2">
-                        <TabsTrigger value="auto">Auto</TabsTrigger>
-                        <TabsTrigger value="custom">Custom</TabsTrigger>
-                      </TabsList>
-                    </Tabs>
+                <SettingsSection
+                  title="Tools &amp; Knowledge"
+                  description="What this agent can call while it works, and what it can search before answering."
+                  data-testid={E2eTestId.AgentToolsSection}
+                >
+                  <div className="space-y-3">
+                    {/* What the mode means, beside the control that sets it.
+                        A full-width tab bar over the whole panel read as the
+                        page's own navigation rather than this block's switch,
+                        and the count it governed sat somewhere else entirely.
+                        Both panels stay mounted, so the sentence is resolved
+                        here rather than inside either of them. */}
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <p className="text-sm text-muted-foreground">
+                        {autoToolsMode
+                          ? exclusionsState
+                            ? excludedToolsSummary(
+                                exclusionsState.current.excludedToolIds.length,
+                              )
+                            : "Every tool."
+                          : assignedToolsSummary(selectedToolsCount)}
+                      </p>
+                      <Tabs
+                        value={autoToolsMode ? "auto" : "custom"}
+                        onValueChange={(value) => {
+                          const auto = value === "auto";
+                          setAccessAllTools(auto);
+                          // Dynamic access only works through the search/run
+                          // dispatch surface, so picking it enables that mode.
+                          if (auto) {
+                            setToolExposureMode("search_and_run_only");
+                          }
+                        }}
+                      >
+                        <TabsList>
+                          <TabsTrigger value="auto">Auto</TabsTrigger>
+                          <TabsTrigger value="custom">Custom</TabsTrigger>
+                        </TabsList>
+                      </Tabs>
+                    </div>
                     {/* Auto and Custom are the same pair of fields inversed —
                         every tool and source minus a set, or exactly a set — so
                         they carry the same order, the same widgets and the same
@@ -2981,17 +3036,10 @@ export function AgentForm({
                         !autoToolsMode && "hidden",
                       )}
                     >
-                      <div className="space-y-2">
-                        <p className="text-sm text-muted-foreground">
-                          {/* No count until the editor has loaded: it opens on
-                              a server-side pre-fill, so "(0)" would be a claim
-                              that nothing is excluded rather than "not yet
-                              known". */}
-                          All tools except
-                          {exclusionsState
-                            ? ` (${exclusionsState.current.excludedToolIds.length})`
-                            : ""}
-                        </p>
+                      <div
+                        className="space-y-2"
+                        data-testid={E2eTestId.AgentToolExclusions}
+                      >
                         <AgentToolExclusionsEditor
                           ref={agentToolExclusionsEditorRef}
                           agentId={agent?.id}
@@ -3004,8 +3052,9 @@ export function AgentForm({
                       {canReadKnowledgeBase && (
                         <div className="space-y-2">
                           <p className="text-sm text-muted-foreground">
-                            All knowledge sources except (
-                            {disabledKnowledgeSourceIds.length})
+                            {excludedSourcesSummary(
+                              disabledKnowledgeSourceIds.length,
+                            )}
                           </p>
                           {isKnowledgeConfigured ? (
                             <KnowledgeSourcesEditor
@@ -3044,29 +3093,18 @@ export function AgentForm({
                         autoToolsMode && "hidden",
                       )}
                     >
-                      <div className="space-y-2">
-                        <p className="text-sm text-muted-foreground">
-                          Tools ({selectedToolsCount})
-                        </p>
-                        {((!agent && selectedToolsCount > 0) ||
-                          environmentScopingEnabled) && (
+                      <div
+                        className="space-y-2"
+                        data-testid={E2eTestId.AgentToolAssignments}
+                      >
+                        {/* The environment scope moved into the server
+                            picker, where the list it describes actually is —
+                            here it sat over the pills a pick produces, which
+                            it says nothing about. */}
+                        {!agent && selectedToolsCount > 0 && (
                           <p className="text-xs text-muted-foreground">
-                            {!agent && selectedToolsCount > 0 && (
-                              <>
-                                Some recommended {appName} MCP tools are
-                                pre-selected for you.{" "}
-                              </>
-                            )}
-                            {environmentScopingEnabled && (
-                              <>
-                                MCP servers are filtered to the selected
-                                environment
-                                {agentEnvironmentName
-                                  ? ` ("${agentEnvironmentName}")`
-                                  : " (Default)"}
-                                .
-                              </>
-                            )}
+                            Some recommended {appName} MCP tools are
+                            pre-selected for you.
                           </p>
                         )}
                         <AgentToolsEditor
@@ -3119,83 +3157,60 @@ export function AgentForm({
                       )}
                     </div>
                   </div>
+                </SettingsSection>
+              )}
 
-                  {/* Auto mode is progressive loading — dynamic access only
-                      works through the search/run dispatch surface, and the
-                      backend coerces the mode to match on every write path. The
-                      row used to be hidden there, which left the one setting
-                      Auto decides for you invisible; it now shows in both
-                      modes, on and locked in Auto. The row reads like the
-                      detail page's: the setting's icon tinted by its state, and
-                      a line on what the state means. */}
-                  <div className="flex items-center gap-3">
-                    <SettingIcon tone={progressiveToolLoading ? "on" : "off"}>
-                      <PackageSearch className="size-4" />
-                    </SettingIcon>
-                    <div className="min-w-0 flex-1 space-y-0.5">
-                      <Label htmlFor="load-tools-when-needed">
-                        Progressive tool loading
-                      </Label>
-                      <p className="text-xs text-muted-foreground">
-                        {/* Word for word the detail page's "Tools loaded"
-                            row, so the setting reads the same where it is
-                            chosen and where it is reported. */}
-                        {progressiveToolLoading ? (
-                          <>
-                            The model starts with{" "}
-                            <code>{TOOL_SEARCH_TOOLS_SHORT_NAME}</code> and{" "}
-                            <code>{TOOL_RUN_TOOL_SHORT_NAME}</code> only, and
-                            reaches the rest by searching for them
-                            mid-conversation.
-                          </>
-                        ) : (
-                          <>
-                            Every assigned tool is in the model's context from
-                            the first message.
-                          </>
-                        )}{" "}
-                        {autoToolsMode && <>Auto mode always uses it. </>}
-                        <ExternalDocsLink
-                          href={toolExposureDocsUrl}
-                          className="underline"
-                          showIcon={false}
-                        >
-                          Learn more
-                        </ExternalDocsLink>
-                      </p>
-                    </div>
-                    <Switch
-                      id="load-tools-when-needed"
-                      checked={progressiveToolLoading}
-                      disabled={autoToolsMode}
-                      onCheckedChange={(checked) =>
-                        setToolExposureMode(
-                          checked ? "search_and_run_only" : "full",
-                        )
-                      }
-                    />
-                  </div>
-
-                  {/* Only meaningful for Custom mode: an Auto agent resolves
-                      tools from what each caller can already reach, so no
-                      caller can be missing a connection. */}
-                  {!autoToolsMode && (
-                    <div className="flex items-center gap-3">
-                      <SettingIcon
-                        tone={
-                          MISSING_CREDENTIAL_TONE[missingCredentialBehavior]
-                        }
-                      >
-                        <Unplug className="size-4" />
+              {/* Section 3b: how tools reach the model. Their own section
+                  rather than a tail on the tools list: neither decides which
+                  tools exist, and unlabelled they read as footnotes to the
+                  pill row above them. */}
+              {showTools && (
+                <SettingsSection
+                  title="Loading"
+                  description="When tools reach the model, and how."
+                  data-testid={E2eTestId.AgentToolLoadingSection}
+                >
+                  {/* Ruled apart: two settings rows of different heights read
+                      as one run-on paragraph when they only have whitespace
+                      between them. */}
+                  <div className="divide-y divide-border">
+                    {/* Auto mode is progressive loading — dynamic access only
+                        works through the search/run dispatch surface, and the
+                        backend coerces the mode to match on every write path. The
+                        row used to be hidden there, which left the one setting
+                        Auto decides for you invisible; it now shows in both
+                        modes, on and locked in Auto. The row reads like the
+                        detail page's: the setting's icon tinted by its state, and
+                        a line on what the state means. */}
+                    <div className="flex items-center gap-3 pb-4">
+                      <SettingIcon tone={progressiveToolLoading ? "on" : "off"}>
+                        <PackageSearch className="size-4" />
                       </SettingIcon>
                       <div className="min-w-0 flex-1 space-y-0.5">
-                        <Label htmlFor="missing-credential-behavior">
-                          Tool connections
+                        <Label htmlFor="load-tools-when-needed">
+                          Progressive tool loading
                         </Label>
                         <p className="text-xs text-muted-foreground">
-                          {TOOL_CONNECTION_PROMPTING[missingCredentialBehavior]}{" "}
+                          {/* Word for word the detail page's "Tools loaded"
+                              row, so the setting reads the same where it is
+                              chosen and where it is reported. */}
+                          {progressiveToolLoading ? (
+                            <>
+                              The model starts with{" "}
+                              <code>{TOOL_SEARCH_TOOLS_SHORT_NAME}</code> and{" "}
+                              <code>{TOOL_RUN_TOOL_SHORT_NAME}</code> only, and
+                              reaches the rest by searching for them
+                              mid-conversation.
+                            </>
+                          ) : (
+                            <>
+                              Every assigned tool is in the model's context from
+                              the first message.
+                            </>
+                          )}{" "}
+                          {autoToolsMode && <>Auto mode always uses it. </>}
                           <ExternalDocsLink
-                            href={toolConnectionsDocsUrl}
+                            href={toolExposureDocsUrl}
                             className="underline"
                             showIcon={false}
                           >
@@ -3203,49 +3218,97 @@ export function AgentForm({
                           </ExternalDocsLink>
                         </p>
                       </div>
-                      <Select
-                        value={missingCredentialBehavior}
-                        onValueChange={(value) =>
-                          setMissingCredentialBehavior(
-                            value as MissingCredentialBehavior,
+                      <Switch
+                        id="load-tools-when-needed"
+                        checked={progressiveToolLoading}
+                        disabled={autoToolsMode}
+                        onCheckedChange={(checked) =>
+                          setToolExposureMode(
+                            checked ? "search_and_run_only" : "full",
                           )
                         }
-                      >
-                        {/* Fixed width: the trigger is `w-fit` by default, so
-                            the row would reflow by ~33px as the value changes. */}
-                        <SelectTrigger
-                          id="missing-credential-behavior"
-                          className="w-[240px]"
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        {/* `popper` is what makes `align` bind at all: the
-                            default `item-aligned` positioning clamps only the
-                            popover's left edge, so it ended flush with the
-                            browser window — over 100px outside the wizard's
-                            panel on a wide screen. Anchored to the trigger's
-                            right edge it stays in the column, and 28rem keeps
-                            every option's explainer at two lines. */}
-                        <SelectContent
-                          position="popper"
-                          align="end"
-                          className="w-[28rem] max-w-[calc(100vw-2rem)]"
-                        >
-                          {MISSING_CREDENTIAL_BEHAVIOR_OPTIONS.map((option) => (
-                            <SelectItem
-                              key={option.value}
-                              value={option.value}
-                              description={
-                                TOOL_CONNECTION_PROMPTING[option.value]
-                              }
-                            >
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      />
                     </div>
-                  )}
+
+                    {/* Only meaningful for Custom mode: an Auto agent resolves
+                        tools from what each caller can already reach, so no
+                        caller can be missing a connection. */}
+                    {!autoToolsMode && (
+                      <div className="flex items-center gap-3">
+                        <SettingIcon
+                          tone={
+                            MISSING_CREDENTIAL_TONE[missingCredentialBehavior]
+                          }
+                        >
+                          <Unplug className="size-4" />
+                        </SettingIcon>
+                        <div className="min-w-0 flex-1 space-y-0.5">
+                          <Label htmlFor="missing-credential-behavior">
+                            Missing connections
+                          </Label>
+                          <p className="text-xs text-muted-foreground">
+                            Some tools run against a server each person connects
+                            themselves.{" "}
+                            {
+                              TOOL_CONNECTION_PROMPTING[
+                                missingCredentialBehavior
+                              ]
+                            }{" "}
+                            <ExternalDocsLink
+                              href={toolConnectionsDocsUrl}
+                              className="underline"
+                              showIcon={false}
+                            >
+                              Learn more
+                            </ExternalDocsLink>
+                          </p>
+                        </div>
+                        <Select
+                          value={missingCredentialBehavior}
+                          onValueChange={(value) =>
+                            setMissingCredentialBehavior(
+                              value as MissingCredentialBehavior,
+                            )
+                          }
+                        >
+                          {/* Fixed width: the trigger is `w-fit` by default, so
+                              the row would reflow by ~33px as the value changes. */}
+                          <SelectTrigger
+                            id="missing-credential-behavior"
+                            className="w-[240px]"
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          {/* `popper` is what makes `align` bind at all: the
+                              default `item-aligned` positioning clamps only the
+                              popover's left edge, so it ended flush with the
+                              browser window — over 100px outside the wizard's
+                              panel on a wide screen. Anchored to the trigger's
+                              right edge it stays in the column, and 28rem keeps
+                              every option's explainer at two lines. */}
+                          <SelectContent
+                            position="popper"
+                            align="end"
+                            className="w-[28rem] max-w-[calc(100vw-2rem)]"
+                          >
+                            {MISSING_CREDENTIAL_BEHAVIOR_OPTIONS.map(
+                              (option) => (
+                                <SelectItem
+                                  key={option.value}
+                                  value={option.value}
+                                  description={
+                                    TOOL_CONNECTION_PROMPTING[option.value]
+                                  }
+                                >
+                                  {option.label}
+                                </SelectItem>
+                              ),
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
                 </SettingsSection>
               )}
 
@@ -3260,21 +3323,25 @@ export function AgentForm({
                       <span>Loading subagents…</span>
                     </p>
                   ) : (
-                    <div className="space-y-2">
-                      <Tabs
-                        value={accessAllSubagents ? "auto" : "custom"}
-                        onValueChange={handleSubagentModeChange}
-                      >
-                        <TabsList className="grid w-full grid-cols-2">
-                          <TabsTrigger value="auto">Auto</TabsTrigger>
-                          <TabsTrigger value="custom">Custom</TabsTrigger>
-                        </TabsList>
-                      </Tabs>
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-sm text-muted-foreground">
+                          {accessAllSubagents
+                            ? excludedSubagentsSummary(disabledSubagentCount)
+                            : assignedSubagentsSummary(delegationTargetCount)}
+                        </p>
+                        <Tabs
+                          value={accessAllSubagents ? "auto" : "custom"}
+                          onValueChange={handleSubagentModeChange}
+                        >
+                          <TabsList>
+                            <TabsTrigger value="auto">Auto</TabsTrigger>
+                            <TabsTrigger value="custom">Custom</TabsTrigger>
+                          </TabsList>
+                        </Tabs>
+                      </div>
                       {accessAllSubagents ? (
                         <div className="space-y-1.5">
-                          <p className="text-sm text-muted-foreground">
-                            All subagents except ({disabledSubagentCount})
-                          </p>
                           <SubagentsEditor
                             availableAgents={allInternalAgents}
                             selectedAgentIds={disabledSubagentIds}
@@ -3291,9 +3358,6 @@ export function AgentForm({
                             Only the subagents you assign below can be delegated
                             to by this{" "}
                             {agentTypeDisplayName[agentType] || "agent"}.
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            Subagents ({delegationTargetCount})
                           </p>
                           <SubagentsEditor
                             availableAgents={allInternalAgents}
@@ -3422,18 +3486,27 @@ export function AgentForm({
                       <span>Loading published skills…</span>
                     </p>
                   ) : (
-                    <div className="space-y-2">
-                      <Tabs
-                        value={accessAllSkills ? "auto" : "custom"}
-                        onValueChange={(value) =>
-                          setAccessAllSkills(value === "auto")
-                        }
-                      >
-                        <TabsList className="grid w-full grid-cols-2">
-                          <TabsTrigger value="auto">Auto</TabsTrigger>
-                          <TabsTrigger value="custom">Custom</TabsTrigger>
-                        </TabsList>
-                      </Tabs>
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-sm text-muted-foreground">
+                          {publishedSkillsSummary({
+                            publishesAll: accessAllSkills,
+                            excludedCount: excludedSkillIds.length,
+                            assignedCount: assignedSkillIds.length,
+                          })}
+                        </p>
+                        <Tabs
+                          value={accessAllSkills ? "auto" : "custom"}
+                          onValueChange={(value) =>
+                            setAccessAllSkills(value === "auto")
+                          }
+                        >
+                          <TabsList>
+                            <TabsTrigger value="auto">Auto</TabsTrigger>
+                            <TabsTrigger value="custom">Custom</TabsTrigger>
+                          </TabsList>
+                        </Tabs>
+                      </div>
                       {accessAllSkills ? (
                         <div className="space-y-2">
                           <ul className="space-y-1.5 pt-1 text-xs text-muted-foreground">
@@ -3450,9 +3523,6 @@ export function AgentForm({
                             </li>
                           </ul>
                           <div className="space-y-1.5">
-                            <p className="text-sm text-muted-foreground">
-                              All skills except ({excludedSkillIds.length})
-                            </p>
                             <AgentSkillsEditor
                               availableSkills={orgScopedSkills}
                               selectedSkillIds={excludedSkillIds}
@@ -3474,9 +3544,6 @@ export function AgentForm({
                             published, a personal skill only by its own author,
                             and a skill restricted to other environments not at
                             all.
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            Skills ({assignedSkillIds.length})
                           </p>
                           <AgentSkillsEditor
                             availableSkills={availableSkills}

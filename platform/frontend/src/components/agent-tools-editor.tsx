@@ -11,7 +11,14 @@ import {
   parseFullToolName,
 } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Loader2, Search } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Loader2,
+  Search,
+  Server,
+} from "lucide-react";
+import Link from "next/link";
 import {
   forwardRef,
   useCallback,
@@ -21,6 +28,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { EmptyState } from "@/components/empty-state";
 import { QueryLoadError } from "@/components/query-load-error";
 import {
   AssignmentCombobox,
@@ -731,10 +739,20 @@ const AgentToolsEditorContent = forwardRef<
   }
 
   if (catalogItems.length === 0) {
+    // Installing one is an organization-wide job, not this record's, so the
+    // panel says whose it is and points there rather than stopping at the fact.
     return (
-      <p className="text-sm text-muted-foreground">
-        No MCP servers available in the catalog.
-      </p>
+      <EmptyState
+        className="py-6"
+        icon={Server}
+        title="No MCP servers are installed"
+        description="Servers are installed once for the whole organization. Until one is, there is nothing to assign here."
+        action={
+          <Button type="button" variant="outline" size="sm" asChild>
+            <Link href="/mcp/registry">Browse the MCP Registry</Link>
+          </Button>
+        }
+      />
     );
   }
 
@@ -782,9 +800,30 @@ const AgentToolsEditorContent = forwardRef<
     );
   }
 
+  // Nothing assigned yet, but there is something to assign: say what that costs
+  // the record rather than leaving a lone Add button to imply it.
+  const isEmpty = selectedCatalogs.length === 0;
+
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap gap-2">
+      <div
+        className={cn(
+          "flex flex-wrap gap-2",
+          isEmpty &&
+            "flex-col items-center rounded-md border border-dashed px-4 py-6 text-center",
+        )}
+      >
+        {isEmpty && (
+          <div className="space-y-0.5">
+            <p className="text-sm font-medium">No tools assigned yet</p>
+            {/* No record noun: this editor serves agents, gateways and
+                proxies, and naming one of them here is how the connection
+                strings drifted apart before. */}
+            <p className="text-xs text-muted-foreground">
+              Add an MCP server to choose tools from.
+            </p>
+          </div>
+        )}
         {selectedCatalogs.map((catalog) => (
           <McpServerPill
             key={catalog.id}
@@ -812,6 +851,12 @@ const AgentToolsEditorContent = forwardRef<
           onItemAdded={setAutoOpenCatalogId}
           placeholder="Search MCP servers..."
           emptyMessage="No MCP servers found."
+          // The scope belongs to this list, not to the pills a pick produces.
+          note={
+            environmentScopingEnabled
+              ? `Filtered to the ${agentEnvironmentName ?? "Default"} environment.`
+              : undefined
+          }
           testId={E2eTestId.AgentToolsAddButton}
           defaultOpen={openComboboxOnMount}
           createAction={{

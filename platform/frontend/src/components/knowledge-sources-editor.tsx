@@ -76,8 +76,29 @@ export function KnowledgeSourcesEditor({
     selectedIds.includes(source.id),
   );
 
+  // Only the assigning side gets an empty state: nothing excluded is a normal,
+  // complete answer, while nothing assigned means the feature is off and the
+  // reader is owed the reason it would be worth turning on.
+  const isEmpty = tone === "assign" && selectedSources.length === 0;
+
   return (
-    <div className="flex flex-wrap gap-2" data-testid={testIds.container}>
+    <div
+      className={cn(
+        "flex flex-wrap gap-2",
+        isEmpty &&
+          "flex-col items-center rounded-md border border-dashed px-4 py-6 text-center",
+      )}
+      data-testid={testIds.container}
+    >
+      {isEmpty && (
+        <div className="space-y-0.5">
+          <p className="text-sm font-medium">No sources assigned</p>
+          <p className="text-xs text-muted-foreground">
+            Assign one and a <code>query_knowledge_sources</code> tool appears,
+            to search it.
+          </p>
+        </div>
+      )}
       {selectedSources.map((source) => (
         <div key={source.id} className="flex items-center">
           <span

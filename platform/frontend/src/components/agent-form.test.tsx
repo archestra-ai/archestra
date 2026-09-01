@@ -878,7 +878,9 @@ describe("AgentForm delegation state", () => {
       ).toBeInTheDocument();
     });
     expect(screen.queryByText(advisorAgent.name)).not.toBeInTheDocument();
-    expect(screen.getByText(/All subagents except \(0\)/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Every subagent, with no exceptions\./),
+    ).toBeInTheDocument();
   });
 
   it("reads as on in Auto mode only while the advisor is not disabled", async () => {
@@ -974,7 +976,9 @@ describe("AgentForm delegation state", () => {
 
     await user.click(subagentModeTab("Auto"));
 
-    expect(screen.getByText(/All subagents except \(0\)/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Every subagent, with no exceptions\./),
+    ).toBeInTheDocument();
     expect(
       screen.getByTestId(E2eTestId.ConsultAdvisorSwitch),
     ).not.toBeChecked();
@@ -1103,7 +1107,7 @@ describe("AgentForm delegation state", () => {
 
     render(<AgentForm onSaved={onSaved} agentType="agent" agent={baseAgent} />);
 
-    await screen.findByText("Subagents (1)");
+    await screen.findByText("1 subagent assigned.");
     await user.click(screen.getByRole("button", { name: /update/i }));
 
     // The save must complete (reaches the success callback) and persist the
@@ -1134,7 +1138,7 @@ describe("AgentForm delegation state", () => {
 
     render(<AgentForm agentType="agent" agent={baseAgent} />);
 
-    await screen.findByText("Subagents (1)");
+    await screen.findByText("1 subagent assigned.");
     await user.click(screen.getByRole("button", { name: /remove agent/i }));
     await user.click(screen.getByRole("button", { name: /update/i }));
 
@@ -1229,7 +1233,7 @@ describe("AgentForm delegation state", () => {
       <AgentForm agentType="agent" agent={baseAgent} />,
     );
 
-    await screen.findByText("Subagents (1)");
+    await screen.findByText("1 subagent assigned.");
 
     useProfileMock.mockReturnValue({
       data: { ...baseAgent, description: "Refetched description" },
@@ -1239,7 +1243,7 @@ describe("AgentForm delegation state", () => {
     rerender(<AgentForm agentType="agent" agent={baseAgent} />);
 
     await waitFor(() => {
-      expect(screen.getByText("Subagents (1)")).toBeInTheDocument();
+      expect(screen.getByText("1 subagent assigned.")).toBeInTheDocument();
     });
   });
 });
@@ -1296,7 +1300,7 @@ describe("AgentForm knowledge in Auto mode", () => {
 
     const section = await screen.findByTestId(E2eTestId.AgentToolsSection);
     expect(
-      within(section).getByText(/All knowledge sources except \(0\)/),
+      within(section).getByText(/Every knowledge source, with no exceptions\./),
     ).toBeVisible();
     // The preview list and its caption are gone, and so is the prose that
     // used to restate the field above it.
@@ -1442,9 +1446,7 @@ describe("AgentForm knowledge in Auto mode", () => {
 
     const section = await screen.findByTestId(E2eTestId.AgentToolsSection);
     expect(
-      within(section).getAllByText(
-        /Configure an embedding model to use knowledge sources/i,
-      ).length,
+      within(section).getAllByText(/Knowledge isn.t set up/i).length,
     ).toBeGreaterThan(0);
   });
 
@@ -1473,16 +1475,21 @@ describe("AgentForm knowledge in Auto mode", () => {
           Node.DOCUMENT_POSITION_FOLLOWING,
       );
 
+    // Auto mode: the exclusion pickers, in the same order. Both mode panels
+    // stay mounted, so both can be checked from one render.
     expect(
       before(
-        within(section).getByText(/^All tools except/),
-        within(section).getByText(/^All knowledge sources except/),
+        within(section).getByTestId(E2eTestId.AgentToolExclusions),
+        within(section).getByTestId(E2eTestId.AgentKnowledgeSourceExclusions),
       ),
     ).toBe(true);
+    // Custom mode: the tool picker precedes the knowledge picker. The mode
+    // summaries now sit in the block header above both panels, so the editors
+    // are what carry the order.
     expect(
       before(
-        within(section).getByText(/^Tools \(/),
-        within(section).getByText(/^Knowledge sources \(/),
+        within(section).getByTestId(E2eTestId.AgentToolAssignments),
+        within(section).getByTestId(E2eTestId.AgentKnowledgeSources),
       ),
     ).toBe(true);
   });
@@ -1546,11 +1553,7 @@ describe("AgentForm knowledge in Auto mode", () => {
     render(<AgentForm agentType="agent" agent={autoAgent} />);
 
     const section = await screen.findByTestId(E2eTestId.AgentToolsSection);
-    expect(
-      within(section).queryByText(
-        /Configure an embedding model to use knowledge sources/i,
-      ),
-    ).toBeNull();
+    expect(within(section).queryByText(/Knowledge isn.t set up/i)).toBeNull();
   });
 });
 
@@ -1580,7 +1583,9 @@ describe("AgentForm progressive tool loading", () => {
 
     render(<AgentForm agentType="agent" agent={autoAgent} />);
 
-    const section = await screen.findByTestId(E2eTestId.AgentToolsSection);
+    const section = await screen.findByTestId(
+      E2eTestId.AgentToolLoadingSection,
+    );
     expect(within(section).getByText("Progressive tool loading")).toBeVisible();
     expect(progressiveSwitch(section)?.checked).toBe(true);
     expect(progressiveSwitch(section)?.disabled).toBe(true);
@@ -1599,7 +1604,9 @@ describe("AgentForm progressive tool loading", () => {
 
     render(<AgentForm agentType="agent" agent={staleAutoAgent} />);
 
-    const section = await screen.findByTestId(E2eTestId.AgentToolsSection);
+    const section = await screen.findByTestId(
+      E2eTestId.AgentToolLoadingSection,
+    );
     expect(progressiveSwitch(section)?.checked).toBe(true);
   });
 
@@ -1609,7 +1616,9 @@ describe("AgentForm progressive tool loading", () => {
 
     render(<AgentForm agentType="agent" agent={baseAgent} />);
 
-    const section = await screen.findByTestId(E2eTestId.AgentToolsSection);
+    const section = await screen.findByTestId(
+      E2eTestId.AgentToolLoadingSection,
+    );
     const toggle = progressiveSwitch(section);
     expect(toggle?.checked).toBe(false);
     expect(toggle?.disabled).toBe(false);
@@ -1809,7 +1818,7 @@ describe("AgentForm published skills", () => {
       <AgentForm onSaved={onSaved} agentType="mcp_gateway" agent={baseAgent} />,
     );
 
-    await screen.findByText("Skills (1)");
+    await screen.findByText("1 skill published.");
     await user.click(screen.getByRole("button", { name: /update/i }));
 
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
@@ -1829,9 +1838,11 @@ describe("AgentForm published skills", () => {
 
     render(<AgentForm agentType="mcp_gateway" agent={baseAgent} />);
 
-    await screen.findByText(/All skills except \(0\)/);
+    await screen.findByText(
+      /Every organization skill in this environment, with no exceptions\./,
+    );
     await user.click(skillsModeTab("Custom"));
-    expect(screen.getByText("Skills (0)")).toBeInTheDocument();
+    expect(screen.getByText("Published skills")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /update/i }));
 
@@ -1859,7 +1870,9 @@ describe("AgentForm published skills", () => {
       <AgentForm onSaved={onSaved} agentType="mcp_gateway" agent={baseAgent} />,
     );
 
-    await screen.findByText(/All skills except \(0\)/);
+    await screen.findByText(
+      /Every organization skill in this environment, with no exceptions\./,
+    );
     await user.click(skillsModeTab("Custom"));
     await user.click(screen.getByRole("button", { name: /update/i }));
 

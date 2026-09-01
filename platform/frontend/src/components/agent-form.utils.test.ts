@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  assignedSubagentsSummary,
+  assignedToolsSummary,
+  excludedSourcesSummary,
+  excludedToolsSummary,
   getDescriptionPlaceholder,
   getNamePlaceholder,
   normalizeSuggestedPrompts,
   shouldOfferAppCatalogs,
   shouldShowDescriptionField,
+  TOOL_CONNECTION_PROMPTING,
 } from "./agent-form.utils";
 
 describe("getNamePlaceholder", () => {
@@ -125,5 +130,48 @@ describe("shouldOfferAppCatalogs", () => {
 
   it("does not offer Apps to an LLM proxy (no app-render surface)", () => {
     expect(shouldOfferAppCatalogs("llm_proxy")).toBe(false);
+  });
+});
+
+describe("Auto-mode summaries", () => {
+  it("names the absence of exceptions rather than counting to zero", () => {
+    expect(excludedToolsSummary(0)).toBe("Every tool, with no exceptions.");
+    expect(excludedSourcesSummary(0)).toBe(
+      "Every knowledge source, with no exceptions.",
+    );
+  });
+
+  it("keeps the field's own register when there are exceptions", () => {
+    expect(excludedToolsSummary(3)).toBe("Every tool, except 3.");
+    expect(excludedSourcesSummary(1)).toBe("Every knowledge source, except 1.");
+  });
+});
+
+describe("TOOL_CONNECTION_PROMPTING", () => {
+  // One record's noun must not leak into a string every record type renders:
+  // `block` said "the gateway" on agents and proxies too.
+  it("names no record type, so agents and proxies read the same", () => {
+    for (const line of Object.values(TOOL_CONNECTION_PROMPTING)) {
+      expect(line).not.toMatch(/gateway|proxy|\bagent\b/i);
+    }
+  });
+
+  it("says what happens to the person chatting, not what is requested", () => {
+    for (const line of Object.values(TOOL_CONNECTION_PROMPTING)) {
+      expect(line).not.toMatch(/^Requested|^Require /);
+    }
+  });
+});
+
+describe("Custom-mode summaries", () => {
+  it("says nothing at zero, leaving the empty state to say it once", () => {
+    expect(assignedToolsSummary(0)).toBe("");
+    expect(assignedSubagentsSummary(0)).toBe("");
+  });
+
+  it("counts what is assigned, singular and plural", () => {
+    expect(assignedToolsSummary(1)).toBe("1 tool assigned.");
+    expect(assignedToolsSummary(12)).toBe("12 tools assigned.");
+    expect(assignedSubagentsSummary(3)).toBe("3 subagents assigned.");
   });
 });

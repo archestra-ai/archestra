@@ -538,6 +538,9 @@ function SubagentsEditor({
         items={comboboxItems}
         selectedIds={selectedAgentIds}
         onToggle={handleToggle}
+        // Without this the exclude side inherited the default "Add", so Auto
+        // mode offered to add an agent and then disabled whichever was picked.
+        label={tone === "exclude" ? "Disable subagents" : "Add"}
         placeholder={placeholder}
         emptyMessage="No agents found."
         createAction={
@@ -1282,18 +1285,18 @@ export function AgentForm({
    * and carries the way out where the reader can take it.
    */
   const knowledgeNotConfiguredNotice = (
-    <div className="rounded-md border bg-muted/40 px-4 py-3">
+    <div className="flex flex-col items-center gap-1 rounded-md border border-dashed px-4 py-6 text-center">
       <p className="text-sm font-medium">Knowledge isn&apos;t set up</p>
-      <p className="mt-0.5 text-xs text-muted-foreground">
-        An embedding model is configured once for the organization. Sources can
-        be assigned once it is.
+      <p className="max-w-prose text-xs text-muted-foreground">
+        An embedding model is set up once for the whole organization. Until one
+        is, there is nothing to assign here.
       </p>
       {canAccessKnowledgeSettings && (
         <Button
           type="button"
           variant="outline"
           size="sm"
-          className="mt-3"
+          className="mt-2"
           asChild
         >
           <Link href="/settings/knowledge">Configure knowledge</Link>
@@ -3051,11 +3054,16 @@ export function AgentForm({
                       </div>
                       {canReadKnowledgeBase && (
                         <div className="space-y-2">
-                          <p className="text-sm text-muted-foreground">
-                            {excludedSourcesSummary(
-                              disabledKnowledgeSourceIds.length,
-                            )}
-                          </p>
+                          {/* The count and the hint describe assigning, which
+                              is not on offer until knowledge is set up. The
+                              empty state is the whole answer there. */}
+                          {isKnowledgeConfigured && (
+                            <p className="text-sm text-muted-foreground">
+                              {excludedSourcesSummary(
+                                disabledKnowledgeSourceIds.length,
+                              )}
+                            </p>
+                          )}
                           {isKnowledgeConfigured ? (
                             <KnowledgeSourcesEditor
                               sources={environmentConnectors.map(
@@ -3071,7 +3079,7 @@ export function AgentForm({
                               selectedIds={disabledKnowledgeSourceIds}
                               onToggle={toggleDisabledKnowledgeSource}
                               tone="exclude"
-                              label="Disable"
+                              label="Disable sources"
                               createAction={KNOWLEDGE_CONNECTOR_CREATE_ACTION}
                               testIds={{
                                 container:
@@ -3125,16 +3133,26 @@ export function AgentForm({
                       </div>
                       {canReadKnowledgeBase && (
                         <div className="space-y-2">
-                          <p className="text-sm text-muted-foreground">
-                            Knowledge sources (
-                            {assignedKnowledgeSourceIds.length})
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            Assigning a source gives this{" "}
-                            {agentType === "mcp_gateway" ? "gateway" : "agent"}{" "}
-                            a <code>query_knowledge_sources</code> tool to
-                            search it.
-                          </p>
+                          {/* At zero the editor's own empty state names the
+                              count and the tool assigning one produces, so
+                              neither is repeated above it. */}
+                          {isKnowledgeConfigured &&
+                            assignedKnowledgeSourceIds.length > 0 && (
+                              <>
+                                <p className="text-sm text-muted-foreground">
+                                  Knowledge sources (
+                                  {assignedKnowledgeSourceIds.length})
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  Assigning a source gives this{" "}
+                                  {agentType === "mcp_gateway"
+                                    ? "gateway"
+                                    : "agent"}{" "}
+                                  a <code>query_knowledge_sources</code> tool to
+                                  search it.
+                                </p>
+                              </>
+                            )}
                           {isKnowledgeConfigured ? (
                             <KnowledgeSourcesEditor
                               sources={assignableKnowledgeSources}
@@ -3232,78 +3250,84 @@ export function AgentForm({
                         tools from what each caller can already reach, so no
                         caller can be missing a connection. */}
                     {!autoToolsMode && (
-                      <div className="flex items-center gap-3">
-                        <SettingIcon
-                          tone={
-                            MISSING_CREDENTIAL_TONE[missingCredentialBehavior]
-                          }
-                        >
-                          <Unplug className="size-4" />
-                        </SettingIcon>
-                        <div className="min-w-0 flex-1 space-y-0.5">
-                          <Label htmlFor="missing-credential-behavior">
-                            Missing connections
-                          </Label>
-                          {/* The question, not the answer: the select beside
+                      <>
+                        {/* Inset past the icon column (size-8 + gap-3) so the
+                            rule divides the two settings rather than cutting
+                            across the icons that label them. */}
+                        <div className="ml-11 border-t border-border" />
+                        <div className="flex items-center gap-3 pt-4">
+                          <SettingIcon
+                            tone={
+                              MISSING_CREDENTIAL_TONE[missingCredentialBehavior]
+                            }
+                          >
+                            <Unplug className="size-4" />
+                          </SettingIcon>
+                          <div className="min-w-0 flex-1 space-y-0.5">
+                            <Label htmlFor="missing-credential-behavior">
+                              Missing connections
+                            </Label>
+                            {/* The question, not the answer: the select beside
                               this already names the choice, and the menu
                               spells out what each one does. Repeating the
                               chosen option's whole sentence here said the same
                               thing three times in one row. */}
-                          <p className="text-xs text-muted-foreground">
-                            When to ask a user to connect credentials.{" "}
-                            <ExternalDocsLink
-                              href={toolConnectionsDocsUrl}
-                              className="underline"
-                              showIcon={false}
-                            >
-                              Learn more
-                            </ExternalDocsLink>
-                          </p>
-                        </div>
-                        <Select
-                          value={missingCredentialBehavior}
-                          onValueChange={(value) =>
-                            setMissingCredentialBehavior(
-                              value as MissingCredentialBehavior,
-                            )
-                          }
-                        >
-                          {/* Fixed width: the trigger is `w-fit` by default, so
-                              the row would reflow by ~33px as the value changes. */}
-                          <SelectTrigger
-                            id="missing-credential-behavior"
-                            className="w-[240px]"
+                            <p className="text-xs text-muted-foreground">
+                              When to ask a user to connect credentials.{" "}
+                              <ExternalDocsLink
+                                href={toolConnectionsDocsUrl}
+                                className="underline"
+                                showIcon={false}
+                              >
+                                Learn more
+                              </ExternalDocsLink>
+                            </p>
+                          </div>
+                          <Select
+                            value={missingCredentialBehavior}
+                            onValueChange={(value) =>
+                              setMissingCredentialBehavior(
+                                value as MissingCredentialBehavior,
+                              )
+                            }
                           >
-                            <SelectValue />
-                          </SelectTrigger>
-                          {/* `popper` is what makes `align` bind at all: the
+                            {/* Fixed width: the trigger is `w-fit` by default, so
+                              the row would reflow by ~33px as the value changes. */}
+                            <SelectTrigger
+                              id="missing-credential-behavior"
+                              className="w-[240px]"
+                            >
+                              <SelectValue />
+                            </SelectTrigger>
+                            {/* `popper` is what makes `align` bind at all: the
                               default `item-aligned` positioning clamps only the
                               popover's left edge, so it ended flush with the
                               browser window — over 100px outside the wizard's
                               panel on a wide screen. Anchored to the trigger's
                               right edge it stays in the column, and 28rem keeps
                               every option's explainer at two lines. */}
-                          <SelectContent
-                            position="popper"
-                            align="end"
-                            className="w-[28rem] max-w-[calc(100vw-2rem)]"
-                          >
-                            {MISSING_CREDENTIAL_BEHAVIOR_OPTIONS.map(
-                              (option) => (
-                                <SelectItem
-                                  key={option.value}
-                                  value={option.value}
-                                  description={
-                                    TOOL_CONNECTION_PROMPTING[option.value]
-                                  }
-                                >
-                                  {option.label}
-                                </SelectItem>
-                              ),
-                            )}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                            <SelectContent
+                              position="popper"
+                              align="end"
+                              className="w-[28rem] max-w-[calc(100vw-2rem)]"
+                            >
+                              {MISSING_CREDENTIAL_BEHAVIOR_OPTIONS.map(
+                                (option) => (
+                                  <SelectItem
+                                    key={option.value}
+                                    value={option.value}
+                                    description={
+                                      TOOL_CONNECTION_PROMPTING[option.value]
+                                    }
+                                  >
+                                    {option.label}
+                                  </SelectItem>
+                                ),
+                              )}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </>
                     )}
                   </div>
                 </SettingsSection>
@@ -3351,11 +3375,6 @@ export function AgentForm({
                         </div>
                       ) : (
                         <div className="space-y-1.5">
-                          <p className="pt-1 text-xs text-muted-foreground">
-                            Only the subagents you assign below can be delegated
-                            to by this{" "}
-                            {agentTypeDisplayName[agentType] || "agent"}.
-                          </p>
                           <SubagentsEditor
                             availableAgents={allInternalAgents}
                             selectedAgentIds={selectedDelegationTargetIds}

@@ -473,7 +473,7 @@ export const AgentToolExclusionsEditor = forwardRef<
         selectedIds={[...entries.keys()]}
         onToggle={handleCatalogToggle}
         onItemAdded={setAutoOpenCatalogId}
-        label="Disable"
+        label="Disable tools"
         placeholder="Search MCP servers..."
         emptyMessage="No MCP servers found."
       />

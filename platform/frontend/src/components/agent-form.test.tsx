@@ -947,10 +947,10 @@ describe("AgentForm delegation state", () => {
     await user.click(subagentModeTab("Custom"));
 
     // The panel assertion is what proves the mode actually moved; the switch
-    // reading the same way afterwards is only meaningful once it has.
-    expect(
-      screen.getByText(/Only the subagents you assign below/),
-    ).toBeInTheDocument();
+    // reading the same way afterwards is only meaningful once it has. Custom
+    // is the only mode that draws an assignment empty state — Auto's list is
+    // exclusions, where holding none is a complete answer.
+    expect(screen.getByText("No subagents assigned")).toBeInTheDocument();
     expect(screen.getByTestId(E2eTestId.ConsultAdvisorSwitch)).toBeChecked();
   });
 

@@ -92,7 +92,7 @@ export function KnowledgeSourcesEditor({
     >
       {isEmpty && (
         <div className="space-y-0.5">
-          <p className="text-sm font-medium">No sources assigned</p>
+          <p className="text-sm font-medium">No knowledge sources assigned</p>
           <p className="text-xs text-muted-foreground">
             Assign one and a <code>query_knowledge_sources</code> tool appears,
             to search it.

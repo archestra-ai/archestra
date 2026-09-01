@@ -1,4 +1,7 @@
-import { ResourceVisibilityScopeSchema } from "@archestra/shared";
+import {
+  CreatedByNullableSchema,
+  ResourceVisibilityScopeSchema,
+} from "@archestra/shared";
 import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
@@ -137,10 +140,17 @@ export const PluginUserSchema = z.object({
 
 const PublicPluginSchema = SelectPluginSchema.omit({ syncGeneration: true });
 
+/**
+ * `createdBy` sits here rather than on the detail schema alone so every plugin
+ * a route hands back carries it: the detail page seeds its cache from the
+ * update and GitHub-apply responses as well as from the read, and a shape that
+ * dropped the creator on those would blank the fact until the next refetch.
+ */
 export const PluginWithVisibilitySchema = PublicPluginSchema.extend({
   teams: z.array(PluginTeamSchema),
   users: z.array(PluginUserSchema),
   labels: z.array(LabelWithDetailsSchema),
+  createdBy: CreatedByNullableSchema,
 });
 
 export const PluginWithFilesSchema = PluginWithVisibilitySchema.extend({

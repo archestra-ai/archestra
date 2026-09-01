@@ -83420,6 +83420,11 @@ export type CreatePluginResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         files: Array<{
             id: string;
             pluginId: string;
@@ -83698,6 +83703,11 @@ export type ImportGithubPluginMarketplaceResponses = {
                 keyId?: string;
                 valueId?: string;
             }>;
+            createdBy: {
+                id: string;
+                name: string | null;
+                email: string | null;
+            } | null;
             files: Array<{
                 id: string;
                 pluginId: string;
@@ -83964,6 +83974,11 @@ export type ImportGithubPluginResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         files: Array<{
             id: string;
             pluginId: string;
@@ -84213,6 +84228,11 @@ export type ApplyGithubPluginUpdateResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         files: Array<{
             id: string;
             pluginId: string;
@@ -84359,6 +84379,11 @@ export type UpdatePluginGithubSyncResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         files: Array<{
             id: string;
             pluginId: string;
@@ -84673,6 +84698,11 @@ export type GetPluginResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         files: Array<{
             id: string;
             pluginId: string;
@@ -84846,6 +84876,11 @@ export type UpdatePluginResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         files: Array<{
             id: string;
             pluginId: string;

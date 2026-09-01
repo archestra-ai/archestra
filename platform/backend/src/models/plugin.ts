@@ -25,6 +25,7 @@ import {
   type PluginWithFiles,
   type UpdatePlugin,
 } from "@/types";
+import CreatedByModel, { lookupCreator } from "./created-by";
 import { PluginLabelModel } from "./entity-labels";
 import PluginTeamModel from "./plugin-team";
 import PluginUserModel from "./plugin-user";
@@ -992,17 +993,26 @@ async function attachFilesAndVisibilityInIdOrder(
   });
 }
 
+/**
+ * Everything a route hands back is hydrated here, so resolving the creator in
+ * this one place is what makes `createdBy` present on the read, the create, the
+ * update and the GitHub apply alike, rather than on whichever of them somebody
+ * remembered.
+ */
 async function attachVisibility(plugins: Plugin[]) {
   const ids = plugins.map((plugin) => plugin.id);
-  const [teamsByPlugin, usersByPlugin, labelsByPlugin] = await Promise.all([
-    PluginTeamModel.getTeamDetailsForPlugins(ids),
-    PluginUserModel.getUserDetailsForPlugins(ids),
-    PluginLabelModel.getLabelsForMany(ids),
-  ]);
+  const [teamsByPlugin, usersByPlugin, creators, labelsByPlugin] =
+    await Promise.all([
+      PluginTeamModel.getTeamDetailsForPlugins(ids),
+      PluginUserModel.getUserDetailsForPlugins(ids),
+      CreatedByModel.resolve(plugins.map((plugin) => plugin.authorId)),
+      PluginLabelModel.getLabelsForMany(ids),
+    ]);
   return plugins.map((plugin) => ({
     ...plugin,
     teams: teamsByPlugin.get(plugin.id) ?? [],
     users: usersByPlugin.get(plugin.id) ?? [],
+    createdBy: lookupCreator(creators, plugin.authorId),
     labels: labelsByPlugin.get(plugin.id) ?? [],
   }));
 }

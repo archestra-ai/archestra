@@ -12,6 +12,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useId, useState } from "react";
 import { AgentBadge } from "@/components/agent-badge";
+import { createdByFact } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
   type OverviewFact,
@@ -205,6 +206,7 @@ function PluginDetailView({
       ),
     },
     { label: "Source", value: <SourceFact plugin={plugin} /> },
+    createdByFact(plugin.createdBy),
   ];
 
   const [deleteRequested, setDeleteRequested] = useState(false);

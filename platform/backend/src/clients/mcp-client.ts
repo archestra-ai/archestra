@@ -5218,28 +5218,87 @@ function makeSyntheticResourceToolName(uri: string): string {
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+/**
+ * Pause between wake attempts. The wake's own readiness polls run on a 2 s
+ * cadence, so a shorter beat here only re-reads cluster truth and the lease
+ * table; 1 s keeps a raced attempt from spinning while still resolving the
+ * common "the other transition just finished" case on the next beat.
+ */
+const WAKE_RETRY_DELAY_MS = 1_000;
+
+/**
+ * Hold the tool call while the MCP server behind it wakes, up to the reply
+ * budget ({@link wakeResponseBudgetMs}).
+ *
+ * A single `ensureAwake` can lose a race it is allowed to lose — its
+ * completeWake superseded by a concurrent transition, a hibernating sweep
+ * still holding the transition gate — and reports that as a retryable
+ * `McpServerWakeError`. Those races settle in seconds. Handing them straight
+ * to the caller as "retry shortly" answers turned an in-progress hibernation
+ * into a failed tool call for any client that does not retry, so this loop IS
+ * that retry: it re-enters the wake until the server is up or the budget is
+ * spent, and only then answers. What still surfaces immediately: an abort,
+ * and failures a retry cannot help (a deployment that cannot start).
+ */
 async function waitForMcpServerWake(params: {
   mcpServerId: string;
   mcpServerName: string;
   abortSignal?: AbortSignal;
 }): Promise<void> {
-  if (params.abortSignal?.aborted) {
-    throw params.abortSignal.reason instanceof Error
-      ? params.abortSignal.reason
+  const { abortSignal } = params;
+  if (abortSignal?.aborted) {
+    throw abortSignal.reason instanceof Error
+      ? abortSignal.reason
       : new Error("The tool call was aborted before the wake");
   }
   const budgetMs = wakeResponseBudgetMs();
-  const wake = withDeadline(
-    McpServerRuntimeManager.ensureAwake(params.mcpServerId),
-    budgetMs,
-    () => new McpServerWakePendingError(params.mcpServerName, budgetMs),
-  );
-  if (!params.abortSignal) {
-    await wake;
-    return;
-  }
+  const deadlineAt = Date.now() + budgetMs;
 
-  const { abortSignal } = params;
+  for (;;) {
+    const attempt = withDeadline(
+      McpServerRuntimeManager.ensureAwake(params.mcpServerId),
+      Math.max(1, deadlineAt - Date.now()),
+      () => new McpServerWakePendingError(params.mcpServerName, budgetMs),
+    );
+    try {
+      await raceWithAbort(attempt, abortSignal);
+      return;
+    } catch (error) {
+      // McpServerWakePendingError is the budget itself running out — it is a
+      // McpServerWakeError subclass, so it must be excluded before the
+      // retryable check or exhaustion would loop one extra beat.
+      if (
+        abortSignal?.aborted ||
+        error instanceof McpServerWakePendingError ||
+        !(error instanceof McpServerWakeError)
+      ) {
+        throw error;
+      }
+      // Too little budget left for another attempt to observe anything new:
+      // answer with the race's own reason, which is already retryable-shaped
+      // and names more than a generic "still pending" would.
+      if (deadlineAt - Date.now() <= WAKE_RETRY_DELAY_MS) {
+        throw error;
+      }
+      logger.debug(
+        { err: error, mcpServerId: params.mcpServerId },
+        "MCP server wake attempt lost a retryable race; re-entering the wake within the reply budget",
+      );
+      await raceWithAbort(
+        new Promise((resolve) => setTimeout(resolve, WAKE_RETRY_DELAY_MS)),
+        abortSignal,
+      );
+    }
+  }
+}
+
+/** Race `work` against the tool call's abort signal, if there is one. */
+async function raceWithAbort<T>(
+  work: Promise<T>,
+  abortSignal: AbortSignal | undefined,
+): Promise<T> {
+  if (!abortSignal) return work;
+
   let onAbort: (() => void) | undefined;
   const aborted = new Promise<never>((_, reject) => {
     onAbort = () => {
@@ -5257,7 +5316,7 @@ async function waitForMcpServerWake(params: {
   });
 
   try {
-    await Promise.race([wake, aborted]);
+    return await Promise.race([work, aborted]);
   } finally {
     if (onAbort) abortSignal.removeEventListener("abort", onAbort);
   }

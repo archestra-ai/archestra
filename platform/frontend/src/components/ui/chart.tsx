@@ -318,7 +318,12 @@ function ChartLegendContent({
   return (
     <div
       className={cn(
-        "flex items-center justify-center gap-4",
+        // `flex-wrap` and the shrinkable items below are what keep a legend
+        // inside its chart. Recharts sizes the legend wrapper to the chart
+        // width, so a single centred row of long series names (model ids such
+        // as "vendor/some-long-model-name") spills past *both* edges of the
+        // card and off the viewport on a phone.
+        "flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5",
         verticalAlign === "top" ? "pb-3" : "pt-3",
         className,
       )}
@@ -333,7 +338,10 @@ function ChartLegendContent({
             <div
               key={item.value}
               className={cn(
-                "[&>svg]:text-muted-foreground flex items-center gap-1.5 [&>svg]:h-3 [&>svg]:w-3",
+                // `min-w-0` + `max-w-full` let an item narrower than its own
+                // label shrink instead of overflowing the row, so a name too
+                // long for one line wraps rather than being clipped.
+                "[&>svg]:text-muted-foreground flex min-w-0 max-w-full items-center gap-1.5 [&>svg]:h-3 [&>svg]:w-3",
               )}
             >
               {itemConfig?.icon && !hideIcon ? (
@@ -346,7 +354,7 @@ function ChartLegendContent({
                   }}
                 />
               )}
-              <span>{itemConfig?.label}</span>
+              <span className="min-w-0 break-words">{itemConfig?.label}</span>
             </div>
           );
         })}

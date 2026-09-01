@@ -2208,6 +2208,24 @@ const config = {
       process.env.ARCHESTRA_MCP_GATEWAY_TOOL_CALL_TIMEOUT_MS,
       60000,
     ),
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    /**
+     * How long (ms) a tool call holds its reply open while the MCP server
+     * behind it wakes from idle hibernation, before being answered with the
+     * retryable "still starting, retry shortly" result. Deliberately
+     * independent of `toolCallTimeoutMs`, which governs the dispatched call
+     * and only starts counting once the woken server has accepted it. Keep
+     * this under the calling clients' own request timeouts, or the client
+     * aborts first and sees a transport error instead of the retryable
+     * answer.
+     */
+    wakeWaitTimeoutMs: parsePositiveInt(
+      process.env.ARCHESTRA_MCP_GATEWAY_WAKE_WAIT_TIMEOUT_MS,
+      30_000,
+    ),
+    // SPDX-SnippetEnd
     /**
      * Both directions of the draft MCP Skills extension: publishing local
      * Skills through gateways and projecting external Skills from installed

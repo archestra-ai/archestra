@@ -1415,6 +1415,9 @@ A2A task streams work across replicas. A client can subscribe on one replica whi
   - Default: `60000` (60 seconds)
   - Raise it for tools that take a long time to run — a slow scraper or report builder, for example — that otherwise fail with a request-timeout error.
 - The MCP Tasks threshold — how long a call from a Tasks-capable client runs synchronously before becoming a background task — derives from this value: half of it, capped at 10 seconds. Task executions themselves are bounded by the 30-minute task retention window, not this timeout.
+- **`ARCHESTRA_MCP_GATEWAY_WAKE_WAIT_TIMEOUT_MS`** - How long, in milliseconds, a tool call is held open while the MCP server behind it wakes from idle hibernation, before being answered with a retryable "still starting, retry shortly" result.
+  - Default: `30000` (30 seconds)
+  - Independent of the tool-call timeout above: that timeout governs the dispatched call and only starts counting once the woken server has accepted it. Keep this value below your clients' own request timeouts, or a client aborts the call first and sees a transport error instead of the retryable answer.
 - **`ARCHESTRA_MCP_SKILLS_ENABLED`** - Beta gate for both directions of the draft MCP Skills extension (SEP-2640): publishing local Skills through gateways and projecting Skills discovered from installed MCP servers.
   - Default: unset (falls back to `ARCHESTRA_BETA`)
   - An explicit `false` keeps both directions off even when the master beta switch is enabled.

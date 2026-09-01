@@ -60,6 +60,29 @@ const TOOL_CALL_TIMEOUT_MS = 120_000;
 const NOT_RUNNING_ERROR_PATTERN = /not running yet|not ready/i;
 const HIBERNATION_WORDING_PATTERN = /hibernat|waking/i;
 
+/**
+ * Internal wake races (a completeWake superseded by a concurrent transition,
+ * a transition gate another replica held). The demand funnel re-enters the
+ * wake within its reply budget when an attempt loses one of these, so no
+ * caller-facing answer may ever carry this wording — a caller can act on
+ * "still starting, retry" and on a terminal failure, but not on a race it
+ * cannot see.
+ */
+const WAKE_RACE_WORDING_PATTERN =
+  /superseded|concurrent transition|did not finish the deployment's lifecycle transition/i;
+
+/**
+ * The state machine refuses (and logs) any lifecycle move its transition
+ * table forbids rather than throwing, so a path acting from a state it
+ * should not be in fails silently and leaves only this record behind. The
+ * closing test sweeps the platform's logs for it — same pattern as the
+ * recovery spec.
+ */
+const ILLEGAL_TRANSITION_LOG_MESSAGE =
+  "Refused an illegal MCP hibernation state transition";
+const PLATFORM_POD_LABEL_SELECTOR = "app.kubernetes.io/name=archestra-platform";
+const PLATFORM_CONTAINER_NAME = "archestra-platform";
+
 /** Callers fired simultaneously at one sleeping deployment. */
 const CONCURRENT_WAKE_CALLERS = 4;
 
@@ -116,6 +139,14 @@ const EARLY_AWAKE_CHECK_MS = hibernationTiming.earlyAwakeCheckMs;
 const PLATFORM_HIBERNATION_TIMEOUT_MS = hibernationTiming.hibernationDeadlineMs;
 
 /**
+ * Cadence of the tight loop that watches for the sweeper's hibernation patch
+ * to land, in the one test that races the transition itself. Small enough
+ * that the first observation is well inside the pod teardown that follows the
+ * patch; large enough not to lean on the API server.
+ */
+const TRANSITION_POLL_MS = 200;
+
+/**
  * A Kubernetes merge patch, which deletes a key by sending null — something
  * the generated `V1Deployment` type cannot express.
  */
@@ -143,15 +174,19 @@ type InstallRow = {
  * being switched on: a deployment that is already asleep must always be
  * wakeable.
  *
- * The last test is the exception, and the reason the rest can take that
- * shortcut safely: with the organization toggle on for the whole file, it
- * lifts this install's own hibernation veto, leaves it genuinely idle, and
- * watches the PLATFORM write the sleeping state itself — the sweep, the window
- * arithmetic and the annotation writing that every injected state above stands
- * in for. Until then the veto is what keeps the armed sweeper out of the other
- * tests' way, which makes it load-bearing rather than decorative. Paying for
- * an idle window in wall-clock time is also why that one test carries
- * `@slow-window`, and why it is last: nothing here may depend on it.
+ * The last three tests are the exception, and the reason the rest can take
+ * that shortcut safely: with the organization toggle on for the whole file,
+ * each lifts this install's own hibernation veto, leaves it genuinely idle,
+ * and watches the PLATFORM write the sleeping state itself — the sweep, the
+ * window arithmetic and the annotation writing that every injected state
+ * above stands in for (the first waits for the sleeping shape to settle
+ * before knocking; the second knocks DURING the transition; the third keeps
+ * knocking throughout it). Until then the veto is what keeps the armed
+ * sweeper out of the other tests' way, which makes it load-bearing rather
+ * than decorative. Paying for an idle window in wall-clock time is also why
+ * those tests carry `@slow-window`, and why they are last — followed only by
+ * the closing platform-log sweep, which asserts that nothing in this file
+ * ever forced an illegal transition through the state machine.
  *
  * What runs end to end against a real API server and kubelet:
  *   sweepIdleDeployments -> hibernate (replicas 0 + both annotations)
@@ -198,6 +233,8 @@ test.describe("MCP idle hibernation - on-demand wake", () => {
    * value is changed, so `afterAll` can put it back on every path.
    */
   let organizationHibernationWasEnabled: boolean | undefined;
+  /** When this spec began, for the closing platform-log sweep's window. */
+  const specStartedAtMs = Date.now();
 
   const listDeploymentPods = async (): Promise<k8s.V1Pod[]> => {
     const pods = await coreApi.listNamespacedPod({
@@ -991,6 +1028,18 @@ test.describe("MCP idle hibernation - on-demand wake", () => {
     expect(halfWoken.replicas).toBe(preHibernationReplicas);
     expect(halfWoken.generation).toBe((asleep.generation ?? 0) + 1);
 
+    // The first knock lands squarely in the WAKING state. Its answer must be
+    // actionable — the real output, or the still-starting retry — never a
+    // disowning "not running" and never an internal race.
+    const firstOutcome = await callToolOutcome(request);
+    expect(firstOutcome.text).not.toMatch(NOT_RUNNING_ERROR_PATTERN);
+    expect(firstOutcome.text).not.toMatch(WAKE_RACE_WORDING_PATTERN);
+    if (firstOutcome.isError) {
+      expect(firstOutcome.text).toMatch(HIBERNATION_WORDING_PATTERN);
+    } else {
+      expect(firstOutcome.text).toBe(baselineToolText);
+    }
+
     await callUntilServing(request);
 
     await expect
@@ -1010,6 +1059,62 @@ test.describe("MCP idle hibernation - on-demand wake", () => {
     // replace the pod.
     expect((await readDeploymentFacts()).generation).toBe(
       (halfWoken.generation ?? 0) + 1,
+    );
+    expect(await newPodCreationsSince(podCreationsBefore)).toBe(1);
+  });
+
+  test("a call landing between readiness and the annotation drop completes the wake without a second scale", async ({
+    request,
+  }) => {
+    // The FINISH-WAKE state: replicas restored and the pod serving again,
+    // with both annotations still on the object — a wake frozen between its
+    // readiness and its annotation drop (also exactly what a completeWake
+    // whose process died leaves behind). A call landing here must be
+    // answered actionably and drive the deployment to running with at most
+    // the annotation-drop write — never a second scale, never a new pod.
+    test.setTimeout(360_000);
+    requireRecordedBaseline();
+
+    await putToSleepOutOfBand(preHibernationReplicas);
+    const podCreationsBefore = await podCreationEventUids();
+
+    await scaleOutOfBand(preHibernationReplicas);
+    await waitForDeploymentAvailable();
+    // The platform's own periodic refresh self-heals this exact shape, so by
+    // the time the pod is available it may have dropped the annotations
+    // already. Both are legal positions inside the same transition; record
+    // which one the call actually landed on.
+    const atCall = await readDeploymentFacts();
+    const caughtAnnotated = atCall.hibernated === "true";
+    expect(atCall.replicas).toBe(preHibernationReplicas);
+
+    const firstOutcome = await callToolOutcome(request);
+    expect(firstOutcome.text).not.toMatch(NOT_RUNNING_ERROR_PATTERN);
+    expect(firstOutcome.text).not.toMatch(WAKE_RACE_WORDING_PATTERN);
+    if (firstOutcome.isError) {
+      expect(firstOutcome.text).toMatch(HIBERNATION_WORDING_PATTERN);
+    } else {
+      expect(firstOutcome.text).toBe(baselineToolText);
+    }
+
+    await callUntilServing(request);
+    await expect
+      .poll(readHibernationShape, {
+        timeout: 60_000,
+        intervals: CLUSTER_POLL_INTERVALS,
+      })
+      .toEqual({
+        replicas: preHibernationReplicas,
+        hibernated: undefined,
+        preHibernationReplicas: undefined,
+      });
+    // Finishing costs exactly the annotation drop — one write when the call
+    // caught the annotated shape, none when the refresh had already healed
+    // it — and the pod the scale-up created is the only pod that ever
+    // existed. A second wake would show up as extra generations or a
+    // replacement pod.
+    expect((await readDeploymentFacts()).generation).toBe(
+      (atCall.generation ?? 0) + (caughtAnnotated ? 1 : 0),
     );
     expect(await newPodCreationsSince(podCreationsBefore)).toBe(1);
   });
@@ -1212,4 +1317,337 @@ test.describe("MCP idle hibernation - on-demand wake", () => {
       }).catch(() => {});
     }
   });
+
+  test("a tool call that lands while the platform is still hibernating the deployment wakes it back @slow-window", async ({
+    request,
+    makeApiRequest,
+  }) => {
+    // The previous test races nothing: it waits for the sleeping shape to
+    // settle and only then knocks. This one is about the transition itself —
+    // the sweeper has written its patch, the pod is being torn down, the
+    // post-hibernate cleanup still holds the transition gate — and a caller
+    // shows up NOW. The demand path must queue behind the in-flight
+    // transition and wake the deployment, never disown it ("not running
+    // yet"), and never wedge: the platform put it to sleep, so the platform
+    // owns bringing it back.
+    test.setTimeout(1_140_000);
+    requireRecordedBaseline();
+
+    try {
+      // Same idle arrangement as the sweeper test above: quiet period, a
+      // provable last-used stamp, then hands off.
+      await sleepUntil(Date.now() + LAST_USED_QUIET_PERIOD_MS);
+      const lastUsedBefore = Date.parse(
+        (await readInstall({ request, makeApiRequest })).lastUsedAt ?? "",
+      );
+      expect(await callTestTool(request)).toBe(baselineToolText);
+      const idleSince = Date.now();
+      await expect
+        .poll(
+          async () =>
+            Date.parse(
+              (await readInstall({ request, makeApiRequest })).lastUsedAt ?? "",
+            ),
+          { timeout: 30_000, intervals: CLUSTER_POLL_INTERVALS },
+        )
+        .toBeGreaterThan(lastUsedBefore);
+
+      const awake = await readDeploymentFacts();
+      expect(awake.hibernated).toBeUndefined();
+      const replicasBeforeSleep = awake.replicas ?? 0;
+      expect(replicasBeforeSleep).toBeGreaterThan(0);
+
+      await setHibernationMode({ request, makeApiRequest, mode: "enabled" });
+
+      // Catch the transition the moment it lands. hibernate() writes replicas
+      // 0 and both annotations in one patch, so the first read that sees the
+      // marker is at most one poll interval behind the write — while the
+      // kubelet is still tearing the pod down and the sweeper is still inside
+      // its post-hibernate cleanup. A tight manual loop rather than
+      // expect.poll, because the poll's report formatting would spend the
+      // very window this test exists to hit.
+      const transitionDeadlineMs =
+        idleSince +
+        EARLIEST_LEGAL_HIBERNATION_MS +
+        PLATFORM_HIBERNATION_TIMEOUT_MS;
+      let slept: Awaited<ReturnType<typeof readDeploymentFacts>> | undefined;
+      while (Date.now() < transitionDeadlineMs) {
+        const facts = await readDeploymentFacts();
+        if (facts.hibernated === "true") {
+          slept = facts;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, TRANSITION_POLL_MS));
+      }
+      expect(
+        slept,
+        "the sweeper never hibernated the idle install, so there was no transition to race",
+      ).toBeDefined();
+      const observedAtMs = Date.now();
+      expect(slept?.replicas).toBe(0);
+      expect(slept?.preHibernationReplicas).toBe(String(replicasBeforeSleep));
+
+      // Knock immediately — the call is in flight before anything else runs.
+      // The pod snapshot rides alongside it as evidence of how deep into the
+      // teardown the call landed; it is recorded, not asserted, because the
+      // kubelet's pace is not this platform's contract.
+      const firstCall = callToolOutcome(request);
+      const callFiredAtMs = Date.now();
+      const podsAtCall = await listDeploymentPods().catch(() => []);
+      test.info().annotations.push({
+        type: "mid-transition evidence",
+        description:
+          `call fired ${callFiredAtMs - observedAtMs}ms after the hibernation patch was observed; ` +
+          `pods still present: ${
+            podsAtCall
+              .map(
+                (pod) =>
+                  `${pod.metadata?.name}(${pod.metadata?.deletionTimestamp ? "terminating" : pod.status?.phase})`,
+              )
+              .join(", ") || "none"
+          }`,
+      });
+      // Both timestamps are this process's own clock: the knock verifiably
+      // happened at the transition, not after the dust settled.
+      expect(callFiredAtMs - observedAtMs).toBeLessThan(1_000);
+
+      // The demand path may answer the first knock either way — with the
+      // server's real output (the wake finished inside the reply budget) or,
+      // when a cold pod genuinely outlives the budget, with the retryable
+      // still-starting answer. What it may NEVER say: that the deployment is
+      // not the platform's problem ("not running yet" here means the gateway
+      // lost track of a deployment the sweeper itself just put to sleep), or
+      // that the wake lost an internal race ("superseded by a concurrent
+      // transition") — the demand funnel re-enters the wake within its reply
+      // budget precisely so a mid-transition caller never sees those races.
+      const firstOutcome = await firstCall;
+      expect(firstOutcome.text).not.toMatch(NOT_RUNNING_ERROR_PATTERN);
+      expect(firstOutcome.text).not.toMatch(WAKE_RACE_WORDING_PATTERN);
+      if (firstOutcome.isError) {
+        expect(firstOutcome.text).toMatch(HIBERNATION_WORDING_PATTERN);
+      } else {
+        expect(firstOutcome.text).toBe(baselineToolText);
+      }
+
+      // Demand alone completes the round trip: the server answers with its
+      // real output, and the deployment ends awake, unmarked, at the replica
+      // count it slept with.
+      await callUntilServing(request);
+      await expect
+        .poll(readHibernationShape, {
+          timeout: 90_000,
+          intervals: CLUSTER_POLL_INTERVALS,
+        })
+        .toEqual({
+          replicas: replicasBeforeSleep,
+          hibernated: undefined,
+          preHibernationReplicas: undefined,
+        });
+      await waitForDeploymentAvailable();
+    } finally {
+      // Pin it awake again whatever happened, exactly like the test above.
+      await makeApiRequest({
+        request,
+        method: "put",
+        urlSuffix: `/api/internal_mcp_catalog/${catalogItemId}`,
+        data: { hibernationMode: "disabled" },
+      }).catch(() => {});
+    }
+  });
+
+  test("demand arriving throughout an in-progress hibernation converges on one wake, and every caller is answered actionably @slow-window", async ({
+    request,
+    makeApiRequest,
+  }) => {
+    // The test above knocks once, at the instant the transition lands. This
+    // one keeps knocking THROUGH it — at the patch, mid pod-teardown, and
+    // into the wake the first caller started — because that is what a busy
+    // gateway does to a server the sweeper picked a bad moment for. Every
+    // answer must be actionable (the real output, or the still-starting
+    // retry), no caller may see an internal race or a disowning error, and
+    // the whole storm must cost exactly one wake.
+    test.setTimeout(1_140_000);
+    requireRecordedBaseline();
+
+    try {
+      await sleepUntil(Date.now() + LAST_USED_QUIET_PERIOD_MS);
+      const lastUsedBefore = Date.parse(
+        (await readInstall({ request, makeApiRequest })).lastUsedAt ?? "",
+      );
+      expect(await callTestTool(request)).toBe(baselineToolText);
+      const idleSince = Date.now();
+      await expect
+        .poll(
+          async () =>
+            Date.parse(
+              (await readInstall({ request, makeApiRequest })).lastUsedAt ?? "",
+            ),
+          { timeout: 30_000, intervals: CLUSTER_POLL_INTERVALS },
+        )
+        .toBeGreaterThan(lastUsedBefore);
+
+      const awake = await readDeploymentFacts();
+      expect(awake.hibernated).toBeUndefined();
+      const replicasBeforeSleep = awake.replicas ?? 0;
+      expect(replicasBeforeSleep).toBeGreaterThan(0);
+
+      await setHibernationMode({ request, makeApiRequest, mode: "enabled" });
+
+      const transitionDeadlineMs =
+        idleSince +
+        EARLIEST_LEGAL_HIBERNATION_MS +
+        PLATFORM_HIBERNATION_TIMEOUT_MS;
+      let slept: Awaited<ReturnType<typeof readDeploymentFacts>> | undefined;
+      while (Date.now() < transitionDeadlineMs) {
+        const facts = await readDeploymentFacts();
+        if (facts.hibernated === "true") {
+          slept = facts;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, TRANSITION_POLL_MS));
+      }
+      expect(
+        slept,
+        "the sweeper never hibernated the idle install, so there was no transition to storm",
+      ).toBeDefined();
+
+      const podCreationsBefore = await podCreationEventUids();
+
+      // Three callers spread across the transition's phases. Answers are
+      // collected, never thrown: a failed MCP call is an ordinary JSON-RPC
+      // result, and what it SAYS is the contract under test.
+      const callerDelaysMs = [0, 1_000, 2_500];
+      const firstOutcomes = await Promise.all(
+        callerDelaysMs.map(async (delayMs) => {
+          if (delayMs > 0) {
+            await new Promise((resolve) => setTimeout(resolve, delayMs));
+          }
+          return callToolOutcome(request);
+        }),
+      );
+      for (const [index, outcome] of firstOutcomes.entries()) {
+        expect
+          .soft(outcome.text, `caller ${index} was disowned`)
+          .not.toMatch(NOT_RUNNING_ERROR_PATTERN);
+        expect
+          .soft(outcome.text, `caller ${index} saw an internal wake race`)
+          .not.toMatch(WAKE_RACE_WORDING_PATTERN);
+        if (outcome.isError) {
+          expect(outcome.text).toMatch(HIBERNATION_WORDING_PATTERN);
+        } else {
+          expect(outcome.text).toBe(baselineToolText);
+        }
+      }
+
+      // Demand converges: the server answers with its real output, on the
+      // burst budget (three callers share one serialized stdio pod).
+      await callUntilServing(request, BURST_SERVING_RETRY_TIMEOUT_MS);
+
+      // The whole storm cost at most one pod creation. 0 is the platform at
+      // its best — the wake reverted the scale-down before the ReplicaSet
+      // ever acted, so the original pod simply kept serving; 1 is a single
+      // replacement pod. More than one is a doubled wake, the thing this
+      // storm exists to rule out.
+      expect(
+        await newPodCreationsSince(podCreationsBefore),
+      ).toBeLessThanOrEqual(1);
+
+      await expect
+        .poll(readHibernationShape, {
+          timeout: 90_000,
+          intervals: CLUSTER_POLL_INTERVALS,
+        })
+        .toEqual({
+          replicas: replicasBeforeSleep,
+          hibernated: undefined,
+          preHibernationReplicas: undefined,
+        });
+      await waitForDeploymentAvailable();
+    } finally {
+      await makeApiRequest({
+        request,
+        method: "put",
+        urlSuffix: `/api/internal_mcp_catalog/${catalogItemId}`,
+        data: { hibernationMode: "disabled" },
+      }).catch(() => {});
+    }
+  });
+
+  test("no illegal lifecycle transition was refused for this deployment", async () => {
+    // Everything above drove this deployment through every in-transition
+    // state — injected sleeps, half-woken resumes, finish-wake completions,
+    // real-sweeper transitions with demand landing mid-flight. None of it
+    // may have had to punch through the state machine: a refusal means some
+    // path reasoned from a state it should not have been in.
+    const logs = await readPlatformLogs();
+    test.skip(
+      logs === null,
+      "platform logs are not observable from a test here: no readable pod matches " +
+        PLATFORM_POD_LABEL_SELECTOR,
+    );
+
+    // deploymentName appears in every refusal record and is unique to this
+    // spec's install, so specs running in parallel cannot poison the result.
+    const attributable = (logs ?? "")
+      .split("\n")
+      .filter((line) => line.includes(deploymentName));
+
+    // Positive control: the wakes and hibernates above log this deployment
+    // by name, so a window that never mentions it is not evidence about it —
+    // a truncated window or a hidden log level would otherwise read as
+    // health.
+    expect(
+      attributable.length,
+      `no platform log record in this window names ${deploymentName}, so the window is not evidence about it`,
+    ).toBeGreaterThan(0);
+
+    expect(
+      attributable.filter((line) =>
+        line.includes(ILLEGAL_TRANSITION_LOG_MESSAGE),
+      ),
+      `the platform refused an illegal hibernation transition for ${deploymentName}`,
+    ).toEqual([]);
+  });
+
+  /**
+   * The platform's own log stream for the window this spec has been running,
+   * or `null` when it cannot be observed from here (the platform does not
+   * run as a labelled pod in this cluster, or its log endpoint refused).
+   * `null` is deliberately distinct from `""`, so an unreadable stream can
+   * never be mistaken for evidence that no warning was produced.
+   */
+  async function readPlatformLogs(): Promise<string | null> {
+    const pods = await coreApi
+      .listPodForAllNamespaces({ labelSelector: PLATFORM_POD_LABEL_SELECTOR })
+      .catch(() => null);
+    if (!pods || pods.items.length === 0) return null;
+
+    const sinceSeconds = Math.ceil((Date.now() - specStartedAtMs) / 1_000) + 60;
+    const chunks: string[] = [];
+    for (const pod of pods.items) {
+      const name = pod.metadata?.name;
+      const namespace = pod.metadata?.namespace;
+      if (!name || !namespace) continue;
+      const log = await coreApi
+        .readNamespacedPodLog({
+          name,
+          namespace,
+          container: PLATFORM_CONTAINER_NAME,
+          sinceSeconds,
+        })
+        // A multi-container pod rejects a read with no container named; a pod
+        // whose container is named otherwise rejects this one. Try both before
+        // concluding the stream is unreadable.
+        .catch(() =>
+          coreApi
+            .readNamespacedPodLog({ name, namespace, sinceSeconds })
+            .catch(() => null),
+        );
+      if (log != null) chunks.push(log);
+    }
+
+    if (chunks.length === 0) return null;
+    const combined = chunks.join("\n");
+    return combined.trim().length === 0 ? null : combined;
+  }
 });

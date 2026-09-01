@@ -4,7 +4,14 @@ import {
   type archestraApiTypes,
   MESSAGING_CHANNEL_LABELS,
 } from "@archestra/shared";
-import { ArrowRight, Info, LockKeyhole, Plus, X } from "lucide-react";
+import {
+  ArrowRight,
+  ChevronDown,
+  Info,
+  LockKeyhole,
+  Plus,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -37,6 +44,7 @@ import {
 import { useAgentEmailAddress } from "@/lib/chatops/incoming-email.query";
 import { useConfig } from "@/lib/config/config.query";
 import { useMessagingChannelCatalog } from "@/lib/integration-overrides";
+import { cn } from "@/lib/utils";
 
 type Agent = archestraApiTypes.GetAgentResponses["200"];
 type Binding =
@@ -711,7 +719,7 @@ function AssignedChannelRow({
   const staged = option.virtualDm
     ? "New direct message"
     : option.assignedAgentName
-      ? `Moving from ${option.assignedAgentName}`
+      ? `Takes over from ${option.assignedAgentName}`
       : null;
   return (
     // Named: the row's controls say "Settings" and an X, which only mean
@@ -722,8 +730,13 @@ function AssignedChannelRow({
     >
       <ChannelIcon channel={option.provider} className="size-4 shrink-0" />
       <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-        <span className="truncate text-sm font-medium">{option.name}</span>
-        <span className="truncate text-xs text-muted-foreground">
+        {/* A flex item will not shrink past its content without min-w-0, so
+            without it `truncate` never fires and a long name pushes the row's
+            controls off the card instead. */}
+        <span className="min-w-0 max-w-full truncate text-sm font-medium">
+          {option.name}
+        </span>
+        <span className="min-w-0 max-w-full truncate text-xs text-muted-foreground">
           {[MESSAGING_CHANNEL_LABELS[option.provider], option.workspaceName]
             .filter(Boolean)
             .join(" · ")}
@@ -821,9 +834,19 @@ function AddChannelPicker({
   const shown = unassigned.filter(
     (option) => option.provider === activeProvider && matches(option),
   );
+  // What you can actually click stays the list. An option this agent may never
+  // hold — most of the pool, for a personal agent — would otherwise bury the
+  // one or two pickable rows under its own copy of the same refusal.
+  const available = shown.filter((option) => !option.disabledReason);
+  const blocked = groupByDisabledReason(shown);
   // Searched here, found there: rather than an empty list, say where it is.
+  // Only pickable ones count — pointing at a tab with nothing claimable in it
+  // is a wasted trip.
   const elsewhere = unassigned.filter(
-    (option) => option.provider !== activeProvider && matches(option),
+    (option) =>
+      option.provider !== activeProvider &&
+      !option.disabledReason &&
+      matches(option),
   );
 
   if (!open) {
@@ -899,9 +922,12 @@ function AddChannelPicker({
           }
         />
       </div>
-      <ScrollArea className="max-h-64">
+      {/* Radix scrolls its viewport, not the root, and the root here is sized
+          by max-height alone — without clipping it, a long pool spills out of
+          the panel and over whatever the page renders underneath. */}
+      <ScrollArea className="max-h-64 overflow-auto">
         <div className="p-2 pt-0">
-          {shown.map((option) => {
+          {available.map((option) => {
             const heldBy =
               option.assignedAgentId && option.assignedAgentId !== agentId
                 ? (agentReferences.get(option.assignedAgentId)?.name ??
@@ -912,8 +938,7 @@ function AddChannelPicker({
               <button
                 key={option.id}
                 type="button"
-                disabled={!!option.disabledReason}
-                className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left hover:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-60"
+                className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left hover:bg-muted/60"
                 onClick={() => {
                   onPick(option.id);
                   setOpen(false);
@@ -923,18 +948,16 @@ function AddChannelPicker({
                 <span className="min-w-0 flex-1 truncate text-sm">
                   {option.name}
                 </span>
-                {option.disabledReason ? (
-                  <span className="flex shrink-0 items-center gap-1 text-xs text-amber-700 dark:text-amber-400">
-                    <LockKeyhole className="size-3" />
-                    {option.disabledReason}
-                  </span>
-                ) : option.virtualDm ? (
+                {option.virtualDm ? (
                   <span className="shrink-0 text-xs text-muted-foreground">
                     A private chat with this agent
                   </span>
                 ) : (
                   heldBy && (
-                    <span className="shrink-0 text-xs text-muted-foreground">
+                    <span
+                      className="max-w-[45%] shrink-0 truncate text-xs text-muted-foreground"
+                      title={`Answered by ${heldBy}`}
+                    >
                       Answered by {heldBy}
                     </span>
                   )
@@ -942,7 +965,7 @@ function AddChannelPicker({
               </button>
             );
           })}
-          {shown.length === 0 && (
+          {available.length === 0 && (
             <p className="px-2 py-6 text-center text-sm text-muted-foreground">
               {elsewhere.length > 0 && activeProvider ? (
                 <>
@@ -958,13 +981,78 @@ function AddChannelPicker({
                 </>
               ) : normalized ? (
                 "No channels match."
+              ) : blocked.length > 0 ? (
+                /* The group below already names them and says why. */
+                "Nothing here this agent can take on."
               ) : (
                 "Every channel here is already assigned to this agent."
               )}
             </p>
           )}
+          {blocked.map(([reason, blockedOptions]) => (
+            <BlockedOptions
+              key={reason}
+              reason={reason}
+              options={blockedOptions}
+            />
+          ))}
         </div>
       </ScrollArea>
+    </div>
+  );
+}
+
+/**
+ * The part of the pool this agent may never hold, folded into one line.
+ *
+ * Every option in a group is refused for the same reason, so the reason is
+ * written once here rather than once per row — a personal agent is refused
+ * every shared channel in the organization, and thirty copies of that sentence
+ * was the loudest thing on the page. They stay one click from view, because
+ * "where did my channel go" is a fair question to ask of a picker.
+ */
+function BlockedOptions({
+  reason,
+  options,
+}: {
+  reason: string;
+  options: AssignmentOption[];
+}) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="mt-1 border-t pt-1">
+      <button
+        type="button"
+        aria-expanded={expanded}
+        className="flex w-full items-start gap-2 rounded-sm px-2 py-2 text-left hover:bg-muted/60"
+        onClick={() => setExpanded((current) => !current)}
+      >
+        <LockKeyhole className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm">
+            {options.length} not available to this agent
+          </span>
+          <span className="block text-xs text-muted-foreground">{reason}</span>
+        </span>
+        <ChevronDown
+          className={cn(
+            "mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform",
+            expanded && "rotate-180",
+          )}
+        />
+      </button>
+      {expanded && (
+        <ul className="pb-1">
+          {options.map((option) => (
+            <li
+              key={option.id}
+              className="truncate px-2 py-1.5 pl-9 text-sm text-muted-foreground"
+            >
+              {option.name}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -1095,6 +1183,8 @@ type AssignmentOption = {
   id: string;
   provider: ChatProvider;
   name: string;
+  /** Whose direct message this is, when it is one. Names it in the a11y label. */
+  ownerEmail: string | null;
   workspaceName: string | null;
   assignedAgentId: string | null;
   assignedAgentName: string | null;
@@ -1113,6 +1203,7 @@ type AssignmentPlan = {
     provider: ChatProvider;
     channelName: string;
     agentName: string;
+    isDm: boolean;
   }>;
 };
 
@@ -1197,6 +1288,7 @@ function buildAssignmentOptions({
     id: `${VIRTUAL_DM_PREFIX}${provider}`,
     provider,
     name: "Direct message",
+    ownerEmail: null,
     workspaceName: null,
     assignedAgentId: null,
     assignedAgentName: null,
@@ -1216,6 +1308,7 @@ function buildAssignmentOptions({
       id: binding.id,
       provider: binding.provider,
       name: channelName(binding),
+      ownerEmail: binding.isDm ? binding.dmOwnerEmail : null,
       workspaceName: binding.workspaceName,
       assignedAgentId: binding.agentId,
       assignedAgentName:
@@ -1230,6 +1323,24 @@ function buildAssignmentOptions({
     };
   });
   return [...virtualDmOptions, ...realOptions];
+}
+
+/**
+ * Refused options bucketed by the sentence that explains them, in the order
+ * the reasons first appear. Usually one bucket; a personal agent looking at a
+ * provider it cannot DM on has two.
+ */
+function groupByDisabledReason(
+  options: AssignmentOption[],
+): Array<[string, AssignmentOption[]]> {
+  const groups = new Map<string, AssignmentOption[]>();
+  for (const option of options) {
+    if (!option.disabledReason) continue;
+    const group = groups.get(option.disabledReason);
+    if (group) group.push(option);
+    else groups.set(option.disabledReason, [option]);
+  }
+  return [...groups];
 }
 
 function buildAssignmentPlan({
@@ -1276,6 +1387,7 @@ function buildAssignmentPlan({
               provider: binding.provider as ChatProvider,
               channelName: channelName(binding),
               agentName: agentNames.get(binding.agentId) ?? "another agent",
+              isDm: binding.isDm,
             },
           ]
         : [],
@@ -1302,17 +1414,21 @@ function ReassignmentConfirmDialog({
 }) {
   const count = plan?.reassignments.length ?? 0;
   const singular = count === 1;
+  const noun = reassignmentNoun(plan);
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
   return (
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
+      // Nothing is being moved anywhere: the room stays where it is and the
+      // agent answering in it changes. "Move channel to n8n" read as though
+      // the channel itself were being relocated between agents.
       title={
         singular
-          ? `Move channel to ${targetAgent.name}?`
-          : `Move ${count} channels to ${targetAgent.name}?`
+          ? `Change the agent for this ${noun.one}?`
+          : `Change the agent for ${count} ${noun.many}?`
       }
-      description="Each messaging channel can be assigned to only one agent at a time."
+      description={`A ${noun.one} answers with one agent at a time.`}
       size="medium"
       initialFocusRef={cancelButtonRef}
       headerClassName="px-12 sm:px-4"
@@ -1336,8 +1452,8 @@ function ReassignmentConfirmDialog({
                 .
               </p>
               <p className="text-muted-foreground">
-                The current {singular ? "agent" : "agents"} will stop receiving
-                messages from {singular ? "this channel" : "these channels"}.
+                The current {singular ? "agent" : "agents"} will stop answering{" "}
+                {singular ? `in this ${noun.one}` : `in these ${noun.many}`}.
               </p>
             </div>
           </div>
@@ -1345,7 +1461,7 @@ function ReassignmentConfirmDialog({
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-medium">Assignment changes</p>
             <Badge variant="secondary">
-              {count} {singular ? "channel" : "channels"}
+              {count} {singular ? noun.one : noun.many}
             </Badge>
           </div>
 
@@ -1360,9 +1476,11 @@ function ReassignmentConfirmDialog({
                   name={reassignment.channelName}
                 />
                 <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] grid-rows-[auto_minmax(1.25rem,auto)] items-center gap-x-3 gap-y-1">
-                  <p className="text-xs text-muted-foreground">From</p>
+                  <p className="text-xs text-muted-foreground">Answers now</p>
                   <span aria-hidden="true" />
-                  <p className="text-xs text-muted-foreground">To</p>
+                  <p className="text-xs text-muted-foreground">
+                    Answers after saving
+                  </p>
                   <div className="min-w-0 self-center">
                     <PlainAgentIdentity
                       agent={
@@ -1398,10 +1516,10 @@ function ReassignmentConfirmDialog({
           <Button type="submit" disabled={isPending}>
             <span>
               {isPending
-                ? "Moving..."
+                ? "Saving..."
                 : singular
-                  ? "Move channel"
-                  : "Move channels"}
+                  ? "Change agent"
+                  : "Change agents"}
             </span>
           </Button>
         </DialogStickyFooter>
@@ -1410,11 +1528,28 @@ function ReassignmentConfirmDialog({
   );
 }
 
+/**
+ * What to call the things being reassigned. A direct message is not a channel,
+ * and a confirmation that says "channel" over a row reading "Direct message
+ * (someone@example.com)" is the reason this dialog was hard to read.
+ */
+function reassignmentNoun(plan: AssignmentPlan | null) {
+  const items = plan?.reassignments ?? [];
+  if (items.length > 0 && items.every((item) => item.isDm)) {
+    return { one: "direct message", many: "direct messages" };
+  }
+  if (items.some((item) => item.isDm)) {
+    return { one: "conversation", many: "conversations" };
+  }
+  return { one: "channel", many: "channels" };
+}
+
 function assignmentOptionLabel(option: AssignmentOption) {
   const provider = MESSAGING_CHANNEL_LABELS[option.provider];
-  return option.isDm
-    ? `${provider} direct message`
-    : `${provider} channel ${option.name}`;
+  if (!option.isDm) return `${provider} channel ${option.name}`;
+  return option.ownerEmail
+    ? `${provider} direct message for ${option.ownerEmail}`
+    : `${provider} direct message`;
 }
 
 function PlainAgentIdentity({ agent }: { agent: AgentReferenceData }) {
@@ -1441,8 +1576,15 @@ function PlainChannelIdentity({
   );
 }
 
+/**
+ * Every direct message is called "Direct message", so a pool with more than
+ * one of them offered a column of identical rows — and the transfer dialog
+ * then asked you to confirm a move of, simply, "Direct message". The owner is
+ * the only thing that tells them apart.
+ */
 function channelName(binding: Binding) {
-  return binding.isDm
-    ? "Direct message"
-    : (binding.channelName ?? binding.channelId);
+  if (!binding.isDm) return binding.channelName ?? binding.channelId;
+  return binding.dmOwnerEmail
+    ? `Direct message (${binding.dmOwnerEmail})`
+    : "Direct message";
 }

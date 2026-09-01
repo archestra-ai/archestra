@@ -10,14 +10,16 @@ import {
 } from "./agent-page-config";
 
 describe("getAgentSetupSteps", () => {
-  it("walks an agent through configuration, tools and advanced — connecting is the detail page's section, not a step", () => {
+  it("walks an agent through configuration, tools, messaging and advanced — connecting is the detail page's section, not a step", () => {
     expect(
       getAgentSetupSteps({ agentType: "agent", builtIn: false }).map(
         (s) => s.id,
       ),
-    ).toEqual(["configuration", "tools", "advanced"]);
+    ).toEqual(["configuration", "tools", "messaging", "advanced"]);
   });
 
+  // A gateway or a proxy is not something a person messages, so it gets no
+  // messaging step.
   it("gives an MCP gateway (and a legacy profile) the same three steps", () => {
     for (const agentType of ["mcp_gateway", "profile"] as const) {
       expect(

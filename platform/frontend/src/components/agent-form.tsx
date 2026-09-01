@@ -1171,11 +1171,13 @@ export function AgentForm({
   const [backgroundExecution, setBackgroundExecution] =
     useState<BackgroundExecutionConfig | null>(null);
   const [channelAssignmentsDirty, setChannelAssignmentsDirty] = useState(false);
-  const channelAssignmentsSaveRef = useRef<(() => Promise<boolean>) | null>(
-    null,
-  );
+  // Takes the id to write against: on create it is the one the record was just
+  // given, which does not exist when the handler is registered.
+  const channelAssignmentsSaveRef = useRef<
+    ((params?: { agentId: string }) => Promise<boolean>) | null
+  >(null);
   const registerChannelAssignmentsSave = useCallback(
-    (handler: (() => Promise<boolean>) | null) => {
+    (handler: ((params?: { agentId: string }) => Promise<boolean>) | null) => {
       channelAssignmentsSaveRef.current = handler;
     },
     [],
@@ -2207,6 +2209,17 @@ export function AgentForm({
               });
             }
             await savePublishedSkills(savedAgentId);
+            // Channels picked on the wizard's messaging step, which had no id
+            // to be written against until a moment ago.
+            if (channelAssignmentsDirty) {
+              const saveChannelAssignments = channelAssignmentsSaveRef.current;
+              if (
+                saveChannelAssignments &&
+                !(await saveChannelAssignments({ agentId: savedAgentId }))
+              ) {
+                throw new Error("The messaging channels could not be assigned");
+              }
+            }
           } catch (error) {
             await deleteAgent.mutateAsync(savedAgentId);
             throw error;
@@ -2382,6 +2395,7 @@ export function AgentForm({
     supportsSubagents,
     agentBackgroundExecutionEnabled,
     backgroundExecution,
+    channelAssignmentsDirty,
   ]);
 
   const handleSave = useCallback(async () => {
@@ -2393,7 +2407,10 @@ export function AgentForm({
       toast.error("Please select at least one team");
       return;
     }
-    if (channelAssignmentsDirty) {
+    // Edit mode writes the assignments first, against an id that already
+    // exists. On create there is no id yet, so `performSave` writes them after
+    // the record lands, under the same rollback as the other staged editors.
+    if (agent && channelAssignmentsDirty) {
       const saveChannelAssignments = channelAssignmentsSaveRef.current;
       if (!saveChannelAssignments) {
         toast.error(
@@ -2409,6 +2426,7 @@ export function AgentForm({
     }
     await performSave();
   }, [
+    agent,
     name,
     isAdmin,
     scope,
@@ -2894,7 +2912,6 @@ export function AgentForm({
           {showMessagingSection &&
             agentType === "agent" &&
             !isBuiltIn &&
-            agent &&
             canReadAgentTriggers && (
               <SettingsSectionGroup
                 className={cn(!isActiveSection("messaging") && "hidden")}
@@ -2903,7 +2920,22 @@ export function AgentForm({
                     the two are different kinds of thing, and neither belongs
                     inside the other's list. */}
                 <AgentChatAppsEditor
-                  agent={agent}
+                  // Before the record exists the channels are picked against
+                  // the draft on this form, and written once Create has given
+                  // it an id.
+                  subject={
+                    agent ?? {
+                      id: null,
+                      name: name.trim() || "This agent",
+                      icon: icon || null,
+                      scope,
+                      authorId: currentUserId,
+                    }
+                  }
+                  emailAgent={agent ?? null}
+                  // See `confirmTransfers`: on create the write happens after
+                  // the record exists, so a cancel there would mean deleting it.
+                  confirmTransfers={!!agent}
                   readOnly={readOnly}
                   onDirtyChange={setChannelAssignmentsDirty}
                   standaloneSave={false}

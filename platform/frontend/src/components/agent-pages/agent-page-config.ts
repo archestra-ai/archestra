@@ -93,7 +93,11 @@ export function agentNewHref(kind: AgentPageKind): string {
   return `${AGENT_PAGE_CONFIGS[kind].basePath}/new`;
 }
 
-export type AgentSetupStepId = "configuration" | "tools" | "advanced";
+export type AgentSetupStepId =
+  | "configuration"
+  | "tools"
+  | "messaging"
+  | "advanced";
 
 export type AgentSetupStep = WizardStepDefinition<AgentSetupStepId>;
 
@@ -158,6 +162,7 @@ export function resolveAgentDetailSection(
 const SECTION_FOR_SETUP_STEP = {
   configuration: "general",
   tools: "tools",
+  messaging: "messaging",
   advanced: "advanced",
 } as const satisfies Record<AgentSetupStepId, AgentDetailSection>;
 
@@ -166,24 +171,36 @@ const CONFIGURATION_STEP: AgentSetupStep = {
   title: "Configuration",
 };
 const TOOLS_STEP: AgentSetupStep = { id: "tools", title: "Tools & Knowledge" };
+const MESSAGING_STEP: AgentSetupStep = {
+  id: "messaging",
+  title: "Messaging Channels",
+};
 const ADVANCED_STEP: AgentSetupStep = { id: "advanced", title: "Advanced" };
 
 /**
  * The setup wizard's steps for one agent — the same on create and on edit.
  * Configuration is what the record is and who can use it; Tools & Knowledge
- * holds everything the agent reaches; Advanced the settings a record rarely
- * needs. A built-in agent is a single-step edit, so its host renders no
+ * holds everything the agent reaches; Messaging Channels where it answers;
+ * Advanced the settings a record rarely needs. Only an `agent` has channels —
+ * a gateway or proxy is not something a person messages — so the step is
+ * offered for that type alone. A built-in agent is a single-step edit, so its host renders no
  * stepper. Connecting is not a step: it is the detail page's Connect section,
  * where a record lands once created and which the list's Connect action opens.
  */
 export function getAgentSetupSteps({
+  agentType,
   builtIn,
 }: {
   agentType: AgentType;
   builtIn: boolean;
 }): AgentSetupStep[] {
   if (builtIn) return [CONFIGURATION_STEP];
-  return [CONFIGURATION_STEP, TOOLS_STEP, ADVANCED_STEP];
+  return [
+    CONFIGURATION_STEP,
+    TOOLS_STEP,
+    ...(agentType === "agent" ? [MESSAGING_STEP] : []),
+    ADVANCED_STEP,
+  ];
 }
 
 /**

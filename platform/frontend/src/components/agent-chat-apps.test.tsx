@@ -141,7 +141,24 @@ import {
   useChatOpsStatus,
 } from "@/lib/chatops/chatops.query";
 import { useConfig } from "@/lib/config/config.query";
-import { AgentChatAppsEditor as AgentChatApps } from "./agent-chat-apps";
+import { AgentChatAppsEditor } from "./agent-chat-apps";
+
+/**
+ * The saved-record mounting, which is what the detail page does: the same agent
+ * is both the subject the channels are assigned to and the record the Email
+ * half configures. The create wizard's mounting (no id, no email) is exercised
+ * by the tests that use `AgentChatAppsEditor` directly.
+ */
+function AgentChatApps({
+  agent,
+  ...rest
+}: { agent: Parameters<typeof AgentChatAppsEditor>[0]["emailAgent"] } & Omit<
+  Parameters<typeof AgentChatAppsEditor>[0],
+  "subject" | "emailAgent"
+>) {
+  if (!agent) throw new Error("agent required");
+  return <AgentChatAppsEditor subject={agent} emailAgent={agent} {...rest} />;
+}
 
 const bindings = [
   {
@@ -1196,6 +1213,54 @@ describe("AgentChatAppsEditor", () => {
     expect(
       within(dialog).getByRole("button", { name: "Change agent" }),
     ).toBeVisible();
+  });
+
+  it("stages channels for a record that does not exist yet", async () => {
+    const user = userEvent.setup();
+    let save: ((params?: { agentId: string }) => Promise<boolean>) | null =
+      null;
+    render(
+      <AgentChatAppsEditor
+        // The create wizard's mounting: a draft with no id, and no Email half
+        // because an address is issued to a record that exists.
+        subject={{ id: null, name: "Draft", scope: "org", authorId: "user-1" }}
+        emailAgent={null}
+        standaloneSave={false}
+        confirmTransfers={false}
+        onSaveHandlerChange={(handler) => {
+          save = handler;
+        }}
+      />,
+    );
+
+    expect(screen.queryByText("Email")).toBeNull();
+    // An unassigned channel must not read as already this agent's just because
+    // both its agent id and the draft's are null.
+    expect(screen.queryByText("General")).toBeNull();
+
+    await addChannel(user, "General", "Slack");
+    expect(channelRow("General")).toBeVisible();
+
+    // The wizard writes the staged picks against the id Create just returned.
+    await (save as unknown as (p: { agentId: string }) => Promise<boolean>)?.({
+      agentId: "created-agent",
+    });
+    await waitFor(() => {
+      expect(applyBindingPlan).toHaveBeenCalledWith(
+        {
+          targetAgentId: "created-agent",
+          updates: [
+            {
+              bindingId: "binding-1",
+              expectedAgentId: "agent-1",
+              nextAgentId: "created-agent",
+            },
+          ],
+          directMessages: [],
+        },
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      );
+    });
   });
 
   it("keeps unsupported personal-agent channels visible but disabled", () => {

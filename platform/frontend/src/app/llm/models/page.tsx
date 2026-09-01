@@ -16,6 +16,7 @@ import {
   Plus,
   RefreshCw,
   Server,
+  Tags,
   UserRoundCheck,
   Users,
 } from "lucide-react";
@@ -72,6 +73,14 @@ import {
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { formatPricePerMillion } from "@/lib/model-price-format";
 import { formatContextLength } from "@/lib/utils";
+import { EntityLabelFilter } from "@/components/entity-label-filter";
+import { EntityLabelsDialog } from "@/components/entity-labels-dialog";
+import { useSelectedLabels } from "@/components/label-select";
+import {
+  useModelLabelKeys,
+  useModelLabelValues,
+  useSaveModelLabels,
+} from "@/lib/entity-labels.query";
 import { EditModelDialog } from "./_parts/edit-model-dialog";
 import {
   canFilterFreeModelsForApiKey,
@@ -94,6 +103,9 @@ export default function ModelsPage() {
   const syncModelsMutation = useSyncLlmModels();
   const updateModel = useUpdateModel();
   const [isRefreshingModels, setIsRefreshingModels] = useState(false);
+  const [labelingModel, setLabelingModel] = useState<ModelWithApiKeys | null>(null);
+  const saveModelLabels = useSaveModelLabels();
+  const selectedLabels = useSelectedLabels();
   const [isCreateApiKeyDialogOpen, setIsCreateApiKeyDialogOpen] =
     useState(false);
   const [search, setSearch] = useState("");
@@ -127,25 +139,34 @@ export default function ModelsPage() {
 
   const bulkVisibility = useBulkUpdateModelVisibility();
 
-  const filteredModels = useMemo(
-    () =>
-      filterModelsForPage({
-        models,
-        search,
-        apiKeyFilter,
-        modelTypeFilter,
-        freeOnly,
-        canFilterFreeModels,
-      }),
-    [
+  const filteredModels = useMemo(() => {
+    const byPageFilters = filterModelsForPage({
       models,
       search,
       apiKeyFilter,
       modelTypeFilter,
       freeOnly,
       canFilterFreeModels,
-    ],
-  );
+    });
+    // Applied here rather than on the query: this page reads the whole catalog
+    // once and narrows it in the browser, as its other filters do.
+    if (!selectedLabels) return byPageFilters;
+    return byPageFilters.filter((model) =>
+      Object.entries(selectedLabels).every(([key, values]) =>
+        model.labels.some(
+          (label) => label.key === key && values.includes(label.value),
+        ),
+      ),
+    );
+  }, [
+    models,
+    search,
+    apiKeyFilter,
+    modelTypeFilter,
+    freeOnly,
+    canFilterFreeModels,
+    selectedLabels,
+  ]);
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshingModels(true);
@@ -489,6 +510,11 @@ export default function ModelsPage() {
                 disabled: updateModel.isPending,
               },
               {
+                icon: <Tags className="h-4 w-4" />,
+                label: "Edit labels",
+                onClick: () => setLabelingModel(row.original),
+              },
+              {
                 icon: <Pencil className="h-4 w-4" />,
                 label: "Edit",
                 onClick: () => openEditDialog(row.original),
@@ -627,6 +653,13 @@ export default function ModelsPage() {
                   </Label>
                 </div>
               )}
+              <EntityLabelFilter
+                useLabelKeys={useModelLabelKeys}
+                useLabelValues={useModelLabelValues}
+                className={filterControlClass({
+                  active: Boolean(selectedLabels),
+                })}
+              />
             </FilterBar>
           </CollectionFilters>
         )}
@@ -716,6 +749,18 @@ export default function ModelsPage() {
           onOpenChange={(open) => {
             if (!open) closeEditDialog();
           }}
+        />
+      )}
+
+      {labelingModel && (
+        <EntityLabelsDialog
+          open={!!labelingModel}
+          onOpenChange={(open) => !open && setLabelingModel(null)}
+          entityName={labelingModel.modelId}
+          labels={labelingModel.labels}
+          onSave={(labels) =>
+            saveModelLabels.mutateAsync({ id: labelingModel.id, labels })
+          }
         />
       )}
     </PageLayout>

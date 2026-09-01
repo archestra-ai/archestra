@@ -1141,6 +1141,17 @@ const INLINE_CONFIG_FIELDS: Record<
             <FormLabel>
               Email{(mode === "edit" || !emailRequired) && " (optional)"}
             </FormLabel>
+            {mode === "edit" && (
+              <FormDescription>
+                Leave empty to keep existing credentials unchanged.
+              </FormDescription>
+            )}
+            {mode === "create" && !emailRequired && (
+              <FormDescription>
+                Leave empty to authenticate with a personal access token
+                instead.
+              </FormDescription>
+            )}
             <FormControl>
               <Input
                 type="email"
@@ -1155,17 +1166,6 @@ const INLINE_CONFIG_FIELDS: Record<
                 {...field}
               />
             </FormControl>
-            {mode === "edit" && (
-              <FormDescription>
-                Leave empty to keep existing credentials unchanged.
-              </FormDescription>
-            )}
-            {mode === "create" && !emailRequired && (
-              <FormDescription>
-                Leave empty to authenticate with a personal access token
-                instead.
-              </FormDescription>
-            )}
             <FormMessage />
           </FormItem>
         )}
@@ -1214,6 +1214,17 @@ const INLINE_CONFIG_FIELDS: Record<
             <FormLabel>
               Email{(mode === "edit" || !emailRequired) && " (optional)"}
             </FormLabel>
+            {mode === "edit" && (
+              <FormDescription>
+                Leave empty to keep existing credentials unchanged.
+              </FormDescription>
+            )}
+            {mode === "create" && !emailRequired && (
+              <FormDescription>
+                Leave empty to authenticate with a personal access token
+                instead.
+              </FormDescription>
+            )}
             <FormControl>
               <Input
                 type="email"
@@ -1228,17 +1239,6 @@ const INLINE_CONFIG_FIELDS: Record<
                 {...field}
               />
             </FormControl>
-            {mode === "edit" && (
-              <FormDescription>
-                Leave empty to keep existing credentials unchanged.
-              </FormDescription>
-            )}
-            {mode === "create" && !emailRequired && (
-              <FormDescription>
-                Leave empty to authenticate with a personal access token
-                instead.
-              </FormDescription>
-            )}
             <FormMessage />
           </FormItem>
         )}
@@ -1265,16 +1265,6 @@ const INLINE_CONFIG_FIELDS: Record<
       render={({ field }) => (
         <FormItem>
           <FormLabel>Username</FormLabel>
-          <FormControl>
-            <Input
-              placeholder={
-                mode === "create"
-                  ? "admin"
-                  : "Leave empty to keep existing credentials"
-              }
-              {...field}
-            />
-          </FormControl>
           {mode === "create" && (
             <FormDescription>
               Your ServiceNow username for basic authentication.
@@ -1285,6 +1275,16 @@ const INLINE_CONFIG_FIELDS: Record<
               Leave empty to keep existing credentials unchanged.
             </FormDescription>
           )}
+          <FormControl>
+            <Input
+              placeholder={
+                mode === "create"
+                  ? "admin"
+                  : "Leave empty to keep existing credentials"
+              }
+              {...field}
+            />
+          </FormControl>
           <FormMessage />
         </FormItem>
       )}
@@ -1302,6 +1302,9 @@ const INLINE_CONFIG_FIELDS: Record<
         render={({ field }) => (
           <FormItem>
             <FormLabel>Tenant ID</FormLabel>
+            <FormDescription>
+              Your Azure AD (Entra ID) tenant ID or domain.
+            </FormDescription>
             <FormControl>
               <Input
                 placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
@@ -1309,9 +1312,6 @@ const INLINE_CONFIG_FIELDS: Record<
                 value={(field.value as string) ?? ""}
               />
             </FormControl>
-            <FormDescription>
-              Your Azure AD (Entra ID) tenant ID or domain.
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}
@@ -1325,6 +1325,9 @@ const INLINE_CONFIG_FIELDS: Record<
         render={({ field }) => (
           <FormItem>
             <FormLabel>Client ID</FormLabel>
+            <FormDescription>
+              Azure AD app registration Client ID.
+            </FormDescription>
             <FormControl>
               <Input
                 placeholder={
@@ -1335,9 +1338,6 @@ const INLINE_CONFIG_FIELDS: Record<
                 {...field}
               />
             </FormControl>
-            <FormDescription>
-              Azure AD app registration Client ID.
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}
@@ -1360,6 +1360,10 @@ const INLINE_CONFIG_FIELDS: Record<
         render={({ field }) => (
           <FormItem>
             <FormLabel>Workspace GID</FormLabel>
+            <FormDescription>
+              Your Asana workspace GID. Syncs top-level tasks only &mdash;
+              subtasks aren&apos;t supported in the initial version.
+            </FormDescription>
             <FormControl>
               <Input
                 placeholder="1234567890"
@@ -1367,10 +1371,6 @@ const INLINE_CONFIG_FIELDS: Record<
                 value={(field.value as string) ?? ""}
               />
             </FormControl>
-            <FormDescription>
-              Your Asana workspace GID. Syncs top-level tasks only &mdash;
-              subtasks aren&apos;t supported in the initial version.
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}
@@ -1387,6 +1387,9 @@ const INLINE_CONFIG_FIELDS: Record<
         render={({ field }) => (
           <FormItem>
             <FormLabel>Tenant ID</FormLabel>
+            <FormDescription>
+              Your Azure AD (Entra ID) tenant ID or domain.
+            </FormDescription>
             <FormControl>
               <Input
                 placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
@@ -1394,9 +1397,6 @@ const INLINE_CONFIG_FIELDS: Record<
                 value={(field.value as string) ?? ""}
               />
             </FormControl>
-            <FormDescription>
-              Your Azure AD (Entra ID) tenant ID or domain.
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}
@@ -1410,6 +1410,9 @@ const INLINE_CONFIG_FIELDS: Record<
         render={({ field }) => (
           <FormItem>
             <FormLabel>Client ID</FormLabel>
+            <FormDescription>
+              Azure AD app registration Client ID.
+            </FormDescription>
             <FormControl>
               <Input
                 placeholder={
@@ -1420,9 +1423,6 @@ const INLINE_CONFIG_FIELDS: Record<
                 {...field}
               />
             </FormControl>
-            <FormDescription>
-              Azure AD app registration Client ID.
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}
@@ -1438,6 +1438,10 @@ const INLINE_CONFIG_FIELDS: Record<
         render={({ field }) => (
           <FormItem>
             <FormLabel>User IDs</FormLabel>
+            <FormDescription>
+              Comma-separated list of user principal names or object IDs whose
+              OneDrive to sync.
+            </FormDescription>
             <FormControl>
               <Input
                 placeholder="user@example.com, user2@example.com"
@@ -1449,10 +1453,6 @@ const INLINE_CONFIG_FIELDS: Record<
                 }
               />
             </FormControl>
-            <FormDescription>
-              Comma-separated list of user principal names or object IDs whose
-              OneDrive to sync.
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}
@@ -1492,6 +1492,11 @@ const INLINE_CONFIG_FIELDS: Record<
       render={({ field }) => (
         <FormItem>
           <FormLabel>Email{mode === "edit" && " (optional)"}</FormLabel>
+          {mode === "edit" && (
+            <FormDescription>
+              Leave empty to keep existing credentials unchanged.
+            </FormDescription>
+          )}
           <FormControl>
             <Input
               type="email"
@@ -1506,11 +1511,6 @@ const INLINE_CONFIG_FIELDS: Record<
               {...field}
             />
           </FormControl>
-          {mode === "edit" && (
-            <FormDescription>
-              Leave empty to keep existing credentials unchanged.
-            </FormDescription>
-          )}
           <FormMessage />
         </FormItem>
       )}
@@ -1525,6 +1525,10 @@ const INLINE_CONFIG_FIELDS: Record<
         render={({ field }) => (
           <FormItem>
             <FormLabel>Depot Paths</FormLabel>
+            <FormDescription>
+              Comma-separated depot paths in depot syntax, e.g.{" "}
+              <code>{"//depot/docs"}</code>. Each path is synced recursively.
+            </FormDescription>
             <FormControl>
               <Input
                 placeholder="//depot/docs, //stream/main/specs"
@@ -1532,10 +1536,6 @@ const INLINE_CONFIG_FIELDS: Record<
                 value={joinIfArray(field.value)}
               />
             </FormControl>
-            <FormDescription>
-              Comma-separated depot paths in depot syntax, e.g.{" "}
-              <code>{"//depot/docs"}</code>. Each path is synced recursively.
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}
@@ -1549,6 +1549,16 @@ const INLINE_CONFIG_FIELDS: Record<
         render={({ field }) => (
           <FormItem>
             <FormLabel>Username</FormLabel>
+            {mode === "create" && (
+              <FormDescription>
+                The Perforce user (P4USER) the connector authenticates as.
+              </FormDescription>
+            )}
+            {mode === "edit" && (
+              <FormDescription>
+                Leave empty to keep existing credentials unchanged.
+              </FormDescription>
+            )}
             <FormControl>
               <Input
                 placeholder={
@@ -1562,16 +1572,6 @@ const INLINE_CONFIG_FIELDS: Record<
                 {...field}
               />
             </FormControl>
-            {mode === "create" && (
-              <FormDescription>
-                The Perforce user (P4USER) the connector authenticates as.
-              </FormDescription>
-            )}
-            {mode === "edit" && (
-              <FormDescription>
-                Leave empty to keep existing credentials unchanged.
-              </FormDescription>
-            )}
             <FormMessage />
           </FormItem>
         )}

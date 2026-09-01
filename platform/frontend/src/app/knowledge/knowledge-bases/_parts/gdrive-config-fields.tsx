@@ -71,6 +71,21 @@ export function GoogleDriveAuthFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>How should {appName} reach Drive?</FormLabel>
+            <FormDescription>
+              {authMode === "service_account_delegated" &&
+                (isScoped
+                  ? "The service account impersonates the admin below and indexes only the folder or drives named under Advanced."
+                  : "The service account impersonates users across your domain: every shared drive, plus every user's My Drive. Nothing has to be shared by hand.")}
+              {authMode === "oauth" &&
+                (oauth?.configured
+                  ? `Connect one Google account after saving. ${appName} indexes exactly what that person can already see.`
+                  : "This deployment has no Google OAuth client. Set ARCHESTRA_KNOWLEDGE_BASE_GOOGLE_DRIVE_OAUTH_CLIENT_ID and ARCHESTRA_KNOWLEDGE_BASE_GOOGLE_DRIVE_OAUTH_CLIENT_SECRET to offer this mode.")}
+              {authMode === "service_account" &&
+                "The service account sees only what has been shared with its own email address — every folder, by hand, forever."}
+              {!authMode &&
+                "This connector predates auth modes and still works out its identity from the credential it holds. Pick a mode to state it explicitly."}{" "}
+              {authModeDescription}
+            </FormDescription>
             <Select
               value={(field.value as string) ?? ""}
               onValueChange={field.onChange}
@@ -93,21 +108,6 @@ export function GoogleDriveAuthFields({
                 </SelectItem>
               </SelectContent>
             </Select>
-            <FormDescription>
-              {authMode === "service_account_delegated" &&
-                (isScoped
-                  ? "The service account impersonates the admin below and indexes only the folder or drives named under Advanced."
-                  : "The service account impersonates users across your domain: every shared drive, plus every user's My Drive. Nothing has to be shared by hand.")}
-              {authMode === "oauth" &&
-                (oauth?.configured
-                  ? `Connect one Google account after saving. ${appName} indexes exactly what that person can already see.`
-                  : "This deployment has no Google OAuth client. Set ARCHESTRA_KNOWLEDGE_BASE_GOOGLE_DRIVE_OAUTH_CLIENT_ID and ARCHESTRA_KNOWLEDGE_BASE_GOOGLE_DRIVE_OAUTH_CLIENT_SECRET to offer this mode.")}
-              {authMode === "service_account" &&
-                "The service account sees only what has been shared with its own email address — every folder, by hand, forever."}
-              {!authMode &&
-                "This connector predates auth modes and still works out its identity from the credential it holds. Pick a mode to state it explicitly."}{" "}
-              {authModeDescription}
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}
@@ -121,6 +121,12 @@ export function GoogleDriveAuthFields({
           render={({ field }) => (
             <FormItem>
               <FormLabel>Delegated admin email</FormLabel>
+              <FormDescription>
+                A Workspace admin the service account impersonates. Authorize
+                its client ID for domain-wide delegation in the Google Admin
+                console first — Security → Access and data control → API
+                controls.
+              </FormDescription>
               <FormControl>
                 <Input
                   type="email"
@@ -129,12 +135,6 @@ export function GoogleDriveAuthFields({
                   value={(field.value as string) ?? ""}
                 />
               </FormControl>
-              <FormDescription>
-                A Workspace admin the service account impersonates. Authorize
-                its client ID for domain-wide delegation in the Google Admin
-                console first — Security → Access and data control → API
-                controls.
-              </FormDescription>
               <FormMessage />
             </FormItem>
           )}
@@ -165,6 +165,11 @@ export function GoogleDriveConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Drive IDs (optional)</FormLabel>
+            <FormDescription>
+              Comma-separated list of shared drive IDs to sync. Providing Drive
+              IDs automatically enables shared-drive sync. Leave blank to sync
+              files from My Drive.
+            </FormDescription>
             <FormControl>
               <Input
                 placeholder="0ABcDeFgHiJkLmN, 0OpQrStUvWxYz"
@@ -172,11 +177,6 @@ export function GoogleDriveConfigFields({
                 value={(field.value as string) ?? ""}
               />
             </FormControl>
-            <FormDescription>
-              Comma-separated list of shared drive IDs to sync. Providing Drive
-              IDs automatically enables shared-drive sync. Leave blank to sync
-              files from My Drive.
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}
@@ -188,6 +188,10 @@ export function GoogleDriveConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Folder ID (optional)</FormLabel>
+            <FormDescription>
+              Restrict sync to a specific folder. Find the folder ID in the
+              Google Drive URL.
+            </FormDescription>
             <FormControl>
               <Input
                 placeholder="1AbCdEfGhIjKlMnOpQrStUv"
@@ -195,10 +199,6 @@ export function GoogleDriveConfigFields({
                 value={(field.value as string) ?? ""}
               />
             </FormControl>
-            <FormDescription>
-              Restrict sync to a specific folder. Find the folder ID in the
-              Google Drive URL.
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}
@@ -210,6 +210,10 @@ export function GoogleDriveConfigFields({
         render={({ field }) => (
           <FormItem>
             <FormLabel>File Types (optional)</FormLabel>
+            <FormDescription>
+              Comma-separated list of file extensions to include. Leave blank to
+              sync all supported file types.
+            </FormDescription>
             <FormControl>
               <Input
                 placeholder=".pdf, .docx, .md"
@@ -217,10 +221,6 @@ export function GoogleDriveConfigFields({
                 value={(field.value as string) ?? ""}
               />
             </FormControl>
-            <FormDescription>
-              Comma-separated list of file extensions to include. Leave blank to
-              sync all supported file types.
-            </FormDescription>
             <FormMessage />
           </FormItem>
         )}

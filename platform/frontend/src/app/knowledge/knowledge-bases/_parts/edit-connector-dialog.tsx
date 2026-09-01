@@ -391,6 +391,7 @@ export function EditConnectorDialog({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>{urlConfig.label}</FormLabel>
+                  <FormDescription>{urlConfig.description}</FormDescription>
                   <FormControl>
                     <Input
                       placeholder={urlConfig.placeholder}
@@ -398,7 +399,6 @@ export function EditConnectorDialog({
                       value={(field.value as string) ?? ""}
                     />
                   </FormControl>
-                  <FormDescription>{urlConfig.description}</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -420,6 +420,13 @@ export function EditConnectorDialog({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>{apiTokenLabel}</FormLabel>
+                  <FormDescription>
+                    <span>
+                      Leave empty to keep existing credentials unchanged.
+                    </span>{" "}
+                    {apiTokenHelpText ? <span>{apiTokenHelpText}</span> : null}{" "}
+                    {credentialRequirement}
+                  </FormDescription>
                   <FormControl>
                     {apiTokenMultiline ? (
                       <SecretTextarea
@@ -434,13 +441,6 @@ export function EditConnectorDialog({
                       />
                     )}
                   </FormControl>
-                  <FormDescription>
-                    <span>
-                      Leave empty to keep existing credentials unchanged.
-                    </span>{" "}
-                    {apiTokenHelpText ? <span>{apiTokenHelpText}</span> : null}{" "}
-                    {credentialRequirement}
-                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -455,16 +455,16 @@ export function EditConnectorDialog({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Organization admin API key (optional)</FormLabel>
+                    <FormDescription>
+                      <AdminApiKeyDescription type={connectorType} /> Leave
+                      empty to keep the existing key.
+                    </FormDescription>
                     <FormControl>
                       <SecretInput
                         placeholder="Atlassian organization admin API key"
                         {...field}
                       />
                     </FormControl>
-                    <FormDescription>
-                      <AdminApiKeyDescription type={connectorType} /> Leave
-                      empty to keep the existing key.
-                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}

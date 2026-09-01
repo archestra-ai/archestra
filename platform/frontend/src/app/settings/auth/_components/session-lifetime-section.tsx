@@ -122,6 +122,9 @@ export function SessionLifetimeSection({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Custom lifetime in seconds</FormLabel>
+                  <FormDescription>
+                    Members are signed out this many seconds after sign-in.
+                  </FormDescription>
                   <FormControl>
                     <Input
                       {...field}
@@ -135,9 +138,6 @@ export function SessionLifetimeSection({
                       }
                     />
                   </FormControl>
-                  <FormDescription>
-                    Members are signed out this many seconds after sign-in.
-                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

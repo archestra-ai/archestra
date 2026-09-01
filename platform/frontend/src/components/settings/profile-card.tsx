@@ -7,6 +7,7 @@ import { z } from "zod";
 import { SettingsBlock } from "@/components/settings/settings-block";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { FieldDescription } from "@/components/ui/field-description";
 import {
   Form,
   FormControl,
@@ -109,6 +110,9 @@ function ProfileForm({
             render={({ field }) => (
               <FormItem className="min-w-0 flex-1 gap-2">
                 <FormLabel>Name</FormLabel>
+                <FormDescription className="text-pretty">
+                  Shown next to you across the app.
+                </FormDescription>
                 <FormControl>
                   <Input
                     {...field}
@@ -116,9 +120,6 @@ function ProfileForm({
                     disabled={updateName.isPending}
                   />
                 </FormControl>
-                <FormDescription className="text-pretty">
-                  Shown next to you across the app.
-                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -175,6 +176,7 @@ function ReadOnlyField({
   return (
     <div className="grid gap-2">
       <Label htmlFor={id}>{label}</Label>
+      <FieldDescription className="text-pretty">{note}</FieldDescription>
       <Input
         id={id}
         value={value || "—"}
@@ -182,7 +184,6 @@ function ReadOnlyField({
         aria-readonly
         className={`cursor-default bg-muted ${valueClassName ?? ""}`}
       />
-      <p className="text-pretty text-sm text-muted-foreground">{note}</p>
     </div>
   );
 }

@@ -34,6 +34,10 @@ export function SchedulePicker({
       render={({ field }) => (
         <FormItem>
           <FormLabel>Documents Sync Schedule</FormLabel>
+          <FormDescription>
+            Pick how often to sync documents with your {connectorTypeLabel}{" "}
+            instance
+          </FormDescription>
           <FormControl>
             <div className="space-y-2">
               <CronExpressionPicker
@@ -45,10 +49,6 @@ export function SchedulePicker({
               />
             </div>
           </FormControl>
-          <FormDescription>
-            Pick how often to sync documents with your {connectorTypeLabel}{" "}
-            instance
-          </FormDescription>
           <FormMessage />
         </FormItem>
       )}

@@ -9,6 +9,7 @@ import {
 } from "@/components/field-scope-select";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SecretTextarea } from "@/components/ui/secret-input";
@@ -309,6 +310,12 @@ function StaticValueEditor({
   return (
     <div className="space-y-2">
       <Label htmlFor="secret-file-value">File contents</Label>
+      {hasStoredSecret && (
+        <FieldDescription>
+          A value is already stored. Leave blank to keep it, or paste a new
+          value to replace.
+        </FieldDescription>
+      )}
       <SecretTextarea
         id="secret-file-value"
         value={draft.value}
@@ -317,12 +324,6 @@ function StaticValueEditor({
         rows={6}
         className="font-mono text-xs"
       />
-      {hasStoredSecret && (
-        <p className="text-xs text-muted-foreground">
-          A value is already stored. Leave blank to keep it, or paste a new
-          value to replace.
-        </p>
-      )}
     </div>
   );
 }

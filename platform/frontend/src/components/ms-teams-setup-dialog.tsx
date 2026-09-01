@@ -9,6 +9,7 @@ import { ExternalDocsLink } from "@/components/external-docs-link";
 import { SetupDialog } from "@/components/setup-dialog";
 import { StepCard } from "@/components/step-card";
 import { Button } from "@/components/ui/button";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SecretInput } from "@/components/ui/secret-input";
@@ -562,6 +563,11 @@ function StepManifest({
       <StepCard stepNumber={stepNumber} title="Create App Manifest">
         <div className="space-y-2">
           <Label htmlFor="manifest-bot-id">Microsoft App ID</Label>
+          <FieldDescription>
+            {effectiveAppId
+              ? "App ID will be injected into the manifest automatically."
+              : "The App ID from Step 2. It will be injected into the manifest automatically."}
+          </FieldDescription>
           <Input
             id="manifest-bot-id"
             value={effectiveAppId}
@@ -572,11 +578,6 @@ function StepManifest({
                 : "Paste your Microsoft App ID"
             }
           />
-          <p className="text-xs text-muted-foreground">
-            {effectiveAppId
-              ? "App ID will be injected into the manifest automatically."
-              : "The App ID from Step 2. It will be injected into the manifest automatically."}
-          </p>
         </div>
 
         <div className="grid grid-cols-2 gap-3">

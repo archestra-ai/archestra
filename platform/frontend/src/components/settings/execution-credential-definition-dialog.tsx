@@ -108,6 +108,11 @@ export function ExecutionCredentialDefinitionDialog({
           render={({ field }) => (
             <FormItem>
               <FormLabel>Name</FormLabel>
+              <FormDescription>
+                {definition
+                  ? "The name is fixed because Agents may already reference this credential."
+                  : "Use the name people will recognize when connecting the credential."}
+              </FormDescription>
               <div className="flex items-center gap-3">
                 <FormField
                   control={form.control}
@@ -130,11 +135,6 @@ export function ExecutionCredentialDefinitionDialog({
                   />
                 </FormControl>
               </div>
-              <FormDescription>
-                {definition
-                  ? "The name is fixed because Agents may already reference this credential."
-                  : "Use the name people will recognize when connecting the credential."}
-              </FormDescription>
               <FormMessage />
             </FormItem>
           )}
@@ -146,6 +146,9 @@ export function ExecutionCredentialDefinitionDialog({
           render={({ field }) => (
             <FormItem>
               <FormLabel>Description</FormLabel>
+              <FormDescription>
+                Tell people what access the credential needs.
+              </FormDescription>
               <FormControl>
                 <Textarea
                   {...field}
@@ -153,9 +156,6 @@ export function ExecutionCredentialDefinitionDialog({
                   rows={2}
                 />
               </FormControl>
-              <FormDescription>
-                Tell people what access the credential needs.
-              </FormDescription>
               <FormMessage />
             </FormItem>
           )}

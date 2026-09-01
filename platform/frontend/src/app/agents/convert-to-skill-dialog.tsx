@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -223,10 +224,10 @@ export function ConvertToSkillDialog({
                   <Label htmlFor="delete-agent" className="font-normal">
                     Remove the agent after converting
                   </Label>
-                  <p className="text-muted-foreground text-xs">
+                  <FieldDescription>
                     The agent is deleted once the skill is created. You can
                     restore it later from the deleted-agents filter.
-                  </p>
+                  </FieldDescription>
                 </div>
               </div>
             </DialogBody>

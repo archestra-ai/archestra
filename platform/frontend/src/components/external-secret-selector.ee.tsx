@@ -3,6 +3,7 @@
 import { E2eTestId } from "@archestra/shared";
 import { AlertCircle, Key, Loader2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { FieldDescription } from "@/components/ui/field-description";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -114,10 +115,10 @@ export default function ExternalSecretSelector({
       {/* Team selector */}
       <div className="space-y-2">
         <Label htmlFor="vault-team">Team</Label>
-        <p className="text-xs text-muted-foreground">
+        <FieldDescription>
           Only teams where you are an admin and have a Vault folder configured
           are shown.
-        </p>
+        </FieldDescription>
         <Select
           value={selectedTeamId || "none"}
           onValueChange={handleTeamChange}

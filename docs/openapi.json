@@ -150125,6 +150125,11 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "payloadPrunedAt": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "date-time"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -150366,6 +150371,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "payloadPrunedAt",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -151201,6 +151207,11 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "payloadPrunedAt": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "date-time"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -151442,6 +151453,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "payloadPrunedAt",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -151987,6 +151999,11 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "payloadPrunedAt": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "date-time"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -152217,6 +152234,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "payloadPrunedAt",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -152762,6 +152780,11 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "payloadPrunedAt": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "date-time"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -152992,6 +153015,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "payloadPrunedAt",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -153537,6 +153561,11 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "payloadPrunedAt": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "date-time"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -153767,6 +153796,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "payloadPrunedAt",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -154312,6 +154342,11 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "payloadPrunedAt": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "date-time"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -154542,6 +154577,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "payloadPrunedAt",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -154956,6 +154992,11 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "payloadPrunedAt": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "date-time"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -155197,6 +155238,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "payloadPrunedAt",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -155611,6 +155653,11 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "payloadPrunedAt": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "date-time"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -155852,6 +155899,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "payloadPrunedAt",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -158320,6 +158368,11 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "payloadPrunedAt": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "date-time"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -158561,6 +158614,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "payloadPrunedAt",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -161669,6 +161723,11 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "payloadPrunedAt": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "date-time"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -161910,6 +161969,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "payloadPrunedAt",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -162324,6 +162384,11 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "payloadPrunedAt": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "date-time"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -162565,6 +162630,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "payloadPrunedAt",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -162979,6 +163045,11 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "payloadPrunedAt": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "date-time"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -163220,6 +163291,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "payloadPrunedAt",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -163634,6 +163706,11 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "payloadPrunedAt": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "date-time"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -163875,6 +163952,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "payloadPrunedAt",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -164289,6 +164367,11 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "payloadPrunedAt": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "date-time"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -164530,6 +164613,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "payloadPrunedAt",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -164944,6 +165028,11 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "payloadPrunedAt": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "date-time"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -165185,6 +165274,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "payloadPrunedAt",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -165599,6 +165689,11 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "payloadPrunedAt": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "date-time"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -165840,6 +165935,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "payloadPrunedAt",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -166254,6 +166350,11 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "payloadPrunedAt": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "date-time"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -166484,6 +166585,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "payloadPrunedAt",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -166898,6 +167000,11 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "payloadPrunedAt": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "date-time"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -167128,6 +167235,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "payloadPrunedAt",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -167542,6 +167650,11 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "payloadPrunedAt": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "date-time"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -167772,6 +167885,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "payloadPrunedAt",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -168186,6 +168300,11 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "payloadPrunedAt": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "date-time"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -168427,6 +168546,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "payloadPrunedAt",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -168841,6 +168961,11 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "payloadPrunedAt": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "date-time"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -169082,6 +169207,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "payloadPrunedAt",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -169496,6 +169622,11 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "payloadPrunedAt": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "date-time"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -169737,6 +169868,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "payloadPrunedAt",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -172551,6 +172683,11 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "payloadPrunedAt": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "date-time"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -172792,6 +172929,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "payloadPrunedAt",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -175601,6 +175739,11 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "payloadPrunedAt": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "date-time"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -175842,6 +175985,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "payloadPrunedAt",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -178656,6 +178800,11 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "payloadPrunedAt": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "date-time"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -178897,6 +179046,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "payloadPrunedAt",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -179311,6 +179461,11 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "payloadPrunedAt": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "date-time"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -179552,6 +179707,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "payloadPrunedAt",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -180202,6 +180358,11 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "payloadPrunedAt": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "date-time"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -180443,6 +180604,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "payloadPrunedAt",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -181278,6 +181440,11 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "payloadPrunedAt": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "date-time"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -181519,6 +181686,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "payloadPrunedAt",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -182354,6 +182522,11 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "payloadPrunedAt": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "date-time"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -182595,6 +182768,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "payloadPrunedAt",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -183421,6 +183595,11 @@
                                   "no_tool_results"
                                 ]
                               },
+                              "payloadPrunedAt": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "date-time"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -183662,6 +183841,7 @@
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
+                              "payloadPrunedAt",
                               "createdAt"
                             ],
                             "additionalProperties": false
@@ -185651,6 +185831,11 @@
                             "no_tool_results"
                           ]
                         },
+                        "payloadPrunedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -185892,6 +186077,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "payloadPrunedAt",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -186727,6 +186913,11 @@
                             "no_tool_results"
                           ]
                         },
+                        "payloadPrunedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -186968,6 +187159,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "payloadPrunedAt",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -187513,6 +187705,11 @@
                             "no_tool_results"
                           ]
                         },
+                        "payloadPrunedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -187743,6 +187940,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "payloadPrunedAt",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -188288,6 +188486,11 @@
                             "no_tool_results"
                           ]
                         },
+                        "payloadPrunedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -188518,6 +188721,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "payloadPrunedAt",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -189063,6 +189267,11 @@
                             "no_tool_results"
                           ]
                         },
+                        "payloadPrunedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -189293,6 +189502,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "payloadPrunedAt",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -189838,6 +190048,11 @@
                             "no_tool_results"
                           ]
                         },
+                        "payloadPrunedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -190068,6 +190283,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "payloadPrunedAt",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -190482,6 +190698,11 @@
                             "no_tool_results"
                           ]
                         },
+                        "payloadPrunedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -190723,6 +190944,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "payloadPrunedAt",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -191137,6 +191359,11 @@
                             "no_tool_results"
                           ]
                         },
+                        "payloadPrunedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -191378,6 +191605,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "payloadPrunedAt",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -193846,6 +194074,11 @@
                             "no_tool_results"
                           ]
                         },
+                        "payloadPrunedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -194087,6 +194320,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "payloadPrunedAt",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -197195,6 +197429,11 @@
                             "no_tool_results"
                           ]
                         },
+                        "payloadPrunedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -197436,6 +197675,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "payloadPrunedAt",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -197850,6 +198090,11 @@
                             "no_tool_results"
                           ]
                         },
+                        "payloadPrunedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -198091,6 +198336,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "payloadPrunedAt",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -198505,6 +198751,11 @@
                             "no_tool_results"
                           ]
                         },
+                        "payloadPrunedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -198746,6 +198997,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "payloadPrunedAt",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -199160,6 +199412,11 @@
                             "no_tool_results"
                           ]
                         },
+                        "payloadPrunedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -199401,6 +199658,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "payloadPrunedAt",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -199815,6 +200073,11 @@
                             "no_tool_results"
                           ]
                         },
+                        "payloadPrunedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -200056,6 +200319,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "payloadPrunedAt",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -200470,6 +200734,11 @@
                             "no_tool_results"
                           ]
                         },
+                        "payloadPrunedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -200711,6 +200980,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "payloadPrunedAt",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -201125,6 +201395,11 @@
                             "no_tool_results"
                           ]
                         },
+                        "payloadPrunedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -201366,6 +201641,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "payloadPrunedAt",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -201780,6 +202056,11 @@
                             "no_tool_results"
                           ]
                         },
+                        "payloadPrunedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -202010,6 +202291,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "payloadPrunedAt",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -202424,6 +202706,11 @@
                             "no_tool_results"
                           ]
                         },
+                        "payloadPrunedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -202654,6 +202941,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "payloadPrunedAt",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -203068,6 +203356,11 @@
                             "no_tool_results"
                           ]
                         },
+                        "payloadPrunedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -203298,6 +203591,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "payloadPrunedAt",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -203712,6 +204006,11 @@
                             "no_tool_results"
                           ]
                         },
+                        "payloadPrunedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -203953,6 +204252,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "payloadPrunedAt",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -204367,6 +204667,11 @@
                             "no_tool_results"
                           ]
                         },
+                        "payloadPrunedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -204608,6 +204913,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "payloadPrunedAt",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -205022,6 +205328,11 @@
                             "no_tool_results"
                           ]
                         },
+                        "payloadPrunedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -205263,6 +205574,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "payloadPrunedAt",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -208077,6 +208389,11 @@
                             "no_tool_results"
                           ]
                         },
+                        "payloadPrunedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -208318,6 +208635,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "payloadPrunedAt",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -211127,6 +211445,11 @@
                             "no_tool_results"
                           ]
                         },
+                        "payloadPrunedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -211368,6 +211691,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "payloadPrunedAt",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -214182,6 +214506,11 @@
                             "no_tool_results"
                           ]
                         },
+                        "payloadPrunedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -214423,6 +214752,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "payloadPrunedAt",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -214837,6 +215167,11 @@
                             "no_tool_results"
                           ]
                         },
+                        "payloadPrunedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -215078,6 +215413,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "payloadPrunedAt",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -215728,6 +216064,11 @@
                             "no_tool_results"
                           ]
                         },
+                        "payloadPrunedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -215969,6 +216310,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "payloadPrunedAt",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -216804,6 +217146,11 @@
                             "no_tool_results"
                           ]
                         },
+                        "payloadPrunedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -217045,6 +217392,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "payloadPrunedAt",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -217880,6 +218228,11 @@
                             "no_tool_results"
                           ]
                         },
+                        "payloadPrunedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -218121,6 +218474,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "payloadPrunedAt",
                         "createdAt"
                       ],
                       "additionalProperties": false
@@ -218947,6 +219301,11 @@
                             "no_tool_results"
                           ]
                         },
+                        "payloadPrunedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -219188,6 +219547,7 @@
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
+                        "payloadPrunedAt",
                         "createdAt"
                       ],
                       "additionalProperties": false

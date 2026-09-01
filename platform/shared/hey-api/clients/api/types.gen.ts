@@ -41682,6 +41682,7 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            payloadPrunedAt: string | null;
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -41890,6 +41891,7 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            payloadPrunedAt: string | null;
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -42014,6 +42016,7 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            payloadPrunedAt: string | null;
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -42136,6 +42139,7 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            payloadPrunedAt: string | null;
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -42258,6 +42262,7 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            payloadPrunedAt: string | null;
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -42380,6 +42385,7 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            payloadPrunedAt: string | null;
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -42479,6 +42485,7 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            payloadPrunedAt: string | null;
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -42580,6 +42587,7 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            payloadPrunedAt: string | null;
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -43122,6 +43130,7 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            payloadPrunedAt: string | null;
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -43697,6 +43706,7 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            payloadPrunedAt: string | null;
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -43798,6 +43808,7 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            payloadPrunedAt: string | null;
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -43899,6 +43910,7 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            payloadPrunedAt: string | null;
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -44000,6 +44012,7 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            payloadPrunedAt: string | null;
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -44101,6 +44114,7 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            payloadPrunedAt: string | null;
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -44202,6 +44216,7 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            payloadPrunedAt: string | null;
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -44303,6 +44318,7 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            payloadPrunedAt: string | null;
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -44404,6 +44420,7 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            payloadPrunedAt: string | null;
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -44503,6 +44520,7 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            payloadPrunedAt: string | null;
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -44602,6 +44620,7 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            payloadPrunedAt: string | null;
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -44701,6 +44720,7 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            payloadPrunedAt: string | null;
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -44802,6 +44822,7 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            payloadPrunedAt: string | null;
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -44903,6 +44924,7 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            payloadPrunedAt: string | null;
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -45718,6 +45740,7 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            payloadPrunedAt: string | null;
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -46533,6 +46556,7 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            payloadPrunedAt: string | null;
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -47348,6 +47372,7 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            payloadPrunedAt: string | null;
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -47449,6 +47474,7 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            payloadPrunedAt: string | null;
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -47618,6 +47644,7 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            payloadPrunedAt: string | null;
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -47826,6 +47853,7 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            payloadPrunedAt: string | null;
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -48034,6 +48062,7 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            payloadPrunedAt: string | null;
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -48242,6 +48271,7 @@ export type GetInteractionsResponses = {
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
             toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            payloadPrunedAt: string | null;
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -48768,6 +48798,7 @@ export type GetInteractionResponses = {
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
         toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+        payloadPrunedAt: string | null;
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -48976,6 +49007,7 @@ export type GetInteractionResponses = {
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
         toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+        payloadPrunedAt: string | null;
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -49100,6 +49132,7 @@ export type GetInteractionResponses = {
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
         toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+        payloadPrunedAt: string | null;
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -49222,6 +49255,7 @@ export type GetInteractionResponses = {
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
         toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+        payloadPrunedAt: string | null;
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -49344,6 +49378,7 @@ export type GetInteractionResponses = {
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
         toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+        payloadPrunedAt: string | null;
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -49466,6 +49501,7 @@ export type GetInteractionResponses = {
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
         toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+        payloadPrunedAt: string | null;
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -49565,6 +49601,7 @@ export type GetInteractionResponses = {
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
         toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+        payloadPrunedAt: string | null;
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -49666,6 +49703,7 @@ export type GetInteractionResponses = {
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
         toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+        payloadPrunedAt: string | null;
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -50208,6 +50246,7 @@ export type GetInteractionResponses = {
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
         toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+        payloadPrunedAt: string | null;
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -50783,6 +50822,7 @@ export type GetInteractionResponses = {
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
         toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+        payloadPrunedAt: string | null;
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -50884,6 +50924,7 @@ export type GetInteractionResponses = {
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
         toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+        payloadPrunedAt: string | null;
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -50985,6 +51026,7 @@ export type GetInteractionResponses = {
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
         toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+        payloadPrunedAt: string | null;
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -51086,6 +51128,7 @@ export type GetInteractionResponses = {
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
         toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+        payloadPrunedAt: string | null;
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -51187,6 +51230,7 @@ export type GetInteractionResponses = {
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
         toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+        payloadPrunedAt: string | null;
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -51288,6 +51332,7 @@ export type GetInteractionResponses = {
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
         toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+        payloadPrunedAt: string | null;
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -51389,6 +51434,7 @@ export type GetInteractionResponses = {
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
         toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+        payloadPrunedAt: string | null;
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -51490,6 +51536,7 @@ export type GetInteractionResponses = {
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
         toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+        payloadPrunedAt: string | null;
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -51589,6 +51636,7 @@ export type GetInteractionResponses = {
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
         toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+        payloadPrunedAt: string | null;
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -51688,6 +51736,7 @@ export type GetInteractionResponses = {
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
         toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+        payloadPrunedAt: string | null;
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -51787,6 +51836,7 @@ export type GetInteractionResponses = {
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
         toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+        payloadPrunedAt: string | null;
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -51888,6 +51938,7 @@ export type GetInteractionResponses = {
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
         toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+        payloadPrunedAt: string | null;
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -51989,6 +52040,7 @@ export type GetInteractionResponses = {
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
         toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+        payloadPrunedAt: string | null;
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -52804,6 +52856,7 @@ export type GetInteractionResponses = {
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
         toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+        payloadPrunedAt: string | null;
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -53619,6 +53672,7 @@ export type GetInteractionResponses = {
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
         toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+        payloadPrunedAt: string | null;
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -54434,6 +54488,7 @@ export type GetInteractionResponses = {
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
         toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+        payloadPrunedAt: string | null;
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -54535,6 +54590,7 @@ export type GetInteractionResponses = {
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
         toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+        payloadPrunedAt: string | null;
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -54704,6 +54760,7 @@ export type GetInteractionResponses = {
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
         toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+        payloadPrunedAt: string | null;
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -54912,6 +54969,7 @@ export type GetInteractionResponses = {
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
         toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+        payloadPrunedAt: string | null;
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -55120,6 +55178,7 @@ export type GetInteractionResponses = {
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
         toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+        payloadPrunedAt: string | null;
         createdAt: string;
         chatErrors?: Array<{
             id: string;
@@ -55328,6 +55387,7 @@ export type GetInteractionResponses = {
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
         toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+        payloadPrunedAt: string | null;
         createdAt: string;
         chatErrors?: Array<{
             id: string;

@@ -1376,7 +1376,7 @@ export function AgentForm({
   // The agents page documents this setting for gateways too.
   const toolConnectionsDocsUrl = getDocsUrl(
     DocsPage.PlatformAgents,
-    "tool-connections",
+    "missing-connections",
   );
   const toolExposureDocsUrl = getDocsUrl(
     agentType === "mcp_gateway"

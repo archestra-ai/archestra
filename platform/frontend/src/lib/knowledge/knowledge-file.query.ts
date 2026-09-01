@@ -43,6 +43,8 @@ export function useKnowledgeFiles(params: {
   offset: number;
   directoryId?: string;
   search?: string;
+  /** Serialized `?labels=` filter; resolved server-side. */
+  labels?: string;
 }) {
   return useQuery({
     queryKey: [FILES_KEY, params],

@@ -8,8 +8,10 @@ import {
   Folder,
   FolderPlus,
   Pencil,
+  Tags,
   Trash2,
 } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
 import { AddToKnowledgeBaseDialog } from "@/app/knowledge/files/_parts/add-to-knowledge-base-dialog";
@@ -22,11 +24,19 @@ import {
   FilePreviewDialog,
   type PreviewableDocument,
 } from "@/components/files/file-preview-dialog";
+import { EntityLabelFilter } from "@/components/entity-label-filter";
+import { EntityLabelsDialog } from "@/components/entity-labels-dialog";
 import {
   CollectionFilters,
   FilterBar,
+  filterControlClass,
   filterSearchClass,
 } from "@/components/filter-bar";
+import {
+  useKnowledgeFileLabelKeys,
+  useKnowledgeFileLabelValues,
+  useSaveKnowledgeFileLabels,
+} from "@/lib/entity-labels.query";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
@@ -127,6 +137,8 @@ function VisibilityBadge({
 export default function KnowledgeFilesPage() {
   const { pageIndex, pageSize, offset, setPagination, updateQueryParams } =
     useDataTableQueryParams();
+  // Label filtering is server-side, so the value rides the list query.
+  const labelsFilter = useSearchParams().get("labels") || undefined;
 
   /** null = the top level, which lists directories plus unfiled documents. */
   const [openDirectoryId, setOpenDirectoryId] = useState<string | null>(null);
@@ -139,6 +151,8 @@ export default function KnowledgeFilesPage() {
     directory?: KnowledgeDirectory;
   }>({ open: false });
   const [editFile, setEditFile] = useState<KnowledgeFile>();
+  const [labelingFile, setLabelingFile] = useState<KnowledgeFile>();
+  const saveFileLabels = useSaveKnowledgeFileLabels();
   const [previewFile, setPreviewFile] = useState<PreviewableDocument>();
 
   const { data: directories = [] } = useKnowledgeDirectories();
@@ -154,6 +168,7 @@ export default function KnowledgeFilesPage() {
     // contents appear when you open it, so nothing is shown twice.
     directoryId: openDirectoryId ?? ROOT_DIRECTORY,
     search: search || undefined,
+    labels: labelsFilter,
   });
 
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
@@ -471,6 +486,12 @@ export default function KnowledgeFilesPage() {
                   onClick: () => setEditFile(item.file),
                 },
                 {
+                  icon: <Tags className="h-4 w-4" />,
+                  label: "Edit labels",
+                  permissions: { knowledgeSource: ["update"] },
+                  onClick: () => setLabelingFile(item.file),
+                },
+                {
                   icon: <Trash2 className="h-4 w-4" />,
                   label: "Delete",
                   variant: "destructive",
@@ -556,6 +577,13 @@ export default function KnowledgeFilesPage() {
               syncQueryParams={false}
               placeholder="Search documents…"
               className={filterSearchClass}
+            />
+            <EntityLabelFilter
+              useLabelKeys={useKnowledgeFileLabelKeys}
+              useLabelValues={useKnowledgeFileLabelValues}
+              className={filterControlClass({
+                active: Boolean(labelsFilter),
+              })}
             />
           </FilterBar>
         </CollectionFilters>
@@ -673,6 +701,17 @@ export default function KnowledgeFilesPage() {
         file={editFile}
         directories={directories}
       />
+      {labelingFile && (
+        <EntityLabelsDialog
+          open={!!labelingFile}
+          onOpenChange={(open) => !open && setLabelingFile(undefined)}
+          entityName={labelingFile.filename}
+          labels={labelingFile.labels}
+          onSave={(labels) =>
+            saveFileLabels.mutateAsync({ id: labelingFile.id, labels })
+          }
+        />
+      )}
       <FilePreviewDialog
         open={!!previewFile}
         onOpenChange={(open) => !open && setPreviewFile(undefined)}

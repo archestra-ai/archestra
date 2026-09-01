@@ -30,9 +30,6 @@ vi.mock("@/lib/app.query", () => ({
 
 vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => ({ data: true }),
-  // The cards carry a "Created by" line, which resolves "is this me" against
-  // the session rather than against a display name.
-  useSession: () => ({ data: { user: { id: "user-1" } } }),
 }));
 
 vi.mock("@/lib/config/config.query", () => ({

@@ -20,7 +20,6 @@ import {
   CreateVirtualKeyDialogWithData,
   type VirtualKeyType,
 } from "@/components/create-virtual-key-dialog";
-import { createCreatedByColumn } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EditVirtualKeyDialog } from "@/components/edit-virtual-key-dialog";
 import {
@@ -304,9 +303,6 @@ function VirtualKeysTable() {
         </span>
       ),
     },
-    createCreatedByColumn<VirtualKeyRow>({
-      accessor: (row) => row.createdBy,
-    }),
     {
       id: "actions",
       header: "Actions",

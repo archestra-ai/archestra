@@ -230,7 +230,7 @@ describe("useAgentOverviewFacts", () => {
     } as unknown as ReturnType<typeof useEnvironments>);
     renderOverview("mcp_gateway", { environmentId: "env-1" });
 
-    expect(labels()).toEqual(["Tools"]);
+    expect(labels()).toEqual(["Tools", "Created by"]);
   });
 
   it("drops the record-level configuration a built-in agent does not own", () => {
@@ -238,5 +238,8 @@ describe("useAgentOverviewFacts", () => {
 
     // Its model is still its own; the environment and tools are not.
     expect(labels()).toEqual(["Model", "API key"]);
+    // Nor a creator: a built-in belongs to nobody, so the fact is absent
+    // rather than present-but-empty, which would read as missing data.
+    expect(labels()).not.toContain("Created by");
   });
 });

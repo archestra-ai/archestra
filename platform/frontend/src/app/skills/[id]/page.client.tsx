@@ -12,6 +12,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useId, useMemo, useState } from "react";
 import { AgentBadge } from "@/components/agent-badge";
+import { createdByFact } from "@/components/created-by-cell";
 import {
   type OverviewFact,
   OverviewSummary,
@@ -149,6 +150,7 @@ function SkillDetailView({
       value: <SourceFact skill={skill} />,
     },
     { label: "Version", value: <span>v{skill.latestVersion}</span> },
+    createdByFact(skill.createdBy),
     {
       label: "Environment",
       value:

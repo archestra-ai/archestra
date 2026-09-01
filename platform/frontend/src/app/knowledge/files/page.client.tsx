@@ -17,7 +17,6 @@ import { DirectoryDialog } from "@/app/knowledge/files/_parts/directory-dialog";
 import { EditFileDialog } from "@/app/knowledge/files/_parts/edit-file-dialog";
 import { UploadFileDialog } from "@/app/knowledge/files/_parts/upload-file-dialog";
 import { BulkVisibilityDialog } from "@/components/bulk-visibility-dialog";
-import { createCreatedByColumn } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
   FilePreviewDialog,
@@ -426,14 +425,6 @@ export default function KnowledgeFilesPage() {
           </span>
         ),
       },
-      // "Added by" rather than "Created by": a directory is created, but a file
-      // is uploaded, and one header has to be true of both rows in this mixed
-      // listing.
-      createCreatedByColumn<Row>({
-        accessor: rowCreatedBy,
-        header: "Added by",
-        size: 20,
-      }),
       {
         id: "actions",
         header: "Actions",

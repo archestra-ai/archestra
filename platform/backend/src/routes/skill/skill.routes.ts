@@ -170,6 +170,7 @@ const SkillListItemSchema = SkillResponseSchema.extend({
 
 /** A skill with its resource files, team, and environment assignments. */
 const SkillDetailSchema = SkillWithFilesSchema.extend({
+  createdBy: CreatedByNullableSchema,
   teams: z.array(SkillTeamSchema),
   users: z.array(SkillUserSchema),
   environments: z.array(SkillEnvironmentSchema),
@@ -2115,15 +2116,17 @@ async function requireReadableSkill(params: {
 
 /** A skill with its files, team, and environment assignments, for detail responses. */
 async function loadSkillDetail(skill: Skill) {
-  const [files, teamsBySkill, usersBySkill, environmentsBySkill] =
+  const [files, teamsBySkill, usersBySkill, environmentsBySkill, createdBy] =
     await Promise.all([
       SkillFileModel.findBySkillId(skill.id),
       SkillTeamModel.getTeamDetailsForSkills([skill.id]),
       SkillUserModel.getUserDetailsForSkills([skill.id]),
       SkillEnvironmentModel.getEnvironmentDetailsForSkills([skill.id]),
+      CreatedByModel.resolveOne(skill.authorId),
     ]);
   return {
     ...skill,
+    createdBy,
     files,
     teams: teamsBySkill.get(skill.id) ?? [],
     users: usersBySkill.get(skill.id) ?? [],

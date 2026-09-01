@@ -14,6 +14,7 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { createdByFact } from "@/components/created-by-cell";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import {
   type OverviewFact,
@@ -728,6 +729,8 @@ function useMcpServerOverviewFacts(item: CatalogItem): OverviewFact[] {
       </span>
     ),
   });
+
+  facts.push(createdByFact(item.createdBy));
 
   return facts;
 }

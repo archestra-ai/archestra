@@ -1,23 +1,27 @@
 "use client";
 
 import type { CreatedBy } from "@archestra/shared";
-import type { ColumnDef } from "@tanstack/react-table";
+import type { DetailFact } from "@/components/detail-facts";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useSession } from "@/lib/auth/auth.query";
 import { cn } from "@/lib/utils";
 
 /**
  * Who created an object, rendered the same way everywhere it appears.
  *
- * The question this answers is "who do I go and ask about this", so the cell
- * leads with a name and keeps the email one hover away rather than spending a
- * table column on it. `title` carries the same text as the tooltip so it
- * survives a truncated cell and a copy-paste.
+ * The question this answers is "who do I go and ask about this", so it leads
+ * with a name and keeps the email one hover away. `title` carries the same text
+ * as the tooltip so it survives a truncated cell and a copy-paste.
+ *
+ * Deliberately presentational — no session lookup, and so no "You" for your own
+ * records. Naming the person is just as clear on a detail page showing one
+ * record (you know your own name), and reading the session would have made a
+ * leaf component depend on a QueryClientProvider being above it, which is a
+ * coupling every page test would then have to satisfy.
  */
 export function CreatedByCell({
   createdBy,
@@ -26,11 +30,6 @@ export function CreatedByCell({
   createdBy: CreatedBy | null | undefined;
   className?: string;
 }) {
-  // Optional-chained rather than destructured: this cell now renders in a
-  // dozen-plus tables, and "no session" is a real state (it just means nothing
-  // can be labelled "You") rather than something worth throwing over.
-  const currentUserId = useSession()?.data?.user?.id;
-
   if (!createdBy) {
     return (
       <Tooltip>
@@ -42,11 +41,8 @@ export function CreatedByCell({
     );
   }
 
-  const isSelf = !!currentUserId && createdBy.id === currentUserId;
-  // "You" beats your own name here: the column exists to find someone to
-  // contact, and the one row you never need to contact is your own.
-  const label = isSelf ? "You" : creatorLabel(createdBy);
-  const detail = createdBy.email ?? creatorLabel(createdBy);
+  const label = creatorLabel(createdBy);
+  const detail = createdBy.email ?? label;
 
   return (
     <Tooltip>
@@ -57,7 +53,7 @@ export function CreatedByCell({
         >
           <Avatar className="h-5 w-5 shrink-0">
             <AvatarFallback className="text-[10px]">
-              {getInitials(creatorLabel(createdBy))}
+              {getInitials(label)}
             </AvatarFallback>
           </Avatar>
           <span className="min-w-0 flex-1 truncate">{label}</span>
@@ -69,35 +65,19 @@ export function CreatedByCell({
 }
 
 /**
- * The "Created by" column, so every table that grows one gets the same header,
- * width and cell. Pass the accessor because the field sits at a different depth
- * per row shape (`row.createdBy`, `row.file.createdBy`, …).
+ * The "Created by" fact, so every detail page and dialog states it identically
+ * rather than each inventing its own label and layout.
+ *
+ * A fact rather than a table column: creator is a property of the one record
+ * you already opened, and it is the record you have open that you need to ask
+ * somebody about.
  */
-export function createCreatedByColumn<T>({
-  accessor,
-  header = "Created by",
-  size = 120,
-}: {
-  accessor: (row: T) => CreatedBy | null | undefined;
-  /** Override for surfaces where "created" is the wrong verb (e.g. uploads). */
-  header?: string;
-  /**
-   * 120px fits a truncated display name beside the avatar, with the full name
-   * and the email on hover. Deliberately modest: `DataTable` sets the table's
-   * min-width to the sum of its column sizes, so a wide column here is what
-   * pushes a table's Actions column behind a horizontal scroll.
-   */
-  size?: number;
-}): ColumnDef<T> {
+export function createdByFact(
+  createdBy: CreatedBy | null | undefined,
+): DetailFact {
   return {
-    id: "createdBy",
-    header,
-    size,
-    // Sorting is off because the value is resolved per page rather than
-    // ordered in SQL: a client-side sort would silently reorder one page only,
-    // which reads as a broken sort rather than an absent one.
-    enableSorting: false,
-    cell: ({ row }) => <CreatedByCell createdBy={accessor(row.original)} />,
+    label: "Created by",
+    value: <CreatedByCell createdBy={createdBy} />,
   };
 }
 

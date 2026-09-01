@@ -75744,6 +75744,29 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "createdBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -75770,7 +75793,8 @@
                     "teams",
                     "users",
                     "viewerRole",
-                    "authorName"
+                    "authorName",
+                    "createdBy"
                   ],
                   "additionalProperties": false
                 }
@@ -77769,6 +77793,29 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "createdBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -77795,7 +77842,8 @@
                     "teams",
                     "users",
                     "viewerRole",
-                    "authorName"
+                    "authorName",
+                    "createdBy"
                   ],
                   "additionalProperties": false
                 }
@@ -78268,6 +78316,29 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "createdBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -78294,7 +78365,8 @@
                     "teams",
                     "users",
                     "viewerRole",
-                    "authorName"
+                    "authorName",
+                    "createdBy"
                   ],
                   "additionalProperties": false
                 }
@@ -78767,6 +78839,29 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "createdBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -78793,7 +78888,8 @@
                     "teams",
                     "users",
                     "viewerRole",
-                    "authorName"
+                    "authorName",
+                    "createdBy"
                   ],
                   "additionalProperties": false
                 }
@@ -79266,6 +79362,29 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "createdBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -79292,7 +79411,8 @@
                     "teams",
                     "users",
                     "viewerRole",
-                    "authorName"
+                    "authorName",
+                    "createdBy"
                   ],
                   "additionalProperties": false
                 }
@@ -219340,6 +219460,29 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "createdBy": {
+                        "nullable": true,
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "email": {
+                            "nullable": true,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "email"
+                        ],
+                        "additionalProperties": false
+                      },
                       "alertMutes": {
                         "type": "array",
                         "items": {
@@ -220911,6 +221054,29 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "createdBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -222475,6 +222641,29 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "createdBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -223975,6 +224164,29 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "createdBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -226319,6 +226531,29 @@
                       "authorName": {
                         "nullable": true,
                         "type": "string"
+                      },
+                      "createdBy": {
+                        "nullable": true,
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "email": {
+                            "nullable": true,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "email"
+                        ],
+                        "additionalProperties": false
                       }
                     },
                     "required": [
@@ -227246,6 +227481,29 @@
                     "authorName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "createdBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -350019,6 +350277,29 @@
                         "additionalProperties": false
                       }
                     },
+                    "createdBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
+                    },
                     "teams": {
                       "type": "array",
                       "items": {
@@ -350112,6 +350393,7 @@
                     "updatedAt",
                     "deletedAt",
                     "files",
+                    "createdBy",
                     "teams",
                     "users",
                     "environments"
@@ -350612,6 +350894,29 @@
                             "additionalProperties": false
                           }
                         },
+                        "createdBy": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "email": {
+                              "nullable": true,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name",
+                            "email"
+                          ],
+                          "additionalProperties": false
+                        },
                         "teams": {
                           "type": "array",
                           "items": {
@@ -350705,6 +351010,7 @@
                         "updatedAt",
                         "deletedAt",
                         "files",
+                        "createdBy",
                         "teams",
                         "users",
                         "environments"
@@ -351520,6 +351826,29 @@
                         "additionalProperties": false
                       }
                     },
+                    "createdBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
+                    },
                     "teams": {
                       "type": "array",
                       "items": {
@@ -351613,6 +351942,7 @@
                     "updatedAt",
                     "deletedAt",
                     "files",
+                    "createdBy",
                     "teams",
                     "users",
                     "environments"
@@ -352181,6 +352511,29 @@
                         "additionalProperties": false
                       }
                     },
+                    "createdBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
+                    },
                     "teams": {
                       "type": "array",
                       "items": {
@@ -352274,6 +352627,7 @@
                     "updatedAt",
                     "deletedAt",
                     "files",
+                    "createdBy",
                     "teams",
                     "users",
                     "environments"
@@ -355066,6 +355420,29 @@
                         "additionalProperties": false
                       }
                     },
+                    "createdBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
+                    },
                     "teams": {
                       "type": "array",
                       "items": {
@@ -355159,6 +355536,7 @@
                     "updatedAt",
                     "deletedAt",
                     "files",
+                    "createdBy",
                     "teams",
                     "users",
                     "environments"
@@ -355911,6 +356289,29 @@
                         "additionalProperties": false
                       }
                     },
+                    "createdBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
+                    },
                     "teams": {
                       "type": "array",
                       "items": {
@@ -356004,6 +356405,7 @@
                     "updatedAt",
                     "deletedAt",
                     "files",
+                    "createdBy",
                     "teams",
                     "users",
                     "environments"
@@ -356516,6 +356918,29 @@
                         "additionalProperties": false
                       }
                     },
+                    "createdBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "email": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email"
+                      ],
+                      "additionalProperties": false
+                    },
                     "teams": {
                       "type": "array",
                       "items": {
@@ -356609,6 +357034,7 @@
                     "updatedAt",
                     "deletedAt",
                     "files",
+                    "createdBy",
                     "teams",
                     "users",
                     "environments"

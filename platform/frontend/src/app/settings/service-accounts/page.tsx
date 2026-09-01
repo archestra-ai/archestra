@@ -6,7 +6,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
-import { createCreatedByColumn } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
   CollectionFilters,
@@ -236,11 +235,6 @@ export default function ServiceAccountsSettingsPage() {
   // or trailing columns disappear behind a horizontal scroll. These add up to
   // 710 including the 56px select column, and each is wide enough for its own
   // header to sit on one line.
-  //
-  // "Created by" was fitted by trimming the five middle columns rather than by
-  // widening the sum: it answers "who do I ask about this automation", which is
-  // the question a service account most often raises, so it earns its place
-  // over the slack the other columns were carrying.
   const columns: ColumnDef<ServiceAccount>[] = useMemo(() => {
     const baseColumns: ColumnDef<ServiceAccount>[] = [
       createSelectColumn<ServiceAccount>({
@@ -250,7 +244,7 @@ export default function ServiceAccountsSettingsPage() {
       {
         accessorKey: "name",
         header: "Account",
-        size: 132,
+        size: 160,
         cell: ({ row }) => (
           <Link
             className="block truncate font-medium hover:underline"
@@ -264,7 +258,7 @@ export default function ServiceAccountsSettingsPage() {
       {
         accessorKey: "role",
         header: "Role",
-        size: 72,
+        size: 88,
         cell: ({ row }) => (
           <Badge variant="secondary">{formatRoleName(row.original.role)}</Badge>
         ),
@@ -272,7 +266,7 @@ export default function ServiceAccountsSettingsPage() {
       {
         accessorKey: "disabled",
         header: "Status",
-        size: 92,
+        size: 112,
         cell: ({ row }) => (
           <AccountHealthBadge health={getAccountHealth(row.original)} />
         ),
@@ -280,22 +274,15 @@ export default function ServiceAccountsSettingsPage() {
       {
         accessorKey: "tokenCount",
         header: "API keys",
-        size: 94,
+        size: 90,
         cell: ({ row }) => <KeyCount account={row.original} />,
       },
       {
         accessorKey: "lastUsedAt",
         header: "Last used",
-        size: 104,
+        size: 108,
         cell: ({ row }) => <LastUsed account={row.original} />,
       },
-      // 96px, below the shared default: this table's budget is the settings
-      // shell's narrow column, and the cell truncates with the full name and
-      // the email still on hover.
-      createCreatedByColumn<ServiceAccount>({
-        accessor: (account) => account.createdBy,
-        size: 96,
-      }),
       // "Created" is deliberately absent. The settings shell gives this table a
       // narrower column than a top-level page, and an eighth column pushed
       // Actions off-screen. For a machine identity "last used" is the

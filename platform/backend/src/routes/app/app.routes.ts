@@ -1,4 +1,5 @@
 import {
+  CreatedByNullableSchema,
   calculatePaginationMeta,
   createPaginatedResponseSchema,
   PaginationQuerySchema,
@@ -157,6 +158,8 @@ const AppWithTeamsSchema = PublicAppSchema.extend({
   // oversight can be shown "Viewing as administrator · <name>". Null when the
   // author row is gone or nameless.
   authorName: z.string().nullable(),
+  /** The author, in the shape shared by every major object. */
+  createdBy: CreatedByNullableSchema,
 });
 
 const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -1684,17 +1687,16 @@ async function buildAppDetail(params: {
   const usersByApp = await AppAccessModel.getUserDetailsForApps([app.id]);
   const teamsByApp = await AppAccessModel.getTeamDetailsForApps([app.id]);
   const viewerRole = await resolveViewerRole({ app, userId, organizationId });
-  const authorName =
-    app.authorId !== null
-      ? ((await UserModel.getNamesByIds([app.authorId])).get(app.authorId) ??
-        null)
-      : null;
+  const createdBy = await CreatedByModel.resolveOne(app.authorId);
   return {
     ...app,
     teams: teamsByApp.get(app.id) ?? [],
     users: usersByApp.get(app.id) ?? [],
     viewerRole,
-    authorName,
+    // Kept alongside `createdBy` because the settings surface renders it inline
+    // in a "Viewing as administrator · <name>" banner, not as a labelled fact.
+    authorName: createdBy?.name ?? null,
+    createdBy,
   };
 }
 

@@ -32,6 +32,7 @@ import {
   type SecretValue,
   type UpdateInternalMcpCatalog,
 } from "@/types";
+import CreatedByModel, { lookupCreator } from "./created-by";
 import LimitModel from "./limit";
 import McpCatalogLabelModel from "./mcp-catalog-label";
 import McpCatalogTeamModel from "./mcp-catalog-team";
@@ -1670,7 +1671,8 @@ class InternalMcpCatalogModel {
   }
 
   /**
-   * Populate authorName for catalog items that have an authorId.
+   * Populate the author's display name and the uniform `createdBy` identity
+   * for catalog items that have an authorId.
    */
   private static async populateAuthorNames(
     catalogItems: InternalMcpCatalog[],
@@ -1682,17 +1684,12 @@ class InternalMcpCatalogModel {
 
     if (authorIds.size === 0) return;
 
-    const users = await db
-      .select({ id: schema.usersTable.id, name: schema.usersTable.name })
-      .from(schema.usersTable)
-      .where(inArray(schema.usersTable.id, Array.from(authorIds)));
-
-    const nameMap = new Map(users.map((u) => [u.id, u.name]));
+    const creators = await CreatedByModel.resolve(Array.from(authorIds));
 
     for (const item of catalogItems) {
-      item.authorName = item.authorId
-        ? (nameMap.get(item.authorId) ?? null)
-        : null;
+      const creator = lookupCreator(creators, item.authorId);
+      item.authorName = creator?.name ?? null;
+      item.createdBy = creator;
     }
   }
 

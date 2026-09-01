@@ -3,6 +3,7 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import { KeyRound } from "lucide-react";
 import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
+import { createdByFact } from "@/components/created-by-cell";
 import type { OverviewFact } from "@/components/overview-summary";
 import {
   useAgentSkillExclusions,
@@ -57,7 +58,16 @@ export function useAgentOverviewFacts({
   const tools = useToolsFact({ agent, enabled: showsTools });
   const skills = useSkillsFact({ agent, enabled: showsSkills });
 
-  return [...model, ...environment, ...tools, ...skills];
+  // Creator last: it is who to ask about the record rather than part of its
+  // configuration, and a built-in belongs to nobody, so it is omitted there
+  // instead of stating an em dash the reader would have to interpret.
+  return [
+    ...model,
+    ...environment,
+    ...tools,
+    ...skills,
+    ...(isBuiltIn ? [] : [createdByFact(agent.createdBy)]),
+  ];
 }
 
 // ===========================================================================

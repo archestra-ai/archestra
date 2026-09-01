@@ -21702,6 +21702,11 @@ export type GetAppResponses = {
         }>;
         viewerRole: 'owner' | 'shared' | 'admin';
         authorName: string | null;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
     };
 };
 
@@ -22211,6 +22216,11 @@ export type EnableAppResponses = {
         }>;
         viewerRole: 'owner' | 'shared' | 'admin';
         authorName: string | null;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
     };
 };
 
@@ -22352,6 +22362,11 @@ export type DisableAppResponses = {
         }>;
         viewerRole: 'owner' | 'shared' | 'admin';
         authorName: string | null;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
     };
 };
 
@@ -22493,6 +22508,11 @@ export type LockAppResponses = {
         }>;
         viewerRole: 'owner' | 'shared' | 'admin';
         authorName: string | null;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
     };
 };
 
@@ -22634,6 +22654,11 @@ export type UnlockAppResponses = {
         }>;
         viewerRole: 'owner' | 'shared' | 'admin';
         authorName: string | null;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
     };
 };
 
@@ -55366,6 +55391,11 @@ export type GetInternalMcpCatalogResponses = {
             level: 'use' | 'write';
         }>;
         authorName?: string | null;
+        createdBy?: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         alertMutes?: Array<{
             catalogId: string;
             mcpServerId: string | null;
@@ -55722,6 +55752,11 @@ export type CreateInternalMcpCatalogItemResponses = {
             level: 'use' | 'write';
         }>;
         authorName?: string | null;
+        createdBy?: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
     };
 };
 
@@ -56206,6 +56241,11 @@ export type GetInternalMcpCatalogItemResponses = {
             level: 'use' | 'write';
         }>;
         authorName?: string | null;
+        createdBy?: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
     };
 };
 
@@ -56547,6 +56587,11 @@ export type UpdateInternalMcpCatalogItemResponses = {
             level: 'use' | 'write';
         }>;
         authorName?: string | null;
+        createdBy?: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
     };
 };
 
@@ -57114,6 +57159,11 @@ export type ListPendingImageApprovalCatalogItemsResponses = {
             level: 'use' | 'write';
         }>;
         authorName?: string | null;
+        createdBy?: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
     }>;
 };
 
@@ -57331,6 +57381,11 @@ export type ApproveCatalogItemImageResponses = {
             level: 'use' | 'write';
         }>;
         authorName?: string | null;
+        createdBy?: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
     };
 };
 
@@ -90083,6 +90138,11 @@ export type CreateSkillResponses = {
             kind: 'reference' | 'script' | 'asset';
             createdAt: string;
         }>;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         teams: Array<{
             id: string;
             name: string;
@@ -90225,6 +90285,11 @@ export type ConvertAgentToSkillResponses = {
                 kind: 'reference' | 'script' | 'asset';
                 createdAt: string;
             }>;
+            createdBy: {
+                id: string;
+                name: string | null;
+                email: string | null;
+            } | null;
             teams: Array<{
                 id: string;
                 name: string;
@@ -90545,6 +90610,11 @@ export type GetSkillResponses = {
             kind: 'reference' | 'script' | 'asset';
             createdAt: string;
         }>;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         teams: Array<{
             id: string;
             name: string;
@@ -90714,6 +90784,11 @@ export type UpdateSkillResponses = {
             kind: 'reference' | 'script' | 'asset';
             createdAt: string;
         }>;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         teams: Array<{
             id: string;
             name: string;
@@ -91436,6 +91511,11 @@ export type RestoreSkillResponses = {
             kind: 'reference' | 'script' | 'asset';
             createdAt: string;
         }>;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         teams: Array<{
             id: string;
             name: string;
@@ -91659,6 +91739,11 @@ export type ResetSkillResponses = {
             kind: 'reference' | 'script' | 'asset';
             createdAt: string;
         }>;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         teams: Array<{
             id: string;
             name: string;
@@ -91810,6 +91895,11 @@ export type UpdateSkillGithubSyncResponses = {
             kind: 'reference' | 'script' | 'asset';
             createdAt: string;
         }>;
+        createdBy: {
+            id: string;
+            name: string | null;
+            email: string | null;
+        } | null;
         teams: Array<{
             id: string;
             name: string;

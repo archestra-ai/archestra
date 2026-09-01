@@ -18,7 +18,6 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
-import { createCreatedByColumn } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import {
@@ -360,9 +359,6 @@ function KnowledgeBasesList() {
         </span>
       ),
     },
-    createCreatedByColumn<KnowledgeBaseItem>({
-      accessor: (base) => base.createdBy,
-    }),
     {
       id: "actions",
       header: "Actions",
@@ -408,9 +404,6 @@ function KnowledgeBasesList() {
         </span>
       ),
     },
-    createCreatedByColumn<KnowledgeBaseItem>({
-      accessor: (base) => base.createdBy,
-    }),
     {
       id: "actions",
       header: "Actions",

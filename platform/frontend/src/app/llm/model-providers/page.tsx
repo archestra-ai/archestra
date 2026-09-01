@@ -23,7 +23,6 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
-import { createCreatedByColumn } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
@@ -477,7 +476,7 @@ export default function ApiKeysPage() {
       {
         accessorKey: "name",
         header: "Name",
-        size: 190,
+        size: 230,
         minSize: 180,
         cell: ({ row }) => (
           <div
@@ -498,7 +497,7 @@ export default function ApiKeysPage() {
       {
         accessorKey: "provider",
         header: "Provider",
-        size: 180,
+        size: 220,
         minSize: 180,
         cell: ({ row }) => {
           const provider = row.original.provider;
@@ -523,7 +522,7 @@ export default function ApiKeysPage() {
       {
         accessorKey: "scope",
         header: "Access",
-        size: 180,
+        size: 210,
         minSize: 170,
         cell: ({ row }) => {
           const credential = row.original;
@@ -625,14 +624,6 @@ export default function ApiKeysPage() {
           </div>
         ),
       },
-      // Name/Provider/Access were trimmed by 110px between them to pay for this
-      // column: `DataTable` min-widths the table to the sum of its sizes, and
-      // without the trim the Actions column fell behind a horizontal scroll at
-      // an ordinary desktop width. Each remains wide enough for its content —
-      // the Access cell's badge is capped at 180px of its own accord.
-      createCreatedByColumn<LlmProviderApiKeyResponse>({
-        accessor: (key) => key.createdBy,
-      }),
       {
         id: "actions",
         header: "Actions",

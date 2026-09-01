@@ -12,7 +12,6 @@ import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { useSetSettingsAction } from "@/app/settings/layout";
 import { CreateOAuthClientDialog } from "@/components/create-oauth-client-dialog";
-import { createCreatedByColumn } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
   CollectionFilters,
@@ -297,9 +296,6 @@ function OauthClientsTable() {
         />
       ),
     },
-    createCreatedByColumn<Row>({
-      accessor: (row) => row.client.createdBy,
-    }),
     {
       id: "actions",
       header: "Actions",

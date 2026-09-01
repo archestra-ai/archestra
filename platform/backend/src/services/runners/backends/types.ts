@@ -1,4 +1,5 @@
 import type { Readable, Writable } from "node:stream";
+import type { AgentRunAttachPhase } from "@archestra/shared";
 import type WebSocket from "ws";
 import type {
   AgentDeploymentBackend,
@@ -108,13 +109,21 @@ export interface RunnerBackend {
     message: string;
   }): Promise<void>;
 
-  /** Attach an interactive terminal to the execution. */
+  /**
+   * Attach an interactive terminal to the execution.
+   *
+   * A backend that has to wait — for placement, for an image, for the agent's
+   * session — reports those waits through `onProgress` rather than leaving the
+   * caller to stare at an unresolved promise. Reporting is best-effort: a
+   * backend that knows nothing about its own startup simply never calls it.
+   */
   attach(params: {
     session: AgentRun;
     stdin: Readable;
     stdout: Writable;
     stderr: Writable;
     onStatus?: (status: RunnerAttachStatus) => void;
+    onProgress?: (progress: RunnerAttachProgress) => void;
   }): Promise<RunnerAttachment>;
 
   /**
@@ -149,6 +158,23 @@ export interface RunnerCompletion {
 export interface RunnerAttachStatus {
   outcome: "success" | "failure";
   message?: string;
+}
+
+/**
+ * One step of an attach that has not completed yet.
+ *
+ * Runtime-neutral on purpose: "waiting for a node" and "pulling the image" are
+ * true of a VM pool or a sandbox tier as much as of a pod, so the vocabulary
+ * belongs to the interface rather than to Kubernetes.
+ */
+export interface RunnerAttachProgress {
+  phase: AgentRunAttachPhase;
+  /** Short phrase naming the wait. */
+  message: string;
+  /** The runtime's own explanation, when it has one. */
+  detail?: string | null;
+  /** Backend-native resource identifier, once one exists. */
+  resourceName?: string | null;
 }
 
 export interface RunnerAttachment {

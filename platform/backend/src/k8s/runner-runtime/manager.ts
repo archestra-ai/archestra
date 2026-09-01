@@ -48,6 +48,13 @@ import {
   RUNNER_EGRESS_POLICY_CRDS,
   type RunnerEgressPolicyObject,
 } from "./network-policy";
+import {
+  attachingProgress,
+  describeRunnerStartupProgress,
+  isSameRunnerStartupProgress,
+  type RunnerStartupProgress,
+  type RunnerStartupProgressReporter,
+} from "./startup-phase";
 
 /** `K8sClients` is internal to the shared module, so it is derived here. */
 type K8sClients = ReturnType<typeof createK8sClients>;
@@ -283,6 +290,8 @@ class RunnerRuntimeManager {
     stdout: Writable;
     stderr: Writable;
     onStatus?: (status: k8s.V1Status) => void;
+    /** Called as the attach moves through its waits; see `startup-phase`. */
+    onProgress?: RunnerStartupProgressReporter;
   }): Promise<{ podName: string; command: string; socket: WebSocket }> {
     const clients = this.requireClients();
     // A2A marks the durable task working before Kubernetes necessarily has a
@@ -293,11 +302,17 @@ class RunnerRuntimeManager {
       session: params.session,
       timeoutMessage:
         "Timed out waiting for the Agent pod to accept a terminal",
+      onProgress: params.onProgress,
     });
     if (!podName) {
       throw new Error("This session has no running pod to attach to");
     }
-    await this.waitForTmuxSession({ session: params.session, podName });
+    await this.waitForTmuxSession({
+      session: params.session,
+      podName,
+      onProgress: params.onProgress,
+    });
+    params.onProgress?.({ ...attachingProgress(), resourceName: podName });
     // Live pods created before an upgrade do not have the stable helper yet.
     // Installing it here keeps the displayed command truthful for them too.
     await this.execInPod({
@@ -393,14 +408,25 @@ class RunnerRuntimeManager {
   async findPodPhase(
     session: AgentRun,
   ): Promise<{ name: string; phase: string } | null> {
+    const pod = await this.findPod(session);
+    if (!pod?.metadata?.name) return null;
+    return { name: pod.metadata.name, phase: pod.status?.phase ?? "Unknown" };
+  }
+
+  /**
+   * The whole pod object behind `findPodPhase`.
+   *
+   * A phase alone cannot say *why* a pod is Pending, and that reason — no node
+   * has room, the image will not pull — is the only thing worth telling
+   * someone watching a run start.
+   */
+  async findPod(session: AgentRun): Promise<k8s.V1Pod | null> {
     const clients = this.requireClients();
     const pods = await clients.coreApi.listNamespacedPod({
       namespace: session.runtimeScope,
       labelSelector: runnerPodSelector(session.taskId),
     });
-    const pod = pods.items.find((candidate) => candidate.metadata?.name);
-    if (!pod?.metadata?.name) return null;
-    return { name: pod.metadata.name, phase: pod.status?.phase ?? "Unknown" };
+    return pods.items.find((candidate) => candidate.metadata?.name) ?? null;
   }
 
   /**
@@ -691,13 +717,25 @@ class RunnerRuntimeManager {
   private async waitForRunningPod(params: {
     session: AgentRun;
     timeoutMessage: string;
+    onProgress?: RunnerStartupProgressReporter;
   }): Promise<string | null> {
     const deadline = Date.now() + RUNNER_INPUT_STAGING_TIMEOUT_MS;
+    let lastProgress: RunnerStartupProgress | null = null;
     while (Date.now() < deadline) {
-      const pod = await this.findPodPhase(params.session);
-      if (pod?.phase === "Running") return pod.name;
-      if (pod && (pod.phase === "Succeeded" || pod.phase === "Failed")) {
-        return null;
+      const pod = await this.findPod(params.session);
+      const phase = pod?.status?.phase;
+      if (phase === "Running" && pod?.metadata?.name) return pod.metadata.name;
+      if (phase === "Succeeded" || phase === "Failed") return null;
+
+      if (params.onProgress) {
+        const progress = describeRunnerStartupProgress(pod);
+        if (!isSameRunnerStartupProgress(lastProgress, progress)) {
+          lastProgress = progress;
+          params.onProgress({
+            ...progress,
+            resourceName: pod?.metadata?.name ?? null,
+          });
+        }
       }
       await delay(RUNNER_INPUT_STAGING_POLL_MS);
     }
@@ -712,8 +750,15 @@ class RunnerRuntimeManager {
   private async waitForTmuxSession(params: {
     session: AgentRun;
     podName: string;
+    onProgress?: RunnerStartupProgressReporter;
   }): Promise<void> {
     const deadline = Date.now() + RUNNER_ATTACH_TIMEOUT_MS;
+    params.onProgress?.({
+      phase: "starting",
+      message: "Waiting for the agent session",
+      detail: null,
+      resourceName: params.podName,
+    });
     while (Date.now() < deadline) {
       const ready = await this.execInPod({
         session: params.session,

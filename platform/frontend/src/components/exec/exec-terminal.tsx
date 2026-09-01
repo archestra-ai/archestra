@@ -7,6 +7,10 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { copyToClipboard } from "@/lib/clipboard";
 import { isUsableTerminalDimensions } from "./exec-terminal.utils";
+import {
+  type ExecSessionProgress,
+  ExecTerminalProgress,
+} from "./exec-terminal-progress";
 
 type ConnectionStatus =
   | "idle"
@@ -24,6 +28,14 @@ export type ExecSessionHandlers = {
   onOutput: (data: string) => void;
   onError: (message: string) => void;
   onClosed: (reason: string | null) => void;
+  /**
+   * A wait the session is still in, before it is live.
+   *
+   * Optional because not every transport can see inside its own startup: one
+   * attaching to a pod that is already running has nothing to report, and gets
+   * the plain connecting state instead.
+   */
+  onProgress?: (progress: ExecSessionProgress) => void;
 };
 
 /**
@@ -88,6 +100,12 @@ export function ExecTerminal({
   );
   const fitAddonRef = useRef<import("@xterm/addon-fit").FitAddon | null>(null);
   const [status, setStatus] = useState<ConnectionStatus>("idle");
+  const [progress, setProgress] = useState<ExecSessionProgress | null>(null);
+  /**
+   * When the current attach began. Reset per attempt so a reconnect's elapsed
+   * counter starts from that attempt, not from when the page was opened.
+   */
+  const [connectingSince, setConnectingSince] = useState(() => Date.now());
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [closedReason, setClosedReason] = useState<string | null>(null);
   const [command, setCommand] = useState<string | null>(null);
@@ -169,12 +187,19 @@ export function ExecTerminal({
       initializedRef.current = true;
 
       setStatus("connecting");
+      setProgress(null);
+      setConnectingSince(Date.now());
       setErrorMessage(null);
 
       const closeSession = transportRef.current.open({
+        onProgress: (sessionProgress) => {
+          if (disposed) return;
+          setProgress(sessionProgress);
+        },
         onStarted: (startedCommand) => {
           if (disposed) return;
           setStatus("connected");
+          setProgress(null);
           setCommand(startedCommand);
           const dims = fitAddon.proposeDimensions();
           if (isUsableTerminalDimensions(dims)) {
@@ -262,11 +287,17 @@ export function ExecTerminal({
           <h3 className="text-sm font-semibold flex-shrink-0">{title}</h3>
         )}
         <div className="flex flex-col flex-1 min-h-0 rounded-md border bg-slate-950 overflow-hidden">
-          {status === "connecting" && (
-            <div className="flex items-center justify-center p-4 text-slate-400 text-sm font-mono">
-              {statusText}
-            </div>
-          )}
+          {status === "connecting" &&
+            (progress ? (
+              <ExecTerminalProgress
+                progress={progress}
+                startedAt={connectingSince}
+              />
+            ) : (
+              <div className="flex items-center justify-center p-4 text-slate-400 text-sm font-mono">
+                {statusText}
+              </div>
+            ))}
           {(status === "error" || status === "disconnected") && (
             <div
               className={`flex items-center justify-center p-4 text-sm font-mono ${status === "error" ? "text-red-400" : "text-yellow-400"}`}
